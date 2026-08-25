@@ -18,7 +18,7 @@ import { registerAutocompleteProvider } from "./services/autocomplete"
 import { ensureBackendForAutocomplete } from "./services/autocomplete/ensure-backend"
 import { AutocompleteServiceManager } from "./services/autocomplete/AutocompleteServiceManager"
 import { AttentionService } from "./services/attention"
-import { BrowserAutomationService } from "./services/browser-automation"
+import { BrowserAutomationService, BrowserPanel } from "./services/browser-automation" // raya_change - Milestone F
 import { TelemetryEventName, TelemetryProxy } from "./services/telemetry"
 import { registerCommitMessageService } from "./services/commit-message"
 import { registerCodeActions, registerTerminalActions, KiloCodeActionProvider } from "./services/code-actions"
@@ -68,20 +68,27 @@ export function activate(context: vscode.ExtensionContext) {
     void context.workspaceState.update(RESTORE_KEY, restore)
   }
 
-  // Create browser automation service (manages Playwright MCP registration)
-  const browserAutomationService = new BrowserAutomationService(connectionService)
-  browserAutomationService.syncWithSettings()
+  // raya_change start - Milestone F shared persistent browser and in-editor panel
+  const browserAutomationService = new BrowserAutomationService(connectionService, context)
+  context.subscriptions.push(
+    vscode.commands.registerCommand("kilo-code.new.openBrowser", () => browserAutomationService.show(false)),
+    vscode.window.registerWebviewPanelSerializer(BrowserPanel.viewType, {
+      deserializeWebviewPanel(panel: vscode.WebviewPanel) {
+        browserAutomationService.restore(panel)
+        return Promise.resolve()
+      },
+    }),
+  )
+  // raya_change end
 
   // Create remote status service (one status bar item for all webviews)
   const remoteService = new RemoteStatusService()
   context.subscriptions.push(remoteService)
   connectionService.setRemoteService(remoteService)
 
-  // Re-register browser automation MCP server on CLI backend reconnect, configure telemetry,
-  // set remote service client, and reload autocomplete so it picks up the now-available backend connection.
+  // Configure telemetry, set remote service client, and reload autocomplete after backend connection.
   const unsubscribeStateChange = connectionService.onStateChange((state) => {
     if (state === "connected") {
-      browserAutomationService.reregisterIfEnabled()
       const config = connectionService.getServerConfig()
       if (config) {
         telemetry.configure(config.baseUrl, config.password)

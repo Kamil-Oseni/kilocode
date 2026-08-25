@@ -78,6 +78,7 @@ import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { McpCatalog } from "@/mcp/catalog"
 import { InstanceRef } from "@/effect/instance-ref" // kilocode_change
 import { Storage } from "@/storage/storage" // kilocode_change // raya_change - Milestone A goal storage
+import { Browser } from "@/kilocode/browser/service" // kilocode_change // raya_change - Milestone F browser bridge
 
 export function webSearchEnabled(
   providerID: ProviderV2.ID,
@@ -149,10 +150,12 @@ const layer = Layer.effect(
     const suggesttool = yield* SuggestTool
     const manager = Option.getOrUndefined(yield* Effect.serviceOption(AgentManager.Service))
     const notebook = Option.getOrUndefined(yield* Effect.serviceOption(Notebook.Service))
+    const browser = Option.getOrUndefined(yield* Effect.serviceOption(Browser.Service)) // kilocode_change // raya_change - Milestone F
     const kiloToolInfos = yield* KiloToolRegistry.infos(
       manager,
       notebook,
       storage ? { storage, sessions } : undefined,
+      browser, // kilocode_change // raya_change - Milestone F browser tools
     ).pipe(Effect.provide(MemoryService.layer)) // kilocode_change // raya_change - Milestone A goal tools
     // kilocode_change end
     const codeMode = flags.experimentalCodeMode ? yield* Effect.promise(() => import("./code-mode")) : undefined
@@ -543,6 +546,7 @@ export const node = LayerNode.suspend(() =>
       SessionStatus.node,
       AgentManager.node,
       Notebook.node,
+      Browser.node, // kilocode_change // raya_change - Milestone F browser bridge
       RepositoryCache.node,
       KiloSessions.node,
       Storage.node, // kilocode_change // raya_change - Milestone A goal storage

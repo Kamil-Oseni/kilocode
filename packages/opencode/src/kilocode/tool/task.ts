@@ -187,6 +187,7 @@ export namespace KiloTask {
     return [
       ...(task ? [] : [{ permission: "task", pattern: "*", action: "deny" as const }]),
       { permission: "question", pattern: "*", action: "deny" },
+      { permission: "ask_options", pattern: "*", action: "deny" }, // raya_change - Milestone C
       { permission: "suggest", pattern: "*", action: "deny" },
       { permission: "interactive_terminal", pattern: "*", action: "deny" },
       ...rules,

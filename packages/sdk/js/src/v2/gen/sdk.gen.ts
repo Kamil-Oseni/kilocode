@@ -42,6 +42,9 @@ import type {
   BackgroundProcessStopSessionResponses,
   BranchNameGenerateErrors,
   BranchNameGenerateResponses,
+  BrowserFailure,
+  BrowserRequestId,
+  BrowserResult,
   CommandListErrors,
   CommandListResponses,
   CommitMessageGenerateErrors,
@@ -185,6 +188,12 @@ import type {
   KilocodeBackgroundJobCancelResponses,
   KilocodeBackgroundJobsErrors,
   KilocodeBackgroundJobsResponses,
+  KilocodeBrowserListErrors,
+  KilocodeBrowserListResponses,
+  KilocodeBrowserRejectErrors,
+  KilocodeBrowserRejectResponses,
+  KilocodeBrowserReplyErrors,
+  KilocodeBrowserReplyResponses,
   KilocodeCommandFilesErrors,
   KilocodeCommandFilesResponses,
   KilocodeGoalClearErrors,
@@ -7736,6 +7745,124 @@ export class Notebook extends HeyApiClient {
   }
 }
 
+export class Browser extends HeyApiClient {
+  /**
+   * List pending browser requests
+   *
+   * List pending shared-browser requests for the routed workspace.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<KilocodeBrowserListResponses, KilocodeBrowserListErrors, ThrowOnError>({
+      url: "/kilocode/browser",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Reply to a browser request
+   *
+   * Complete a pending shared-browser request with a structured result.
+   */
+  public reply<ThrowOnError extends boolean = false>(
+    parameters: {
+      requestID: BrowserRequestId
+      directory?: string
+      workspace?: string
+      result?: BrowserResult
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "requestID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "result" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeBrowserReplyResponses,
+      KilocodeBrowserReplyErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/browser/{requestID}/reply",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Reject a browser request
+   *
+   * Complete a pending shared-browser request with a structured host error.
+   */
+  public reject<ThrowOnError extends boolean = false>(
+    parameters: {
+      requestID: BrowserRequestId
+      directory?: string
+      workspace?: string
+      error?: BrowserFailure
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "requestID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "error" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeBrowserRejectResponses,
+      KilocodeBrowserRejectErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/browser/{requestID}/reject",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class AgentManager extends HeyApiClient {
   /**
    * List pending Agent Manager requests
@@ -8666,6 +8793,11 @@ export class Kilocode extends HeyApiClient {
   private _notebook?: Notebook
   get notebook(): Notebook {
     return (this._notebook ??= new Notebook({ client: this.client }))
+  }
+
+  private _browser?: Browser
+  get browser(): Browser {
+    return (this._browser ??= new Browser({ client: this.client }))
   }
 
   private _agentManager?: AgentManager

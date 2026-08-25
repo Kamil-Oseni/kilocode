@@ -15,6 +15,7 @@ import type { QuestionRequest } from "../../types/messages"
 import {
   clearActiveQuestionTab,
   pickOutcome,
+  questionOptionValue, // raya_change - Milestone C stable option ids
   resolveOptimisticQuestionAgent,
   resolveSelectedQuestionMode,
   setActiveQuestionTab,
@@ -223,11 +224,11 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
     const opt = options()[optIndex]
     if (!opt) return
     if (multi()) {
-      toggle(opt.label)
+      toggle(questionOptionValue(opt)) // raya_change - Milestone C stable option ids
       return
     }
     close()
-    pick(opt.label)
+    pick(questionOptionValue(opt)) // raya_change - Milestone C stable option ids
   }
 
   const onKey = (e: KeyboardEvent) => {
@@ -402,7 +403,7 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
             <div data-slot="question-options" onKeyDown={onKey}>
               <For each={options()}>
                 {(opt, i) => {
-                  const picked = () => store.answers[store.tab]?.includes(opt.label) ?? false
+                  const picked = () => store.answers[store.tab]?.includes(questionOptionValue(opt)) ?? false // raya_change
                   const localized = translateOption(opt)
                   return (
                     <button
@@ -502,7 +503,14 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
               <div data-slot="review-title">{language.t("ui.messagePart.review.title")}</div>
               <For each={questions()}>
                 {(q, index) => {
-                  const value = () => store.answers[index()]?.join(", ") ?? ""
+                  // raya_change start - Milestone C review shows labels while replies retain stable ids
+                  const value = () =>
+                    (store.answers[index()] ?? [])
+                      .map(
+                        (answer) => q.options.find((option) => questionOptionValue(option) === answer)?.label ?? answer,
+                      )
+                      .join(", ")
+                  // raya_change end
                   const answered = () => Boolean(value())
                   return (
                     <div data-slot="review-item">

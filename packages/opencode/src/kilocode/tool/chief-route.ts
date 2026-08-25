@@ -2,6 +2,7 @@
 import { Effect, Option, Schema } from "effect"
 import { Agent } from "@/agent/agent"
 import { Config } from "@/config/config"
+import { RayaAskOptions } from "@/kilocode/ask-options" // raya_change - Milestone C shared option cards
 import { RayaChief } from "@/kilocode/chief"
 import { KiloTask } from "@/kilocode/tool/task"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -43,19 +44,22 @@ export const ChiefRouteTool = Tool.define<
           const available = (yield* agents.list()).filter(
             (item) => item.mode !== "primary" && !item.hidden && !item.deprecated,
           )
-          const initial = RayaChief.route({ request: params.objective, agents: available })
-          const chosen =
-            !RayaChief.needsPrompt(initial)
-              ? initial.agent
-              : yield* question
-                  .ask({
-                    sessionID: ctx.sessionID,
-                    questions: [RayaChief.question(initial)],
-                    blocking: true,
-                    tool: ctx.callID ? { messageID: ctx.messageID, callID: ctx.callID } : undefined,
-                  })
-                  .pipe(Effect.map((answers) => answers[0]?.[0] ?? initial.agent))
-          const selected = available.find((item) => item.name === chosen) ?? available.find((item) => item.name === initial.agent)
+          // raya_change start - route the persisted user text, never a model-rewritten objective
+          const request = RayaChief.request(session.metadata) ?? params.objective
+          const initial = RayaChief.route({ request, agents: available })
+          // raya_change end
+          // raya_change start - Milestone C low-confidence routing reuses ask_options
+          const answer = RayaChief.needsPrompt(initial)
+            ? yield* RayaAskOptions.ask(question, {
+                sessionID: ctx.sessionID,
+                questions: [RayaChief.question(initial)],
+                blocking: true,
+                tool: ctx.callID ? { messageID: ctx.messageID, callID: ctx.callID } : undefined,
+              })
+            : undefined
+          const chosen = answer?.[0]?.selected[0]?.id ?? answer?.[0]?.other[0] ?? initial.agent
+          const selected = available.find((item) => item.name === chosen)
+          // raya_change end
           if (!selected) throw new Error("The selected Auto specialist is unavailable")
 
           const message = yield* sessions
@@ -83,7 +87,7 @@ export const ChiefRouteTool = Tool.define<
           const chiefModel = assistant ? `${assistant.providerID}/${assistant.modelID}` : `${parent.providerID}/${parent.modelID}`
           const candidate = initial.candidates.find((item) => item.agent === selected.name)
           const pending: RayaChief.Pending = {
-            request: params.objective,
+            request,
             agent: selected.name,
             role: candidate?.role ?? initial.role,
             needs_plan: candidate?.role === "reasoner" || initial.needs_plan,
@@ -106,6 +110,7 @@ export const ChiefRouteTool = Tool.define<
             metadata: {
               ...session.metadata,
               [RayaChief.pendingKey]: pending,
+              [RayaChief.phaseKey]: "task", // raya_change - only task is legal after Chief
               [RayaChief.logKey]: [...RayaChief.history(session.metadata), decision],
             },
           })

@@ -7,6 +7,52 @@ export namespace RayaChief {
   export const pendingKey = "raya.chief.pending"
   export const modelKey = "raya.chief.parentModel"
   export const logKey = "raya.chief.decisions"
+  export const requestKey = "raya.chief.request" // raya_change - Auto must route the user's exact request
+  export const phaseKey = "raya.chief.phase" // raya_change - enforce the Chief → task → synthesis state machine
+
+  // raya_change start - Auto runtime state machine
+  export type Phase = "route" | "task" | "synthesize"
+
+  export function phase(metadata: Record<string, unknown> | undefined): Phase {
+    const value = metadata?.[phaseKey]
+    if (value === "task" || value === "synthesize") return value
+    return "route"
+  }
+
+  export function request(metadata: Record<string, unknown> | undefined) {
+    const value = metadata?.[requestKey]
+    return typeof value === "string" && value.trim() ? value : undefined
+  }
+
+  export function tools<T>(available: Record<string, T>, metadata: Record<string, unknown> | undefined) {
+    const current = phase(metadata)
+    if (current === "synthesize") return {} as Record<string, T>
+    const name = current === "route" ? "chief_route" : "task"
+    const tool = available[name]
+    return tool ? { [name]: tool } : {}
+  }
+
+  export function repair(input: { agent: string; tools: Readonly<Record<string, unknown>> }) {
+    if (input.agent !== "auto") return
+    const names = Object.keys(input.tools).filter((name) => name !== "invalid")
+    if (names.length !== 1) return
+    if (names[0] === "chief_route") {
+      return {
+        toolName: "chief_route",
+        input: { objective: "Route the current user's exact request." },
+      }
+    }
+    if (names[0] === "task") {
+      return {
+        toolName: "task",
+        input: {
+          description: "Execute the routed request",
+          prompt: "Execute the original user request selected by Chief.",
+        },
+      }
+    }
+  }
+  // raya_change end
 
   export const Role = Schema.Literals(["coder", "designer", "researcher", "accountant", "reasoner"])
   export type Role = typeof Role.Type
@@ -225,18 +271,18 @@ export namespace RayaChief {
     return decision.confidence < threshold
   }
 
+  // raya_change start - Milestone C low-confidence selectable contract
   export function question(decision: Pick<ReturnType<typeof route>, "candidates">) {
     return {
-      header: "Choose specialist",
-      question: "Auto found more than one plausible specialist. Who should handle this request?",
+      prompt: "Auto found more than one plausible specialist. Who should handle this request?",
       options: decision.candidates.map((item) => ({
+        id: item.agent,
         label: item.agent,
-        description: `${item.role}: ${item.reason}`,
       })),
-      multiple: false,
-      custom: false,
+      allow_multiple: false,
     } as const
   }
+  // raya_change end
 
   export function prompt(agents: readonly Agent[]) {
     const registry = agents
@@ -245,7 +291,7 @@ export namespace RayaChief {
           `- ${item.name}: ${item.description ?? "No capability card"}${item.model ? ` [${item.model.providerID}/${item.model.modelID}]` : ""}`,
       )
       .join("\n")
-    return `You are Raya's Chief router. For every new user request, call chief_route exactly once with the user's complete objective. Do not answer the request yourself and do not call task before chief_route succeeds. The route result is a strict decision containing agent, model, needs_plan, confidence, and reason. After it returns, call task exactly once; the runtime enforces the logged decision and delegates to the selected isolated specialist. When task completes, give the user a concise synthesis.
+    return `You are Raya's Chief router. Do not inspect the repository, answer the request, narrate an approach, or name a tool that is not currently available. The runtime exposes exactly the one action allowed at each stage. First call chief_route exactly once; its runtime uses the user's original request, regardless of how you phrase the objective argument. After it returns, call task exactly once. When task completes, give the user a concise synthesis without calling another tool.
 
 Registry:
 ${registry}`

@@ -29,6 +29,8 @@ import { Session } from "@/session/session" // raya_change - Milestone A goal se
 import { Storage } from "@/storage/storage" // raya_change - Milestone A durable goal storage
 import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal operations
 import { RayaGoalContinuation } from "@/kilocode/goal/continuation" // raya_change - Milestone A resume behavior
+import type { RequestID as BrowserRequestID } from "@/kilocode/browser/protocol" // raya_change - Milestone F
+import { Browser } from "@/kilocode/browser/service" // raya_change - Milestone F browser bridge
 import {
   AgentManagerRejectPayload,
   AgentManagerReplyPayload,
@@ -41,6 +43,8 @@ import {
   BackgroundJobsQuery,
   GoalCreatePayload, // raya_change - Milestone A goal API
   GoalUpdatePayload, // raya_change - Milestone A goal API
+  BrowserReplyPayload, // raya_change - Milestone F browser API
+  BrowserRejectPayload, // raya_change - Milestone F browser API
 } from "../groups/kilocode"
 
 export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode", (handlers) =>
@@ -52,6 +56,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     const store = yield* InstanceStore.Service
     const manager = yield* AgentManager.Service
     const notebook = yield* Notebook.Service
+    const browser = yield* Browser.Service // raya_change - Milestone F browser bridge
     const background = yield* BackgroundJob.Service
     const runState = yield* SessionRunState.Service
     const locations = yield* LocationServiceMap.Service
@@ -183,6 +188,33 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       return true
     })
 
+    // raya_change start - Milestone F browser host API
+    const browserList = Effect.fn("KilocodeHttpApi.browserList")(function* () {
+      return yield* browser.list()
+    })
+
+    const browserReply = Effect.fn("KilocodeHttpApi.browserReply")(function* (ctx: {
+      params: { requestID: BrowserRequestID }
+      payload: typeof BrowserReplyPayload.Type
+    }) {
+      yield* browser.reply({ requestID: ctx.params.requestID, result: ctx.payload.result }).pipe(
+        Effect.catchTag("Browser.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+        Effect.catchTag("Browser.InvalidReplyError", () => Effect.fail(new HttpApiError.BadRequest({}))),
+      )
+      return true
+    })
+
+    const browserReject = Effect.fn("KilocodeHttpApi.browserReject")(function* (ctx: {
+      params: { requestID: BrowserRequestID }
+      payload: typeof BrowserRejectPayload.Type
+    }) {
+      yield* browser
+        .reject({ requestID: ctx.params.requestID, error: ctx.payload.error })
+        .pipe(Effect.catchTag("Browser.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))))
+      return true
+    })
+    // raya_change end
+
     const agentManagerList = Effect.fn("KilocodeHttpApi.agentManagerList")(function* () {
       return yield* manager.list()
     })
@@ -300,6 +332,11 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .handle("notebookList", notebookList)
         .handle("notebookReply", notebookReply)
         .handle("notebookReject", notebookReject)
+        // raya_change start - Milestone F browser host API
+        .handle("browserList", browserList)
+        .handle("browserReply", browserReply)
+        .handle("browserReject", browserReject)
+        // raya_change end
         .handle("agentManagerList", agentManagerList)
         .handle("agentManagerReply", agentManagerReply)
         .handle("agentManagerReject", agentManagerReject)

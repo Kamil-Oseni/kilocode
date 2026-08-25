@@ -1,167 +1,55 @@
-// raya_change - Raya extension namespace
+// raya_change - Milestone F shared Playwright host and CLI bridge
+import { join } from "node:path"
 import * as vscode from "vscode"
-import type { KiloClient } from "@kilocode/sdk/v2/client"
-import type { KiloConnectionService } from "../cli-backend"
-
-type BrowserAutomationState = "disabled" | "registering" | "connected" | "failed" | "disconnected"
+import type { KiloConnectionService } from "../cli-backend/connection-service"
+import { BrowserSession } from "./browser-session"
+import { BrowserPanel } from "./browser-panel"
+import { BrowserBridge } from "./browser-bridge"
 
 export class BrowserAutomationService implements vscode.Disposable {
-  private state: BrowserAutomationState = "disabled"
-  private disposables: vscode.Disposable[] = []
+  readonly panel: BrowserPanel
+  readonly session: BrowserSession
 
-  // MCP server name used when registering with the CLI backend
-  private static readonly MCP_SERVER_NAME = "kilo-playwright"
+  private readonly bridge: BrowserBridge
+  private disposed = false
 
-  constructor(private readonly connectionService: KiloConnectionService) {
-    // Listen for settings changes
-    this.disposables.push(
-      vscode.workspace.onDidChangeConfiguration((e) => {
-        if (e.affectsConfiguration("raya.browserAutomation")) {
-          this.syncWithSettings()
-        }
-      }),
-    )
+  constructor(connection: KiloConnectionService, context: vscode.ExtensionContext) {
+    this.session = new BrowserSession(join(context.globalStorageUri.fsPath, "browser-profile"))
+    this.panel = new BrowserPanel(this.session)
+    this.bridge = new BrowserBridge(connection, {
+      show: async () => {
+        this.assertEnabled()
+        await this.panel.show(true)
+      },
+      execute: (action) => {
+        this.assertEnabled()
+        return this.session.execute(action)
+      },
+      cancel: () => this.session.takeControl("The agent browser action was paused or cancelled."),
+    })
   }
 
-  /**
-   * Read settings and enable/disable accordingly.
-   * Called on construction and when settings change.
-   */
-  async syncWithSettings(): Promise<void> {
-    const config = vscode.workspace.getConfiguration("raya.browserAutomation")
-    const enabled = config.get<boolean>("enabled", false)
-
-    if (enabled) {
-      await this.register()
-    } else {
-      await this.unregister()
-    }
+  async show(preserveFocus = false): Promise<void> {
+    this.assertEnabled()
+    await this.panel.show(preserveFocus)
   }
 
-  /**
-   * Re-register the MCP server after CLI backend reconnects.
-   * Should be called from the connection state change handler.
-   */
-  async reregisterIfEnabled(): Promise<void> {
-    const config = vscode.workspace.getConfiguration("raya.browserAutomation")
-    const enabled = config.get<boolean>("enabled", false)
-    if (enabled) {
-      await this.register()
-    }
-  }
-
-  /**
-   * Register the Playwright MCP server with the CLI backend.
-   */
-  private async register(): Promise<void> {
-    this.setState("registering")
-
-    const client = this.getClient()
-    if (!client) {
-      console.error("[Kilo New] BrowserAutomationService: No SDK client available")
-      this.setState("failed")
-      return
-    }
-
-    const config = vscode.workspace.getConfiguration("raya.browserAutomation")
-    const useSystemChrome = config.get<boolean>("useSystemChrome", true)
-    const headless = config.get<boolean>("headless", false)
-
-    // Build the command for the Playwright MCP server
-    const command = ["npx", "@playwright/mcp@latest"]
-    if (headless) {
-      command.push("--headless")
-    }
-    if (useSystemChrome) {
-      command.push("--browser", "chrome")
-    }
-
-    try {
-      const directory = this.getWorkspaceDirectory()
-      const { data: status } = await client.mcp.add(
-        {
-          name: BrowserAutomationService.MCP_SERVER_NAME,
-          config: {
-            type: "local",
-            command,
-            enabled: true,
-            timeout: 60000,
-          },
-          directory,
-        },
-        { throwOnError: true },
-      )
-
-      const serverStatus = status[BrowserAutomationService.MCP_SERVER_NAME]
-      if (serverStatus?.status === "connected") {
-        this.setState("connected")
-      } else if (serverStatus?.status === "failed") {
-        console.error(
-          "[Kilo New] BrowserAutomationService: MCP server failed:",
-          (serverStatus as { error?: string }).error,
-        )
-        this.setState("failed")
-      } else {
-        this.setState("disconnected")
-      }
-    } catch (error) {
-      console.error("[Kilo New] BrowserAutomationService: Failed to register MCP server:", error)
-      this.setState("failed")
-    }
-  }
-
-  /**
-   * Unregister/disconnect the Playwright MCP server.
-   */
-  private async unregister(): Promise<void> {
-    if (this.state === "disabled") {
-      return
-    }
-
-    const client = this.getClient()
-    if (client) {
-      try {
-        const directory = this.getWorkspaceDirectory()
-        await client.mcp.disconnect(
-          { name: BrowserAutomationService.MCP_SERVER_NAME, directory },
-          { throwOnError: true },
-        )
-      } catch (error) {
-        console.error("[Kilo New] BrowserAutomationService: Failed to disconnect MCP server:", error)
-      }
-    }
-
-    this.setState("disabled")
-  }
-
-  private getClient(): KiloClient | null {
-    try {
-      return this.connectionService.getClient()
-    } catch {
-      return null
-    }
-  }
-
-  private getWorkspaceDirectory(): string {
-    const folders = vscode.workspace.workspaceFolders
-    if (folders && folders.length > 0) {
-      return folders[0].uri.fsPath
-    }
-    return process.cwd()
-  }
-
-  private setState(state: BrowserAutomationState): void {
-    if (this.state === state) {
-      return
-    }
-    console.log(`[Kilo New] BrowserAutomationService: State ${this.state} → ${state}`)
-    this.state = state
+  restore(panel: vscode.WebviewPanel): void {
+    this.panel.restore(panel)
   }
 
   dispose(): void {
-    for (const d of this.disposables) {
-      d.dispose()
-    }
-    this.disposables = []
+    if (this.disposed) return
+    this.disposed = true
+    this.bridge.dispose()
+    this.panel.dispose()
+    void this.session
+      .dispose()
+      .catch((error: unknown) => console.error("[Kilo New] BrowserAutomationService: disposal failed:", error))
+  }
+
+  private assertEnabled(): void {
+    const enabled = vscode.workspace.getConfiguration("raya.browserAutomation").get<boolean>("enabled", true)
+    if (!enabled) throw new Error("Browser automation is disabled in Raya settings")
   }
 }

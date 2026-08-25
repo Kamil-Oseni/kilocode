@@ -71,8 +71,14 @@ export function toggleAnswer(existing: string[], answer: string): string[] {
   return next
 }
 
+// raya_change start - Milestone C stable option ids
+export function questionOptionValue(option: QuestionOption): string {
+  return option.id ?? option.label
+}
+// raya_change end
+
 export function resolveQuestionMode(options: QuestionOption[], answer: string): string | undefined {
-  return options.find((item) => item.label === answer)?.mode
+  return options.find((item) => questionOptionValue(item) === answer)?.mode // raya_change - Milestone C
 }
 
 export function resolveSelectedQuestionMode(

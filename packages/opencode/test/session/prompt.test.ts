@@ -998,6 +998,67 @@ it.instance("loop continues when finish is tool-calls", () =>
   }),
 )
 
+// kilocode_change start
+// raya_change start - Milestone C scripted ask_options turn
+it.instance("ask_options click resolves the tool and the same turn continues on the selected id", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const questions = yield* Question.Service
+    const session = yield* sessions.create({
+      title: "Selectable decision",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "Choose an output format" }],
+    })
+    yield* llm.tool("ask_options", {
+      questions: [
+        {
+          prompt: "Which output format should I use?",
+          options: [
+            { id: "markdown", label: "Markdown" },
+            { id: "json", label: "JSON" },
+          ],
+        },
+      ],
+    })
+    yield* llm.text("Continuing with markdown")
+
+    const fiber = yield* prompt.loop({ sessionID: session.id }).pipe(Effect.forkChild)
+    const pending = yield* pollWithTimeout(
+      questions.list().pipe(Effect.map((items) => items.find((item) => item.sessionID === session.id))),
+      "timed out waiting for ask_options",
+    )
+    expect(pending.autoSubmit).toBe(true)
+    expect(pending.questions[0]?.custom).toBe(true)
+    yield* questions.reply({ requestID: pending.id, answers: [["raya-option:markdown"]] })
+
+    const result = yield* Fiber.join(fiber)
+    expect(yield* llm.calls).toBe(2)
+    expect(result.info.role).toBe("assistant")
+    expect(result.parts.some((part) => part.type === "text" && part.text === "Continuing with markdown")).toBe(true)
+
+    const messages = yield* MessageV2.filterCompactedEffect(session.id)
+    const tool = messages
+      .flatMap((message) => message.parts)
+      .find((part) => part.type === "tool" && part.tool === "ask_options")
+    expect(tool?.type).toBe("tool")
+    if (tool?.type === "tool") expect(tool.state.status).toBe("completed")
+    if (tool?.type === "tool" && tool.state.status === "completed") {
+      expect(tool.state.metadata).toMatchObject({
+        answers: [{ selected: [{ id: "markdown", label: "Markdown" }], other: [] }],
+      })
+    }
+  }),
+)
+// raya_change end
+// kilocode_change end
+
 it.instance("glob tool keeps instance context during prompt runs", () =>
   Effect.gen(function* () {
     const { dir, llm } = yield* useServerConfig(providerCfg)

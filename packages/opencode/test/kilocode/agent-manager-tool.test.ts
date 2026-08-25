@@ -13,6 +13,7 @@ import * as ToolJsonSchema from "../../src/tool/json-schema"
 import { Truncate } from "../../src/tool/truncate"
 import { Agent } from "../../src/agent/agent"
 import { Provider } from "../../src/provider/provider"
+import { Question } from "../../src/question" // raya_change - Milestone C destructive confirmation
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 
@@ -64,7 +65,11 @@ const agent: Agent.Info = {
 }
 
 // Default provider is `test`, so resolution should prefer test, then kilo, then others.
-function makeRuntime(defaultProviderID = "test", host: Partial<AgentManager.Interface> = {}) {
+function makeRuntime(
+  defaultProviderID = "test",
+  host: Partial<AgentManager.Interface> = {},
+  question?: Partial<Question.Interface>, // raya_change - Milestone C
+) {
   return ManagedRuntime.make(
     Layer.mergeAll(
       AppNodeBuilder.build(Truncate.node),
@@ -76,6 +81,7 @@ function makeRuntime(defaultProviderID = "test", host: Partial<AgentManager.Inte
         list: () => Effect.succeed(providers),
         defaultModel: () => Effect.succeed({ providerID: defaultProviderID, modelID: "reasoning/model" }) as never,
       }),
+      question ? Layer.mock(Question.Service, question) : Layer.empty, // raya_change - Milestone C
     ),
   )
 }
@@ -490,13 +496,24 @@ describe("agent_manager tool", () => {
 
   test("stops one existing session with a separate mutation permission pattern", async () => {
     const requests: unknown[] = []
-    const rt = makeRuntime("test", {
-      request: (input) =>
-        Effect.sync(() => {
-          requests.push(input)
-          return { operation: "stop" as const, sessionID: SessionID.make("ses_target"), stopped: true as const }
-        }),
-    })
+    const cards: Parameters<Question.Interface["ask"]>[0][] = [] // raya_change - Milestone C
+    const rt = makeRuntime(
+      "test",
+      {
+        request: (input) =>
+          Effect.sync(() => {
+            requests.push(input)
+            return { operation: "stop" as const, sessionID: SessionID.make("ses_target"), stopped: true as const }
+          }),
+      },
+      {
+        ask: (input) =>
+          Effect.sync(() => {
+            cards.push(input)
+            return [["raya-option:confirm"]]
+          }),
+      },
+    )
     const tool = await rt.runPromise(
       Effect.gen(function* () {
         return yield* Tool.init(yield* AgentManagerTool)
@@ -527,6 +544,19 @@ describe("agent_manager tool", () => {
         targetSessionID: "ses_target",
       },
     ])
+    expect(cards[0]).toMatchObject({
+      questions: [
+        {
+          question: "Stop Agent Manager session ses_target?",
+          custom: true,
+          options: [
+            { id: "raya-option:confirm", label: "Confirm" },
+            { id: "raya-option:cancel", label: "Cancel" },
+          ],
+        },
+      ],
+      autoSubmit: true,
+    }) // raya_change - Milestone C destructive prompt reuses ask_options cards
     expect(result.output).toContain("removed it from Agent Manager")
     expect(result.metadata).toEqual(expect.objectContaining({ action: "stop", sessionID: "ses_target" }))
     await rt.dispose()

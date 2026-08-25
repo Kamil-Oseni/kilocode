@@ -7,6 +7,7 @@ export interface TodoItem {
 
 // Question types
 export interface QuestionOption {
+  id?: string // raya_change - Milestone C stable ask_options reply value
   label: string
   description: string
   mode?: string

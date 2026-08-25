@@ -311,7 +311,12 @@ export const TaskTool = Tool.define(
         const clean = Object.fromEntries(Object.entries(latest.metadata ?? {}).filter(([key]) => key !== RayaChief.pendingKey))
         yield* sessions.setMetadata({
           sessionID: ctx.sessionID,
-          metadata: clean,
+          // kilocode_change start
+          metadata: {
+            ...clean,
+            [RayaChief.phaseKey]: "synthesize", // raya_change - final Auto step cannot call tools
+          },
+          // kilocode_change end
         })
       }
       // raya_change end

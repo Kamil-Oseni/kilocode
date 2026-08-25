@@ -51,13 +51,30 @@ describe("Raya Chief routing", () => {
     expect(RayaChief.needsPrompt(decision)).toBe(true)
     expect(decision.candidates.length).toBeGreaterThanOrEqual(2)
     expect(RayaChief.question(decision)).toMatchObject({
-      header: "Choose specialist",
-      multiple: false,
-      custom: false,
+      prompt: "Auto found more than one plausible specialist. Who should handle this request?",
+      allow_multiple: false,
       options: decision.candidates.map((item) => ({
+        id: item.agent,
         label: item.agent,
-        description: `${item.role}: ${item.reason}`,
       })),
     })
   })
+
+  // raya_change start - Auto phase enforcement regression
+  it("exposes one legal action per Auto phase and repairs hallucinated tools to it", () => {
+    const tools = { chief_route: { id: "chief" }, task: { id: "task" }, read: { id: "read" } }
+
+    expect(Object.keys(RayaChief.tools(tools, { [RayaChief.phaseKey]: "route" }))).toEqual(["chief_route"])
+    expect(Object.keys(RayaChief.tools(tools, { [RayaChief.phaseKey]: "task" }))).toEqual(["task"])
+    expect(Object.keys(RayaChief.tools(tools, { [RayaChief.phaseKey]: "synthesize" }))).toEqual([])
+    expect(RayaChief.repair({ agent: "auto", tools: { chief_route: tools.chief_route } })).toEqual({
+      toolName: "chief_route",
+      input: { objective: "Route the current user's exact request." },
+    })
+    expect(RayaChief.repair({ agent: "auto", tools: { task: tools.task } })).toMatchObject({
+      toolName: "task",
+    })
+    expect(RayaChief.repair({ agent: "code", tools: { chief_route: tools.chief_route } })).toBeUndefined()
+  })
+  // raya_change end
 })

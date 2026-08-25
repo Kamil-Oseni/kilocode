@@ -33,6 +33,7 @@ import { Question } from "@/question"
 // kilocode_change start
 import { Notebook } from "@/kilocode/notebook/service"
 import { AgentManager } from "@/kilocode/agent-manager/service"
+import { Browser } from "@/kilocode/browser/service" // kilocode_change // raya_change - Milestone F browser bridge
 import { KiloViewers } from "@/kilocode/presence/service"
 // kilocode_change end
 import { SessionCompaction } from "@/session/compaction"
@@ -318,6 +319,7 @@ export function createRoutes(
       // kilocode_change start
       AgentManager.defaultLayer,
       Notebook.defaultLayer,
+      Browser.defaultLayer, // kilocode_change // raya_change - Milestone F browser bridge
       KiloViewers.defaultLayer,
       SyncEvent.defaultLayer,
       // kilocode_change end

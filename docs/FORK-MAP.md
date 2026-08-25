@@ -2,7 +2,7 @@
 
 # Raya Fork Map
 
-Last verified against commit `b1fc387246`, the Raya source commit used for the Milestone A verified VSIX and bundled CLI build.
+Last verified against commit `3800ede61a`, the Raya source commit used for the Milestone F implementation and bundled CLI build.
 
 This map identifies the current extension seams in the Kilo fork on which Raya is built. Refresh it after an upstream rebase moves any named symbol or path. No feature milestone in `docs/Building-Raya.md` may begin while this map is missing or stale.
 
@@ -97,6 +97,28 @@ The backend bridge is `packages/kilo-vscode/src/services/cli-backend/connection-
 The webview session store and its main host-message switch are in `webview-ui/src/context/session.tsx`. Transcript layout proceeds through `MessageList.tsx`, `VscodeSessionTurn.tsx`, and `AssistantMessage.tsx`. Generic part and tool dispatch lives in `packages/kilo-ui/src/components/message-part.tsx` through `ToolRegistry.register` and `ToolRegistry.render`; VS Code-specific registrations are installed by `TaskToolExpanded.tsx` and `VscodeToolOverrides.tsx`.
 
 Extension seam: for a new webview-to-host message, add its interface to `webview-messages.ts`, append it to `WebviewMessage`, send it through `useVSCode().postMessage`, and handle it in `KiloProvider.setupWebviewMessageHandler`. For host-to-webview traffic, add the type to `extension-messages.ts`, send it through `KiloProvider.postMessage`, and handle it in `session.tsx` or a dedicated context. Register a new VS Code-only tool renderer through `ToolRegistry.register` from `VscodeToolOverrides.tsx`, called at startup by `App.tsx`.
+
+<!-- raya_change start - Milestone C selectable option seams -->
+
+### Raya selectable decisions
+
+The model-facing `ask_options` tool is defined in `packages/opencode/src/kilocode/tool/ask-options.ts` and registered through `KiloToolRegistry`. Its shared normalization layer in `packages/opencode/src/kilocode/ask-options/` maps stable option IDs, multi-select answers, and unmatched Other text onto the existing `Question.Service`, so the same blocking request and reply lifecycle resumes the active model turn without a parallel transport.
+
+`QuestionV1.Option.id` preserves a machine-readable reply value while `QuestionV1.Request.autoSubmit` lets single-select cards resolve on click. The extension forwards both fields through `kilo-provider-utils.ts`; `QuestionDock.tsx` displays labels while replying with IDs, retains explicit submission for multi-select, and always renders the custom Other input for `ask_options`. `AssistantMessage.tsx` correlates pending questions by call and message ID rather than assuming only the legacy `question` tool can suspend, which lets Chief low-confidence routing and Agent Manager stop confirmation reuse the same cards.
+
+<!-- raya_change end -->
+
+<!-- raya_change start - Milestone F shared browser seams -->
+
+### Raya in-editor browser
+
+The native `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_select`, `browser_scroll`, `browser_screenshot`, and `browser_evaluate` tools are defined in `packages/opencode/src/kilocode/tool/browser-host.ts`. They send typed operations through the workspace-routed host bridge in `packages/opencode/src/kilocode/browser/`; pending requests cross the generated `kilocode.browser` HTTP API while requested and cancelled lifecycle events travel over the existing SSE connection.
+
+The VS Code extension owns the only Playwright runtime. `BrowserSession` in `packages/kilo-vscode/src/services/browser-automation/browser-session.ts` launches a headless persistent Chrome context under extension global storage, keeps one page and CDP session shared by tools and UI, starts `Page.startScreencast`, and forwards CDP `Input` events. Agent operations are serialized and naturally paced, transient failures receive three total attempts with bounded backoff, and HTTP 403/429 responses follow the same retry path. Exhausted actions enter manual takeover, but page content never forces it: authentication, CAPTCHA, and payment pages remain available to normal browser tools. `BrowserPanel` displays live attempt and ownership state, locks user input while an agent action is active, accepts manual input during takeover, and resumes agent control explicitly or automatically on the next agent browser instruction without replacing the persistent page. `BrowserBridge` correlates CLI requests with that shared session, and `BrowserAutomationService` creates these three objects once during extension activation.
+
+Playwright is externalized from the extension bundle and copied into `dist/node_modules/playwright-core` by `packages/kilo-vscode/esbuild.js`, so the packaged VSIX can use the system Chrome channel without opening an external window or downloading a browser during normal operation.
+
+<!-- raya_change end -->
 
 ## Build and packaging anchors
 

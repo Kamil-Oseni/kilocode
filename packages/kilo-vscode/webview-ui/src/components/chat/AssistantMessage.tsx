@@ -86,20 +86,22 @@ function PlanExitCard(props: { part: ToolPart }) {
   )
 }
 
+// raya_change start - Milestone C questions can suspend any tool
 /**
- * Match a tool part to an active request (question or suggestion) by tool name
- * and callID/messageID. Returns the matched request or undefined.
+ * Match a tool part to an active request by callID/messageID, optionally
+ * restricting the tool name. Programmatic ask_options reuse can suspend any tool.
  */
 function matchToolRequest<T extends { tool?: { callID: string; messageID: string } }>(
   part: SDKPart,
-  name: string,
+  name: string | undefined,
   requests: T[],
 ): T | undefined {
   if (part.type !== "tool") return undefined
   const tp = part as unknown as ToolPart
-  if (tp.tool !== name) return undefined
+  if (name && tp.tool !== name) return undefined
   return requests.find((r) => r.tool?.callID === tp.callID && r.tool?.messageID === tp.messageID)
 }
+// raya_change end
 
 interface AssistantMessageProps {
   message: SDKAssistantMessage
@@ -230,9 +232,11 @@ export const AssistantMessage: Component<AssistantMessageProps> = (props) => {
     if (!stored) return []
     return (stored as SDKPart[]).filter((part) => {
       if (!isRenderable(part, props.message)) return false
-      if (part.type !== "tool" || part.tool !== "question") return true
+      // raya_change start - Milestone C hides orphaned ask_options calls like legacy questions
+      if (part.type !== "tool" || (part.tool !== "question" && part.tool !== "ask_options")) return true
       if (part.state.status !== "pending" && part.state.status !== "running") return true
-      return !!matchToolRequest(part, "question", session.questions())
+      return !!matchToolRequest(part, undefined, session.questions())
+      // raya_change end
     })
   })
   // Pull the weighted generation rate across the turn's step-finish parts
@@ -258,8 +262,8 @@ export const AssistantMessage: Component<AssistantMessageProps> = (props) => {
           const isUpstreamSuppressed =
             part.type === "tool" && UPSTREAM_SUPPRESSED_TOOLS.has((part as SDKPart & { tool: string }).tool)
 
-          // Active question tool parts render the interactive QuestionDock inline
-          const activeQuestion = createMemo(() => matchToolRequest(part, "question", session.questions()))
+          // raya_change - Milestone C any tool can reuse selectable question cards
+          const activeQuestion = createMemo(() => matchToolRequest(part, undefined, session.questions()))
 
           // Active suggestion tool parts render the interactive SuggestBar inline
           const activeSuggestion = createMemo(() => matchToolRequest(part, "suggest", session.suggestions()))

@@ -502,16 +502,19 @@ describe("mapSSEEventToWebviewMessage", () => {
           {
             question: "Ready to implement?",
             header: "Implement",
-            options: [{ label: "Implement", description: "Switch to code", mode: "code" }],
+            options: [{ id: "raya-option:implement", label: "Implement", description: "Switch to code", mode: "code" }], // raya_change - Milestone C stable option id
           },
         ],
+        autoSubmit: true, // raya_change - Milestone C click resolution
       },
     }
     const msg = mapSSEEventToWebviewMessage(event, "sess-1")
     expect(msg?.type).toBe("questionRequest")
     if (msg?.type === "questionRequest") {
-      const questions = msg.question.questions as Array<{ options?: Array<{ mode?: string }> }>
+      const questions = msg.question.questions as Array<{ options?: Array<{ id?: string; mode?: string }> }>
       expect(questions[0]?.options?.[0]?.mode).toBe("code")
+      expect(questions[0]?.options?.[0]?.id).toBe("raya-option:implement") // raya_change - Milestone C
+      expect(msg.question.autoSubmit).toBe(true) // raya_change - Milestone C
     }
   })
 

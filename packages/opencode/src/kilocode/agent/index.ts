@@ -19,6 +19,15 @@ import PROMPT_ORCHESTRATOR from "../../agent/prompt/orchestrator.txt"
 import PROMPT_ASK from "../../agent/prompt/ask.txt"
 import PROMPT_EXPLORE from "../../agent/prompt/explore.txt"
 
+// raya_change start - Milestone C selectable user decisions
+const ASK_OPTIONS_GUIDANCE =
+  "When a discrete choice genuinely belongs to the user, call ask_options instead of asking in prose. Use stable option ids, enable allow_multiple only when choices may be combined, and rely on the always-available Other response. Before an unapproved destructive action, use ask_options with explicit confirm and cancel choices."
+
+function choices(prompt?: string) {
+  return [prompt, ASK_OPTIONS_GUIDANCE].filter(Boolean).join("\n\n")
+}
+// raya_change end
+
 export const bash: Record<string, "allow" | "ask" | "deny"> = {
   "*": "ask",
   "cat *": "allow",
@@ -169,6 +178,7 @@ function askGuard(mcp: Record<string, "allow" | "ask" | "deny"> = {}) {
     list: "allow",
     skill: "allow",
     question: "allow",
+    ask_options: "allow", // raya_change - Milestone C
     webfetch: "allow",
     websearch: "allow",
     semantic_search: "allow",
@@ -199,10 +209,7 @@ function editRestrictions(rules: Permission.Ruleset) {
 }
 
 function restrictions(user: Permission.Ruleset) {
-  return [
-    ...user.filter((rule) => rule.action === "deny" && rule.permission !== "edit"),
-    ...editRestrictions(user),
-  ]
+  return [...user.filter((rule) => rule.action === "deny" && rule.permission !== "edit"), ...editRestrictions(user)]
 }
 
 function askEditGuard() {
@@ -326,6 +333,7 @@ function planGuard(worktree: string, mcp: Record<string, "allow" | "ask" | "deny
   return Permission.fromConfig({
     "*": "deny",
     question: "allow",
+    ask_options: "allow", // raya_change - Milestone C
     suggest: "allow",
     skill: "allow",
     plan_exit: "allow",
@@ -380,6 +388,20 @@ export function prepare(cfg: Config.Info): KiloData {
     ...(Flag.KILO_CLIENT === "vscode" && cfg.experimental?.native_notebook_tools === true
       ? { notebook_read: "ask" as const, notebook_edit: "ask" as const, notebook_execute: "ask" as const }
       : {}),
+    // raya_change start - Milestone F browser actions are explicitly auto-approved
+    ...(Flag.KILO_CLIENT === "vscode"
+      ? {
+          browser_navigate: "allow" as const,
+          browser_snapshot: "allow" as const,
+          browser_click: "allow" as const,
+          browser_type: "allow" as const,
+          browser_select: "allow" as const,
+          browser_scroll: "allow" as const,
+          browser_screenshot: "allow" as const,
+          browser_evaluate: "allow" as const,
+        }
+      : {}),
+    // raya_change end
     kilo_memory_recall: "ask",
     kilo_memory_save: "ask",
   })
@@ -509,6 +531,7 @@ export function patchAgents(
     agents.code = {
       ...agents.build,
       name: "code",
+      prompt: choices(agents.build.prompt), // raya_change - Milestone C
       permission: Permission.merge(
         defaults,
         agents.build.permission,
@@ -525,6 +548,7 @@ export function patchAgents(
     agents.plan = {
       ...agents.plan,
       description: "Plan mode. Can only edit plan files; all other filesystem mutations are denied.",
+      prompt: choices(agents.plan.prompt), // raya_change - Milestone C
       permission: Permission.merge(
         defaults,
         guard,
@@ -575,12 +599,13 @@ export function patchAgents(
   agents.debug = {
     name: "debug",
     description: "Diagnose and fix software issues with systematic debugging methodology.",
-    prompt: PROMPT_DEBUG,
+    prompt: choices(PROMPT_DEBUG), // raya_change - Milestone C
     options: {},
     permission: Permission.merge(
       defaults,
       Permission.fromConfig({
         question: "allow",
+        ask_options: "allow", // raya_change - Milestone C
         suggest: "allow", // kilocode_change
         plan_enter: "allow",
         semantic_search: "allow",
@@ -595,7 +620,7 @@ export function patchAgents(
   agents.orchestrator = {
     name: "orchestrator",
     description: "Coordinate complex tasks by delegating to specialized agents in parallel.",
-    prompt: PROMPT_ORCHESTRATOR,
+    prompt: choices(PROMPT_ORCHESTRATOR), // raya_change - Milestone C
     options: {},
     permission: Permission.merge(
       defaults,
@@ -606,6 +631,7 @@ export function patchAgents(
         glob: "allow",
         list: "allow",
         question: "allow",
+        ask_options: "allow", // raya_change - Milestone C
         skill: "allow",
         suggest: "allow", // kilocode_change
         task: "allow",
@@ -633,7 +659,7 @@ export function patchAgents(
   agents.ask = {
     name: "ask",
     description: "Get answers and explanations without making changes to the codebase.",
-    prompt: PROMPT_ASK,
+    prompt: choices(PROMPT_ASK), // raya_change - Milestone C
     options: {},
     permission: Permission.merge(
       defaults,
@@ -655,7 +681,8 @@ export function patchAgents(
       ...general,
       name: "coder",
       description: "Software implementation specialist for coding, fixes, refactors, APIs, and tests.",
-      prompt: "Act as Raya's coding specialist. Implement and verify the delegated software objective within inherited permissions.",
+      prompt:
+        "Act as Raya's coding specialist. Implement and verify the delegated software objective within inherited permissions.",
       mode: "subagent",
       native: true,
     }
@@ -663,14 +690,16 @@ export function patchAgents(
       ...general,
       name: "designer",
       description: "Product and interface design specialist for UI, UX, Figma, layouts, visual systems, and motion.",
-      prompt: "Act as Raya's design specialist. Produce or implement a coherent UI/UX solution and verify it visually when possible.",
+      prompt:
+        "Act as Raya's design specialist. Produce or implement a coherent UI/UX solution and verify it visually when possible.",
       mode: "subagent",
       native: true,
     }
     agents.accountant = {
       ...general,
       name: "accountant",
-      description: "Accounting specialist for ledgers, reconciliation, invoices, statements, tax, and financial analysis.",
+      description:
+        "Accounting specialist for ledgers, reconciliation, invoices, statements, tax, and financial analysis.",
       prompt: "Act as Raya's accounting specialist. Show auditable calculations, assumptions, and source evidence.",
       mode: "subagent",
       native: true,
@@ -678,8 +707,10 @@ export function patchAgents(
     agents.reasoner = {
       ...general,
       name: "reasoner",
-      description: "Hard-reasoning specialist for architecture, algorithms, proofs, security, concurrency, and trade-offs.",
-      prompt: "Act as Raya's hard-reasoning specialist. Analyze constraints and alternatives before reaching a defensible conclusion.",
+      description:
+        "Hard-reasoning specialist for architecture, algorithms, proofs, security, concurrency, and trade-offs.",
+      prompt:
+        "Act as Raya's hard-reasoning specialist. Analyze constraints and alternatives before reaching a defensible conclusion.",
       mode: "subagent",
       native: true,
     }
@@ -688,8 +719,10 @@ export function patchAgents(
     agents.researcher = {
       ...explore,
       name: "researcher",
-      description: "Research specialist for investigations, source comparison, documentation, evidence, and benchmarks.",
-      prompt: "Act as Raya's research specialist. Gather primary evidence, cite exact sources, and distinguish findings from inference.",
+      description:
+        "Research specialist for investigations, source comparison, documentation, evidence, and benchmarks.",
+      prompt:
+        "Act as Raya's research specialist. Gather primary evidence, cite exact sources, and distinguish findings from inference.",
       mode: "subagent",
       native: true,
     }
@@ -852,9 +885,8 @@ async function removeConfigAgent(name: string, sources: KilocodeConfigSources.So
     const opts = { formattingOptions: { insertSpaces: true, tabSize: 2 } }
     const next = applyEdits(text, modify(text, ["agent", name], undefined, opts))
     const parsed = parseJsonc(next)
-    const final = parsed.default_agent === name
-      ? applyEdits(next, modify(next, ["default_agent"], undefined, opts))
-      : next
+    const final =
+      parsed.default_agent === name ? applyEdits(next, modify(next, ["default_agent"], undefined, opts)) : next
     await Bun.write(file, final)
     found = true
   }

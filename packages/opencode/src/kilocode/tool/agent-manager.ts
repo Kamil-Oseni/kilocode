@@ -7,10 +7,12 @@ import type { Result } from "@/kilocode/agent-manager/protocol"
 import * as SandboxInheritance from "@/kilocode/sandbox/inheritance"
 import { KiloSessionMessageOrder } from "@/kilocode/session/message-order"
 import { Provider } from "@/provider/provider"
+import { Question } from "@/question" // raya_change - Milestone C destructive confirmation
+import { RayaAskOptions } from "@/kilocode/ask-options" // raya_change - Milestone C destructive confirmation
 import { SessionID } from "@/session/schema"
 import * as ToolJsonSchema from "@/tool/json-schema"
 import { Tool } from "@/tool/tool"
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect" // raya_change - Milestone C optional question service
 import { matchesQuery } from "./model-search"
 import DESCRIPTION from "./agent-manager.txt"
 
@@ -398,6 +400,23 @@ export const AgentManagerTool = Tool.define<
               }
             }
             if (params.action === "stop") {
+              // raya_change start - Milestone C destructive actions use the shared selectable confirmation
+              const service = yield* Effect.serviceOption(Question.Service)
+              if (Option.isSome(service)) {
+                const answers = yield* RayaAskOptions.ask(service.value, {
+                  sessionID: ctx.sessionID,
+                  questions: [RayaAskOptions.confirm(`Stop Agent Manager session ${params.sessionID}?`)],
+                  tool: ctx.callID ? { messageID: ctx.messageID, callID: ctx.callID } : undefined,
+                }).pipe(Effect.catchTag("QuestionRejectedError", () => Effect.succeed([])))
+                if (answers[0]?.selected[0]?.id !== "confirm") {
+                  return {
+                    title: "Stop cancelled",
+                    output: `Kept Agent Manager session ${params.sessionID} running.`,
+                    metadata: { action: "stop", sessionID: params.sessionID },
+                  }
+                }
+              }
+              // raya_change end
               yield* ctx.ask({
                 permission: "agent_manager",
                 patterns: ["stop"],

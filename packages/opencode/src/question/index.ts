@@ -51,6 +51,7 @@ export interface Interface {
     sessionID: SessionID
     questions: ReadonlyArray<Info>
     blocking?: boolean // kilocode_change
+    autoSubmit?: boolean // kilocode_change // raya_change - Milestone C clickable option cards
     tool?: Tool
   }) => Effect.Effect<ReadonlyArray<Answer>, RejectedError>
   readonly reply: (input: {
@@ -91,6 +92,7 @@ export const layer = Layer.effect(
       sessionID: SessionID
       questions: ReadonlyArray<Info>
       blocking?: boolean // kilocode_change
+      autoSubmit?: boolean // kilocode_change // raya_change - Milestone C clickable option cards
       tool?: Tool
     }) {
       const pending = (yield* InstanceState.get(state)).pending
@@ -103,6 +105,7 @@ export const layer = Layer.effect(
         sessionID: input.sessionID,
         questions: input.questions,
         blocking: input.blocking, // kilocode_change
+        autoSubmit: input.autoSubmit, // kilocode_change // raya_change - Milestone C clickable option cards
         tool: input.tool,
       }
 

@@ -865,10 +865,19 @@ export const layer = Layer.effect(
       // kilocode_change start
       // raya_change start - Milestone B target-model precedence starts from the user's selected model, not Chief's
       if (ag.name === "auto") {
+        // raya_change start - preserve the exact request and reset Auto's enforced per-turn phase
+        const objective = input.parts
+          .filter((part): part is Extract<PromptInput["parts"][number], { type: "text" }> => part.type === "text")
+          .map((part) => part.text)
+          .join("\n")
+          .trim()
+        // raya_change end
         yield* sessions.setMetadata({
           sessionID: input.sessionID,
           metadata: {
             ...current.metadata,
+            [RayaChief.requestKey]: objective,
+            [RayaChief.phaseKey]: "route",
             [RayaChief.modelKey]: {
               providerID: requested.providerID,
               modelID: requested.modelID,
@@ -1700,7 +1709,7 @@ export const layer = Layer.effect(
           const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
           const promptOps = yield* ops()
 
-          const tools = yield* SessionTools.resolve({
+          const resolved = yield* SessionTools.resolve({ // kilocode_change // raya_change - filter Auto tools by phase
             agent,
             session,
             model,
@@ -1724,6 +1733,13 @@ export const layer = Layer.effect(
             Effect.provideService(RuntimeFlags.Service, flags),
             // kilocode_change end
           )
+          // kilocode_change start
+          // raya_change start - Auto exposes exactly one phase-appropriate tool, then none for synthesis
+          const current = agent.name === "auto" ? yield* sessions.get(sessionID).pipe(Effect.orDie) : session
+          const tools = agent.name === "auto" ? RayaChief.tools(resolved, current.metadata) : resolved
+          const phase = agent.name === "auto" ? RayaChief.phase(current.metadata) : undefined
+          // raya_change end
+          // kilocode_change end
 
           if (lastUser.format?.type === "json_schema") {
             tools["StructuredOutput"] = createStructuredOutputTool({
@@ -1800,7 +1816,17 @@ export const layer = Layer.effect(
             ],
             tools,
             model,
-            toolChoice: format.type === "json_schema" ? "required" : undefined,
+            // kilocode_change start
+            // raya_change - force Auto's one legal action and forbid tools during final synthesis
+            toolChoice:
+              format.type === "json_schema"
+                ? "required"
+                : agent.name === "auto"
+                  ? phase === "synthesize"
+                    ? "none"
+                    : "required"
+                  : undefined,
+            // kilocode_change end
             // kilocode_change start - feed the provider-reported context size from the last finished
             // turn into the output-token cap, so image/vision input is measured by the provider
             // rather than by encoded payload bytes (see KiloLLM.capOutputTokens). Summary messages

@@ -119,6 +119,8 @@ export type Event =
   | EventKilocodeNotebookRequested
   | EventKilocodeNotebookCancelled
   | EventKiloSessionsRemoteStatusChanged
+  | EventKilocodeBrowserRequested
+  | EventKilocodeBrowserCancelled
   | EventMemoryStatus1
   | EventMemoryUpdated1
   | EventMemoryError1
@@ -460,6 +462,62 @@ export type NotebookExecuteRequest = {
 }
 
 export type NotebookRequest = NotebookReadRequest | NotebookEditRequest | NotebookExecuteRequest
+
+export type BrowserRequestId = string
+
+export type BrowserRequest =
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      operation: "navigate"
+      url: string
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      operation: "snapshot"
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      operation: "click"
+      selector: string
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      operation: "type"
+      selector: string
+      text: string
+      submit: boolean
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      operation: "select"
+      selector: string
+      values: Array<string>
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      operation: "scroll"
+      deltaX: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      deltaY: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      selector?: string
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      operation: "screenshot"
+      fullPage: boolean
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      operation: "evaluate"
+      expression: string
+    }
 
 export type IndexingStatusState = "Disabled" | "In Progress" | "Complete" | "Error" | "Standby"
 
@@ -1109,6 +1167,7 @@ export type SessionStatus =
     }
 
 export type QuestionOption = {
+  id?: string
   /**
    * Display text (1-5 words, concise)
    */
@@ -1177,6 +1236,8 @@ export type GlobalEvent = {
     | EventKilocodeNotebookRequested
     | EventKilocodeNotebookCancelled
     | EventKiloSessionsRemoteStatusChanged
+    | EventKilocodeBrowserRequested
+    | EventKilocodeBrowserCancelled
     | EventMemoryStatus
     | EventMemoryUpdated
     | EventMemoryError
@@ -2057,6 +2118,7 @@ export type GlobalEvent = {
            */
           questions: Array<QuestionInfo>
           blocking?: boolean
+          autoSubmit?: boolean
           tool?: QuestionTool
         }
       }
@@ -3196,6 +3258,7 @@ export type QuestionRequest = {
    */
   questions: Array<QuestionInfo>
   blocking?: boolean
+  autoSubmit?: boolean
   tool?: QuestionTool
 }
 
@@ -4313,6 +4376,71 @@ export type NotebookFailure = {
   currentRevision?: string
 }
 
+export type BrowserResult =
+  | {
+      url?: string
+      title?: string
+      operation: "navigate"
+      snapshot?: string
+    }
+  | {
+      url?: string
+      title?: string
+      operation: "snapshot"
+      snapshot: string
+    }
+  | {
+      url?: string
+      title?: string
+      operation: "click"
+      snapshot?: string
+    }
+  | {
+      url?: string
+      title?: string
+      operation: "type"
+      snapshot?: string
+    }
+  | {
+      url?: string
+      title?: string
+      operation: "select"
+      snapshot?: string
+    }
+  | {
+      url?: string
+      title?: string
+      operation: "scroll"
+      snapshot?: string
+    }
+  | {
+      url?: string
+      title?: string
+      operation: "screenshot"
+      mime: "image/png" | "image/jpeg"
+      data: string
+    }
+  | {
+      url?: string
+      title?: string
+      operation: "evaluate"
+      output: string
+    }
+
+export type BrowserFailure = {
+  code:
+    | "cancelled"
+    | "closed"
+    | "disconnected"
+    | "evaluation_failed"
+    | "invalid_request"
+    | "navigation_failed"
+    | "not_found"
+    | "timeout"
+    | "unsupported"
+  message: string
+}
+
 export type AgentManagerActivity = "idle" | "busy" | "retry" | "offline"
 
 export type AgentManagerAttention = Array<"permission" | "question">
@@ -4803,6 +4931,60 @@ export type InteractiveTerminalInfo1 = {
   }
 }
 
+export type BrowserRequest1 =
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      operation: "navigate"
+      url: string
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      operation: "snapshot"
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      operation: "click"
+      selector: string
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      operation: "type"
+      selector: string
+      text: string
+      submit: boolean
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      operation: "select"
+      selector: string
+      values: Array<string>
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      operation: "scroll"
+      deltaX: number | "NaN" | "Infinity" | "-Infinity"
+      deltaY: number | "NaN" | "Infinity" | "-Infinity"
+      selector?: string
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      operation: "screenshot"
+      fullPage: boolean
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      operation: "evaluate"
+      expression: string
+    }
+
 export type CredentialValue = CredentialOAuth | CredentialKey
 
 export type IntegrationInputs = {
@@ -5056,6 +5238,22 @@ export type EventKiloSessionsRemoteStatusChanged = {
   properties: {
     enabled: boolean
     connected: boolean
+  }
+}
+
+export type EventKilocodeBrowserRequested = {
+  id: string
+  type: "kilocode.browser.requested"
+  properties: BrowserRequest
+}
+
+export type EventKilocodeBrowserCancelled = {
+  id: string
+  type: "kilocode.browser.cancelled"
+  properties: {
+    requestID: BrowserRequestId
+    sessionID: string
+    reason: "cancelled" | "disposed" | "timeout"
   }
 }
 
@@ -6139,6 +6337,7 @@ export type EventQuestionAsked = {
      */
     questions: Array<QuestionInfo>
     blocking?: boolean
+    autoSubmit?: boolean
     tool?: QuestionTool
   }
 }
@@ -9033,6 +9232,7 @@ export type QuestionAsked = {
      */
     questions: Array<QuestionInfo>
     blocking?: boolean
+    autoSubmit?: boolean
     tool?: QuestionTool
   }
 }
@@ -10134,6 +10334,7 @@ export type EventQuestionAsked1 = {
      */
     questions: Array<QuestionInfo>
     blocking?: boolean
+    autoSubmit?: boolean
     tool?: QuestionTool
   }
 }
@@ -16927,6 +17128,106 @@ export type KilocodeNotebookRejectResponses = {
 }
 
 export type KilocodeNotebookRejectResponse = KilocodeNotebookRejectResponses[keyof KilocodeNotebookRejectResponses]
+
+export type KilocodeBrowserListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/browser"
+}
+
+export type KilocodeBrowserListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type KilocodeBrowserListError = KilocodeBrowserListErrors[keyof KilocodeBrowserListErrors]
+
+export type KilocodeBrowserListResponses = {
+  /**
+   * Pending browser host requests
+   */
+  200: Array<BrowserRequest>
+}
+
+export type KilocodeBrowserListResponse = KilocodeBrowserListResponses[keyof KilocodeBrowserListResponses]
+
+export type KilocodeBrowserReplyData = {
+  body?: {
+    result: BrowserResult
+  }
+  path: {
+    requestID: BrowserRequestId
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/browser/{requestID}/reply"
+}
+
+export type KilocodeBrowserReplyErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeBrowserReplyError = KilocodeBrowserReplyErrors[keyof KilocodeBrowserReplyErrors]
+
+export type KilocodeBrowserReplyResponses = {
+  /**
+   * Browser reply accepted
+   */
+  200: boolean
+}
+
+export type KilocodeBrowserReplyResponse = KilocodeBrowserReplyResponses[keyof KilocodeBrowserReplyResponses]
+
+export type KilocodeBrowserRejectData = {
+  body?: {
+    error: BrowserFailure
+  }
+  path: {
+    requestID: BrowserRequestId
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/browser/{requestID}/reject"
+}
+
+export type KilocodeBrowserRejectErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeBrowserRejectError = KilocodeBrowserRejectErrors[keyof KilocodeBrowserRejectErrors]
+
+export type KilocodeBrowserRejectResponses = {
+  /**
+   * Browser rejection accepted
+   */
+  200: boolean
+}
+
+export type KilocodeBrowserRejectResponse = KilocodeBrowserRejectResponses[keyof KilocodeBrowserRejectResponses]
 
 export type KilocodeAgentManagerListData = {
   body?: never

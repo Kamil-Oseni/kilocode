@@ -72,7 +72,7 @@ export const TaskTimeline: Component = () => {
       if (m.role === "user") continue
       const p = visibleParts(m.id, session.getParts(m.id), revert).filter((part) => {
         if (!isRenderable(part as SDKPart, m as SDKAssistantMessage)) return false
-        if (part.type !== "tool" || part.tool !== "question") return true
+        if (part.type !== "tool" || (part.tool !== "question" && part.tool !== "ask_options")) return true // raya_change
         if (part.state.status !== "pending" && part.state.status !== "running") return true
         const call = (part as SDKPart & { callID: string }).callID
         return qs.some((item) => item.tool?.callID === call && item.tool?.messageID === m.id)

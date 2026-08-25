@@ -378,13 +378,17 @@ describe("tool.task", () => {
       const { chat, assistant } = yield* seed()
       yield* sessions.setMetadata({
         sessionID: chat.id,
-        metadata: { [RayaChief.modelKey]: ref },
+        metadata: {
+          [RayaChief.modelKey]: ref,
+          [RayaChief.requestKey]: "Help me decide what to do with this project",
+          [RayaChief.phaseKey]: "route",
+        }, // raya_change - preserve the ambiguous user request despite model rewriting
       })
       const tool = yield* ChiefRouteTool
       const def = yield* tool.init()
       const fiber = yield* def
         .execute(
-          { objective: "Help me decide what to do with this project" },
+          { objective: "Implement code by inspecting this repository" }, // raya_change - simulated Chief rewrite
           {
             sessionID: chat.id,
             messageID: assistant.id,
@@ -406,17 +410,20 @@ describe("tool.task", () => {
 
       expect(pending).toHaveLength(1)
       expect(pending[0]?.questions[0]).toMatchObject({
-        header: "Choose specialist",
+        header: "Choose option",
         multiple: false,
-        custom: false,
+        custom: true,
       })
+      expect(pending[0]?.autoSubmit).toBe(true) // raya_change - Milestone C shared option cards
       expect(pending[0]?.questions[0]?.options.length).toBeGreaterThanOrEqual(2)
       yield* questions.reply({ requestID: pending[0]!.id, answers: [["designer"]] })
       const result = yield* Fiber.join(fiber)
 
       expect(result.metadata.decision.agent).toBe("designer")
+      expect(result.metadata.decision.request).toBe("Help me decide what to do with this project")
       expect(result.metadata.decision.prompted).toBe(true)
       expect(result.metadata.decision.reason).toContain("user selected designer")
+      expect(RayaChief.phase((yield* sessions.get(chat.id)).metadata)).toBe("task")
     }),
   )
 

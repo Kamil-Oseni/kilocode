@@ -428,7 +428,14 @@ export type WebviewMessage =
   | { type: "todoUpdated"; sessionID: string; items: unknown[] }
   | {
       type: "questionRequest"
-      question: { id: string; sessionID: string; questions: unknown[]; blocking?: boolean; tool?: unknown }
+      question: {
+        id: string
+        sessionID: string
+        questions: unknown[]
+        blocking?: boolean
+        autoSubmit?: boolean // raya_change - Milestone C
+        tool?: unknown
+      }
     }
   | { type: "questionResolved"; requestID: string }
   | {
@@ -590,6 +597,7 @@ export function mapSSEEventToWebviewMessage(event: StreamEvent, sessionID: strin
           sessionID: event.properties.sessionID,
           questions: event.properties.questions,
           blocking: event.properties.blocking,
+          autoSubmit: event.properties.autoSubmit, // raya_change - Milestone C click resolves single-select
           tool: event.properties.tool,
         },
       }

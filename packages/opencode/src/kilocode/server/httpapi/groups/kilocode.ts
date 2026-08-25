@@ -26,6 +26,14 @@ import { ModelUsage } from "@/kilocode/session/model-usage"
 import { SessionID } from "@/session/schema"
 import { CommandFiles } from "@/kilocode/command-files"
 import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal API contracts
+// raya_change start - Milestone F browser API contracts
+import {
+  Failure as BrowserFailure,
+  Request as BrowserRequest,
+  RequestID as BrowserRequestID,
+  Result as BrowserResult,
+} from "@/kilocode/browser/protocol"
+// raya_change end
 
 const root = "/kilocode"
 const Scope = Schema.Literals(["global", "project"])
@@ -65,6 +73,8 @@ export const AgentManagerReplyPayload = Schema.Struct({ result: AgentManagerResu
 export const AgentManagerRejectPayload = Schema.Struct({ error: AgentManagerFailure })
 export const GoalCreatePayload = RayaGoal.Create // raya_change - Milestone A goal API contracts
 export const GoalUpdatePayload = RayaGoal.Control // raya_change - Milestone A goal API contracts
+export const BrowserReplyPayload = Schema.Struct({ result: BrowserResult }) // raya_change - Milestone F
+export const BrowserRejectPayload = Schema.Struct({ error: BrowserFailure }) // raya_change - Milestone F
 
 export const KilocodePaths = {
   heapSnapshot: `${root}/heap/snapshot`,
@@ -84,6 +94,9 @@ export const KilocodePaths = {
   backgroundJobs: `${root}/background-jobs`,
   backgroundJobCancel: `${root}/background-jobs/:jobID/cancel`,
   goal: `/session/:sessionID/goal`, // raya_change - Milestone A session-scoped goal API
+  browserList: `${root}/browser`, // raya_change - Milestone F browser host API
+  browserReply: `${root}/browser/:requestID/reply`, // raya_change - Milestone F browser host API
+  browserReject: `${root}/browser/:requestID/reject`, // raya_change - Milestone F browser host API
 } as const
 
 export const KilocodeApi = HttpApi.make("kilocode")
@@ -206,6 +219,44 @@ export const KilocodeApi = HttpApi.make("kilocode")
             description: "Complete a pending native notebook request with a structured host error.",
           }),
         ),
+        // raya_change start - Milestone F browser host API
+        HttpApiEndpoint.get("browserList", KilocodePaths.browserList, {
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Array(BrowserRequest), "Pending browser host requests"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.browser.list",
+            summary: "List pending browser requests",
+            description: "List pending shared-browser requests for the routed workspace.",
+          }),
+        ),
+        HttpApiEndpoint.post("browserReply", KilocodePaths.browserReply, {
+          params: { requestID: BrowserRequestID },
+          query: WorkspaceRoutingQuery,
+          payload: BrowserReplyPayload,
+          success: described(Schema.Boolean, "Browser reply accepted"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.browser.reply",
+            summary: "Reply to a browser request",
+            description: "Complete a pending shared-browser request with a structured result.",
+          }),
+        ),
+        HttpApiEndpoint.post("browserReject", KilocodePaths.browserReject, {
+          params: { requestID: BrowserRequestID },
+          query: WorkspaceRoutingQuery,
+          payload: BrowserRejectPayload,
+          success: described(Schema.Boolean, "Browser rejection accepted"),
+          error: HttpApiError.NotFound,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.browser.reject",
+            summary: "Reject a browser request",
+            description: "Complete a pending shared-browser request with a structured host error.",
+          }),
+        ),
+        // raya_change end
         HttpApiEndpoint.get("agentManagerList", KilocodePaths.agentManagerList, {
           query: WorkspaceRoutingQuery,
           success: described(Schema.Array(AgentManagerRequest), "Pending Agent Manager host requests"),

@@ -262,11 +262,21 @@ function getExtensionConfig() {
     sourcesContent: false,
     platform: "node",
     outfile: "dist/extension.js",
-    external: ["vscode"],
+    external: ["vscode", "playwright-core"], // raya_change - ship Playwright beside the extension bundle
     logLevel: "silent",
     plugins: watch ? [esbuildProblemMatcherPlugin] : [],
   }
 }
+
+// raya_change start - Milestone F Playwright runtime packaging
+function copyBrowserRuntime() {
+  const source = path.dirname(require.resolve("playwright-core/package.json"))
+  const target = path.join(__dirname, "dist", "node_modules", "playwright-core")
+  fs.rmSync(target, { recursive: true, force: true })
+  fs.mkdirSync(path.dirname(target), { recursive: true })
+  fs.cpSync(source, target, { recursive: true })
+}
+// raya_change end
 
 function getWebviewsConfig() {
   return {
@@ -339,6 +349,7 @@ async function main() {
   const webviewsConfig = getWebviewsConfig()
   const shikiWorkerConfig = getShikiWorkerConfig()
   const markdownShikiWorkerConfig = getMarkdownShikiWorkerConfig()
+  copyBrowserRuntime() // raya_change - keep external Playwright resolvable in packaged VSIX
 
   if (watch) {
     const [extensionCtx, webviewsCtx, shikiWorkerCtx, markdownShikiWorkerCtx] = await Promise.all([

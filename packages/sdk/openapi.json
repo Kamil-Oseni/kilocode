@@ -15811,6 +15811,249 @@
         ]
       }
     },
+    "/kilocode/browser": {
+      "get": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.browser.list",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pending browser host requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BrowserRequest"
+                  },
+                  "description": "Pending browser host requests"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "List pending shared-browser requests for the routed workspace.",
+        "summary": "List pending browser requests",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.browser.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/browser/{requestID}/reply": {
+      "post": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.browser.reply",
+        "parameters": [
+          {
+            "name": "requestID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/BrowserRequestID"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Browser reply accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Browser reply accepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Complete a pending shared-browser request with a structured result.",
+        "summary": "Reply to a browser request",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "result": {
+                    "$ref": "#/components/schemas/BrowserResult"
+                  }
+                },
+                "required": ["result"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.browser.reply({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/browser/{requestID}/reject": {
+      "post": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.browser.reject",
+        "parameters": [
+          {
+            "name": "requestID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/BrowserRequestID"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Browser rejection accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Browser rejection accepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Complete a pending shared-browser request with a structured host error.",
+        "summary": "Reject a browser request",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "error": {
+                    "$ref": "#/components/schemas/BrowserFailure"
+                  }
+                },
+                "required": ["error"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.browser.reject({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/kilocode/agent-manager": {
       "get": {
         "tags": ["kilocode"],
@@ -16654,7 +16897,7 @@
                                       "type": "string"
                                     }
                                   },
-                                  "required": ["messageID", "callID", "summary"],
+                                  "required": ["callID", "summary"],
                                   "additionalProperties": false
                                 }
                               }
@@ -16994,7 +17237,7 @@
                                       "type": "string"
                                     }
                                   },
-                                  "required": ["messageID", "callID", "summary"],
+                                  "required": ["callID", "summary"],
                                   "additionalProperties": false
                                 }
                               }
@@ -17311,7 +17554,7 @@
                                       "type": "string"
                                     }
                                   },
-                                  "required": ["messageID", "callID", "summary"],
+                                  "required": ["callID", "summary"],
                                   "additionalProperties": false
                                 }
                               }
@@ -27551,6 +27794,12 @@
             "$ref": "#/components/schemas/EventKilo-sessionsRemote-status-changed"
           },
           {
+            "$ref": "#/components/schemas/EventKilocodeBrowserRequested"
+          },
+          {
+            "$ref": "#/components/schemas/EventKilocodeBrowserCancelled"
+          },
+          {
             "$ref": "#/components/schemas/EventMemoryStatus1"
           },
           {
@@ -28633,6 +28882,251 @@
           },
           {
             "$ref": "#/components/schemas/NotebookExecuteRequest"
+          }
+        ]
+      },
+      "BrowserRequestID": {
+        "type": "string"
+      },
+      "BrowserRequest": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["navigate"]
+              },
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000
+              }
+            },
+            "required": ["id", "sessionID", "operation", "url"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["snapshot"]
+              }
+            },
+            "required": ["id", "sessionID", "operation"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["click"]
+              },
+              "selector": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 10000
+              }
+            },
+            "required": ["id", "sessionID", "operation", "selector"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["type"]
+              },
+              "selector": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 10000
+              },
+              "text": {
+                "type": "string",
+                "maxLength": 200000
+              },
+              "submit": {
+                "type": "boolean"
+              }
+            },
+            "required": ["id", "sessionID", "operation", "selector", "text", "submit"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["select"]
+              },
+              "selector": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 10000
+              },
+              "values": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 200000
+                },
+                "minItems": 1,
+                "maxItems": 100
+              }
+            },
+            "required": ["id", "sessionID", "operation", "selector", "values"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["scroll"]
+              },
+              "deltaX": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["NaN"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["-Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              },
+              "deltaY": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["NaN"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["-Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              },
+              "selector": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 10000
+              }
+            },
+            "required": ["id", "sessionID", "operation", "deltaX", "deltaY"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["screenshot"]
+              },
+              "fullPage": {
+                "type": "boolean"
+              }
+            },
+            "required": ["id", "sessionID", "operation", "fullPage"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["evaluate"]
+              },
+              "expression": {
+                "type": "string",
+                "maxLength": 200000
+              }
+            },
+            "required": ["id", "sessionID", "operation", "expression"],
+            "additionalProperties": false
           }
         ]
       },
@@ -30586,6 +31080,9 @@
       "QuestionOption": {
         "type": "object",
         "properties": {
+          "id": {
+            "type": "string"
+          },
           "label": {
             "type": "string",
             "description": "Display text (1-5 words, concise)"
@@ -30746,6 +31243,12 @@
               },
               {
                 "$ref": "#/components/schemas/EventKilo-sessionsRemote-status-changed"
+              },
+              {
+                "$ref": "#/components/schemas/EventKilocodeBrowserRequested"
+              },
+              {
+                "$ref": "#/components/schemas/EventKilocodeBrowserCancelled"
               },
               {
                 "$ref": "#/components/schemas/EventMemoryStatus"
@@ -33740,6 +34243,9 @@
                         "description": "Questions to ask"
                       },
                       "blocking": {
+                        "type": "boolean"
+                      },
+                      "autoSubmit": {
                         "type": "boolean"
                       },
                       "tool": {
@@ -37051,6 +37557,9 @@
             "description": "Questions to ask"
           },
           "blocking": {
+            "type": "boolean"
+          },
+          "autoSubmit": {
             "type": "boolean"
           },
           "tool": {
@@ -40524,6 +41033,232 @@
         "required": ["code", "message"],
         "additionalProperties": false
       },
+      "BrowserResult": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000
+              },
+              "title": {
+                "type": "string",
+                "maxLength": 10000
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["navigate"]
+              },
+              "snapshot": {
+                "type": "string",
+                "maxLength": 200000
+              }
+            },
+            "required": ["operation"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000
+              },
+              "title": {
+                "type": "string",
+                "maxLength": 10000
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["snapshot"]
+              },
+              "snapshot": {
+                "type": "string",
+                "maxLength": 200000
+              }
+            },
+            "required": ["operation", "snapshot"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000
+              },
+              "title": {
+                "type": "string",
+                "maxLength": 10000
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["click"]
+              },
+              "snapshot": {
+                "type": "string",
+                "maxLength": 200000
+              }
+            },
+            "required": ["operation"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000
+              },
+              "title": {
+                "type": "string",
+                "maxLength": 10000
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["type"]
+              },
+              "snapshot": {
+                "type": "string",
+                "maxLength": 200000
+              }
+            },
+            "required": ["operation"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000
+              },
+              "title": {
+                "type": "string",
+                "maxLength": 10000
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["select"]
+              },
+              "snapshot": {
+                "type": "string",
+                "maxLength": 200000
+              }
+            },
+            "required": ["operation"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000
+              },
+              "title": {
+                "type": "string",
+                "maxLength": 10000
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["scroll"]
+              },
+              "snapshot": {
+                "type": "string",
+                "maxLength": 200000
+              }
+            },
+            "required": ["operation"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000
+              },
+              "title": {
+                "type": "string",
+                "maxLength": 10000
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["screenshot"]
+              },
+              "mime": {
+                "type": "string",
+                "enum": ["image/png", "image/jpeg"]
+              },
+              "data": {
+                "type": "string",
+                "maxLength": 20000000
+              }
+            },
+            "required": ["operation", "mime", "data"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000
+              },
+              "title": {
+                "type": "string",
+                "maxLength": 10000
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["evaluate"]
+              },
+              "output": {
+                "type": "string",
+                "maxLength": 200000
+              }
+            },
+            "required": ["operation", "output"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "BrowserFailure": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "cancelled",
+              "closed",
+              "disconnected",
+              "evaluation_failed",
+              "invalid_request",
+              "navigation_failed",
+              "not_found",
+              "timeout",
+              "unsupported"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 10000
+          }
+        },
+        "required": ["code", "message"],
+        "additionalProperties": false
+      },
       "AgentManagerActivity": {
         "type": "string",
         "enum": ["idle", "busy", "retry", "offline"]
@@ -42068,6 +42803,240 @@
         "required": ["id", "sessionID", "pid", "command", "cwd", "status", "cols", "rows", "time"],
         "additionalProperties": false
       },
+      "BrowserRequest1": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["navigate"]
+              },
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000
+              }
+            },
+            "required": ["id", "sessionID", "operation", "url"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["snapshot"]
+              }
+            },
+            "required": ["id", "sessionID", "operation"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["click"]
+              },
+              "selector": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 10000
+              }
+            },
+            "required": ["id", "sessionID", "operation", "selector"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["type"]
+              },
+              "selector": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 10000
+              },
+              "text": {
+                "type": "string",
+                "maxLength": 200000
+              },
+              "submit": {
+                "type": "boolean"
+              }
+            },
+            "required": ["id", "sessionID", "operation", "selector", "text", "submit"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["select"]
+              },
+              "selector": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 10000
+              },
+              "values": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 200000
+                },
+                "minItems": 1,
+                "maxItems": 100
+              }
+            },
+            "required": ["id", "sessionID", "operation", "selector", "values"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["scroll"]
+              },
+              "deltaX": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["NaN"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["-Infinity"]
+                  }
+                ]
+              },
+              "deltaY": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["NaN"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["-Infinity"]
+                  }
+                ]
+              },
+              "selector": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 10000
+              }
+            },
+            "required": ["id", "sessionID", "operation", "deltaX", "deltaY"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["screenshot"]
+              },
+              "fullPage": {
+                "type": "boolean"
+              }
+            },
+            "required": ["id", "sessionID", "operation", "fullPage"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["evaluate"]
+              },
+              "expression": {
+                "type": "string",
+                "maxLength": 200000
+              }
+            },
+            "required": ["id", "sessionID", "operation", "expression"],
+            "additionalProperties": false
+          }
+        ]
+      },
       "CredentialValue": {
         "anyOf": [
           {
@@ -42856,6 +43825,55 @@
               }
             },
             "required": ["enabled", "connected"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventKilocodeBrowserRequested": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["kilocode.browser.requested"]
+          },
+          "properties": {
+            "$ref": "#/components/schemas/BrowserRequest"
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventKilocodeBrowserCancelled": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["kilocode.browser.cancelled"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "requestID": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "reason": {
+                "type": "string",
+                "enum": ["cancelled", "disposed", "timeout"]
+              }
+            },
+            "required": ["requestID", "sessionID", "reason"],
             "additionalProperties": false
           }
         },
@@ -46783,6 +47801,9 @@
                 "description": "Questions to ask"
               },
               "blocking": {
+                "type": "boolean"
+              },
+              "autoSubmit": {
                 "type": "boolean"
               },
               "tool": {
@@ -55551,6 +56572,9 @@
               "blocking": {
                 "type": "boolean"
               },
+              "autoSubmit": {
+                "type": "boolean"
+              },
               "tool": {
                 "$ref": "#/components/schemas/QuestionTool"
               }
@@ -58896,6 +59920,9 @@
                 "description": "Questions to ask"
               },
               "blocking": {
+                "type": "boolean"
+              },
+              "autoSubmit": {
                 "type": "boolean"
               },
               "tool": {

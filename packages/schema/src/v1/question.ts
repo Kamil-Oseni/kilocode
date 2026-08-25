@@ -13,6 +13,13 @@ export const ID = Schema.String.check(Schema.isStartsWith("que")).pipe(
 )
 
 export const Option = Schema.Struct({
+  // kilocode_change start
+  // raya_change start - Milestone C stable option ids
+  id: Schema.optional(Schema.String).annotate({
+    description: "Stable reply value; clients fall back to label when omitted",
+  }),
+  // raya_change end
+  // kilocode_change end
   label: Schema.String.annotate({ description: "Display text (1-5 words, concise)" }),
   description: Schema.String.annotate({ description: "Explanation of choice" }),
   // kilocode_change start - Kilo client localization and mode selection hints
@@ -56,6 +63,13 @@ export const Request = Schema.Struct({
   blocking: Schema.optional(Schema.Boolean).annotate({
     description: "Whether this question blocks prompt input (default: true)",
   }), // kilocode_change
+  // kilocode_change start
+  // raya_change start - Milestone C clickable cards
+  autoSubmit: Schema.optional(Schema.Boolean).annotate({
+    description: "Submit a single-select answer immediately when an option is clicked",
+  }),
+  // raya_change end
+  // kilocode_change end
   tool: Schema.optional(Tool),
 }).annotate({ identifier: "QuestionRequest" })
 export const Answer = Schema.Array(Schema.String).annotate({ identifier: "QuestionAnswer" })

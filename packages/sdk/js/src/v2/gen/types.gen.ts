@@ -17172,6 +17172,229 @@ export type KilocodeBackgroundJobCancelResponses = {
 export type KilocodeBackgroundJobCancelResponse =
   KilocodeBackgroundJobCancelResponses[keyof KilocodeBackgroundJobCancelResponses]
 
+export type KilocodeGoalClearData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/goal"
+}
+
+export type KilocodeGoalClearErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type KilocodeGoalClearError = KilocodeGoalClearErrors[keyof KilocodeGoalClearErrors]
+
+export type KilocodeGoalClearResponses = {
+  /**
+   * Goal cleared
+   */
+  200: boolean
+}
+
+export type KilocodeGoalClearResponse = KilocodeGoalClearResponses[keyof KilocodeGoalClearResponses]
+
+export type KilocodeGoalGetData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/goal"
+}
+
+export type KilocodeGoalGetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeGoalGetError = KilocodeGoalGetErrors[keyof KilocodeGoalGetErrors]
+
+export type KilocodeGoalGetResponses = {
+  /**
+   * Current goal
+   */
+  200: {
+    objective: string
+    status: "active" | "paused" | "complete" | "blocked"
+    createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    usage: {
+      turns: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      continuations: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      toolCalls: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
+    blockedReason?: string
+    audit?: {
+      requirements: Array<{
+        requirement: string
+        passed: boolean
+        evidence: Array<{
+          messageID?: string
+          callID: string
+          summary: string
+        }>
+      }>
+      summary: string
+      verifiedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
+    progress: Array<{
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      kind: "status" | "turn" | "continuation"
+      message: string
+    }>
+  }
+}
+
+export type KilocodeGoalGetResponse = KilocodeGoalGetResponses[keyof KilocodeGoalGetResponses]
+
+export type KilocodeGoalUpdateData = {
+  body?: {
+    status: "active" | "paused"
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/goal"
+}
+
+export type KilocodeGoalUpdateErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeGoalUpdateError = KilocodeGoalUpdateErrors[keyof KilocodeGoalUpdateErrors]
+
+export type KilocodeGoalUpdateResponses = {
+  /**
+   * Updated goal
+   */
+  200: {
+    objective: string
+    status: "active" | "paused" | "complete" | "blocked"
+    createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    usage: {
+      turns: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      continuations: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      toolCalls: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
+    blockedReason?: string
+    audit?: {
+      requirements: Array<{
+        requirement: string
+        passed: boolean
+        evidence: Array<{
+          messageID?: string
+          callID: string
+          summary: string
+        }>
+      }>
+      summary: string
+      verifiedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
+    progress: Array<{
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      kind: "status" | "turn" | "continuation"
+      message: string
+    }>
+  }
+}
+
+export type KilocodeGoalUpdateResponse = KilocodeGoalUpdateResponses[keyof KilocodeGoalUpdateResponses]
+
+export type KilocodeGoalCreateData = {
+  body?: {
+    objective: string
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/goal"
+}
+
+export type KilocodeGoalCreateErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeGoalCreateError = KilocodeGoalCreateErrors[keyof KilocodeGoalCreateErrors]
+
+export type KilocodeGoalCreateResponses = {
+  /**
+   * Created goal
+   */
+  200: {
+    objective: string
+    status: "active" | "paused" | "complete" | "blocked"
+    createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    usage: {
+      turns: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      continuations: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      toolCalls: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
+    blockedReason?: string
+    audit?: {
+      requirements: Array<{
+        requirement: string
+        passed: boolean
+        evidence: Array<{
+          messageID?: string
+          callID: string
+          summary: string
+        }>
+      }>
+      summary: string
+      verifiedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
+    progress: Array<{
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      kind: "status" | "turn" | "continuation"
+      message: string
+    }>
+  }
+}
+
+export type KilocodeGoalCreateResponse = KilocodeGoalCreateResponses[keyof KilocodeGoalCreateResponses]
+
 export type AnacondaDesktopStatusData = {
   body?: never
   path?: never

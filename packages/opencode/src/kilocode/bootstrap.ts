@@ -1,4 +1,4 @@
-import { Cause, Context, Effect, Layer } from "effect"
+import { Cause, Context, Effect, Layer, Option } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { KiloSessions } from "@/kilo-sessions/kilo-sessions"
 import * as Log from "@opencode-ai/core/util/log"
@@ -21,6 +21,8 @@ import { KiloToolRegistry } from "@/kilocode/tool/registry"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { KilocodeWatcher } from "@/kilocode/watcher"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder" // kilocode_change
+import { Storage } from "@/storage/storage" // raya_change - Milestone A durable goal storage
+import { RayaGoalContinuation } from "@/kilocode/goal/continuation" // raya_change - Milestone A idle continuation
 
 const log = Log.create({ service: "kilocode-bootstrap" })
 
@@ -43,11 +45,15 @@ export namespace KilocodeBootstrap {
       const provider = yield* Provider.Service
       const memory = yield* MemoryService.Service
       const watcher = yield* KilocodeWatcher.Service
+      const storage = Option.getOrUndefined(yield* Effect.serviceOption(Storage.Service)) // raya_change - Milestone A durable goal storage
 
       const init = Effect.fn("KilocodeBootstrap.init")(function* () {
         yield* watcher.init()
         yield* kilo.init()
         yield* MemoryLifecycle.subscribe({ bus, sessions, summary, provider, memory })
+        if (storage) {
+          yield* RayaGoalContinuation.subscribe({ bus, sessions, storage }) // raya_change - Milestone A idle continuation
+        }
         // Invalidate enabled cache on every memory state mutation (properties.directory holds the memory root).
         yield* bus.subscribeCallback(MemoryEvents.Status, (evt) =>
           KiloToolRegistry.invalidateMemoryEnabled(evt.properties.directory),
@@ -105,6 +111,7 @@ export namespace KilocodeBootstrap {
       MemoryService.layer,
       Bus.defaultLayer,
       KilocodeWatcher.defaultLayer,
+      AppNodeBuilder.build(Storage.node), // raya_change - Milestone A durable goal storage
     ]),
   )
 
@@ -114,7 +121,16 @@ export namespace KilocodeBootstrap {
     LayerNode.make({
       service: Service,
       layer,
-      deps: [KiloSessions.node, Session.node, SessionSummary.node, Provider.node, memory, Bus.node, watcher],
+      deps: [
+        KiloSessions.node,
+        Session.node,
+        SessionSummary.node,
+        Provider.node,
+        memory,
+        Bus.node,
+        watcher,
+        Storage.node, // raya_change - Milestone A durable goal storage
+      ],
     }),
   )
 }

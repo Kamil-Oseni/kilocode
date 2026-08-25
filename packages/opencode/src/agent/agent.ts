@@ -335,6 +335,12 @@ const layer = Layer.effect(
 
         // kilocode_change start - rename build→code, add debug/orchestrator/ask, patch plan/explore
         KiloAgent.patchAgents(agents, defaults, user, cfg, kilo, ctx.worktree, whitelistedDirs)
+        // raya_change start - Milestone B binds Auto's Chief turn to the configured cheap model
+        const small = cfg.small_model
+          ? Provider.parseModel(cfg.small_model)
+          : { providerID: ProviderV2.ID.kilo, modelID: ModelV2.ID.make("kilo-auto/small") }
+        KiloAgent.addAuto(agents, defaults, small)
+        // raya_change end
 
         const agentConfigs = KiloAgent.preprocessConfig(cfg.agent ?? {})
         for (const [key, value] of Object.entries(agentConfigs)) {
@@ -446,6 +452,8 @@ const layer = Layer.effect(
           }
         // kilocode_change end
         }
+
+        KiloAgent.refreshAuto(agents, small) // kilocode_change // raya_change - keep Chief cheap and include configured specialists
 
         // Ensure Truncate.GLOB is allowed unless explicitly configured
         for (const name in agents) {

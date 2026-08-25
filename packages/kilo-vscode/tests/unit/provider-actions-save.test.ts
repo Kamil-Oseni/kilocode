@@ -19,6 +19,8 @@ function createCtx(existing: ExistingGlobal = { disabled_providers: [] }, merged
     cached: [] as unknown[],
     refresh: 0,
     dispose: 0,
+    secretSet: [] as Array<{ providerID: string; key: string }>, // raya_change - Milestone I
+    secretDelete: [] as string[], // raya_change
   }
 
   const ctx = {
@@ -83,6 +85,17 @@ function createCtx(existing: ExistingGlobal = { disabled_providers: [] }, merged
     fetchAndSendProviders: async () => {
       calls.refresh += 1
     },
+    // raya_change start - exercise the SecretStorage action boundary
+    secrets: {
+      get: async () => undefined,
+      set: async (providerID: string, key: string) => {
+        calls.secretSet.push({ providerID, key })
+      },
+      delete: async (providerID: string) => {
+        calls.secretDelete.push(providerID)
+      },
+    },
+    // raya_change end
   } as unknown as Parameters<typeof saveCustomProvider>[0]
 
   return {
@@ -126,6 +139,7 @@ describe("disconnectProvider", () => {
     expect(calls.remove).toEqual([{ providerID: "openai" }])
     expect(calls.config).toEqual([{ config: { disabled_providers: ["groq"] } }])
     expect(calls.refresh).toBe(1)
+    expect(calls.secretDelete).toEqual(["openai"]) // raya_change
   })
 })
 
@@ -149,6 +163,7 @@ describe("connectProvider", () => {
       },
     ])
     expect(calls.refresh).toBe(1)
+    expect(calls.secretSet).toEqual([{ providerID: "azure", key: "sk-test" }]) // raya_change
     expect(calls.posts).toContainEqual({ type: "providerConnected", requestId: "req", providerID: "azure" })
   })
 
@@ -195,6 +210,7 @@ describe("saveCustomProvider", () => {
 
     expect(calls.set).toHaveLength(0)
     expect(calls.remove).toEqual([{ providerID: "myprovider" }])
+    expect(calls.secretDelete).toEqual(["myprovider"]) // raya_change
   })
 
   it("stores a changed api key", async () => {
@@ -204,6 +220,8 @@ describe("saveCustomProvider", () => {
 
     expect(calls.remove).toHaveLength(0)
     expect(calls.set).toEqual([{ providerID: "myprovider", auth: { type: "api", key: "sk-test" } }])
+    expect(calls.secretSet).toEqual([{ providerID: "myprovider", key: "sk-test" }]) // raya_change
+    expect(JSON.stringify(calls.config)).not.toContain("sk-test") // raya_change - no plaintext config write
   })
 
   it("preserves opaque existing variant options through the save boundary", async () => {
@@ -347,6 +365,7 @@ describe("disconnectProvider", () => {
     expect(calls.config).toHaveLength(1)
     expect(calls.config[0].config).toEqual({ disabled_providers: ["openai", "myprovider"] })
     expect(calls.remove).toEqual([{ providerID: "myprovider" }])
+    expect(calls.secretDelete).toEqual(["myprovider"]) // raya_change
     expect(calls.refresh).toBe(1)
     expect(calls.posts).toContainEqual({ type: "providerDisconnected", requestId: "req", providerID: "myprovider" })
   })
@@ -556,6 +575,45 @@ describe("fetchProviderData", () => {
       myprovider: { key: "sk-stored", baseURL: "https://example.com/v1" },
     })
     expect(result.response.all.every((item) => !("key" in (item as Record<string, unknown>)))).toBe(true)
+  })
+
+  it("migrates CLI auth into SecretStorage and prefers the encrypted key", async () => {
+    // raya_change - Milestone I migration and secret-source contract
+    const saved: Array<{ providerID: string; key: string }> = []
+    const client = {
+      provider: {
+        list: async () => ({
+          data: {
+            all: [
+              {
+                id: "myprovider",
+                name: "My Provider",
+                source: "config",
+                key: "cli-key",
+                env: [],
+                options: { baseURL: "https://example.com/v1" },
+                models: {},
+              },
+            ],
+            connected: ["myprovider"],
+            default: {},
+          },
+        }),
+        auth: async () => ({ data: {} }),
+      },
+      kilo: { authStatus: async () => ({ data: { authenticated: false } }) },
+    } as unknown as Parameters<typeof fetchProviderData>[0]
+    const secrets = {
+      get: async () => undefined,
+      set: async (providerID: string, key: string) => saved.push({ providerID, key }),
+      delete: async () => undefined,
+    }
+
+    const result = await fetchProviderData(client, "/tmp", secrets)
+
+    expect(saved).toEqual([{ providerID: "myprovider", key: "cli-key" }])
+    expect(result.storedKeys.myprovider?.key).toBe("cli-key")
+    expect(JSON.stringify(result.response)).not.toContain("cli-key")
   })
 })
 

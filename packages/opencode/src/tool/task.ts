@@ -23,6 +23,10 @@ import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import * as SandboxPolicy from "@/kilocode/sandbox/policy" // kilocode_change
 import { Database } from "@opencode-ai/core/database/database"
+import { Permission } from "@/permission" // raya_change - Milestone D auto-routing respects inherited task denies
+import { RayaChief } from "@/kilocode/chief" // raya_change - Milestone B enforced Auto decision
+import { ModelV2 } from "@opencode-ai/core/model" // raya_change - Milestone B preserved target model
+import { ProviderV2 } from "@opencode-ai/core/provider" // raya_change - Milestone B preserved target model
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -50,8 +54,24 @@ const BACKGROUND_UPDATED = [
 
 const BaseParameterFields = {
   description: Schema.String.annotate({ description: "A short (3-5 words) description of the task" }),
-  prompt: Schema.String.annotate({ description: "The task for the agent to perform" }),
-  subagent_type: Schema.String.annotate({ description: "The type of specialized agent to use for this task" }),
+  // raya_change start - Milestone D defaults delegation to Chief auto-selection
+  prompt: Schema.optional(Schema.String).annotate({ description: "Legacy task objective; prefer brief.objective" }),
+  subagent_type: Schema.optional(Schema.String).annotate({
+    description:
+      'Optional explicit specialist override. Omit this or pass "auto" to let the Chief select the best-fit subagent.',
+  }),
+  brief: Schema.optional(
+    Schema.Struct({
+      objective: Schema.String,
+      context: Schema.optional(Schema.String),
+      constraints: Schema.optional(Schema.Array(Schema.String)),
+      expected_return: Schema.optional(Schema.String),
+    }),
+  ).annotate({ description: "Structured hand-off contract for the isolated subagent" }),
+  step_cap: Schema.optional(Schema.Number).annotate({
+    description: "Maximum agentic steps for this child (clamped to 1-50; defaults to 12)",
+  }),
+  // raya_change end
   task_id: Schema.optional(Schema.String).annotate({
     description:
       "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
@@ -113,6 +133,55 @@ export const TaskTool = Tool.define(
       }
 
       const parent = yield* sessions.get(ctx.sessionID)
+      // raya_change start - resolve resumed, explicit, or Chief-routed specialists before permission checks
+      const chief = ctx.agent === "auto" ? RayaChief.pending(parent.metadata) : undefined
+      if (ctx.agent === "auto" && !chief) {
+        return yield* Effect.fail(new Error("Auto must call chief_route before delegating with task"))
+      }
+      const resumed = params.task_id
+        ? yield* sessions.get(SessionID.make(params.task_id)).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
+        : undefined
+      if (resumed && resumed.parentID !== ctx.sessionID) {
+        return yield* Effect.fail(
+          new Error(`Cannot resume session ${params.task_id}: not a child of the current session`),
+        )
+      }
+      const caller = yield* agent.get(ctx.agent)
+      const ruleset = Permission.merge(caller.permission, parent.permission ?? [])
+      const candidates = (yield* agent.list()).filter(
+        (item) =>
+          item.mode !== "primary" &&
+          !item.hidden &&
+          !item.deprecated &&
+          Permission.evaluate(id, item.name, ruleset).action !== "deny",
+      )
+      const explicit = params.subagent_type && params.subagent_type !== "auto" ? params.subagent_type : undefined
+      const routed = chief?.agent ?? explicit ?? resumed?.agent ?? KiloTask.route({
+        request: [
+          params.description,
+          params.prompt ?? "",
+          params.brief?.objective ?? "",
+          params.brief?.context ?? "",
+          ...(params.brief?.constraints ?? []),
+          params.brief?.expected_return ?? "",
+        ].join("\n"),
+        agents: candidates,
+      }).name
+      const limit = KiloTask.cap(params.step_cap)
+      const handoff = KiloTask.brief({
+        prompt: chief?.request ?? params.prompt,
+        brief: chief
+          ? {
+              ...params.brief,
+              objective: chief.request,
+              context: [params.brief?.context, chief.needs_plan ? "Plan the approach before execution." : undefined]
+                .filter(Boolean)
+                .join("\n"),
+            }
+          : params.brief,
+        cap: limit,
+      })
+      // raya_change end
       let current = parent
       let depth = 0
       while (current.parentID) {
@@ -136,36 +205,28 @@ export const TaskTool = Tool.define(
       if (!ctx.extra?.bypassAgentCheck) {
         yield* ctx.ask({
           permission: id,
-          patterns: [params.subagent_type],
+          patterns: [routed], // raya_change - authorize the actual Chief-selected specialist
           always: ["*"],
           metadata: {
             description: params.description,
-            subagent_type: params.subagent_type,
+            subagent_type: routed, // raya_change
           },
         })
       }
 
-      const next = yield* agent.get(params.subagent_type)
+      const next = yield* agent.get(routed) // raya_change - explicit override or automatic route
       if (!next) {
-        return yield* Effect.fail(new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`))
+        return yield* Effect.fail(new Error(`Unknown agent type: ${routed} is not a valid agent type`))
       }
       // kilocode_change start — reject primary agents; only subagent/all modes allowed
-      KiloTask.validate(next, params.subagent_type)
+      KiloTask.validate(next, routed)
       // kilocode_change end
 
       const canTask = depth + 1 < (cfg.subagent_depth ?? 1) // kilocode_change - honor upstream's opt-in depth limit
       const canTodo = next.permission.some((rule) => rule.permission === "todowrite")
 
-      const session = params.task_id
-        ? yield* sessions.get(SessionID.make(params.task_id)).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
-        : undefined
-      if (session && session.parentID !== ctx.sessionID) {
-        return yield* Effect.fail(
-          new Error(`Cannot resume session ${params.task_id}: not a child of the current session`),
-        ) // kilocode_change - prevent cross-session task resume
-      }
+      const session = resumed // raya_change - reuse the child validated before auto-routing
       // kilocode_change start — inherit edit/bash/MCP restrictions from calling agent
-      const caller = yield* agent.get(ctx.agent)
       const rules = KiloTask.inherited({ caller, session: parent, mcp: cfg.mcp })
       const childPermission = KiloTask.merge(
         deriveSubagentSessionPermission({
@@ -201,6 +262,11 @@ export const TaskTool = Tool.define(
           permission: childPermission, // kilocode_change - persist inherited Kilo ceilings and upstream child denies
         }))
       // kilocode_change end
+      // raya_change - persist a task-specific ceiling consumed by SessionPrompt.runLoop
+      yield* sessions.setMetadata({
+        sessionID: nextSession.id,
+        metadata: KiloTask.metadata(nextSession.metadata, params.step_cap),
+      })
       // kilocode_change start - rebuild in-memory ancestry and inherit confinement after creation/resume
       KiloSession.register({ id: nextSession.id, parentID: ctx.sessionID, platform })
       yield* SandboxPolicy.inherit(ctx.sessionID, nextSession.id, fallback).pipe(
@@ -215,24 +281,55 @@ export const TaskTool = Tool.define(
       if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
 
       // kilocode_change start — prefer valid subagent overrides, safely inheriting when overrides go stale
+      // raya_change start - Auto delegates from the user's selected model, never from Chief's cheap model
+      const chiefParent = RayaChief.parent(parent.metadata)
+      const parentModel = chiefParent
+        ? {
+            providerID: ProviderV2.ID.make(chiefParent.providerID),
+            modelID: ModelV2.ID.make(chiefParent.modelID),
+          }
+        : {
+            modelID: msg.info.modelID,
+            providerID: msg.info.providerID,
+          }
+      // raya_change end
       const selected = yield* KiloTask.resolveModel({
         name: next.name,
         agent: next,
         config: cfg,
-        parent: {
-          modelID: msg.info.modelID,
-          providerID: msg.info.providerID,
-        },
-        variant: msg.info.variant,
-        workflow: KiloTask.workflow(ctx.extra), // kilocode_change
+        parent: parentModel, // raya_change - Milestone B preserved user model
+        variant: chiefParent?.variant ?? msg.info.variant, // raya_change
+        workflow: chief ? undefined : KiloTask.workflow(ctx.extra), // kilocode_change // raya_change
         provider,
       })
       const model = selected.model
       const variant = selected.variant
       // kilocode_change end
-      const metadata = {
+      // raya_change start - consume the already logged Chief decision exactly once
+      if (chief) {
+        const latest = yield* sessions.get(ctx.sessionID)
+        const clean = Object.fromEntries(Object.entries(latest.metadata ?? {}).filter(([key]) => key !== RayaChief.pendingKey))
+        yield* sessions.setMetadata({
+          sessionID: ctx.sessionID,
+          metadata: clean,
+        })
+      }
+      // raya_change end
+      const metadata: {
+        parentSessionId: SessionID
+        sessionId: SessionID
+        selectedAgent?: string
+        selection?: "auto" | "explicit"
+        stepCap?: number
+        model: typeof model
+        variant?: string
+        background?: boolean
+      } = {
         parentSessionId: ctx.sessionID,
         sessionId: nextSession.id,
+        selectedAgent: next.name, // raya_change - expose Chief routing to parent and nested UI
+        selection: explicit ? "explicit" : "auto", // raya_change
+        stepCap: limit, // raya_change
         model,
         variant, // kilocode_change
         ...(runInBackground ? { background: true } : {}),
@@ -248,7 +345,7 @@ export const TaskTool = Tool.define(
 
       const runTask = Effect.fn("TaskTool.runTask")(
         function* () {
-          const parts = yield* ops.resolvePromptParts(params.prompt)
+          const parts = yield* ops.resolvePromptParts(handoff) // raya_change - structured brief, never raw transcript context
           KiloSessionProcessor.markReviewTelemetry(parts, params.command) // kilocode_change - carry review command into child session telemetry
           const result = yield* ops.prompt({
             messageID: MessageID.ascending(),

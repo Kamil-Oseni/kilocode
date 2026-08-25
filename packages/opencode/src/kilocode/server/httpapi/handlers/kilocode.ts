@@ -25,6 +25,10 @@ import { Skill } from "@/skill"
 import { BackgroundJob } from "@/background/job"
 import { SessionRunState } from "@/session/run-state"
 import { SessionID } from "@/session/schema"
+import { Session } from "@/session/session" // raya_change - Milestone A goal session validation
+import { Storage } from "@/storage/storage" // raya_change - Milestone A durable goal storage
+import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal operations
+import { RayaGoalContinuation } from "@/kilocode/goal/continuation" // raya_change - Milestone A resume behavior
 import {
   AgentManagerRejectPayload,
   AgentManagerReplyPayload,
@@ -35,6 +39,8 @@ import {
   RemoveSkillPayload,
   BackgroundJobInfo,
   BackgroundJobsQuery,
+  GoalCreatePayload, // raya_change - Milestone A goal API
+  GoalUpdatePayload, // raya_change - Milestone A goal API
 } from "../groups/kilocode"
 
 export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode", (handlers) =>
@@ -49,6 +55,9 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     const background = yield* BackgroundJob.Service
     const runState = yield* SessionRunState.Service
     const locations = yield* LocationServiceMap.Service
+    const sessions = yield* Session.Service // raya_change - Milestone A goal state and evidence
+    const storage = yield* Storage.Service // raya_change - Milestone A durable goal storage
+    const goals = RayaGoal.make({ storage, sessions }) // raya_change - Milestone A goal operations
 
     // Location-scoped services, keyed by the request's directory and workspace.
     const located = Effect.fnUntraced(function* <A, E, R>(effect: Effect.Effect<A, E, R>) {
@@ -234,22 +243,75 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       return true
     })
 
-    return handlers
-      .handle("heapSnapshot", heapSnapshot)
-      .handle("commandFiles", commandFiles)
-      .handle("removeCommand", removeCommand)
-      .handle("removeSkill", removeSkill)
-      .handle("removeAgent", removeAgent)
-      .handle("providerUsage", providerUsage)
-      .handle("providerUsageRefresh", providerUsageRefresh)
-      .handle("notebookList", notebookList)
-      .handle("notebookReply", notebookReply)
-      .handle("notebookReject", notebookReject)
-      .handle("agentManagerList", agentManagerList)
-      .handle("agentManagerReply", agentManagerReply)
-      .handle("agentManagerReject", agentManagerReject)
-      .handle("sessionModelUsage", sessionModelUsage)
-      .handle("backgroundJobs", backgroundJobs)
-      .handle("backgroundJobCancel", backgroundJobCancel)
+    // raya_change start - Milestone A session-scoped goal API
+    const goalCreate = Effect.fn("KilocodeHttpApi.goalCreate")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof GoalCreatePayload.Type
+    }) {
+      yield* sessions
+        .get(ctx.params.sessionID)
+        .pipe(Effect.catchTag("NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))))
+      return yield* goals.create(ctx.params.sessionID, ctx.payload.objective).pipe(
+        Effect.catchTag("RayaGoal.ExistsError", () => Effect.fail(new HttpApiError.BadRequest({}))),
+        Effect.catchTag("RayaGoal.AuditError", () => Effect.fail(new HttpApiError.BadRequest({}))),
+      )
+    })
+
+    const goalGet = Effect.fn("KilocodeHttpApi.goalGet")(function* (ctx: { params: { sessionID: SessionID } }) {
+      const goal = yield* goals.get(ctx.params.sessionID)
+      if (!goal) return yield* new HttpApiError.NotFound({})
+      return goal
+    })
+
+    const goalUpdate = Effect.fn("KilocodeHttpApi.goalUpdate")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof GoalUpdatePayload.Type
+    }) {
+      const prior = yield* goals.get(ctx.params.sessionID)
+      const goal = yield* goals.control(ctx.params.sessionID, ctx.payload.status).pipe(
+        Effect.catchTag("RayaGoal.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+        Effect.catchTag("RayaGoal.AuditError", () => Effect.fail(new HttpApiError.BadRequest({}))),
+      )
+      if (prior?.status === "paused" && goal.status === "active") {
+        yield* RayaGoalContinuation.resume({
+          sessionID: ctx.params.sessionID,
+          storage,
+          sessions,
+        }).pipe(Effect.forkDetach)
+      }
+      return goal
+    })
+
+    const goalClear = Effect.fn("KilocodeHttpApi.goalClear")(function* (ctx: { params: { sessionID: SessionID } }) {
+      yield* goals.clear(ctx.params.sessionID)
+      return true
+    })
+    // raya_change end
+
+    return (
+      handlers
+        .handle("heapSnapshot", heapSnapshot)
+        .handle("commandFiles", commandFiles)
+        .handle("removeCommand", removeCommand)
+        .handle("removeSkill", removeSkill)
+        .handle("removeAgent", removeAgent)
+        .handle("providerUsage", providerUsage)
+        .handle("providerUsageRefresh", providerUsageRefresh)
+        .handle("notebookList", notebookList)
+        .handle("notebookReply", notebookReply)
+        .handle("notebookReject", notebookReject)
+        .handle("agentManagerList", agentManagerList)
+        .handle("agentManagerReply", agentManagerReply)
+        .handle("agentManagerReject", agentManagerReject)
+        .handle("sessionModelUsage", sessionModelUsage)
+        .handle("backgroundJobs", backgroundJobs)
+        .handle("backgroundJobCancel", backgroundJobCancel)
+        // raya_change start - Milestone A session-scoped goal API
+        .handle("goalCreate", goalCreate)
+        .handle("goalGet", goalGet)
+        .handle("goalUpdate", goalUpdate)
+        .handle("goalClear", goalClear)
+    )
+    // raya_change end
   }),
 )

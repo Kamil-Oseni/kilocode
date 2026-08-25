@@ -18,6 +18,7 @@ import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
 import { Provider } from "../../src/provider/provider" // kilocode_change
 import { KiloSession } from "../../src/kilocode/session" // kilocode_change
+import { KiloTask } from "../../src/kilocode/tool/task" // kilocode_change // raya_change
 import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
@@ -26,6 +27,9 @@ import { disposeAllInstances, provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { RayaChief } from "../../src/kilocode/chief" // kilocode_change // raya_change - Milestone B
+import { ChiefRouteTool } from "../../src/kilocode/tool/chief-route" // kilocode_change // raya_change - Milestone B
+import { Question } from "../../src/question" // kilocode_change // raya_change - Milestone B option prompt
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -51,6 +55,7 @@ const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
       Truncate.node,
       ToolRegistry.node,
       Provider.node, // kilocode_change
+      Question.node, // kilocode_change // raya_change - Milestone B Chief option prompt
       Database.node,
       RuntimeFlags.node,
       Ripgrep.node,
@@ -230,6 +235,321 @@ describe("tool.task", () => {
       },
     },
   )
+
+  // kilocode_change start // raya_change start - Milestone D intelligent delegation
+  it.instance("registers Auto as a cheap-model primary agent with five specialist capability cards", () =>
+    Effect.gen(function* () {
+      const agents = yield* Agent.Service
+      const auto = yield* agents.get("auto")
+
+      expect(auto.mode).toBe("primary")
+      expect(`${auto.model?.providerID}/${auto.model?.modelID}`).toBe("kilo/kilo-auto/small")
+      for (const name of ["coder", "designer", "researcher", "accountant", "reasoner"]) {
+        expect((yield* agents.get(name)).mode).toBe("subagent")
+        expect(auto.prompt).toContain(`- ${name}:`)
+      }
+    }),
+  )
+
+  it.instance("auto-selects the best specialist and sends a bounded structured brief to an isolated child", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let seen: SessionPrompt.PromptInput | undefined
+
+      const result = yield* def.execute(
+        {
+          description: "Map API routes",
+          brief: {
+            objective: "Find and map every HTTP API endpoint in the codebase",
+            context: "Focus on the server package",
+            constraints: ["Do not edit files"],
+            expected_return: "A concise endpoint map with source paths",
+          },
+          step_cap: 4,
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps: stubOps({ text: "Synthesized endpoint map", onPrompt: (input) => (seen = input) }) },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      const child = yield* sessions.get(result.metadata.sessionId)
+      expect(child.parentID).toBe(chat.id)
+      expect(child.agent).toBe("explore")
+      expect(child.metadata?.["raya.task.stepCap"]).toBe(4)
+      expect(result.metadata).toMatchObject({
+        selectedAgent: "explore",
+        selection: "auto",
+        stepCap: 4,
+      })
+      expect(seen?.agent).toBe("explore")
+      const part = seen?.parts[0]
+      expect(part?.type).toBe("text")
+      if (part?.type !== "text") throw new Error("expected structured text brief")
+      expect(part.text).toContain("<subagent_brief>")
+      expect(part.text).toContain("Expected return: A concise endpoint map with source paths")
+      expect(result.output).toContain("Synthesized endpoint map")
+    }),
+  )
+
+  it.instance("routes custom specialist descriptions and applies the task step ceiling", () =>
+    Effect.sync(() => {
+      const selected = KiloTask.route({
+        request: "Audit authentication for security vulnerabilities and unsafe authorization",
+        agents: [
+          { name: "general", mode: "subagent", description: "General implementation agent" },
+          {
+            name: "security",
+            mode: "subagent",
+            description: "Security specialist for authentication vulnerabilities and authorization audits",
+          },
+        ],
+      })
+
+      expect(selected.name).toBe("security")
+      expect(KiloTask.steps(undefined, { "raya.task.stepCap": 3 })).toBe(3)
+      expect(KiloTask.steps(2, { "raya.task.stepCap": 8 })).toBe(2)
+      expect(KiloTask.cap(500)).toBe(50)
+    }),
+  )
+
+  // raya_change start - Milestone B Auto enforces and records the Chief handoff
+  it.instance("Chief records a strict high-confidence decision with measured latency and actual model", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* ChiefRouteTool
+      const def = yield* tool.init()
+      const chief = {
+        ...assistant,
+        modelID: ModelV2.ID.make("cheap-model"),
+        time: { created: Date.now() - 10 },
+      }
+      yield* sessions.updateMessage(chief)
+      yield* sessions.setMetadata({
+        sessionID: chat.id,
+        metadata: { [RayaChief.modelKey]: ref },
+      })
+      const result = yield* def.execute(
+        { objective: "Implement a typed API endpoint and add unit tests" },
+        {
+          sessionID: chat.id,
+          messageID: chief.id,
+          agent: "auto",
+          callID: "chief-call",
+          abort: new AbortController().signal,
+          extra: {},
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+      const updated = yield* sessions.get(chat.id)
+      const decisions = RayaChief.history(updated.metadata)
+
+      expect(result.metadata.decision).toMatchObject({
+        agent: "coder",
+        model: "test/test-model",
+        confidence: expect.any(Number),
+        reason: "The request is primarily software implementation work.",
+        chiefModel: "test/cheap-model",
+        prompted: false,
+      })
+      expect(result.metadata.decision.latency).toBeGreaterThanOrEqual(10)
+      expect(result.metadata.decision.latency).toBeLessThan(5_000)
+      expect(decisions).toEqual([result.metadata.decision])
+      expect(RayaChief.pending(updated.metadata)?.agent).toBe("coder")
+    }),
+  )
+
+  it.instance("Chief raises an in-chat option question before resolving a low-confidence route", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const questions = yield* Question.Service
+      const { chat, assistant } = yield* seed()
+      yield* sessions.setMetadata({
+        sessionID: chat.id,
+        metadata: { [RayaChief.modelKey]: ref },
+      })
+      const tool = yield* ChiefRouteTool
+      const def = yield* tool.init()
+      const fiber = yield* def
+        .execute(
+          { objective: "Help me decide what to do with this project" },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "auto",
+            callID: "chief-call",
+            abort: new AbortController().signal,
+            extra: {},
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+        .pipe(Effect.forkChild)
+      let pending = yield* questions.list()
+      for (let attempt = 0; pending.length === 0 && attempt < 100; attempt++) {
+        yield* Effect.sleep("50 millis")
+        pending = yield* questions.list()
+      }
+
+      expect(pending).toHaveLength(1)
+      expect(pending[0]?.questions[0]).toMatchObject({
+        header: "Choose specialist",
+        multiple: false,
+        custom: false,
+      })
+      expect(pending[0]?.questions[0]?.options.length).toBeGreaterThanOrEqual(2)
+      yield* questions.reply({ requestID: pending[0]!.id, answers: [["designer"]] })
+      const result = yield* Fiber.join(fiber)
+
+      expect(result.metadata.decision.agent).toBe("designer")
+      expect(result.metadata.decision.prompted).toBe(true)
+      expect(result.metadata.decision.reason).toContain("user selected designer")
+    }),
+  )
+
+  it.instance("Auto delegates only through its pending Chief decision and logs the actual model", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const pending: RayaChief.Pending = {
+        request: "Implement a typed API endpoint",
+        agent: "coder",
+        role: "coder",
+        needs_plan: false,
+        confidence: 0.94,
+        reason: "The request is primarily software implementation work.",
+        candidates: [
+          {
+            agent: "coder",
+            role: "coder",
+            score: 8,
+            reason: "The request is primarily software implementation work.",
+          },
+        ],
+        prompted: false,
+        latency: 23,
+        chiefModel: "test/cheap-model",
+      }
+      yield* sessions.setMetadata({
+        sessionID: chat.id,
+        metadata: {
+          [RayaChief.pendingKey]: pending,
+          [RayaChief.modelKey]: ref,
+          [RayaChief.logKey]: [{ ...pending, model: "test/test-model" }],
+        },
+      })
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const result = yield* def.execute(
+        {
+          description: "Implement endpoint",
+          subagent_type: "designer",
+          brief: { objective: "This narrower model-authored objective must not replace the user's request" },
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "auto",
+          abort: new AbortController().signal,
+          extra: { promptOps: stubOps() },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+      const updated = yield* sessions.get(chat.id)
+      const decisions = RayaChief.history(updated.metadata)
+
+      expect(result.metadata.selectedAgent).toBe("coder")
+      expect(result.metadata.model).toEqual(ref)
+      expect(updated.metadata?.[RayaChief.pendingKey]).toBeUndefined()
+      expect(decisions).toHaveLength(1)
+      expect(decisions[0]).toMatchObject({
+        agent: "coder",
+        model: "test/test-model",
+        confidence: 0.94,
+        reason: pending.reason,
+        chiefModel: "test/cheap-model",
+      })
+      expect(result.output).toContain("done")
+    }),
+  )
+  // raya_change end
+
+  it.instance("runs two auto-routed children concurrently and joins both synthesized results", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const ready = defer<void>()
+      const gate = defer<void>()
+      let started = 0
+      const promptOps: TaskPromptOps = {
+        cancel: () => Effect.void,
+        resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
+        prompt: (input) =>
+          Effect.promise(() => {
+            started++
+            if (started === 2) ready.resolve()
+            return gate.promise
+          }).pipe(Effect.as(reply(input, `summary:${input.agent}`))),
+      }
+      const ctx = {
+        sessionID: chat.id,
+        messageID: assistant.id,
+        agent: "build",
+        abort: new AbortController().signal,
+        extra: { promptOps },
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      }
+      const fiber = yield* Effect.all(
+        [
+          def.execute(
+            {
+              description: "Find route files",
+              brief: { objective: "Search and map route files in the codebase" },
+            },
+            ctx,
+          ),
+          def.execute(
+            {
+              description: "Implement helper",
+              brief: { objective: "Implement a reusable helper and return changed artifact paths" },
+            },
+            ctx,
+          ),
+        ],
+        { concurrency: "unbounded" },
+      ).pipe(Effect.forkChild)
+
+      yield* Effect.promise(() => ready.promise)
+      expect(started).toBe(2)
+      gate.resolve()
+      const results = yield* Fiber.join(fiber)
+      expect(new Set(results.map((item) => item.metadata.sessionId)).size).toBe(2)
+      expect(results.map((item) => item.metadata.selectedAgent)).toEqual(["explore", "general"])
+      expect(results.map((item) => item.output)).toEqual([
+        expect.stringContaining("summary:explore"),
+        expect.stringContaining("summary:general"),
+      ])
+    }),
+  )
+  // kilocode_change end // raya_change end
 
   it.instance("execute resumes an existing task session from task_id", () =>
     Effect.gen(function* () {
@@ -978,9 +1298,12 @@ describe("tool.task", () => {
       expect(result.output).toContain("Background task updated")
       first.resolve()
       expect((yield* jobs.get(started.metadata.sessionId))?.status).toBe("running")
-      expect((yield* Effect.promise(() => updated.promise)).parts).toEqual([
-        { type: "text", text: "also inspect cancellation" },
-      ])
+      // kilocode_change start // raya_change start - task updates now carry structured briefs
+      const update = yield* Effect.promise(() => updated.promise)
+      expect(update.parts[0]?.type).toBe("text")
+      if (update.parts[0]?.type !== "text") throw new Error("expected structured task update")
+      expect(update.parts[0].text).toContain("Objective: also inspect cancellation")
+      // kilocode_change end // raya_change end
 
       second.resolve()
       const waited = yield* jobs.wait({ id: started.metadata.sessionId, timeout: 1_000 })

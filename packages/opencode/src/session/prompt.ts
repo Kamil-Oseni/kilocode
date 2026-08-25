@@ -17,6 +17,8 @@ import * as KiloWorkflowVariant from "@/kilocode/session/workflow-variant" // ki
 import { KiloSessionOverflow } from "@/kilocode/session/overflow" // kilocode_change
 import { KiloReference } from "@/kilocode/reference/contains" // kilocode_change
 import { KiloReadObject } from "@/kilocode/tool/read-object" // kilocode_change
+import { KiloTask } from "@/kilocode/tool/task" // kilocode_change // raya_change - Milestone D child step ceiling
+import { RayaChief } from "@/kilocode/chief" // kilocode_change // raya_change - Milestone B Auto routing state
 import { isInterrupted } from "@/kilocode/effect/cause" // kilocode_change
 import * as SandboxPolicy from "@/kilocode/sandbox/policy" // kilocode_change
 import { CommandTimeout } from "@/kilocode/command-timeout" // kilocode_change
@@ -821,7 +823,12 @@ export const layer = Layer.effect(
         yield* events.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })
         throw error
       }
-      const model = input.model ?? ag.model ?? (yield* currentModel(input.sessionID))
+      // kilocode_change start
+      // raya_change start - Auto's own turn uses the cheap Chief model while preserving the user's model for its child
+      const requested = input.model ?? (yield* currentModel(input.sessionID))
+      const model = ag.name === "auto" && ag.model ? ag.model : (input.model ?? ag.model ?? requested)
+      // raya_change end
+      // kilocode_change end
       // kilocode_change start - retain the source session variant across Agent Manager's model-less fork handoff
       const stored = !input.model && !ag.model ? model : undefined
       const same = ag.model && model.providerID === ag.model.providerID && model.modelID === ag.model.modelID
@@ -855,6 +862,23 @@ export const layer = Layer.effect(
       }
 
       const current = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
+      // kilocode_change start
+      // raya_change start - Milestone B target-model precedence starts from the user's selected model, not Chief's
+      if (ag.name === "auto") {
+        yield* sessions.setMetadata({
+          sessionID: input.sessionID,
+          metadata: {
+            ...current.metadata,
+            [RayaChief.modelKey]: {
+              providerID: requested.providerID,
+              modelID: requested.modelID,
+              variant: input.variant ?? ("variant" in requested ? requested.variant : undefined),
+            },
+          },
+        })
+      }
+      // raya_change end
+      // kilocode_change end
       if (
         current.agent !== info.agent ||
         current.model?.providerID !== info.model.providerID ||
@@ -1628,7 +1652,7 @@ export const layer = Layer.effect(
           yield* events.publish(Session.Event.Error, { sessionID, error: error.toObject() })
           throw error
         }
-        const maxSteps = agent.steps ?? Infinity
+        const maxSteps = KiloTask.steps(agent.steps, session.metadata) // kilocode_change // raya_change
         const isLastStep = step >= maxSteps
         msgs = yield* SessionReminders.apply({ messages: msgs, agent, session }).pipe(
           Effect.provideService(RuntimeFlags.Service, flags),

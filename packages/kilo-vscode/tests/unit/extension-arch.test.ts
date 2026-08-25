@@ -1,4 +1,4 @@
-// raya_change - Raya extension namespace
+// raya_change - Raya extension namespace and panel identity
 /**
  * Architecture test: package.json ↔ source command sync
  *
@@ -278,7 +278,7 @@ describe("Extension — editor panel placement", () => {
   const ext = fs.readFileSync(EXTENSION_FILE, "utf-8")
   const settings = fs.readFileSync(SETTINGS_PROVIDER_FILE, "utf-8")
 
-  it("opens Kilo as a tab in the active editor group", () => {
+  it("opens Raya as a tab in the active editor group", () => {
     const fn = ext.indexOf("function openKiloInNewTab")
     expect(fn, "openKiloInNewTab must exist").toBeGreaterThan(-1)
     const body = sliceBlock(ext, fn)
@@ -297,6 +297,19 @@ describe("Extension — editor panel placement", () => {
     expect(body).toContain("existing.reveal(vscode.ViewColumn.Active)")
     expect(body.match(/vscode\.ViewColumn\.Active/g)).toHaveLength(2)
     expect(body).not.toContain("vscode.ViewColumn.One")
+  })
+
+  it("uses Raya identity for settings panels and restores their view types", () => {
+    expect(settings).toContain('settings: "Raya Settings"')
+    expect(settings).toContain('profile: "Raya Profile"')
+    expect(settings).toContain('type.match(/^raya\\.(\\w+)Panel$/)')
+    expect(settings).toContain("panel.title = PANEL_TITLES[view]")
+    expect(settings).toContain('"eden-logo-light.svg"')
+    expect(settings).toContain('"eden-logo-dark.svg"')
+    expect(settings).not.toContain('"Kilo Settings"')
+    expect(settings).not.toContain('"Kilo Profile"')
+    expect(settings).not.toContain('"kilo-light.svg"')
+    expect(settings).not.toContain('"kilo-dark.svg"')
   })
 })
 

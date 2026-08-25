@@ -71,6 +71,11 @@ export function useSlashCommand(
 
   const all: SlashCommandEntry[] = [
     {
+      name: "goal",
+      description: "Start a persistent goal",
+      hints: [],
+    }, // raya_change - Milestone A native command appears in the slash picker
+    {
       name: "new",
       description: "Start a new session",
       hints: ["clear"],

@@ -83,6 +83,7 @@ import { partReview, reviewBody } from "../../../../src/shared/review-comments"
 import { isEnterKeyCommitNotIme } from "../../utils/ime-enter"
 import { parseMemoryCommand, type ParsedMemoryCommand } from "../../utils/memory-command"
 import { useMemory } from "../../context/memory"
+import { parseGoalCommand } from "../../../../src/shared/goal" // raya_change - Milestone A /goal parser
 
 function mergeReviewComments(current: ReviewCommentEntry[], incoming: ReviewCommentEntry[]): ReviewCommentEntry[] {
   if (incoming.length === 0) return current
@@ -1158,9 +1159,28 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
   }
 
-  const handleSend = async () => {
-    const draft = text().trim()
+  // raya_change start - Milestone A native /goal command
+  const runGoalCommand = (draft: string) => {
+    const goal = parseGoalCommand(draft)
+    if (!goal) return false
+    if (goal.kind === "start") {
+      if (goal.notice) window.dispatchEvent(new CustomEvent("rayaGoalNotice", { detail: goal.notice }))
+      return false
+    }
+    window.dispatchEvent(new CustomEvent("rayaGoalNotice", { detail: goal.notice }))
+    history.append(draft)
+    setText("")
+    if (textareaRef) {
+      textareaRef.value = ""
+      textareaRef.style.height = "auto"
+    }
+    drafts.delete(draftKey())
+    slash.close()
+    return true
+  }
+  // raya_change end
 
+  const sendDraft = async (draft: string) => {
     const memory = parseMemoryCommand(draft)
     if (memory) {
       if (!runMemory(memory)) return
@@ -1183,8 +1203,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     // command named e.g. "continue" is not hijacked by a client alias.
     const cmdMatch = draft.match(/^\/(\S+)/)
     const word = cmdMatch?.[1]
+    const runnable = slash.commands().filter((command) => command.name !== "goal") // raya_change
     const matched = word
-      ? (slash.commands().find((c) => c.name === word) ?? slash.commands().find((c) => c.hints.includes(word)))
+      ? (runnable.find((command) => command.name === word) ??
+        runnable.find((command) => command.hints.includes(word)))
       : undefined
 
     // Client-side slash command — runs locally without a backend round-trip
@@ -1300,6 +1322,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     if (textareaRef) textareaRef.style.height = "auto"
   }
+
+  // raya_change start - Milestone A keeps /goal parsing outside the already-complex send pipeline
+  const handleSend = async () => {
+    const draft = text().trim()
+    if (runGoalCommand(draft)) return
+    await sendDraft(draft)
+  }
+  // raya_change end
 
   return (
     <div

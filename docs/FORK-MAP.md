@@ -2,7 +2,7 @@
 
 # Raya Fork Map
 
-Last verified against commit `b6e6ab83ec`, the Raya source commit used for the final verified VSIX and bundled CLI smoke run.
+Last verified against commit `b1fc387246`, the Raya source commit used for the Milestone A verified VSIX and bundled CLI build.
 
 This map identifies the current extension seams in the Kilo fork on which Raya is built. Refresh it after an upstream rebase moves any named symbol or path. No feature milestone in `docs/Building-Raya.md` may begin while this map is missing or stale.
 
@@ -26,6 +26,18 @@ A turn settles when `runLoop` sees a finished assistant message with no pending 
 
 Extension seam: inject continuation at the settled return boundary near the end of `SessionPrompt.runLoop`, or enqueue a synthetic/user follow-up through `KiloSessionPromptQueue.enqueue` when continuation must become another normal turn.
 
+<!-- raya_change start - Milestone A native goal seams -->
+
+### Raya native goals
+
+Durable session-scoped goal state, usage accounting, progress, blocked reasons, and evidence-gated completion live in `packages/opencode/src/kilocode/goal/index.ts`. Automatic turn-close continuation and no-tool spin suppression live in `packages/opencode/src/kilocode/goal/continuation.ts`, subscribed from `packages/opencode/src/kilocode/bootstrap.ts`.
+
+The model-facing `create_goal`, `get_goal`, and `update_goal` tools are defined in `packages/opencode/src/kilocode/tool/goal.ts` and registered through `KiloToolRegistry.infos`, `build`, and `extra`. User-controlled create/get/pause/resume/clear operations are declared and handled in the Kilo HTTP API group, with generated SDK access under `client.kilocode.goal`.
+
+The VS Code `/goal` parser and shared state contract live in `packages/kilo-vscode/src/shared/goal.ts`. `KiloProvider.handleSendMessage` arms the goal before sending the first model turn, while `GoalBanner.tsx` fetches persisted state on session selection or reload and exposes pause, resume, and clear.
+
+<!-- raya_change end -->
+
 ## 3. Agent definitions and mode prompts
 
 The agent schema, service, built-in definitions, configuration merge, and default-agent resolution live in `packages/opencode/src/agent/agent.ts`. Native agents include primary and subagent modes; user-defined agents enter through `Config.Info.agent`. Kilo-specific renaming, additional primary modes, permission hardening, and patches are applied in `packages/opencode/src/kilocode/agent/index.ts`, principally through `prepare` and `patchAgents`.
@@ -45,6 +57,18 @@ Permission ceilings begin in `packages/opencode/src/agent/subagent-permissions.t
 `KiloTask.resolveModel` in `packages/opencode/src/kilocode/tool/task.ts` owns model and variant precedence. It considers a direct workflow selection, the saved CLI model, the selected agent's model and variant, global `subagent_model` and `subagent_variant`, then the inherited parent model and variant. The resolved choice is passed into the recursive child prompt.
 
 Foreground and background execution both use `BackgroundJob.Service`. Foreground calls wait for completion and render the task result; background calls notify and inject a synthetic result into the parent through the same prompt service. Cost propagation is handled by `packages/opencode/src/kilocode/session/cost-propagation.ts`.
+
+<!-- raya_change start - Milestone D intelligent subagent calling -->
+
+Raya's primary delegation path omits `subagent_type`: `KiloTask.route` scores the structured brief against eligible specialist descriptions and chooses the best fit, while an explicit name remains an override. `TaskTool` persists a clamped per-child step cap in session metadata, and `SessionPrompt.runLoop` applies the lower of that cap and the selected agent's configured `steps`. Task metadata records the selected specialist so `TaskToolExpanded.tsx` can render the isolated child as a nested, live thread. Multiple foreground task calls execute concurrently through the model tool-call batch and join before the parent receives their synthesized results.
+
+<!-- raya_change end -->
+
+<!-- raya_change start - Milestone B intelligent auto-routing -->
+
+Raya's selectable `Auto` primary agent is assembled by `KiloAgent.addAuto` and bound to configured `small_model` (falling back to `kilo/kilo-auto/small`), so the routing turn uses a fast model while the user's selected model remains available to the delegated specialist. `chief_route` applies the labeled deterministic routing policy in `packages/opencode/src/kilocode/chief/`, raises a blocking `Question` option card below the confidence threshold, and stores a mandatory pending decision. `TaskTool` consumes that decision, delegates through the same isolated Milestone D child-session path, resolves the specialist model by the existing precedence, and appends the actual agent, model, confidence, reason, Chief model, and measured latency to session metadata under `raya.chief.decisions`.
+
+<!-- raya_change end -->
 
 Extension seam: adjust child permission inheritance in `KiloTask.inherited`, model precedence in `KiloTask.resolveModel`, or child-session execution around `TaskTool`'s `sessions.create` and `ops.prompt` calls.
 

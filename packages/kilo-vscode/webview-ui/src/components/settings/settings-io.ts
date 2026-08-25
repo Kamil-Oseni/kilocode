@@ -53,7 +53,38 @@ export type ImportResult = { ok: true; config: Config; warning?: ImportWarning }
 interface ExportMeta {
   version: number
   exportedAt: string
+  secretsStripped: true // raya_change - Milestone I exports are non-secret
 }
+
+// raya_change start - remove credentials defensively even when hand-written config contains them
+const SECRET_KEYS = /^(?:api[_-]?key|access[_-]?token|token|secret|password|authorization)$/i
+const SECRET_HEADERS = /^(?:authorization|proxy-authorization|x-api-key|api-key|x-auth-token)$/i
+
+function record(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value)
+}
+
+function scrub(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(scrub)
+  if (!record(value)) return value
+
+  const result: Record<string, unknown> = {}
+  for (const [key, item] of Object.entries(value)) {
+    if (SECRET_KEYS.test(key)) continue
+    if ((key === "env" || key === "environment") && record(item)) continue
+    if (key === "headers" && record(item)) {
+      result[key] = Object.fromEntries(
+        Object.entries(item)
+          .filter(([name]) => !SECRET_HEADERS.test(name))
+          .map(([name, header]) => [name, scrub(header)]),
+      )
+      continue
+    }
+    result[key] = scrub(item)
+  }
+  return result
+}
+// raya_change end
 
 // ---------------------------------------------------------------------------
 // Export
@@ -61,18 +92,20 @@ interface ExportMeta {
 
 /**
  * Build a JSON-serialisable export payload from the current config.
- * All fields are included as-is so the export is a complete snapshot
- * that can be imported on another instance without re-entering secrets.
+ * Non-secret fields are included so the export can reconstruct provider and
+ * agent-model configuration without carrying credentials. // raya_change
  */
 export function buildExport(cfg: Config): Record<string, unknown> {
   const meta: ExportMeta = {
     version: META_VERSION,
     exportedAt: new Date().toISOString(),
+    secretsStripped: true, // raya_change
   }
 
   const out: Record<string, unknown> = { _meta: meta }
 
-  for (const [key, value] of Object.entries(cfg)) {
+  const safe = scrub(cfg) as Record<string, unknown> // raya_change - never export provider or embedded credentials
+  for (const [key, value] of Object.entries(safe)) {
     if (value === undefined || value === null) continue
     out[key] = value
   }
@@ -126,7 +159,8 @@ export function parseImport(json: string): ImportResult {
     return { ok: false, error: "invalidConfig" }
   }
 
-  return warning ? { ok: true, config: config as Config, warning } : { ok: true, config: config as Config }
+  const safe = scrub(config) as Config // raya_change - imports cannot bypass secret-storage-only BYOK handling
+  return warning ? { ok: true, config: safe, warning } : { ok: true, config: safe }
 }
 
 // ---------------------------------------------------------------------------

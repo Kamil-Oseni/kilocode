@@ -11,6 +11,7 @@ import {
 } from "./shared/custom-provider"
 import { isCustomProviderPackage, KILO_AUTO, KILO_PROVIDER_ID, parseModelString } from "./shared/provider-model"
 import { configFeatures } from "./features"
+import type { ProviderSecrets } from "./provider-secrets" // raya_change - encrypted BYOK storage
 
 /**
  * Compute the default model selection from CLI config, VS Code settings, or hardcoded fallback.
@@ -51,7 +52,7 @@ function same(a: unknown, b: unknown): boolean {
 }
 
 /** Fetch provider availability and authentication state without exposing stored credentials. */
-export async function fetchProviderData(client: KiloClient, dir: string) {
+export async function fetchProviderData(client: KiloClient, dir: string, secrets?: ProviderSecrets) {
   const authRequest =
     typeof client.provider.auth === "function"
       ? client.provider
@@ -71,23 +72,31 @@ export async function fetchProviderData(client: KiloClient, dir: string) {
   ])
   const authStates: Record<string, AuthState> = {}
   const storedKeys: Record<string, StoredProviderKey> = {}
-  const all = response.all.map((item) => {
-    const raw = item as Record<string, unknown>
-    if (typeof raw.id === "string" && typeof raw.key === "string" && raw.key) {
-      authStates[raw.id] = "api"
-      // Retain the key on the extension side so model fetches for an existing
-      // provider can authenticate without the webview ever seeing the secret
-      // (#10139). Only providers with a configured baseURL are retained — the
-      // fetch handler requires a URL match before applying a stored key.
-      const options = record(raw.options) ? raw.options : undefined
-      const baseURL = options && typeof options.baseURL === "string" ? options.baseURL : undefined
-      if (baseURL) storedKeys[raw.id] = { key: raw.key, baseURL }
-    }
-    if (!("key" in raw)) return item
-    const next = { ...raw }
-    delete next.key
-    return next as (typeof response.all)[number]
-  })
+  // raya_change start - use SecretStorage as the primary extension-side key source and migrate existing CLI auth
+  const all = await Promise.all(
+    response.all.map(async (item) => {
+      const raw = item as Record<string, unknown>
+      if (typeof raw.id === "string") {
+        const mirrored = typeof raw.key === "string" && raw.key ? raw.key : undefined
+        const stored = await secrets?.get(raw.id)
+        const key = stored ?? mirrored
+        if (mirrored && !stored) await secrets?.set(raw.id, mirrored)
+        if (key) authStates[raw.id] = "api"
+        // Retain the key on the extension side so model fetches for an existing
+        // provider can authenticate without the webview ever seeing the secret
+        // (#10139). Only providers with a configured baseURL are retained — the
+        // fetch handler requires a URL match before applying a stored key.
+        const options = record(raw.options) ? raw.options : undefined
+        const baseURL = options && typeof options.baseURL === "string" ? options.baseURL : undefined
+        if (baseURL && key) storedKeys[raw.id] = { key, baseURL }
+      }
+      if (!("key" in raw)) return item
+      const next = { ...raw }
+      delete next.key
+      return next as (typeof response.all)[number]
+    }),
+  )
+  // raya_change end
   delete authStates[KILO_PROVIDER_ID]
   if (kiloAuth) authStates[KILO_PROVIDER_ID] = kiloAuth
   return { response: { ...response, all }, authMethods, authStates, storedKeys }
@@ -117,6 +126,7 @@ export function buildActionContext(
   errFn: (err: unknown) => string,
   dir: string,
   refresh: () => Promise<void>,
+  secrets?: ProviderSecrets, // raya_change - encrypted BYOK storage
 ): ActionContext {
   return {
     client,
@@ -132,6 +142,7 @@ export function buildActionContext(
       })
     },
     fetchAndSendProviders: refresh,
+    secrets, // raya_change
   }
 }
 
@@ -194,6 +205,7 @@ interface ActionContext {
   workspaceDir: string
   disposeGlobal: (reason: string) => Promise<void>
   fetchAndSendProviders: () => Promise<void>
+  secrets?: ProviderSecrets // raya_change - encrypted BYOK storage
 }
 
 function postError(
@@ -254,12 +266,14 @@ async function saveProject(ctx: ActionContext, config: Config) {
 }
 
 async function removeAuth(ctx: ActionContext, id: string, configured: boolean) {
-  try {
-    await ctx.client.auth.remove({ providerID: id }, { throwOnError: true })
-  } catch (err) {
-    if (!configured) throw err
-    console.warn(`[Kilo New] auth.remove failed for configured provider ${id} (non-fatal):`, err)
-  }
+  const err = await ctx.client.auth
+    .remove({ providerID: id }, { throwOnError: true })
+    .then(() => undefined)
+    .catch((error: unknown) => error)
+  await ctx.secrets?.delete(id) // raya_change - remove the encrypted source with its CLI mirror
+  if (!err) return
+  if (!configured) throw err
+  console.warn(`[Kilo New] auth.remove failed for configured provider ${id} (non-fatal):`, err)
 }
 
 async function removeCustom(ctx: ActionContext, id: string, global: Config, merged: Config) {
@@ -304,6 +318,7 @@ export async function connectProvider(
   try {
     const meta = cleanMetadata(metadata)
     const auth = meta ? { type: "api" as const, key: apiKey, metadata: meta } : { type: "api" as const, key: apiKey }
+    await ctx.secrets?.set(id, apiKey) // raya_change - SecretStorage is the durable BYOK source
     await ctx.client.auth.set({ providerID: id, auth }, { throwOnError: true })
     await ctx.disposeGlobal(`provider connect (${id})`)
     await ctx.fetchAndSendProviders()
@@ -472,9 +487,11 @@ export async function saveCustomProvider(
 
     try {
       if (auth.mode === "set") {
+        await ctx.secrets?.set(id, auth.key) // raya_change - SecretStorage is the durable BYOK source
         await ctx.client.auth.set({ providerID: id, auth: { type: "api", key: auth.key } }, { throwOnError: true })
       }
       if (auth.mode === "clear") {
+        await ctx.secrets?.delete(id) // raya_change
         await ctx.client.auth.remove({ providerID: id }, { throwOnError: true })
       }
     } catch (error) {

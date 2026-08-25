@@ -25,6 +25,7 @@ import {
 import { ModelUsage } from "@/kilocode/session/model-usage"
 import { SessionID } from "@/session/schema"
 import { CommandFiles } from "@/kilocode/command-files"
+import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal API contracts
 
 const root = "/kilocode"
 const Scope = Schema.Literals(["global", "project"])
@@ -62,6 +63,8 @@ export const NotebookReplyPayload = Schema.Struct({ result: NotebookResult })
 export const NotebookRejectPayload = Schema.Struct({ error: NotebookFailure })
 export const AgentManagerReplyPayload = Schema.Struct({ result: AgentManagerResult })
 export const AgentManagerRejectPayload = Schema.Struct({ error: AgentManagerFailure })
+export const GoalCreatePayload = RayaGoal.Create // raya_change - Milestone A goal API contracts
+export const GoalUpdatePayload = RayaGoal.Control // raya_change - Milestone A goal API contracts
 
 export const KilocodePaths = {
   heapSnapshot: `${root}/heap/snapshot`,
@@ -80,6 +83,7 @@ export const KilocodePaths = {
   sessionModelUsage: `/session/:sessionID/model-usage`,
   backgroundJobs: `${root}/background-jobs`,
   backgroundJobCancel: `${root}/background-jobs/:jobID/cancel`,
+  goal: `/session/:sessionID/goal`, // raya_change - Milestone A session-scoped goal API
 } as const
 
 export const KilocodeApi = HttpApi.make("kilocode")
@@ -272,6 +276,57 @@ export const KilocodeApi = HttpApi.make("kilocode")
             description: "Cancel one background subagent job and its session tree.",
           }),
         ),
+        // raya_change start - Milestone A session-scoped goal API
+        HttpApiEndpoint.post("goalCreate", KilocodePaths.goal, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          payload: GoalCreatePayload,
+          success: described(RayaGoal.State, "Created goal"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.goal.create",
+            summary: "Create a session goal",
+            description: "Arm one durable goal for a session.",
+          }),
+        ),
+        HttpApiEndpoint.get("goalGet", KilocodePaths.goal, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(RayaGoal.State, "Current goal"),
+          error: HttpApiError.NotFound,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.goal.get",
+            summary: "Get a session goal",
+            description: "Get the durable goal state for a session.",
+          }),
+        ),
+        HttpApiEndpoint.patch("goalUpdate", KilocodePaths.goal, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          payload: GoalUpdatePayload,
+          success: described(RayaGoal.State, "Updated goal"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.goal.update",
+            summary: "Pause or resume a session goal",
+            description: "Apply a user-controlled pause or resume transition.",
+          }),
+        ),
+        HttpApiEndpoint.delete("goalClear", KilocodePaths.goal, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Boolean, "Goal cleared"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.goal.clear",
+            summary: "Clear a session goal",
+            description: "Remove the durable goal state for a session.",
+          }),
+        ),
+        // raya_change end
       )
       .annotateMerge(
         OpenApi.annotations({

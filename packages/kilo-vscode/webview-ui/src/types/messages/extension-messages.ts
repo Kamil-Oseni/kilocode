@@ -82,6 +82,7 @@ import type {
   MigrationStateMessage,
 } from "./migration"
 import type { MemoryEventMessage, MemoryLoadedMessage, MemoryOperationResultMessage } from "./memory"
+import type { GoalState } from "../../../../src/shared/goal" // raya_change - Milestone A goal UI
 
 // ============================================
 // Messages FROM extension TO webview
@@ -147,6 +148,15 @@ export interface SessionCommandCompletedMessage {
   type: "sessionCommandCompleted"
   messageID: string
 }
+
+// raya_change start - Milestone A persistent goal state
+export interface GoalStateMessage {
+  type: "goalState"
+  sessionID: string
+  goal?: GoalState
+  notice?: string
+}
+// raya_change end
 
 // Wire shape lives in src/shared/stream-messages.ts; narrow `part` to the
 // webview's concrete union.
@@ -1419,6 +1429,7 @@ export type ExtensionMessage =
   | ErrorMessage
   | SendMessageFailedMessage
   | SessionCommandCompletedMessage
+  | GoalStateMessage // raya_change - Milestone A
   | PartUpdatedMessage
   | PartsUpdatedMessage
   | PartRemovedMessage

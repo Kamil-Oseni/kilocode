@@ -584,6 +584,43 @@ it.instance(
 )
 // kilocode_change end
 
+// kilocode_change start // raya_change start - Milestone D enforce task child step caps in the real loop
+it.instance(
+  "isolated task child cannot exceed its persisted step cap",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const parent = yield* sessions.create({ title: "Parent" })
+      const child = yield* sessions.create({
+        title: "Bounded child",
+        parentID: parent.id,
+        metadata: { "raya.task.stepCap": 1 },
+      })
+      yield* prompt.prompt({
+        sessionID: child.id,
+        agent: "general",
+        noReply: true,
+        parts: [{ type: "text", text: "continue beyond the child cap" }],
+      })
+      yield* llm.text("bounded summary")
+
+      yield* prompt.loop({ sessionID: child.id })
+
+      const inputs = yield* llm.inputs
+      expect(inputs).toHaveLength(1)
+      const messages = inputs[0]?.messages
+      if (!Array.isArray(messages)) throw new Error("expected child LLM messages")
+      expect(messages.at(-1)).toMatchObject({
+        role: "user",
+        content: expect.stringContaining("MAXIMUM STEPS REACHED"),
+      })
+    }),
+  30_000,
+)
+// kilocode_change end // raya_change end
+
 noLLMServer.instance(
   "new prompt dismisses a pending question",
   () =>

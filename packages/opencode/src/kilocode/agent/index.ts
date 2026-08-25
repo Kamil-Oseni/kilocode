@@ -12,6 +12,7 @@ import { Global } from "@opencode-ai/core/global"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { applyEdits, modify, parse as parseJsonc } from "jsonc-parser"
 import { KilocodeConfigSources } from "../config/sources"
+import { RayaChief } from "../chief" // raya_change - Milestone B intelligent auto-routing
 
 import PROMPT_DEBUG from "../../agent/prompt/debug.txt"
 import PROMPT_ORCHESTRATOR from "../../agent/prompt/orchestrator.txt"
@@ -646,8 +647,97 @@ export function patchAgents(
     native: true,
   }
 
+  // raya_change start - Milestone B built-in specialists used by Auto
+  const general = agents.general
+  const explore = agents.explore
+  if (general) {
+    agents.coder = {
+      ...general,
+      name: "coder",
+      description: "Software implementation specialist for coding, fixes, refactors, APIs, and tests.",
+      prompt: "Act as Raya's coding specialist. Implement and verify the delegated software objective within inherited permissions.",
+      mode: "subagent",
+      native: true,
+    }
+    agents.designer = {
+      ...general,
+      name: "designer",
+      description: "Product and interface design specialist for UI, UX, Figma, layouts, visual systems, and motion.",
+      prompt: "Act as Raya's design specialist. Produce or implement a coherent UI/UX solution and verify it visually when possible.",
+      mode: "subagent",
+      native: true,
+    }
+    agents.accountant = {
+      ...general,
+      name: "accountant",
+      description: "Accounting specialist for ledgers, reconciliation, invoices, statements, tax, and financial analysis.",
+      prompt: "Act as Raya's accounting specialist. Show auditable calculations, assumptions, and source evidence.",
+      mode: "subagent",
+      native: true,
+    }
+    agents.reasoner = {
+      ...general,
+      name: "reasoner",
+      description: "Hard-reasoning specialist for architecture, algorithms, proofs, security, concurrency, and trade-offs.",
+      prompt: "Act as Raya's hard-reasoning specialist. Analyze constraints and alternatives before reaching a defensible conclusion.",
+      mode: "subagent",
+      native: true,
+    }
+  }
+  if (explore) {
+    agents.researcher = {
+      ...explore,
+      name: "researcher",
+      description: "Research specialist for investigations, source comparison, documentation, evidence, and benchmarks.",
+      prompt: "Act as Raya's research specialist. Gather primary evidence, cite exact sources, and distinguish findings from inference.",
+      mode: "subagent",
+      native: true,
+    }
+  }
+  // raya_change end
+
   hardenSystemAgents(agents)
 }
+
+// raya_change start - Milestone B selectable cheap-model Chief
+export function addAuto(
+  agents: Parameters<typeof patchAgents>[0],
+  defaults: Permission.Ruleset,
+  model?: { providerID: string; modelID: string },
+) {
+  const specialists = Object.values(agents).filter(
+    (item) => item.mode !== "primary" && !item.hidden && !item.deprecated,
+  )
+  agents.auto = {
+    name: "auto",
+    displayName: "Auto",
+    description: "Intelligently route each request to the best-fit specialist and model.",
+    prompt: RayaChief.prompt(specialists),
+    options: {},
+    permission: Permission.merge(
+      defaults,
+      Permission.fromConfig({
+        "*": "deny",
+        chief_route: "allow",
+        task: "allow",
+      }),
+    ),
+    model,
+    steps: 4,
+    mode: "primary",
+    native: true,
+  }
+}
+
+export function refreshAuto(agents: Parameters<typeof patchAgents>[0], model: { providerID: string; modelID: string }) {
+  const auto = agents.auto
+  if (!auto) return
+  auto.model = model
+  auto.prompt = RayaChief.prompt(
+    Object.values(agents).filter((item) => item.mode !== "primary" && !item.hidden && !item.deprecated),
+  )
+}
+// raya_change end
 
 export const RemoveError = NamedError.create("AgentRemoveError", {
   name: Schema.String,

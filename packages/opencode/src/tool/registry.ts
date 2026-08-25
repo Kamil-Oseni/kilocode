@@ -77,6 +77,7 @@ import { MCP } from "@/mcp"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { McpCatalog } from "@/mcp/catalog"
 import { InstanceRef } from "@/effect/instance-ref" // kilocode_change
+import { Storage } from "@/storage/storage" // kilocode_change // raya_change - Milestone A goal storage
 
 export function webSearchEnabled(
   providerID: ProviderV2.ID,
@@ -123,6 +124,7 @@ const layer = Layer.effect(
     const flags = yield* RuntimeFlags.Service
     const mcp = yield* MCP.Service
     const sessions = yield* Session.Service
+    const storage = Option.getOrUndefined(yield* Effect.serviceOption(Storage.Service)) // kilocode_change // raya_change - Milestone A goal storage
 
     const invalid = yield* InvalidTool
     const task = yield* TaskTool
@@ -147,7 +149,11 @@ const layer = Layer.effect(
     const suggesttool = yield* SuggestTool
     const manager = Option.getOrUndefined(yield* Effect.serviceOption(AgentManager.Service))
     const notebook = Option.getOrUndefined(yield* Effect.serviceOption(Notebook.Service))
-    const kiloToolInfos = yield* KiloToolRegistry.infos(manager, notebook).pipe(Effect.provide(MemoryService.layer))
+    const kiloToolInfos = yield* KiloToolRegistry.infos(
+      manager,
+      notebook,
+      storage ? { storage, sessions } : undefined,
+    ).pipe(Effect.provide(MemoryService.layer)) // kilocode_change // raya_change - Milestone A goal tools
     // kilocode_change end
     const codeMode = flags.experimentalCodeMode ? yield* Effect.promise(() => import("./code-mode")) : undefined
 
@@ -539,6 +545,7 @@ export const node = LayerNode.suspend(() =>
       Notebook.node,
       RepositoryCache.node,
       KiloSessions.node,
+      Storage.node, // kilocode_change // raya_change - Milestone A goal storage
     ],
   }),
 )

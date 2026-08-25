@@ -16,6 +16,38 @@ import z from "zod"
 
 const log = Log.create({ service: "kilocode-task-model" })
 
+// raya_change start - Milestone D automatic Chief routing and bounded child runs
+const STEP_KEY = "raya.task.stepCap"
+const DEFAULT_CAP = 12
+const MAX_CAP = 50
+const ignored = new Set([
+  "agent",
+  "and",
+  "for",
+  "from",
+  "into",
+  "the",
+  "this",
+  "that",
+  "task",
+  "use",
+  "when",
+  "with",
+])
+
+function words(value: string) {
+  return new Set(
+    (value.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter((word) => word.length > 2 && !ignored.has(word)),
+  )
+}
+
+function profile(name: string) {
+  if (name === "explore") return ["codebase", "find", "inspect", "locate", "map", "search", "where"]
+  if (name === "scout") return ["dependency", "documentation", "external", "library", "package", "reference", "source"]
+  return []
+}
+// raya_change end
+
 // RATIONALE: Mirror narrow state slice Task tool consumes and ignore unrelated TUI fields.
 const ModelState = z
   .object({
@@ -33,6 +65,71 @@ const ModelState = z
   .passthrough()
 
 export namespace KiloTask {
+  // raya_change start - Milestone D task contract
+  export type Candidate = Pick<Agent.Info, "name" | "description" | "mode" | "hidden" | "deprecated">
+  export type Brief = {
+    objective: string
+    context?: string
+    constraints?: readonly string[]
+    expected_return?: string
+  }
+
+  export function route(input: { request: string; agents: Candidate[] }) {
+    const request = words(input.request)
+    const ranked = input.agents
+      .filter((item) => item.mode !== "primary" && !item.hidden && !item.deprecated)
+      .map((item) => {
+        const name = item.name.toLowerCase()
+        const description = words(item.description ?? "")
+        const overlap = [...description].filter((word) => request.has(word)).length
+        const exact = request.has(name) ? 20 : 0
+        const specialist = profile(name).filter((word) => request.has(word)).length * 5
+        const fallback = name === "general" ? 0 : 1
+        return { item, score: exact + overlap * 2 + specialist + fallback }
+      })
+      .sort((a, b) => b.score - a.score || a.item.name.localeCompare(b.item.name))
+    const selected = ranked[0]?.item
+    if (!selected) throw new Error("No eligible subagent is available for automatic routing")
+    if (selected.name === "general") return selected
+    if (ranked[0]!.score > 1) return selected
+    return ranked.find((item) => item.item.name === "general")?.item ?? selected
+  }
+
+  export function cap(value?: number) {
+    if (value === undefined || !Number.isFinite(value)) return DEFAULT_CAP
+    return Math.max(1, Math.min(MAX_CAP, Math.floor(value)))
+  }
+
+  export function steps(agent: number | undefined, metadata: Record<string, unknown> | undefined) {
+    const value = metadata?.[STEP_KEY]
+    const task = typeof value === "number" && Number.isFinite(value) ? cap(value) : Infinity
+    return Math.min(agent ?? Infinity, task)
+  }
+
+  export function metadata(current: Record<string, unknown> | undefined, value?: number) {
+    return { ...current, [STEP_KEY]: cap(value) }
+  }
+
+  export function brief(input: { prompt?: string; brief?: Brief; cap: number }) {
+    const objective = input.brief?.objective.trim() || input.prompt?.trim()
+    if (!objective) throw new Error("Task requires brief.objective or prompt")
+    return [
+      "<subagent_brief>",
+      `Objective: ${objective}`,
+      ...(input.brief?.context ? [`Context: ${input.brief.context.trim()}`] : []),
+      ...(input.brief?.constraints?.length
+        ? ["Constraints:", ...input.brief.constraints.map((item) => `- ${item.trim()}`).filter((item) => item !== "- ")]
+        : []),
+      `Step cap: ${input.cap}`,
+      `Expected return: ${
+        input.brief?.expected_return?.trim() ||
+        "A concise synthesized result with conclusions, evidence, and artifact paths; do not return the raw transcript."
+      }`,
+      "</subagent_brief>",
+    ].join("\n")
+  }
+  // raya_change end
+
   /** Reject primary agents used as subagents */
   export function validate(info: Agent.Info, name: string) {
     if (info.mode === "primary") throw new Error(`Agent "${name}" is a primary agent and cannot be used as a subagent`)

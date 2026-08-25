@@ -23,6 +23,11 @@ import * as Truncate from "@/tool/truncate"
 import { InstanceState } from "@/effect/instance-state"
 import { KiloMemory } from "@kilocode/kilo-memory/effect"
 import { MemoryPaths } from "@kilocode/kilo-memory/effect/paths"
+import type { Storage } from "@/storage/storage" // raya_change - Milestone A goal tool dependencies
+import type { Session } from "@/session/session" // raya_change - Milestone A goal audit evidence
+import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal state
+import { goalTools } from "./goal" // raya_change - Milestone A model-facing tools
+import { ChiefRouteTool } from "./chief-route" // raya_change - Milestone B intelligent auto-routing
 
 const log = Log.create({ service: "kilocode-tool-registry" })
 type Deps = { agent: Agent.Interface; truncate: Truncate.Interface; indexing?: boolean }
@@ -65,7 +70,11 @@ export namespace KiloToolRegistry {
     reject: () => Effect.die(new Error("Agent Manager orchestration is unavailable in this runtime")),
   })
 
-  export function infos(host?: AgentManager.Interface, notebook?: Notebook.Interface) {
+  export function infos(
+    host?: AgentManager.Interface,
+    notebook?: Notebook.Interface,
+    goalDeps?: { storage: Storage.Interface; sessions: Session.Interface }, // raya_change - Milestone A
+  ) {
     return Effect.gen(function* () {
       const recall = yield* RecallTool
       const managerModels = yield* AgentManagerModelsTool
@@ -82,14 +91,37 @@ export namespace KiloToolRegistry {
       const sessions = yield* KiloSessions.Service
       const notify = yield* NotifyUserTool.pipe(Effect.provideService(KiloSessions.Service, sessions))
       const send = yield* SendFileTool
+      const chief = yield* ChiefRouteTool // raya_change - Milestone B intelligent auto-routing
+      // raya_change start - Milestone A model-facing goal tools
+      const goals = goalDeps ? goalTools(RayaGoal.make(goalDeps)) : undefined
+      const goalCreate = goals ? yield* goals.create : undefined
+      const goalGet = goals ? yield* goals.get : undefined
+      const goalUpdate = goals ? yield* goals.update : undefined
+      const goal = { goalCreate, goalGet, goalUpdate }
+      // raya_change end
       if (!notebook)
-        return { recall, managerModels, memory, save, manager, process, chart, image, terminal, notify, send }
+        return { recall, managerModels, memory, save, manager, process, chart, image, terminal, notify, send, chief, ...goal }
       const tools = yield* Effect.all({
         notebookRead: NotebookReadTool,
         notebookEdit: NotebookEditTool,
         notebookExecute: NotebookExecuteTool,
       }).pipe(Effect.provideService(Notebook.Service, notebook))
-      return { recall, managerModels, memory, save, manager, process, chart, image, terminal, notify, send, ...tools }
+      return {
+        recall,
+        managerModels,
+        memory,
+        save,
+        manager,
+        process,
+        chart,
+        image,
+        terminal,
+        notify,
+        send,
+        chief,
+        ...goal,
+        ...tools,
+      }
     })
   }
 
@@ -111,6 +143,10 @@ export namespace KiloToolRegistry {
       notebookRead?: Tool.Info
       notebookEdit?: Tool.Info
       notebookExecute?: Tool.Info
+      goalCreate?: Tool.Info // raya_change - Milestone A
+      goalGet?: Tool.Info // raya_change - Milestone A
+      goalUpdate?: Tool.Info // raya_change - Milestone A
+      chief?: Tool.Info // raya_change - Milestone B
     },
     deps: Deps,
     loaders: Loaders = {},
@@ -128,6 +164,7 @@ export namespace KiloToolRegistry {
         notify: Tool.init(tools.notify),
         send: Tool.init(tools.send),
       })
+      const chief = tools.chief ? yield* Tool.init(tools.chief) : undefined // raya_change - Milestone B
       const terminal = tools.terminal ? yield* Tool.init(tools.terminal) : undefined
       const notebooks =
         tools.notebookRead && tools.notebookEdit && tools.notebookExecute
@@ -138,7 +175,17 @@ export namespace KiloToolRegistry {
             })
           : {}
       const semantic = yield* semanticTool(deps, loaders)
-      return { ...base, terminal, ...notebooks, semantic, notify: base.notify, send: base.send }
+      // raya_change start - Milestone A model-facing goal tools
+      const goals =
+        tools.goalCreate && tools.goalGet && tools.goalUpdate
+          ? yield* Effect.all({
+              goalCreate: Tool.init(tools.goalCreate),
+              goalGet: Tool.init(tools.goalGet),
+              goalUpdate: Tool.init(tools.goalUpdate),
+            })
+          : {}
+      // raya_change end
+      return { ...base, terminal, ...notebooks, ...goals, semantic, notify: base.notify, send: base.send, chief }
     })
   }
 
@@ -181,6 +228,7 @@ export namespace KiloToolRegistry {
 
   /** Hide human-driven tools from agents that cannot interact with the user directly. */
   export function available(tool: Tool.Def, agent: Agent.Info) {
+    if (tool.id === "chief_route") return agent.name === "auto" // raya_change - Milestone B
     if (tool.id === "notify_user") return KiloSessions.remoteStatus().enabled
     if (tool.id === "send_file") return KiloSessions.remoteStatus().connected
     if (tool.id !== "interactive_terminal") return true
@@ -205,6 +253,10 @@ export namespace KiloToolRegistry {
       notebookRead?: Tool.Def
       notebookEdit?: Tool.Def
       notebookExecute?: Tool.Def
+      goalCreate?: Tool.Def // raya_change - Milestone A
+      goalGet?: Tool.Def // raya_change - Milestone A
+      goalUpdate?: Tool.Def // raya_change - Milestone A
+      chief?: Tool.Def // raya_change - Milestone B
     },
     cfg: { experimental?: { image_generation?: boolean; native_notebook_tools?: boolean } },
   ): Tool.Def[] {
@@ -225,6 +277,11 @@ export namespace KiloToolRegistry {
       tools.notebookExecute
         ? [tools.notebookRead, tools.notebookEdit, tools.notebookExecute]
         : []),
+      // raya_change - Milestone A goal tools are available in every client
+      ...(tools.goalCreate && tools.goalGet && tools.goalUpdate
+        ? [tools.goalCreate, tools.goalGet, tools.goalUpdate]
+        : []),
+      ...(tools.chief ? [tools.chief] : []), // raya_change - Milestone B
       tools.notify,
       tools.send,
     ]

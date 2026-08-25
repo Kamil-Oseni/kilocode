@@ -19,10 +19,12 @@ describe("buildExport", () => {
     expect(result._meta).toBeDefined()
     expect(result._meta.version).toBe(META_VERSION)
     expect(typeof result._meta.exportedAt).toBe("string")
+    expect(result._meta.secretsStripped).toBe(true) // raya_change - Milestone I transfer contract
     expect(result.model).toBe("anthropic/claude-sonnet-4-20250514")
   })
 
-  it("preserves provider fields including secrets", () => {
+  it("preserves provider fields while stripping secrets", () => {
+    // raya_change - Milestone I exports never carry BYOK credentials
     const cfg: Config = {
       provider: {
         openai: { name: "OpenAI", api_key: "sk-secret-123" },
@@ -30,13 +32,15 @@ describe("buildExport", () => {
       },
     }
     const result = buildExport(cfg)
-    expect(result.provider.openai.api_key).toBe("sk-secret-123")
+    expect(result.provider.openai.api_key).toBeUndefined()
     expect(result.provider.openai.name).toBe("OpenAI")
-    expect(result.provider.custom.options.apiKey).toBe("secret")
+    expect(result.provider.custom.options.apiKey).toBeUndefined()
     expect(result.provider.custom.options.baseURL).toBe("https://example.com")
+    expect(JSON.stringify(result)).not.toContain("sk-secret-123")
   })
 
-  it("preserves mcp fields including env and headers", () => {
+  it("strips embedded environment and authorization secrets", () => {
+    // raya_change - non-secret transfer remains safe beyond provider keys
     const cfg: Config = {
       mcp: {
         github: {
@@ -59,10 +63,10 @@ describe("buildExport", () => {
       },
     }
     const result = buildExport(cfg)
-    expect(result.mcp.github.env.GITHUB_TOKEN).toBe("ghp_secret123")
+    expect(result.mcp.github.env).toBeUndefined()
     expect(result.mcp.github.command).toBe("npx")
-    expect(result.mcp.server.environment.SECRET).toBe("val")
-    expect(result.mcp.remote.headers.Authorization).toBe("Bearer secret-token")
+    expect(result.mcp.server.environment).toBeUndefined()
+    expect(result.mcp.remote.headers.Authorization).toBeUndefined()
     expect(result.mcp.remote.url).toBe("https://mcp.example.com")
   })
 
@@ -259,7 +263,8 @@ describe("parseImport", () => {
     expect(result.ok).toBe(true)
   })
 
-  it("preserves provider and mcp fields as-is (including secrets on import)", () => {
+  it("strips provider and embedded secrets on import", () => {
+    // raya_change - imported files cannot bypass SecretStorage
     const json = JSON.stringify({
       provider: { openai: { name: "OpenAI", api_key: "sk-123" } },
       mcp: { gh: { command: "npx", env: { TOKEN: "secret" } } },
@@ -267,8 +272,9 @@ describe("parseImport", () => {
     const result = parseImport(json)
     expect(result.ok).toBe(true)
     if (result.ok) {
-      expect(result.config.provider?.openai?.api_key).toBe("sk-123")
-      expect(result.config.mcp?.gh?.env?.TOKEN).toBe("secret")
+      expect(result.config.provider?.openai?.api_key).toBeUndefined()
+      expect(result.config.provider?.openai?.name).toBe("OpenAI")
+      expect(result.config.mcp?.gh?.env).toBeUndefined()
     }
   })
 })
@@ -354,11 +360,14 @@ describe("mergeConfig", () => {
 // Round-trip
 // ---------------------------------------------------------------------------
 describe("round-trip", () => {
-  it("export then import preserves all fields including secrets", () => {
+  it("export then import restores providers and agent models without secrets", () => {
+    // raya_change - Milestone I non-secret config round-trip
     const original: Config = {
       model: "test-model",
-      agent: { coder: { mode: "primary", prompt: "Code" } },
-      provider: { openai: { name: "OpenAI", api_key: "sk-secret" } },
+      agent: { coder: { mode: "primary", prompt: "Code", model: "openai/gpt-test" } },
+      provider: {
+        openai: { name: "OpenAI", api_key: "sk-secret", options: { baseURL: "https://api.example.com/v1" } },
+      },
       mcp: { gh: { command: "npx", env: { TOKEN: "secret" } } },
       permission: { read: "allow" },
       instructions: ["rules.md"],
@@ -369,11 +378,12 @@ describe("round-trip", () => {
     expect(result.ok).toBe(true)
     if (result.ok) {
       expect(result.config.model).toBe("test-model")
-      expect(result.config.agent).toEqual({ coder: { mode: "primary", prompt: "Code" } })
+      expect(result.config.agent).toEqual({ coder: { mode: "primary", prompt: "Code", model: "openai/gpt-test" } })
       expect(result.config.provider?.openai?.name).toBe("OpenAI")
-      expect(result.config.provider?.openai?.api_key).toBe("sk-secret")
+      expect(result.config.provider?.openai?.options?.baseURL).toBe("https://api.example.com/v1")
+      expect(result.config.provider?.openai?.api_key).toBeUndefined()
       expect(result.config.mcp?.gh?.command).toBe("npx")
-      expect(result.config.mcp?.gh?.env?.TOKEN).toBe("secret")
+      expect(result.config.mcp?.gh?.env).toBeUndefined()
       expect(result.config.permission).toEqual({ read: "allow" })
       expect(result.config.instructions).toEqual(["rules.md"])
     }

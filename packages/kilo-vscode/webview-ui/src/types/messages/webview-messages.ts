@@ -44,6 +44,19 @@ export interface AbortRequest {
   sessionID: string
 }
 
+// raya_change start - Milestone A goal state controls
+export interface GoalGetMessage {
+  type: "goalGet"
+  sessionID: string
+}
+
+export interface GoalControlMessage {
+  type: "goalControl"
+  sessionID: string
+  action: "pause" | "resume" | "clear"
+}
+// raya_change end
+
 export interface RequestBackgroundJobsMessage {
   type: "requestBackgroundJobs"
   sessionID: string
@@ -1493,6 +1506,8 @@ export type WebviewMessage =
   | DocumentSendCommentsMessage
   | SendMessageRequest
   | AbortRequest
+  | GoalGetMessage // raya_change - Milestone A
+  | GoalControlMessage // raya_change - Milestone A
   | RequestBackgroundJobsMessage
   | CancelBackgroundJobMessage
   | BackgroundSubagentsMessage

@@ -19,6 +19,7 @@ import { PermissionDock } from "./PermissionDock"
 import { SessionDock } from "./SessionDock"
 import { StartupErrorBanner } from "./StartupErrorBanner"
 import { SessionTabStrip } from "./SessionTabStrip"
+import { GoalBanner } from "./GoalBanner" // raya_change - Milestone A persistent goal UI
 import { useSession } from "../../context/session"
 import { useLocalTabs } from "../../context/local-tabs"
 import { useVSCode } from "../../context/vscode"
@@ -347,6 +348,9 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           <SessionTabStrip />
         </Show>
         <TaskHeader readonly={props.readonly} />
+        <Show when={!props.readonly}>
+          <GoalBanner /> {/* raya_change - Milestone A persistent goal UI */}
+        </Show>
         <div class="chat-messages-wrapper">
           <div class="chat-messages">
             <MessageList

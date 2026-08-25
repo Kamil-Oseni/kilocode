@@ -56,7 +56,7 @@ const AboutKiloCodeTab: Component<AboutKiloCodeTabProps> = (props) => {
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = "kilo-settings.json"
+    a.download = "raya-settings.json" // raya_change - Milestone I non-secret settings transfer
     a.click()
     URL.revokeObjectURL(url)
   }

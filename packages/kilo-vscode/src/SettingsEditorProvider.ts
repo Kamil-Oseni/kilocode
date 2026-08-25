@@ -1,4 +1,4 @@
-// raya_change - Raya extension namespace
+// raya_change - Raya extension namespace and panel identity
 import * as vscode from "vscode"
 import { KiloProvider } from "./KiloProvider"
 import { resolvePanelProjectDirectory } from "./project-directory"
@@ -9,8 +9,8 @@ import type { AgentManagerSettingsHandler } from "./kilo-provider/options"
 type PanelView = "settings" | "profile" | "indexing"
 
 const PANEL_TITLES: Record<PanelView, string> = {
-  settings: "Kilo Settings",
-  profile: "Kilo Profile",
+  settings: "Raya Settings",
+  profile: "Raya Profile",
   indexing: "Codebase Indexing",
 }
 
@@ -51,7 +51,7 @@ export class SettingsEditorProvider implements vscode.Disposable {
 
   /** Extract the PanelView from a viewType string like "raya.settingsPanel". */
   static viewFromType(type: string): PanelView | undefined {
-    const match = type.match(/^kilo-code\.new\.(\w+)Panel$/)
+    const match = type.match(/^raya\.(\w+)Panel$/)
     if (!match) return undefined
     const view = match[1] as PanelView
     if (!(view in PANEL_TITLES)) return undefined
@@ -97,9 +97,10 @@ export class SettingsEditorProvider implements vscode.Disposable {
   }
 
   private wirePanel(panel: vscode.WebviewPanel, view: PanelView, projectDirectory: string | null): void {
+    panel.title = PANEL_TITLES[view]
     panel.iconPath = {
-      light: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "kilo-light.svg"),
-      dark: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "kilo-dark.svg"),
+      light: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "eden-logo-light.svg"),
+      dark: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "eden-logo-dark.svg"),
     }
 
     // Create a dedicated KiloProvider for this panel so it has full

@@ -166,6 +166,7 @@ import { fetchOpenAIModels, FetchModelsError } from "./shared/fetch-models"
 import type { Agent } from "@kilocode/sdk/v2/client"
 import { configFeatures } from "./features"
 import { fetchSnapshot } from "./kilo-provider/config-snapshot"
+import { ProviderSecretStore, type ProviderSecrets } from "./provider-secrets" // raya_change - Milestone I BYOK secrets
 import { createAutoApproveBridge } from "./kilo-provider/auto-approve"
 import type { KiloProviderOptions } from "./kilo-provider/options"
 import type { ProjectRef, SessionRef, WorktreeRef } from "./agent-manager/project/route"
@@ -176,6 +177,7 @@ import { fetchSpeechToTextModels } from "./speech-to-text/catalog"
 import { SPEECH_TO_TEXT_MODELS } from "./speech-to-text/models"
 import { stopSessionProcesses } from "./kilo-provider/background-process"
 import { sandboxDefault, sandboxSessionMetadata } from "./shared/sandbox-session"
+import { goalPrompt, parseGoalCommand, type GoalState } from "./shared/goal" // raya_change - Milestone A native goal mode
 import {
   buildIndexingSettingsMessage,
   validIndexingSetting,
@@ -343,6 +345,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
    * and the key is resolved here. Refreshed on every provider fetch.
    */
   private storedProviderKeys: Record<string, StoredProviderKey> = {}
+  private readonly providerSecrets: ProviderSecrets | undefined // raya_change - encrypted BYOK source
   /** Coalesce provider refreshes — at most one follow-up rerun when a request lands mid-flight. */
   private providersRefresh: Promise<void> | null = null
   private providersQueued = false
@@ -482,6 +485,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   ) {
     this.projectDirectory = opts.projectDirectory
     this.slimEditMetadata = opts.slimEditMetadata ?? true
+    this.providerSecrets = extensionContext ? new ProviderSecretStore(extensionContext.secrets) : undefined // raya_change
     this.unsubscribeSandboxPreference = this.connectionService.sandboxPreference?.onChange(() => {
       if (this.connectionState === "connected") void this.fetchAndSendSandboxDefault()
     })
@@ -1557,6 +1561,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   private async handleProfileDataMessage(message: TypedWebviewMessage): Promise<boolean> {
+    if (await this.handleGoalMessage(message)) return true // raya_change - Milestone A goal controls
     if (message.type === "refreshProfile") {
       await handleRefreshProfile(this.authCtx)
       return true
@@ -1571,6 +1576,25 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     }
     return false
   }
+
+  // raya_change start - Milestone A persistent goal controls
+  private async handleGoalMessage(
+    message: TypedWebviewMessage & { sessionID?: unknown; action?: unknown },
+  ): Promise<boolean> {
+    if (message.type === "goalGet") {
+      if (typeof message.sessionID === "string") await this.fetchAndSendGoal(message.sessionID)
+      return true
+    }
+    if (message.type !== "goalControl") return false
+    if (
+      typeof message.sessionID === "string" &&
+      (message.action === "pause" || message.action === "resume" || message.action === "clear")
+    ) {
+      await this.handleGoalControl(message.sessionID, message.action)
+    }
+    return true
+  }
+  // raya_change end
 
   private handleWebviewFocusMessage(message: TypedWebviewMessage & { focused?: unknown; target?: unknown }): void {
     if (message.type === "webviewFocusChanged" && this.opts.focusContext) {
@@ -2524,6 +2548,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           const { response, authMethods, authStates, storedKeys } = await fetchProviderData(
             client,
             this.getWorkspaceDirectory(),
+            this.providerSecrets, // raya_change - migrate/read keys through SecretStorage
           )
           if (generation !== this.providersGeneration || client !== this.client) {
             if (!this.providersQueued) return
@@ -2592,6 +2617,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       getErrorMessage,
       this.getWorkspaceDirectory(),
       () => this.fetchAndSendProviders(),
+      this.providerSecrets, // raya_change - provider actions update SecretStorage and the CLI auth mirror together
     )
     const set = (m: unknown) => {
       this.cachedConfigMessage = m
@@ -3954,6 +3980,28 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       if (sandbox) await sandbox
       const sid = resolved.sid
       const dir = resolved.dir
+      // raya_change start - Milestone A arm /goal before the first model turn
+      const command = parseGoalCommand(text)
+      if (command?.kind === "usage") {
+        this.postMessage({ type: "goalState", sessionID: sid, notice: command.notice })
+        return
+      }
+      const armed =
+        command?.kind === "start"
+          ? await this.client.kilocode.goal.create(
+              { sessionID: sid, directory: dir, objective: command.objective },
+              { throwOnError: true },
+            )
+          : undefined
+      if (armed?.data) {
+        this.postMessage({
+          type: "goalState",
+          sessionID: sid,
+          goal: armed.data as GoalState,
+          notice: command?.notice,
+        })
+      }
+      // raya_change end
 
       const parts: Array<TextPartInput | FilePartInput> = []
       if (files) {
@@ -3962,6 +4010,9 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         }
       }
       parts.push({ type: "text", text, metadata: review ? reviewMetadata(review) : undefined })
+      if (command?.kind === "start") {
+        parts.push({ type: "text", text: goalPrompt(command.objective), synthetic: true })
+      } // raya_change - Milestone A same-turn work reminder
 
       const editorContext = await this.gatherEditorContext(dir)
       if (draftID && this.closedDrafts.delete(draftID)) {
@@ -4006,6 +4057,35 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       })
     }
   }
+
+  // raya_change start - Milestone A persistent goal state and user controls
+  private async fetchAndSendGoal(sessionID: string, notice?: string): Promise<void> {
+    if (!this.client) return
+    const directory = this.getWorkspaceDirectory(sessionID)
+    const response = await this.client.kilocode.goal.get({ sessionID, directory })
+    this.postMessage({
+      type: "goalState",
+      sessionID,
+      goal: response.data as GoalState | undefined,
+      notice,
+    })
+  }
+
+  private async handleGoalControl(sessionID: string, action: "pause" | "resume" | "clear"): Promise<void> {
+    if (!this.client) return
+    const directory = this.getWorkspaceDirectory(sessionID)
+    if (action === "clear") {
+      await this.client.kilocode.goal.clear({ sessionID, directory }, { throwOnError: true })
+      this.postMessage({ type: "goalState", sessionID })
+      return
+    }
+    const response = await this.client.kilocode.goal.update(
+      { sessionID, directory, status: action === "pause" ? "paused" : "active" },
+      { throwOnError: true },
+    )
+    this.postMessage({ type: "goalState", sessionID, goal: response.data as GoalState })
+  }
+  // raya_change end
 
   private async handleSendCommand(
     command: string,
@@ -4680,6 +4760,9 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         this.streams.flush(sid)
         this.postMessage(msg)
       }
+      if (event.properties.status.type === "idle") {
+        setTimeout(() => void this.fetchAndSendGoal(sid), 100)
+      } // raya_change - Milestone A refresh audit/block/progress after turn settlement
       return
     }
 

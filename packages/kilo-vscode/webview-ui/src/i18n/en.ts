@@ -403,6 +403,12 @@ export const dict = {
   "provider.custom.models.fetch.showing": "Showing {{shown}} of {{total}}",
   "provider.custom.models.fetch.search": "Search models\u2026",
   "provider.custom.models.fetch.add": "Add {{count}} model(s)",
+  // raya_change start - Milestone I provider connection testing
+  "provider.custom.connection.test": "Test connection",
+  "provider.custom.connection.testing": "Testing\u2026",
+  "provider.custom.connection.success": "Connected — {{count}} models found",
+  "provider.custom.connection.failed": "Connection failed: {{error}}",
+  // raya_change end
   "provider.custom.edit.title": "Edit provider",
   "provider.custom.edit.advanced": "Edit advanced settings in the JSON config file",
   "provider.custom.headers.label": "Headers (optional)",
@@ -443,7 +449,7 @@ export const dict = {
   "settings.config.source.projectRoot": "Project root config",
   "settings.config.source.projectKilocode": "Legacy .kilocode config",
   "settings.config.source.projectOpencode": "Legacy .opencode config",
-  "settings.models.title": "Models",
+  "settings.models.title": "Agents & models", // raya_change - Milestone I settings section
 
   "settings.permissions.toast.updateFailed.title": "Failed to update permissions",
 

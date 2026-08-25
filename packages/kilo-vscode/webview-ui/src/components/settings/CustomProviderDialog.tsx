@@ -57,6 +57,7 @@ function fuzzy(query: string, target: string) {
 }
 
 type FetchedModel = { id: string; name: string }
+type ConnectionTest = { ok: true; count: number } | { ok: false; error: string } // raya_change - Milestone I result
 type RawModel = {
   name?: string
   reasoning?: boolean
@@ -197,6 +198,7 @@ const CustomProviderDialog = (props: CustomProviderDialogProps) => {
   const [fetchedModels, setFetchedModels] = createSignal<FetchedModel[]>()
   const [selected, setSelected] = createSignal<Set<string>>(new Set())
   const [fetchStatus, setFetchStatus] = createSignal<string>()
+  const [connection, setConnection] = createSignal<ConnectionTest>() // raya_change - explicit free model-list test
 
   // Search within fetched models
   const [search, setSearch] = createSignal("")
@@ -238,6 +240,7 @@ const CustomProviderDialog = (props: CustomProviderDialogProps) => {
     setFetchedModels(undefined)
     setFetchError(undefined)
     setFetchStatus(undefined)
+    setConnection(undefined) // raya_change
     setSearch("")
 
     if (npm === "@ai-sdk/anthropic" || !/^https?:\/\//.test(url.trim())) return
@@ -252,7 +255,8 @@ const CustomProviderDialog = (props: CustomProviderDialogProps) => {
 
   // ── Core fetch logic ────────────────────────────────────────────────
 
-  function doFetch() {
+  function doFetch(test = false) {
+    // raya_change - test mode reports the real model-list result
     // Snapshot all values from signals/store before entering async.
     // This avoids reading the store proxy inside callbacks, which could
     // subscribe to unrelated store properties and cause re-render loops.
@@ -296,15 +300,23 @@ const CustomProviderDialog = (props: CustomProviderDialogProps) => {
       setFetching(false)
 
       if (msg.error) {
+        if (test)
+          setConnection({
+            ok: false,
+            error: msg.auth ? language.t("provider.custom.models.fetch.authError") : msg.error,
+          })
         setFetchError(msg.auth ? language.t("provider.custom.models.fetch.authError") : msg.error)
         return
       }
 
       const models = msg.models ?? []
       if (models.length === 0) {
+        if (test) setConnection({ ok: false, error: language.t("provider.custom.models.fetch.empty") })
         setFetchError(language.t("provider.custom.models.fetch.empty"))
         return
       }
+
+      if (test) setConnection({ ok: true, count: models.length }) // raya_change - green result includes returned count
 
       // Filter using the snapshot taken at fetch time (trimmed, case-insensitive)
       const fresh = models.filter((m) => !existing.has(m.id.trim().toLowerCase()))
@@ -661,6 +673,41 @@ const CustomProviderDialog = (props: CustomProviderDialogProps) => {
                 setFetchKey(key)
               }}
             />
+            {/* raya_change start - explicit, inference-free provider connection test */}
+            <div style={{ display: "flex", "align-items": "center", gap: "10px", "flex-wrap": "wrap" }}>
+              <Button
+                type="button"
+                variant="secondary"
+                size="small"
+                disabled={fetching() || !/^https?:\/\//.test(form.baseURL.trim())}
+                onClick={() => doFetch(true)}
+              >
+                {fetching()
+                  ? language.t("provider.custom.connection.testing")
+                  : language.t("provider.custom.connection.test")}
+              </Button>
+              <Show when={connection()}>
+                {(result) => (
+                  <span
+                    role="status"
+                    style={{
+                      "font-size": "var(--kilo-font-size-12)",
+                      color: result().ok
+                        ? "var(--vscode-testing-iconPassed, #4caf50)"
+                        : "var(--vscode-testing-iconFailed, #f44336)",
+                    }}
+                  >
+                    {(() => {
+                      const value = result()
+                      return value.ok
+                        ? language.t("provider.custom.connection.success", { count: String(value.count) })
+                        : language.t("provider.custom.connection.failed", { error: value.error })
+                    })()}
+                  </span>
+                )}
+              </Show>
+            </div>
+            {/* raya_change end */}
           </div>
 
           {/* Models */}

@@ -21,7 +21,7 @@ import { useVSCode } from "../../context/vscode"
 import { useWorktreeMode } from "../../context/worktree-mode"
 import { childID } from "../../context/session-utils"
 import { openSubagent } from "./open-subagent"
-import { taskResult, taskRunning, taskVisible } from "./task-tool-state"
+import { taskAgent, taskResult, taskRunning, taskVisible } from "./task-tool-state" // raya_change
 
 const TaskToolRenderer: Component<ToolProps> = (props) => {
   const i18n = useI18n()
@@ -29,6 +29,15 @@ const TaskToolRenderer: Component<ToolProps> = (props) => {
   const session = useSession()
   const vscode = useVSCode()
   const worktree = useWorktreeMode()
+
+  // raya_change start - Milestone D show the Chief-selected specialist in the nested thread
+  const taskMetadata = () => {
+    const part = props.partMetadata as { selectedAgent?: string; selection?: string } | undefined
+    const state = props.metadata as { selectedAgent?: string; selection?: string } | undefined
+    return taskAgent(props.input, part, state)
+  }
+  const selectedAgent = () => taskMetadata().agent
+  // raya_change end
 
   const childSessionId = () =>
     childID({
@@ -66,11 +75,10 @@ const TaskToolRenderer: Component<ToolProps> = (props) => {
     if (synced) session.unsyncSession(synced)
   })
 
-  const title = createMemo(() => i18n.t("ui.tool.agent", { type: props.input.subagent_type || props.tool }))
+  const title = createMemo(() => i18n.t("ui.tool.agent", { type: selectedAgent() })) // raya_change
 
   const description = createMemo(() => {
-    const val = props.input.description
-    return typeof val === "string" ? val : undefined
+    return taskMetadata().description // raya_change - distinguish automatic Chief routing from explicit overrides
   })
 
   // All tool parts from the child session — the compact summary list
@@ -85,7 +93,8 @@ const TaskToolRenderer: Component<ToolProps> = (props) => {
     return id ? session.getSessionToolCount(id) : 0
   })
 
-  const result = createMemo(() => taskResult(props.output, childSessionId()))
+  // raya_change - keep running children focused on live tools, then reveal the synthesized final result
+  const result = createMemo(() => taskResult(props.output, running() ? childSessionId() : undefined))
 
   createEffect((prev: string | undefined) => {
     const id = taskVisible(open(), childSessionId())

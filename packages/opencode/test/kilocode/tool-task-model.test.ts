@@ -203,6 +203,7 @@ function writeState(input: unknown) {
 
 function run(input: {
   agent: "pinned" | "worker"
+  objective?: string // raya_change - exercise Chief auto-selection with model precedence
   state?: unknown
   client?: string
   variant?: string
@@ -223,8 +224,8 @@ function run(input: {
         const result = yield* def.execute(
           {
             description: `run ${input.agent}`,
-            prompt: "inspect resolution",
-            subagent_type: input.agent,
+            prompt: input.objective ?? "inspect resolution",
+            subagent_type: input.objective ? undefined : input.agent, // raya_change
           },
           {
             sessionID: chat.id,
@@ -250,8 +251,13 @@ function run(input: {
         ...catalog,
         ...input.config,
         agent: {
-          worker: { mode: "subagent" },
-          pinned: { mode: "subagent", model: "config-provider/config-model", variant: cfgVariant },
+          worker: { mode: "subagent", description: "General task worker" },
+          pinned: {
+            mode: "subagent",
+            description: "Database migration specialist for schema changes",
+            model: "config-provider/config-model",
+            variant: cfgVariant,
+          },
         },
       },
     },
@@ -259,6 +265,24 @@ function run(input: {
 }
 
 describe("tool.task model resolution", () => {
+  // raya_change - Milestone D auto-routing preserves specialist model pins
+  it.live("auto-selected specialist model beats the configured subagent default", () =>
+    run({
+      agent: "pinned",
+      objective: "Migrate the database schema and verify the migration",
+      config: { subagent_model: "sub-provider/sub-model", subagent_variant: subVariant },
+    }).pipe(
+      Effect.tap((result) =>
+        Effect.sync(() => {
+          expect(result.prompt).toEqual(cfg)
+          expect(result.variant).toEqual(cfgVariant)
+          expect(result.model).toEqual(cfg)
+          expect(result.metadataVariant).toEqual(cfgVariant)
+        }),
+      ),
+    ),
+  )
+
   it.live("saved model beats agent config for pinned", () =>
     run({
       agent: "pinned",

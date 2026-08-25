@@ -5,7 +5,7 @@ import {
   toolOpenKey,
   writeToolOpen,
 } from "../../../kilo-ui/src/components/tool-open-state"
-import { taskResult, taskRunning, taskVisible } from "../../webview-ui/src/components/chat/task-tool-state"
+import { taskAgent, taskResult, taskRunning, taskVisible } from "../../webview-ui/src/components/chat/task-tool-state" // raya_change
 
 describe("completed task hydration", () => {
   beforeEach(() => resetToolOpenState())
@@ -37,5 +37,27 @@ describe("completed task hydration", () => {
     expect(taskResult(output, undefined)).toBe("child outcome")
     expect(taskResult(output, "ses_child")).toBeUndefined()
     expect(taskResult("plain output", undefined)).toBe("plain output")
+  })
+
+  // raya_change - Milestone D nested threads expose automatic routing and final summaries
+  it("labels the live nested thread with the Chief-selected specialist", () => {
+    expect(
+      taskAgent(
+        { description: "Inspect API routes" },
+        { selectedAgent: "explore", selection: "auto" },
+      ),
+    ).toEqual({
+      agent: "explore",
+      description: "Auto → explore · Inspect API routes",
+    })
+    expect(taskResult("<task_result>\nSynthesized route map\n</task_result>", undefined)).toBe(
+      "Synthesized route map",
+    )
+    expect(
+      taskResult(
+        "<task_result>\nSynthesized route map\n</task_result>",
+        taskRunning("completed") ? "ses_child" : undefined,
+      ),
+    ).toBe("Synthesized route map")
   })
 })

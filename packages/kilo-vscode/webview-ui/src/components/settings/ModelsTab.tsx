@@ -83,7 +83,8 @@ const ModelsTab: Component = () => {
     })
   }
 
-  const allAgents = createMemo(() => session.agents())
+  // raya_change - Milestone I assigns models to every visible primary agent and subagent
+  const allAgents = createMemo(() => session.allAgents().filter((agent) => !agent.hidden))
 
   function handleModeModelSelect(agentName: string) {
     return (providerID: string, modelID: string) => {

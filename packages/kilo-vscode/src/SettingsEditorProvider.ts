@@ -1,3 +1,4 @@
+// raya_change - Raya extension namespace
 import * as vscode from "vscode"
 import { KiloProvider } from "./KiloProvider"
 import { resolvePanelProjectDirectory } from "./project-directory"
@@ -48,7 +49,7 @@ export class SettingsEditorProvider implements vscode.Disposable {
     return resolvePanelProjectDirectory(active, vscode.workspace.workspaceFolders)
   }
 
-  /** Extract the PanelView from a viewType string like "kilo-code.new.settingsPanel". */
+  /** Extract the PanelView from a viewType string like "raya.settingsPanel". */
   static viewFromType(type: string): PanelView | undefined {
     const match = type.match(/^kilo-code\.new\.(\w+)Panel$/)
     if (!match) return undefined
@@ -76,16 +77,11 @@ export class SettingsEditorProvider implements vscode.Disposable {
       return
     }
 
-    const panel = vscode.window.createWebviewPanel(
-      `kilo-code.new.${view}Panel`,
-      PANEL_TITLES[view],
-      vscode.ViewColumn.Active,
-      {
-        enableScripts: true,
-        retainContextWhenHidden: true,
-        localResourceRoots: [this.extensionUri],
-      },
-    )
+    const panel = vscode.window.createWebviewPanel(`raya.${view}Panel`, PANEL_TITLES[view], vscode.ViewColumn.Active, {
+      enableScripts: true,
+      retainContextWhenHidden: true,
+      localResourceRoots: [this.extensionUri],
+    })
 
     this.wirePanel(panel, view, projectDirectory)
   }

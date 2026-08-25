@@ -1,3 +1,4 @@
+// raya_change - Raya extension namespace
 /**
  * legacy-migration - Core migration service.
  *
@@ -689,7 +690,7 @@ async function migrateAutoApproval(
 
 async function migrateAutocomplete(settings: LegacyAutocompleteSettings): Promise<MigrationResultItem> {
   try {
-    const config = vscode.workspace.getConfiguration("kilo-code.new.autocomplete")
+    const config = vscode.workspace.getConfiguration("raya.autocomplete")
     if (settings.enableAutoTrigger !== undefined) {
       await config.update("enableAutoTrigger", settings.enableAutoTrigger, vscode.ConfigurationTarget.Global)
     }

@@ -1,3 +1,4 @@
+// raya_change - Raya visible product copy
 import { cloudProviderDict } from "./cloud-provider"
 
 export const anacondaDesktopDict = {
@@ -538,7 +539,7 @@ export const dict = {
   "deviceAuth.toast.codeCopied": "کد در کلیپ‌بورد کپی شد",
   "deviceAuth.toast.errorCopied": "خطا در کلیپ‌بورد کپی شد",
   "deviceAuth.status.initiating": "در حال شروع ورود...",
-  "deviceAuth.title": "ورود به Kilo Code",
+  "deviceAuth.title": "ورود به Raya",
   "deviceAuth.step1": "مرحله ۱: این URL را باز کنید",
   "deviceAuth.action.copyUrl": "کپی URL",
   "deviceAuth.action.openBrowser": "باز کردن مرورگر",
@@ -561,7 +562,7 @@ export const dict = {
 
   "profile.title": "پروفایل",
   "profile.notLoggedIn": "وارد نشده‌اید",
-  "profile.action.login": "ورود با Kilo Code",
+  "profile.action.login": "ورود با Raya",
   "profile.balance.title": "موجودی",
   "profile.balance.refresh": "بازخوانی موجودی",
   "profile.usage.title": "طرح‌ها و میزان استفاده",
@@ -665,10 +666,10 @@ export const dict = {
   "settings.indexing.tuning.description": "پارامتر پیشرفته جستجو و دسته‌بندی.",
   "settings.experimental.title": "آزمایشی",
   "settings.language.title": "زبان",
-  "settings.aboutKiloCode.title": "درباره Kilo Code",
+  "settings.aboutKiloCode.title": "درباره Raya",
 
   "session.messages.welcome":
-    "Kilo Code یک دستیار هوش مصنوعی برای کدنویسی است. از آن بخواهید ویژگی‌ها بسازد، باگ‌ها را رفع کند یا کدبیس شما را توضیح دهد.",
+    "Raya یک دستیار هوش مصنوعی برای کدنویسی است. از آن بخواهید ویژگی‌ها بسازد، باگ‌ها را رفع کند یا کدبیس شما را توضیح دهد.",
   "session.messages.scrollToBottom": "رفتن به پایین",
   "session.messages.initializing": "در حال راه‌اندازی...",
   "session.messages.taskStarting": "در حال شروع...",
@@ -696,7 +697,7 @@ export const dict = {
   "session.costAlert.continue": "ادامه",
   "session.costAlert.question": "هزینه این جلسه از آستانه هشدار {{limit}} شما فراتر رفت و {{cost}} شد. ادامه می‌دهید؟",
   "session.costAlert.stop": "توقف",
-  "sidebar.topBar.label": "پیمایش Kilo Code",
+  "sidebar.topBar.label": "پیمایش Raya",
   "sidebar.topBar.newTask": "وظیفه جدید",
   "sidebar.topBar.history": "تاریخچه",
   "sidebar.topBar.agentManager": "مدیر عامل‌ها",
@@ -803,7 +804,7 @@ export const dict = {
   "settings.browser.headless.description": "در حالت headless اجرا شود (بدون پنجره مرورگر قابل مشاهده).",
 
   "settings.language.description":
-    "زبان رابط کاربری Kilo Code را انتخاب کنید. «Auto» از زبان نمایشی VS Code شما استفاده می‌کند.",
+    "زبان رابط کاربری Raya را انتخاب کنید. «Auto» از زبان نمایشی VS Code شما استفاده می‌کند.",
   "settings.language.auto": "خودکار (زبان VS Code)",
   "settings.language.current": "فعلی:",
 
@@ -1155,12 +1156,12 @@ export const dict = {
   "settings.legacyMigration.link": "انتقال از نسخه قدیمی",
   "settings.aboutKiloCode.legacyMigration.title": "انتقال از نسخه قدیمی",
   "settings.aboutKiloCode.legacyMigration.description":
-    "تنظیمات را از نصب قبلی Kilo Code منتقل کنید، از جمله کلیدهای API ارائه‌دهنده و مدل پیش‌فرض.",
+    "تنظیمات را از نصب قبلی Raya منتقل کنید، از جمله کلیدهای API ارائه‌دهنده و مدل پیش‌فرض.",
   "settings.aboutKiloCode.rooImport.description": "تاریخچه مکالمات را از یک نصب Roo Code وارد کنید.",
   "settings.aboutKiloCode.rooImport.button": "وارد کردن جلسات از Roo Code",
 
   // Screen 1 — What's New
-  "migration.whatsNew.title": "تازه‌های Kilo Code",
+  "migration.whatsNew.title": "تازه‌های Raya",
   "migration.whatsNew.subtitle": "افزونه را بر پایه‌ای سریع‌تر و کارآمدتر بازسازی کرده‌ایم.",
   "migration.whatsNew.features.performance.title": "عملکرد سریع‌تر عامل",
   "migration.whatsNew.features.performance.detail":

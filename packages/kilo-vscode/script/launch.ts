@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+// raya_change - Raya extension namespace
 /**
  * Build the Kilo VS Code extension and launch it in a development host.
  *
@@ -370,7 +371,7 @@ async function launch() {
 
   if (mode === "dev") {
     args.push(`--extensionDevelopmentPath=${root}`)
-    args.push("--disable-extension=kilocode.kilo-code")
+    args.push("--disable-extension=eden.raya")
   }
 
   if (mode === "vsix") {

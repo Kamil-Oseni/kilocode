@@ -1,3 +1,4 @@
+// raya_change - Raya extension namespace
 import { describe, it, expect } from "bun:test"
 import { buildKeybindingMap, formatKeybinding } from "../../src/agent-manager/format-keybinding"
 
@@ -78,7 +79,7 @@ describe("formatKeybinding", () => {
 
 describe("buildKeybindingMap", () => {
   it("maps the configurable Agent Manager search shortcut", () => {
-    const bindings = [{ command: "kilo-code.new.agentManager.search", key: "ctrl+f", mac: "cmd+f" }]
+    const bindings = [{ command: "raya.agentManager.search", key: "ctrl+f", mac: "cmd+f" }]
     expect(buildKeybindingMap(bindings, true).search).toBe("⌘F")
     expect(buildKeybindingMap(bindings, false).search).toBe("Ctrl+F")
   })
@@ -93,16 +94,16 @@ describe("buildKeybindingMap", () => {
   it("keeps prompt and side-terminal shortcuts separate", () => {
     const bindings = [
       {
-        command: "kilo-code.new.agentManager.newTerminalTab",
+        command: "raya.agentManager.newTerminalTab",
         key: "ctrl+shift+t",
         mac: "cmd+shift+t",
-        when: "activeWebviewPanelId == 'kilo-code.new.AgentManagerPanel' && kilo-code.new.agentManagerPromptFocused",
+        when: "activeWebviewPanelId == 'raya.AgentManagerPanel' && raya.agentManagerPromptFocused",
       },
       {
-        command: "kilo-code.new.agentManager.newSideTerminal",
+        command: "raya.agentManager.newSideTerminal",
         key: "ctrl+t",
         mac: "cmd+t",
-        when: "activeWebviewPanelId == 'kilo-code.new.AgentManagerPanel' && kilo-code.new.agentManagerSideTerminalFocused",
+        when: "activeWebviewPanelId == 'raya.AgentManagerPanel' && raya.agentManagerSideTerminalFocused",
       },
     ]
     expect(buildKeybindingMap(bindings, true)).toMatchObject({

@@ -1,3 +1,4 @@
+// raya_change - Raya extension namespace
 import * as vscode from "vscode"
 import type { TuiAttentionSoundName } from "@kilocode/plugin/tui"
 import type { SSEPayload } from "../cli-backend/sdk-sse-adapter"
@@ -123,7 +124,7 @@ export class AttentionService implements vscode.Disposable {
   }
 
   private notify(sound: TuiAttentionSoundName) {
-    const config = vscode.workspace.getConfiguration("kilo-code.new.attention")
+    const config = vscode.workspace.getConfiguration("raya.attention")
     if (!config.get<boolean>("enabled", false)) return
     const selected = resolveSoundID(config.get<string>("sound", "default"))
     void playSound(sound, selected)

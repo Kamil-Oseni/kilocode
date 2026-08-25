@@ -1,3 +1,4 @@
+// raya_change - Raya extension setting namespace
 /**
  * AssistantMessage component
  * Renders all parts of an assistant message as a flat list — no context grouping.
@@ -188,7 +189,7 @@ function BashToolCard(props: { part: ToolPart; defaultOpen: boolean; forceOpen?:
  * rate across the turn's model-generation steps (output + reasoning
  * tokens over active generation time).
  *
- * Visibility is gated by the same `kilo-code.new.showTokenThroughput`
+ * Visibility is gated by the same `raya.showTokenThroughput`
  * toggle that previously controlled the multi-row badge. The metric only
  * renders when the message has at least one step-finish part carrying both
  * a token count and elapsed timing.

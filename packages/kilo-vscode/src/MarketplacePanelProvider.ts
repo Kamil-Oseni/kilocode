@@ -1,3 +1,4 @@
+// raya_change - Raya extension namespace
 import * as os from "os"
 import * as vscode from "vscode"
 import type { GlobalEvent, SessionStatus } from "@kilocode/sdk/v2/client"
@@ -28,7 +29,7 @@ interface MarketplaceMessage {
 }
 
 export class MarketplacePanelProvider implements vscode.Disposable {
-  public static readonly viewType = "kilo-code.new.marketplacePanel"
+  public static readonly viewType = "raya.marketplacePanel"
 
   private panel: vscode.WebviewPanel | undefined
   private project: string | null = null
@@ -40,8 +41,7 @@ export class MarketplacePanelProvider implements vscode.Disposable {
   private disposables: vscode.Disposable[] = []
   private subscriptions: Array<() => void> = []
   private readonly marketplace = new MarketplaceService()
-  private readonly extensionVersion =
-    vscode.extensions.getExtension("kilocode.kilo-code")?.packageJSON?.version ?? "unknown"
+  private readonly extensionVersion = vscode.extensions.getExtension("eden.raya")?.packageJSON?.version ?? "unknown"
 
   constructor(
     private readonly extensionUri: vscode.Uri,

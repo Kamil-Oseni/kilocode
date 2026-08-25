@@ -1,3 +1,4 @@
+// raya_change - Raya extension namespace
 import * as vscode from "vscode"
 import type { AutocompleteContext, VisibleCodeContext } from "../types"
 import { removePrefixOverlap } from "../continuedev/core/autocomplete/postprocessing/removePrefixOverlap.js"
@@ -82,7 +83,7 @@ export class ChatTextAreaAutocomplete {
   }
 
   async getCompletion(userText: string, visibleCodeContext?: VisibleCodeContext): Promise<{ suggestion: string }> {
-    const cfg = vscode.workspace.getConfiguration("kilo-code.new.autocomplete")
+    const cfg = vscode.workspace.getConfiguration("raya.autocomplete")
     const entry = getChatAutocompleteModel(cfg.get<string>("provider"), cfg.get<string>("model"))
     const startTime = Date.now()
 

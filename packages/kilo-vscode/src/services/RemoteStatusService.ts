@@ -1,3 +1,4 @@
+// raya_change - Raya extension namespace
 import * as vscode from "vscode"
 import type { KiloClient } from "@kilocode/sdk/v2/client"
 import { t } from "./cli-backend/i18n"
@@ -19,7 +20,7 @@ export class RemoteStatusService implements vscode.Disposable {
 
   constructor() {
     this.bar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 99)
-    this.bar.command = "kilo-code.new.toggleRemote"
+    this.bar.command = "raya.toggleRemote"
     this.sync()
   }
 

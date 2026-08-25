@@ -1,3 +1,4 @@
+// raya_change - Raya extension namespace
 /**
  * VS Code adapter implementing the Host interface.
  *
@@ -48,16 +49,11 @@ export class VscodeHost implements Host {
     onBeforeMessage: (msg: Record<string, unknown>) => Promise<Record<string, unknown> | null>
     worktreeDirectories?: () => string[]
   }): PanelContext {
-    const panel = vscode.window.createWebviewPanel(
-      "kilo-code.new.AgentManagerPanel",
-      "Agent Manager",
-      vscode.ViewColumn.One,
-      {
-        enableScripts: true,
-        retainContextWhenHidden: true,
-        localResourceRoots: [this.extensionUri],
-      },
-    )
+    const panel = vscode.window.createWebviewPanel("raya.AgentManagerPanel", "Agent Manager", vscode.ViewColumn.One, {
+      enableScripts: true,
+      retainContextWhenHidden: true,
+      localResourceRoots: [this.extensionUri],
+    })
     return this.wirePanel(panel, opts)
   }
 
@@ -111,9 +107,9 @@ export class VscodeHost implements Host {
       rootDirectory: opts.workspaceRoot,
       disableViewedRegistration: true,
       focusTargetContext: {
-        prompt: "kilo-code.new.agentManagerPromptFocused",
-        mainTerminal: "kilo-code.new.agentManagerMainTerminalFocused",
-        sideTerminal: "kilo-code.new.agentManagerSideTerminalFocused",
+        prompt: "raya.agentManagerPromptFocused",
+        mainTerminal: "raya.agentManagerMainTerminalFocused",
+        sideTerminal: "raya.agentManagerSideTerminalFocused",
       },
       routeService: this.routes,
       projectQualifier: () => {
@@ -236,7 +232,7 @@ export class VscodeHost implements Host {
   }
 
   multiProject(): boolean {
-    return vscode.workspace.getConfiguration("kilo-code.new.experimental").get("multiProject", false)
+    return vscode.workspace.getConfiguration("raya.experimental").get("multiProject", false)
   }
 
   readProjects(): unknown {
@@ -257,7 +253,7 @@ export class VscodeHost implements Host {
 
   onDidChangeMultiProject(cb: (enabled: boolean) => void): Disposable {
     return vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration("kilo-code.new.experimental.multiProject")) cb(this.multiProject())
+      if (e.affectsConfiguration("raya.experimental.multiProject")) cb(this.multiProject())
     })
   }
 
@@ -266,7 +262,7 @@ export class VscodeHost implements Host {
   }
 
   autoBranchNaming(): { enabled: boolean; prefix: string } {
-    const cfg = vscode.workspace.getConfiguration("kilo-code.new.agentManager")
+    const cfg = vscode.workspace.getConfiguration("raya.agentManager")
     return {
       enabled: cfg.get("autoBranchNaming", true),
       prefix: cfg.get("branchPrefix", ""),
@@ -304,7 +300,7 @@ export class VscodeHost implements Host {
   }
 
   extensionKeybindings(): Array<{ command: string; key?: string; mac?: string; when?: string }> {
-    const ext = vscode.extensions.getExtension("kilocode.kilo-code")
+    const ext = vscode.extensions.getExtension("eden.raya")
     return ext?.packageJSON?.contributes?.keybindings ?? []
   }
 
@@ -321,7 +317,7 @@ export class VscodeHost implements Host {
   }
 
   openSettings(tab?: string, projectId?: string): void {
-    void vscode.commands.executeCommand("kilo-code.new.settingsButtonClicked", tab, projectId)
+    void vscode.commands.executeCommand("raya.settingsButtonClicked", tab, projectId)
   }
 
   refreshGit(): void {

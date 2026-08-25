@@ -1,3 +1,4 @@
+// raya_change - Raya extension namespace
 import * as vscode from "vscode"
 
 type Post = (msg: unknown) => void
@@ -12,7 +13,7 @@ export function buildThroughputSettingMessage() {
 
 export function watchThroughputConfig(post: Post): vscode.Disposable {
   return vscode.workspace.onDidChangeConfiguration((event) => {
-    if (event.affectsConfiguration("kilo-code.new.showTokenThroughput")) {
+    if (event.affectsConfiguration("raya.showTokenThroughput")) {
       post(buildThroughputSettingMessage())
     }
   })

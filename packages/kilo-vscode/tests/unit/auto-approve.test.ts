@@ -1,3 +1,4 @@
+// raya_change - Raya extension namespace
 import { describe, expect, it } from "bun:test"
 import * as vscode from "vscode"
 import { registerToggleAutoApprove, type AutoApproveController } from "../../src/commands/toggle-auto-approve"
@@ -69,7 +70,7 @@ function config(initial: boolean, info: Record<string, unknown> = {}) {
     set active(value: boolean) {
       state.active = value
     },
-    emit(key = "kilo-code.new.autoApprove.enabled") {
+    emit(key = "raya.autoApprove.enabled") {
       for (const handler of handlers) handler({ affectsConfiguration: (name) => name === key })
     },
   }

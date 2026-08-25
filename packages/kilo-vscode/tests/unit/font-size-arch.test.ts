@@ -1,7 +1,8 @@
+// raya_change - Raya extension namespace
 /**
  * Architecture test: webview font-size token usage.
  *
- * Kilo's VS Code webviews use the `kilo-code.new.fontSize` setting, not
+ * Kilo's VS Code webviews use the `raya.fontSize` setting, not
  * VS Code editor font-size or raw pixel declarations. This keeps the Kilo UI
  * independently scalable across sidebar, settings, Agent Manager, KiloClaw,
  * diff viewers, code blocks, and shared kilo-ui controls.
@@ -126,7 +127,7 @@ describe("webview font-size architecture", () => {
     const missing = WATCHED_PROVIDERS.filter((file) => !fs.readFileSync(file, "utf-8").includes("watchFontSizeConfig"))
     expect(
       missing.map(rel),
-      `Webview providers that stay open must broadcast fontSizeChanged when kilo-code.new.fontSize changes.\n` +
+      `Webview providers that stay open must broadcast fontSizeChanged when raya.fontSize changes.\n` +
         missing.map((file) => `  - ${rel(file)}`).join("\n"),
     ).toEqual([])
   })

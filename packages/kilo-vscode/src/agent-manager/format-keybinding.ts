@@ -1,3 +1,4 @@
+// raya_change - Raya extension namespace
 const KEY_SYMBOLS: Record<string, { mac: string; other: string }> = {
   ctrl: { mac: "⌃", other: "Ctrl" },
   cmd: { mac: "⌘", other: "Ctrl" },
@@ -34,17 +35,17 @@ export function formatKeybinding(raw: string, mac: boolean): string {
 }
 
 /** Agent Manager command prefix for keybinding extraction. */
-const AM_PREFIX = "kilo-code.new.agentManager."
+const AM_PREFIX = "raya.agentManager."
 
 /** Global commands whose keybindings are forwarded to the webview. */
 const GLOBAL_KEYBINDINGS: Record<string, string> = {
-  "kilo-code.new.agentManagerOpen": "agentManagerOpen",
-  "kilo-code.new.cycleAgentMode": "cycleAgentMode",
-  "kilo-code.new.cyclePreviousAgentMode": "cyclePreviousAgentMode",
+  "raya.agentManagerOpen": "agentManagerOpen",
+  "raya.cycleAgentMode": "cycleAgentMode",
+  "raya.cyclePreviousAgentMode": "cyclePreviousAgentMode",
 }
 
 function addBinding(bindings: Record<string, string>, name: string, value: string, when?: string): void {
-  if (name === "newTerminalTab" && when?.includes("!kilo-code.new.agentManagerSideTerminalFocused")) {
+  if (name === "newTerminalTab" && when?.includes("!raya.agentManagerSideTerminalFocused")) {
     bindings.newTerminalCenter = value
     return
   }

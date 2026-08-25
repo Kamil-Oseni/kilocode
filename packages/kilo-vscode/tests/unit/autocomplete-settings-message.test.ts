@@ -1,3 +1,4 @@
+// raya_change - Raya extension namespace
 import { describe, it, expect, afterEach, beforeEach } from "bun:test"
 import * as vscode from "vscode"
 import { buildAutocompleteSettingsMessage, validAutocompleteSetting } from "../../src/services/autocomplete/settings"
@@ -13,7 +14,7 @@ const original = vscode.workspace.getConfiguration
 
 function stubConfig(state: Map<string, unknown>) {
   ;(vscode.workspace as unknown as Stub).getConfiguration = (section?: string) => {
-    if (section !== "kilo-code.new.autocomplete") {
+    if (section !== "raya.autocomplete") {
       return { get: <T>(_key: string, fallback?: T) => fallback }
     }
     return {

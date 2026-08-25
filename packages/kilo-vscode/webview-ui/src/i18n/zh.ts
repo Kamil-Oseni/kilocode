@@ -1,3 +1,4 @@
+// raya_change - Raya visible product copy
 import { dict as en } from "./en"
 
 type Keys = keyof typeof en
@@ -282,7 +283,7 @@ export const dict = {
   "session.messages.loadEarlier": "加载更早的消息",
   "session.messages.loading": "正在加载消息...",
 
-  "sidebar.topBar.label": "Kilo Code 导航",
+  "sidebar.topBar.label": "Raya 导航",
   "sidebar.topBar.newTask": "新建任务",
   "sidebar.topBar.history": "历史记录",
   "sidebar.topBar.agentManager": "代理管理器",
@@ -600,7 +601,7 @@ export const dict = {
   "deviceAuth.toast.codeCopied": "代码已复制到剪贴板",
   "deviceAuth.toast.errorCopied": "错误已复制到剪贴板",
   "deviceAuth.status.initiating": "正在启动登录...",
-  "deviceAuth.title": "登录 Kilo Code",
+  "deviceAuth.title": "登录 Raya",
   "deviceAuth.step1": "步骤 1：打开此 URL",
   "deviceAuth.action.copyUrl": "复制 URL",
   "deviceAuth.action.openBrowser": "打开浏览器",
@@ -623,7 +624,7 @@ export const dict = {
 
   "profile.title": "个人资料",
   "profile.notLoggedIn": "未登录",
-  "profile.action.login": "使用 Kilo Code 登录",
+  "profile.action.login": "使用 Raya 登录",
   "profile.balance.title": "余额",
   "profile.balance.refresh": "刷新余额",
   "profile.usage.title": "套餐与用量",
@@ -690,9 +691,9 @@ export const dict = {
 
   "settings.experimental.title": "实验性功能",
   "settings.language.title": "语言",
-  "settings.aboutKiloCode.title": "关于 Kilo Code",
+  "settings.aboutKiloCode.title": "关于 Raya",
 
-  "session.messages.welcome": "Kilo Code 是一个 AI 编程助手。让它帮你构建功能、修复 bug 或解释代码库。",
+  "session.messages.welcome": "Raya 是一个 AI 编程助手。让它帮你构建功能、修复 bug 或解释代码库。",
   "session.messages.scrollToBottom": "滚动到底部",
   "session.messages.initializing": "初始化中...",
   "session.messages.taskStarting": "启动中...",
@@ -789,7 +790,7 @@ export const dict = {
   "settings.browser.headless.title": "无头模式",
   "settings.browser.headless.description": "以无头模式运行（无可见浏览器窗口）。",
 
-  "settings.language.description": '"自动"将使用 VS Code 的显示语言。选择 Kilo Code 界面的语言。',
+  "settings.language.description": '"自动"将使用 VS Code 的显示语言。选择 Raya 界面的语言。',
   "settings.language.auto": "自动（VS Code 语言）",
   "settings.language.current": "当前：",
 
@@ -1094,13 +1095,12 @@ export const dict = {
   // legacy-migration start
   "settings.legacyMigration.link": "从旧版迁移",
   "settings.aboutKiloCode.legacyMigration.title": "旧版迁移",
-  "settings.aboutKiloCode.legacyMigration.description":
-    "从旧版 Kilo Code 安装迁移设置，包括提供商 API 密钥和默认模型。",
+  "settings.aboutKiloCode.legacyMigration.description": "从旧版 Raya 安装迁移设置，包括提供商 API 密钥和默认模型。",
   "settings.aboutKiloCode.rooImport.description": "从 Roo Code 安装导入对话历史记录。",
   "settings.aboutKiloCode.rooImport.button": "从 Roo Code 导入会话",
 
   // Screen 1 — What's New
-  "migration.whatsNew.title": "Kilo Code 新功能",
+  "migration.whatsNew.title": "Raya 新功能",
   "migration.whatsNew.subtitle": "我们在更快、更高效的基础上重新构建了扩展。",
   "migration.whatsNew.features.performance.title": "更快的智能体性能",
   "migration.whatsNew.features.performance.detail":

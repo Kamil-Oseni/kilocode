@@ -1,3 +1,4 @@
+// raya_change - Raya extension namespace
 /**
  * KiloClaw panel provider for the VS Code extension.
  *
@@ -56,7 +57,7 @@ const MESSAGES_PAGE = 50
 const CONVERSATIONS_PAGE = 50
 
 export class KiloClawProvider implements vscode.Disposable {
-  static readonly viewType = "kilo-code.new.KiloClawPanel"
+  static readonly viewType = "raya.KiloClawPanel"
 
   private panel: vscode.WebviewPanel | null = null
   private timer: ReturnType<typeof setInterval> | null = null

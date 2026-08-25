@@ -1,3 +1,4 @@
+// raya_change - Raya extension namespace
 import * as vscode from "vscode"
 import type { KiloProvider } from "../../KiloProvider"
 import type { AgentManagerProvider } from "../../agent-manager/AgentManagerProvider"
@@ -11,12 +12,12 @@ export function registerTerminalActions(
 ): void {
   const target = () => (agentManager?.isActive() ? agentManager : provider)
   const reveal = async () => {
-    await vscode.commands.executeCommand("kilo-code.SidebarProvider.focus")
+    await vscode.commands.executeCommand("raya.SidebarProvider.focus")
     await provider.waitForReady()
   }
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("kilo-code.new.terminalAddToContext", async (args: any) => {
+    vscode.commands.registerCommand("raya.terminalAddToContext", async (args: any) => {
       let content = args?.selection as string | undefined
       if (!content) {
         content = (await getTerminalContents(-1)).content
@@ -37,7 +38,7 @@ export function registerTerminalActions(
       view.postMessage({ type: "action", action: "focusInput" })
     }),
 
-    vscode.commands.registerCommand("kilo-code.new.terminalFixCommand", async (args: any) => {
+    vscode.commands.registerCommand("raya.terminalFixCommand", async (args: any) => {
       let content = args?.selection as string | undefined
       if (!content) {
         content = (await getTerminalContents(1)).content
@@ -57,7 +58,7 @@ export function registerTerminalActions(
       view.postMessage({ type: "triggerTask", text: prompt })
     }),
 
-    vscode.commands.registerCommand("kilo-code.new.terminalExplainCommand", async (args: any) => {
+    vscode.commands.registerCommand("raya.terminalExplainCommand", async (args: any) => {
       let content = args?.selection as string | undefined
       if (!content) {
         content = (await getTerminalContents(1)).content

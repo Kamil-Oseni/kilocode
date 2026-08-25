@@ -1,3 +1,4 @@
+// raya_change - Raya extension namespace
 import { describe, it, expect, afterEach, beforeEach } from "bun:test"
 import * as vscode from "vscode"
 import { migrateDefaultAutocompleteSettings } from "../../src/services/autocomplete/migrate-default"
@@ -40,7 +41,7 @@ function stubConfig(state: State) {
     return fresh
   }
   ;(vscode.workspace as unknown as Stub).getConfiguration = (section?: string) => {
-    if (section !== "kilo-code.new.autocomplete") {
+    if (section !== "raya.autocomplete") {
       return {
         get: () => undefined,
         inspect: () => undefined,

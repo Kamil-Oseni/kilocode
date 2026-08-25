@@ -1,3 +1,4 @@
+// raya_change - Raya visible product copy
 import { cloudProviderDict } from "./cloud-provider"
 
 export const anacondaDesktopDict = {
@@ -467,7 +468,7 @@ export const dict = {
   "deviceAuth.toast.codeCopied": "Codice copiato negli appunti",
   "deviceAuth.toast.errorCopied": "Errore copiato negli appunti",
   "deviceAuth.status.initiating": "Avvio accesso...",
-  "deviceAuth.title": "Accedi a Kilo Code",
+  "deviceAuth.title": "Accedi a Raya",
   "deviceAuth.step1": "Passaggio 1: apri questo URL",
   "deviceAuth.action.copyUrl": "Copia URL",
   "deviceAuth.action.openBrowser": "Apri browser",
@@ -488,7 +489,7 @@ export const dict = {
   "common.reloadDescription": "Ricarica configurazione, competenze, agenti e comandi dal disco",
   "profile.title": "Profilo",
   "profile.notLoggedIn": "Accesso non effettuato",
-  "profile.action.login": "Accedi con Kilo Code",
+  "profile.action.login": "Accedi con Raya",
   "profile.balance.title": "Saldo",
   "profile.balance.refresh": "Aggiorna saldo",
   "profile.usage.title": "Piani e utilizzo",
@@ -582,9 +583,9 @@ export const dict = {
   "settings.indexing.tuning.description": "Parametro avanzato per ricerca e batching.",
   "settings.experimental.title": "Sperimentale",
   "settings.language.title": "Lingua",
-  "settings.aboutKiloCode.title": "Informazioni su Kilo Code",
+  "settings.aboutKiloCode.title": "Informazioni su Raya",
   "session.messages.welcome":
-    "Kilo Code è un assistente AI per il coding. Chiedigli di creare feature, correggere bug o spiegare il codebase.",
+    "Raya è un assistente AI per il coding. Chiedigli di creare feature, correggere bug o spiegare il codebase.",
   "session.messages.scrollToBottom": "Scorri in fondo",
   "session.messages.initializing": "Inizializzazione...",
   "session.messages.taskStarting": "Avvio...",
@@ -599,7 +600,7 @@ export const dict = {
   "session.status.retry": "Riprovo...",
   "session.status.working": "Al lavoro...",
   "session.status.offline": "Rete disconnessa - riconnessione...",
-  "sidebar.topBar.label": "Navigazione Kilo Code",
+  "sidebar.topBar.label": "Navigazione Raya",
   "sidebar.topBar.newTask": "Nuova Attività",
   "sidebar.topBar.history": "Cronologia",
   "sidebar.topBar.agentManager": "Agent Manager",
@@ -694,7 +695,7 @@ export const dict = {
     "Usa il browser Chrome installato invece di un'istanza Chromium separata.",
   "settings.browser.headless.title": "Modalità headless",
   "settings.browser.headless.description": "Esegui in modalità headless (senza finestra browser visibile).",
-  "settings.language.description": 'Scegli la lingua dell\'interfaccia Kilo Code. "Auto" usa la lingua di VS Code.',
+  "settings.language.description": 'Scegli la lingua dell\'interfaccia Raya. "Auto" usa la lingua di VS Code.',
   "settings.language.auto": "Auto (lingua VS Code)",
   "settings.language.current": "Corrente:",
   "common.add": "Aggiungi",
@@ -1040,11 +1041,11 @@ export const dict = {
   "settings.legacyMigration.link": "Migra dalla versione legacy",
   "settings.aboutKiloCode.legacyMigration.title": "Migrazione legacy",
   "settings.aboutKiloCode.legacyMigration.description":
-    "Migra le impostazioni da una precedente installazione di Kilo Code, incluse API key dei provider e modello predefinito.",
+    "Migra le impostazioni da una precedente installazione di Raya, incluse API key dei provider e modello predefinito.",
   "settings.aboutKiloCode.rooImport.description":
     "Importa la cronologia delle conversazioni da una installazione di Roo Code.",
   "settings.aboutKiloCode.rooImport.button": "Importa sessioni da Roo Code",
-  "migration.whatsNew.title": "Novità in Kilo Code",
+  "migration.whatsNew.title": "Novità in Raya",
   "migration.whatsNew.subtitle": "Abbiamo ricostruito l'estensione su fondamenta più veloci ed efficienti.",
   "migration.whatsNew.features.performance.title": "Prestazioni agente più rapide",
   "migration.whatsNew.features.performance.detail":

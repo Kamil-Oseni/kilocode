@@ -1,3 +1,4 @@
+// raya_change - Raya extension namespace
 import { describe, expect, it } from "bun:test"
 import type { TuiAttentionSoundName } from "@kilocode/plugin/tui"
 import { AttentionService } from "../../src/services/attention/service"
@@ -172,12 +173,12 @@ describe("attention defaults", () => {
     }
     const properties = manifest.contributes.configuration.properties
 
-    expect(properties["kilo-code.new.attention.enabled"]?.default).toBe(false)
-    expect(properties["kilo-code.new.attention.sound"]?.default).toBe("default")
-    expect(properties["kilo-code.new.attention.sound"]?.enum).toEqual(["default", "system", ...CustomSoundIDs])
-    expect(properties["kilo-code.new.sounds.agentEnabled"]).toBeUndefined()
-    expect(properties["kilo-code.new.sounds.permissionsEnabled"]).toBeUndefined()
-    expect(properties["kilo-code.new.sounds.errorsEnabled"]).toBeUndefined()
+    expect(properties["raya.attention.enabled"]?.default).toBe(false)
+    expect(properties["raya.attention.sound"]?.default).toBe("default")
+    expect(properties["raya.attention.sound"]?.enum).toEqual(["default", "system", ...CustomSoundIDs])
+    expect(properties["raya.sounds.agentEnabled"]).toBeUndefined()
+    expect(properties["raya.sounds.permissionsEnabled"]).toBeUndefined()
+    expect(properties["raya.sounds.errorsEnabled"]).toBeUndefined()
   })
 
   it("resolves global sound choices safely", () => {

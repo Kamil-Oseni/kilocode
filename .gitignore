@@ -75,3 +75,6 @@ packages/*/.kilo/tui.jsonc
 # Test Artifacts
 packages/app/.artifacts/
 packages/opencode/.artifacts/
+
+# Raya provider keys for local testing (never commit)
+*.local.json

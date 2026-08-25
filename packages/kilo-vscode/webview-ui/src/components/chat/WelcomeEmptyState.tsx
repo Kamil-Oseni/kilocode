@@ -1,3 +1,4 @@
+// raya_change - Raya primary webview branding
 import { type Component, For, Show } from "solid-js"
 import { Icon } from "@kilocode/kilo-ui/icon"
 import { useDialog } from "@kilocode/kilo-ui/context/dialog"
@@ -16,11 +17,11 @@ export const KiloLogo = () => {
   const icons = (window as { ICONS_BASE_URI?: string }).ICONS_BASE_URI || ""
   const light =
     document.body.classList.contains("vscode-light") || document.body.classList.contains("vscode-high-contrast-light")
-  const file = light ? "kilo-light.svg" : "kilo-dark.svg"
+  const file = light ? "eden-logo-light.svg" : "eden-logo-dark.svg"
 
   return (
     <div class="kilo-logo">
-      <img src={`${icons}/${file}`} alt="Kilo Code" />
+      <img src={`${icons}/${file}`} alt="Raya" />
     </div>
   )
 }

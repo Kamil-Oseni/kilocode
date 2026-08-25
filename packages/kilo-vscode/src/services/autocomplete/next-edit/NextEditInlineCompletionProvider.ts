@@ -1,3 +1,4 @@
+// raya_change - Raya extension namespace
 import * as vscode from "vscode"
 import type { KiloConnectionService } from "../../cli-backend"
 import { computeEditableRegion } from "./editableRegion"
@@ -7,7 +8,7 @@ import { MercuryEditError, MercuryEditProvider } from "./MercuryEditProvider"
 import type { NextEditSuggestionManager } from "./NextEditSuggestionManager"
 import type { MercuryEditRequestContext, MercuryRecentSnippet } from "./types"
 
-const INLINE_COMPLETION_ACCEPTED_COMMAND = "kilo-code.new.autocomplete.nextEdit.accepted"
+const INLINE_COMPLETION_ACCEPTED_COMMAND = "raya.autocomplete.nextEdit.accepted"
 const DEFAULT_DEBOUNCE_MS = 250
 
 export interface NextEditProviderDeps {

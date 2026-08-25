@@ -1,8 +1,9 @@
+// raya_change - Raya extension namespace
 import * as vscode from "vscode"
 import type { IndexingProject } from "../indexing-consent"
 
 export function buildIndexingSettingsMessage(consent = false, projects: IndexingProject[] = [], projectId?: string) {
-  const config = vscode.workspace.getConfiguration("kilo-code.new.indexing")
+  const config = vscode.workspace.getConfiguration("raya.indexing")
   return {
     type: "indexingSettingsLoaded" as const,
     settings: {
@@ -16,7 +17,7 @@ export function buildIndexingSettingsMessage(consent = false, projects: Indexing
 
 export function watchIndexingConfig(post: () => void): vscode.Disposable {
   return vscode.workspace.onDidChangeConfiguration((event) => {
-    if (event.affectsConfiguration("kilo-code.new.indexing")) {
+    if (event.affectsConfiguration("raya.indexing")) {
       post()
     }
   })

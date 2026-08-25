@@ -1,3 +1,4 @@
+// raya_change - Raya extension namespace
 import { afterEach, beforeEach, describe, expect, it } from "bun:test"
 import * as vscode from "vscode"
 import { buildChatSettingsMessage, validChatSetting } from "../../src/kilo-provider/chat-settings"
@@ -12,7 +13,7 @@ const original = vscode.workspace.getConfiguration
 
 function stubConfig(state: Map<string, unknown>) {
   ;(vscode.workspace as unknown as Stub).getConfiguration = (section?: string) => {
-    if (section !== "kilo-code.new.chat") {
+    if (section !== "raya.chat") {
       return { get: <T>(_key: string, fallback?: T) => fallback }
     }
     return {

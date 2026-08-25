@@ -1,3 +1,4 @@
+// raya_change - Raya extension namespace
 import { describe, it, expect, vi, beforeEach, type Mock } from "vitest"
 
 // Mock vscode following the pattern from AutocompleteServiceManager.spec.ts
@@ -66,13 +67,10 @@ describe("commit-message service", () => {
       expect(disposables.length).toBeGreaterThan(0)
     })
 
-    it("registers the kilo-code.new.generateCommitMessage command", () => {
+    it("registers the raya.generateCommitMessage command", () => {
       registerCommitMessageService(mockContext, mockConnectionService)
 
-      expect(vscode.commands.registerCommand).toHaveBeenCalledWith(
-        "kilo-code.new.generateCommitMessage",
-        expect.any(Function),
-      )
+      expect(vscode.commands.registerCommand).toHaveBeenCalledWith("raya.generateCommitMessage", expect.any(Function))
     })
 
     it("pushes the command disposable to context.subscriptions", () => {

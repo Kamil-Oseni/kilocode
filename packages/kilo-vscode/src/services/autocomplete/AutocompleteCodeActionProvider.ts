@@ -1,3 +1,4 @@
+// raya_change - Raya extension namespace
 import * as vscode from "vscode"
 import { t } from "../i18n"
 
@@ -17,7 +18,7 @@ export class AutocompleteCodeActionProvider implements vscode.CodeActionProvider
       this.providedCodeActionKinds["quickfix"],
     )
     action.command = {
-      command: "kilo-code.new.autocomplete.generateSuggestions",
+      command: "raya.autocomplete.generateSuggestions",
       title: "",
       arguments: [document.uri, range],
     }

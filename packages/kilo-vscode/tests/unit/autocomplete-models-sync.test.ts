@@ -1,3 +1,4 @@
+// raya_change - Raya extension namespace
 import { describe, it, expect } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
@@ -5,7 +6,7 @@ import { AUTOCOMPLETE_MODELS } from "../../src/shared/autocomplete-models"
 
 describe("autocomplete model enum ↔ AUTOCOMPLETE_MODELS sync", () => {
   const pkg = JSON.parse(readFileSync(join(__dirname, "../../package.json"), "utf8"))
-  const prop = pkg.contributes.configuration.properties["kilo-code.new.autocomplete.model"]
+  const prop = pkg.contributes.configuration.properties["raya.autocomplete.model"]
 
   it("package.json enum matches AUTOCOMPLETE_MODELS model IDs", () => {
     const ids = AUTOCOMPLETE_MODELS.map((m) => m.modelID)

@@ -1,3 +1,4 @@
+// raya_change - Raya extension namespace
 import { describe, expect, it } from "bun:test"
 import {
   DestinationState,
@@ -20,7 +21,7 @@ describe("Agent Manager terminal destination", () => {
   })
 
   it("watches only the terminal button destination setting", () => {
-    expect(affectsTerminalDestination(event("kilo-code.new.agentManager.terminalButtonDestination"))).toBe(true)
+    expect(affectsTerminalDestination(event("raya.agentManager.terminalButtonDestination"))).toBe(true)
     expect(affectsTerminalDestination(event("terminal.integrated.fontFamily"))).toBe(false)
   })
 

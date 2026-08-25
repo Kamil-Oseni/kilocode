@@ -1,3 +1,4 @@
+// raya_change - Raya extension namespace
 import * as vscode from "vscode"
 import { getWebviewFontSize } from "../utils"
 
@@ -6,8 +7,7 @@ export function watchFontSizeConfig(
   next?: vscode.Disposable,
 ) {
   const font = vscode.workspace.onDidChangeConfiguration((event) => {
-    if (event.affectsConfiguration("kilo-code.new.fontSize"))
-      post({ type: "fontSizeChanged", fontSize: getWebviewFontSize() })
+    if (event.affectsConfiguration("raya.fontSize")) post({ type: "fontSizeChanged", fontSize: getWebviewFontSize() })
   })
   return next ? vscode.Disposable.from(font, next) : font
 }

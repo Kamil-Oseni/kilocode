@@ -76,5 +76,5 @@ packages/*/.kilo/tui.jsonc
 packages/app/.artifacts/
 packages/opencode/.artifacts/
 
-# Raya provider keys for local testing (never commit)
+# raya_change - Raya provider keys for local testing (never commit)
 *.local.json

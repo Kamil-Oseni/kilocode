@@ -2,7 +2,7 @@
 
 # Raya Fork Map
 
-Last verified against commit `193a0b5e77a85c04d6c443e6a41da6d0489e4480`.
+Last verified against commit `b6e6ab83ec`, the Raya source commit used for the final verified VSIX and bundled CLI smoke run.
 
 This map identifies the current extension seams in the Kilo fork on which Raya is built. Refresh it after an upstream rebase moves any named symbol or path. No feature milestone in `docs/Building-Raya.md` may begin while this map is missing or stale.
 

@@ -168,6 +168,18 @@ export const Info = Schema.Struct({
   small_model: Schema.optional(Schema.NullOr(Schema.String)).annotate({
     description: "Small model to use for tasks like title generation in the format of provider/model",
   }),
+  // raya_change start - Milestones B/I configurable Chief and goal continuation policy
+  raya_routing: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({
+        confidence_threshold: Schema.optional(Schema.Number),
+        goal_continuation: Schema.optional(Schema.Boolean),
+      }),
+    ),
+  ).annotate({
+    description: "Raya Auto routing confidence and persistent-goal continuation defaults.",
+  }),
+  // raya_change end
   subagent_model: Schema.optional(Schema.NullOr(Schema.String)).annotate({
     description:
       "Default model for task-tool subagents in the format of provider/model. If unset or unavailable, subagents inherit the calling agent model.",

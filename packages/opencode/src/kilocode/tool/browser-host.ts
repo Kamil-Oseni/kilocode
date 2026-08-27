@@ -1,7 +1,7 @@
 // raya_change - Milestone F model-facing browser tools
 import { Browser, HostError } from "@/kilocode/browser/service"
 import type { Input } from "@/kilocode/browser/service"
-import type { Result } from "@/kilocode/browser/protocol"
+import { SmokeStep, type Result } from "@/kilocode/browser/protocol"
 import * as Tool from "@/tool/tool"
 import { Effect, Schema } from "effect"
 
@@ -49,7 +49,8 @@ export const BrowserNavigateTool = Tool.define<
   Effect.gen(function* () {
     const browser = yield* Browser.Service
     return {
-      description: "Navigate the shared in-editor browser to a URL and return the resulting page state.",
+      description:
+        "Navigate the shared in-editor browser to a URL and return the resulting page state. Use automatically when the user asks to open, browse, visit, or inspect a website.",
       parameters: NavigateParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
@@ -81,7 +82,7 @@ export const BrowserSnapshotTool = Tool.define<
     const browser = yield* Browser.Service
     return {
       description:
-        "Return an accessibility-oriented snapshot of the current page in the shared in-editor browser. Use its selectors to ground later browser actions.",
+        "Return an accessibility-oriented snapshot of the current page in the shared in-editor browser. Use automatically to look at or inspect a website, and use its selectors to ground later browser actions.",
       parameters: SnapshotParams,
       execute: (_params, ctx) =>
         Effect.gen(function* () {
@@ -293,6 +294,110 @@ export const BrowserEvaluateTool = Tool.define<
   }),
 )
 
+// raya_change start - Milestone G authenticated walkthrough and structured smoke evidence tools
+const AuthCaptureParams = Schema.Struct({
+  name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)).annotate({
+    description: "Stable target-app name used to save and later reuse authenticated Playwright storage state.",
+  }),
+})
+export const BrowserAuthCaptureTool = Tool.define<
+  typeof AuthCaptureParams,
+  { path?: string; cookies?: number; origins?: number },
+  Browser.Service,
+  "browser_auth_capture"
+>(
+  "browser_auth_capture",
+  Effect.gen(function* () {
+    const browser = yield* Browser.Service
+    return {
+      description:
+        "Capture the current logged-in browser session as Playwright storageState for authenticated smoke runs.",
+      parameters: AuthCaptureParams,
+      execute: (params, ctx) =>
+        Effect.gen(function* () {
+          yield* ctx.ask({
+            permission: "browser_auth_capture",
+            patterns: [params.name],
+            always: [params.name],
+            metadata: {},
+          })
+          const result = yield* run(
+            browser,
+            { operation: "auth_capture", sessionID: ctx.sessionID, name: params.name },
+            ctx.abort,
+          )
+          if (result.operation !== "auth_capture")
+            return yield* Effect.die(new Error("Browser host returned the wrong auth capture result"))
+          return {
+            title: `Captured authenticated browser state for ${params.name}`,
+            output: render(result),
+            metadata: { path: result.path, cookies: result.cookies, origins: result.origins },
+          }
+        }),
+    }
+  }),
+)
+
+const SmokeParams = Schema.Struct({
+  name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)),
+  mode: Schema.optional(Schema.Literals(["scripted", "exploratory"])).annotate({
+    description: "Use exploratory when the agent derived this walkthrough dynamically. Defaults to scripted.",
+  }),
+  steps: Schema.Array(SmokeStep).check(Schema.isMinLength(1), Schema.isMaxLength(100)),
+})
+export const BrowserSmokeTestTool = Tool.define<
+  typeof SmokeParams,
+  { passed: boolean; runID: string; artifact: string; failingStep?: string },
+  Browser.Service,
+  "browser_smoke_test"
+>(
+  "browser_smoke_test",
+  Effect.gen(function* () {
+    const browser = yield* Browser.Service
+    return {
+      description:
+        "Run an authenticated browser walkthrough with per-step screenshots and visible-state plus network or console assertions. Use this automatically for plain-English requests to test like a real user, run a walkthrough, UX test, smoke test, or end-to-end browser check. Derive exploratory steps from the user intent and live page instead of asking the user to name tools. The first run captures current authentication automatically when no saved state exists. A failed assertion returns passed=false and the exact failing step.",
+      parameters: SmokeParams,
+      execute: (params, ctx) =>
+        Effect.gen(function* () {
+          yield* ctx.ask({
+            permission: "browser_smoke_test",
+            patterns: [params.name],
+            always: [params.name],
+            metadata: {},
+          })
+          const result = yield* run(
+            browser,
+            {
+              operation: "smoke",
+              sessionID: ctx.sessionID,
+              name: params.name,
+              mode: params.mode ?? "scripted",
+              steps: params.steps,
+            },
+            ctx.abort,
+          )
+          if (result.operation !== "smoke")
+            return yield* Effect.die(new Error("Browser host returned the wrong smoke result"))
+          return {
+            title: result.passed
+              ? `Smoke test passed: ${result.name}`
+              : `Smoke test failed at ${result.failingStep ?? "an unknown step"}: ${result.name}`,
+            output: render(result),
+            metadata: {
+              passed: result.passed,
+              runID: result.runID,
+              artifact: result.artifact,
+              failingStep: result.failingStep,
+              evidence: "raya-smoke-v1",
+            },
+          }
+        }),
+    }
+  }),
+)
+// raya_change end
+
 export const BrowserTools = [
   BrowserNavigateTool,
   BrowserSnapshotTool,
@@ -302,4 +407,6 @@ export const BrowserTools = [
   BrowserScrollTool,
   BrowserScreenshotTool,
   BrowserEvaluateTool,
+  BrowserAuthCaptureTool,
+  BrowserSmokeTestTool,
 ]

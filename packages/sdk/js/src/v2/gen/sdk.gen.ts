@@ -45,6 +45,9 @@ import type {
   BrowserFailure,
   BrowserRequestId,
   BrowserResult,
+  CanvasFailure,
+  CanvasRequestId,
+  CanvasResult,
   CommandListErrors,
   CommandListResponses,
   CommitMessageGenerateErrors,
@@ -194,6 +197,12 @@ import type {
   KilocodeBrowserRejectResponses,
   KilocodeBrowserReplyErrors,
   KilocodeBrowserReplyResponses,
+  KilocodeCanvasListErrors,
+  KilocodeCanvasListResponses,
+  KilocodeCanvasRejectErrors,
+  KilocodeCanvasRejectResponses,
+  KilocodeCanvasReplyErrors,
+  KilocodeCanvasReplyResponses,
   KilocodeCommandFilesErrors,
   KilocodeCommandFilesResponses,
   KilocodeGoalClearErrors,
@@ -232,6 +241,14 @@ import type {
   KilocodeSessionImportSessionResponses,
   KilocodeSessionModelUsageErrors,
   KilocodeSessionModelUsageResponses,
+  KilocodeVoiceCloseErrors,
+  KilocodeVoiceCloseResponses,
+  KilocodeVoiceEventErrors,
+  KilocodeVoiceEventResponses,
+  KilocodeVoiceStartErrors,
+  KilocodeVoiceStartResponses,
+  KilocodeVoiceStateErrors,
+  KilocodeVoiceStateResponses,
   KiloEditErrors,
   KiloEditResponses,
   KiloFimErrors,
@@ -7863,6 +7880,122 @@ export class Browser extends HeyApiClient {
   }
 }
 
+export class Canvas extends HeyApiClient {
+  /**
+   * List pending canvas requests
+   *
+   * List pending live-canvas requests for the routed workspace.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<KilocodeCanvasListResponses, KilocodeCanvasListErrors, ThrowOnError>({
+      url: "/kilocode/canvas",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Reply to a canvas request
+   *
+   * Complete a pending live-canvas request with its render status.
+   */
+  public reply<ThrowOnError extends boolean = false>(
+    parameters: {
+      requestID: CanvasRequestId
+      directory?: string
+      workspace?: string
+      result?: CanvasResult
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "requestID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "result" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<KilocodeCanvasReplyResponses, KilocodeCanvasReplyErrors, ThrowOnError>(
+      {
+        url: "/kilocode/canvas/{requestID}/reply",
+        ...options,
+        ...params,
+        headers: {
+          "Content-Type": "application/json",
+          ...options?.headers,
+          ...params.headers,
+        },
+      },
+    )
+  }
+
+  /**
+   * Reject a canvas request
+   *
+   * Complete a pending live-canvas request with a host error.
+   */
+  public reject<ThrowOnError extends boolean = false>(
+    parameters: {
+      requestID: CanvasRequestId
+      directory?: string
+      workspace?: string
+      error?: CanvasFailure
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "requestID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "error" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeCanvasRejectResponses,
+      KilocodeCanvasRejectErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/canvas/{requestID}/reject",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class AgentManager extends HeyApiClient {
   /**
    * List pending Agent Manager requests
@@ -8552,6 +8685,164 @@ export class SessionImport extends HeyApiClient {
   }
 }
 
+export class Voice extends HeyApiClient {
+  /**
+   * Start a realtime voice session
+   *
+   * Mint thin-client and media-frontend room credentials without exposing provider secrets.
+   */
+  public start<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      parentSessionID?: string
+      mediaURL?: string
+      room?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "parentSessionID" },
+            { in: "body", key: "mediaURL" },
+            { in: "body", key: "room" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<KilocodeVoiceStartResponses, KilocodeVoiceStartErrors, ThrowOnError>({
+      url: "/kilocode/voice/session",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Close a realtime voice session
+   */
+  public close<ThrowOnError extends boolean = false>(
+    parameters: {
+      voiceSessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "voiceSessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<KilocodeVoiceCloseResponses, KilocodeVoiceCloseErrors, ThrowOnError>(
+      {
+        url: "/kilocode/voice/session/{voiceSessionID}",
+        ...options,
+        ...params,
+      },
+    )
+  }
+
+  /**
+   * Get reconstructed voice state
+   */
+  public state<ThrowOnError extends boolean = false>(
+    parameters: {
+      voiceSessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "voiceSessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<KilocodeVoiceStateResponses, KilocodeVoiceStateErrors, ThrowOnError>({
+      url: "/kilocode/voice/session/{voiceSessionID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Ingest one ordered media-plane event
+   */
+  public event<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      session?: string
+      seq?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      event?: {
+        seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        type: string
+        session?: string
+        turn?: string
+        item?: string
+        text?: string
+        stable?: boolean
+        truncated?: boolean
+        heardMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        at: string
+        data?: {
+          [key: string]: unknown
+        }
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "session" },
+            { in: "body", key: "seq" },
+            { in: "body", key: "event" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<KilocodeVoiceEventResponses, KilocodeVoiceEventErrors, ThrowOnError>({
+      url: "/kilocode/voice/events",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Kilocode extends HeyApiClient {
   /**
    * List command files
@@ -8800,6 +9091,11 @@ export class Kilocode extends HeyApiClient {
     return (this._browser ??= new Browser({ client: this.client }))
   }
 
+  private _canvas?: Canvas
+  get canvas(): Canvas {
+    return (this._canvas ??= new Canvas({ client: this.client }))
+  }
+
   private _agentManager?: AgentManager
   get agentManager(): AgentManager {
     return (this._agentManager ??= new AgentManager({ client: this.client }))
@@ -8818,6 +9114,11 @@ export class Kilocode extends HeyApiClient {
   private _sessionImport?: SessionImport
   get sessionImport(): SessionImport {
     return (this._sessionImport ??= new SessionImport({ client: this.client }))
+  }
+
+  private _voice?: Voice
+  get voice(): Voice {
+    return (this._voice ??= new Voice({ client: this.client }))
   }
 }
 

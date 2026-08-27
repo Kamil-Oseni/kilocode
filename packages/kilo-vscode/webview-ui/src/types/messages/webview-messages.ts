@@ -463,6 +463,9 @@ export interface SpeechToTextStartMessage {
   requestId: string
   model: string
   language?: string
+  handsFree?: boolean // raya_change - Milestone H extension-host VAD fallback
+  threshold?: number // raya_change - Milestone H extension-host VAD fallback
+  silenceMs?: number // raya_change - Milestone H extension-host VAD fallback
 }
 
 export interface SpeechToTextStopMessage {
@@ -470,10 +473,63 @@ export interface SpeechToTextStopMessage {
   requestId: string
 }
 
+// raya_change - Milestone H marks the next backend turn for extension-host TTS
+export interface SpeechVoiceTurnMessage {
+  type: "speechVoiceTurn"
+}
+
 export interface SpeechToTextCancelMessage {
   type: "speechToTextCancel"
   requestId: string
 }
+
+// raya_change start - Milestone H configured speech and voice-mode channel
+export interface SpeechToTextSubmitMessage {
+  type: "speechToTextSubmit"
+  requestId: string
+  model?: string
+  language?: string
+  format: string
+  data: string
+}
+
+export interface SpeechSettingsRequestMessage {
+  type: "speechSettingsRequest"
+}
+
+export interface SpeechSettingsUpdateMessage {
+  type: "speechSettingsUpdate"
+  settings: import("../../../../src/shared/speech").SpeechSettings
+}
+
+export interface SpeechKeyUpdateMessage {
+  type: "speechKeyUpdate"
+  kind: "realtime" | "stt" | "tts"
+  key?: string
+}
+
+export interface SpeechPlaybackStartMessage {
+  type: "speechPlaybackStart"
+  requestId: string
+  text: string
+}
+
+export interface SpeechPlaybackCancelMessage {
+  type: "speechPlaybackCancel"
+  requestId?: string
+}
+
+// raya_change start - architecture-faithful hands-free session lifecycle
+export interface SpeechRealtimeStartMessage {
+  type: "speechRealtimeStart"
+  sessionID: string
+}
+
+export interface SpeechRealtimeStopMessage {
+  type: "speechRealtimeStop"
+}
+// raya_change end
+// raya_change end
 
 export interface RequestFileSearchMessage {
   type: "requestFileSearch"
@@ -1576,6 +1632,15 @@ export type WebviewMessage =
   | SpeechToTextStartMessage
   | SpeechToTextStopMessage
   | SpeechToTextCancelMessage
+  | SpeechVoiceTurnMessage // raya_change - Milestone H
+  | SpeechToTextSubmitMessage // raya_change - Milestone H
+  | SpeechSettingsRequestMessage // raya_change - Milestone H
+  | SpeechSettingsUpdateMessage // raya_change - Milestone H
+  | SpeechKeyUpdateMessage // raya_change - Milestone H
+  | SpeechPlaybackStartMessage // raya_change - Milestone H
+  | SpeechPlaybackCancelMessage // raya_change - Milestone H
+  | SpeechRealtimeStartMessage // raya_change - realtime voice
+  | SpeechRealtimeStopMessage // raya_change - realtime voice
   | RequestFileSearchMessage
   | RequestSessionSearchMessage
   | RequestFilePickerMessage

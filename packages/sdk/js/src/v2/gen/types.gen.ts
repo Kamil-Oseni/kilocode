@@ -121,6 +121,8 @@ export type Event =
   | EventKiloSessionsRemoteStatusChanged
   | EventKilocodeBrowserRequested
   | EventKilocodeBrowserCancelled
+  | EventKilocodeCanvasRequested
+  | EventKilocodeCanvasCancelled
   | EventMemoryStatus1
   | EventMemoryUpdated1
   | EventMemoryError1
@@ -517,6 +519,85 @@ export type BrowserRequest =
       sessionID: string
       operation: "evaluate"
       expression: string
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      operation: "auth_capture"
+      name: string
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      operation: "smoke"
+      name: string
+      mode: "scripted" | "exploratory"
+      steps: Array<{
+        id: string
+        title: string
+        action?:
+          | {
+              kind: "navigate"
+              url: string
+            }
+          | {
+              kind: "click"
+              selector: string
+            }
+          | {
+              kind: "type"
+              selector: string
+              text: string
+              submit?: boolean
+            }
+          | {
+              kind: "select"
+              selector: string
+              values: Array<string>
+            }
+        assertions: Array<
+          | {
+              kind: "visible"
+              selector: string
+              text?: string
+            }
+          | {
+              kind: "network"
+              url: string
+              status?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            }
+          | {
+              kind: "console"
+              level?: "error" | "warning" | "log" | "info"
+              message?: string
+              max: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            }
+        >
+      }>
+    }
+
+export type CanvasRequestId = string
+
+export type CanvasRequest =
+  | {
+      id: CanvasRequestId
+      sessionID: string
+      operation: "create"
+      name: string
+      source: string
+      data: {
+        [key: string]: unknown
+      }
+    }
+  | {
+      id: CanvasRequestId
+      sessionID: string
+      operation: "update"
+      name: string
+      source?: string
+      data?: {
+        [key: string]: unknown
+      }
     }
 
 export type IndexingStatusState = "Disabled" | "In Progress" | "Complete" | "Error" | "Standby"
@@ -1238,6 +1319,8 @@ export type GlobalEvent = {
     | EventKiloSessionsRemoteStatusChanged
     | EventKilocodeBrowserRequested
     | EventKilocodeBrowserCancelled
+    | EventKilocodeCanvasRequested
+    | EventKilocodeCanvasCancelled
     | EventMemoryStatus
     | EventMemoryUpdated
     | EventMemoryError
@@ -2656,6 +2739,10 @@ export type Config = {
   }
   model?: string
   small_model?: string
+  raya_routing?: {
+    confidence_threshold?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    goal_continuation?: boolean
+  }
   subagent_model?: string
   subagent_variant?: string
   subagent_variant_overrides?: {
@@ -4426,6 +4513,54 @@ export type BrowserResult =
       operation: "evaluate"
       output: string
     }
+  | {
+      url?: string
+      title?: string
+      operation: "auth_capture"
+      name: string
+      path: string
+      cookies: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      origins: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
+  | {
+      url?: string
+      title?: string
+      operation: "smoke"
+      runID: string
+      name: string
+      mode: "scripted" | "exploratory"
+      passed: boolean
+      startedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      finishedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      artifact: string
+      authState: string
+      failingStep?: string
+      steps: Array<{
+        id: string
+        title: string
+        passed: boolean
+        screenshot: string
+        assertions: Array<{
+          kind: "visible" | "network" | "console"
+          passed: boolean
+          expected: string
+          actual: string
+        }>
+        error?: string
+      }>
+      network: Array<{
+        url?: string
+        status?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        level?: string
+        message?: string
+      }>
+      console: Array<{
+        url?: string
+        status?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        level?: string
+        message?: string
+      }>
+    }
 
 export type BrowserFailure = {
   code:
@@ -4438,6 +4573,20 @@ export type BrowserFailure = {
     | "not_found"
     | "timeout"
     | "unsupported"
+  message: string
+}
+
+export type CanvasResult = {
+  operation: "create" | "update"
+  name: string
+  path: string
+  status: "ready" | "error"
+  version: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  error?: string
+}
+
+export type CanvasFailure = {
+  code: "cancelled" | "disconnected" | "invalid_request" | "not_found" | "timeout" | "unsupported"
   message: string
 }
 
@@ -4984,6 +5133,61 @@ export type BrowserRequest1 =
       operation: "evaluate"
       expression: string
     }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      operation: "auth_capture"
+      name: string
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      operation: "smoke"
+      name: string
+      mode: "scripted" | "exploratory"
+      steps: Array<{
+        id: string
+        title: string
+        action?:
+          | {
+              kind: "navigate"
+              url: string
+            }
+          | {
+              kind: "click"
+              selector: string
+            }
+          | {
+              kind: "type"
+              selector: string
+              text: string
+              submit?: boolean
+            }
+          | {
+              kind: "select"
+              selector: string
+              values: Array<string>
+            }
+        assertions: Array<
+          | {
+              kind: "visible"
+              selector: string
+              text?: string
+            }
+          | {
+              kind: "network"
+              url: string
+              status?: number | "NaN" | "Infinity" | "-Infinity"
+            }
+          | {
+              kind: "console"
+              level?: "error" | "warning" | "log" | "info"
+              message?: string
+              max: number | "NaN" | "Infinity" | "-Infinity"
+            }
+        >
+      }>
+    }
 
 export type CredentialValue = CredentialOAuth | CredentialKey
 
@@ -5252,6 +5456,22 @@ export type EventKilocodeBrowserCancelled = {
   type: "kilocode.browser.cancelled"
   properties: {
     requestID: BrowserRequestId
+    sessionID: string
+    reason: "cancelled" | "disposed" | "timeout"
+  }
+}
+
+export type EventKilocodeCanvasRequested = {
+  id: string
+  type: "kilocode.canvas.requested"
+  properties: CanvasRequest
+}
+
+export type EventKilocodeCanvasCancelled = {
+  id: string
+  type: "kilocode.canvas.cancelled"
+  properties: {
+    requestID: CanvasRequestId
     sessionID: string
     reason: "cancelled" | "disposed" | "timeout"
   }
@@ -17229,6 +17449,106 @@ export type KilocodeBrowserRejectResponses = {
 
 export type KilocodeBrowserRejectResponse = KilocodeBrowserRejectResponses[keyof KilocodeBrowserRejectResponses]
 
+export type KilocodeCanvasListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/canvas"
+}
+
+export type KilocodeCanvasListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type KilocodeCanvasListError = KilocodeCanvasListErrors[keyof KilocodeCanvasListErrors]
+
+export type KilocodeCanvasListResponses = {
+  /**
+   * Pending canvas host requests
+   */
+  200: Array<CanvasRequest>
+}
+
+export type KilocodeCanvasListResponse = KilocodeCanvasListResponses[keyof KilocodeCanvasListResponses]
+
+export type KilocodeCanvasReplyData = {
+  body?: {
+    result: CanvasResult
+  }
+  path: {
+    requestID: CanvasRequestId
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/canvas/{requestID}/reply"
+}
+
+export type KilocodeCanvasReplyErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeCanvasReplyError = KilocodeCanvasReplyErrors[keyof KilocodeCanvasReplyErrors]
+
+export type KilocodeCanvasReplyResponses = {
+  /**
+   * Canvas reply accepted
+   */
+  200: boolean
+}
+
+export type KilocodeCanvasReplyResponse = KilocodeCanvasReplyResponses[keyof KilocodeCanvasReplyResponses]
+
+export type KilocodeCanvasRejectData = {
+  body?: {
+    error: CanvasFailure
+  }
+  path: {
+    requestID: CanvasRequestId
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/canvas/{requestID}/reject"
+}
+
+export type KilocodeCanvasRejectErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeCanvasRejectError = KilocodeCanvasRejectErrors[keyof KilocodeCanvasRejectErrors]
+
+export type KilocodeCanvasRejectResponses = {
+  /**
+   * Canvas rejection accepted
+   */
+  200: boolean
+}
+
+export type KilocodeCanvasRejectResponse = KilocodeCanvasRejectResponses[keyof KilocodeCanvasRejectResponses]
+
 export type KilocodeAgentManagerListData = {
   body?: never
   path?: never
@@ -19232,6 +19552,198 @@ export type MemoryPurgeResponses = {
 }
 
 export type MemoryPurgeResponse = MemoryPurgeResponses[keyof MemoryPurgeResponses]
+
+export type KilocodeVoiceStartData = {
+  body?: {
+    parentSessionID: string
+    mediaURL: string
+    room?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/voice/session"
+}
+
+export type KilocodeVoiceStartErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeVoiceStartError = KilocodeVoiceStartErrors[keyof KilocodeVoiceStartErrors]
+
+export type KilocodeVoiceStartResponses = {
+  /**
+   * Realtime voice session connection
+   */
+  200: {
+    id: string
+    parentSessionID: string
+    room: string
+    livekitURL: string
+    clientToken: string
+    mediaToken: string
+    mediaURL: string
+    engine: "qwen-realtime"
+    acceptsTruncation: boolean
+    status: "starting" | "active" | "closed" | "failed"
+    createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+}
+
+export type KilocodeVoiceStartResponse = KilocodeVoiceStartResponses[keyof KilocodeVoiceStartResponses]
+
+export type KilocodeVoiceCloseData = {
+  body?: never
+  path: {
+    voiceSessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/voice/session/{voiceSessionID}"
+}
+
+export type KilocodeVoiceCloseErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeVoiceCloseError = KilocodeVoiceCloseErrors[keyof KilocodeVoiceCloseErrors]
+
+export type KilocodeVoiceCloseResponses = {
+  /**
+   * Voice session closed
+   */
+  200: boolean
+}
+
+export type KilocodeVoiceCloseResponse = KilocodeVoiceCloseResponses[keyof KilocodeVoiceCloseResponses]
+
+export type KilocodeVoiceStateData = {
+  body?: never
+  path: {
+    voiceSessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/voice/session/{voiceSessionID}"
+}
+
+export type KilocodeVoiceStateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeVoiceStateError = KilocodeVoiceStateErrors[keyof KilocodeVoiceStateErrors]
+
+export type KilocodeVoiceStateResponses = {
+  /**
+   * Authoritative realtime voice state
+   */
+  200: {
+    info: {
+      id: string
+      parentSessionID: string
+      room: string
+      livekitURL: string
+      clientToken: string
+      mediaToken: string
+      mediaURL: string
+      engine: "qwen-realtime"
+      acceptsTruncation: boolean
+      status: "starting" | "active" | "closed" | "failed"
+      createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
+    lastSeq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    incomplete: boolean
+    turns: Array<{
+      id: string
+      role: "user" | "assistant"
+      speculative: string
+      authoritative?: string
+      stable: boolean
+      truncated: boolean
+      heardMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      overlap: boolean
+    }>
+  }
+}
+
+export type KilocodeVoiceStateResponse = KilocodeVoiceStateResponses[keyof KilocodeVoiceStateResponses]
+
+export type KilocodeVoiceEventData = {
+  body?: {
+    session: string
+    seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    event: {
+      seq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      type: string
+      session?: string
+      turn?: string
+      item?: string
+      text?: string
+      stable?: boolean
+      truncated?: boolean
+      heardMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      at: string
+      data?: {
+        [key: string]: unknown
+      }
+    }
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/voice/events"
+}
+
+export type KilocodeVoiceEventErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeVoiceEventError = KilocodeVoiceEventErrors[keyof KilocodeVoiceEventErrors]
+
+export type KilocodeVoiceEventResponses = {
+  /**
+   * Media event accepted
+   */
+  200: boolean
+}
+
+export type KilocodeVoiceEventResponse = KilocodeVoiceEventResponses[keyof KilocodeVoiceEventResponses]
 
 export type V2HealthGetData = {
   body?: never

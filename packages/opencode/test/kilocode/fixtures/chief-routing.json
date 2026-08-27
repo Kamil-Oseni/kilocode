@@ -23,5 +23,12 @@
   { "prompt": "Prove this algorithm is correct under concurrent updates", "agent": "reasoner" },
   { "prompt": "Develop a consistency strategy for a distributed database", "agent": "reasoner" },
   { "prompt": "Create a security threat model and reason about mitigations", "agent": "reasoner" },
-  { "prompt": "Compare architectural alternatives for this complex migration", "agent": "reasoner" }
+  { "prompt": "Compare architectural alternatives for this complex migration", "agent": "reasoner" },
+  { "prompt": "Run a UX walkthrough of the checkout flow", "agent": "designer" },
+  { "prompt": "Smoke test the login flow like a real user", "agent": "coder" },
+  { "prompt": "Verify the browser flow end to end with an e2e test", "agent": "coder" },
+  { "prompt": "Browse the vendor website and inspect its documentation", "agent": "researcher" },
+  { "prompt": "Open and inspect this website for current product evidence", "agent": "researcher" },
+  { "prompt": "Build me a live dashboard from these metrics", "agent": "designer" },
+  { "prompt": "Turn this dataset into an interactive chart beside the chat", "agent": "designer" }
 ]

@@ -19,12 +19,36 @@ import PROMPT_ORCHESTRATOR from "../../agent/prompt/orchestrator.txt"
 import PROMPT_ASK from "../../agent/prompt/ask.txt"
 import PROMPT_EXPLORE from "../../agent/prompt/explore.txt"
 
-// raya_change start - Milestone C selectable user decisions
+// raya_change start - plain-English intelligence across Milestones A, C, D, F, and G
+const GOAL_INTENT_GUIDANCE =
+  'Treat ordinary phrases such as "done when", "keep working until", "do not stop until", "finish this completely and verify it", or "make this a goal" as durable-goal intent without requiring /goal. In VS Code the host normally arms that goal before the turn; otherwise call create_goal when no goal exists. Preserve the full objective, keep making verified progress across turns, and complete or block it through the goal tools rather than asking the user to remember goal commands.'
 const ASK_OPTIONS_GUIDANCE =
   "When a discrete choice genuinely belongs to the user, call ask_options instead of asking in prose. Use stable option ids, enable allow_multiple only when choices may be combined, and rely on the always-available Other response. Before an unapproved destructive action, use ask_options with explicit confirm and cancel choices."
+const DELEGATION_GUIDANCE =
+  "Infer delegation from the work itself; never require the user to request a subagent or remember a specialist name. Delegate substantial specialist, research, design, accounting, architecture, or independently parallelizable work through task with automatic specialist selection. Fan out independent investigations in parallel and synthesize their evidence. Treat an explicit agent name only as an override."
+const BROWSER_GUIDANCE =
+  "Treat ordinary requests to open, browse, navigate, inspect, click through, fill, or check a website as browser intent. Use the shared in-editor browser tools directly and ground interactions with page snapshots; never ask the user to name a browser tool or open an external browser."
+const BROWSER_TEST_GUIDANCE =
+  'Treat requests to "test like a real user", run a walkthrough, smoke test, end-to-end test, UX test, usability check, or verify a browser flow as browser-testing intent without requiring the user to name tools. Inspect the live page, derive realistic steps and expected outcomes from the request and visible UI, then call browser_smoke_test in exploratory mode with concrete visible-state assertions plus network or console assertions. Reuse the target name consistently; the first smoke run captures the current authenticated browser state automatically when none exists. If authentication is absent, navigate the login flow and only ask for user input when credentials or an external confirmation genuinely require it. Return the structured result, failing step, report path, and screenshot paths.'
+const CANVAS_GUIDANCE =
+  "Treat requests for a standalone dashboard, chart, table, interactive analysis, calculator, or visual report as canvas intent without requiring the user to name a tool. Call create_canvas with a focused default-exported React TSX component and useful initial data; call update_canvas to refine source or data. Use JSX without imports, read values from the component data prop, and repair any returned compile or runtime error on the next turn."
 
 function choices(prompt?: string) {
-  return [prompt, ASK_OPTIONS_GUIDANCE].filter(Boolean).join("\n\n")
+  return [
+    prompt,
+    GOAL_INTENT_GUIDANCE,
+    ASK_OPTIONS_GUIDANCE,
+    DELEGATION_GUIDANCE,
+    BROWSER_GUIDANCE,
+    BROWSER_TEST_GUIDANCE,
+    CANVAS_GUIDANCE,
+  ]
+    .filter(Boolean)
+    .join("\n\n")
+}
+
+function walkthrough(prompt: string) {
+  return `${prompt}\n\n${DELEGATION_GUIDANCE}\n\n${BROWSER_GUIDANCE}\n\n${BROWSER_TEST_GUIDANCE}\n\n${CANVAS_GUIDANCE}`
 }
 // raya_change end
 
@@ -399,6 +423,10 @@ export function prepare(cfg: Config.Info): KiloData {
           browser_scroll: "allow" as const,
           browser_screenshot: "allow" as const,
           browser_evaluate: "allow" as const,
+          browser_auth_capture: "allow" as const, // raya_change - Milestone G authenticated smoke tests
+          browser_smoke_test: "allow" as const, // raya_change - Milestone G authenticated smoke tests
+          create_canvas: "allow" as const, // raya_change - Milestone E canvas artifacts
+          update_canvas: "allow" as const, // raya_change - Milestone E canvas artifacts
         }
       : {}),
     // raya_change end
@@ -536,11 +564,33 @@ export function patchAgents(
         defaults,
         agents.build.permission,
         user,
-        Permission.fromConfig({ semantic_search: "allow" }),
+        Permission.fromConfig({
+          semantic_search: "allow",
+          ask_options: "allow", // raya_change - plain-English decisions must not require tool approval
+        }),
       ),
     }
     delete agents.build
   }
+
+  // raya_change start - Milestone H dedicated conversational agent selected by the hands-free orb
+  if (agents.code) {
+    agents.voice = {
+      ...agents.code,
+      name: "voice",
+      displayName: "Voice",
+      description: "Hands-free conversational mode with concise responses designed for spoken playback.",
+      prompt:
+        "You are Raya's hands-free voice agent. Handle the user's request yourself without Chief, delegation, or agent selection. Keep conversational answers concise and natural when spoken. Use your direct tools when the request requires action, but do not narrate routine mechanics or emit unnecessary markdown.",
+      permission: Permission.merge(
+        agents.code.permission,
+        Permission.fromConfig({ task: "deny", chief_route: "deny" }),
+      ),
+      mode: "primary",
+      native: true,
+    }
+  }
+  // raya_change end
 
   // Patch plan mode
   if (agents.plan) {
@@ -681,8 +731,9 @@ export function patchAgents(
       ...general,
       name: "coder",
       description: "Software implementation specialist for coding, fixes, refactors, APIs, and tests.",
-      prompt:
+      prompt: walkthrough(
         "Act as Raya's coding specialist. Implement and verify the delegated software objective within inherited permissions.",
+      ),
       mode: "subagent",
       native: true,
     }
@@ -690,8 +741,9 @@ export function patchAgents(
       ...general,
       name: "designer",
       description: "Product and interface design specialist for UI, UX, Figma, layouts, visual systems, and motion.",
-      prompt:
+      prompt: walkthrough(
         "Act as Raya's design specialist. Produce or implement a coherent UI/UX solution and verify it visually when possible.",
+      ),
       mode: "subagent",
       native: true,
     }
@@ -700,7 +752,7 @@ export function patchAgents(
       name: "accountant",
       description:
         "Accounting specialist for ledgers, reconciliation, invoices, statements, tax, and financial analysis.",
-      prompt: "Act as Raya's accounting specialist. Show auditable calculations, assumptions, and source evidence.",
+      prompt: `Act as Raya's accounting specialist. Show auditable calculations, assumptions, and source evidence.\n\n${CANVAS_GUIDANCE}`,
       mode: "subagent",
       native: true,
     }
@@ -709,8 +761,7 @@ export function patchAgents(
       name: "reasoner",
       description:
         "Hard-reasoning specialist for architecture, algorithms, proofs, security, concurrency, and trade-offs.",
-      prompt:
-        "Act as Raya's hard-reasoning specialist. Analyze constraints and alternatives before reaching a defensible conclusion.",
+      prompt: `Act as Raya's hard-reasoning specialist. Analyze constraints and alternatives before reaching a defensible conclusion.\n\n${CANVAS_GUIDANCE}`,
       mode: "subagent",
       native: true,
     }
@@ -721,8 +772,29 @@ export function patchAgents(
       name: "researcher",
       description:
         "Research specialist for investigations, source comparison, documentation, evidence, and benchmarks.",
-      prompt:
+      prompt: walkthrough(
         "Act as Raya's research specialist. Gather primary evidence, cite exact sources, and distinguish findings from inference.",
+      ),
+      // raya_change start - website research must retain the browser tools described by its runtime guidance
+      permission: Permission.merge(
+        explore.permission,
+        Permission.fromConfig({
+          browser_navigate: "allow",
+          browser_snapshot: "allow",
+          browser_click: "allow",
+          browser_type: "allow",
+          browser_select: "allow",
+          browser_scroll: "allow",
+          browser_screenshot: "allow",
+          browser_evaluate: "allow",
+          browser_auth_capture: "allow",
+          browser_smoke_test: "allow",
+          create_canvas: "allow",
+          update_canvas: "allow",
+        }),
+        user,
+      ),
+      // raya_change end
       mode: "subagent",
       native: true,
     }

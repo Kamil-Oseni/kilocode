@@ -78,3 +78,6 @@ packages/opencode/.artifacts/
 
 # raya_change - Raya provider keys for local testing (never commit)
 *.local.json
+
+# raya_change - local CLI speech credentials
+.raya/speech.local.json

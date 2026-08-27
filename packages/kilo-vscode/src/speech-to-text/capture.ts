@@ -9,6 +9,11 @@ type Input = {
   requestId: string
   model: string
   language?: string
+  handsFree?: boolean // raya_change - Milestone H native VAD fallback
+  threshold?: number // raya_change - Milestone H native VAD fallback
+  silenceMs?: number // raya_change - Milestone H native VAD fallback
+  onSpeech?: () => void // raya_change - Milestone H native VAD fallback
+  onSilence?: () => void // raya_change - Milestone H native VAD fallback
 }
 
 type Recording = Input & {
@@ -16,6 +21,7 @@ type Recording = Input & {
   proc: ChildProcess
   stderr: string[]
   stopped: boolean
+  heard?: boolean // raya_change - Milestone H native VAD fallback
   exit?: {
     code: number | null
     signal: string | null
@@ -70,7 +76,7 @@ export async function startSpeechCapture(input: Input): Promise<boolean> {
   starting = input.requestId
   try {
     const file = path.join(os.tmpdir(), `kilo-stt-${process.pid}-${Date.now()}.m4a`)
-    if (useMacCapture(process.platform, process.env)) {
+    if (useMacCapture(process.platform, process.env) && !input.handsFree) {
       const result = await startMac(file, input).catch((err: unknown) => {
         console.warn("[Kilo New] Native macOS speech capture failed, falling back to FFmpeg", err)
         return undefined
@@ -169,8 +175,30 @@ export function macCaptureArgs(file: string): string[] {
   return ["-l", "JavaScript", "-e", macScript, file]
 }
 
-export function ffmpegCaptureArgs(input: string[], file: string): string[] {
-  return ["-y", ...input, "-c:a", "aac", "-b:a", "24k", "-ar", "16000", "-ac", "1", "-movflags", "+faststart", file]
+export function ffmpegCaptureArgs(
+  input: string[],
+  file: string,
+  vad?: { threshold: number; silenceMs: number },
+): string[] {
+  const filter = vad
+    ? ["-af", `silencedetect=noise=${Math.round(20 * Math.log10(vad.threshold))}dB:d=${vad.silenceMs / 1_000}`]
+    : []
+  return [
+    "-y",
+    ...input,
+    ...filter,
+    "-c:a",
+    "aac",
+    "-b:a",
+    "24k",
+    "-ar",
+    "16000",
+    "-ac",
+    "1",
+    "-movflags",
+    "+faststart",
+    file,
+  ]
 }
 
 export function ffmpegPipeArgs(file: string): string[] {
@@ -208,9 +236,17 @@ async function startWithArgs(bin: string, file: string, input: Input, args: Args
 
   const proc = first.pipe
     ? pipeProcess(first.pipe, bin, file)
-    : spawn(bin, ffmpegCaptureArgs(first.input, file), {
-        stdio: ["pipe", "ignore", "pipe"],
-      })
+    : spawn(
+        bin,
+        ffmpegCaptureArgs(
+          first.input,
+          file,
+          input.handsFree ? { threshold: input.threshold ?? 0.025, silenceMs: input.silenceMs ?? 900 } : undefined,
+        ),
+        {
+          stdio: ["pipe", "ignore", "pipe"],
+        },
+      )
   const state = createState(input, file, proc)
   try {
     await waitForStart(state)
@@ -227,7 +263,20 @@ function createState(input: Input, file: string, proc: ChildProcess): Recording 
   active = state
 
   proc.stderr?.on("data", (data: Buffer) => {
-    if (state.stderr.length < 20) state.stderr.push(data.toString())
+    const text = data.toString()
+    if (state.stderr.length < 20) state.stderr.push(text)
+    // raya_change start - FFmpeg silencedetect supplies hands-free boundaries when webview mic permission is denied
+    for (const match of text.matchAll(/silence_(start|end)/g)) {
+      if (match[1] === "end") {
+        if (!state.heard) state.onSpeech?.()
+        state.heard = true
+        continue
+      }
+      if (!state.heard) continue
+      state.onSilence?.()
+      state.heard = false
+    }
+    // raya_change end
   })
   proc.on("exit", (code, signal) => {
     state.exit = { code, signal }

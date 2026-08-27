@@ -25,11 +25,36 @@ export interface BrowserHost {
 }
 
 function action(request: BrowserRequest): BrowserAction {
-  if (request.operation !== "scroll") return request
-  const x = Number(request.deltaX)
-  const y = Number(request.deltaY)
-  if (!Number.isFinite(x) || !Number.isFinite(y)) throw new Error("Browser scroll deltas must be finite numbers")
-  return { operation: "scroll", deltaX: x, deltaY: y, selector: request.selector }
+  if (request.operation === "scroll") {
+    const x = Number(request.deltaX)
+    const y = Number(request.deltaY)
+    if (!Number.isFinite(x) || !Number.isFinite(y)) throw new Error("Browser scroll deltas must be finite numbers")
+    return { operation: "scroll", deltaX: x, deltaY: y, selector: request.selector }
+  }
+  // raya_change start - Milestone G validates generated special-number unions at the host boundary
+  if (request.operation === "smoke")
+    return {
+      operation: "smoke",
+      name: request.name,
+      mode: request.mode,
+      steps: request.steps.map((step) => ({
+        ...step,
+        assertions: step.assertions.map((assertion) => {
+          if (assertion.kind === "visible") return assertion
+          if (assertion.kind === "network") {
+            const status = assertion.status === undefined ? undefined : Number(assertion.status)
+            if (status !== undefined && !Number.isFinite(status))
+              throw new Error(`Smoke step ${step.id} has an invalid network status`)
+            return { ...assertion, status }
+          }
+          const max = Number(assertion.max)
+          if (!Number.isFinite(max) || max < 0) throw new Error(`Smoke step ${step.id} has an invalid console maximum`)
+          return { ...assertion, max }
+        }),
+      })),
+    }
+  // raya_change end
+  return request
 }
 
 export class BrowserBridge {

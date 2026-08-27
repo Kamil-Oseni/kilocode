@@ -142,6 +142,10 @@ export namespace RayaChief {
         layout: 3,
         animation: 2,
         screen: 2,
+        canvas: 5, // raya_change - Milestone E live visual artifacts
+        dashboard: 4, // raya_change - Milestone E plain-English canvas intent
+        chart: 3, // raya_change - Milestone E plain-English canvas intent
+        interactive: 2, // raya_change - Milestone E plain-English canvas intent
       },
       reason: "The request is primarily product or interface design work.",
     },
@@ -183,6 +187,12 @@ export namespace RayaChief {
         documentation: 2,
         benchmark: 2,
         analyze: 2,
+        // raya_change start - plain-English website inspection routes to browser-capable research
+        browse: 3,
+        inspect: 3,
+        website: 2,
+        browser: 2,
+        // raya_change end
       },
       reason: "The request is primarily evidence-gathering or comparative research.",
     },
@@ -205,6 +215,12 @@ export namespace RayaChief {
         database: 2,
         endpoint: 3,
         build: 2,
+        // raya_change start - browser flow verification routes to the coding specialist
+        smoke: 4,
+        e2e: 4,
+        walkthrough: 2,
+        browser: 2,
+        // raya_change end
       },
       reason: "The request is primarily software implementation work.",
     },
@@ -242,13 +258,19 @@ export namespace RayaChief {
       })
       .filter((item): item is { profile: Profile; agent: Agent; score: number } => item.agent !== undefined)
       .toSorted((a, b) => b.score - a.score || a.agent.name.localeCompare(b.agent.name))
-    const top = ranked[0]
-    if (!top) throw new Error("Auto routing requires at least one eligible specialist")
+    const first = ranked[0]
+    if (!first) throw new Error("Auto routing requires at least one eligible specialist")
+    // raya_change - zero-signal conversational requests should proceed through a capable generalist instead of prompting
+    const top = first.score === 0 ? (ranked.find((item) => item.profile.role === "coder") ?? first) : first
 
-    const next = ranked[1]?.score ?? 0
+    const next = ranked.find((item) => item !== top)?.score ?? 0
     const confidence =
-      top.score === 0 ? 0.35 : next === top.score ? 0.55 : Math.min(0.98, 0.74 + top.score * 0.03 + (top.score - next) * 0.02)
-    const candidates = ranked.slice(0, 3).map(
+      top.score === 0
+        ? 0.35
+        : next === top.score
+          ? 0.55
+          : Math.min(0.98, 0.74 + top.score * 0.03 + (top.score - next) * 0.02)
+    const candidates = [top, ...ranked.filter((item) => item !== top)].slice(0, 3).map(
       (item): Candidate => ({
         agent: item.agent.name,
         role: item.profile.role,
@@ -267,8 +289,16 @@ export namespace RayaChief {
     }
   }
 
-  export function needsPrompt(decision: Pick<ReturnType<typeof route>, "confidence">) {
-    return decision.confidence < threshold
+  export function needsPrompt(
+    decision: Pick<ReturnType<typeof route>, "confidence"> & Partial<Pick<ReturnType<typeof route>, "candidates">>,
+    configured: number = threshold, // raya_change - Milestone I routing settings
+    request?: string, // raya_change - preserve explicit ambiguity while allowing smooth conversational turns
+  ) {
+    const value = Number.isFinite(configured) ? Math.min(1, Math.max(0, configured)) : threshold // raya_change
+    if (decision.confidence >= value) return false
+    if (!request || !decision.candidates) return true
+    if (decision.candidates.some((item) => item.score > 0)) return true
+    return /\b(help me decide|not sure|which (?:agent|specialist)|who should|what should i do)\b/i.test(request)
   }
 
   // raya_change start - Milestone C low-confidence selectable contract

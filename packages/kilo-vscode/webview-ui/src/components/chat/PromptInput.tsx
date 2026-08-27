@@ -20,6 +20,7 @@ import { useLanguage } from "../../context/language"
 import { useVSCode } from "../../context/vscode"
 import { useConfig } from "../../context/config"
 import { useProvider } from "../../context/provider"
+import { useVoice } from "../../context/voice" // raya_change - Milestone H intelligent voice mode
 import { ModelSelector } from "../shared/ModelSelector"
 import { ModeSwitcher } from "../shared/ModeSwitcher"
 import { SandboxButtonBase, SandboxTooltipContent } from "../shared/SandboxButton"
@@ -37,6 +38,7 @@ import { useGhostText } from "../../hooks/useGhostText"
 import { useSpeechToText } from "../speech-to-text/useSpeechToText"
 import { useSpeechToTextModels } from "../../context/speech-to-text-models"
 import { createSpeechShortcut } from "../speech-to-text/shortcut"
+import { voiceIntent } from "../speech-to-text/voice-intent" // raya_change - Milestone H
 import { useImageAttachments, type ImageAttachment } from "../../hooks/useImageAttachments"
 import { convertToMentionPath } from "../../utils/path-mentions"
 import { SessionMentionPicker } from "./SessionMentionPicker"
@@ -183,6 +185,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const indexing = useIndexing()
   const { config, globalConfig, settings, features } = useConfig()
   const provider = useProvider()
+  const voice = useVoice() // raya_change - Milestone H
+  const voicePending = { start: false } // raya_change - create a backend parent before native voice admission
   const language = useLanguage()
   const vscode = useVSCode()
   const projectMemory = useMemory()
@@ -532,8 +536,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       globalConfig(),
     )
   const isDisabled = () => !server.isConnected()
-  const canUseSpeech = () => canUseSpeechToText(config(), provider.authStates())
-  const speechModel = () => selectedSpeechToTextModel(config(), speechModels.models())
+  const canUseSpeech = () =>
+    (!!voice.settings().sttEndpoint && voice.settings().hasSttKey) ||
+    canUseSpeechToText(config(), provider.authStates()) // raya_change - configured STT takes precedence
+  const speechModel = () => voice.settings().sttModel || selectedSpeechToTextModel(config(), speechModels.models()) // raya_change - Milestone H
   const hasInput = () => text().trim().length > 0 || imageAttach.images().length > 0 || reviewComments().length > 0
   const canSend = () =>
     !isDisabled() &&
@@ -1029,11 +1035,26 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const insertSpeechText = (value: string) => {
+    const cleaned = voice.clean(value)
+    if (!cleaned) {
+      speech.rejectEcho() // raya_change - proven false interruption tightens the gate and resumes remaining speech
+      if (!voice.recover()) queueMicrotask(() => window.dispatchEvent(new CustomEvent("rayaVoiceListen")))
+      return false
+    }
+    // raya_change start - ordinary spoken language can switch voice behavior without a command
+    const intent = voiceIntent(cleaned)
+    if (intent) {
+      if (intent === "hands-free") startVoice()
+      if (intent !== "hands-free") voice.stop()
+      session.selectAgent(intent === "hands-free" ? "voice" : "auto", sid()) // raya_change - spoken mode changes mirror the orb
+      return false
+    }
+    // raya_change end
     const ref = textareaRef
     const current = text()
     const start = ref?.selectionStart ?? current.length
     const end = ref?.selectionEnd ?? start
-    const result = insertSpacedText(current, value, start, end)
+    const result = insertSpacedText(current, cleaned, start, end)
 
     setText(result.text)
     if (!ref) return
@@ -1046,10 +1067,22 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const startSpeech = () => {
-    speech.start({ model: speechModel(), insert: insertSpeechText })
+    const fallback = voice.cascade() && voice.settings().mode === "hands-free"
+    if (!voice.playing()) voice.listen() // raya_change - background barge-in capture must preserve the speaking phase
+    speech.start({
+      model: speechModel(),
+      insert: insertSpeechText,
+      handsFree: fallback,
+      threshold: voice.settings().vadThreshold,
+      silenceMs: voice.settings().vadSilenceMs,
+      echoSuppression: voice.playing(), // raya_change - learn residual speaker energy once, then retain fast human barge-in
+      onSpeech: voice.hear, // raya_change - Milestone H barge-in transition
+      onSilence: fallback ? () => transcribeAndSend() : undefined,
+    })
   }
 
   const transcribeAndSend = () => {
+    voice.wait() // raya_change - Milestone H wait for the agent before spoken playback
     const key = draftKey()
     const id = sid()
     const context = ctx()
@@ -1093,6 +1126,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return true
   }
   onCleanup(shortcut.reset)
+  // raya_change start - hands-free resumes listening after spoken playback completes
+  const voiceListen = () => {
+    if (voice.settings().mode !== "hands-free" || !voice.cascade() || speech.active() || isDisabled()) return
+    if (isBusy()) {
+      setTimeout(() => window.dispatchEvent(new CustomEvent("rayaVoiceListen")), 100)
+      return
+    }
+    startSpeech()
+  }
+  window.addEventListener("rayaVoiceListen", voiceListen)
+  onCleanup(() => window.removeEventListener("rayaVoiceListen", voiceListen))
+  // raya_change end
 
   const handleSendClick = () => {
     if (speech.state() !== "recording" || !canSend()) {
@@ -1101,6 +1146,43 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
     transcribeAndSend()
   }
+
+  // raya_change start - the orb opens a native media session and never submits composer text
+  const startVoice = () => {
+    const id = session.currentSessionID()
+    if (id) {
+      voice.start(id)
+      session.selectAgent("voice", id)
+      return
+    }
+    voicePending.start = true
+    session.createSession()
+  }
+  createEffect(() => {
+    const id = session.currentSessionID()
+    if (!voicePending.start || !id) return
+    voicePending.start = false
+    voice.start(id)
+    session.selectAgent("voice", id)
+  })
+  const voiceActive = () => voice.status() !== "off"
+  const voiceLabel = () => {
+    if (!voiceActive()) return "Start hands-free voice"
+    const transcript = voice.transcript()?.text.trim()
+    return transcript ? `Stop hands-free voice — ${transcript}` : `Stop hands-free voice — ${voice.status()}`
+  }
+  const toggleVoice = () => {
+    if (!voiceActive()) {
+      startVoice()
+      return
+    }
+    voicePending.start = false
+    speech.cancel() // raya_change - orb ownership includes its background microphone capture
+    voice.stop()
+    voice.setMode("off")
+    session.selectAgent("auto", sid())
+  }
+  // raya_change end
 
   const runMemory = (memory: NonNullable<ReturnType<typeof parseMemoryCommand>>) => {
     if (memory.kind === "usage") {
@@ -1205,8 +1287,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const word = cmdMatch?.[1]
     const runnable = slash.commands().filter((command) => command.name !== "goal") // raya_change
     const matched = word
-      ? (runnable.find((command) => command.name === word) ??
-        runnable.find((command) => command.hints.includes(word)))
+      ? (runnable.find((command) => command.name === word) ?? runnable.find((command) => command.hints.includes(word)))
       : undefined
 
     // Client-side slash command — runs locally without a backend round-trip
@@ -1547,6 +1628,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           />
         </div>
       </div>
+      {/* raya_change - speculative voice transcript is visible but never copied into or submitted from the composer */}
+      <Show when={voiceActive()}>
+        <div class="prompt-realtime-voice" role="status" aria-live="polite">
+          <span class="prompt-realtime-voice__state">
+            {voice.status()}
+            {voice.aec() ? " · AEC" : ""}
+          </span>
+          <Show when={voice.transcript()?.text || voice.error()}>
+            <span class="prompt-realtime-voice__text">{voice.transcript()?.text || voice.error()}</span>
+          </Show>
+        </div>
+      </Show>
       <div class="prompt-input-hint">
         <div class="prompt-input-hint-selectors">
           <ModeSwitcher sessionID={sid} />
@@ -1642,6 +1735,30 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           </Tooltip>
           <Show when={canUseSpeech()}>
             <SpeechToTextButton speech={speech} disabled={isDisabled()} start={startSpeech} label={language.t} />
+            {/* raya_change - Milestone H keeps dictation on the mic and hands-free conversation on a distinct orb */}
+            <Tooltip value={voiceLabel()} placement="top" openDelay={0}>
+              <Button
+                variant="ghost"
+                size="small"
+                aria-label={voiceLabel()}
+                aria-pressed={voiceActive()}
+                onClick={toggleVoice}
+                style={{
+                  "border-radius": "999px",
+                  background: voiceActive()
+                    ? "radial-gradient(circle at 35% 30%, #8be9ff, #6c63ff 48%, #282a68)"
+                    : "radial-gradient(circle at 35% 30%, var(--vscode-descriptionForeground), var(--vscode-editor-background) 70%)",
+                  "box-shadow": voiceActive()
+                    ? "0 0 0 1px color-mix(in srgb, #8be9ff 60%, transparent), 0 0 10px color-mix(in srgb, #6c63ff 65%, transparent)"
+                    : "inset 0 0 0 1px var(--vscode-widget-border)",
+                }}
+              >
+                <span
+                  aria-hidden="true"
+                  style={{ width: "10px", height: "10px", "border-radius": "999px", background: "currentColor" }}
+                />
+              </Button>
+            </Tooltip>
           </Show>
           <Show
             when={showStop()}

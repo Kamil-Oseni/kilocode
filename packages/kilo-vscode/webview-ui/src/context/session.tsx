@@ -394,7 +394,7 @@ export const SessionProvider: ParentComponent = (props) => {
   // Agents (modes) loaded from the CLI backend
   const [agents, setAgents] = createSignal<AgentInfo[]>([])
   const [allAgents, setAllAgents] = createSignal<AgentInfo[]>([])
-  const [defaultAgent, setDefaultAgent] = createSignal("code")
+  const [defaultAgent, setDefaultAgent] = createSignal("auto") // raya_change - intelligent routing before backend hydration
   const [pendingKiloModel, setPendingKiloModel] = createSignal<{
     modelID?: string
     agent?: string

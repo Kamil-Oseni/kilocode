@@ -19,6 +19,7 @@ import { ensureBackendForAutocomplete } from "./services/autocomplete/ensure-bac
 import { AutocompleteServiceManager } from "./services/autocomplete/AutocompleteServiceManager"
 import { AttentionService } from "./services/attention"
 import { BrowserAutomationService, BrowserPanel } from "./services/browser-automation" // raya_change - Milestone F
+import { CanvasPanel, CanvasService } from "./services/canvas" // raya_change - Milestone E
 import { TelemetryEventName, TelemetryProxy } from "./services/telemetry"
 import { registerCommitMessageService } from "./services/commit-message"
 import { registerCodeActions, registerTerminalActions, KiloCodeActionProvider } from "./services/code-actions"
@@ -75,6 +76,18 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.window.registerWebviewPanelSerializer(BrowserPanel.viewType, {
       deserializeWebviewPanel(panel: vscode.WebviewPanel) {
         browserAutomationService.restore(panel)
+        return Promise.resolve()
+      },
+    }),
+  )
+  // raya_change end
+
+  // raya_change start - Milestone E live React canvas panel and host bridge
+  const canvasService = new CanvasService(connectionService, context)
+  context.subscriptions.push(
+    vscode.window.registerWebviewPanelSerializer(CanvasPanel.viewType, {
+      deserializeWebviewPanel(panel: vscode.WebviewPanel) {
+        canvasService.restore(panel)
         return Promise.resolve()
       },
     }),
@@ -638,6 +651,7 @@ export function activate(context: vscode.ExtensionContext) {
       unsubscribeStateChange()
       attention.dispose()
       browserAutomationService.dispose()
+      canvasService.dispose() // raya_change - Milestone E
       provider.dispose()
       notebookBridge.dispose()
       connectionService.dispose()

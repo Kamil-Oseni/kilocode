@@ -20,7 +20,8 @@ const user =
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "") || "local"
-const snapshotVersion = `${pkg.version}-snapshot+${sha}.${user}`
+const stamp = Date.now() // raya_change - unique local identity prevents stale VS Code webview service-worker state
+const snapshotVersion = `${pkg.version}-snapshot+${sha}.${user}.${stamp}`
 
 console.log(`Building snapshot version: ${snapshotVersion}`)
 console.log(`Base version: ${pkg.version}`)
@@ -45,7 +46,7 @@ await $`bun script/local-bin.ts --compiled`.cwd(root)
 await $`bun run build:check:production`.cwd(root)
 
 console.log("\n📦 Packaging VSIX...")
-const vsixPath = join(outDir, `raya-vscode-snapshot-${sha}-${user}.vsix`)
+const vsixPath = join(outDir, `raya-vscode-snapshot-${sha}-${user}-${stamp}.vsix`)
 const require = createRequire(import.meta.url)
 const vsceRequire = createRequire(require.resolve("@vscode/vsce"))
 if (shouldInstall) {

@@ -57,6 +57,59 @@ export const EvaluateRequest = Schema.Struct({
   operation: Schema.Literal("evaluate"),
   expression: Text,
 })
+// raya_change start - Milestone G authenticated smoke walkthrough protocol
+const Name = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200))
+const NavigateAction = Schema.Struct({ kind: Schema.Literal("navigate"), url: Url })
+const ClickAction = Schema.Struct({ kind: Schema.Literal("click"), selector: Selector })
+const TypeAction = Schema.Struct({
+  kind: Schema.Literal("type"),
+  selector: Selector,
+  text: Text,
+  submit: Schema.optional(Schema.Boolean),
+})
+const SelectAction = Schema.Struct({
+  kind: Schema.Literal("select"),
+  selector: Selector,
+  values: Schema.Array(Text).check(Schema.isMinLength(1), Schema.isMaxLength(100)),
+})
+export const SmokeAction = Schema.Union([NavigateAction, ClickAction, TypeAction, SelectAction])
+export const SmokeAssertion = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal("visible"),
+    selector: Selector,
+    text: Schema.optional(Text),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("network"),
+    url: Text,
+    status: Schema.optional(Schema.Number),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("console"),
+    level: Schema.optional(Schema.Literals(["error", "warning", "log", "info"])),
+    message: Schema.optional(Text),
+    max: Schema.Number,
+  }),
+])
+export const SmokeStep = Schema.Struct({
+  id: Name,
+  title: Name,
+  action: Schema.optional(SmokeAction),
+  assertions: Schema.Array(SmokeAssertion).check(Schema.isMinLength(1), Schema.isMaxLength(100)),
+})
+export const AuthCaptureRequest = Schema.Struct({
+  ...Base,
+  operation: Schema.Literal("auth_capture"),
+  name: Name,
+})
+export const SmokeRequest = Schema.Struct({
+  ...Base,
+  operation: Schema.Literal("smoke"),
+  name: Name,
+  mode: Schema.Literals(["scripted", "exploratory"]),
+  steps: Schema.Array(SmokeStep).check(Schema.isMinLength(1), Schema.isMaxLength(100)),
+})
+// raya_change end
 
 export const Request = Schema.Union([
   NavigateRequest,
@@ -67,6 +120,8 @@ export const Request = Schema.Union([
   ScrollRequest,
   ScreenshotRequest,
   EvaluateRequest,
+  AuthCaptureRequest,
+  SmokeRequest,
 ]).annotate({ identifier: "BrowserRequest" })
 export type Request = Schema.Schema.Type<typeof Request>
 
@@ -102,6 +157,52 @@ export const EvaluateResult = Schema.Struct({
   operation: Schema.Literal("evaluate"),
   output: Text,
 })
+// raya_change start - Milestone G structured smoke evidence
+export const AuthCaptureResult = Schema.Struct({
+  ...ResultBase,
+  operation: Schema.Literal("auth_capture"),
+  name: Name,
+  path: Schema.String,
+  cookies: Schema.Number,
+  origins: Schema.Number,
+})
+export const SmokeAssertionResult = Schema.Struct({
+  kind: Schema.Literals(["visible", "network", "console"]),
+  passed: Schema.Boolean,
+  expected: Text,
+  actual: Text,
+})
+export const SmokeStepResult = Schema.Struct({
+  id: Name,
+  title: Name,
+  passed: Schema.Boolean,
+  screenshot: Schema.String,
+  assertions: Schema.Array(SmokeAssertionResult),
+  error: Schema.optional(Text),
+})
+export const SmokeFinding = Schema.Struct({
+  url: Schema.optional(Text),
+  status: Schema.optional(Schema.Number),
+  level: Schema.optional(Text),
+  message: Schema.optional(Text),
+})
+export const SmokeResult = Schema.Struct({
+  ...ResultBase,
+  operation: Schema.Literal("smoke"),
+  runID: Schema.String,
+  name: Name,
+  mode: Schema.Literals(["scripted", "exploratory"]),
+  passed: Schema.Boolean,
+  startedAt: Schema.Number,
+  finishedAt: Schema.Number,
+  artifact: Schema.String,
+  authState: Schema.String,
+  failingStep: Schema.optional(Name),
+  steps: Schema.Array(SmokeStepResult),
+  network: Schema.Array(SmokeFinding),
+  console: Schema.Array(SmokeFinding),
+})
+// raya_change end
 
 export const Result = Schema.Union([
   NavigateResult,
@@ -112,6 +213,8 @@ export const Result = Schema.Union([
   ScrollResult,
   ScreenshotResult,
   EvaluateResult,
+  AuthCaptureResult,
+  SmokeResult,
 ]).annotate({ identifier: "BrowserResult" })
 export type Result = Schema.Schema.Type<typeof Result>
 

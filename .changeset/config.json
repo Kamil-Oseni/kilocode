@@ -1,8 +1,9 @@
 {
+  "// raya_change": "Keep the fixed release group aligned with the Raya extension package name.",
   "$schema": "https://unpkg.com/@changesets/config@3.0.4/schema.json",
   "changelog": ["../script/changelog-github.cjs", { "repo": "Kilo-Org/kilocode" }],
   "commit": false,
-  "fixed": [["kilo-code", "@kilocode/cli"]],
+  "fixed": [["raya", "@kilocode/cli"]],
   "linked": [],
   "access": "restricted",
   "baseBranch": "main",

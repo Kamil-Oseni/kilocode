@@ -548,6 +548,18 @@ export interface SpeechToTextStartedMessage {
   requestId: string
 }
 
+// raya_change start - Milestone H extension-host VAD fallback
+export interface SpeechToTextSpeechMessage {
+  type: "speechToTextSpeech"
+  requestId: string
+}
+
+export interface SpeechToTextSilenceMessage {
+  type: "speechToTextSilence"
+  requestId: string
+}
+// raya_change end
+
 export interface SpeechToTextCancelledMessage {
   type: "speechToTextCancelled"
   requestId: string
@@ -559,6 +571,58 @@ export interface SpeechToTextErrorMessage {
   code?: string
   requestId: string
 }
+
+// raya_change start - Milestone H speech settings and streaming playback
+export interface SpeechSettingsLoadedMessage {
+  type: "speechSettingsLoaded"
+  settings: import("../../../../src/shared/speech").SpeechState
+}
+
+export interface SpeechPlaybackChunkMessage {
+  type: "speechPlaybackChunk"
+  requestId: string
+  data: string
+  mime: string
+  text?: string // raya_change - echo-reference text for residual self-transcription rejection
+}
+
+export interface SpeechPlaybackDoneMessage {
+  type: "speechPlaybackDone"
+  requestId: string
+  firstAudioMs: number
+  chunks: number
+  bytes: number
+}
+
+export interface SpeechPlaybackErrorMessage {
+  type: "speechPlaybackError"
+  requestId: string
+  error: string
+}
+
+// raya_change start - architecture-faithful hands-free session lifecycle
+export interface SpeechRealtimeReadyMessage {
+  type: "speechRealtimeReady"
+  connection: {
+    id: string
+    livekitURL: string
+    clientToken: string
+    engine: "qwen-realtime"
+    acceptsTruncation: boolean
+  }
+}
+
+export interface SpeechRealtimeErrorMessage {
+  type: "speechRealtimeError"
+  error: string
+  fallback: "cascade-v1" | "text"
+}
+
+export interface SpeechRealtimeStoppedMessage {
+  type: "speechRealtimeStopped"
+}
+// raya_change end
+// raya_change end
 
 export interface FileSearchItem {
   path: string
@@ -1476,9 +1540,18 @@ export type ExtensionMessage =
   | AutocompleteSettingsLoadedMessage
   | ChatCompletionResultMessage
   | SpeechToTextStartedMessage
+  | SpeechToTextSpeechMessage // raya_change - Milestone H
+  | SpeechToTextSilenceMessage // raya_change - Milestone H
   | SpeechToTextCancelledMessage
   | SpeechToTextResultMessage
   | SpeechToTextErrorMessage
+  | SpeechSettingsLoadedMessage // raya_change - Milestone H
+  | SpeechPlaybackChunkMessage // raya_change - Milestone H
+  | SpeechPlaybackDoneMessage // raya_change - Milestone H
+  | SpeechPlaybackErrorMessage // raya_change - Milestone H
+  | SpeechRealtimeReadyMessage // raya_change - realtime voice
+  | SpeechRealtimeErrorMessage // raya_change - realtime voice
+  | SpeechRealtimeStoppedMessage // raya_change - realtime voice
   | FileSearchResultMessage
   | SessionSearchResultMessage
   | FilePickerResultMessage

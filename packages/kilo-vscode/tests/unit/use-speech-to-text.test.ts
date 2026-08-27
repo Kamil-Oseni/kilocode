@@ -67,6 +67,21 @@ describe("useSpeechToText", () => {
     ctx.dispose()
   })
 
+  // raya_change - hands-free capture stays active during playback and cancels only after real speech begins.
+  it("cancels streaming playback when extension-host VAD hears a barge-in", () => {
+    const ctx = setup()
+    let heard = 0
+    ctx.speech.start({ model: "scribe", insert: () => {}, handsFree: true, onSpeech: () => heard++ })
+    const start = ctx.sent[0]
+    if (start?.type !== "speechToTextStart") throw new Error("speech start message missing")
+    ctx.fire({ type: "speechToTextStarted", requestId: start.requestId })
+    ctx.fire({ type: "speechToTextSpeech", requestId: start.requestId })
+
+    expect(heard).toBe(1)
+    expect(ctx.sent[1]).toEqual({ type: "speechPlaybackCancel" })
+    ctx.dispose()
+  })
+
   it("does not stop or start another recording while the microphone is starting", () => {
     const ctx = setup()
 
@@ -138,6 +153,23 @@ describe("useSpeechToText", () => {
 
     expect(text).toEqual(["Recorded prompt"])
     expect(done).toBe(1)
+    expect(ctx.speech.state()).toBe("idle")
+    ctx.dispose()
+  })
+
+  // raya_change - Milestone H local plain-English voice commands are not sent to the agent
+  it("does not submit a transcript consumed by voice control", () => {
+    const ctx = setup()
+    let done = 0
+    ctx.speech.start({ model: "scribe", insert: () => false })
+    const start = ctx.sent[0]
+    if (start?.type !== "speechToTextStart") throw new Error("speech start message missing")
+    ctx.fire({ type: "speechToTextStarted", requestId: start.requestId })
+
+    ctx.speech.stop({ done: () => done++ })
+    ctx.fire({ type: "speechToTextResult", requestId: start.requestId, text: "Start hands-free voice mode" })
+
+    expect(done).toBe(0)
     expect(ctx.speech.state()).toBe("idle")
     ctx.dispose()
   })

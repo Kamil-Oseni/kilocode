@@ -48,6 +48,17 @@ describe("ffmpeg args", () => {
     ])
   })
 
+  // raya_change - Milestone H extension-host hands-free fallback
+  it("adds silence detection using configured VAD settings", () => {
+    const args = ffmpegCaptureArgs(["-f", "dshow", "-i", "audio=Microphone"], "speech.m4a", {
+      threshold: 0.025,
+      silenceMs: 900,
+    })
+
+    expect(args).toContain("-af")
+    expect(args).toContain("silencedetect=noise=-32dB:d=0.9")
+  })
+
   it("builds pipe capture arguments for Linux PipeWire", () => {
     const args = ffmpegPipeArgs("/tmp/speech.m4a")
 

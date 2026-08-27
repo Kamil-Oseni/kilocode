@@ -105,6 +105,85 @@ describe("Raya browser bridge", () => {
     expect(cancelled).toHaveLength(1)
     bridge.dispose()
   })
+
+  it("returns a structured smoke report through the CLI bridge", async () => {
+    const actions: BrowserRequest[] = []
+    const replies: Record<string, unknown>[] = []
+    const done = Promise.withResolvers<void>()
+    const client = {
+      kilocode: {
+        browser: {
+          list: async () => ({ data: [] }),
+          reply: async (input: Record<string, unknown>) => {
+            replies.push(input)
+            done.resolve()
+            return {}
+          },
+          reject: async () => ({}),
+        },
+      },
+    } as unknown as KiloClient
+    const connection = harness(client)
+    const bridge = new BrowserBridge(connection.value, {
+      show: async () => undefined,
+      execute: async (action) => {
+        actions.push(action as BrowserRequest)
+        if (action.operation !== "smoke") throw new Error("Expected smoke action")
+        return {
+          operation: "smoke",
+          runID: "run_green",
+          name: action.name,
+          mode: action.mode,
+          passed: true,
+          startedAt: 1,
+          finishedAt: 2,
+          artifact: "report.json",
+          authState: "auth.json",
+          steps: [
+            {
+              id: "dashboard",
+              title: "Dashboard",
+              passed: true,
+              screenshot: "dashboard.png",
+              assertions: [{ kind: "network", passed: true, expected: "/health 200", actual: "200" }],
+            },
+          ],
+          network: [{ url: "/health", status: 200 }],
+          console: [],
+        }
+      },
+    })
+
+    connection.event({
+      id: "evt_smoke",
+      type: "kilocode.browser.requested",
+      properties: {
+        id: "brr_smoke",
+        sessionID: "ses_test",
+        operation: "smoke",
+        name: "sample-app",
+        mode: "scripted",
+        steps: [
+          {
+            id: "dashboard",
+            title: "Dashboard",
+            assertions: [
+              { kind: "visible", selector: "#welcome" },
+              { kind: "network", url: "/health", status: 200 },
+            ],
+          },
+        ],
+      },
+    })
+    await done.promise
+
+    expect(actions[0]).toMatchObject({ operation: "smoke", name: "sample-app" })
+    expect(replies[0]).toMatchObject({
+      requestID: "brr_smoke",
+      result: { operation: "smoke", passed: true, artifact: "report.json" },
+    })
+    bridge.dispose()
+  })
 })
 
 function harness(client: KiloClient) {

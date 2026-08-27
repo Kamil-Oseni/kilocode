@@ -137,6 +137,10 @@ export interface Config {
   permission?: PermissionConfig
   model?: string | null
   small_model?: string | null
+  raya_routing?: {
+    confidence_threshold?: number
+    goal_continuation?: boolean
+  } | null // raya_change - Milestone I Goals & routing settings
   subagent_model?: string | null
   subagent_variant?: string | null
   subagent_variant_overrides?: Record<string, string | null> | null

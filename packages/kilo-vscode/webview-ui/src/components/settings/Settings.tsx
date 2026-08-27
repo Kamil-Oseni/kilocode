@@ -19,6 +19,8 @@ import DisplayTab from "./DisplayTab"
 import AutocompleteTab from "./AutocompleteTab"
 import NotificationsTab from "./NotificationsTab"
 import ContextTab from "./ContextTab"
+import SpeechTab from "./SpeechTab" // raya_change - Milestones H/I
+import GoalsRoutingTab from "./GoalsRoutingTab" // raya_change - Milestone I
 
 import CommitMessageTab from "./CommitMessageTab"
 import ExperimentalTab from "./ExperimentalTab"
@@ -341,6 +343,16 @@ const Settings: Component<SettingsProps> = (props) => {
             <Icon name="window-cursor" />
             <span class="label">{language.t("settings.webTools.title")}</span>
           </Tabs.Trigger>
+          {/* raya_change start - Milestone I settings hub completion */}
+          <Tabs.Trigger value="speech" aria-label="Speech">
+            <Icon name="speech-bubble" />
+            <span class="label">Speech</span>
+          </Tabs.Trigger>
+          <Tabs.Trigger value="goalsRouting" aria-label="Goals & routing">
+            <Icon name="brain" />
+            <span class="label">Goals & routing</span>
+          </Tabs.Trigger>
+          {/* raya_change end */}
           <Tabs.Trigger value="checkpoints" aria-label={language.t("settings.checkpoints.title")}>
             <Icon name="branch" />
             <span class="label">{language.t("settings.checkpoints.title")}</span>
@@ -418,6 +430,16 @@ const Settings: Component<SettingsProps> = (props) => {
           <h3>{language.t("settings.webTools.title")}</h3>
           <BrowserTab />
         </Tabs.Content>
+        {/* raya_change start - Milestone I settings hub completion */}
+        <Tabs.Content value="speech">
+          <h3>Speech</h3>
+          <SpeechTab />
+        </Tabs.Content>
+        <Tabs.Content value="goalsRouting">
+          <h3>Goals & routing</h3>
+          <GoalsRoutingTab />
+        </Tabs.Content>
+        {/* raya_change end */}
         <Tabs.Content value="checkpoints">
           <h3>{language.t("settings.checkpoints.title")}</h3>
           <CheckpointsTab />

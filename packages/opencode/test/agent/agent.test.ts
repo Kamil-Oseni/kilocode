@@ -57,7 +57,9 @@ it.instance("returns default native agents when no config", () =>
   Effect.gen(function* () {
     const agents = yield* load((svc) => svc.list())
     const names = agents.map((a) => a.name)
+    expect(names[0]).toBe("auto") // kilocode_change // raya_change - intelligent routing is the zero-configuration default
     expect(names).toContain("code")
+    expect(names).toContain("voice") // kilocode_change // raya_change - hands-free requests bypass Chief through a dedicated primary agent
     expect(names).toContain("plan")
     expect(names).toContain("general")
     expect(names).toContain("explore")
@@ -79,8 +81,44 @@ it.instance("build agent has correct default properties", () =>
     expect(evalPerm(build, "repo_clone")).toBe("deny")
     expect(evalPerm(build, "repo_overview")).toBe("deny")
     expect(evalPerm(build, "interactive_terminal")).toBe("allow") // kilocode_change
+    expect(evalPerm(build, "ask_options")).toBe("allow") // kilocode_change // raya_change - no decision-tool approval
   }),
 )
+
+// kilocode_change start
+// raya_change - plain-English milestone intent is part of the runtime prompts, not user memory
+it.instance("primary and routed specialist prompts infer goal, choice, delegation, browser, and canvas intent", () =>
+  Effect.gen(function* () {
+    const code = yield* load((svc) => svc.get("code"))
+    const designer = yield* load((svc) => svc.get("designer"))
+    const prompt = code?.prompt ?? ""
+    expect(prompt).toContain("durable-goal intent")
+    expect(prompt).toContain("discrete choice genuinely belongs to the user")
+    expect(prompt).toContain("never require the user to request a subagent")
+    expect(prompt).toContain("ordinary requests to open, browse, navigate")
+    expect(prompt).toContain("test like a real user")
+    expect(prompt).toContain("standalone dashboard")
+    expect(designer?.prompt).toContain("never require the user to request a subagent")
+    expect(designer?.prompt).toContain("browser-testing intent")
+    expect(designer?.prompt).toContain("canvas intent")
+    const researcher = yield* load((svc) => svc.get("researcher"))
+    expect(evalPerm(researcher, "browser_navigate")).toBe("allow")
+    expect(evalPerm(researcher, "browser_smoke_test")).toBe("allow")
+    expect(evalPerm(researcher, "create_canvas")).toBe("allow")
+    expect(evalPerm(researcher, "update_canvas")).toBe("allow")
+  }),
+)
+
+// raya_change - hands-free mode must answer directly rather than handing spoken turns back to Chief or Coder
+it.instance("voice agent is direct and cannot delegate", () =>
+  Effect.gen(function* () {
+    const voice = yield* load((svc) => svc.get("voice"))
+    expect(voice?.prompt).toContain("without Chief, delegation, or agent selection")
+    expect(Permission.evaluate("task", "*", voice!.permission).action).toBe("deny")
+    expect(Permission.evaluate("chief_route", "*", voice!.permission).action).toBe("deny")
+  }),
+)
+// kilocode_change end
 
 it.instance("plan agent denies edits except .opencode/plans/*", () =>
   Effect.gen(function* () {
@@ -682,20 +720,24 @@ it.instance(
   },
 )
 
-it.instance("defaultAgent returns code when no default_agent config", () =>
+// kilocode_change start
+// raya_change start - Auto is the zero-configuration primary agent
+it.instance("defaultAgent returns Auto when no default_agent config", () =>
   Effect.gen(function* () {
     const agent = yield* load((svc) => svc.defaultAgent())
-    expect(agent).toBe("code")
+    expect(agent).toBe("auto")
   }),
 )
 
-it.instance("defaultInfo returns resolved code agent when no default_agent config", () =>
+it.instance("defaultInfo returns resolved Auto agent when no default_agent config", () =>
   Effect.gen(function* () {
     const agent = yield* load((svc) => svc.defaultInfo())
-    expect(agent.name).toBe("code")
+    expect(agent.name).toBe("auto")
     expect(agent.mode).toBe("primary")
   }),
 )
+// raya_change end
+// kilocode_change end
 
 it.instance(
   "defaultAgent respects default_agent config set to plan",
@@ -760,13 +802,14 @@ it.instance(
   },
 )
 
+// kilocode_change start
+// raya_change start - Auto remains available if the explicit code agent is disabled
 it.instance(
-  "defaultAgent returns plan when build is disabled and default_agent not set",
+  "defaultAgent remains Auto when code is disabled and default_agent is not set",
   () =>
     Effect.gen(function* () {
       const agent = yield* load((svc) => svc.defaultAgent())
-      // build is disabled, so it should return plan (next primary agent)
-      expect(agent).toBe("plan")
+      expect(agent).toBe("auto")
     }),
   {
     config: {
@@ -776,6 +819,8 @@ it.instance(
     },
   },
 )
+// raya_change end
+// kilocode_change end
 
 it.instance(
   "defaultAgent throws when all primary agents are disabled",
@@ -788,6 +833,8 @@ it.instance(
         debug: { disable: true },
         orchestrator: { disable: true },
         ask: { disable: true },
+        auto: { disable: true }, // kilocode_change // raya_change - Auto is now a primary default
+        voice: { disable: true }, // kilocode_change // raya_change - dedicated hands-free primary
       },
     },
   },

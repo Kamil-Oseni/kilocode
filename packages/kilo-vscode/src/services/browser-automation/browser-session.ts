@@ -1,6 +1,9 @@
 // raya_change - Milestone F shared persistent Playwright browser session
 import { mkdir } from "node:fs/promises"
+import { join } from "node:path"
 import { chromium } from "playwright-core"
+import { BrowserSmoke } from "./browser-smoke"
+import type { SmokeConsole, SmokeCookie, SmokeInput, SmokeOrigin, SmokeResponse, SmokeResult } from "./browser-smoke"
 
 export type BrowserAction =
   | { operation: "navigate"; url: string }
@@ -11,16 +14,28 @@ export type BrowserAction =
   | { operation: "scroll"; deltaX: number; deltaY: number; selector?: string }
   | { operation: "screenshot"; fullPage: boolean }
   | { operation: "evaluate"; expression: string }
+  | { operation: "auth_capture"; name: string }
+  | ({ operation: "smoke" } & SmokeInput)
+type BrowserNativeAction = Exclude<BrowserAction, { operation: "auth_capture" | "smoke" }>
 
-export type BrowserResult = {
-  operation: BrowserAction["operation"]
-  url: string
-  title: string
-  snapshot?: string
-  mime?: "image/png" | "image/jpeg"
-  data?: string
-  output?: string
-}
+export type BrowserResult =
+  | {
+      operation: Exclude<BrowserAction["operation"], "auth_capture" | "smoke">
+      url: string
+      title: string
+      snapshot?: string
+      mime?: "image/png" | "image/jpeg"
+      data?: string
+      output?: string
+    }
+  | {
+      operation: "auth_capture"
+      name: string
+      path: string
+      cookies: number
+      origins: number
+    }
+  | SmokeResult
 
 export type BrowserFrame = {
   data: string
@@ -66,7 +81,12 @@ type FrameEvent = {
 export interface BrowserPage {
   url(): string
   title(): Promise<string>
-  goto(url: string, options?: { timeout?: number }): Promise<{ status(): number } | null | undefined>
+  goto(
+    url: string,
+    options?: { timeout?: number; waitUntil?: "load" },
+  ): Promise<{ status(): number } | null | undefined>
+  waitForTimeout(timeout: number): Promise<void>
+  addInitScript<A>(script: (arg: A) => void, arg: A): Promise<void>
   goBack(): Promise<unknown>
   goForward(): Promise<unknown>
   reload(): Promise<unknown>
@@ -77,9 +97,15 @@ export interface BrowserPage {
     selectOption(values: string[], options?: { timeout?: number }): Promise<unknown>
     ariaSnapshot(options?: { timeout?: number }): Promise<string>
     evaluate<R, A>(fn: (element: HTMLElement, arg: A) => R, arg: A): Promise<R>
+    isVisible(options?: { timeout?: number }): Promise<boolean>
+    textContent(options?: { timeout?: number }): Promise<string | null>
   }
-  screenshot(options: { type: "png"; fullPage: boolean }): Promise<Buffer>
+  screenshot(options: { type: "png"; fullPage: boolean; path?: string }): Promise<Buffer>
   evaluate<R>(fn: (source: string) => R, source: string): Promise<R>
+  on(event: "response", listener: (response: SmokeResponse) => void): void
+  on(event: "console", listener: (message: SmokeConsole) => void): void
+  off(event: "response", listener: (response: SmokeResponse) => void): void
+  off(event: "console", listener: (message: SmokeConsole) => void): void
   mouse: { wheel(deltaX: number, deltaY: number): Promise<void> }
   viewportSize(): { width: number; height: number } | null
 }
@@ -94,6 +120,11 @@ export interface BrowserContextLike {
   pages(): BrowserPage[]
   newPage(): Promise<BrowserPage>
   newCDPSession(page: BrowserPage): Promise<BrowserCDP>
+  storageState(options: { path: string; indexedDB?: boolean }): Promise<{
+    cookies: SmokeCookie[]
+    origins: SmokeOrigin[]
+  }>
+  addCookies(cookies: SmokeCookie[]): Promise<void>
   close(): Promise<void>
 }
 
@@ -141,6 +172,7 @@ export class BrowserSession {
   constructor(
     readonly profile: string,
     private readonly launcher: BrowserLaunch = launch,
+    private readonly artifacts = join(profile, "raya-smoke"),
   ) {}
 
   async ready(): Promise<void> {
@@ -241,7 +273,10 @@ export class BrowserSession {
     if (revision !== this.revision) throw new Error("Browser action cancelled for manual takeover.")
     await this.pace(number)
     try {
-      const result = await this.once(action)
+      const result =
+        action.operation === "auth_capture" || action.operation === "smoke"
+          ? await this.smoke(action)
+          : await this.once(action)
       if (revision !== this.revision) throw new Error("Browser action cancelled for manual takeover.")
       return result
     } catch (error) {
@@ -256,7 +291,7 @@ export class BrowserSession {
     }
   }
 
-  private async once(action: BrowserAction): Promise<BrowserResult> {
+  private async once(action: BrowserNativeAction): Promise<BrowserResult> {
     const page = this.active()
     if (action.operation === "navigate") {
       const response = await page.goto(action.url, { timeout: 15_000 })
@@ -298,6 +333,17 @@ export class BrowserSession {
             : (JSON.stringify(value) ?? String(value))
           : undefined,
     }
+  }
+
+  // raya_change - Milestone G keeps smoke branching outside the generic browser action runner
+  private async smoke(action: Extract<BrowserAction, { operation: "auth_capture" | "smoke" }>): Promise<BrowserResult> {
+    if (action.operation === "auth_capture")
+      return new BrowserSmoke(this.artifacts, this.active(), this.browser()).capture(action.name)
+    return new BrowserSmoke(this.artifacts, this.active(), this.browser()).run({
+      name: action.name,
+      mode: action.mode,
+      steps: action.steps,
+    })
   }
 
   private async pace(number: number): Promise<void> {
@@ -392,6 +438,11 @@ export class BrowserSession {
   private channel(): BrowserCDP {
     if (!this.cdp) throw new Error("Browser CDP session is not ready")
     return this.cdp
+  }
+
+  private browser(): BrowserContextLike {
+    if (!this.context) throw new Error("Browser context is not ready")
+    return this.context
   }
 
   private publish(frame: BrowserFrame): void {

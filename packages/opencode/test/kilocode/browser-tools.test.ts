@@ -7,6 +7,7 @@ import type { Result } from "@/kilocode/browser/protocol"
 import { Browser } from "@/kilocode/browser/service"
 import { Permission } from "@/permission"
 import {
+  BrowserAuthCaptureTool,
   BrowserClickTool,
   BrowserEvaluateTool,
   BrowserNavigateTool,
@@ -14,6 +15,7 @@ import {
   BrowserScrollTool,
   BrowserSelectTool,
   BrowserSnapshotTool,
+  BrowserSmokeTestTool,
   BrowserTypeTool,
 } from "@/kilocode/tool/browser-host"
 import { MessageID, SessionID } from "@/session/schema"
@@ -30,6 +32,31 @@ function result(input: Browser.Input): Result {
     return { operation: "screenshot", url: "https://example.com", mime: "image/png", data: "cG5n" }
   if (input.operation === "evaluate")
     return { operation: "evaluate", url: "https://example.com", output: '{"ok":true}' }
+  if (input.operation === "auth_capture")
+    return { operation: "auth_capture", name: input.name, path: "auth.json", cookies: 1, origins: 1 }
+  if (input.operation === "smoke")
+    return {
+      operation: "smoke",
+      runID: "run_green",
+      name: input.name,
+      mode: input.mode,
+      passed: true,
+      startedAt: 1,
+      finishedAt: 2,
+      artifact: "report.json",
+      authState: "auth.json",
+      steps: [
+        {
+          id: "dashboard",
+          title: "Dashboard",
+          passed: true,
+          screenshot: "dashboard.png",
+          assertions: [{ kind: "visible", passed: true, expected: "visible", actual: "visible" }],
+        },
+      ],
+      network: [{ url: "/health", status: 200 }],
+      console: [],
+    }
   return { operation: input.operation, url: input.operation === "navigate" ? input.url : "https://example.com" }
 }
 
@@ -72,6 +99,8 @@ test("auto-approves every native browser action in VS Code", () => {
       "browser_scroll",
       "browser_screenshot",
       "browser_evaluate",
+      "browser_auth_capture",
+      "browser_smoke_test",
     ]) {
       expect(Permission.evaluate(permission, "*", rules).action).toBe("allow")
     }
@@ -121,6 +150,14 @@ describe("browser host tools", () => {
           Effect.provideService(Browser.Service, host),
           Effect.flatMap(Tool.init),
         )
+        const auth = yield* BrowserAuthCaptureTool.pipe(
+          Effect.provideService(Browser.Service, host),
+          Effect.flatMap(Tool.init),
+        )
+        const smoke = yield* BrowserSmokeTestTool.pipe(
+          Effect.provideService(Browser.Service, host),
+          Effect.flatMap(Tool.init),
+        )
 
         yield* navigate.execute({ url: "https://example.com" }, ctx)
         const tree = yield* snapshot.execute({}, ctx)
@@ -130,6 +167,25 @@ describe("browser host tools", () => {
         yield* scroll.execute({ delta_x: 4, delta_y: 500, selector: "#main" }, ctx)
         const image = yield* screenshot.execute({ full_page: true }, ctx)
         const value = yield* evaluate.execute({ expression: "() => ({ ok: true })" }, ctx)
+        yield* auth.execute({ name: "sample-app" }, ctx)
+        const report = yield* smoke.execute(
+          {
+            name: "sample-app",
+            mode: "scripted",
+            steps: [
+              {
+                id: "dashboard",
+                title: "Dashboard",
+                action: { kind: "navigate", url: "https://example.com/app" },
+                assertions: [
+                  { kind: "visible", selector: "#welcome" },
+                  { kind: "network", url: "/health", status: 200 },
+                ],
+              },
+            ],
+          },
+          ctx,
+        )
 
         expect(calls.map((item) => item.operation)).toEqual([
           "navigate",
@@ -140,6 +196,8 @@ describe("browser host tools", () => {
           "scroll",
           "screenshot",
           "evaluate",
+          "auth_capture",
+          "smoke",
         ])
         expect(calls[3]).toMatchObject({ text: "Raya", submit: true })
         expect(calls[5]).toMatchObject({ deltaX: 4, deltaY: 500 })
@@ -152,9 +210,20 @@ describe("browser host tools", () => {
           "browser_scroll",
           "browser_screenshot",
           "browser_evaluate",
+          "browser_auth_capture",
+          "browser_smoke_test",
         ])
         expect(tree.output).toContain("Continue")
         expect(value.output).toBe('{"ok":true}')
+        expect(navigate.description).toContain("browse") // raya_change - plain-English Milestone F activation
+        expect(snapshot.description).toContain("inspect a website")
+        expect(smoke.description).toContain("plain-English")
+        expect(report.metadata).toMatchObject({
+          passed: true,
+          runID: "run_green",
+          artifact: "report.json",
+          evidence: "raya-smoke-v1",
+        })
         expect(image.attachments?.[0]).toMatchObject({
           mime: "image/png",
           url: "data:image/png;base64,cG5n",

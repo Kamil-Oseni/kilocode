@@ -65,6 +65,8 @@ class FakePage implements BrowserPage {
   async goBack(): Promise<void> {}
   async goForward(): Promise<void> {}
   async reload(): Promise<void> {}
+  async waitForTimeout(): Promise<void> {}
+  async addInitScript(): Promise<void> {}
 
   locator(selector: string) {
     return {
@@ -87,6 +89,8 @@ class FakePage implements BrowserPage {
       },
       ariaSnapshot: async () => `- document: ${this.current}`,
       evaluate: async <R>() => undefined as R,
+      isVisible: async () => true,
+      textContent: async () => "visible",
     }
   }
 
@@ -103,6 +107,9 @@ class FakePage implements BrowserPage {
     if (source === "document.cookie") return this.state.cookie as R
     return fn(source)
   }
+
+  on(): void {}
+  off(): void {}
 
   readonly mouse = {
     wheel: async (x: number, y: number) => {
@@ -130,6 +137,8 @@ function harness() {
       pages: () => [page],
       newPage: async () => page,
       newCDPSession: async () => cdp,
+      storageState: async () => ({ cookies: [], origins: [] }),
+      addCookies: async () => undefined,
       close: async () => undefined,
     } satisfies BrowserContextLike
   }

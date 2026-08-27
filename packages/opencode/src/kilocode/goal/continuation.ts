@@ -76,6 +76,7 @@ export namespace RayaGoalContinuation {
     storage: Storage.Interface
     sessions: Pick<Session.Interface, "get" | "messages"> // raya_change
     run?: (sessionID: SessionID, objective: string, directory: string) => Promise<unknown>
+    enabled?: () => Effect.Effect<boolean> // raya_change - Milestone I continuation default
   }) {
     return Effect.gen(function* () {
       const bridge = yield* EffectBridge.make()
@@ -86,6 +87,7 @@ export namespace RayaGoalContinuation {
           Effect.gen(function* () {
             const turn = yield* goals.recordTurn(event.properties.sessionID)
             if (!turn || turn.state.status !== "active" || !turn.productive) return
+            if (input.enabled && !(yield* input.enabled())) return // raya_change - Milestone I
             if (KiloSessionPromptQueue.snapshot(event.properties.sessionID).length > 0) return
             const current = yield* goals.get(event.properties.sessionID)
             if (!current || current.status !== "active") return

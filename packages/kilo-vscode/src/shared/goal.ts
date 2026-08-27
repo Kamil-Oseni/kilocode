@@ -32,10 +32,33 @@ export type GoalCommand = { kind: "usage"; notice: string } | { kind: "start"; o
 
 const usage = "Usage: /goal <objective>"
 const limit = /^(\d+(?:\.\d+)?(?:m|h))(?:\s+([\s\S]+))?$/i
+// raya_change start - infer durable goal intent from ordinary language without arming routine requests
+const durable = [
+  /\bdone when\b/i,
+  /\b(?:do not|don't|never)\s+stop\s+until\b/i,
+  /\b(?:keep|continue)\s+(?:working|going)\s+until\b/i,
+  /\b(?:make|treat)\s+(?:this|it)\s+(?:as\s+)?a?\s*goal\b/i,
+  /\b(?:work|run)\s+(?:on\s+this\s+)?until\b[\s\S]*\b(?:complete|done|passes?|green|verified)\b/i,
+  /\b(?:finish|complete|implement)\b[\s\S]{0,240}\b(?:fully|completely)\b[\s\S]{0,240}\b(?:verify|verified|passes?|done)\b/i,
+]
+
+export function hasGoalIntent(text: string) {
+  const value = text.trim()
+  return value.length >= 12 && durable.some((pattern) => pattern.test(value))
+}
+// raya_change end
 
 export function parseGoalCommand(text: string): GoalCommand | undefined {
   const match = text.trim().match(/^\/goal(?:\s+([\s\S]*))?$/i)
-  if (!match) return
+  if (!match) {
+    const objective = text.trim()
+    if (!hasGoalIntent(objective)) return
+    return {
+      kind: "start",
+      objective,
+      notice: "Raya recognized this as durable goal work and will continue until it is verified or honestly blocked.",
+    }
+  }
   const raw = match[1]?.trim() ?? ""
   if (!raw) return { kind: "usage", notice: usage }
   const timed = raw.match(limit)

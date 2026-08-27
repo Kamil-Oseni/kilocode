@@ -31,6 +31,8 @@ import { ChiefRouteTool } from "./chief-route" // raya_change - Milestone B inte
 import { AskOptionsTool } from "./ask-options" // raya_change - Milestone C selectable options
 import { BrowserTools } from "./browser-host" // raya_change - Milestone F browser tools
 import { Browser } from "@/kilocode/browser/service" // raya_change - Milestone F browser bridge
+import { CanvasTools } from "./canvas-host" // raya_change - Milestone E canvas tools
+import { Canvas } from "@/kilocode/canvas/service" // raya_change - Milestone E canvas bridge
 
 const log = Log.create({ service: "kilocode-tool-registry" })
 type Deps = { agent: Agent.Interface; truncate: Truncate.Interface; indexing?: boolean }
@@ -78,6 +80,7 @@ export namespace KiloToolRegistry {
     notebook?: Notebook.Interface,
     goalDeps?: { storage: Storage.Interface; sessions: Session.Interface }, // raya_change - Milestone A
     browser?: Browser.Interface, // raya_change - Milestone F browser bridge
+    canvas?: Canvas.Interface, // raya_change - Milestone E canvas bridge
   ) {
     return Effect.gen(function* () {
       const recall = yield* RecallTool
@@ -100,6 +103,11 @@ export namespace KiloToolRegistry {
       // raya_change start - Milestone F browser tools
       const browserTools = browser
         ? yield* Effect.all(BrowserTools).pipe(Effect.provideService(Browser.Service, browser))
+        : undefined
+      // raya_change end
+      // raya_change start - Milestone E canvas tools
+      const canvasTools = canvas
+        ? yield* Effect.all(CanvasTools).pipe(Effect.provideService(Canvas.Service, canvas))
         : undefined
       // raya_change end
       // raya_change start - Milestone A model-facing goal tools
@@ -125,6 +133,7 @@ export namespace KiloToolRegistry {
           chief,
           ask,
           browser: browserTools, // raya_change - Milestone F browser tools
+          canvas: canvasTools, // raya_change - Milestone E canvas tools
           ...goal,
         }
       const tools = yield* Effect.all({
@@ -147,6 +156,7 @@ export namespace KiloToolRegistry {
         chief,
         ask,
         browser: browserTools, // raya_change - Milestone F browser tools
+        canvas: canvasTools, // raya_change - Milestone E canvas tools
         ...goal,
         ...tools,
       }
@@ -177,6 +187,7 @@ export namespace KiloToolRegistry {
       chief?: Tool.Info // raya_change - Milestone B
       ask?: Tool.Info // raya_change - Milestone C
       browser?: Tool.Info[] // raya_change - Milestone F
+      canvas?: Tool.Info[] // raya_change - Milestone E
     },
     deps: Deps,
     loaders: Loaders = {},
@@ -197,6 +208,7 @@ export namespace KiloToolRegistry {
       const chief = tools.chief ? yield* Tool.init(tools.chief) : undefined // raya_change - Milestone B
       const ask = tools.ask ? yield* Tool.init(tools.ask) : undefined // raya_change - Milestone C
       const browser = tools.browser ? yield* Effect.all(tools.browser.map(Tool.init)) : [] // raya_change - Milestone F
+      const canvas = tools.canvas ? yield* Effect.all(tools.canvas.map(Tool.init)) : [] // raya_change - Milestone E
       const terminal = tools.terminal ? yield* Tool.init(tools.terminal) : undefined
       const notebooks =
         tools.notebookRead && tools.notebookEdit && tools.notebookExecute
@@ -228,6 +240,7 @@ export namespace KiloToolRegistry {
         chief,
         ask,
         browser, // raya_change - Milestone F
+        canvas, // raya_change - Milestone E
       }
     })
   }
@@ -303,6 +316,7 @@ export namespace KiloToolRegistry {
       chief?: Tool.Def // raya_change - Milestone B
       ask?: Tool.Def // raya_change - Milestone C
       browser?: Tool.Def[] // raya_change - Milestone F
+      canvas?: Tool.Def[] // raya_change - Milestone E
     },
     cfg: { experimental?: { image_generation?: boolean; native_notebook_tools?: boolean } },
   ): Tool.Def[] {
@@ -330,6 +344,7 @@ export namespace KiloToolRegistry {
       ...(tools.chief ? [tools.chief] : []), // raya_change - Milestone B
       ...(tools.ask ? [tools.ask] : []), // raya_change - Milestone C
       ...(Flag.KILO_CLIENT === "vscode" ? (tools.browser ?? []) : []), // raya_change - Milestone F
+      ...(Flag.KILO_CLIENT === "vscode" ? (tools.canvas ?? []) : []), // raya_change - Milestone E
       tools.notify,
       tools.send,
     ]

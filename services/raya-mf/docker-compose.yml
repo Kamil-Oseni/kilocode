@@ -1,0 +1,18 @@
+# raya_change - Local architecture-faithful LiveKit SFU for realtime voice development.
+services:
+  livekit:
+    image: livekit/livekit-server:latest
+    command: --dev --bind 0.0.0.0
+    ports:
+      - "127.0.0.1:7880:7880"
+      - "127.0.0.1:7881:7881"
+      - "127.0.0.1:7882:7882/udp"
+  raya-mf:
+    # raya_change - production-equivalent libopus media bridge used by the local extension.
+    build: .
+    environment:
+      RAYA_MF_ADDR: 0.0.0.0:7890
+    ports:
+      - "127.0.0.1:7890:7890"
+    depends_on:
+      - livekit

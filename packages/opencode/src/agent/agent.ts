@@ -483,7 +483,8 @@ const layer = Layer.effect(
             agents,
             values(),
             sortBy(
-              [(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "code"), "desc"], // kilocode_change - renamed from "build" to "code"
+              // kilocode_change // raya_change - Auto is the intelligent default; explicit config remains authoritative
+              [(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "auto"), "desc"],
               [(x) => x.name, "asc"],
             ),
           )
@@ -501,7 +502,11 @@ const layer = Layer.effect(
             if (agent.hidden === true) throw new Error(`default agent "${c.default_agent}" is hidden`)
             return agent
           }
-          // kilocode_change start - prefer "code" as default agent (key order changes after rename from "build")
+          // kilocode_change start
+          // raya_change start - default ordinary language to Chief routing without requiring mode selection
+          const auto = agents.auto
+          if (auto && auto.mode !== "subagent" && auto.hidden !== true) return auto
+          // raya_change end
           const code = agents.code
           if (code && code.mode !== "subagent" && code.hidden !== true) return code
           // kilocode_change end

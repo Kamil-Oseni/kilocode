@@ -31,6 +31,8 @@ import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal ope
 import { RayaGoalContinuation } from "@/kilocode/goal/continuation" // raya_change - Milestone A resume behavior
 import type { RequestID as BrowserRequestID } from "@/kilocode/browser/protocol" // raya_change - Milestone F
 import { Browser } from "@/kilocode/browser/service" // raya_change - Milestone F browser bridge
+import type { RequestID as CanvasRequestID } from "@/kilocode/canvas/protocol" // raya_change - Milestone E
+import { Canvas } from "@/kilocode/canvas/service" // raya_change - Milestone E canvas bridge
 import {
   AgentManagerRejectPayload,
   AgentManagerReplyPayload,
@@ -45,6 +47,8 @@ import {
   GoalUpdatePayload, // raya_change - Milestone A goal API
   BrowserReplyPayload, // raya_change - Milestone F browser API
   BrowserRejectPayload, // raya_change - Milestone F browser API
+  CanvasReplyPayload, // raya_change - Milestone E canvas API
+  CanvasRejectPayload, // raya_change - Milestone E canvas API
 } from "../groups/kilocode"
 
 export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode", (handlers) =>
@@ -57,6 +61,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     const manager = yield* AgentManager.Service
     const notebook = yield* Notebook.Service
     const browser = yield* Browser.Service // raya_change - Milestone F browser bridge
+    const canvas = yield* Canvas.Service // raya_change - Milestone E canvas bridge
     const background = yield* BackgroundJob.Service
     const runState = yield* SessionRunState.Service
     const locations = yield* LocationServiceMap.Service
@@ -215,6 +220,33 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     })
     // raya_change end
 
+    // raya_change start - Milestone E canvas host API
+    const canvasList = Effect.fn("KilocodeHttpApi.canvasList")(function* () {
+      return yield* canvas.list()
+    })
+
+    const canvasReply = Effect.fn("KilocodeHttpApi.canvasReply")(function* (ctx: {
+      params: { requestID: CanvasRequestID }
+      payload: typeof CanvasReplyPayload.Type
+    }) {
+      yield* canvas.reply({ requestID: ctx.params.requestID, result: ctx.payload.result }).pipe(
+        Effect.catchTag("Canvas.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+        Effect.catchTag("Canvas.InvalidReplyError", () => Effect.fail(new HttpApiError.BadRequest({}))),
+      )
+      return true
+    })
+
+    const canvasReject = Effect.fn("KilocodeHttpApi.canvasReject")(function* (ctx: {
+      params: { requestID: CanvasRequestID }
+      payload: typeof CanvasRejectPayload.Type
+    }) {
+      yield* canvas
+        .reject({ requestID: ctx.params.requestID, error: ctx.payload.error })
+        .pipe(Effect.catchTag("Canvas.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))))
+      return true
+    })
+    // raya_change end
+
     const agentManagerList = Effect.fn("KilocodeHttpApi.agentManagerList")(function* () {
       return yield* manager.list()
     })
@@ -336,6 +368,11 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .handle("browserList", browserList)
         .handle("browserReply", browserReply)
         .handle("browserReject", browserReject)
+        // raya_change end
+        // raya_change start - Milestone E canvas host API
+        .handle("canvasList", canvasList)
+        .handle("canvasReply", canvasReply)
+        .handle("canvasReject", canvasReject)
         // raya_change end
         .handle("agentManagerList", agentManagerList)
         .handle("agentManagerReply", agentManagerReply)

@@ -10,6 +10,7 @@ import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import { AppNodeBuilderV1 } from "@/effect/app-node-builder-v1" // kilocode_change - defaultLayer aliases are gone
 
 import { KiloViewers } from "@/kilocode/presence/service" // kilocode_change
+import { Canvas } from "@/kilocode/canvas/service" // raya_change - Milestone E canvas handler dependency
 import { agentBuilderHandlers } from "./handlers/agent-builder"
 import { anacondaDesktopHandlers } from "./handlers/anaconda-desktop"
 import { backgroundProcessHandlers } from "./handlers/background-process"
@@ -29,6 +30,7 @@ import { sandboxHandlers } from "./handlers/sandbox"
 import { sessionImportHandlers } from "./handlers/session-import"
 import { suggestionHandlers } from "./handlers/suggestion"
 import { telemetryHandlers } from "./handlers/telemetry"
+import { voiceHandlers } from "./handlers/voice" // raya_change - realtime voice async plane
 
 export const provide = Layer.provide([
   agentBuilderHandlers,
@@ -42,7 +44,7 @@ export const provide = Layer.provide([
   instanceReloadHandlers,
   interactiveTerminalHandlers,
   kiloGatewayHandlers,
-  kilocodeHandlers,
+  kilocodeHandlers.pipe(Layer.provide(Canvas.defaultLayer)), // raya_change - Milestone E canvas startup wiring
   memoryHandlers,
   networkHandlers,
   remoteHandlers,
@@ -50,6 +52,7 @@ export const provide = Layer.provide([
   sessionImportHandlers,
   suggestionHandlers,
   telemetryHandlers,
+  voiceHandlers, // raya_change - realtime voice async plane
 ])
 
 export function provideListener(opts?: CorsOptions) {

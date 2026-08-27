@@ -34,6 +34,14 @@ import {
   Result as BrowserResult,
 } from "@/kilocode/browser/protocol"
 // raya_change end
+// raya_change start - Milestone E canvas API contracts
+import {
+  Failure as CanvasFailure,
+  Request as CanvasRequest,
+  RequestID as CanvasRequestID,
+  Result as CanvasResult,
+} from "@/kilocode/canvas/protocol"
+// raya_change end
 
 const root = "/kilocode"
 const Scope = Schema.Literals(["global", "project"])
@@ -75,6 +83,8 @@ export const GoalCreatePayload = RayaGoal.Create // raya_change - Milestone A go
 export const GoalUpdatePayload = RayaGoal.Control // raya_change - Milestone A goal API contracts
 export const BrowserReplyPayload = Schema.Struct({ result: BrowserResult }) // raya_change - Milestone F
 export const BrowserRejectPayload = Schema.Struct({ error: BrowserFailure }) // raya_change - Milestone F
+export const CanvasReplyPayload = Schema.Struct({ result: CanvasResult }) // raya_change - Milestone E
+export const CanvasRejectPayload = Schema.Struct({ error: CanvasFailure }) // raya_change - Milestone E
 
 export const KilocodePaths = {
   heapSnapshot: `${root}/heap/snapshot`,
@@ -97,6 +107,9 @@ export const KilocodePaths = {
   browserList: `${root}/browser`, // raya_change - Milestone F browser host API
   browserReply: `${root}/browser/:requestID/reply`, // raya_change - Milestone F browser host API
   browserReject: `${root}/browser/:requestID/reject`, // raya_change - Milestone F browser host API
+  canvasList: `${root}/canvas`, // raya_change - Milestone E canvas host API
+  canvasReply: `${root}/canvas/:requestID/reply`, // raya_change - Milestone E canvas host API
+  canvasReject: `${root}/canvas/:requestID/reject`, // raya_change - Milestone E canvas host API
 } as const
 
 export const KilocodeApi = HttpApi.make("kilocode")
@@ -254,6 +267,44 @@ export const KilocodeApi = HttpApi.make("kilocode")
             identifier: "kilocode.browser.reject",
             summary: "Reject a browser request",
             description: "Complete a pending shared-browser request with a structured host error.",
+          }),
+        ),
+        // raya_change end
+        // raya_change start - Milestone E canvas host API
+        HttpApiEndpoint.get("canvasList", KilocodePaths.canvasList, {
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Array(CanvasRequest), "Pending canvas host requests"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.canvas.list",
+            summary: "List pending canvas requests",
+            description: "List pending live-canvas requests for the routed workspace.",
+          }),
+        ),
+        HttpApiEndpoint.post("canvasReply", KilocodePaths.canvasReply, {
+          params: { requestID: CanvasRequestID },
+          query: WorkspaceRoutingQuery,
+          payload: CanvasReplyPayload,
+          success: described(Schema.Boolean, "Canvas reply accepted"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.canvas.reply",
+            summary: "Reply to a canvas request",
+            description: "Complete a pending live-canvas request with its render status.",
+          }),
+        ),
+        HttpApiEndpoint.post("canvasReject", KilocodePaths.canvasReject, {
+          params: { requestID: CanvasRequestID },
+          query: WorkspaceRoutingQuery,
+          payload: CanvasRejectPayload,
+          success: described(Schema.Boolean, "Canvas rejection accepted"),
+          error: HttpApiError.NotFound,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.canvas.reject",
+            summary: "Reject a canvas request",
+            description: "Complete a pending live-canvas request with a host error.",
           }),
         ),
         // raya_change end

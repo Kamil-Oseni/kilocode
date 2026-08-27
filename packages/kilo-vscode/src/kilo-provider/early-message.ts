@@ -8,6 +8,7 @@ import { buildChatSettingsMessage } from "./chat-settings"
 import { buildThroughputSettingMessage } from "./throughput-settings"
 import { buildAutoApprovalReasonSettingMessage } from "./auto-approval-reason-settings"
 import { handleModelUsageMessage, type ModelUsageMessage } from "./model-usage"
+import type { SpeechService } from "../speech/service" // raya_change - Milestone H
 
 type Ctx = {
   question: SuggestionContext
@@ -24,6 +25,7 @@ type Ctx = {
   backgroundJobs: (sessionID: string, requestID: string) => Promise<void>
   cancelBackgroundJob: (jobID: string, sessionID: string, requestID: string) => Promise<void>
   backgroundSubagents: (sessionID: string) => Promise<void>
+  speech?: SpeechService // raya_change - Milestone H configured speech bridge
 }
 
 async function routeBackgroundMessage(
@@ -116,6 +118,12 @@ export async function routeEarlyMessage(
   }
   const background = await routeBackgroundMessage(message, ctx)
   return (
-    background ?? (await routeInputToolMessage(message, { connection: ctx.connection, dir: ctx.dir, post: ctx.post }))
+    background ??
+    (await routeInputToolMessage(message as Parameters<typeof routeInputToolMessage>[0], {
+      connection: ctx.connection,
+      dir: ctx.dir,
+      post: ctx.post,
+      speech: ctx.speech, // raya_change - Milestone H
+    }))
   )
 }

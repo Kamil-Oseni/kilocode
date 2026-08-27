@@ -1,5 +1,5 @@
 ---
-"kilo-code": patch
+"raya": patch
 ---
 
 Ensure Enter and Tab execute the slash command highlighted in the VS Code command picker.

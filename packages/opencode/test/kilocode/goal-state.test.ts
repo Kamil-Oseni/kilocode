@@ -24,7 +24,13 @@ const model = {
   modelID: ModelV2.ID.make("goal-model"),
 }
 
-function transcript(input: { sessionID: SessionID; tool?: string; exit?: number }) {
+function transcript(input: {
+  sessionID: SessionID
+  tool?: string
+  exit?: number
+  output?: string
+  metadata?: Record<string, unknown>
+}) {
   const user: MessageV2.User = {
     id: MessageID.ascending(),
     sessionID: input.sessionID,
@@ -59,9 +65,9 @@ function transcript(input: { sessionID: SessionID; tool?: string; exit?: number 
         state: {
           status: "completed",
           input: {},
-          output: input.exit === 0 ? "all checks passed" : "check failed",
+          output: input.output ?? (input.exit === 0 ? "all checks passed" : "check failed"),
           title: "verification",
-          metadata: { exit: input.exit },
+          metadata: { exit: input.exit, ...input.metadata },
           time: { start: Date.now(), end: Date.now() },
         },
       }
@@ -207,6 +213,76 @@ describe("RayaGoal", () => {
     }),
   )
 
+  // raya_change - Milestone G smoke-gated goals require a genuine green host report
+  it.live("completes a smoke-gated goal only from green browser smoke evidence", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const sessionID = SessionID.make(`ses_goal_${crypto.randomUUID()}`)
+      let rows: MessageV2.WithParts[] = []
+      const goals = setup(storage, () => rows)
+      yield* Effect.addFinalizer(() => goals.clear(sessionID))
+      yield* goals.create(sessionID, "Complete only when the smoke test passes")
+
+      const audit = (part: MessageV2.ToolPart) => ({
+        status: "complete" as const,
+        audit: {
+          summary: "The authenticated smoke test is green.",
+          requirements: [
+            {
+              requirement: "The smoke test passes",
+              passed: true,
+              evidence: [{ callID: part.callID, summary: "The browser smoke report completed." }],
+            },
+          ],
+        },
+      })
+
+      const command = transcript({ sessionID, tool: "bash", exit: 0 })
+      rows = command.rows
+      const commandOnly = yield* Effect.flip(goals.update(sessionID, audit(command.part!)))
+      expect(commandOnly).toBeInstanceOf(RayaGoal.AuditError)
+
+      const failed = transcript({
+        sessionID,
+        tool: "browser_smoke_test",
+        output: '{"passed":false,"failingStep":"checkout"}',
+        metadata: {
+          evidence: "raya-smoke-v1",
+          passed: false,
+          runID: "run_failed",
+          artifact: "failed/report.json",
+          failingStep: "checkout",
+        },
+      })
+      rows = failed.rows
+      const red = yield* Effect.flip(goals.update(sessionID, audit(failed.part!)))
+      expect(red).toBeInstanceOf(RayaGoal.AuditError)
+      expect(red.message).toContain("checkout")
+      expect((yield* goals.get(sessionID))?.status).toBe("active")
+
+      const passed = transcript({
+        sessionID,
+        tool: "browser_smoke_test",
+        output: '{"passed":true}',
+        metadata: {
+          evidence: "raya-smoke-v1",
+          passed: true,
+          runID: "run_passed",
+          artifact: "passed/report.json",
+        },
+      })
+      rows = passed.rows
+      expect(yield* goals.evidence(sessionID)).toEqual([
+        expect.objectContaining({
+          callID: passed.part!.callID,
+          smoke: expect.objectContaining({ passed: true, runID: "run_passed", artifact: "passed/report.json" }),
+        }),
+      ])
+      const complete = yield* goals.update(sessionID, audit(passed.part!))
+      expect(complete.status).toBe("complete")
+    }),
+  )
+
   it.live("blocks a continuation that repeats identical tool work", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service
@@ -293,6 +369,41 @@ describe("RayaGoal", () => {
       yield* Effect.sleep(25)
       expect(runs).toBe(1)
       expect((yield* goals.get(sessionID))?.usage.continuations).toBe(1)
+    }),
+  )
+
+  // raya_change - Milestone I goal-continuation setting
+  it.live("respects a disabled automatic continuation default", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const sessionID = SessionID.make(`ses_goal_${crypto.randomUUID()}`)
+      const data = transcript({ sessionID, tool: "bash", exit: 0 })
+      const goals = setup(storage, () => data.rows)
+      yield* Effect.addFinalizer(() => goals.clear(sessionID))
+      yield* goals.create(sessionID, "Stay active without automatic continuation")
+      let close: ((event: { properties: { sessionID: SessionID; reason: "completed" } }) => unknown) | undefined
+      const bus = {
+        subscribeCallback: (_event, callback) => {
+          close = callback as typeof close
+          return Effect.succeed(() => {})
+        },
+      } as Pick<Bus.Interface, "subscribeCallback"> as Bus.Interface
+      let runs = 0
+      yield* RayaGoalContinuation.subscribe({
+        bus,
+        storage,
+        sessions: {
+          get: () => Effect.succeed({ directory: process.cwd() }),
+          messages: () => Effect.succeed(data.rows),
+        } as unknown as Pick<Session.Interface, "get" | "messages">,
+        enabled: () => Effect.succeed(false),
+        run: async () => void runs++,
+      })
+
+      close?.({ properties: { sessionID, reason: "completed" } })
+      yield* Effect.sleep(50)
+      expect(runs).toBe(0)
+      expect((yield* goals.get(sessionID))?.status).toBe("active")
     }),
   )
 })

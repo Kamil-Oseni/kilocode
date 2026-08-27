@@ -24,4 +24,22 @@ describe("Milestone I settings", () => {
     expect(selector).toContain('class="model-selector-search"')
     expect(selector).toContain("rankModelSearch")
   })
+
+  // raya_change - Milestones H/I complete the settings hub
+  it("exposes Speech and Goals & routing panels backed by runtime settings", async () => {
+    const settings = await Bun.file(path.join(root, "settings/Settings.tsx")).text()
+    const speech = await Bun.file(path.join(root, "settings/SpeechTab.tsx")).text()
+    const routing = await Bun.file(path.join(root, "settings/GoalsRoutingTab.tsx")).text()
+    const models = await Bun.file(path.join(root, "settings/ModelsTab.tsx")).text()
+
+    expect(settings).toContain('value="speech"')
+    expect(settings).toContain('value="goalsRouting"')
+    expect(speech).toContain("sttEndpoint")
+    expect(speech).toContain("ttsModel")
+    expect(speech).toContain('type="password"')
+    expect(models).not.toContain("speech_to_text_model")
+    expect(models).not.toContain("hasSpeechToTextAccess")
+    expect(routing).toContain("confidence_threshold")
+    expect(routing).toContain("goal_continuation")
+  })
 })

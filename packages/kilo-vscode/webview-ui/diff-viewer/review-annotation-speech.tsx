@@ -64,6 +64,7 @@ export function createReviewAnnotationSpeechRenderer(props: Props) {
         if (!mine()) return
         props.speech.stop(opts)
       },
+      rejectEcho: () => props.speech.rejectEcho(), // raya_change - preserve the shared speech controller contract
       cancel: () => {
         if (!mine()) return
         props.speech.cancel()

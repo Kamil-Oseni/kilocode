@@ -14,7 +14,12 @@ export class BrowserAutomationService implements vscode.Disposable {
   private disposed = false
 
   constructor(connection: KiloConnectionService, context: vscode.ExtensionContext) {
-    this.session = new BrowserSession(join(context.globalStorageUri.fsPath, "browser-profile"))
+    // raya_change - Milestone G keeps auth state and smoke evidence under extension storage
+    this.session = new BrowserSession(
+      join(context.globalStorageUri.fsPath, "browser-profile"),
+      undefined,
+      join(context.globalStorageUri.fsPath, "browser-artifacts"),
+    )
     this.panel = new BrowserPanel(this.session)
     this.bridge = new BrowserBridge(connection, {
       show: async () => {

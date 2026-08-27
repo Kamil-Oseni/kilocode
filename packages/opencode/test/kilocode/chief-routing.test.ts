@@ -45,10 +45,11 @@ describe("Raya Chief routing", () => {
   })
 
   it("marks ambiguous requests for an in-chat option prompt instead of guessing", () => {
-    const decision = RayaChief.route({ request: "Help me decide what to do with this project", agents })
+    const request = "Help me decide what to do with this project"
+    const decision = RayaChief.route({ request, agents })
 
     expect(decision.confidence).toBeLessThan(RayaChief.threshold)
-    expect(RayaChief.needsPrompt(decision)).toBe(true)
+    expect(RayaChief.needsPrompt(decision, RayaChief.threshold, request)).toBe(true)
     expect(decision.candidates.length).toBeGreaterThanOrEqual(2)
     expect(RayaChief.question(decision)).toMatchObject({
       prompt: "Auto found more than one plausible specialist. Who should handle this request?",
@@ -58,6 +59,22 @@ describe("Raya Chief routing", () => {
         label: item.agent,
       })),
     })
+  })
+
+  // raya_change - ordinary and spoken conversational turns should not trigger a specialist questionnaire
+  it("routes zero-signal conversational requests to the coding generalist without prompting", () => {
+    const request = "Write a one-sentence greeting"
+    const decision = RayaChief.route({ request, agents })
+
+    expect(decision.agent).toBe("coder")
+    expect(RayaChief.needsPrompt(decision, RayaChief.threshold, request)).toBe(false)
+  })
+
+  // raya_change - Milestone I configurable routing threshold
+  it("applies the configured confidence threshold without code changes", () => {
+    const decision = { confidence: 0.8 } as Pick<ReturnType<typeof RayaChief.route>, "confidence">
+    expect(RayaChief.needsPrompt(decision, 0.85)).toBe(true)
+    expect(RayaChief.needsPrompt(decision, 0.75)).toBe(false)
   })
 
   // raya_change start - Auto phase enforcement regression

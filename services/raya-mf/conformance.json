@@ -1,0 +1,33 @@
+{
+  "_raya_change": "Machine-readable Phase 1 realtime voice capability report",
+  "engine": "qwen-realtime",
+  "phase": "experimental",
+  "gates": {
+    "voiceEngineBoundary": "pass",
+    "continuousPcmInput": "pass",
+    "twentyMillisecondFrameClock": "pass",
+    "silenceContinuity": "pass",
+    "semanticEndpointing": "pass",
+    "sessionConfigurationAdmission": "pass",
+    "localInterruptionUnder100ms": "pass",
+    "deadlineBoundedInjection": "pass",
+    "delegateInjectionTTL": "pass",
+    "orderedMediaDelivery": "pass",
+    "multiTurnPlayout": "pass",
+    "orderedTranscriptReconstruction": "pass",
+    "transcriptRehydration": "pass",
+    "failureLadder": "pass",
+    "providerSecretIsolation": "pass",
+    "packagedExtension": "pass",
+    "measuredPlayoutTruncation": "fail"
+  },
+  "productionReady": false,
+  "blocker": "Qwen Audio Realtime does not expose conversation truncation at a measured playout position. Raya stops local audio and cancels the response, but does not claim unheard model context was removed.",
+  "liveValidation": {
+    "status": "opt-in-not-run",
+    "probe": "bun run voice:probe:qwen",
+    "creditPolicy": "No provider probe runs unless explicitly invoked.",
+    "localStack": "bun run extension:voice",
+    "requirements": "Docker, a funded Qwen key for audio, microphone access, and explicit user invocation"
+  }
+}

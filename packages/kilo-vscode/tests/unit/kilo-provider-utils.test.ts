@@ -215,16 +215,16 @@ describe("filterVisibleAgents", () => {
     expect(defaultAgent).toBe("first")
   })
 
-  it("falls back to 'code' when no visible agents", () => {
+  it("falls back to Auto when no visible agents", () => {
     const agents = [makeAgent({ mode: "subagent" }), makeAgent({ hidden: true })]
     const { defaultAgent } = filterVisibleAgents(agents)
-    expect(defaultAgent).toBe("code")
+    expect(defaultAgent).toBe("auto") // raya_change - intelligent routing remains the empty-list fallback
   })
 
   it("handles empty agent list", () => {
     const { visible, defaultAgent } = filterVisibleAgents([])
     expect(visible).toHaveLength(0)
-    expect(defaultAgent).toBe("code")
+    expect(defaultAgent).toBe("auto") // raya_change - intelligent routing remains the empty-list fallback
   })
 
   it("passes through all modes that are primary or all", () => {

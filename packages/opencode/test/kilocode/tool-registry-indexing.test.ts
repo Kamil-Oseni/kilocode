@@ -17,6 +17,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { Session } from "../../src/session/session"
 import { SessionSummary } from "../../src/session/summary"
+import { Config } from "../../src/config/config" // raya_change - Milestone I bootstrap dependency
 import { ToolRegistry } from "../../src/tool/registry"
 import type * as Tool from "../../src/tool/tool"
 import { disposeAllInstances, provideTmpdirInstance } from "../fixture/fixture"
@@ -483,6 +484,7 @@ describe("kilocode tool registry indexing", () => {
     const summary = Layer.succeed(SessionSummary.Service, {} as SessionSummary.Interface)
     const provider = Layer.succeed(Provider.Service, {} as Provider.Interface)
     const watcher = Layer.succeed(KilocodeWatcher.Service, KilocodeWatcher.Service.of({ init: () => Effect.void }))
+    const config = Layer.succeed(Config.Service, {} as Config.Interface) // raya_change - Milestone I
     const indexing = spyOn(KiloIndexing, "init").mockRejectedValue(err)
     const warn = spyOn(logger, "warn").mockImplementation(() => {})
 
@@ -490,7 +492,9 @@ describe("kilocode tool registry indexing", () => {
       await Effect.runPromise(
         KilocodeBootstrap.Service.use((svc) => svc.init()).pipe(
           Effect.provide(
-            KilocodeBootstrap.layer.pipe(Layer.provide([sessions, bus, memory, session, summary, provider, watcher])),
+            KilocodeBootstrap.layer.pipe(
+              Layer.provide([sessions, bus, memory, session, summary, provider, watcher, config]), // raya_change
+            ),
           ),
           Effect.scoped,
         ),

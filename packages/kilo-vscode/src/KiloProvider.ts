@@ -178,6 +178,7 @@ import { SPEECH_TO_TEXT_MODELS } from "./speech-to-text/models"
 import { stopSessionProcesses } from "./kilo-provider/background-process"
 import { sandboxDefault, sandboxSessionMetadata } from "./shared/sandbox-session"
 import { goalPrompt, parseGoalCommand, type GoalState } from "./shared/goal" // raya_change - Milestone A native goal mode
+import { SpeechService } from "./speech/service" // raya_change - Milestone H voice orchestration
 import {
   buildIndexingSettingsMessage,
   validIndexingSetting,
@@ -346,6 +347,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
    */
   private storedProviderKeys: Record<string, StoredProviderKey> = {}
   private readonly providerSecrets: ProviderSecrets | undefined // raya_change - encrypted BYOK source
+  private readonly speech: SpeechService | undefined // raya_change - Milestone H encrypted speech and streaming audio
   /** Coalesce provider refreshes — at most one follow-up rerun when a request lands mid-flight. */
   private providersRefresh: Promise<void> | null = null
   private providersQueued = false
@@ -486,6 +488,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.projectDirectory = opts.projectDirectory
     this.slimEditMetadata = opts.slimEditMetadata ?? true
     this.providerSecrets = extensionContext ? new ProviderSecretStore(extensionContext.secrets) : undefined // raya_change
+    this.speech = extensionContext ? new SpeechService(extensionContext) : undefined // raya_change - Milestone H
     this.unsubscribeSandboxPreference = this.connectionService.sandboxPreference?.onChange(() => {
       if (this.connectionState === "connected") void this.fetchAndSendSandboxDefault()
     })
@@ -1048,6 +1051,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           backgroundJobs: (sessionID, requestID) => this.fetchAndSendBackgroundJobs(sessionID, requestID),
           cancelBackgroundJob: (jobID, sessionID, requestID) => this.cancelBackgroundJob(jobID, sessionID, requestID),
           backgroundSubagents: (sessionID) => this.backgroundSubagents(sessionID),
+          speech: this.speech, // raya_change - Milestone H
         })
       ) {
         return
@@ -4740,6 +4744,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
     if (event.type === "message.updated") {
       this.confirmations.confirm(event.properties.info.id)
+      this.speech?.trackMessage(event.properties.sessionID, event.properties.info.role, event.properties.info.id) // raya_change - extension-host Voice to MiniMax handoff
     }
 
     // session.status events pass the onEventFiltered pre-filter for all providers (see line 842),
@@ -4761,6 +4766,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         this.postMessage(msg)
       }
       if (event.properties.status.type === "idle") {
+        void this.speech?.speakOnIdle(sid, (message) => this.postMessage(message)) // raya_change - reliable spoken completion
         setTimeout(() => void this.fetchAndSendGoal(sid), 100)
       } // raya_change - Milestone A refresh audit/block/progress after turn settlement
       return
@@ -4786,7 +4792,13 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     )
       return
 
-    if (event.type === "message.part.updated") this.refreshGitStatusFromPart(event, sessionID)
+    if (event.type === "message.part.updated") {
+      this.refreshGitStatusFromPart(event, sessionID)
+      this.speech?.trackPart(event.properties.sessionID, event.properties.part) // raya_change - collect final Voice text
+    }
+    if (event.type === "message.part.removed") {
+      this.speech?.removePart(event.properties.sessionID, event.properties.partID) // raya_change - exclude transient status parts from speech
+    }
 
     if (event.type === "session.updated" && typeof event.properties.info.cost === "number") {
       const cost = this.costs.setSessionCost(event.properties.sessionID, event.properties.info.cost)
@@ -5465,6 +5477,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.sessionStatusMap.clear()
     this.ignoreController?.dispose()
     this.chatAutocomplete?.dispose()
+    this.speech?.dispose() // raya_change - Milestone H
     disposeGitChangesTarget()
   }
 }

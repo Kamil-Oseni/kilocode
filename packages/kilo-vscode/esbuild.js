@@ -262,7 +262,7 @@ function getExtensionConfig() {
     sourcesContent: false,
     platform: "node",
     outfile: "dist/extension.js",
-    external: ["vscode", "playwright-core"], // raya_change - ship Playwright beside the extension bundle
+    external: ["vscode", "playwright-core", "esbuild-wasm"], // raya_change - ship host runtimes beside the extension
     logLevel: "silent",
     plugins: watch ? [esbuildProblemMatcherPlugin] : [],
   }
@@ -272,6 +272,16 @@ function getExtensionConfig() {
 function copyBrowserRuntime() {
   const source = path.dirname(require.resolve("playwright-core/package.json"))
   const target = path.join(__dirname, "dist", "node_modules", "playwright-core")
+  fs.rmSync(target, { recursive: true, force: true })
+  fs.mkdirSync(path.dirname(target), { recursive: true })
+  fs.cpSync(source, target, { recursive: true })
+}
+// raya_change end
+
+// raya_change start - Milestone E portable runtime canvas compiler packaging
+function copyCanvasCompilerRuntime() {
+  const source = path.dirname(require.resolve("esbuild-wasm/package.json"))
+  const target = path.join(__dirname, "dist", "node_modules", "esbuild-wasm")
   fs.rmSync(target, { recursive: true, force: true })
   fs.mkdirSync(path.dirname(target), { recursive: true })
   fs.cpSync(source, target, { recursive: true })
@@ -344,19 +354,40 @@ function getMarkdownShikiWorkerConfig() {
   }
 }
 
+// raya_change start - Milestone E fixed React canvas runtime
+function getCanvasRuntimeConfig() {
+  return {
+    entryPoints: ["src/services/canvas/canvas-runtime.tsx"],
+    bundle: true,
+    format: "iife",
+    minify: production,
+    sourcemap: !production,
+    sourcesContent: false,
+    platform: "browser",
+    outfile: "dist/canvas-runtime.js",
+    logLevel: "silent",
+    jsx: "automatic",
+    plugins: watch ? [esbuildProblemMatcherPlugin] : [],
+  }
+}
+// raya_change end
+
 async function main() {
   const extensionConfig = getExtensionConfig()
   const webviewsConfig = getWebviewsConfig()
   const shikiWorkerConfig = getShikiWorkerConfig()
   const markdownShikiWorkerConfig = getMarkdownShikiWorkerConfig()
+  const canvasRuntimeConfig = getCanvasRuntimeConfig() // raya_change - Milestone E
   copyBrowserRuntime() // raya_change - keep external Playwright resolvable in packaged VSIX
+  copyCanvasCompilerRuntime() // raya_change - keep external esbuild-wasm resolvable in packaged VSIX
 
   if (watch) {
-    const [extensionCtx, webviewsCtx, shikiWorkerCtx, markdownShikiWorkerCtx] = await Promise.all([
+    const [extensionCtx, webviewsCtx, shikiWorkerCtx, markdownShikiWorkerCtx, canvasRuntimeCtx] = await Promise.all([
       esbuild.context(extensionConfig),
       esbuild.context(webviewsConfig),
       esbuild.context(shikiWorkerConfig),
       esbuild.context(markdownShikiWorkerConfig),
+      esbuild.context(canvasRuntimeConfig),
     ])
 
     await Promise.all([
@@ -364,6 +395,7 @@ async function main() {
       webviewsCtx.watch(),
       shikiWorkerCtx.watch(),
       markdownShikiWorkerCtx.watch(),
+      canvasRuntimeCtx.watch(),
     ])
   } else {
     await Promise.all([
@@ -371,6 +403,7 @@ async function main() {
       esbuild.build(webviewsConfig),
       esbuild.build(shikiWorkerConfig),
       esbuild.build(markdownShikiWorkerConfig),
+      esbuild.build(canvasRuntimeConfig),
     ])
   }
 }

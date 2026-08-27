@@ -48,10 +48,9 @@ describe("buildCspString", () => {
     expect(result).toContain(`font-src ${cspSource}`)
   })
 
-  it("allows only webview resources for the Shiki worker", () => {
+  it("allows webview workers and the realtime playout AudioWorklet", () => {
     const result = buildCspString(cspSource, nonce)
-    expect(result).toContain(`worker-src ${cspSource}`)
-    expect(result).not.toContain(`worker-src ${cspSource} blob:`)
+    expect(result).toContain(`worker-src ${cspSource} blob:`)
   })
 
   it("includes cspSource and https: in img-src", () => {
@@ -60,6 +59,11 @@ describe("buildCspString", () => {
     expect(result).toContain(cspSource)
     expect(result).toContain("https:")
     expect(result).toContain("data:")
+  })
+
+  // raya_change - Milestone H streaming speech playback
+  it("allows only blob-backed webview audio", () => {
+    expect(buildCspString(cspSource, nonce)).toContain("media-src blob:")
   })
 
   it("uses wildcard connect-src when no port provided", () => {
@@ -76,6 +80,11 @@ describe("buildCspString", () => {
   it("includes cspSource in connect-src for source map loading", () => {
     const result = buildCspString(cspSource, nonce)
     expect(result).toMatch(new RegExp(`connect-src\\s+${cspSource.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`))
+  })
+
+  // raya_change - configurable LiveKit Cloud signaling
+  it("allows secure LiveKit signaling", () => {
+    expect(buildCspString(cspSource, nonce)).toContain("https: wss:")
   })
 
   it("joins directives with semicolons", () => {

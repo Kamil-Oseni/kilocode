@@ -205,6 +205,16 @@ export namespace RayaGoal {
           title: part.state.status === "completed" ? part.state.title : "",
           output: part.state.status === "completed" ? part.state.output.slice(0, 500) : "",
           exit: part.state.status === "completed" ? part.state.metadata["exit"] : undefined,
+          // raya_change - Milestone G exposes host-authored smoke evidence to the completion audit
+          smoke:
+            part.state.status === "completed" && part.tool === "browser_smoke_test"
+              ? {
+                  passed: part.state.metadata["passed"],
+                  runID: part.state.metadata["runID"],
+                  artifact: part.state.metadata["artifact"],
+                  failingStep: part.state.metadata["failingStep"],
+                }
+              : undefined,
         }))
     })
 
@@ -229,7 +239,7 @@ export namespace RayaGoal {
         return yield* new AuditError({ message: "Completion requires a requirement-by-requirement audit." })
       }
       const messages = yield* deps.sessions.messages({ sessionID })
-      const audit = yield* validateForSession(input.audit, messages, state.createdAt)
+      const audit = yield* validateForSession(input.audit, messages, state.createdAt, state.objective)
       return yield* save(sessionID, {
         ...state,
         status: "complete",
@@ -243,11 +253,14 @@ export namespace RayaGoal {
       audit: NonNullable<ModelUpdate["audit"]>,
       messages: SessionV1.WithParts[],
       createdAt: number,
+      objective: string,
     ) {
       if (audit.requirements.length === 0) {
         return yield* new AuditError({ message: "Completion requires at least one concrete requirement." })
       }
       const parts = tools(messages)
+      const needsSmoke = (value: string) =>
+        /smoke(?:\s|-)*test.{0,40}(?:pass|green)|(?:pass|green).{0,40}smoke(?:\s|-)*test/i.test(value)
       for (const requirement of audit.requirements) {
         if (!clean(requirement.requirement)) {
           return yield* new AuditError({ message: "Every audited requirement needs a concrete description." })
@@ -258,6 +271,7 @@ export namespace RayaGoal {
         if (requirement.evidence.length === 0) {
           return yield* new AuditError({ message: `Requirement has no real evidence: ${requirement.requirement}` })
         }
+        const cited: SessionV1.ToolPart[] = []
         for (const evidence of requirement.evidence) {
           const part = parts.find(
             (item) => item.callID === evidence.callID && (!evidence.messageID || item.messageID === evidence.messageID),
@@ -273,15 +287,44 @@ export namespace RayaGoal {
               message: `Evidence ${ref} is not a completed post-goal work or verification tool call.`,
             })
           }
+          cited.push(part)
           if (part.tool === "bash" && part.state.metadata["exit"] !== 0) {
             return yield* new AuditError({
               message: `Command evidence ${ref} did not exit successfully.`,
             })
           }
+          // raya_change start - Milestone G failed smoke reports can never prove completion
+          if (
+            part.tool === "browser_smoke_test" &&
+            (part.state.metadata["passed"] !== true || part.state.metadata["evidence"] !== "raya-smoke-v1")
+          ) {
+            return yield* new AuditError({
+              message: `Smoke-test evidence ${ref} is not green${
+                part.state.metadata["failingStep"] ? `; failing step: ${part.state.metadata["failingStep"]}` : ""
+              }.`,
+            })
+          }
+          // raya_change end
           if (!clean(evidence.summary)) {
             return yield* new AuditError({ message: "Every evidence reference needs a plain summary." })
           }
         }
+        // raya_change start - Milestone G smoke-gated goals require genuine host smoke evidence
+        if (
+          (needsSmoke(objective) || needsSmoke(requirement.requirement)) &&
+          !cited.some(
+            (part) =>
+              part.tool === "browser_smoke_test" &&
+              part.state.status === "completed" &&
+              part.state.metadata["passed"] === true &&
+              part.state.metadata["evidence"] === "raya-smoke-v1",
+          )
+        ) {
+          return yield* new AuditError({
+            message: `Requirement needs a completed green browser_smoke_test result: ${requirement.requirement}`,
+          })
+        }
+        // raya_change end
       }
       const summary = clean(audit.summary)
       if (!summary) return yield* new AuditError({ message: "Completion requires an audit summary." })

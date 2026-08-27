@@ -63,6 +63,13 @@ describe("sendMessage dismisses pending tool requests", () => {
   })
 })
 
+// raya_change - a fresh webview must not require the user to remember to select Auto
+describe("plain-English routing default", () => {
+  it("uses Auto before the backend agent list hydrates", () => {
+    expect(readFile(SESSION_FILE)).toContain('createSignal("auto") // raya_change - intelligent routing')
+  })
+})
+
 describe("sendCommand dismisses pending tool requests", () => {
   const source = readFile(SESSION_FILE)
   const body = extractFunctionBody(source, "sendCommand")
@@ -371,8 +378,8 @@ describe("PromptInput send origin contract", () => {
   })
 
   it("records sent prompts before a pending session key change can return", () => {
-    const start = source.indexOf("const handleSend = async () =>")
-    const end = source.indexOf("\n  return (", start)
+    const start = source.indexOf("const sendDraft = async (draft: string) =>")
+    const end = source.indexOf("\n  const handleSend = async () =>", start)
     const body = source.slice(start, end)
     const send = Math.max(body.indexOf("session.sendMessage("), body.indexOf("session.sendCommand("))
     const append = body.lastIndexOf("history.append(draft)")

@@ -478,6 +478,30 @@
   display: inline-flex;
 }
 
+/* raya_change - compact speculative transcript/status surface for native realtime voice. */
+.prompt-realtime-voice {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 4px 8px;
+  border-top: 1px solid var(--vscode-widget-border);
+  color: var(--vscode-descriptionForeground);
+  font-size: var(--kilo-font-size-11);
+}
+
+.prompt-realtime-voice__state {
+  flex: none;
+  color: var(--vscode-textLink-foreground);
+  text-transform: capitalize;
+}
+
+.prompt-realtime-voice__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .prompt-input-hint {
   display: flex;
   flex-wrap: nowrap;

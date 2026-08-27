@@ -2,7 +2,7 @@
 
 # Raya Fork Map
 
-Last verified against commit `3800ede61a`, the Raya source commit used for the Milestone F implementation and bundled CLI build.
+Last verified against commit `bcfdbe5aba`, the Raya source commit used as the Milestone G implementation baseline.
 
 This map identifies the current extension seams in the Kilo fork on which Raya is built. Refresh it after an upstream rebase moves any named symbol or path. No feature milestone in `docs/Building-Raya.md` may begin while this map is missing or stale.
 
@@ -70,6 +70,16 @@ Raya's selectable `Auto` primary agent is assembled by `KiloAgent.addAuto` and b
 
 <!-- raya_change end -->
 
+<!-- raya_change start - cross-milestone plain-English orchestration -->
+
+### Raya plain-English orchestration
+
+Raya defaults new, unconfigured conversations to the `Auto` primary agent in `packages/opencode/src/agent/agent.ts`; an explicit `default_agent` or user-selected mode still wins. Chief routing therefore classifies ordinary requests and delegates to the best specialist without requiring users to select Auto, name an agent, choose a model, or ask for a subagent. The shared runtime guidance in `packages/opencode/src/kilocode/agent/index.ts` teaches primary agents and built-in specialists to infer discrete user decisions, specialist and parallel delegation, direct browser operation, and authenticated walkthrough testing from the request itself.
+
+The VS Code host uses `hasGoalIntent` in `packages/kilo-vscode/src/shared/goal.ts` to recognize strong durable-completion language such as “done when,” “keep working until,” and “finish completely and verify.” It arms the same persisted Milestone A goal before the first model turn, while routine questions, explanations, bounded edits, and ordinary browser requests remain single-turn work. `/goal`, explicit modes, named specialists, and browser tool names remain supported as overrides, but none is required for the normal path.
+
+<!-- raya_change end -->
+
 Extension seam: adjust child permission inheritance in `KiloTask.inherited`, model precedence in `KiloTask.resolveModel`, or child-session execution around `TaskTool`'s `sessions.create` and `ops.prompt` calls.
 
 ## 5. Local server and generated SDK
@@ -108,6 +118,18 @@ The model-facing `ask_options` tool is defined in `packages/opencode/src/kilocod
 
 <!-- raya_change end -->
 
+<!-- raya_change start - Milestone E live canvas seams -->
+
+### Raya live canvases
+
+The model-facing `create_canvas` and `update_canvas` tools are defined in `packages/opencode/src/kilocode/tool/canvas-host.ts` and registered through `KiloToolRegistry`. Their workspace-routed request lifecycle lives in `packages/opencode/src/kilocode/canvas/`; pending requests, replies, and failures cross the generated `kilocode.canvas` HTTP API and the existing SSE connection. Ordinary requests for dashboards, charts, tables, visual reports, and interactive analyses are mapped to these tools by the shared agent guidance and Chief routing vocabulary, so users do not need to remember canvas tool names.
+
+The VS Code extension owns canvas files under each project’s `.raya/canvases/` directory. `CanvasService` in `packages/kilo-vscode/src/services/canvas/canvas-service.ts` connects the CLI bridge, compiler, file watcher, and panel. `CanvasCompiler` uses the packaged, portable `esbuild-wasm` runtime to transform import-free React TSX into an isolated artifact bundle; `CanvasRefresh` rebuilds the active artifact when either its `.canvas.tsx` source or `.canvas.json` data file changes. `CanvasPanel` places an `iframe` with only `sandbox="allow-scripts"` inside a trusted webview beside chat. The iframe loads the fixed React runtime and generated artifact under its own restrictive content security policy, cannot access the VS Code API or inherit the trusted webview origin, and exchanges only typed messages with the outer shell. The host sends JSON-compatible `CanvasData` into the component’s `data` prop. Compile failures render directly in the panel, while the React error boundary and global runtime handlers keep runtime failures visible, report them through the shell, and leave the panel available for the next `update_canvas` repair.
+
+The fixed browser-side runtime is `packages/kilo-vscode/src/services/canvas/canvas-runtime.tsx`. `packages/kilo-vscode/esbuild.js` bundles it as `dist/canvas-runtime.js`, externalizes the runtime compiler from the extension bundle, and copies `esbuild-wasm` into packaged extension assets.
+
+<!-- raya_change end -->
+
 <!-- raya_change start - Milestone F shared browser seams -->
 
 ### Raya in-editor browser
@@ -120,11 +142,38 @@ Playwright is externalized from the extension bundle and copied into `dist/node_
 
 <!-- raya_change end -->
 
+<!-- raya_change start - Milestone G authenticated smoke evidence seams -->
+
+### Raya authenticated smoke testing
+
+`browser_auth_capture` and `browser_smoke_test` extend the Milestone F host protocol in `packages/opencode/src/kilocode/browser/protocol.ts` and are registered with the other native browser tools in `packages/opencode/src/kilocode/tool/browser-host.ts`. The extension dispatches both through `BrowserBridge` to the same visible `BrowserSession`; `BrowserSmoke` in `packages/kilo-vscode/src/services/browser-automation/browser-smoke.ts` automatically captures the current Playwright authentication on the first named run, restores saved cookies and local storage thereafter, runs scripted or agent-composed exploratory steps, records visible/network/console assertions, and writes a JSON report plus one screenshot per executed step under extension global storage. Primary-agent and built-in specialist guidance in `packages/opencode/src/kilocode/agent/index.ts` maps ordinary walkthrough, UX-test, real-user, smoke, and end-to-end language onto this flow without requiring users to remember tool names.
+
+The smoke tool persists host-authored `passed`, `runID`, `artifact`, and `failingStep` metadata on its tool part. `RayaGoal.validateAuditForSession` in `packages/opencode/src/kilocode/goal/index.ts` rejects every red smoke report and requires a completed green `raya-smoke-v1` tool result whenever the goal objective or audited requirement says the smoke test must pass. This prevents model-authored summaries or unrelated green commands from satisfying a smoke-gated goal.
+
+<!-- raya_change end -->
+
+<!-- raya_change start - Milestones H/I voice and settings seams -->
+
+### Raya voice and completed settings hub
+
+The primary hands-free path is a two-plane system. `services/raya-mf/` is the Go real-time media frontend: its engine boundary owns Qwen Audio Realtime, its 20 ms clock inserts silence on underrun, and its LiveKit adapter keeps WebRTC audio out of `kilo serve`. The adapter declares `AcceptsTruncation: false` because Qwen can cancel output and the client can flush local playout, but Qwen cannot truncate conversation state at the measured heard position. The local Docker stack supplies the native libopus dependency and a development LiveKit SFU.
+
+The webview path in `webview-ui/src/context/realtime-voice.ts` is intentionally thin. It publishes the microphone through LiveKit, renders speculative transcripts, passes subscribed audio through an `AudioWorklet`, reports the measured destination sample cursor, and flushes local playout on discontinuity. The orb in `PromptInput.tsx` opens this media session and never submits realtime turns through the composer. One-shot dictation remains independent.
+
+The asynchronous plane lives under `packages/opencode/src/kilocode/voice/`. Its HTTP group issues short-lived room tokens, ingests ordered media events, reconstructs speculative and authoritative turns, persists interrupted output as incomplete, and exposes one deadline-bounded `delegate` path through the configured Raya model. `SpeechService` brokers provider secrets from encrypted extension storage to `raya-mf`; no Qwen or LiveKit service secret reaches the webview.
+
+The prior OpenAI-compatible STT and MiniMax streaming TTS implementation remains the executable `cascade-v1` degradation rung, followed by text-only status rather than silence. `SpeechTab.tsx` edits the native engine profile, Qwen endpoint/model/voice, media frontend, encrypted keys, explicit conformance status, STT/TTS fallback, VAD, and CLI mirroring. `GoalsRoutingTab.tsx` edits the Chief model, low-confidence threshold, and goal-continuation default.
+
+<!-- raya_change end -->
+
 ## Build and packaging anchors
 
 The standalone CLI build script is `packages/opencode/script/build.ts`. On Windows, `bun packages/opencode/script/build.ts --single` produces `packages/opencode/dist/@kilocode/cli-windows-x64/bin/kilo.exe`; the script performs version, model-snapshot, and sandbox-worker smoke checks.
 
 In `packages/kilo-vscode`, `bun run compile` performs development type, lint, and bundle validation. `bun run package` currently performs the production validation build but does not create an archive. The current SHA-stamped VSIX command is `bun run snapshot:build`, implemented by `packages/kilo-vscode/script/dev-snapshot.ts`, and outputs under the system temporary directory's `raya-vscode-snapshots` folder.
+
+<!-- raya_change - Realtime voice launch and conformance anchors. -->
+Realtime voice development uses `bun run extension:voice`, which builds and starts the Dockerized LiveKit and `raya-mf` stack before launching the extension. `bun run voice:test` runs the Go media conformance suite, while `services/raya-mf/conformance.json` publishes the experimental engine gates. Production supplies `RAYA_LIVEKIT_URL`, `RAYA_LIVEKIT_API_KEY`, and `RAYA_LIVEKIT_API_SECRET`; local development intentionally uses LiveKit's loopback-only dev credentials.
 
 ## Verified plan drift
 

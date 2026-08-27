@@ -41,6 +41,8 @@ export const ChiefRouteTool = Tool.define<
         Effect.gen(function* () {
           const started = Date.now()
           const session = yield* sessions.get(ctx.sessionID).pipe(Effect.orDie)
+          const cfg = yield* config.get() // raya_change - Milestone I runtime routing settings
+          const threshold = cfg.raya_routing?.confidence_threshold // raya_change - Milestone I
           const available = (yield* agents.list()).filter(
             (item) => item.mode !== "primary" && !item.hidden && !item.deprecated,
           )
@@ -49,7 +51,7 @@ export const ChiefRouteTool = Tool.define<
           const initial = RayaChief.route({ request, agents: available })
           // raya_change end
           // raya_change start - Milestone C low-confidence routing reuses ask_options
-          const answer = RayaChief.needsPrompt(initial)
+          const answer = RayaChief.needsPrompt(initial, threshold, request)
             ? yield* RayaAskOptions.ask(question, {
                 sessionID: ctx.sessionID,
                 questions: [RayaChief.question(initial)],
@@ -65,7 +67,8 @@ export const ChiefRouteTool = Tool.define<
           const message = yield* sessions
             .findMessage(ctx.sessionID, (item) => item.info.id === ctx.messageID)
             .pipe(Effect.orDie)
-          const assistant = Option.isSome(message) && message.value.info.role === "assistant" ? message.value.info : undefined
+          const assistant =
+            Option.isSome(message) && message.value.info.role === "assistant" ? message.value.info : undefined
           const saved = RayaChief.parent(session.metadata)
           const parent = saved
             ? {
@@ -75,7 +78,6 @@ export const ChiefRouteTool = Tool.define<
             : assistant
               ? { providerID: assistant.providerID, modelID: assistant.modelID }
               : yield* provider.defaultModel()
-          const cfg = yield* config.get()
           const resolved = yield* KiloTask.resolveModel({
             name: selected.name,
             agent: selected,
@@ -84,7 +86,9 @@ export const ChiefRouteTool = Tool.define<
             variant: saved?.variant,
             provider,
           })
-          const chiefModel = assistant ? `${assistant.providerID}/${assistant.modelID}` : `${parent.providerID}/${parent.modelID}`
+          const chiefModel = assistant
+            ? `${assistant.providerID}/${assistant.modelID}`
+            : `${parent.providerID}/${parent.modelID}`
           const candidate = initial.candidates.find((item) => item.agent === selected.name)
           const pending: RayaChief.Pending = {
             request,
@@ -97,7 +101,7 @@ export const ChiefRouteTool = Tool.define<
                 ? initial.reason
                 : `The user selected ${selected.name} after Auto reported low confidence.`,
             candidates: initial.candidates,
-            prompted: RayaChief.needsPrompt(initial),
+            prompted: RayaChief.needsPrompt(initial, threshold, request),
             latency: Math.max(0, Date.now() - (assistant?.time.created ?? started)),
             chiefModel,
           }

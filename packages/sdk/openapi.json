@@ -16054,6 +16054,249 @@
         ]
       }
     },
+    "/kilocode/canvas": {
+      "get": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.canvas.list",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pending canvas host requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CanvasRequest"
+                  },
+                  "description": "Pending canvas host requests"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "List pending live-canvas requests for the routed workspace.",
+        "summary": "List pending canvas requests",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.canvas.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/canvas/{requestID}/reply": {
+      "post": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.canvas.reply",
+        "parameters": [
+          {
+            "name": "requestID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/CanvasRequestID"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canvas reply accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Canvas reply accepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Complete a pending live-canvas request with its render status.",
+        "summary": "Reply to a canvas request",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "result": {
+                    "$ref": "#/components/schemas/CanvasResult"
+                  }
+                },
+                "required": ["result"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.canvas.reply({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/canvas/{requestID}/reject": {
+      "post": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.canvas.reject",
+        "parameters": [
+          {
+            "name": "requestID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/CanvasRequestID"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canvas rejection accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Canvas rejection accepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Complete a pending live-canvas request with a host error.",
+        "summary": "Reject a canvas request",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "error": {
+                    "$ref": "#/components/schemas/CanvasFailure"
+                  }
+                },
+                "required": ["error"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.canvas.reject({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/kilocode/agent-manager": {
       "get": {
         "tags": ["kilocode"],
@@ -21939,6 +22182,658 @@
         ]
       }
     },
+    "/kilocode/voice/session": {
+      "post": {
+        "tags": ["raya-voice"],
+        "operationId": "kilocode.voice.start",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Realtime voice session connection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "parentSessionID": {
+                      "type": "string",
+                      "pattern": "^ses"
+                    },
+                    "room": {
+                      "type": "string"
+                    },
+                    "livekitURL": {
+                      "type": "string"
+                    },
+                    "clientToken": {
+                      "type": "string"
+                    },
+                    "mediaToken": {
+                      "type": "string"
+                    },
+                    "mediaURL": {
+                      "type": "string"
+                    },
+                    "engine": {
+                      "type": "string",
+                      "enum": ["qwen-realtime"]
+                    },
+                    "acceptsTruncation": {
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["starting", "active", "closed", "failed"]
+                    },
+                    "createdAt": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["NaN"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["Infinity"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["-Infinity"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["Infinity", "-Infinity", "NaN"]
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "parentSessionID",
+                    "room",
+                    "livekitURL",
+                    "clientToken",
+                    "mediaToken",
+                    "mediaURL",
+                    "engine",
+                    "acceptsTruncation",
+                    "status",
+                    "createdAt"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Realtime voice session connection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Mint thin-client and media-frontend room credentials without exposing provider secrets.",
+        "summary": "Start a realtime voice session",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "parentSessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "mediaURL": {
+                    "type": "string"
+                  },
+                  "room": {
+                    "type": "string"
+                  }
+                },
+                "required": ["parentSessionID", "mediaURL"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.voice.start({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/voice/session/{voiceSessionID}": {
+      "get": {
+        "tags": ["raya-voice"],
+        "operationId": "kilocode.voice.state",
+        "parameters": [
+          {
+            "name": "voiceSessionID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authoritative realtime voice state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "info": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "parentSessionID": {
+                          "type": "string",
+                          "pattern": "^ses"
+                        },
+                        "room": {
+                          "type": "string"
+                        },
+                        "livekitURL": {
+                          "type": "string"
+                        },
+                        "clientToken": {
+                          "type": "string"
+                        },
+                        "mediaToken": {
+                          "type": "string"
+                        },
+                        "mediaURL": {
+                          "type": "string"
+                        },
+                        "engine": {
+                          "type": "string",
+                          "enum": ["qwen-realtime"]
+                        },
+                        "acceptsTruncation": {
+                          "type": "boolean"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": ["starting", "active", "closed", "failed"]
+                        },
+                        "createdAt": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["NaN"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["-Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity", "-Infinity", "NaN"]
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "parentSessionID",
+                        "room",
+                        "livekitURL",
+                        "clientToken",
+                        "mediaToken",
+                        "mediaURL",
+                        "engine",
+                        "acceptsTruncation",
+                        "status",
+                        "createdAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "lastSeq": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["NaN"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["Infinity"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["-Infinity"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["Infinity", "-Infinity", "NaN"]
+                        }
+                      ]
+                    },
+                    "incomplete": {
+                      "type": "boolean"
+                    },
+                    "turns": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "role": {
+                            "type": "string",
+                            "enum": ["user", "assistant"]
+                          },
+                          "speculative": {
+                            "type": "string"
+                          },
+                          "authoritative": {
+                            "type": "string"
+                          },
+                          "stable": {
+                            "type": "boolean"
+                          },
+                          "truncated": {
+                            "type": "boolean"
+                          },
+                          "heardMs": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["NaN"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["-Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity", "-Infinity", "NaN"]
+                              }
+                            ]
+                          },
+                          "overlap": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": ["id", "role", "speculative", "stable", "truncated", "overlap"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["info", "lastSeq", "incomplete", "turns"],
+                  "additionalProperties": false,
+                  "description": "Authoritative realtime voice state"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get reconstructed voice state",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.voice.state({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "tags": ["raya-voice"],
+        "operationId": "kilocode.voice.close",
+        "parameters": [
+          {
+            "name": "voiceSessionID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Voice session closed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Voice session closed"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Close a realtime voice session",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.voice.close({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/voice/events": {
+      "post": {
+        "tags": ["raya-voice"],
+        "operationId": "kilocode.voice.event",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Media event accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Media event accepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Ingest one ordered media-plane event",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "session": {
+                    "type": "string"
+                  },
+                  "seq": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  },
+                  "event": {
+                    "type": "object",
+                    "properties": {
+                      "seq": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["NaN"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["-Infinity"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity", "-Infinity", "NaN"]
+                          }
+                        ]
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "session": {
+                        "type": "string"
+                      },
+                      "turn": {
+                        "type": "string"
+                      },
+                      "item": {
+                        "type": "string"
+                      },
+                      "text": {
+                        "type": "string"
+                      },
+                      "stable": {
+                        "type": "boolean"
+                      },
+                      "truncated": {
+                        "type": "boolean"
+                      },
+                      "heardMs": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["NaN"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["-Infinity"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity", "-Infinity", "NaN"]
+                          }
+                        ]
+                      },
+                      "at": {
+                        "type": "string"
+                      },
+                      "data": {
+                        "type": "object"
+                      }
+                    },
+                    "required": ["seq", "type", "at"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["session", "seq", "event"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.voice.event({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "tags": ["Kilo HttpApi"],
@@ -27800,6 +28695,12 @@
             "$ref": "#/components/schemas/EventKilocodeBrowserCancelled"
           },
           {
+            "$ref": "#/components/schemas/EventKilocodeCanvasRequested"
+          },
+          {
+            "$ref": "#/components/schemas/EventKilocodeCanvasCancelled"
+          },
+          {
             "$ref": "#/components/schemas/EventMemoryStatus1"
           },
           {
@@ -29126,6 +30027,340 @@
               }
             },
             "required": ["id", "sessionID", "operation", "expression"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["auth_capture"]
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              }
+            },
+            "required": ["id", "sessionID", "operation", "name"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["smoke"]
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "mode": {
+                "type": "string",
+                "enum": ["scripted", "exploratory"]
+              },
+              "steps": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "action": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["navigate"]
+                            },
+                            "url": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 20000
+                            }
+                          },
+                          "required": ["kind", "url"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["click"]
+                            },
+                            "selector": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 10000
+                            }
+                          },
+                          "required": ["kind", "selector"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["type"]
+                            },
+                            "selector": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 10000
+                            },
+                            "text": {
+                              "type": "string",
+                              "maxLength": 200000
+                            },
+                            "submit": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": ["kind", "selector", "text"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["select"]
+                            },
+                            "selector": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 10000
+                            },
+                            "values": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "maxLength": 200000
+                              },
+                              "minItems": 1,
+                              "maxItems": 100
+                            }
+                          },
+                          "required": ["kind", "selector", "values"],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "assertions": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["visible"]
+                              },
+                              "selector": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 10000
+                              },
+                              "text": {
+                                "type": "string",
+                                "maxLength": 200000
+                              }
+                            },
+                            "required": ["kind", "selector"],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["network"]
+                              },
+                              "url": {
+                                "type": "string",
+                                "maxLength": 200000
+                              },
+                              "status": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["NaN"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["Infinity"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["-Infinity"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["Infinity", "-Infinity", "NaN"]
+                                  }
+                                ]
+                              }
+                            },
+                            "required": ["kind", "url"],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["console"]
+                              },
+                              "level": {
+                                "type": "string",
+                                "enum": ["error", "warning", "log", "info"]
+                              },
+                              "message": {
+                                "type": "string",
+                                "maxLength": 200000
+                              },
+                              "max": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["NaN"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["Infinity"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["-Infinity"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["Infinity", "-Infinity", "NaN"]
+                                  }
+                                ]
+                              }
+                            },
+                            "required": ["kind", "max"],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "minItems": 1,
+                      "maxItems": 100
+                    }
+                  },
+                  "required": ["id", "title", "assertions"],
+                  "additionalProperties": false
+                },
+                "minItems": 1,
+                "maxItems": 100
+              }
+            },
+            "required": ["id", "sessionID", "operation", "name", "mode", "steps"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "CanvasRequestID": {
+        "type": "string"
+      },
+      "CanvasRequest": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/CanvasRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["create"]
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "source": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000000
+              },
+              "data": {
+                "type": "object"
+              }
+            },
+            "required": ["id", "sessionID", "operation", "name", "source", "data"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/CanvasRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["update"]
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "source": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000000
+              },
+              "data": {
+                "type": "object"
+              }
+            },
+            "required": ["id", "sessionID", "operation", "name"],
             "additionalProperties": false
           }
         ]
@@ -31249,6 +32484,12 @@
               },
               {
                 "$ref": "#/components/schemas/EventKilocodeBrowserCancelled"
+              },
+              {
+                "$ref": "#/components/schemas/EventKilocodeCanvasRequested"
+              },
+              {
+                "$ref": "#/components/schemas/EventKilocodeCanvasCancelled"
               },
               {
                 "$ref": "#/components/schemas/EventMemoryStatus"
@@ -35764,6 +37005,38 @@
           },
           "small_model": {
             "type": "string"
+          },
+          "raya_routing": {
+            "type": "object",
+            "properties": {
+              "confidence_threshold": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["NaN"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["-Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              },
+              "goal_continuation": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
           },
           "subagent_model": {
             "type": "string"
@@ -41230,6 +42503,328 @@
             },
             "required": ["operation", "output"],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000
+              },
+              "title": {
+                "type": "string",
+                "maxLength": 10000
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["auth_capture"]
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "path": {
+                "type": "string"
+              },
+              "cookies": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["NaN"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["-Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              },
+              "origins": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["NaN"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["-Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              }
+            },
+            "required": ["operation", "name", "path", "cookies", "origins"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000
+              },
+              "title": {
+                "type": "string",
+                "maxLength": 10000
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["smoke"]
+              },
+              "runID": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "mode": {
+                "type": "string",
+                "enum": ["scripted", "exploratory"]
+              },
+              "passed": {
+                "type": "boolean"
+              },
+              "startedAt": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["NaN"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["-Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              },
+              "finishedAt": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["NaN"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["-Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              },
+              "artifact": {
+                "type": "string"
+              },
+              "authState": {
+                "type": "string"
+              },
+              "failingStep": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "steps": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "passed": {
+                      "type": "boolean"
+                    },
+                    "screenshot": {
+                      "type": "string"
+                    },
+                    "assertions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": ["visible", "network", "console"]
+                          },
+                          "passed": {
+                            "type": "boolean"
+                          },
+                          "expected": {
+                            "type": "string",
+                            "maxLength": 200000
+                          },
+                          "actual": {
+                            "type": "string",
+                            "maxLength": 200000
+                          }
+                        },
+                        "required": ["kind", "passed", "expected", "actual"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "error": {
+                      "type": "string",
+                      "maxLength": 200000
+                    }
+                  },
+                  "required": ["id", "title", "passed", "screenshot", "assertions"],
+                  "additionalProperties": false
+                }
+              },
+              "network": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "url": {
+                      "type": "string",
+                      "maxLength": 200000
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["NaN"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["Infinity"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["-Infinity"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["Infinity", "-Infinity", "NaN"]
+                        }
+                      ]
+                    },
+                    "level": {
+                      "type": "string",
+                      "maxLength": 200000
+                    },
+                    "message": {
+                      "type": "string",
+                      "maxLength": 200000
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "console": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "url": {
+                      "type": "string",
+                      "maxLength": 200000
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["NaN"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["Infinity"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["-Infinity"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["Infinity", "-Infinity", "NaN"]
+                        }
+                      ]
+                    },
+                    "level": {
+                      "type": "string",
+                      "maxLength": 200000
+                    },
+                    "message": {
+                      "type": "string",
+                      "maxLength": 200000
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "operation",
+              "runID",
+              "name",
+              "mode",
+              "passed",
+              "startedAt",
+              "finishedAt",
+              "artifact",
+              "authState",
+              "steps",
+              "network",
+              "console"
+            ],
+            "additionalProperties": false
           }
         ]
       },
@@ -41254,6 +42849,72 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 10000
+          }
+        },
+        "required": ["code", "message"],
+        "additionalProperties": false
+      },
+      "CanvasResult": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "enum": ["create", "update"]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "path": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["ready", "error"]
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "error": {
+            "type": "string",
+            "maxLength": 100000
+          }
+        },
+        "required": ["operation", "name", "path", "status", "version"],
+        "additionalProperties": false
+      },
+      "CanvasFailure": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": ["cancelled", "disconnected", "invalid_request", "not_found", "timeout", "unsupported"]
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100000
           }
         },
         "required": ["code", "message"],
@@ -43034,6 +44695,263 @@
             },
             "required": ["id", "sessionID", "operation", "expression"],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["auth_capture"]
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              }
+            },
+            "required": ["id", "sessionID", "operation", "name"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["smoke"]
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "mode": {
+                "type": "string",
+                "enum": ["scripted", "exploratory"]
+              },
+              "steps": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "action": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["navigate"]
+                            },
+                            "url": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 20000
+                            }
+                          },
+                          "required": ["kind", "url"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["click"]
+                            },
+                            "selector": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 10000
+                            }
+                          },
+                          "required": ["kind", "selector"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["type"]
+                            },
+                            "selector": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 10000
+                            },
+                            "text": {
+                              "type": "string",
+                              "maxLength": 200000
+                            },
+                            "submit": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": ["kind", "selector", "text"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["select"]
+                            },
+                            "selector": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 10000
+                            },
+                            "values": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "maxLength": 200000
+                              },
+                              "minItems": 1,
+                              "maxItems": 100
+                            }
+                          },
+                          "required": ["kind", "selector", "values"],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "assertions": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["visible"]
+                              },
+                              "selector": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 10000
+                              },
+                              "text": {
+                                "type": "string",
+                                "maxLength": 200000
+                              }
+                            },
+                            "required": ["kind", "selector"],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["network"]
+                              },
+                              "url": {
+                                "type": "string",
+                                "maxLength": 200000
+                              },
+                              "status": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["NaN"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["Infinity"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["-Infinity"]
+                                  }
+                                ]
+                              }
+                            },
+                            "required": ["kind", "url"],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["console"]
+                              },
+                              "level": {
+                                "type": "string",
+                                "enum": ["error", "warning", "log", "info"]
+                              },
+                              "message": {
+                                "type": "string",
+                                "maxLength": 200000
+                              },
+                              "max": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["NaN"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["Infinity"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["-Infinity"]
+                                  }
+                                ]
+                              }
+                            },
+                            "required": ["kind", "max"],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "minItems": 1,
+                      "maxItems": 100
+                    }
+                  },
+                  "required": ["id", "title", "assertions"],
+                  "additionalProperties": false
+                },
+                "minItems": 1,
+                "maxItems": 100
+              }
+            },
+            "required": ["id", "sessionID", "operation", "name", "mode", "steps"],
+            "additionalProperties": false
           }
         ]
       },
@@ -43863,6 +45781,55 @@
             "properties": {
               "requestID": {
                 "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "reason": {
+                "type": "string",
+                "enum": ["cancelled", "disposed", "timeout"]
+              }
+            },
+            "required": ["requestID", "sessionID", "reason"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventKilocodeCanvasRequested": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["kilocode.canvas.requested"]
+          },
+          "properties": {
+            "$ref": "#/components/schemas/CanvasRequest"
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventKilocodeCanvasCancelled": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["kilocode.canvas.cancelled"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "requestID": {
+                "$ref": "#/components/schemas/CanvasRequestID"
               },
               "sessionID": {
                 "type": "string",
@@ -61466,6 +63433,9 @@
     {
       "name": "memory",
       "description": "Kilo memory routes."
+    },
+    {
+      "name": "raya-voice"
     },
     {
       "name": "Kilo HttpApi",

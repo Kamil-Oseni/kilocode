@@ -5,6 +5,7 @@
   "private": true,
   "type": "module",
   "packageManager": "bun@1.3.14",
+  "// raya_change": "Realtime voice media frontend development scripts",
   "scripts": {
     "dev": "KILO_CLIENT=cli bun run --cwd packages/opencode --conditions=node src/index.ts",
     "dev:stats": "bun sst shell --stage=production -- bun run --cwd packages/stats/app dev",
@@ -20,10 +21,15 @@
     "test": "echo 'do not run tests from root' && exit 1",
     "test:script:ci": "mkdir -p .artifacts/unit && bun test ./script --timeout 30000 --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml",
     "extension": "bun --cwd packages/kilo-vscode script/launch.ts",
+    "extension:voice": "bun run voice:stack && bun run extension",
     "extension:isolated": "bun --cwd packages/kilo-vscode script/launch.ts --isolated",
     "extension:isolated:clean": "bun --cwd packages/kilo-vscode script/launch.ts --isolated --clean",
     "dev-setup": "bun run --cwd packages/opencode --conditions=browser src/index.ts dev-setup",
-    "dev:local": "bun run packages/opencode/script/dev-local.ts"
+    "dev:local": "bun run packages/opencode/script/dev-local.ts",
+    "voice:stack": "docker compose -f services/raya-mf/docker-compose.yml up -d --build",
+    "voice:stack:down": "docker compose -f services/raya-mf/docker-compose.yml down",
+    "voice:test": "go -C services/raya-mf test ./...",
+    "voice:probe:qwen": "go -C services/raya-mf run ./cmd/qwen-probe"
   },
   "workspaces": {
     "packages": [

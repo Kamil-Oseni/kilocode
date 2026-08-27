@@ -27,10 +27,11 @@ export function buildCspString(cspSource: string, nonce: string, port?: number):
     `style-src 'unsafe-inline' ${cspSource}`,
     `script-src 'nonce-${nonce}' 'wasm-unsafe-eval'`,
     // Allow the bundled Shiki highlighting worker (loaded as a webview resource).
-    `worker-src ${cspSource}`,
+    `worker-src ${cspSource} blob:`, // raya_change - AudioWorklet playout accounting module
     `font-src ${cspSource}`,
-    `connect-src ${cspSource} ${connectSrc}`,
+    `connect-src ${cspSource} ${connectSrc} https: wss:`, // raya_change - configurable LiveKit Cloud signaling
     `img-src ${cspSource} data: https:`,
+    "media-src blob:", // raya_change - Milestone H streams synthesized audio through a MediaSource blob
   ]
   return joinCspDirectives(directives)
 }

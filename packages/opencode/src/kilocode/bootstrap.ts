@@ -23,6 +23,7 @@ import { KilocodeWatcher } from "@/kilocode/watcher"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder" // kilocode_change
 import { Storage } from "@/storage/storage" // raya_change - Milestone A durable goal storage
 import { RayaGoalContinuation } from "@/kilocode/goal/continuation" // raya_change - Milestone A idle continuation
+import { Config } from "@/config/config" // raya_change - Milestone I goal continuation setting
 
 const log = Log.create({ service: "kilocode-bootstrap" })
 
@@ -46,13 +47,19 @@ export namespace KilocodeBootstrap {
       const memory = yield* MemoryService.Service
       const watcher = yield* KilocodeWatcher.Service
       const storage = Option.getOrUndefined(yield* Effect.serviceOption(Storage.Service)) // raya_change - Milestone A durable goal storage
+      const config = yield* Config.Service // raya_change - Milestone I
 
       const init = Effect.fn("KilocodeBootstrap.init")(function* () {
         yield* watcher.init()
         yield* kilo.init()
         yield* MemoryLifecycle.subscribe({ bus, sessions, summary, provider, memory })
         if (storage) {
-          yield* RayaGoalContinuation.subscribe({ bus, sessions, storage }) // raya_change - Milestone A idle continuation
+          yield* RayaGoalContinuation.subscribe({
+            bus,
+            sessions,
+            storage,
+            enabled: () => config.get().pipe(Effect.map((cfg) => cfg.raya_routing?.goal_continuation !== false)),
+          }) // raya_change - Milestones A/I configurable idle continuation
         }
         // Invalidate enabled cache on every memory state mutation (properties.directory holds the memory root).
         yield* bus.subscribeCallback(MemoryEvents.Status, (evt) =>
@@ -112,6 +119,7 @@ export namespace KilocodeBootstrap {
       Bus.defaultLayer,
       KilocodeWatcher.defaultLayer,
       AppNodeBuilder.build(Storage.node), // raya_change - Milestone A durable goal storage
+      AppNodeBuilder.build(Config.node), // raya_change - Milestone I routing settings
     ]),
   )
 
@@ -130,6 +138,7 @@ export namespace KilocodeBootstrap {
         Bus.node,
         watcher,
         Storage.node, // raya_change - Milestone A durable goal storage
+        Config.node, // raya_change - Milestone I routing settings
       ],
     }),
   )

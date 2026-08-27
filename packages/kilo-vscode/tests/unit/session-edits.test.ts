@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import * as path from "node:path" // raya_change
 import { editPaths } from "../../src/kilo-provider/session-edits"
 
 describe("session edit paths", () => {
@@ -29,10 +30,12 @@ describe("session edit paths", () => {
       },
     ]
 
-    expect(editPaths(parts, "/workspace")).toEqual([
-      "/workspace/app/src/a.ts",
-      "/workspace/app/src/b.ts",
-      "/workspace/app/src/new.ts",
-    ])
+    // raya_change start - editPaths intentionally returns host-normalized absolute paths.
+    expect(editPaths(parts, "/workspace")).toEqual(
+      ["/workspace/app/src/a.ts", "/workspace/app/src/b.ts", "/workspace/app/src/new.ts"].map((file) =>
+        path.normalize(file),
+      ),
+    )
+    // raya_change end
   })
 })

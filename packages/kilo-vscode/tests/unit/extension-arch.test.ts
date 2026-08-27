@@ -107,6 +107,13 @@ describe("Extension — package.json command sync", () => {
     ).toEqual([])
   })
 
+  it("declares the Raya browser command and keeps the Kilo ID as an activation-only alias", () => {
+    expect(declared).toContain("raya.openBrowser")
+    expect(declared).not.toContain("kilo-code.new.openBrowser")
+    expect(registered).toContain("raya.openBrowser")
+    expect(registered).toContain("kilo-code.new.openBrowser")
+  })
+
   it("scopes Agent Manager search to the panel and leaves the integrated terminal alone", () => {
     const binding = pkg.contributes?.keybindings?.find(
       (item: { command: string }) => item.command === "raya.agentManager.search",

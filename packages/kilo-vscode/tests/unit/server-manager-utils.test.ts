@@ -65,13 +65,15 @@ describe("parseServerPort", () => {
 
 describe("cli tree-sitter resources", () => {
   it("resolves resources next to the VS Code bundled CLI", () => {
-    const root = "/Users/test/.vscode/extensions/kilocode.kilo-code-7.2.50-darwin-arm64"
-    const bin = `${root}/bin/kilo`
+    // raya_change start - Model a native packaged path on every host.
+    const root = path.join(path.sep, "Users", "test", ".vscode", "extensions", "kilocode.kilo-code-7.2.50-darwin-arm64")
+    const bin = path.join(root, "bin", "kilo")
 
-    expect(treeSitterDirForBinary(bin)).toBe(`${root}/bin/tree-sitter`)
-    expect(treeSitterDirForExtension(root)).toBe(`${root}/bin/tree-sitter`)
-    expect(kiloSandboxWorkerForBinary(bin)).toBe(`${root}/bin/kilo-sandbox-mutation-worker.js`)
-    expect(resolveTreeSitterEnv(root)).toEqual({ KILO_TREE_SITTER_WASM_DIR: `${root}/bin/tree-sitter` })
+    expect(treeSitterDirForBinary(bin)).toBe(path.join(root, "bin", "tree-sitter"))
+    expect(treeSitterDirForExtension(root)).toBe(path.join(root, "bin", "tree-sitter"))
+    expect(kiloSandboxWorkerForBinary(bin)).toBe(path.join(root, "bin", "kilo-sandbox-mutation-worker.js"))
+    expect(resolveTreeSitterEnv(root)).toEqual({ KILO_TREE_SITTER_WASM_DIR: path.join(root, "bin", "tree-sitter") })
+    // raya_change end
   })
 
   it("resolves resources next to a Windows packaged CLI", () => {
@@ -156,7 +158,8 @@ describe("cli tree-sitter resources", () => {
 
       const copied = path.join(path.dirname(target), "bwrap")
       expect(await fs.readFile(copied, "utf8")).toBe("helper")
-      expect((await fs.stat(copied)).mode & 0o111).not.toBe(0)
+      // raya_change - Windows does not expose POSIX executable mode bits.
+      if (process.platform !== "win32") expect((await fs.stat(copied)).mode & 0o111).not.toBe(0)
       expect(await fs.readFile(path.join(path.dirname(target), "licenses", "bubblewrap", "COPYING"), "utf8")).toBe(
         "LGPL",
       )
@@ -166,7 +169,8 @@ describe("cli tree-sitter resources", () => {
       expect(await fs.readFile(path.join(path.dirname(target), "kilo-sandbox-network-relay.js"), "utf8")).toBe("relay")
       const copiedSeccomp = path.join(path.dirname(target), "kilo-sandbox-seccomp")
       expect(await fs.readFile(copiedSeccomp, "utf8")).toBe("seccomp")
-      expect((await fs.stat(copiedSeccomp)).mode & 0o111).not.toBe(0)
+      // raya_change - Preserve the Linux executable invariant where mode bits exist.
+      if (process.platform !== "win32") expect((await fs.stat(copiedSeccomp)).mode & 0o111).not.toBe(0)
       expect(await fs.readFile(path.join(path.dirname(target), "licenses", "sandbox-runtime", "LICENSE"), "utf8")).toBe(
         "Apache-2.0",
       )

@@ -1,9 +1,12 @@
-import { describe, it, expect } from "bun:test"
+import { describe, it, expect, setDefaultTimeout } from "bun:test"
 import * as fs from "fs/promises"
 import * as os from "os"
 import * as nodePath from "path"
 import { GitOps } from "../../src/agent-manager/GitOps"
 import { Semaphore } from "../../src/agent-manager/semaphore"
+
+// raya_change - Git process startup is slower under the full Windows suite.
+if (process.platform === "win32") setDefaultTimeout(15_000)
 
 function ops(handler: (args: string[], cwd: string) => Promise<string>, semaphore?: Semaphore): GitOps {
   return new GitOps({ log: () => undefined, runGit: handler, semaphore })
@@ -34,6 +37,8 @@ async function withRepo(run: (cwd: string) => Promise<void>): Promise<void> {
   const cwd = await fs.mkdtemp(nodePath.join(os.tmpdir(), "kilo-gitops-test-"))
   try {
     runGit(cwd, ["init"])
+    runGit(cwd, ["config", "core.autocrlf", "false"]) // raya_change - deterministic fixture blobs on Windows
+    runGit(cwd, ["config", "core.eol", "lf"])
     await run(cwd)
   } finally {
     await fs.rm(cwd, { recursive: true, force: true })

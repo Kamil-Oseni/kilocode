@@ -68,6 +68,10 @@ export async function getShellEnvironment(): Promise<Record<string, string>> {
     for (const [key, value] of Object.entries(process.env)) {
       if (typeof value === "string") env[key] = value
     }
+    // raya_change start - expose stable cross-platform aliases to extension callers
+    env.PATH ??= env.Path
+    env.HOME ??= env.USERPROFILE ?? os.homedir()
+    // raya_change end
     return env
   }
   const now = Date.now()

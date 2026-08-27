@@ -39,4 +39,20 @@ describe("splitConfigByScope", () => {
     })
     expect(split.project).toEqual({})
   })
+
+  // raya_change - Milestone I model pins and routing survive the settings save boundary for future runs.
+  it("writes agent model pins and routing settings to global config", () => {
+    const split = splitConfigByScope({
+      agent: { code: { model: "openai/gpt-4.1" } },
+      small_model: "openai/gpt-4.1-mini",
+      raya_routing: { confidence_threshold: 0.8, goal_continuation: true },
+    })
+
+    expect(split.global).toEqual({
+      agent: { code: { model: "openai/gpt-4.1" } },
+      small_model: "openai/gpt-4.1-mini",
+      raya_routing: { confidence_threshold: 0.8, goal_continuation: true },
+    })
+    expect(split.project).toEqual({})
+  })
 })

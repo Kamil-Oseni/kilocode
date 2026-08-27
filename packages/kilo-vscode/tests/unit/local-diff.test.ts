@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test"
+import { describe, it, expect, setDefaultTimeout } from "bun:test"
 import * as fs from "fs/promises"
 import * as os from "os"
 import * as path from "path"
@@ -13,6 +13,9 @@ import {
 import { GitOps } from "../../src/agent-manager/GitOps"
 import { WorktreeDiffReverter } from "../../src/diff/shared/reverter"
 import { resolveLocalDiffTarget } from "../../src/diff/shared/target"
+
+// raya_change - Git process startup is materially slower on Windows CI.
+if (process.platform === "win32") setDefaultTimeout(15_000)
 
 function git(): GitOps {
   return new GitOps({ log: () => undefined })
@@ -57,6 +60,9 @@ async function withRepo(run: (dir: string, base: string) => Promise<void>): Prom
     runSync(dir, ["config", "user.email", "test@example.com"])
     runSync(dir, ["config", "user.name", "Test"])
     runSync(dir, ["config", "commit.gpgsign", "false"])
+    // raya_change - keep fixture blobs deterministic when Windows Git has autocrlf enabled globally.
+    runSync(dir, ["config", "core.autocrlf", "false"])
+    runSync(dir, ["config", "core.eol", "lf"])
     // Seed commit so `merge-base HEAD main` resolves.
     await fs.writeFile(path.join(dir, "seed.txt"), "seed\n")
     runSync(dir, ["add", "seed.txt"])

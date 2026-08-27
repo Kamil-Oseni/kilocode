@@ -48,12 +48,13 @@ function source() {
 function secure(dir: string) {
   mkdirSync(dir, { recursive: true, mode: 0o700 })
   const entry = lstatSync(dir)
-  if (
+  // raya_change start - Windows has no meaningful POSIX owner or mode bits, but must still reject links.
+  const insecure =
     entry.isSymbolicLink() ||
     !entry.isDirectory() ||
-    entry.uid !== process.getuid?.() ||
-    (entry.mode & 0o077) !== 0
-  ) {
+    (process.platform !== "win32" && (entry.uid !== process.getuid?.() || (entry.mode & 0o077) !== 0))
+  // raya_change end
+  if (insecure) {
     throw new Error(`Bubblewrap cache directory is not private: ${dir}`)
   }
 }

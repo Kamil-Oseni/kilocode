@@ -1,14 +1,15 @@
 import { describe, expect, it } from "bun:test"
 import type { Session } from "@kilocode/sdk/v2/client"
+import { EXTENSION_DISPLAY_NAME } from "../../src/constants" // raya_change - branding expectations follow product identity
 import { nativeTitle } from "../../src/kilo-provider/native-tab-title"
 
 const session = (title: string | null) => ({ title }) as Session
 
 describe("nativeTitle", () => {
   it("uses the default title without a useful session title", () => {
-    expect(nativeTitle(null)).toBe("Kilo Code")
-    expect(nativeTitle(session(""))).toBe("Kilo Code")
-    expect(nativeTitle(session("New session - 2026-05-06T10:39:00.000Z"))).toBe("Kilo Code")
+    expect(nativeTitle(null)).toBe(EXTENSION_DISPLAY_NAME)
+    expect(nativeTitle(session(""))).toBe(EXTENSION_DISPLAY_NAME)
+    expect(nativeTitle(session("New session - 2026-05-06T10:39:00.000Z"))).toBe(EXTENSION_DISPLAY_NAME)
   })
 
   it("keeps short session titles", () => {

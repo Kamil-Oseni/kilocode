@@ -308,7 +308,8 @@ describe("runWorktreeSetupScript", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kilo-setup-flow-"))
     if (!script) return dir
     fs.mkdirSync(path.join(dir, ".kilo"), { recursive: true })
-    fs.writeFileSync(path.join(dir, ".kilo", "setup-script"), "#!/bin/sh\nexit 0\n")
+    const name = process.platform === "win32" ? "setup-script.ps1" : "setup-script"
+    fs.writeFileSync(path.join(dir, ".kilo", name), process.platform === "win32" ? "exit 0\r\n" : "#!/bin/sh\nexit 0\n") // raya_change
     return dir
   }
 
@@ -319,12 +320,13 @@ describe("runWorktreeSetupScript", () => {
     const posted: AgentManagerOutMessage[] = []
     const runs: string[] = []
     const ctx = harness()
+    const repo = root(script) // raya_change - use host-native fixture paths throughout the flow
     const vscode: RunTask = async (cfg) => {
       runs.push(cfg.cwd)
       return opts?.code ?? 0
     }
     const input = {
-      service: new SetupScriptService(root(script)),
+      service: new SetupScriptService(repo),
       destination: opts?.destination ?? ("vscode" as const),
       projectId: opts?.projectId,
       worktreeId: "wt-1",
@@ -335,12 +337,13 @@ describe("runWorktreeSetupScript", () => {
       env: async () => ({}),
       post: (message: AgentManagerOutMessage) => posted.push(message),
     }
-    return { input, posted, runs, ctx }
+    return { input, posted, runs, ctx, repo }
   }
 
   it("posts progress and executes through the picked runner", async () => {
     const scene = flow(true, { code: 0 })
-    await runWorktreeSetupScript(scene.input, { worktreePath: "/repo/worktree", repoPath: "/repo" })
+    const worktree = path.join(scene.repo, "worktree")
+    await runWorktreeSetupScript(scene.input, { worktreePath: worktree, repoPath: scene.repo }) // raya_change
 
     expect(scene.posted).toEqual([
       {
@@ -350,12 +353,15 @@ describe("runWorktreeSetupScript", () => {
         worktreeId: "wt-1",
       },
     ])
-    expect(scene.runs).toEqual(["/repo/worktree"])
+    expect(scene.runs).toEqual([worktree]) // raya_change
   })
 
   it("stamps progress and embedded terminals with the owning project", async () => {
     const scene = flow(true, { destination: "agentManager", projectId: "prj-a" })
-    const result = runWorktreeSetupScript(scene.input, { worktreePath: "/repo/worktree", repoPath: "/repo" })
+    const result = runWorktreeSetupScript(scene.input, {
+      worktreePath: path.join(scene.repo, "worktree"),
+      repoPath: scene.repo,
+    }) // raya_change
     await new Promise((resolve) => setTimeout(resolve, 0))
 
     expect(scene.posted[0]).toMatchObject({ projectId: "prj-a", worktreeId: "wt-1" })
@@ -366,7 +372,10 @@ describe("runWorktreeSetupScript", () => {
 
   it("stays silent when no setup script is configured", async () => {
     const scene = flow(false)
-    await runWorktreeSetupScript(scene.input, { worktreePath: "/repo/worktree", repoPath: "/repo" })
+    await runWorktreeSetupScript(scene.input, {
+      worktreePath: path.join(scene.repo, "worktree"),
+      repoPath: scene.repo,
+    }) // raya_change
 
     expect(scene.posted).toEqual([])
     expect(scene.runs).toEqual([])
@@ -374,10 +383,11 @@ describe("runWorktreeSetupScript", () => {
 
   it("keeps worktree creation best-effort when the script fails", async () => {
     const scene = flow(true, { code: 3 })
+    const worktree = path.join(scene.repo, "worktree")
     await expect(
-      runWorktreeSetupScript(scene.input, { worktreePath: "/repo/worktree", repoPath: "/repo" }),
+      runWorktreeSetupScript(scene.input, { worktreePath: worktree, repoPath: scene.repo }), // raya_change
     ).resolves.toBeUndefined()
-    expect(scene.runs).toEqual(["/repo/worktree"])
+    expect(scene.runs).toEqual([worktree]) // raya_change
     expect(scene.posted).toContainEqual({
       type: "agentManager.worktreeSetup",
       status: "error",

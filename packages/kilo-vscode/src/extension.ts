@@ -72,6 +72,8 @@ export function activate(context: vscode.ExtensionContext) {
   // raya_change start - Milestone F shared persistent browser and in-editor panel
   const browserAutomationService = new BrowserAutomationService(connectionService, context)
   context.subscriptions.push(
+    vscode.commands.registerCommand("raya.openBrowser", () => browserAutomationService.show(false)),
+    // Preserve integrations that invoked the pre-Raya command directly without declaring it in the Raya manifest.
     vscode.commands.registerCommand("kilo-code.new.openBrowser", () => browserAutomationService.show(false)),
     vscode.window.registerWebviewPanelSerializer(BrowserPanel.viewType, {
       deserializeWebviewPanel(panel: vscode.WebviewPanel) {

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, mock } from "bun:test"
+import * as path from "path"
 import * as vscode from "vscode"
 import {
   removeMarketplaceItem,
@@ -15,11 +16,11 @@ import {
 } from "../../webview-ui/src/components/marketplace/utils"
 import type { MarketplaceItem } from "../../webview-ui/src/types/marketplace"
 
-const project = "/repo"
-const storage = vscode.Uri.file("/storage")
-const local = `${project}/.kilo/mcp.json`
-const legacy = `${project}/.kilocode/mcp.json`
-const global = `${storage.fsPath}/settings/mcp_settings.json`
+const project = path.resolve("/repo") // raya_change - use canonical fixture paths on Windows
+const storage = vscode.Uri.file(path.resolve("/storage"))
+const local = path.join(project, ".kilo", "mcp.json")
+const legacy = path.join(project, ".kilocode", "mcp.json")
+const global = vscode.Uri.joinPath(storage, "settings", "mcp_settings.json").fsPath
 const item: McpMarketplaceItem = {
   id: "memory",
   type: "mcp",

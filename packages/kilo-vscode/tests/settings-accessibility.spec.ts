@@ -2,8 +2,10 @@ import { expect, test, type Page } from "@playwright/test"
 
 const GLOBALS = "colorScheme:dark;theme:kilo-vscode;vscodeTheme:dark-modern"
 const NAMES = [
-  "Models",
   "Providers",
+  "Agents & models",
+  "Speech",
+  "Goals & routing",
   "Agent Behaviour",
   "Auto-Approve",
   "Web Tools",
@@ -15,7 +17,7 @@ const NAMES = [
   "Commit Message",
   "Experimental",
   "Language",
-  "About Kilo Code",
+  "About Raya", // raya_change - current product branding
 ]
 
 function story(page: Page) {
@@ -36,22 +38,24 @@ test.describe("settings tab accessibility", () => {
       await expect(page.getByRole("tab", { name, exact: true })).toBeVisible()
     }
 
-    const models = page.getByRole("tab", { name: "Models" })
+    // raya_change start - Milestone I puts Providers before Agents & models in the focused navigation.
+    const models = page.getByRole("tab", { name: "Agents & models" })
     const providers = page.getByRole("tab", { name: "Providers" })
     await expect(models).toHaveAttribute("aria-selected", "true")
     await expect(providers).toHaveAttribute("aria-selected", "false")
-    await expect(page.getByRole("tabpanel", { name: "Models" })).toBeVisible()
+    await expect(page.getByRole("tabpanel", { name: "Agents & models" })).toBeVisible()
 
     await models.focus()
-    await page.keyboard.press("ArrowDown")
+    await page.keyboard.press("ArrowUp")
     await expect(providers).toBeFocused()
     await expect(providers).toHaveAttribute("aria-selected", "true")
     await expect(page.getByRole("tabpanel", { name: "Providers" })).toBeVisible()
 
-    await page.keyboard.press("ArrowUp")
+    await page.keyboard.press("ArrowDown")
     await expect(models).toBeFocused()
     await expect(models).toHaveAttribute("aria-selected", "true")
-    await expect(page.getByRole("tabpanel", { name: "Models" })).toBeVisible()
+    await expect(page.getByRole("tabpanel", { name: "Agents & models" })).toBeVisible()
+    // raya_change end
   })
 
   test("shows sandboxing controls when the platform supports them", async ({ page }) => {

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, mock } from "bun:test"
+import { afterEach, describe, expect, it, mock, setDefaultTimeout } from "bun:test"
 import * as fs from "node:fs/promises"
 import * as os from "node:os"
 import * as path from "node:path"
@@ -18,8 +18,15 @@ const noop = () => {}
 const log = noop as (...args: unknown[]) => void
 const dirs: string[] = []
 
+// raya_change - Git and worktree process startup is slower under the full Windows suite.
+if (process.platform === "win32") setDefaultTimeout(30_000)
+
 afterEach(async () => {
-  await Promise.all(dirs.splice(0, dirs.length).map((dir) => fs.rm(dir, { recursive: true, force: true })))
+  await Promise.all(
+    dirs
+      .splice(0, dirs.length)
+      .map((dir) => fs.rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })),
+  )
 })
 
 async function repo(): Promise<string> {
@@ -29,6 +36,8 @@ async function repo(): Promise<string> {
   await git.init(["--initial-branch=main"])
   await git.addConfig("user.email", "test@test.com")
   await git.addConfig("user.name", "Test")
+  await git.addConfig("core.autocrlf", "false") // raya_change - deterministic fixture content on Windows
+  await git.addConfig("core.eol", "lf")
   await fs.writeFile(path.join(dir, "state.txt"), "base\n")
   await git.add("state.txt")
   await git.commit("initial")

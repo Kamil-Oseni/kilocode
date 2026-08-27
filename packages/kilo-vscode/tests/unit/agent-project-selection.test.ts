@@ -2,16 +2,16 @@ import { describe, it, expect } from "bun:test"
 import { handleProjectMessage, type ProjectMessageDeps } from "../../src/agent-manager/project/messages"
 import type { ProjectContext, ProjectInitResult } from "../../src/agent-manager/project/context"
 import { ProjectContexts } from "../../src/agent-manager/project/contexts"
-import { projectIdFor } from "../../src/agent-manager/project/paths"
+import { canonicalizePath, projectIdFor } from "../../src/agent-manager/project/paths"
 import type { AgentManagerInMessage } from "../../src/agent-manager/types"
 import type { StoredProject } from "../../src/agent-manager/project/registry"
 import type { WorktreeStateManager } from "../../src/agent-manager/WorktreeStateManager"
 
-const WORKSPACE = "/repo/main"
+const WORKSPACE = canonicalizePath("/repo/main") // raya_change - match production project identity on Windows
 const PINNED = projectIdFor(WORKSPACE)
 
 function stored(id: string): StoredProject {
-  return { id, root: `/repo/${id}`, order: 1, addedAt: new Date().toISOString() }
+  return { id, root: canonicalizePath(`/repo/${id}`), order: 1, addedAt: new Date().toISOString() }
 }
 
 function fakeState(persisted?: { current?: unknown }) {

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, spyOn } from "bun:test"
+import path from "node:path"
 import * as vscode from "vscode"
 import { openFileInEditor, openRelativeFile } from "../../src/review-utils"
 
@@ -32,7 +33,8 @@ describe("openRelativeFile", () => {
   it("resolves diff paths from the selected repository", () => {
     openRelativeFile("/repo/app_alpha", "README.md")
 
-    expect((execute.mock.calls[0]?.[1] as vscode.Uri).fsPath).toBe("/repo/app_alpha/README.md")
+    // raya_change - relative review paths resolve with the extension host's native separators.
+    expect((execute.mock.calls[0]?.[1] as vscode.Uri).fsPath).toBe(path.resolve("/repo/app_alpha/README.md"))
   })
 
   it("rejects paths outside the selected repository", () => {

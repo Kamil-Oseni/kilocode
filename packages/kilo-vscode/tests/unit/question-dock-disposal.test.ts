@@ -1,12 +1,14 @@
-import { describe, expect, it } from "bun:test"
+import { afterAll, describe, expect, it } from "bun:test"
 import { unlinkSync } from "node:fs"
 import path from "node:path"
-import { build } from "esbuild"
+import { build, stop } from "esbuild"
 import { solidPlugin } from "esbuild-plugin-solid"
 
 const ROOT = path.resolve(import.meta.dir, "../..")
 const WEBVIEW = path.join(ROOT, "webview-ui")
 const FIXTURE = path.join(ROOT, "tests/fixtures/question-dock-disposal.tsx")
+
+afterAll(() => stop()) // raya_change - release the esbuild service after Bun tests
 
 describe("QuestionDock disposal", () => {
   it("does not read a stale callback-form Show accessor", async () => {

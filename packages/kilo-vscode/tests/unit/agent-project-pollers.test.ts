@@ -2,15 +2,15 @@ import { describe, it, expect } from "bun:test"
 import { ProjectPollers, type PollerPair, type StatsOutMessage } from "../../src/agent-manager/project/pollers"
 import { ProjectContexts } from "../../src/agent-manager/project/contexts"
 import type { StoredProject } from "../../src/agent-manager/project/registry"
-import { projectIdFor } from "../../src/agent-manager/project/paths"
+import { canonicalizePath, projectIdFor } from "../../src/agent-manager/project/paths"
 import type { GitOps } from "../../src/agent-manager/GitOps"
 import type { WorktreeStateManager } from "../../src/agent-manager/WorktreeStateManager"
 
-const WORKSPACE = "/repo/main"
+const WORKSPACE = canonicalizePath("/repo/main") // raya_change - match production project identity on every host
 const PINNED = projectIdFor(WORKSPACE)
 
 function stored(id: string): StoredProject {
-  return { id, root: `/repo/${id}`, order: 1, addedAt: new Date().toISOString() }
+  return { id, root: canonicalizePath(`/repo/${id}`), order: 1, addedAt: new Date().toISOString() }
 }
 
 function setup(projects: StoredProject[], opts: { enabled?: boolean } = {}) {

@@ -317,14 +317,27 @@ const Settings: Component<SettingsProps> = (props) => {
         style={{ flex: 1, overflow: "hidden" }}
       >
         <Tabs.List>
-          <Tabs.Trigger value="models" aria-label={language.t("settings.models.title")}>
-            <Icon name="models" />
-            <span class="label">{language.t("settings.models.title")}</span>
-          </Tabs.Trigger>
+          {/* raya_change start - Keep Raya's primary settings prominent in persistent navigation. */}
           <Tabs.Trigger value="providers" aria-label={language.t("settings.providers.title")}>
             <Icon name="providers" />
             <span class="label">{language.t("settings.providers.title")}</span>
           </Tabs.Trigger>
+          <Tabs.Trigger value="models" aria-label={language.t("settings.models.title")}>
+            <Icon name="models" />
+            <span class="label">{language.t("settings.models.title")}</span>
+          </Tabs.Trigger>
+          <Tabs.Trigger value="speech" aria-label={language.t("settings.speech.title")}>
+            <Icon name="speech-bubble" />
+            <span class="label">{language.t("settings.speech.title")}</span>
+          </Tabs.Trigger>
+          <Tabs.Trigger value="goalsRouting" aria-label={language.t("settings.goalsRouting.title")}>
+            <Icon name="brain" />
+            <span class="label">{language.t("settings.goalsRouting.title")}</span>
+          </Tabs.Trigger>
+          <div class="settings-nav-group label" role="presentation">
+            {language.t("settings.navigation.advanced")}
+          </div>
+          {/* raya_change end */}
           <Tabs.Trigger value="agentBehaviour" aria-label={language.t("settings.agentBehaviour.title")}>
             <Icon name="brain" />
             <span class="label">{language.t("settings.agentBehaviour.title")}</span>
@@ -343,16 +356,6 @@ const Settings: Component<SettingsProps> = (props) => {
             <Icon name="window-cursor" />
             <span class="label">{language.t("settings.webTools.title")}</span>
           </Tabs.Trigger>
-          {/* raya_change start - Milestone I settings hub completion */}
-          <Tabs.Trigger value="speech" aria-label="Speech">
-            <Icon name="speech-bubble" />
-            <span class="label">Speech</span>
-          </Tabs.Trigger>
-          <Tabs.Trigger value="goalsRouting" aria-label="Goals & routing">
-            <Icon name="brain" />
-            <span class="label">Goals & routing</span>
-          </Tabs.Trigger>
-          {/* raya_change end */}
           <Tabs.Trigger value="checkpoints" aria-label={language.t("settings.checkpoints.title")}>
             <Icon name="branch" />
             <span class="label">{language.t("settings.checkpoints.title")}</span>
@@ -432,11 +435,11 @@ const Settings: Component<SettingsProps> = (props) => {
         </Tabs.Content>
         {/* raya_change start - Milestone I settings hub completion */}
         <Tabs.Content value="speech">
-          <h3>Speech</h3>
+          <h3>{language.t("settings.speech.title")}</h3>
           <SpeechTab />
         </Tabs.Content>
         <Tabs.Content value="goalsRouting">
-          <h3>Goals & routing</h3>
+          <h3>{language.t("settings.goalsRouting.title")}</h3>
           <GoalsRoutingTab />
         </Tabs.Content>
         {/* raya_change end */}

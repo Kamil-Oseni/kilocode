@@ -1,16 +1,17 @@
 import { describe, it, expect } from "bun:test"
+import * as path from "path"
 import { ProjectContexts } from "../../src/agent-manager/project/contexts"
 import { ProjectRegistry, type StoredProject } from "../../src/agent-manager/project/registry"
-import { projectIdFor } from "../../src/agent-manager/project/paths"
+import { canonicalizePath, projectIdFor } from "../../src/agent-manager/project/paths"
 import type { WorktreeStateManager } from "../../src/agent-manager/WorktreeStateManager"
 
-const WORKSPACE = "/repo/main"
+const WORKSPACE = canonicalizePath("/repo/main") // raya_change - match production canonicalization on every platform
 const PINNED = projectIdFor(WORKSPACE)
 
 function stored(id: string): StoredProject {
   return {
     id,
-    root: `/repo/${id}`,
+    root: path.resolve("/repo", id), // raya_change - keep fixture roots canonical on Windows
     order: 1,
     addedAt: new Date().toISOString(),
   }
@@ -73,7 +74,7 @@ describe("ProjectContexts", () => {
     const extra = stored("prj-extra")
     const { contexts } = setup({ workspace: WORKSPACE, enabled: true, projects: [extra] })
     const ctx = contexts.activate("prj-extra")
-    expect(ctx?.root).toBe("/repo/prj-extra")
+    expect(ctx?.root).toBe(path.resolve("/repo/prj-extra"))
     expect(contexts.active()?.id).toBe("prj-extra")
     expect(contexts.isExpanded("prj-extra")).toBe(false)
   })
@@ -166,7 +167,7 @@ describe("ProjectContexts", () => {
     const { contexts, created } = setup({ workspace: WORKSPACE, enabled: true, projects: [extra] })
     contexts.active()!.stateManager()
     contexts.activate("prj-extra")!.stateManager()
-    expect(created).toEqual([WORKSPACE, "/repo/prj-extra"])
+    expect(created).toEqual([WORKSPACE, path.resolve("/repo/prj-extra")])
   })
 
   it("re-derives the pinned project when the workspace changes", () => {
@@ -183,9 +184,9 @@ describe("ProjectContexts", () => {
     expect(dynamic.syncPinned()).toBe(true)
     expect(dynamic.active()?.id).toBe(PINNED)
     expect(dynamic.syncPinned()).toBe(false)
-    ws.root = "/repo/other"
+    ws.root = path.resolve("/repo/other")
     expect(dynamic.syncPinned()).toBe(true)
-    expect(dynamic.active()?.root).toBe("/repo/other")
+    expect(dynamic.active()?.root).toBe(canonicalizePath("/repo/other"))
   })
 
   it("snapshots pinned first with registry projects in order", () => {

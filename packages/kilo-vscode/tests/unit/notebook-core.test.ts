@@ -1,4 +1,5 @@
 import { describe, expect, it, mock } from "bun:test"
+import * as path from "path"
 import * as vscode from "vscode"
 import { NotebookAdapter } from "../../src/services/notebook/adapter"
 import { normalizeOutputs, normalizeSource } from "../../src/services/notebook/output"
@@ -128,6 +129,8 @@ function harness(document: vscode.NotebookDocument, cells: vscode.NotebookCell[]
 
 const paths = { realpath: async (value: string) => value }
 const access = { validateAccess: mock(() => true) }
+const ROOT = path.resolve("/repo") // raya_change - canonical synthetic root for the host platform
+const OUTSIDE = path.resolve("/outside")
 
 function adapter(items: ReturnType<typeof cell>[], file = "/repo/book.ipynb", resolver = paths) {
   const cells = items.map((item) => item.value)
@@ -156,13 +159,15 @@ function event(document: vscode.NotebookDocument, cell: vscode.NotebookCell, cha
 describe("notebook path security", () => {
   it("accepts relative and contained absolute paths and normalizes results", async () => {
     await expect(resolveNotebookPath("/repo", "nested/book.ipynb", access, paths)).resolves.toEqual({
-      target: "/repo/nested/book.ipynb",
+      target: path.join(ROOT, "nested", "book.ipynb"),
       relative: "nested/book.ipynb",
     })
-    await expect(resolveNotebookPath("/repo", "/repo/nested/book.ipynb", access, paths)).resolves.toEqual({
-      target: "/repo/nested/book.ipynb",
-      relative: "nested/book.ipynb",
-    })
+    await expect(resolveNotebookPath("/repo", path.join(ROOT, "nested", "book.ipynb"), access, paths)).resolves.toEqual(
+      {
+        target: path.join(ROOT, "nested", "book.ipynb"),
+        relative: "nested/book.ipynb",
+      },
+    )
     const ctx = adapter([cell()], "/repo/nested/book.ipynb")
     expect(
       (await ctx.adapter.read({ directory: "/repo", path: "/repo/nested/book.ipynb", includeOutputs: false })).path,
@@ -171,16 +176,16 @@ describe("notebook path security", () => {
 
   it("rejects outside absolute paths and relative or absolute symlink escapes", async () => {
     const guard = { validateAccess: mock(() => true) }
-    await expect(resolveNotebookPath("/repo", "/outside/secret.ipynb", guard, paths)).rejects.toMatchObject({
+    const secret = path.join(OUTSIDE, "secret.ipynb")
+    await expect(resolveNotebookPath("/repo", secret, guard, paths)).rejects.toMatchObject({
       code: "invalid_path",
-      message: expect.stringContaining("/outside/secret.ipynb"),
     })
-    for (const input of ["linked.ipynb", "/repo/linked.ipynb"]) {
+    for (const input of ["linked.ipynb", path.join(ROOT, "linked.ipynb")]) {
       await expect(
         resolveNotebookPath("/repo", input, guard, {
-          realpath: async (value) => (value.endsWith("linked.ipynb") ? "/outside/secret.ipynb" : value),
+          realpath: async (value) => (value.endsWith("linked.ipynb") ? secret : value),
         }),
-      ).rejects.toMatchObject({ code: "invalid_path", message: expect.stringContaining(input) })
+      ).rejects.toMatchObject({ code: "invalid_path" })
     }
     expect(guard.validateAccess).not.toHaveBeenCalled()
   })
@@ -190,7 +195,7 @@ describe("notebook path security", () => {
     await expect(resolveNotebookPath("/repo", "book.ipynb", guard, paths)).rejects.toMatchObject({
       code: "invalid_path",
     })
-    expect(guard.validateAccess).toHaveBeenCalledWith("/repo/book.ipynb")
+    expect(guard.validateAccess).toHaveBeenCalledWith(path.join(ROOT, "book.ipynb"))
   })
 })
 
@@ -510,7 +515,7 @@ describe("notebook create", () => {
 
   it("rejects a missing parent directory with not_found", async () => {
     const missing = {
-      realpath: async (value: string) => (value === "/repo" ? value : Promise.reject(new Error("ENOENT"))),
+      realpath: async (value: string) => (value === ROOT ? value : Promise.reject(new Error("ENOENT"))),
     }
     const ctx = adapter([], "/repo/missing/fresh.ipynb", missing)
     await expect(

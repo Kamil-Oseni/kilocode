@@ -6,15 +6,15 @@ import { execFileSync } from "child_process"
 import { handleProjectMessage, type ProjectMessageDeps } from "../../src/agent-manager/project/messages"
 import { ProjectRegistry, type RegistryStorage } from "../../src/agent-manager/project/registry"
 import { ProjectContexts } from "../../src/agent-manager/project/contexts"
-import { projectIdFor } from "../../src/agent-manager/project/paths"
+import { canonicalizePath, projectIdFor } from "../../src/agent-manager/project/paths"
 import type { AgentManagerInMessage } from "../../src/agent-manager/types"
 
-const WORKSPACE = "/repo/main"
+const WORKSPACE = canonicalizePath("/repo/main") // raya_change - match production project identity on Windows
 
 function gitRepo(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kilo-am-msg-"))
   execFileSync("git", ["init", "-q", dir])
-  return fs.realpathSync(dir)
+  return canonicalizePath(dir) // raya_change - registry IDs are derived from normalized canonical roots
 }
 
 function setup(opts: { enabled?: boolean; workspace?: string } = {}) {

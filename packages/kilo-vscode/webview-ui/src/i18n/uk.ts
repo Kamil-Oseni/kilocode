@@ -1327,4 +1327,12 @@ export const dict = {
   "chat.search.invalidRegex": "Недійсний регулярний вираз",
   "chat.search.noResults": "Немає результатів",
   "chat.search.searchingHistory": "Пошук у попередніх повідомленнях…",
+  // raya_change - Milestone I English fallbacks pending locale translation
+  "provider.custom.connection.test": "Test connection",
+  "provider.custom.connection.testing": "Testing…",
+  "provider.custom.connection.success": "Connected — {{count}} models found",
+  "provider.custom.connection.failed": "Connection failed: {{error}}",
+  "settings.speech.title": "Speech",
+  "settings.goalsRouting.title": "Goals & routing",
+  "settings.navigation.advanced": "Advanced",
 }

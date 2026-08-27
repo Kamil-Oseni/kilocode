@@ -1340,4 +1340,12 @@ export const dict = {
   "chat.search.invalidRegex": "Ungültiger regulärer Ausdruck",
   "chat.search.noResults": "Keine Ergebnisse",
   "chat.search.searchingHistory": "Frühere Nachrichten werden durchsucht…",
+  // raya_change - Milestone I English fallbacks pending locale translation
+  "provider.custom.connection.test": "Test connection",
+  "provider.custom.connection.testing": "Testing…",
+  "provider.custom.connection.success": "Connected — {{count}} models found",
+  "provider.custom.connection.failed": "Connection failed: {{error}}",
+  "settings.speech.title": "Speech",
+  "settings.goalsRouting.title": "Goals & routing",
+  "settings.navigation.advanced": "Advanced",
 } satisfies Partial<Record<Keys, string>>

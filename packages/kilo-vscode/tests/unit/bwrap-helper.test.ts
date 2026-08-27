@@ -35,7 +35,8 @@ describe("local Bubblewrap helper", () => {
 
       expect(dest?.startsWith(extension)).toBe(false)
       expect(await fs.readFile(dest!, "utf8")).toBe("bubblewrap")
-      expect((await fs.stat(dest!)).mode & 0o111).not.toBe(0)
+      // raya_change - executable mode bits are only meaningful on POSIX hosts.
+      if (process.platform !== "win32") expect((await fs.stat(dest!)).mode & 0o111).not.toBe(0)
       expect(resolveLocalBwrapEnv(extension, true, "linux-x64", cache)).toEqual({ KILO_BWRAP_PATH: dest })
       expect(resolveLocalBwrapEnv(extension, false, "linux-x64", cache)).toEqual({})
     } finally {
@@ -87,19 +88,27 @@ describe("local Bubblewrap helper", () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "kilo-vscode-bwrap-"))
     try {
       const source = path.join(root, "source")
+      const linked = path.join(root, "linked")
       const cache = path.join(root, "cache")
       const dest = localBwrapPath("linux-x64", cache)!
       await fs.writeFile(source, "bubblewrap")
+      await fs.mkdir(linked)
       await fs.mkdir(path.dirname(dest), { recursive: true })
-      await fs.symlink(source, dest)
-      await fs.writeFile(`${dest}.sha256`, "0".repeat(64))
+      // raya_change - directory junctions do not require Windows developer-mode privileges.
+      await fs.symlink(linked, dest, process.platform === "win32" ? "junction" : "dir")
       expect(validLocalBwrap(dest)).toBe(false)
 
       await fs.rm(cache, { recursive: true, force: true })
       await fs.mkdir(cache, { recursive: true, mode: 0o777 })
       await fs.chmod(cache, 0o777)
       process.env.KILO_BWRAP_PATH = source
-      await expect(ensureBwrapForTarget("linux-x64", cache)).rejects.toThrow("cache directory is not private")
+      // raya_change start - public mode bits cannot be represented on Windows.
+      if (process.platform === "win32") {
+        expect(await ensureBwrapForTarget("linux-x64", cache)).toBe(localBwrapPath("linux-x64", cache))
+      } else {
+        await expect(ensureBwrapForTarget("linux-x64", cache)).rejects.toThrow("cache directory is not private")
+      }
+      // raya_change end
     } finally {
       await fs.rm(root, { recursive: true, force: true })
     }

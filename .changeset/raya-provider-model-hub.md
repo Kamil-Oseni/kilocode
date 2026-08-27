@@ -4,4 +4,4 @@
 
 <!-- raya_change - Milestone I release note -->
 
-Add encrypted BYOK provider setup with free connection testing and persistent per-agent model selection.
+Complete the focused settings hub with encrypted BYOK provider testing, persistent agent and Chief model selection, and scoped secret-free settings transfer.

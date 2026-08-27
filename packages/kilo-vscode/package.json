@@ -119,7 +119,7 @@
         "icon": "$(organization)"
       },
       {
-        "command": "kilo-code.new.openBrowser",
+        "command": "raya.openBrowser",
         "title": "Open Browser",
         "category": "Raya",
         "icon": "$(globe)"
@@ -1258,10 +1258,10 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "knip": "knip",
-    "check-kilocode-change": "! grep -rIn 'kilocode_change' . ../kilo-ui/ --exclude='package.json' --exclude='*.md' --exclude-dir='node_modules' --exclude-dir='dist' | grep -v '`kilocode_change`'",
+    "check-kilocode-change": "bun script/check-kilocode-change.ts",
     "lint": "eslint --cache --cache-strategy content --cache-location node_modules/.cache/eslint src webview-ui",
     "test": "vscode-test",
-    "test:unit": "bun test tests/unit/ --dots",
+    "test:unit": "bun script/test-unit.ts",
     "test:browser-smoke-live": "bun script/test-browser-smoke-live.ts",
     "test:voice-live": "bun script/test-voice-live.ts",
     "test:voice-stt-live": "bun script/test-voice-stt-live.ts",

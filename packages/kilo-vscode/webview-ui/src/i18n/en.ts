@@ -449,7 +449,12 @@ export const dict = {
   "settings.config.source.projectRoot": "Project root config",
   "settings.config.source.projectKilocode": "Legacy .kilocode config",
   "settings.config.source.projectOpencode": "Legacy .opencode config",
-  "settings.models.title": "Agents & models", // raya_change - Milestone I settings section
+  // raya_change start - Milestone I primary settings navigation
+  "settings.models.title": "Agents & models",
+  "settings.speech.title": "Speech",
+  "settings.goalsRouting.title": "Goals & routing",
+  "settings.navigation.advanced": "Advanced",
+  // raya_change end
 
   "settings.permissions.toast.updateFailed.title": "Failed to update permissions",
 

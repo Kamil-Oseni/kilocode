@@ -1339,4 +1339,12 @@ export const dict = {
   "chat.search.invalidRegex": "Ongeldige reguliere expressie",
   "chat.search.noResults": "Geen resultaten",
   "chat.search.searchingHistory": "Eerdere berichten doorzoeken…",
+  // raya_change - Milestone I English fallbacks pending locale translation
+  "provider.custom.connection.test": "Test connection",
+  "provider.custom.connection.testing": "Testing…",
+  "provider.custom.connection.success": "Connected — {{count}} models found",
+  "provider.custom.connection.failed": "Connection failed: {{error}}",
+  "settings.speech.title": "Speech",
+  "settings.goalsRouting.title": "Goals & routing",
+  "settings.navigation.advanced": "Advanced",
 }

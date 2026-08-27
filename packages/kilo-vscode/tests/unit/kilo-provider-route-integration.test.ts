@@ -1,11 +1,14 @@
-import { describe, it, expect } from "bun:test"
+import { describe, it, expect, setDefaultTimeout } from "bun:test"
 import * as fs from "fs/promises"
 import * as os from "os"
 import * as path from "path"
+import { canonicalizePath } from "../../src/agent-manager/project/paths"
 import { ProjectRouteService } from "../../src/agent-manager/project/route"
 
 // vscode mock is provided by the shared preload (tests/setup/vscode-mock.ts)
 const { KiloProvider } = await import("../../src/KiloProvider")
+
+if (process.platform === "win32") setDefaultTimeout(15_000) // raya_change - allow Git startup under full-suite load
 
 type SessionGetParams = { sessionID: string; directory: string }
 
@@ -54,6 +57,7 @@ function mockConnection(getImpl?: (p: SessionGetParams) => Promise<unknown>, vcs
       notifications: async () => ({ data: [] }),
       profile: async () => ({ data: {} }),
     },
+    kilocode: { goal: { get: async () => ({ data: undefined }) } }, // raya_change - satisfy delayed goal refreshes
   }
   let current: typeof client | null = client
   return {
@@ -183,7 +187,7 @@ describe("KiloProvider route integration", () => {
 
       await internal.refreshGitStatus(source, "s1")
       const resolved = await fs.realpath(root)
-      expect(provider.getSessionGitDirectory("s1")).toBe(resolved)
+      expect(canonicalizePath(provider.getSessionGitDirectory("s1")!)).toBe(canonicalizePath(resolved)) // raya_change
 
       const calls: Array<{ directory?: string; sessionID?: string }> = []
       internal.refreshGitStatus = async (directory, sessionID) => {
@@ -192,7 +196,9 @@ describe("KiloProvider route integration", () => {
       internal.contextSessionID = "s1"
       internal.refreshSessionDetails("s1", parent)
 
-      expect(calls).toEqual([{ directory: resolved, sessionID: "s1" }])
+      expect(calls.map((call) => ({ ...call, directory: canonicalizePath(call.directory!) }))).toEqual([
+        { directory: canonicalizePath(resolved), sessionID: "s1" },
+      ]) // raya_change - compare canonical host paths
     })
   })
 
@@ -239,7 +245,7 @@ describe("KiloProvider route integration", () => {
         "s1",
       )
 
-      expect(provider.getSessionGitDirectory("s1")).toBe(await fs.realpath(root))
+      expect(canonicalizePath(provider.getSessionGitDirectory("s1")!)).toBe(canonicalizePath(await fs.realpath(root))) // raya_change
     })
   })
 
@@ -257,7 +263,7 @@ describe("KiloProvider route integration", () => {
 
       await internal.refreshGitStatus(root, "child")
 
-      expect(provider.getSessionGitDirectory("child")).toBe(await fs.realpath(root))
+      expect(canonicalizePath(provider.getSessionGitDirectory("child")!)).toBe(canonicalizePath(await fs.realpath(root))) // raya_change
       expect(sent).not.toContainEqual({ type: "gitStatus", repo: true })
     })
   })

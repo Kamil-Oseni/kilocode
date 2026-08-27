@@ -1,14 +1,17 @@
-import { describe, expect, it } from "bun:test"
+import { afterAll, describe, expect, it } from "bun:test"
 import { unlinkSync } from "node:fs"
 import path from "node:path"
-import { build } from "esbuild"
+import { build, stop } from "esbuild"
 import { solidPlugin } from "esbuild-plugin-solid"
 
 const ROOT = path.resolve(import.meta.dir, "../..")
 const WEBVIEW = path.join(ROOT, "webview-ui")
 const FIXTURE = path.join(ROOT, "tests/fixtures/pr-comments-render.tsx")
 
+afterAll(() => stop()) // raya_change - release the esbuild service after Bun tests
+
 describe("PR comments", () => {
+  // raya_change start - allow Bun and esbuild startup under full Windows suite load
   it("renders hunks, collapses resolved threads, and sends a thread to the agent", async () => {
     const solid = path.dirname(Bun.resolveSync("solid-js/package.json", WEBVIEW))
     const aliases: Record<string, string> = {
@@ -53,5 +56,6 @@ describe("PR comments", () => {
 
     const output = child.stdout.toString() + child.stderr.toString()
     expect(child.exitCode, output).toBe(0)
-  })
+  }, 30_000)
+  // raya_change end
 })

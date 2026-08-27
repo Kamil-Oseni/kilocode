@@ -105,6 +105,49 @@ describe("buildExport", () => {
     expect(result.provider).toBeUndefined()
     expect(result.mcp).toBeUndefined()
   })
+
+  // raya_change - Milestone I v2 keeps global/project ownership and exports speech preferences without key state.
+  it("exports scoped config and non-secret speech preferences", () => {
+    const result = buildExport({
+      global: {
+        provider: {
+          custom: {
+            name: "Custom",
+            api_key: "sk-secret",
+            options: { baseURL: "https://user:pass@example.com/v1?api_key=hidden&region=eu" },
+          },
+        },
+        agent: { code: { model: "custom/code" } },
+      },
+      project: { commit_message: { model: "custom/fast" } },
+      speech: {
+        voiceEngine: "cascade-v1",
+        realtimeEndpoint: "wss://realtime.example.com",
+        realtimeModel: "realtime",
+        realtimeVoice: "voice",
+        mediaFrontendURL: "http://127.0.0.1:7890",
+        sttEndpoint: "https://stt.example.com/v1/audio/transcriptions",
+        sttModel: "stt",
+        ttsEndpoint: "wss://tts.example.com/ws",
+        ttsModel: "tts",
+        voice: "speaker",
+        mode: "hands-free",
+        autoSpeak: true,
+        cliMirror: false,
+        vadThreshold: 0.03,
+        vadSilenceMs: 800,
+      },
+    })
+
+    expect(result.global.provider.custom.api_key).toBeUndefined()
+    expect(result.global.provider.custom.options.baseURL).toBe("https://example.com/v1?region=eu")
+    expect(result.global.agent.code.model).toBe("custom/code")
+    expect(result.project.commit_message.model).toBe("custom/fast")
+    expect(result.speech.sttModel).toBe("stt")
+    expect(JSON.stringify(result)).not.toContain("sk-secret")
+    expect(JSON.stringify(result)).not.toContain("pass")
+    expect(JSON.stringify(result)).not.toContain("hidden")
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -277,6 +320,39 @@ describe("parseImport", () => {
       expect(result.config.mcp?.gh?.env).toBeUndefined()
     }
   })
+
+  // raya_change - scoped settings round-trip restores both owners and ignores speech key-state injections.
+  it("imports v2 scopes and whitelisted speech preferences", () => {
+    const json = JSON.stringify({
+      _meta: { version: 2, secretsStripped: true },
+      global: {
+        provider: { custom: { name: "Custom", api_key: "sk-imported" } },
+        agent: { code: { model: "custom/code" } },
+        raya_routing: { confidence_threshold: 0.8 },
+      },
+      project: { commit_message: { model: "custom/fast" } },
+      speech: {
+        sttEndpoint: "https://stt.example.com/v1/audio/transcriptions",
+        sttModel: "stt",
+        hasSttKey: true,
+        apiKey: "speech-secret",
+      },
+    })
+    const result = parseImport(json)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    expect(result.scopes?.global.provider?.custom?.api_key).toBeUndefined()
+    expect(result.scopes?.global.agent?.code?.model).toBe("custom/code")
+    expect(result.scopes?.global.raya_routing?.confidence_threshold).toBe(0.8)
+    expect(result.scopes?.project.commit_message?.model).toBe("custom/fast")
+    expect(result.speech).toEqual({
+      sttEndpoint: "https://stt.example.com/v1/audio/transcriptions",
+      sttModel: "stt",
+    })
+    expect(JSON.stringify(result)).not.toContain("speech-secret")
+    expect(JSON.stringify(result)).not.toContain("hasSttKey")
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -398,8 +474,8 @@ describe("constants", () => {
     expect(MAX_IMPORT_SIZE).toBe(1_048_576)
   })
 
-  it("META_VERSION is 1", () => {
-    expect(META_VERSION).toBe(1)
+  it("META_VERSION is 2", () => {
+    expect(META_VERSION).toBe(2)
   })
 
   it("KNOWN_KEYS includes core config keys", () => {
@@ -416,10 +492,11 @@ describe("constants", () => {
     // If someone adds a new field to Config, this test fails as a reminder
     // to also add it to KNOWN_KEYS in settings-io.ts.
     const src = await Bun.file(require("path").join(__dirname, "../../webview-ui/src/types/messages/config.ts")).text()
-    const match = src.match(/export interface Config \{([^}]+)\}/)
+    // raya_change - stop only at Config's unindented brace so nested option objects remain valid.
+    const match = src.match(/export interface Config \{([\s\S]*?)^\}/m)
     expect(match).not.toBeNull()
     const body = match![1]
-    const keys = [...body.matchAll(/^\s+(\w+)\??:/gm)].map((m) => m[1])
+    const keys = [...body.matchAll(/^  (\w+)\??:/gm)].map((m) => m[1])
     expect(keys.length).toBeGreaterThan(0)
 
     const sorted = (arr: readonly string[]) => [...arr].sort()

@@ -12,6 +12,13 @@
  */
 
 import { getShellEnvironment } from "./shell-env"
+// raya_change - setup lifecycle timers must not inherit test or extension global timer shims
+import {
+  clearInterval as stopInterval,
+  clearTimeout as stopTimeout,
+  setInterval as repeat,
+  setTimeout as delay,
+} from "node:timers"
 import { SetupScriptRunner, type RunTask } from "./SetupScriptRunner"
 import type { SetupScriptService } from "./SetupScriptService"
 import type { RunHandle } from "./run/manager"
@@ -112,8 +119,8 @@ export function createSetupScriptTask(input: Input): RunTask {
       const settle = (action: () => void) => {
         if (settled) return
         settled = true
-        clearTimeout(timer)
-        clearInterval(watchdog)
+        stopTimeout(timer)
+        stopInterval(watchdog)
         action()
       }
       const halt = (target: RunHandle, reason: string) => {
@@ -135,10 +142,10 @@ export function createSetupScriptTask(input: Input): RunTask {
       // The first budget covers connect + create; once the PTY is running
       // the script itself gets a fresh full budget, so a slow backend start
       // never eats into its five minutes.
-      let timer = setTimeout(expire, ms)
+      let timer = delay(expire, ms)
       // Exit events are the primary signal; reconcile periodically so a
       // lost event cannot leave the script (and worktree creation) stuck.
-      const watchdog = setInterval(() => {
+      const watchdog = repeat(() => {
         void input.manager.sync().catch((error) => {
           input.log(`Setup terminal reconcile failed: ${error instanceof Error ? error.message : String(error)}`)
         })
@@ -166,8 +173,8 @@ export function createSetupScriptTask(input: Input): RunTask {
               if (expired) halt(created, "Setup script timed out after 5 minutes")
               return
             }
-            clearTimeout(timer)
-            timer = setTimeout(expire, ms)
+            stopTimeout(timer)
+            timer = delay(expire, ms)
           },
           (error) => settle(() => reject(error instanceof Error ? error : new Error(String(error)))),
         )

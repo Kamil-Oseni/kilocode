@@ -74,14 +74,16 @@ describe("RunScriptService", () => {
     expect(new RunScriptService(root).resolveScript("darwin")).toBeUndefined()
   })
 
-  it("rejects symlinks pointing outside the .kilo directory", () => {
+  // raya_change - Windows file symlinks require privileges unavailable in standard test environments.
+  it.skipIf(process.platform === "win32")("rejects symlinks pointing outside the .kilo directory", () => {
     const outside = path.join(root, "evil.sh")
     fs.writeFileSync(outside, "echo pwned")
     fs.symlinkSync(outside, path.join(dir, "run-script"))
     expect(new RunScriptService(root).resolveScript("darwin")).toBeUndefined()
   })
 
-  it("accepts symlinks pointing inside the .kilo directory", () => {
+  // raya_change - Keep the containment invariant covered on hosts that can create file symlinks.
+  it.skipIf(process.platform === "win32")("accepts symlinks pointing inside the .kilo directory", () => {
     const target = path.join(dir, "real-script")
     fs.writeFileSync(target, "bun test")
     fs.symlinkSync(target, path.join(dir, "run-script"))

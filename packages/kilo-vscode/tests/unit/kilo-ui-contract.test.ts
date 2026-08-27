@@ -356,10 +356,15 @@ describe("AssistantMessage visible row contract (source)", () => {
     expect(parts).toContain('part.state.status === "completed" && !!ToolRegistry.render(part.tool)')
   })
 
-  it("filters pending questions until their dock request exists", () => {
+  // raya_change start - Milestone C question and ask_options tools share dock requests
+  it("filters pending selectable prompts until their dock request exists", () => {
     expect(src).toContain('part.state.status !== "pending" && part.state.status !== "running"')
-    expect(src).toContain('matchToolRequest(part, "question", session.questions())')
+    expect(src).toContain('(part.tool !== "question" && part.tool !== "ask_options")')
+    expect(src).toContain("matchToolRequest(part, undefined, session.questions())")
+    expect(src).toContain("// raya_change start - Milestone C hides orphaned ask_options calls like legacy questions")
+    expect(src).toContain("// raya_change end")
   })
+  // raya_change end
 
   it("filters completed synthetic text and redaction-only reasoning", () => {
     expect(parts).toContain("part.synthetic && message?.time.completed")

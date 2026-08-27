@@ -508,6 +508,28 @@ it.instance(
   },
 )
 
+// kilocode_change start
+// raya_change - Milestone I proves a saved per-agent model pin is resolved by the next runtime load.
+it.instance(
+  "configured agent model pins apply when the agent runtime loads",
+  () =>
+    Effect.gen(function* () {
+      const code = yield* load((svc) => svc.get("code"))
+      expect(code?.model?.providerID).toBe("openai")
+      expect(code?.model?.modelID).toBe("gpt-4.1")
+    }),
+  {
+    config: {
+      agent: {
+        code: {
+          model: "openai/gpt-4.1",
+        },
+      },
+    },
+  },
+)
+// kilocode_change end
+
 it.instance(
   "Agent.list keeps the default agent first and sorts the rest by name",
   () =>

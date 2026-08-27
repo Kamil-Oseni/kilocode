@@ -9,12 +9,17 @@ import {
   samePath,
 } from "../../src/agent-manager/project/paths"
 
+// raya_change - directory junctions exercise realpath aliases without Windows developer-mode privileges.
+function link(target: string, alias: string) {
+  fs.symlinkSync(target, alias, process.platform === "win32" ? "junction" : "dir")
+}
+
 describe("project-paths", () => {
   it("canonicalizePath resolves a symlink alias to its realpath", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "pp-root-"))
     const target = fs.mkdtempSync(path.join(os.tmpdir(), "pp-target-"))
     const alias = path.join(root, "alias")
-    fs.symlinkSync(target, alias)
+    link(target, alias)
     try {
       expect(canonicalizePath(alias)).toBe(canonicalizePath(target))
       expect(canonicalizePath(alias)).not.toBe(alias)
@@ -35,7 +40,7 @@ describe("project-paths", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "pp-tracked-"))
     const target = fs.mkdtempSync(path.join(os.tmpdir(), "pp-target-"))
     const alias = path.join(root, "alias")
-    fs.symlinkSync(target, alias)
+    link(target, alias)
     try {
       // git worktree list --porcelain realpath-resolves registration, so the
       // tracked key is the realpath, not the lexical alias a session was
@@ -53,7 +58,7 @@ describe("project-paths", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "pp-lexical-"))
     const target = fs.mkdtempSync(path.join(os.tmpdir(), "pp-lexical-target-"))
     const alias = path.join(root, "alias")
-    fs.symlinkSync(target, alias)
+    link(target, alias)
     try {
       // A map keyed by the lexical alias (as older code paths produced) must
       // still match a probe path that canonicalizes to the same realpath.

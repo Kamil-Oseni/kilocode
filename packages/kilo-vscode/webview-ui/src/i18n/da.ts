@@ -1311,4 +1311,12 @@ export const dict = {
   "chat.search.invalidRegex": "Ugyldigt regulært udtryk",
   "chat.search.noResults": "Ingen resultater",
   "chat.search.searchingHistory": "Søger i tidligere beskeder…",
+  // raya_change - Milestone I English fallbacks pending locale translation
+  "provider.custom.connection.test": "Test connection",
+  "provider.custom.connection.testing": "Testing…",
+  "provider.custom.connection.success": "Connected — {{count}} models found",
+  "provider.custom.connection.failed": "Connection failed: {{error}}",
+  "settings.speech.title": "Speech",
+  "settings.goalsRouting.title": "Goals & routing",
+  "settings.navigation.advanced": "Advanced",
 }

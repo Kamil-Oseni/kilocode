@@ -137,7 +137,8 @@ export function validLocalBwrap(file: string): boolean {
   try {
     const entry = fs.lstatSync(file)
     if (entry.isSymbolicLink() || !entry.isFile() || (entry.mode & 0o6000) !== 0) return false
-    if ((entry.mode & 0o022) !== 0 || (entry.mode & 0o111) === 0) return false
+    // raya_change - Windows cannot represent the POSIX write/execute policy used for Linux helpers.
+    if (process.platform !== "win32" && ((entry.mode & 0o022) !== 0 || (entry.mode & 0o111) === 0)) return false
     const digest = fs.readFileSync(`${file}.sha256`, "utf8").trim()
     if (!/^[a-f0-9]{64}$/.test(digest)) return false
     return localBwrapDigest(file) === digest

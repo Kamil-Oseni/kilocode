@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import type { Config } from "@kilocode/sdk/v2/client"
 import { fetchSnapshot } from "../../src/kilo-provider/config-snapshot"
+import { canonicalizePath } from "../../src/agent-manager/project/paths"
 
 // vscode mock is provided by the shared preload (tests/setup/vscode-mock.ts)
 const { KiloProvider } = await import("../../src/KiloProvider")
@@ -288,7 +289,7 @@ describe("KiloProvider indexing refresh", () => {
   })
 
   it("fetchAndSendIndexingStatus writes project consent through the dedicated endpoint", async () => {
-    const worktree = "/repo/.kilo/.kilocode/worktrees/feature"
+    const worktree = canonicalizePath("/repo/.kilo/.kilocode/worktrees/feature") // raya_change - host path identity
     const calls: { input: RequestInfo | URL; init?: RequestInit }[] = []
     const original = globalThis.fetch
 

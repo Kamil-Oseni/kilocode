@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test"
+import os from "node:os"
+import path from "node:path"
+import { canonicalizePath } from "../../src/agent-manager/project/paths"
 import { getShellEnvironment, execWithShellEnv, clearShellEnvCache } from "../../src/agent-manager/shell-env"
 
 afterEach(() => {
@@ -42,23 +45,27 @@ describe("getShellEnvironment", () => {
 
 describe("execWithShellEnv", () => {
   it("executes a simple command", async () => {
-    const { stdout } = await execWithShellEnv("echo", ["hello"])
+    const { stdout } = await execWithShellEnv(process.execPath, ["-e", "process.stdout.write('hello')"]) // raya_change
     expect(stdout.trim()).toBe("hello")
   })
 
   it("passes cwd option through", async () => {
-    const { stdout } = await execWithShellEnv("pwd", [], { cwd: "/tmp" })
-    // /tmp may resolve to /private/tmp on macOS
-    expect(stdout.trim()).toMatch(/\/tmp$/)
+    const { stdout } = await execWithShellEnv(process.execPath, ["-e", "process.stdout.write(process.cwd())"], {
+      cwd: os.tmpdir(),
+    }) // raya_change - use an executable and directory available on every host
+    expect(canonicalizePath(stdout.trim())).toBe(canonicalizePath(path.resolve(os.tmpdir())))
   })
 
   it("throws on non-ENOENT errors", async () => {
-    await expect(execWithShellEnv("ls", ["--nonexistent-flag-that-fails"])).rejects.toThrow()
+    await expect(execWithShellEnv(process.execPath, ["-e", "process.exit(1)"])).rejects.toThrow() // raya_change
   })
 
   it("concurrent calls don't reject prematurely", async () => {
     // Both calls should succeed — neither should throw due to a race
-    const [a, b] = await Promise.all([execWithShellEnv("echo", ["first"]), execWithShellEnv("echo", ["second"])])
+    const [a, b] = await Promise.all([
+      execWithShellEnv(process.execPath, ["-e", "process.stdout.write('first')"]),
+      execWithShellEnv(process.execPath, ["-e", "process.stdout.write('second')"]),
+    ]) // raya_change - avoid POSIX shell builtins on Windows
     expect(a.stdout.trim()).toBe("first")
     expect(b.stdout.trim()).toBe("second")
   })

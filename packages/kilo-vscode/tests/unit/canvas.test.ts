@@ -1,14 +1,20 @@
 // raya_change - Milestone E render-from-data, live-refresh, and error-recovery tests
-import { afterEach, describe, expect, it } from "bun:test"
+import { afterAll, afterEach, describe, expect, it } from "bun:test"
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
-import { build } from "esbuild"
+import { build, stop } from "esbuild"
+import { stop as stopWasm } from "esbuild-wasm"
 import { Window } from "happy-dom"
 import { CanvasCompiler, type CanvasBuild } from "../../src/services/canvas/canvas-compiler"
 import { CanvasRefresh } from "../../src/services/canvas/canvas-refresh"
 
 const dirs: string[] = []
+
+afterAll(() => {
+  stop()
+  stopWasm()
+}) // raya_change - release native and WASM esbuild services after Bun tests
 
 async function temp() {
   const dir = await mkdtemp(join(tmpdir(), "raya-canvas-"))

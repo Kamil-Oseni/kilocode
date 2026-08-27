@@ -164,6 +164,8 @@ The asynchronous plane lives under `packages/opencode/src/kilocode/voice/`. Its 
 
 The prior OpenAI-compatible STT and MiniMax streaming TTS implementation remains the executable `cascade-v1` degradation rung, followed by text-only status rather than silence. `SpeechTab.tsx` edits the native engine profile, Qwen endpoint/model/voice, media frontend, encrypted keys, explicit conformance status, STT/TTS fallback, VAD, and CLI mirroring. `GoalsRoutingTab.tsx` edits the Chief model, low-confidence threshold, and goal-continuation default.
 
+The Milestone I settings surface keeps Providers, Agents & models, Speech, and Goals & routing first in the persistent navigation, with the inherited extension controls retained under Advanced. Provider credentials remain in VS Code SecretStorage and are mirrored through the existing CLI auth API; the webview receives only authentication state. `settings-io.ts` exports one versioned file containing separate global and project config layers plus non-secret speech preferences, strips embedded credentials defensively, and retains compatibility with the earlier flat format.
+
 <!-- raya_change end -->
 
 ## Build and packaging anchors

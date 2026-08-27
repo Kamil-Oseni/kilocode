@@ -37,7 +37,7 @@
  *     payloads. Add indirect/external keys there rather than deleting them.
  */
 
-import { describe, it, expect } from "bun:test"
+import { describe, it, expect, setDefaultTimeout } from "bun:test"
 import { Glob } from "bun"
 import path from "node:path"
 
@@ -49,6 +49,9 @@ import { dict as hostEn } from "../../src/services/i18n/en"
 
 const REPO = path.resolve(import.meta.dir, "../../../..")
 const VSCODE = path.join(REPO, "packages/kilo-vscode")
+
+// raya_change - repository-wide glob scans need more startup time in the full Windows suite.
+if (process.platform === "win32") setDefaultTimeout(30_000)
 
 // Webview key strings are consumed not only in the webview itself but also
 // embedded as data in the CLI backend / extension host (provider metadata,

@@ -1,3 +1,16 @@
+/* raya_change start - Milestone I primary/advanced settings navigation */
+.settings-nav-group {
+  margin: 10px 8px 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-weak-base);
+  color: var(--text-weak-base, var(--vscode-descriptionForeground));
+  font-size: var(--kilo-font-size-11);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+/* raya_change end */
+
 /* Settings save bar */
 .settings-save-bar-wrap {
   display: flex;

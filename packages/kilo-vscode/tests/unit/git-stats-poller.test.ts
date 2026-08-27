@@ -21,6 +21,20 @@ async function waitFor(check: () => boolean, timeout = 500): Promise<void> {
   }
 }
 
+// raya_change start - tolerate delayed Git handle release and use privilege-free Windows aliases.
+function link(target: string, alias: string): void {
+  fs.symlinkSync(target, alias, process.platform === "win32" ? "junction" : "dir")
+}
+
+async function remove(dir: string): Promise<void> {
+  await fs.promises.rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }).catch((err: unknown) => {
+    // raya_change - a terminating Git child can retain its cwd briefly on Windows; cleanup must not fail the test.
+    if (process.platform === "win32" && (err as NodeJS.ErrnoException).code === "EBUSY") return
+    throw err
+  })
+}
+// raya_change end
+
 function worktree(id: string, remote = "origin"): Worktree {
   return {
     id,
@@ -145,6 +159,8 @@ describe("GitStatsPoller", () => {
         if (result.exitCode !== 0) throw new Error(Buffer.from(result.stderr).toString("utf8"))
       }
       run(["init", "-b", "main"])
+      run(["config", "core.autocrlf", "false"]) // raya_change - deterministic fixture content on Windows
+      run(["config", "core.eol", "lf"])
       await fs.promises.writeFile(path.join(root, "file.txt"), "one\n")
       run(["add", "."])
       run(["commit", "-m", "base"])
@@ -164,7 +180,8 @@ describe("GitStatsPoller", () => {
       })
 
       poller.setEnabled(true)
-      await waitFor(() => git.commands.filter((item) => item.args.includes("--porcelain=v2")).length >= 2, 2_000)
+      // raya_change - real Git probes can queue behind the full Windows suite.
+      await waitFor(() => git.commands.filter((item) => item.args.includes("--porcelain=v2")).length >= 2, 10_000)
       const statuses = git.commands
         .map((item, index) => ({ ...item, index }))
         .filter((item) => item.args.includes("--porcelain=v2"))
@@ -174,16 +191,17 @@ describe("GitStatsPoller", () => {
 
       const diffs = git.commands.filter((item) => item.args.includes("diff")).length
       await fs.promises.writeFile(path.join(root, "file.txt"), "changed and larger\n")
-      await waitFor(() => git.commands.filter((item) => item.args.includes("diff")).length > diffs, 2_000)
+      await waitFor(() => git.commands.filter((item) => item.args.includes("diff")).length > diffs, 10_000)
 
       const ahead = git.aheadCalls
       poller.stop()
       await poller.snapshot(true)
       expect(git.aheadCalls).toBe(ahead + 1)
+      git.dispose() // raya_change - release Windows child-process handles before fixture cleanup
     } finally {
-      await fs.promises.rm(root, { recursive: true, force: true })
+      await remove(root)
     }
-  })
+  }, 30_000) // raya_change - real Git startup is slower under a busy Windows full-suite run
 
   it("keeps hot worktrees on every tick and rotates clean dormant worktrees", async () => {
     const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gsp-shard-"))
@@ -207,6 +225,8 @@ describe("GitStatsPoller", () => {
       }
       await fs.promises.mkdir(dirs[0]!)
       run(dirs[0]!, ["init", "-b", "main"])
+      run(dirs[0]!, ["config", "core.autocrlf", "false"]) // raya_change - deterministic fixture content on Windows
+      run(dirs[0]!, ["config", "core.eol", "lf"])
       await fs.promises.writeFile(path.join(dirs[0]!, "file.txt"), "one\n")
       run(dirs[0]!, ["add", "."])
       run(dirs[0]!, ["commit", "-m", "base"])
@@ -236,8 +256,10 @@ describe("GitStatsPoller", () => {
       })
 
       poller.setEnabled(true)
-      await waitFor(() => git.commands.filter((item) => item.args.includes("--porcelain=v2")).length >= 15, 3_000)
+      // raya_change - allow enough time for 15 real Git probes under full Windows suite load.
+      await waitFor(() => git.commands.filter((item) => item.args.includes("--porcelain=v2")).length >= 15, 15_000)
       poller.stop()
+      git.dispose() // raya_change - release Windows child-process handles before fixture cleanup
       const counts = new Map<string, number>()
       for (const item of git.commands) {
         if (!item.args.includes("--porcelain=v2")) continue
@@ -247,9 +269,9 @@ describe("GitStatsPoller", () => {
       expect(counts.get(dirs[1]!)).toBeGreaterThan(2)
       expect(counts.get(dirs[2]!)).toBeGreaterThan(2)
     } finally {
-      await fs.promises.rm(root, { recursive: true, force: true })
+      await remove(root)
     }
-  })
+  }, 30_000) // raya_change - linked-worktree setup can exceed Bun's default on Windows
 
   it("keeps mutual exclusion when a stale fetch finishes after a restart", async () => {
     let calls = 0
@@ -504,7 +526,7 @@ describe("GitStatsPoller", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "gsp-symlink-"))
     const real = fs.mkdtempSync(path.join(os.tmpdir(), "gsp-symlink-real-"))
     const alias = path.join(root, "alias")
-    fs.symlinkSync(real, alias)
+    link(real, alias)
 
     const presence: WorktreePresenceResult[] = []
     const calls: string[] = []

@@ -146,7 +146,11 @@ const SpeechTab: Component = () => {
             </Button>
             <Show when={voice.error()}>
               {(error) => (
-                <span style={{ color: "var(--vscode-errorForeground)", "font-size": "12px" }}>{error()}</span>
+                <span
+                  style={{ color: "var(--vscode-errorForeground)", "font-size": "var(--kilo-font-size-12)" }}
+                >
+                  {error()}
+                </span>
               )}
             </Show>
           </div>

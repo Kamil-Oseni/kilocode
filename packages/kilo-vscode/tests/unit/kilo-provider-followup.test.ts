@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test"
 import type { Event, Session } from "@kilocode/sdk/v2/client"
+import path from "node:path"
 
 // vscode mock is provided by the shared preload (tests/setup/vscode-mock.ts)
 const { KiloProvider } = await import("../../src/KiloProvider")
@@ -196,7 +197,8 @@ describe("KiloProvider follow-up sessions", () => {
     )
 
     await refreshed.promise
-    expect(dirs).toEqual(["/workspace/frontend/src"])
+    // raya_change - edit path normalization follows the extension host's separator convention.
+    expect(dirs).toEqual([path.normalize("/workspace/frontend/src")])
   })
 
   it("ignores completed tool paths outside the active project", async () => {

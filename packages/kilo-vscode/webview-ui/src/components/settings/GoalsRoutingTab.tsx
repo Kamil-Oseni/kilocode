@@ -3,12 +3,26 @@ import { Card } from "@kilocode/kilo-ui/card"
 import { Switch } from "@kilocode/kilo-ui/switch"
 import { TextField } from "@kilocode/kilo-ui/text-field"
 import type { Component } from "solid-js"
+import { parseModelString } from "../../../../src/shared/provider-model"
 import { useConfig } from "../../context/config"
+import { useLanguage } from "../../context/language"
+import { ModelSelectorBase } from "../shared/ModelSelector"
 import SettingsRow from "./SettingsRow"
 
 const GoalsRoutingTab: Component = () => {
   const { config, updateConfig } = useConfig()
+  const language = useLanguage()
   const routing = () => config().raya_routing ?? {}
+
+  // raya_change start - Use the provider-backed picker while retaining small_model inheritance semantics.
+  const select = (providerID: string, modelID: string) => {
+    if (!providerID || !modelID) {
+      updateConfig({ small_model: null })
+      return
+    }
+    updateConfig({ small_model: `${providerID}/${modelID}` })
+  }
+  // raya_change end
 
   return (
     <div style={{ display: "flex", "flex-direction": "column", gap: "16px" }}>
@@ -17,10 +31,16 @@ const GoalsRoutingTab: Component = () => {
       </p>
       <Card>
         <SettingsRow title="Chief model" description="Fast, inexpensive provider/model used by Auto before delegation.">
-          <TextField
-            value={config().small_model ?? ""}
-            placeholder="provider/fast-model"
-            onChange={(small_model) => updateConfig({ small_model: small_model.trim() || undefined })}
+          {/* raya_change - Clearing the Chief model inherits the resolved default small model. */}
+          <ModelSelectorBase
+            value={parseModelString(config().small_model ?? undefined)}
+            onSelect={select}
+            placement="bottom-start"
+            allowClear
+            clearLabel={language.t("settings.providers.notSet")}
+            includeAutoSmall
+            label="Chief model"
+            description="Fast, inexpensive provider/model used by Auto before delegation."
           />
         </SettingsRow>
         <SettingsRow

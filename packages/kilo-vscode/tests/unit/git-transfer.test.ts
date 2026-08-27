@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, afterEach } from "bun:test"
+import { describe, expect, it, beforeEach, afterEach, setDefaultTimeout } from "bun:test"
 import * as fs from "fs/promises"
 import * as path from "path"
 import * as os from "os"
@@ -16,6 +16,9 @@ function git(args: string[], cwd: string): Promise<string> {
 
 const noop = () => {}
 
+// raya_change - Git process startup is slower under the full Windows suite.
+if (process.platform === "win32") setDefaultTimeout(15_000)
+
 describe("git-transfer", () => {
   let dir: string
 
@@ -24,6 +27,8 @@ describe("git-transfer", () => {
     await git(["init", "-b", "main"], dir)
     await git(["config", "user.email", "test@test.com"], dir)
     await git(["config", "user.name", "Test"], dir)
+    await git(["config", "core.autocrlf", "false"], dir) // raya_change - deterministic fixture blobs on Windows
+    await git(["config", "core.eol", "lf"], dir)
     // Initial commit so HEAD exists
     await fs.writeFile(path.join(dir, "init.txt"), "init\n")
     await git(["add", "."], dir)
@@ -31,7 +36,7 @@ describe("git-transfer", () => {
   })
 
   afterEach(async () => {
-    await fs.rm(dir, { recursive: true, force: true })
+    await fs.rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
   })
 
   describe("capture", () => {

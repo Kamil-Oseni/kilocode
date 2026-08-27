@@ -1,11 +1,12 @@
-import { Component, createSignal, onCleanup } from "solid-js"
+import { Component, createSignal } from "solid-js"
 import { Button } from "@kilocode/kilo-ui/button"
 import { Icon } from "@kilocode/kilo-ui/icon"
 import { showToast } from "@kilocode/kilo-ui/toast"
 import { useLanguage } from "../../context/language"
 import { useVSCode } from "../../context/vscode"
 import { useConfig } from "../../context/config"
-import type { Config, ConnectionState, ExtensionMessage, MigrationSource } from "../../types/messages"
+import { useVoice } from "../../context/voice" // raya_change - include non-secret speech preferences in transfer
+import type { Config, ConnectionState, MigrationSource } from "../../types/messages"
 import { buildExport, parseImport, MAX_IMPORT_SIZE } from "./settings-io"
 
 export interface AboutKiloCodeTabProps {
@@ -18,10 +19,9 @@ export interface AboutKiloCodeTabProps {
 const AboutKiloCodeTab: Component<AboutKiloCodeTabProps> = (props) => {
   const language = useLanguage()
   const vscode = useVSCode()
-  const { updateConfig, updateGlobalConfig } = useConfig()
+  const { globalConfig, projectConfig, updateConfig, updateGlobalConfig, updateProjectConfig } = useConfig()
+  const voice = useVoice() // raya_change
   const [importing, setImporting] = createSignal(false)
-  const [exporting, setExporting] = createSignal(false)
-  let epoch = 0
 
   const open = (url: string) => {
     vscode.postMessage({ type: "openExternal", url })
@@ -44,13 +44,13 @@ const AboutKiloCodeTab: Component<AboutKiloCodeTabProps> = (props) => {
     updateGlobalConfig({ indexing: { enabled } })
   }
 
-  // Listen for globalConfigLoaded response
-  const handler = (event: MessageEvent) => {
-    const msg = event.data as ExtensionMessage
-    if (msg.type !== "globalConfigLoaded" || !exporting()) return
-    setExporting(false)
-    epoch++
-    const payload = buildExport(msg.config)
+  // raya_change start - export both config scopes and speech preferences without credentials
+  const handleExport = () => {
+    const payload = buildExport({
+      global: globalConfig(),
+      project: projectConfig(),
+      speech: voice.settings(),
+    })
     const json = JSON.stringify(payload, null, 2)
     const blob = new Blob([json], { type: "application/json" })
     const url = URL.createObjectURL(blob)
@@ -60,19 +60,7 @@ const AboutKiloCodeTab: Component<AboutKiloCodeTabProps> = (props) => {
     a.click()
     URL.revokeObjectURL(url)
   }
-  window.addEventListener("message", handler)
-  onCleanup(() => window.removeEventListener("message", handler))
-
-  // ----- Export -----
-  const handleExport = () => {
-    if (exporting()) return
-    setExporting(true)
-    const token = ++epoch
-    vscode.postMessage({ type: "requestGlobalConfig" })
-    setTimeout(() => {
-      if (epoch === token) setExporting(false)
-    }, 5000)
-  }
+  // raya_change end
 
   // ----- Import -----
   const handleImport = () => {
@@ -108,7 +96,15 @@ const AboutKiloCodeTab: Component<AboutKiloCodeTabProps> = (props) => {
             title: language.t("settings.aboutKiloCode.importSettings.newerVersion"),
           })
         }
-        importConfig(result.config)
+        // raya_change start - v2 restores original scopes; v1 retains legacy scope splitting
+        if (result.scopes) {
+          updateGlobalConfig(result.scopes.global)
+          updateProjectConfig(result.scopes.project)
+        } else {
+          importConfig(result.config)
+        }
+        if (result.speech) voice.update(result.speech)
+        // raya_change end
         showToast({
           variant: "success",
           title: language.t("settings.aboutKiloCode.importSettings.success"),

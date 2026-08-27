@@ -1,13 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test"
+import * as path from "node:path" // raya_change
 import * as vscode from "vscode"
 import { createSessionID } from "../../src/legacy-migration/sessions/lib/ids"
 import { parseSession } from "../../src/legacy-migration/sessions/parser"
 import { detectRooCodeSessions } from "../../src/roo-import/service"
 
 const enc = new TextEncoder()
-const first = "/storage/roovscode.roo-cline/tasks"
-const second = "/storage/rooveterinaryinc.roo-cline/tasks"
-const customRoot = "/custom/roo/tasks"
+// raya_change start - Build synthetic filesystem paths with host separators.
+const storage = path.join(path.sep, "storage")
+const first = path.join(storage, "roovscode.roo-cline", "tasks")
+const second = path.join(storage, "rooveterinaryinc.roo-cline", "tasks")
+const custom = path.join(path.sep, "custom", "roo")
+const customRoot = path.join(custom, "tasks")
+// raya_change end
 const id = "1781613537275"
 const other = "1781613537276"
 const missing = "1781613537277"
@@ -92,24 +97,26 @@ describe("roo import", () => {
         },
       ],
     ])
+    files = new Map([...files].map(([file, value]) => [path.resolve(file), value])) // raya_change
     dirs = new Map([
       [first, [id, special]],
       [second, [id, other, "bad", missing]],
       [customRoot, [customId]],
     ])
+    dirs = new Map([...dirs].map(([dir, entries]) => [path.resolve(dir), entries])) // raya_change
 
     fs.readDirectory = async (uri) => {
-      const entries = dirs.get(uri.fsPath)
+      const entries = dirs.get(path.resolve(uri.fsPath)) // raya_change
       if (entries) return entries.map((entry) => [entry, vscode.FileType.Directory])
       throw new Error(`missing dir ${uri.fsPath}`)
     }
     fs.stat = async (uri) => {
-      const file = files.get(uri.fsPath)
+      const file = files.get(path.resolve(uri.fsPath)) // raya_change
       if (file) return { type: vscode.FileType.File, ctime: 0, mtime: file.mtime, size: file.value.length }
       throw new Error(`missing file ${uri.fsPath}`)
     }
     fs.readFile = async (uri) => {
-      const file = files.get(uri.fsPath)
+      const file = files.get(path.resolve(uri.fsPath)) // raya_change
       if (file) return enc.encode(file.value)
       throw new Error(`missing file ${uri.fsPath}`)
     }
@@ -122,7 +129,10 @@ describe("roo import", () => {
   })
 
   it("recovers indexed metadata, selects the newest duplicate, and diagnoses unusable tasks", async () => {
-    const source = await detectRooCodeSessions({ globalStorageUri: { fsPath: "/storage/kilocode.kilo-code" } } as never)
+    // raya_change - Match the host-native fixture map keys.
+    const source = await detectRooCodeSessions({
+      globalStorageUri: { fsPath: path.join(storage, "kilocode.kilo-code") },
+    } as never)
 
     expect(source?.sessions).toEqual([
       { id, title: "New root", directory: "/new", time: Number(id) + 1 },
@@ -138,10 +148,12 @@ describe("roo import", () => {
   })
 
   it("discovers sessions in Roo's configured custom storage path", async () => {
+    // raya_change start - Match the host-native fixture map keys.
     const source = await detectRooCodeSessions(
-      { globalStorageUri: { fsPath: "/storage/kilocode.kilo-code" } } as never,
-      "/custom/roo",
+      { globalStorageUri: { fsPath: path.join(storage, "kilocode.kilo-code") } } as never,
+      custom,
     )
+    // raya_change end
 
     expect(source?.sessions).toContainEqual({
       id: customId,
@@ -153,7 +165,10 @@ describe("roo import", () => {
   })
 
   it("namespaces generated Roo IDs without changing the visible session slug", async () => {
-    const source = await detectRooCodeSessions({ globalStorageUri: { fsPath: "/storage/kilocode.kilo-code" } } as never)
+    // raya_change - Match the host-native fixture map keys.
+    const source = await detectRooCodeSessions({
+      globalStorageUri: { fsPath: path.join(storage, "kilocode.kilo-code") },
+    } as never)
     const entry = source?.catalog.get(id)
     expect(entry).toBeDefined()
 

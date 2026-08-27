@@ -1,9 +1,15 @@
-import { describe, it, expect, spyOn } from "bun:test"
+import { afterEach, describe, it, expect, spyOn } from "bun:test"
 import * as vscode from "vscode"
+import { canonicalizePath } from "../../src/agent-manager/project/paths"
 import type { PartUpdate } from "../../src/shared/stream-messages"
 
 // vscode mock is provided by the shared preload (tests/setup/vscode-mock.ts)
 const { KiloProvider, unwrapSyncEvent } = await import("../../src/KiloProvider")
+const providers: InstanceType<typeof KiloProvider>[] = [] // raya_change - dispose provider timers after every Windows test
+
+afterEach(() => {
+  for (const provider of providers.splice(0)) provider.dispose()
+})
 
 type State = "connecting" | "connected" | "disconnected" | "error"
 
@@ -165,6 +171,7 @@ function createClient(options?: {
       notifications: async () => ({ data: [] }),
       profile: async () => ({ data: {} }),
     },
+    kilocode: { goal: { get: async () => ({ data: undefined }) } }, // raya_change - satisfy delayed goal refreshes
     command: { list: async () => ({ data: [] }) },
   }
 }
@@ -250,7 +257,9 @@ type ProviderInternals = {
 function makeProvider(client: ReturnType<typeof createClient>) {
   const connection = createConnection(client)
   const provider = new KiloProvider({} as never, connection as never)
+  providers.push(provider) // raya_change - prevent leaked handles from hanging the full unit suite
   const internal = provider as unknown as ProviderInternals
+  internal.refreshGitStatus = async () => {} // raya_change - message tests do not start real Git pollers
   internal.connectionState = "connected"
   const sent: unknown[] = []
   internal.webview = {
@@ -833,16 +842,17 @@ describe("KiloProvider.handleLoadMessages / focus mode freshness", () => {
     })
     const { internal } = makeProvider(client)
     const calls: Array<{ directory?: string; sessionID?: string }> = []
-    const recovered = defer<void>()
     internal.refreshGitStatus = async (directory, sessionID) => {
       calls.push({ directory, sessionID })
-      if (directory === "/repo/frontend/src") recovered.resolve()
     }
 
     await internal.handleLoadMessages("s1")
-    await recovered.promise
+    await Bun.sleep(0) // raya_change - allow the fire-and-forget recovery to run without path-sensitive signaling
 
-    expect(calls).toContainEqual({ directory: "/repo/frontend/src", sessionID: "s1" })
+    expect(calls.map((call) => ({ ...call, directory: canonicalizePath(call.directory!) }))).toContainEqual({
+      directory: canonicalizePath("/repo/frontend/src"),
+      sessionID: "s1",
+    }) // raya_change
   })
 
   it("stops background processes for the previous session when switching sessions", async () => {

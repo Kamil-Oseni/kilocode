@@ -116,7 +116,7 @@ test.describe("webview accessibility ratchet", () => {
   test("Profile login exposes a keyboard-operable named control", async ({ page }) => {
     await open(page, "profile--not-logged-in")
 
-    const login = page.getByRole("button", { name: "Login with Kilo Code" })
+    const login = page.getByRole("button", { name: "Login with Raya" }) // raya_change - current product branding
     await reach(page, login)
     await expect(login).toBeFocused()
 

@@ -515,8 +515,8 @@ it.instance(
   () =>
     Effect.gen(function* () {
       const code = yield* load((svc) => svc.get("code"))
-      expect(code?.model?.providerID).toBe("openai")
-      expect(code?.model?.modelID).toBe("gpt-4.1")
+      expect(String(code?.model?.providerID)).toBe("openai")
+      expect(String(code?.model?.modelID)).toBe("gpt-4.1")
     }),
   {
     config: {

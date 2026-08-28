@@ -91,6 +91,68 @@ window. Open the panel and confirm the redesigned component looks right in place
 both light and dark themes. This is the manual glance the browser tool cannot do for
 you.
 
+## Shipping it: merge the branch and update the extension
+
+When the redesign is done, moving it into your real extension is four short stages:
+confirm the work is really finished, merge the feature branch into main, then rebuild
+and reinstall the extension. Run these from the fork at `C:\Users\User\Desktop\raya`,
+from a normal editor window rather than the second instance that was running the goal,
+and only after the goal has fully finished, since merging or rebuilding mid-goal would
+interrupt the loop.
+
+First, confirm the branch is clean and green so you are not merging half-finished work.
+The goal itself will not close until `bun run compile` passes and the smoke run is
+green, so if the goal completed, the build is already good; this is just a check.
+
+```
+git checkout raya-self-redesign
+git status
+```
+
+`git status` should report a clean working tree. If the goal loop left anything
+uncommitted, commit it first.
+
+Second, merge the feature branch into main. Switch to main, pull the latest so you are
+current, merge your branch in, and push.
+
+```
+git checkout main
+git pull
+git merge raya-self-redesign
+git push
+```
+
+If the merge reports conflicts, which is unlikely when only you touched the webview,
+git pauses and lists the conflicting files; open each, resolve the marked sections,
+then `git add <file>` and `git commit` to finish the merge. A solo branch that only
+touched the webview usually merges cleanly.
+
+Third, rebuild and reinstall the extension from the updated main, then reload the
+window so the new build loads.
+
+```
+cd packages/kilo-vscode
+bun run snapshot:build
+bun run snapshot:install
+```
+
+Reload with Command Palette then "Developer: Reload Window", open the Raya panel, and
+confirm the redesign looks right in the actual chat in both light and dark themes. That
+last visual check in the real panel is the one thing the localhost preview cannot do
+for you.
+
+Fourth, optionally clean up the branch once main is updated and the extension looks
+right, since its work now lives in main.
+
+```
+git branch -d raya-self-redesign
+git push origin --delete raya-self-redesign
+```
+
+If you want to hand this build to your developers, the fresh VSIX from the rebuild sits
+in `%TEMP%\raya-vscode-snapshots`; copy the newest one over `Raya-latest.vsix` as
+described in `Raya-Sharing-and-Publishing.md`.
+
 ## Guardrails
 
 Keep the first goal small; one component plus the reusable harness is enough to prove

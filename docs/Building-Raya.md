@@ -649,13 +649,12 @@ live keys for the checks that genuinely need a real model: end-to-end tool-calli
 the provider-specific numbers like MiniMax TTS latency, a Chinese-CER transcription
 figure, and routing accuracy. A **free local OpenAI-compatible endpoint** (Ollama or
 llama.cpp) stays a handy third option when you want a real model in CI with no spend.
-One deliberate exception: Qwen stays unfunded, so only its connection and model-list
-are verified — never gate a milestone on a live Qwen inference call. Any check that
-would otherwise need a real Qwen response (the vision and web-research paths) either
-runs against the mock or local endpoint, or substitutes a funded vision-capable model
-— `MiniMax-M3`, `kimi-k3`, or `deepseek-v4-flash-vision-exp` — so those milestones
-still prove out fully on funded providers. And throughout, the agents *building* Raya
-run on your Cursor models, independent of all of this.
+Qwen, once treated as unfunded, is now live too: a direct completion call against its
+endpoint returned normally (verified 2026-08-27), so its vision and web-research paths
+can run against the real model like the others rather than being mocked. Keep a funded
+vision-capable substitute (`MiniMax-M3`, `kimi-k3`, or `deepseek-v4-flash-vision-exp`)
+in mind only if you want to avoid Qwen spend on a given run. And throughout, the agents
+*building* Raya run on your Cursor models, independent of all of this.
 
 **Upstream sync discipline.** Mark every fork edit with your marker, keep patches
 small and localized, and rebase onto `upstream/main` on a regular cadence, resolving

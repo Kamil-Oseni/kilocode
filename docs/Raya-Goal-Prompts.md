@@ -23,11 +23,12 @@ that section's Definition of Done as the completion contract.
   hardest (A goal runtime, F browser/CDP, H voice). Drop to **GPT‑5.3 Codex** only for
   cheap, mechanical passes where cost matters more than depth.
 - `/goal` is still rolling out in Cursor; if you don't see it, start a fresh chat.
-- Your DeepSeek, GLM, Kimi, and MiniMax keys are funded, so live tests run on those.
-  Qwen stays unfunded — verify it only at the connection/model-list level, and for any
-  test that would need a real Qwen response (vision or web-research), substitute a
-  funded vision-capable model (MiniMax-M3, kimi-k3, or deepseek-v4-flash-vision-exp)
-  or the mock/local endpoint.
+- Your DeepSeek, GLM, Kimi, and MiniMax keys are funded, and Qwen is live too (a
+  completion call against its endpoint returned normally, verified 2026-08-27), so live
+  tests run on all of them, including Qwen's vision and web-research paths. A funded
+  vision-capable substitute (MiniMax-M3, kimi-k3, or deepseek-v4-flash-vision-exp) or
+  the mock/local endpoint is a fine fallback only if you want to avoid Qwen spend on a
+  run.
 
 ---
 

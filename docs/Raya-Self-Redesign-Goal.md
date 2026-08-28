@@ -29,14 +29,75 @@ Take navigation and interaction inspiration from ChatGPT where it is genuinely g
 calm and uncluttered transcript, a focused composer, clear model and mode affordances,
 and an unobtrusive history rail, and then build past it: warmer type, a more considered
 spatial rhythm, real empty and loading states, and motion that feels physical. The bar
-is a UI more refined than ChatGPT's, not a copy of it. Because the designer agent does
-not study references on its own, make it explicit: early in a design goal, use the
-in-editor browser to open chatgpt.com, capture what its interface does well and where it
-falls short, and let that ground the work rather than designing from memory. All of this
-still answers to the designer prompt's fundamentals, laws of UX, anti-slop rules, and
-physics-based motion; the premium aesthetic sits on top of that discipline, never in
+is a UI more refined than ChatGPT's, not a copy of it. The designer agent does not study
+references on its own, and opening chatgpt.com in a browser will not reveal its full
+design, so ground the work in research instead: before designing, have the agent use web
+search to read current breakdowns of ChatGPT's 2026 interface and of shadcn's AI-chat
+patterns (the Reference reading list below), pulling out the lessons on navigation,
+streaming, empty states, and transcript layout rather than working from memory. All of
+this still answers to the designer prompt's fundamentals, laws of UX, anti-slop rules,
+and physics-based motion; the premium aesthetic sits on top of that discipline, never in
 place of it. Each goal below restates the parts of this direction it needs so the pasted
 block stays self-contained.
+
+### Reference reading (study before a design goal)
+
+These are the sources to read, mostly from the second half of 2026, before touching the
+UI. Study the patterns and reasoning, not the markup: ChatGPT is a React build and
+shadcn is React, while Raya's webview is SolidJS, so the agent reimplements the behaviors
+in Solid idioms rather than copying code. One deliberate divergence: ChatGPT ships no
+webfont and rides the platform font stack for reach, but Raya keeps its premium type
+(Instrument Serif and Outfit) because that is part of Eden's identity, so do not copy the
+no-webfont decision.
+
+ChatGPT's 2026 interface:
+
+- 925studios, "ChatGPT Design Breakdown" (Aug 2026),
+  https://www.925studios.co/blog/chatgpt-interface-design-breakdown, for the five
+  patterns worth adapting (a blank-field-first empty state, streaming text output, an
+  outcome-labeled model selector, conversation-timeline navigation, and a fixed-width
+  response column around 65 characters) and the gaps to avoid, such as no in-conversation
+  search.
+- 925studios, "Why AI Products Fail Without UX Research" (2026),
+  https://www.925studios.co/blog/why-ai-products-fail-without-ux-research-2026, for the
+  reminder that a bare chat box is not automatically the right model and that contextual,
+  inline interactions often beat conversational ones for operational tasks.
+- performance.dev, "Reverse Engineering ChatGPT Web" (2026),
+  https://performance.dev/chatgpt, for how token streaming works over server-sent events
+  into an already-painted shell, the Radix-primitive plus ProseMirror composer approach,
+  Tailwind over a design-token layer, and how restrained the motion is.
+- The Best Blog Ever, "The ChatGPT Design System Architecture,"
+  https://thebestblogever.co/artificial-intelligence/chatgpt-design-system-architecture,
+  for the quantified system: interface chrome held under about 15% of the viewport,
+  surfaces separated by tonal shifts rather than borders, a single accent reserved
+  strictly for state and primary actions (which matches the one-accent rule), hierarchy
+  carried by type instead of message bubbles, and motion in the 120 to 200ms range.
+- The mid-2026 desktop redesign backlash, as a navigation cautionary tale: 9to5Mac (Jul
+  2026), https://9to5mac.com/2026/07/17/openai-fixes-chat-access-in-the-chatgpt-app-for-mac/,
+  and Digital Trends,
+  https://www.digitaltrends.com/computing/openai-patches-chatgpt-desktop-after-user-backlash-over-its-recent-redesign/.
+  Merging Chat, Codex, and Work into tabs buried chat history in a floating window and
+  drew heavy backlash, and OpenAI walked it back by restoring history and Projects to the
+  sidebar and adding a clear Chat/Work toggle. Keep primary surfaces reachable; do not
+  bury history behind modes.
+
+AI UX from shadcn:
+
+- shadcn/ui chat components (Jun 2026),
+  https://ui.shadcn.com/docs/changelog/2026-06-chat-components, for the primitives the
+  ecosystem now standardizes on (MessageScroller, Message, Bubble, Attachment, Marker)
+  and the small touches that read as polish, like scroll-fade edges and a text shimmer for
+  "Thinking..." and streaming status.
+- shadcn/ui MessageScroller,
+  https://ui.shadcn.com/docs/components/base/message-scroller, for the transcript
+  behaviors that are easy to get wrong: turns anchored near the top, auto-follow only
+  while the reader is already at the bottom so streaming never yanks the viewport,
+  position preserved when older history is prepended, jump-to-latest, and live-region
+  accessibility (role="log").
+- shadcn chat rules,
+  https://github.com/shadcn-ui/ui/blob/main/skills/shadcn/rules/chat.md, for the
+  principle of composing these primitives rather than hand-rolling scroll containers and
+  bubbles.
 
 ## The goal prompt
 
@@ -131,7 +192,7 @@ Constraints: stay on the branch; match SolidJS idioms; scope to the settings hub
 ```
 /goal Perform a full, premium design overhaul of Raya's webview UI to a single coherent design system, reusing and extending the localhost preview harness. Work in C:\Users\User\Desktop\raya on the branch raya-self-redesign. This is the largest goal; keep the full objective intact across turns and commit after each surface. Complete only when every item is true and verified.
 
-Design direction: the finished UI should feel premium and distinctly Eden's and read as more refined than ChatGPT's, not a copy of it. Early on, use the in-editor browser to open chatgpt.com and study its current interface so the comparison is grounded rather than from memory, noting what it does well and where it is flat. Borrow navigation and interaction cues where they are genuinely good (a calm transcript, a focused composer, clear model and mode affordances, an unobtrusive history rail) and build past them with warmer type, a more considered spatial rhythm, real empty and loading states, and physical motion. All of it answers to the designer prompt's fundamentals, laws of UX, anti-slop rules, and physics-based motion.
+Design direction: the finished UI should feel premium and distinctly Eden's and read as more refined than ChatGPT's, not a copy of it. Early on, research the reference material rather than working from memory: use web search to read current breakdowns of ChatGPT's 2026 interface (start with the 925studios ChatGPT interface breakdown and the performance.dev reverse-engineering writeup) and shadcn's 2026 AI-chat components (ui.shadcn.com chat components), and see the Reference reading list in docs/Raya-Self-Redesign-Goal.md for the full set. Pull out the lessons on navigation, streaming, empty states, and transcript layout. Borrow the cues that are genuinely good (a calm transcript, a focused composer, clear model and mode affordances, an unobtrusive history rail, streaming that never yanks the viewport, chrome held to a small share of the screen, hierarchy from type rather than heavy bubbles) and build past them with warmer type, a more considered spatial rhythm, real empty and loading states, and physical motion. shadcn and ChatGPT are React and Raya's webview is SolidJS, so study the patterns and behaviors, not the code verbatim, and reimplement them in Solid idioms. All of it answers to the designer prompt's fundamentals, laws of UX, anti-slop rules, and physics-based motion.
 
 Definition of done:
 1. Token foundation. Establish or complete a tiered token architecture for the webview: base tokens (palette, spacing, radii, type, durations, easing), semantic tokens (surface, text, border, status, accent), and component tokens minted only where a real decision is named. Light and dark are mode axes, not forks. Done when: the token layer exists, is documented in one place, and is the single source of truth.

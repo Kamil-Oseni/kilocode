@@ -43,3 +43,69 @@ cannot declare victory from a plausible-looking summary.
 
 Once this loop works, later goals reuse the same harness and simply widen the target,
 one component or one screen at a time.
+
+## Next goals: scaling to a full overhaul
+
+Run these in order, one at a time, after the first goal proves the loop. Review the
+work at the checkpoints and commit between goals so each stage is reversible. Each
+goal reuses and extends the same localhost preview harness, so the setup cost is paid
+only once. The last goal is the real test of the designer prompt: it hands the agent
+the whole webview and asks it to audit, repair, and unify everything to one system, in
+both themes, gated by a comprehensive smoke run. Expect it to call out existing slop
+for repair rather than preserve it; that is the designer prompt working as intended.
+
+### Goal 2: a full panel (the composer region)
+
+```
+/goal Redesign Raya's chat composer region as one coherent surface, reusing the localhost preview harness from the first goal. Work in C:\Users\User\Desktop\raya on the branch raya-self-redesign. Complete only when every item is true and verified.
+
+Scope: the prompt input (PromptInput.tsx), the goal banner (GoalBanner.tsx), and the selectable-options dock (QuestionDock.tsx) as a single composed region.
+
+Definition of done:
+1. Preview. Extend the harness to render the composer region with mock props, including an active, paused, and blocked goal banner and a pending question card. Done when: `bun run preview` shows the region with no console errors.
+2. Tokens. Every color, space, radius, and type value in these components traces to a design token; no magic literals. Add semantic tokens where a real decision is named. Done when: no stray hex or px remains in the three components.
+3. Audit and repair. Before restyling, audit the current region against the design fundamentals and the anti-slop rules in the designer prompt, name what breaks them, and fix it rather than preserving it. Done when: the region holds up against hierarchy, spacing, typography, contrast, the one-accent rule, and the no-slop checks.
+4. States and themes. All interactive states (default, hover, focus, active, disabled) and the goal and question variants render correctly in light and dark. Done when: verified in the preview in both themes.
+5. Motion. Any motion follows the physics-based, frequency-gated rules in the designer prompt. Done when: transitions are purposeful and none is gratuitous.
+6. Green smoke. Run browser_smoke_test named raya-panel-v1 that navigates the preview, exercises every state and variant, asserts each renders, and screenshots each. Done when: the run is green with per-state screenshots you have visually confirmed.
+7. Build. Done when: `bun run compile` passes.
+
+Constraints: stay on the branch; match SolidJS idioms; keep edits scoped to the composer region, its tokens, and the harness; mark fork additions with // raya_change; commit when the region is done. Keep working across turns until all items are verified.
+```
+
+### Goal 3: a whole screen (the settings hub)
+
+```
+/goal Redesign Raya's settings hub as a full screen, reusing and extending the localhost preview harness. Work in C:\Users\User\Desktop\raya on the branch raya-self-redesign. Complete only when every item is true and verified.
+
+Scope: the settings hub screen and its primary sections (Providers, Agents & models, Speech, Goals & routing), including the section navigation and the tab surfaces (SpeechTab.tsx, GoalsRoutingTab.tsx, and their siblings).
+
+Definition of done:
+1. Preview. Extend the harness to render the settings hub with mock data for each section. Done when: `bun run preview` shows the screen and every section with no console errors.
+2. Layout and hierarchy. The screen has a clear information hierarchy, a consistent spacing rhythm, aligned sections, and scannable navigation, judged against the design fundamentals. Done when: the layout reads cleanly at a glance and nothing is arbitrary.
+3. Tokens. Every value across the screen traces to a token; introduce or extend semantic and component tokens as the system needs. Done when: no magic literals remain in the settings surfaces.
+4. Audit and repair. Audit the existing settings UI against the fundamentals and anti-slop rules, call out what breaks them, and fix it. Done when: the screen passes the one-accent, one-grey-family, no-slop, and full-state-cycle checks.
+5. States, themes, empty and error. Loading, empty, and error states are designed rather than defaulted, and everything renders in light and dark. Done when: verified in the preview.
+6. Green smoke. Run browser_smoke_test named raya-screen-v1 that walks each section, exercises key controls, asserts render, and screenshots each section and state. Done when: green with screenshots you have visually confirmed.
+7. Build. Done when: `bun run compile` passes.
+
+Constraints: stay on the branch; match SolidJS idioms; scope to the settings hub, its tokens, and the harness; mark fork additions with // raya_change; commit when done. Keep working until all items are verified.
+```
+
+### Goal 4: the full overhaul
+
+```
+/goal Perform a full design overhaul of Raya's webview UI to a single coherent design system, reusing and extending the localhost preview harness. Work in C:\Users\User\Desktop\raya on the branch raya-self-redesign. This is the largest goal; keep the full objective intact across turns and commit after each surface. Complete only when every item is true and verified.
+
+Definition of done:
+1. Token foundation. Establish or complete a tiered token architecture for the webview: base tokens (palette, spacing, radii, type, durations, easing), semantic tokens (surface, text, border, status, accent), and component tokens minted only where a real decision is named. Light and dark are mode axes, not forks. Done when: the token layer exists, is documented in one place, and is the single source of truth.
+2. Surface coverage. Restyle every primary surface to the system: the chat transcript (MessageList, VscodeSessionTurn, AssistantMessage), the composer region (PromptInput, GoalBanner, QuestionDock), the tool renderings (TaskToolExpanded and the tool overrides), and the settings hub. Done when: each primary surface consumes only tokens and shared components, with no stray literals.
+3. Audit and repair. Across all surfaces, audit against the design fundamentals, the laws of UX, and the anti-slop rules in the designer prompt. Name every violation (arbitrary values, broken hierarchy, misalignment, failing contrast, duplicated or one-off components, slop styling) and repair it. Where a structural change would improve the system, propose it with reasoning rather than silently diverging. Done when: no primary surface violates the fundamentals or the anti-slop checks.
+4. States, themes, motion. Every surface renders its full state cycle (default, hover, focus, active, disabled, empty, loading, error) in light and dark, and all motion follows the physics-based, frequency-gated rules. Done when: verified in the preview across surfaces and both themes.
+5. Comprehensive smoke. Run browser_smoke_test named raya-overhaul-v1 that walks the main flows across every restyled surface, asserts render and key interactions, and screenshots each surface and state in both themes. Done when: the run is green with the full screenshot set, and you have read them and confirmed the overhaul holds up against the fundamentals.
+6. Build. Done when: `bun run compile` passes and the extension still builds.
+
+Constraints: stay on the branch and commit after each surface so progress is reversible; match SolidJS idioms and reactivity; keep the token layer the single source of truth; mark fork additions with // raya_change; do not break behavior while restyling. If a required decision is missing or a change needs your approval, set the goal blocked with a plain reason rather than guessing. Keep working across turns until every surface is on the system, the overhaul smoke run is green with verified screenshots, and the build passes.
+```
+
+A practical note on the overhaul: it is deliberately broad, and Raya's goal loop is built to carry it across many turns, but you will get the best result by letting it commit surface by surface and by reviewing its audit findings as they surface. If it proposes a structural change to the token model or a component API, that is the moment to weigh in before it proceeds.

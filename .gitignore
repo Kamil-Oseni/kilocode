@@ -81,3 +81,6 @@ packages/opencode/.artifacts/
 
 # raya_change - local CLI speech credentials
 .raya/speech.local.json
+
+# raya_change - packaged extension builds are large; share them out of band, never commit
+*.vsix

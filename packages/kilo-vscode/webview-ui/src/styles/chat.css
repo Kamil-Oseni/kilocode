@@ -11,6 +11,7 @@
 @import "./session-tabs.css";
 @import "./chat-layout.css";
 @import "./prompt-rail.css";
+@import "./eden.css"; /* raya_change - Eden design tokens and bundled premium type */
 @import "./banners.css";
 @import "./session-actions.css";
 @import "./welcome.css";

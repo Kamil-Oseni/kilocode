@@ -53,7 +53,14 @@ export interface GoalGetMessage {
 export interface GoalControlMessage {
   type: "goalControl"
   sessionID: string
-  action: "pause" | "resume" | "clear"
+  action: "pause" | "resume" | "clear" | "revise"
+  objective?: string
+}
+
+export interface GoalDiscardMessage {
+  type: "goalDiscard"
+  sessionID: string
+  messageID: string
 }
 // raya_change end
 
@@ -128,6 +135,12 @@ export interface RequestSessionModelUsageMessage {
   sessionID: string
   requestID: string
 }
+
+export interface RequestProjectUsageMessage {
+  type: "requestProjectUsage"
+  range: "24h" | "7d" | "30d" | "all"
+  requestID: string
+} // raya_change - historical model token and cost tracker
 
 export interface RequestCloudSessionsMessage {
   type: "requestCloudSessions"
@@ -1564,6 +1577,7 @@ export type WebviewMessage =
   | AbortRequest
   | GoalGetMessage // raya_change - Milestone A
   | GoalControlMessage // raya_change - Milestone A
+  | GoalDiscardMessage // raya_change - safe ordered goal rollback
   | RequestBackgroundJobsMessage
   | CancelBackgroundJobMessage
   | BackgroundSubagentsMessage
@@ -1576,6 +1590,7 @@ export type WebviewMessage =
   | LoadMessagesRequest
   | LoadSessionsRequest
   | RequestSessionModelUsageMessage
+  | RequestProjectUsageMessage // raya_change - historical model usage
   | RequestCloudSessionsMessage
   | RequestGitRemoteUrlMessage
   | LoginRequest

@@ -80,7 +80,9 @@ const EXCLUDE_PATTERNS = [
 ]
 
 // Directories to skip entirely
-const SKIP_DIRS = ["node_modules", ".storybook", "stories", "test", "tests", "__tests__", "__mocks__"]
+// kilocode_change start - raya_change: ignore generated preview fixture bundles
+const SKIP_DIRS = ["node_modules", ".storybook", "stories", "test", "tests", "__tests__", "__mocks__", "preview"]
+// kilocode_change end
 
 // Subdirectories containing vendored/third-party code
 const SKIP_PATH_SEGMENTS = ["continuedev"]

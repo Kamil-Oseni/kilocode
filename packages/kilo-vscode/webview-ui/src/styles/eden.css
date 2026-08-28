@@ -1,0 +1,156 @@
+/* raya_change start - Eden design foundation for the Raya webview.
+ *
+ * Token tiers:
+ *   base      — this file, concrete ingredients on :root (type, spacing, radius,
+ *               motion, and the Eden fallback palette)
+ *   semantic  — kilo-ui globals + vscode-bridge map roles (--surface-*, --text-*,
+ *               --border-*, --button-*) to the live VS Code theme; this file does
+ *               not redefine them
+ *   component — declared and consumed inside each component rule block so var()
+ *               substitution resolves against whichever semantic source the host
+ *               provides (the VS Code theme in the editor, theme mocks in the
+ *               dev preview)
+ *
+ * The Eden fallback palette only resolves when no theme supplies a semantic token
+ * (for example the standalone preview harness without theme mocks).
+ */
+
+/* ===== Bundled typefaces =====
+ * Served from extension resources, so they work offline and satisfy the webview
+ * Content-Security-Policy `font-src ${cspSource}` directive. Instrument Serif is
+ * the display voice, Outfit carries body and UI, Geist Mono carries code and
+ * numeric meta.
+ */
+@font-face {
+  font-family: "Instrument Serif";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../assets/fonts/instrument-serif-400-latin.woff2") format("woff2");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC,
+    U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Instrument Serif";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../assets/fonts/instrument-serif-400-latin-ext.woff2") format("woff2");
+  unicode-range:
+    U+0100-02BA, U+02BD, U+02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF,
+    U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Instrument Serif";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../assets/fonts/instrument-serif-400italic-latin.woff2") format("woff2");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC,
+    U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Instrument Serif";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../assets/fonts/instrument-serif-400italic-latin-ext.woff2") format("woff2");
+  unicode-range:
+    U+0100-02BA, U+02BD, U+02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF,
+    U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Outfit";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../assets/fonts/outfit-latin.woff2") format("woff2");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC,
+    U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Outfit";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../assets/fonts/outfit-latin-ext.woff2") format("woff2");
+  unicode-range:
+    U+0100-02BA, U+02BD, U+02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF,
+    U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../assets/fonts/geist-mono-variable.woff2") format("woff2");
+}
+
+/* ===== Base tokens ===== */
+:root {
+  /* Typography: Eden's three voices */
+  --font-display: "Instrument Serif", Georgia, serif;
+  --font-body: "Outfit", system-ui, sans-serif;
+  --font-mono: "Geist Mono", var(--vscode-editor-font-family, ui-monospace), monospace;
+  --raya-font-display: var(--font-display);
+  --raya-font-body: var(--font-body);
+  --raya-font-mono: var(--font-mono);
+
+  /* Type rhythm */
+  --raya-leading-tight: 1.2;
+  --raya-leading-body: 1.5;
+  --raya-tracking-caps: 0.08em;
+  /* raya_change start - semantic interaction and bounded-panel tokens */
+  --raya-weight-body: 450;
+  --raya-opacity-pressed: 0.8;
+  --raya-panel-detail-max: min(42vh, 26rem);
+  /* raya_change end */
+
+  /* Spacing scale, named by resolved value so every size traces to a token */
+  --raya-space-2: 2px;
+  --raya-space-4: 4px;
+  --raya-space-6: 6px;
+  --raya-space-8: 8px;
+  --raya-space-10: 10px;
+  --raya-space-12: 12px;
+  --raya-space-16: 16px;
+  --raya-space-20: 20px;
+  --raya-space-24: 24px;
+
+  /* Radius */
+  --raya-radius-sm: 4px;
+  --raya-radius-md: 6px;
+  --raya-radius-lg: 10px;
+  --raya-radius-full: 999px;
+
+  /* Hairline borders */
+  --raya-hairline: 1px;
+
+  /* Motion: one small set of durations and curves, reused everywhere */
+  --raya-duration-fast: 120ms;
+  --raya-duration-base: 200ms;
+  --raya-duration-pulse: 2400ms;
+  --raya-ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --raya-ease-in-out: cubic-bezier(0.45, 0, 0.55, 1);
+
+  /* Eden fallback palette.
+   * Day is warm paper with a deep garden emerald; night is warm near-black with
+   * a dusk gold. These resolve only when a semantic token has no theme source.
+   */
+  --raya-eden-surface: #f4f1ea;
+  --raya-eden-surface-raised: #faf8f3;
+  --raya-eden-surface-hover: #ebe7dc;
+  --raya-eden-ink: #3a382f;
+  --raya-eden-ink-strong: #211f19;
+  --raya-eden-ink-soft: #776f5c;
+  --raya-eden-line: #e0d9c8;
+  --raya-eden-accent: #2e6b50;
+  --raya-eden-on-accent: #f6f4ee;
+  --raya-eden-success: #2f7d51;
+  --raya-eden-warning: #a07a1f;
+  --raya-eden-critical: #b3452f;
+}
+/* raya_change end */

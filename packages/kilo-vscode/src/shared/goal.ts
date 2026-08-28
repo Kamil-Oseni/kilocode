@@ -3,6 +3,7 @@ export type GoalStatus = "active" | "paused" | "complete" | "blocked"
 
 export interface GoalState {
   objective: string
+  startMessageID?: string
   status: GoalStatus
   createdAt: number
   updatedAt: number
@@ -76,6 +77,6 @@ A persistent goal has just been armed for this session.
 Objective:
 ${objective}
 
-Perform the first concrete unit of work now in this same turn. Do not stop after planning or restating the objective. Preserve the full objective across turns. Immediately before update_goal(status="complete"), call get_goal to obtain the exact eligible evidence IDs, then check every concrete requirement against those real successful tool calls. If evidence is missing, keep working. A goal must never remain active while waiting for user approval, input, credentials, or another external dependency: use update_goal(status="blocked") with a plain reason instead of repeatedly checking unchanged evidence.
+Perform the first concrete unit of work now in this same turn. Do not stop after planning or restating the objective. Preserve the full objective across turns. For multi-step work, call todowrite immediately, keep exactly one item in progress, and update it as work advances so the user can follow the plan without exposing private chain-of-thought. Immediately before update_goal(status="complete"), call get_goal to obtain the exact eligible evidence IDs, then check every concrete requirement against those real successful tool calls. If evidence is missing, keep working. A goal must never remain active while waiting for user approval, input, credentials, or another external dependency: use update_goal(status="blocked") with a plain reason instead of repeatedly checking unchanged evidence.
 </system-reminder>`
 }

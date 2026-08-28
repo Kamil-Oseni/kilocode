@@ -17249,6 +17249,69 @@ export type KilocodeProviderUsageRefreshResponses = {
 export type KilocodeProviderUsageRefreshResponse =
   KilocodeProviderUsageRefreshResponses[keyof KilocodeProviderUsageRefreshResponses]
 
+export type KilocodeProjectUsageData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    range?: "24h" | "7d" | "30d" | "all"
+  }
+  url: "/kilocode/usage"
+}
+
+export type KilocodeProjectUsageErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type KilocodeProjectUsageError = KilocodeProjectUsageErrors[keyof KilocodeProjectUsageErrors]
+
+export type KilocodeProjectUsageResponses = {
+  /**
+   * Project model token and cost history
+   */
+  200: {
+    range: "24h" | "7d" | "30d" | "all"
+    since?: number
+    until: number
+    timezone: "UTC"
+    sessions: number
+    totals: {
+      steps: number
+      cost: number
+      tokens: {
+        input: number
+        output: number
+        reasoning: number
+        cache: {
+          read: number
+          write: number
+        }
+      }
+    }
+    models: Array<{
+      providerID: string
+      modelID: string
+      steps: number
+      cost: number
+      tokens: {
+        input: number
+        output: number
+        reasoning: number
+        cache: {
+          read: number
+          write: number
+        }
+      }
+    }>
+  }
+}
+
+export type KilocodeProjectUsageResponse = KilocodeProjectUsageResponses[keyof KilocodeProjectUsageResponses]
+
 export type KilocodeNotebookListData = {
   body?: never
   path?: never
@@ -17854,6 +17917,7 @@ export type KilocodeGoalGetResponses = {
    */
   200: {
     objective: string
+    startMessageID?: string
     status: "active" | "paused" | "complete" | "blocked"
     createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -17888,7 +17952,8 @@ export type KilocodeGoalGetResponse = KilocodeGoalGetResponses[keyof KilocodeGoa
 
 export type KilocodeGoalUpdateData = {
   body?: {
-    status: "active" | "paused"
+    status?: "active" | "paused"
+    objective?: string
   }
   path: {
     sessionID: string
@@ -17919,6 +17984,7 @@ export type KilocodeGoalUpdateResponses = {
    */
   200: {
     objective: string
+    startMessageID?: string
     status: "active" | "paused" | "complete" | "blocked"
     createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -17954,6 +18020,7 @@ export type KilocodeGoalUpdateResponse = KilocodeGoalUpdateResponses[keyof Kiloc
 export type KilocodeGoalCreateData = {
   body?: {
     objective: string
+    messageID?: string
   }
   path: {
     sessionID: string
@@ -17984,6 +18051,7 @@ export type KilocodeGoalCreateResponses = {
    */
   200: {
     objective: string
+    startMessageID?: string
     status: "active" | "paused" | "complete" | "blocked"
     createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"

@@ -4,3 +4,12 @@ out/
 storybook-static/
 test-results/
 playwright-report/
+# raya_change - generated localhost preview bundles never belong in source control
+webview-ui/preview/.serve/
+webview-ui/preview/index.js
+webview-ui/preview/index.js.map
+webview-ui/preview/index.css
+webview-ui/preview/index.css.map
+webview-ui/preview/*.woff
+webview-ui/preview/*.woff2
+webview-ui/preview/*.ttf

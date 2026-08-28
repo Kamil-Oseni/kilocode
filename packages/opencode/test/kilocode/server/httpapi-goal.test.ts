@@ -49,15 +49,27 @@ describe("goal HTTP API", () => {
 
     const created = await request(first, "POST", `/session/${session.id}/goal`, {
       objective: "Persist through a client reload",
+      messageID: "msg_goal_start",
     })
     expect(created.status).toBe(200)
-    expect((await created.json()) as { status: string }).toMatchObject({ status: "active" })
+    expect((await created.json()) as { status: string }).toMatchObject({
+      status: "active",
+      startMessageID: "msg_goal_start",
+    })
 
     const reloaded = app()
     const restored = await request(reloaded, "GET", `/session/${session.id}/goal`)
     expect(restored.status).toBe(200)
     expect((await restored.json()) as { objective: string }).toMatchObject({
       objective: "Persist through a client reload",
+    })
+
+    const revised = await request(reloaded, "PATCH", `/session/${session.id}/goal`, {
+      objective: "Apply steering on the next turn",
+    })
+    expect(revised.status).toBe(200)
+    expect((await revised.json()) as { objective: string }).toMatchObject({
+      objective: "Apply steering on the next turn",
     })
 
     const paused = await request(reloaded, "PATCH", `/session/${session.id}/goal`, { status: "paused" })

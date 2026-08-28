@@ -32,6 +32,10 @@ const BROWSER_TEST_GUIDANCE =
   'Treat requests to "test like a real user", run a walkthrough, smoke test, end-to-end test, UX test, usability check, or verify a browser flow as browser-testing intent without requiring the user to name tools. Inspect the live page, derive realistic steps and expected outcomes from the request and visible UI, then call browser_smoke_test in exploratory mode with concrete visible-state assertions plus network or console assertions. Reuse the target name consistently; the first smoke run captures the current authenticated browser state automatically when none exists. If authentication is absent, navigate the login flow and only ask for user input when credentials or an external confirmation genuinely require it. Return the structured result, failing step, report path, and screenshot paths.'
 const CANVAS_GUIDANCE =
   "Treat requests for a standalone dashboard, chart, table, interactive analysis, calculator, or visual report as canvas intent without requiring the user to name a tool. Call create_canvas with a focused default-exported React TSX component and useful initial data; call update_canvas to refine source or data. Use JSX without imports, read values from the component data prop, and repair any returned compile or runtime error on the next turn."
+// raya_change start - keep Raya's designer away from recognizable generated-UI defaults
+const DESIGN_GUIDANCE =
+  "Design with explicit hierarchy and product meaning, never the statistical-average AI aesthetic. Do not add decorative side rails or side-tab accent borders, pulsing status dots for static state, faux activity timelines, ornamental pills, floating cards, cards nested inside cards, uniform oversized radii, glassmorphism, gradient text, purple-blue glows, emoji-as-icons, or motion that does not explain a state change. Do not wrap content merely to make it look designed. Prefer typography, spacing, restrained tonal shifts, and thin dividers; reserve one accent for genuine state or primary action. Every icon, border, container, status marker, and animation must earn its place. Audit the combined cluster of patterns, not only each motif in isolation."
+// raya_change end
 
 function choices(prompt?: string) {
   return [
@@ -742,7 +746,7 @@ export function patchAgents(
       name: "designer",
       description: "Product and interface design specialist for UI, UX, Figma, layouts, visual systems, and motion.",
       prompt: walkthrough(
-        "Act as Raya's design specialist. Produce or implement a coherent UI/UX solution and verify it visually when possible.",
+        `Act as Raya's design specialist. Produce or implement a coherent UI/UX solution and verify it visually when possible.\n\n${DESIGN_GUIDANCE}`,
       ),
       mode: "subagent",
       native: true,

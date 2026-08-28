@@ -411,6 +411,82 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
+  // kilocode_change start - Qwen must receive browser screenshots as user data URLs, not tool-result media
+  test("moves Qwen tool-result images into a provider-download-safe user message", async () => {
+    const qwen: Provider.Model = {
+      ...model,
+      id: ModelV2.ID.make("qwen/qwen3.8-max"),
+      providerID: ProviderV2.ID.make("qwen"),
+      api: { id: "qwen3.8-max", url: "https://example.maas.aliyuncs.com/compatible-mode/v1", npm: "@ai-sdk/openai" },
+      capabilities: {
+        ...model.capabilities,
+        attachment: true,
+        input: { ...model.capabilities.input, image: true },
+      },
+    }
+    const userID = "m-user-qwen"
+    const assistantID = "m-assistant-qwen"
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [{ ...basePart(userID, "u1-qwen"), type: "text", text: "inspect the preview" }] as SessionV1.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1-qwen"),
+            type: "tool",
+            callID: "call-qwen-screenshot",
+            tool: "browser_screenshot",
+            state: {
+              status: "completed",
+              input: { full_page: true },
+              output: "Captured preview screenshot.",
+              title: "Browser screenshot",
+              metadata: {},
+              time: { start: 0, end: 1 },
+              attachments: [
+                {
+                  ...basePart(assistantID, "file-qwen"),
+                  type: "file",
+                  mime: "image/png",
+                  filename: "browser.png",
+                  url: "data:image/png;base64,Zm9v",
+                },
+              ],
+            },
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, qwen)
+    expect(result).toHaveLength(4)
+    expect(result[2]).toMatchObject({
+      role: "tool",
+      content: [
+        {
+          type: "tool-result",
+          output: { type: "text", value: "Captured preview screenshot." },
+        },
+      ],
+    })
+    expect(result[3]).toStrictEqual({
+      role: "user",
+      content: [
+        { type: "text", text: "Attached media from tool result:" },
+        {
+          type: "file",
+          mediaType: "image/png",
+          filename: "browser.png",
+          data: "data:image/png;base64,Zm9v",
+        },
+      ],
+    })
+  })
+  // kilocode_change end
+
   test("preserves jpeg tool-result media for anthropic models", async () => {
     const anthropicModel: Provider.Model = {
       ...model,

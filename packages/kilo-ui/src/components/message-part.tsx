@@ -751,6 +751,9 @@ export function UserMessageDisplay(props: {
   text?: string
   copyText?: string
   header?: JSX.Element
+  collapsed?: boolean // raya_change - keep long goal prompts from displacing the transcript
+  toggleLabel?: string // raya_change
+  onToggle?: () => void // raya_change
   onDelete?: () => void
   onFork?: () => void
   onRevert?: () => void
@@ -892,9 +895,25 @@ export function UserMessageDisplay(props: {
             <div data-slot="user-message-body">
               {props.header}
               <Show when={text()}>
-                <div data-slot="user-message-text" dir="auto" data-queued={props.queued ? "" : undefined}>
+                <div
+                  data-slot="user-message-text"
+                  dir="auto"
+                  data-queued={props.queued ? "" : undefined}
+                  data-long={props.onToggle ? "" : undefined}
+                  data-collapsed={props.collapsed ? "" : undefined}
+                >
                   <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
                 </div>
+              </Show>
+              <Show when={props.onToggle}>
+                <button
+                  type="button"
+                  data-slot="user-message-toggle"
+                  aria-expanded={!props.collapsed}
+                  onClick={() => props.onToggle?.()}
+                >
+                  {props.toggleLabel}
+                </button>
               </Show>
               <GrowBox animate={!!props.animate} open={!!props.queued}>
                 <div data-slot="user-message-queued-indicator">

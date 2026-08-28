@@ -8,6 +8,7 @@ import type {
   CloudSessionInfo,
   Message,
   MessageLoadMode,
+  ProjectUsage,
   ProjectSessionInfo,
   SessionCloseReason,
   SessionInfo,
@@ -260,6 +261,20 @@ export interface SessionModelUsageLoadedMessage {
 export interface SessionModelUsageChangedMessage {
   type: "sessionModelUsageChanged"
   sessionID: string
+}
+
+export interface ProjectUsageLoadedMessage {
+  type: "projectUsageLoaded"
+  requestID: string
+  data?: ProjectUsage
+  error?: string
+} // raya_change - historical model token and cost tracker
+
+// raya_change - expose the backend's authoritative safe-boundary prompt queue
+export interface SessionQueueChangedMessage {
+  type: "sessionQueueChanged"
+  sessionID: string
+  queued: string[]
 }
 
 export interface MessageCreatedMessage {
@@ -1512,6 +1527,8 @@ export type ExtensionMessage =
   | MessagesLoadedMessage
   | SessionModelUsageLoadedMessage
   | SessionModelUsageChangedMessage
+  | ProjectUsageLoadedMessage // raya_change - historical model usage
+  | SessionQueueChangedMessage // raya_change - authoritative queued prompt IDs
   | ModelUsageLoadedMessage
   | MessageCreatedMessage
   | SessionsLoadedMessage

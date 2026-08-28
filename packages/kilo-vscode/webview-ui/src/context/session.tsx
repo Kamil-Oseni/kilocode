@@ -112,6 +112,7 @@ interface SessionStore {
   favoriteModels: ModelSelection[]
   modelUsageHistory: ModelUsageMap
   modelUsage: Record<string, { requestID: string; data?: SessionModelUsage }>
+  queues: Record<string, string[] | undefined> // raya_change - authoritative backend prompt queues
 }
 
 interface SessionContextValue {
@@ -171,6 +172,7 @@ interface SessionContextValue {
 
   // Todos for current session
   todos: Accessor<TodoItem[]>
+  queuedMessages: Accessor<string[] | undefined> // raya_change - undefined until the runtime reports queue state
 
   // Pending permission requests (unscoped — all tracked sessions)
   permissions: Accessor<PermissionRequest[]>
@@ -529,6 +531,7 @@ export const SessionProvider: ParentComponent = (props) => {
     favoriteModels: [],
     modelUsageHistory: {},
     modelUsage: {},
+    queues: {}, // raya_change - authoritative backend prompt queues
   })
   const [modelUsageReady, setModelUsageReady] = createSignal(false)
   let modelUsageQueued = false
@@ -1098,12 +1101,25 @@ export const SessionProvider: ParentComponent = (props) => {
     if (message.type === "extensionDataReady") queueModelUsageRefresh()
   }
 
+  function handleWorkMessage(message: ExtensionMessage) {
+    if (message.type === "todoUpdated") {
+      handleTodoUpdated(message.sessionID, message.items)
+      return true
+    }
+    if (message.type === "sessionQueueChanged") {
+      setStore("queues", message.sessionID, message.queued)
+      return true
+    }
+    return false
+  } // raya_change - keep todo and authoritative queue updates out of the large dispatcher
+
   function handleExtensionMessage(message: ExtensionMessage): void {
     // Route suggestion messages (extracted to stay within complexity limit)
     routeSuggestionMessage(message)
     if (handleModelUsageMessage(message)) return
     refreshModelUsageForMessage(message)
     if (handleStreamMessage(message)) return
+    if (handleWorkMessage(message)) return
     handleCommandCompletion(message)
     cah.handleMessage(message)
     switch (message.type) {
@@ -1130,10 +1146,6 @@ export const SessionProvider: ParentComponent = (props) => {
 
       case "sessionTurnClosed":
         setCloseMap(message.sessionID, message.reason)
-        break
-
-      case "todoUpdated":
-        handleTodoUpdated(message.sessionID, message.items)
         break
 
       case "questionRequest":
@@ -2017,6 +2029,7 @@ export const SessionProvider: ParentComponent = (props) => {
           for (const id of msgIds) delete s.parts[id]
           delete s.toolParts[sessionID]
           delete s.todos[sessionID]
+          delete s.queues[sessionID]
           for (const [id, state] of Object.entries(s.modelUsage)) {
             if (id === sessionID || state.data?.sessionIDs.includes(sessionID)) delete s.modelUsage[id]
           }
@@ -2865,6 +2878,7 @@ export const SessionProvider: ParentComponent = (props) => {
     const id = currentSessionID()
     return id ? store.todos[id] || [] : []
   }
+  const queuedMessages = () => store.queues[currentSessionID() ?? ""] // raya_change - authoritative queue for active session
 
   const sessions = createMemo(() =>
     Object.values(store.sessions)
@@ -2983,6 +2997,7 @@ export const SessionProvider: ParentComponent = (props) => {
     isErrorHidden: (messageID: string) => hiddenErrors().has(messageID),
     hydrateParts,
     todos,
+    queuedMessages,
     permissions,
     respondingPermissions,
     questions,

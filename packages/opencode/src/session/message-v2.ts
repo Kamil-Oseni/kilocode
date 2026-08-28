@@ -269,7 +269,13 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
   // otherwise unsupportedParts() will turn it into a user-visible error.
   const supportsMediaInToolResult = (attachment: { mime: string }) => {
     if (model.api.npm === "@ai-sdk/anthropic") return true
-    if (model.api.npm === "@ai-sdk/openai") return true
+    // kilocode_change start - Qwen's OpenAI-compatible endpoint accepts base64
+    // user image parts but rejects media embedded inside tool results as a URL
+    // it cannot download. Extract those attachments into the synthetic user
+    // message below, even when a custom Qwen provider uses the OpenAI adapter.
+    const qwen = [model.providerID, model.id, model.api.id].some((id) => String(id).toLowerCase().includes("qwen"))
+    if (model.api.npm === "@ai-sdk/openai") return !qwen
+    // kilocode_change end
     if (model.api.npm === "@ai-sdk/amazon-bedrock/mantle") return true
     if (model.api.npm === "@ai-sdk/amazon-bedrock") return attachment.mime.startsWith("image/")
     if (model.api.npm === "@ai-sdk/xai") return attachment.mime.startsWith("image/")

@@ -2,6 +2,13 @@
 .vscode-test/**
 out/**
 node_modules/**
+# raya_change start - keep generated development evidence out of installed snapshots
+test-results/**
+storybook-static/**
+tmp/**
+coverage/**
+.kilo-dev/**
+# raya_change end
 src/**
 webview-ui/**
 script/**

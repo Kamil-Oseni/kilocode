@@ -40,6 +40,36 @@ and physics-based motion; the premium aesthetic sits on top of that discipline, 
 place of it. Each goal below restates the parts of this direction it needs so the pasted
 block stays self-contained.
 
+### Anti-slop standard
+
+Research into the recurring 2025–2026 generated-interface aesthetic shows that the
+problem is usually a cluster of defaults rather than one forbidden style. The most
+recognizable tells are purple-to-blue gradients, glass surfaces, floating or nested
+cards, uniformly oversized radii, identical card grids, generic geometric typography,
+decorative icon rows, and motion added to imply polish rather than communicate state.
+Operational interfaces add another family of tells: thick accent rails on one side of a
+rounded panel, dotted or bar-filled faux timelines, a pulsing dot beside every status,
+small uppercase pill labels, and permanent activity chrome that occupies space without
+helping the user understand or act.
+
+Raya's designer must not reach for those motifs by default. A side rail, dot, pill,
+container, icon, gradient, or animation is permitted only when it carries information
+that cannot be expressed more clearly through type, spacing, a restrained tonal shift,
+or a thin divider. Static state must not pulse. Work progress should use plain language,
+an actual task list, and real timestamps rather than simulated telemetry. Cards must not
+be nested merely to manufacture hierarchy, and every surface must not share one radius,
+shadow, or elevation. The audit is compositional: even individually defensible choices
+must be removed when their combination recreates the generic AI-product look.
+
+This standard is grounded in the current pattern catalogues at
+[Impeccable's Slop guide](https://impeccable.style/slop/),
+[pols.dev's slop catalogue](https://pols.dev/slop.md), and
+[MindStudio's design-system guidance](https://www.mindstudio.ai/blog/build-design-system-claude-design-no-ai-aesthetics).
+The practical replacement is explicit tokens and named decisions: hierarchy through the
+Instrument Serif and Outfit pairing, one Eden accent used only for meaning, a deliberate
+spacing rhythm, shallow surfaces, complete interaction states, and motion only where it
+explains cause and effect.
+
 ### Reference reading (study before a design goal)
 
 These are the sources to read, mostly from the second half of 2026, before touching the

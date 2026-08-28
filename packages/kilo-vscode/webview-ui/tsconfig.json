@@ -18,6 +18,7 @@
     "kiloclaw/**/*",
     "marketplace/**/*",
     "diff-viewer/**/*",
-    "diff-virtual/**/*"
+    "diff-virtual/**/*",
+    "preview/**/*"
   ]
 }

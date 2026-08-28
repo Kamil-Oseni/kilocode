@@ -22,6 +22,7 @@ import { TaskTimeline } from "./TaskTimeline"
 import { BackgroundAgents } from "./BackgroundAgents"
 import { ContextProgress } from "./ContextProgress"
 import { TaskUsage } from "./TaskUsage"
+import { UsageHistory } from "./UsageHistory" // raya_change - project-wide model spend history
 import { TranscriptSearch } from "./TranscriptSearch"
 import { useTranscriptSearch } from "../../context/transcript-search"
 import { hasModelUsage, tokenSummary } from "../../context/model-usage"
@@ -90,7 +91,7 @@ export const TaskHeader: Component<TaskHeaderProps> = (props) => {
   })
 
   const vscode = useVSCode()
-  const [expanded, setExpanded] = createSignal(true)
+  const [expanded, setExpanded] = createSignal(false) // raya_change - keep transcript space calm by default
 
   // Read initial value from VS Code settings
   onMount(() => vscode.postMessage({ type: "requestTimelineSetting" }))
@@ -110,6 +111,9 @@ export const TaskHeader: Component<TaskHeaderProps> = (props) => {
   const toggleSearch = () => (search.active() ? search.closeSearch() : search.setActive(true))
   window.addEventListener("focusTranscriptSearch", toggleSearch)
   onCleanup(() => window.removeEventListener("focusTranscriptSearch", toggleSearch))
+  const showStatus = () => setExpanded(true)
+  window.addEventListener("showTaskStatus", showStatus)
+  onCleanup(() => window.removeEventListener("showTaskStatus", showStatus)) // raya_change - /status reveals real runtime evidence
 
   // Whenever search closes via an explicit user action — the header toggle
   // button, the command palette toggle above, the search bar's own "X", or
@@ -299,6 +303,7 @@ export const TaskHeader: Component<TaskHeaderProps> = (props) => {
             <ContextProgress />
           </div>
           <Show when={tokens()}>{(tk) => <TaskUsage tokens={tk()} usage={session.modelUsage()} />}</Show>
+          <UsageHistory />
         </div>
       </Show>
       <BackgroundAgents readonly={props.readonly} />

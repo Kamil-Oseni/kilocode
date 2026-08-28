@@ -1096,6 +1096,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       if (await this.handleMemoryMessage(message)) return
       if (await this.handleProfileDataMessage(message)) return
       if (this.handleLegacyMigrationMessage(message)) return
+      if (this.handleUsageMessage(message)) return
       switch (message.type) {
         case "webviewReady":
           console.log("[Kilo New] KiloProvider: ✅ webviewReady received")
@@ -1189,9 +1190,6 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           break
         case "loadSessions":
           this.handleLoadSessions().catch((e) => console.error("[Kilo New] handleLoadSessions failed:", e))
-          break
-        case "requestSessionModelUsage":
-          void this.fetchAndSendSessionModelUsage(message.sessionID, message.requestID)
           break
         case "login": {
           const attempt = ++this.loginAttempt
@@ -1583,22 +1581,65 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
   // raya_change start - Milestone A persistent goal controls
   private async handleGoalMessage(
-    message: TypedWebviewMessage & { sessionID?: unknown; action?: unknown },
+    message: TypedWebviewMessage & { sessionID?: unknown; action?: unknown; objective?: unknown; messageID?: unknown },
   ): Promise<boolean> {
     if (message.type === "goalGet") {
       if (typeof message.sessionID === "string") await this.fetchAndSendGoal(message.sessionID)
       return true
     }
+    if (message.type === "goalDiscard") {
+      if (typeof message.sessionID !== "string" || typeof message.messageID !== "string") return true
+      const sid = message.sessionID
+      const id = message.messageID
+      this.checkpoint(sid, async () => {
+        await this.handleRevertSession(sid, id)
+        await this.handleGoalControl(sid, "clear")
+      })
+      return true
+    }
     if (message.type !== "goalControl") return false
     if (
       typeof message.sessionID === "string" &&
-      (message.action === "pause" || message.action === "resume" || message.action === "clear")
+      (message.action === "pause" ||
+        message.action === "resume" ||
+        message.action === "clear" ||
+        message.action === "revise")
     ) {
-      await this.handleGoalControl(message.sessionID, message.action)
+      await this.handleGoalControl(
+        message.sessionID,
+        message.action,
+        typeof message.objective === "string" ? message.objective : undefined,
+      )
     }
     return true
   }
   // raya_change end
+
+  private handleUsageMessage(
+    message: TypedWebviewMessage & {
+      sessionID?: unknown
+      requestID?: unknown
+      range?: unknown
+    },
+  ): boolean {
+    if (
+      message.type === "requestSessionModelUsage" &&
+      typeof message.sessionID === "string" &&
+      typeof message.requestID === "string"
+    ) {
+      void this.fetchAndSendSessionModelUsage(message.sessionID, message.requestID)
+      return true
+    }
+    if (
+      message.type === "requestProjectUsage" &&
+      typeof message.requestID === "string" &&
+      (message.range === "24h" || message.range === "7d" || message.range === "30d" || message.range === "all")
+    ) {
+      void this.fetchAndSendProjectUsage(message.range, message.requestID)
+      return true
+    }
+    return false
+  } // raya_change - keep usage transport outside the already-complex message switch
 
   private handleWebviewFocusMessage(message: TypedWebviewMessage & { focused?: unknown; target?: unknown }): void {
     if (message.type === "webviewFocusChanged" && this.opts.focusContext) {
@@ -2065,6 +2106,18 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         this.postMessage({ type: "sessionModelUsageLoaded", sessionID, requestID })
       })
   }
+
+  private fetchAndSendProjectUsage(range: "24h" | "7d" | "30d" | "all", requestID: string): Promise<void> {
+    const directory = this.getWorkspaceDirectory()
+    return this.connectionService
+      .getClientAsync(directory)
+      .then((client) => client.kilocode.projectUsage({ directory, range }, { throwOnError: true }))
+      .then((response) => this.postMessage({ type: "projectUsageLoaded", requestID, data: response.data }))
+      .catch((error: unknown) => {
+        console.warn("[Kilo New] KiloProvider: Failed to load project model usage:", error)
+        this.postMessage({ type: "projectUsageLoaded", requestID, error: "Could not load model usage history." })
+      })
+  } // raya_change - historical project analytics over persisted settled steps
 
   private async handleLoadMessages(
     sessionID: string,
@@ -3993,7 +4046,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       const armed =
         command?.kind === "start"
           ? await this.client.kilocode.goal.create(
-              { sessionID: sid, directory: dir, objective: command.objective },
+              { sessionID: sid, directory: dir, objective: command.objective, messageID },
               { throwOnError: true },
             )
           : undefined
@@ -4075,12 +4128,25 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     })
   }
 
-  private async handleGoalControl(sessionID: string, action: "pause" | "resume" | "clear"): Promise<void> {
+  private async handleGoalControl(
+    sessionID: string,
+    action: "pause" | "resume" | "clear" | "revise",
+    objective?: string,
+  ): Promise<void> {
     if (!this.client) return
     const directory = this.getWorkspaceDirectory(sessionID)
     if (action === "clear") {
       await this.client.kilocode.goal.clear({ sessionID, directory }, { throwOnError: true })
       this.postMessage({ type: "goalState", sessionID })
+      return
+    }
+    if (action === "revise") {
+      if (!objective?.trim()) return
+      const response = await this.client.kilocode.goal.update(
+        { sessionID, directory, objective: objective.trim() },
+        { throwOnError: true },
+      )
+      this.postMessage({ type: "goalState", sessionID, goal: response.data as GoalState })
       return
     }
     const response = await this.client.kilocode.goal.update(
@@ -4804,6 +4870,15 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       const cost = this.costs.setSessionCost(event.properties.sessionID, event.properties.info.cost)
       this.requestCostAlert(event.properties.sessionID, cost)
     }
+
+    if (event.type === "session.queue.changed") {
+      this.postMessage({
+        type: "sessionQueueChanged",
+        sessionID: event.properties.sessionID,
+        queued: event.properties.queued,
+      })
+      return
+    } // raya_change - forward the runtime's authoritative safe-boundary queue
 
     if (event.type === "session.updated") {
       // Full bus snapshots duplicate sync patches with the same event ID but no sequence metadata.

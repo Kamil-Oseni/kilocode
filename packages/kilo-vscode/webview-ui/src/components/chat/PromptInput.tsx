@@ -317,6 +317,55 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (!sandboxVisible()) hidden.add("sandbox")
       return hidden
     },
+    undefined,
+    undefined,
+    [
+      {
+        name: "plan",
+        description: "Switch to Plan mode before implementation",
+        hints: ["design", "think"],
+        action: () => session.selectAgent("plan", sid()),
+      },
+      {
+        name: "status",
+        description: "Show timeline, tasks, context, and model usage",
+        hints: ["progress", "todos", "usage"],
+        action: () => window.dispatchEvent(new CustomEvent("showTaskStatus")),
+      },
+      {
+        name: "changes",
+        description: "Open the changed-file review",
+        hints: ["diff", "review"],
+        action: () => vscode.postMessage({ type: "openChanges" }),
+      },
+      {
+        name: "fork",
+        description: "Fork this conversation into a new session",
+        hints: ["branch", "copy"],
+        action: () => {
+          const id = sid()
+          if (id) vscode.postMessage({ type: "forkSession", sessionId: id })
+        },
+      },
+      {
+        name: "side",
+        description: "Continue a separate line of thought in a fork",
+        hints: ["chat", "fork"],
+        action: () => {
+          const id = sid()
+          if (id) vscode.postMessage({ type: "forkSession", sessionId: id })
+        },
+      },
+      {
+        name: "worktree",
+        description: "Continue this session in an isolated worktree",
+        hints: ["isolate", "branch"],
+        action: () => {
+          const id = sid()
+          if (id) vscode.postMessage({ type: "continueInWorktree", sessionId: id })
+        },
+      },
+    ], // raya_change - expose existing agent control capabilities where users look for commands
   )
   const clearSandboxRequest = (sessionID: string | undefined, requestID: string) => {
     setSandboxRequests((current) => {
@@ -550,8 +599,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const sendLabel = () => {
     if (props.blocked?.()) return language.t("prompt.action.send.blocked")
     if (speech.state() === "recording") return language.t("prompt.action.send.recording")
+    if (isBusy() && hasInput()) return "Queue for the next safe step"
     return language.t("prompt.action.send")
-  }
+  } // raya_change - make active-run queue semantics explicit at the action point
   const showStop = () => isBusy() && !hasInput() && speech.state() !== "recording"
   const isAtEnd = () =>
     textareaRef ? atEnd(textareaRef.selectionStart, textareaRef.selectionEnd, textareaRef.value.length) : false
@@ -1628,6 +1678,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           />
         </div>
       </div>
+      <Show when={isBusy() && hasInput()}>
+        <div class="prompt-queue-note" role="status">
+          Send queues this instruction for Raya's next safe step. Stop interrupts the current step.
+        </div>
+      </Show>
       {/* raya_change - speculative voice transcript is visible but never copied into or submitted from the composer */}
       <Show when={voiceActive()}>
         <div class="prompt-realtime-voice" role="status" aria-live="polite">

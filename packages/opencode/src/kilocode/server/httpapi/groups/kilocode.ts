@@ -23,6 +23,7 @@ import {
   Result as NotebookResult,
 } from "@/kilocode/notebook/protocol"
 import { ModelUsage } from "@/kilocode/session/model-usage"
+import { ProjectUsage } from "@/kilocode/session/project-usage" // raya_change - historical project usage
 import { SessionID } from "@/session/schema"
 import { CommandFiles } from "@/kilocode/command-files"
 import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal API contracts
@@ -62,6 +63,11 @@ export const BackgroundJobsQuery = Schema.Struct({
   sessionID: SessionID,
 })
 
+export const ProjectUsageQuery = Schema.Struct({
+  ...WorkspaceRoutingQueryFields,
+  range: Schema.optional(ProjectUsage.Range),
+}) // raya_change - bounded historical usage query
+
 export const RemoveSkillPayload = Schema.Struct({
   location: Schema.String,
 })
@@ -94,6 +100,7 @@ export const KilocodePaths = {
   removeAgent: `${root}/agent/remove`,
   providerUsage: `${root}/provider-usage`,
   providerUsageRefresh: `${root}/provider-usage/refresh`,
+  projectUsage: `${root}/usage`, // raya_change - model token and cost history
   notebookList: `${root}/notebook`,
   notebookReply: `${root}/notebook/:requestID/reply`,
   notebookReject: `${root}/notebook/:requestID/reject`,
@@ -194,6 +201,16 @@ export const KilocodeApi = HttpApi.make("kilocode")
             identifier: "kilocode.providerUsage.refresh",
             summary: "Refresh provider usage",
             description: "Refresh provider plan usage while coalescing concurrent source requests.",
+          }),
+        ),
+        HttpApiEndpoint.get("projectUsage", KilocodePaths.projectUsage, {
+          query: ProjectUsageQuery,
+          success: described(ProjectUsage.Info, "Project model token and cost history"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.projectUsage",
+            summary: "Get project model usage",
+            description: "Aggregate settled model tokens and costs for the routed project over a UTC rolling range.",
           }),
         ),
         HttpApiEndpoint.get("notebookList", KilocodePaths.notebookList, {
@@ -413,8 +430,8 @@ export const KilocodeApi = HttpApi.make("kilocode")
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "kilocode.goal.update",
-            summary: "Pause or resume a session goal",
-            description: "Apply a user-controlled pause or resume transition.",
+            summary: "Control or revise a session goal",
+            description: "Pause, resume, or revise a goal without cancelling its current model turn.",
           }),
         ),
         HttpApiEndpoint.delete("goalClear", KilocodePaths.goal, {

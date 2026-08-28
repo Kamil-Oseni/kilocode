@@ -1191,8 +1191,8 @@
         },
         "raya.showTaskTimeline": {
           "type": "boolean",
-          "default": true,
-          "description": "Show the task timeline graph in the chat header"
+          "default": false,
+          "description": "Show the optional task timeline graph in the chat header. Goal progress and todos remain visible without it."
         },
         "raya.showTokenThroughput": {
           "type": "boolean",
@@ -1244,6 +1244,9 @@
     "watch:esbuild": "bun run prepare:cli-binary && node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
     "watch:cli": "bun script/watch-cli.ts",
+    "//preview": "raya_change - dev-only component preview harness served at http://localhost:5199",
+    "preview": "bun webview-ui/preview/serve.cjs",
+    "preview:check": "bun webview-ui/preview/serve.cjs --check",
     "package": "bun run prepare:cli-binary && bun run prepare:sdk && bun run build:check:production",
     "build:check": "bun run --parallel check-types check-types:webview lint bundle",
     "build:check:production": "bun run --parallel check-types check-types:webview lint bundle:production",
@@ -1263,6 +1266,7 @@
     "test": "vscode-test",
     "test:unit": "bun script/test-unit.ts",
     "test:browser-smoke-live": "bun script/test-browser-smoke-live.ts",
+    "test:self-redesign-smoke": "bun script/test-self-redesign-smoke.ts",
     "test:voice-live": "bun script/test-voice-live.ts",
     "test:voice-stt-live": "bun script/test-voice-stt-live.ts",
     "test:voice-mic-live": "bun script/test-voice-mic-live.ts",

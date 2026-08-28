@@ -502,6 +502,14 @@
   white-space: nowrap;
 }
 
+/* raya_change - active-run intervention explains queueing without adding permanent chrome. */
+.prompt-queue-note {
+  padding: 4px 8px 0;
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-size: var(--kilo-font-size-10);
+  line-height: 1.4;
+}
+
 .prompt-input-hint {
   display: flex;
   flex-wrap: nowrap;

@@ -7,6 +7,7 @@ import { iife } from "@/util/iife"
 import { kiloProviderOptions } from "@/kilocode/provider-options"
 import { isLing } from "@/kilocode/model-match" // kilocode_change
 import { reasoningSummary } from "@/kilocode/provider/reasoning-summary" // kilocode_change
+import { DashscopeMedia } from "@/kilocode/provider/dashscope-media" // kilocode_change
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
@@ -518,6 +519,7 @@ function mapProviderOptions(
 }
 
 export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
+  msgs = DashscopeMedia.sanitize(msgs, model) // kilocode_change - never send provider-inaccessible media URLs
   msgs = unsupportedParts(msgs, model)
   msgs = normalizeMessages(msgs, model, options)
   const usesAnthropicAutomaticCaching =

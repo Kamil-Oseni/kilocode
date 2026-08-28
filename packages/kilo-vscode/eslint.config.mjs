@@ -3,6 +3,10 @@ import eslintConfigPrettier from "eslint-config-prettier"
 
 export default [
   {
+    // raya_change - esbuild owns these preview outputs; lint the authored TSX/CSS instead
+    ignores: ["webview-ui/preview/.serve/**", "webview-ui/preview/index.js"],
+  },
+  {
     files: ["**/*.ts", "**/*.tsx"],
   },
   {

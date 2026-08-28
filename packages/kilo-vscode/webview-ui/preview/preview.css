@@ -1,0 +1,130 @@
+/* raya_change start - preview harness page chrome and theme mocks.
+ * Dev-only. The .pv-theme--* blocks stand in for the vscode-bridge: they supply
+ * the same semantic tokens the bridge maps from --vscode-* variables in the
+ * editor, so component-tier tokens resolve identically in both hosts.
+ */
+
+:root {
+  /* Harness chrome tokens: the neutral stage the fixtures sit on */
+  --pv-stage: #12110d;
+  --pv-stage-line: #29271f;
+  --pv-ink: #b9b3a2;
+  --pv-ink-weak: #7d7666;
+  --pv-panel-max: 460px;
+}
+
+body {
+  margin: 0;
+  background: var(--pv-stage);
+  color: var(--pv-ink);
+  font-family: var(--font-body);
+}
+
+.pv-page {
+  max-width: calc(var(--pv-panel-max) + var(--raya-space-24) * 2);
+  margin: 0 auto;
+  padding: var(--raya-space-24) var(--raya-space-16) calc(var(--raya-space-24) * 3);
+}
+
+.pv-page--focused {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+}
+
+.pv-page--focused .pv-page__header {
+  display: none;
+}
+
+.pv-page__header {
+  margin-bottom: var(--raya-space-24);
+}
+
+.pv-page__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--kilo-font-size-24);
+  font-weight: 400;
+  line-height: var(--raya-leading-tight);
+  color: var(--pv-ink);
+}
+
+.pv-page__sub {
+  margin: var(--raya-space-4) 0 0;
+  font-size: var(--kilo-font-size-12);
+  line-height: var(--raya-leading-body);
+  color: var(--pv-ink-weak);
+}
+
+.pv-fixture {
+  margin: 0 0 var(--raya-space-24);
+}
+
+.pv-page--focused .pv-fixture {
+  margin: 0;
+  width: 100%;
+}
+
+.pv-fixture__label {
+  font-size: var(--kilo-font-size-10);
+  font-weight: 600;
+  letter-spacing: var(--raya-tracking-caps);
+  text-transform: uppercase;
+  color: var(--pv-ink-weak);
+  margin-bottom: var(--raya-space-6);
+}
+
+.pv-panel {
+  border: var(--raya-hairline) solid var(--pv-stage-line);
+  border-radius: var(--raya-radius-lg);
+  padding: var(--raya-space-12);
+  padding-bottom: var(--raya-space-16);
+  background: var(--surface-base);
+}
+
+/* ===== Theme mocks =====
+ * Eden by day: warm paper, ink-brown text, a garden emerald for focus and the
+ * live state. Eden by night: warm near-black, moon-cream text, dusk gold.
+ */
+.pv-theme--light {
+  --surface-base: #f4f1ea;
+  --surface-raised-base: #faf8f3;
+  --surface-base-hover: #ebe7dc;
+  --text-base: #3a382f;
+  --text-strong: #211f19;
+  --text-weak: #776f5c;
+  --text-weaker: #a49c88;
+  --border-base: #e0d9c8;
+  --border-focus: #2e6b50;
+  --button-secondary-base: #e9e4d7;
+  --button-secondary-hover: #ded7c4;
+  --button-ghost-hover: #ebe6d9;
+  --icon-base: #8a816c;
+  --icon-hover: #322f26;
+  --surface-warning-strong: #a07a1f;
+  --surface-success-strong: #2f7d51;
+  --surface-critical-strong: #b3452f;
+  color: var(--text-base);
+}
+
+.pv-theme--dark {
+  --surface-base: #171610;
+  --surface-raised-base: #211f17;
+  --surface-base-hover: #2b2920;
+  --text-base: #ddd8c8;
+  --text-strong: #f2eee1;
+  --text-weak: #9a937f;
+  --text-weaker: #6f6a5c;
+  --border-base: #322f26;
+  --border-focus: #c8a24e;
+  --button-secondary-base: #2b2920;
+  --button-secondary-hover: #38352b;
+  --button-ghost-hover: #2b2920;
+  --icon-base: #8d8672;
+  --icon-hover: #e8e3d4;
+  --surface-warning-strong: #d0a53f;
+  --surface-success-strong: #7cbf8e;
+  --surface-critical-strong: #e07862;
+  color: var(--text-base);
+}
+/* raya_change end */

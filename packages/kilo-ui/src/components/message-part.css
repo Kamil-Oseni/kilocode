@@ -416,6 +416,41 @@ html[data-theme="kilo-vscode"] [data-component="bash-output"] {
     &[data-queued] {
       opacity: 0.6;
     }
+
+    /* raya_change start - long goal prompts stay readable without taking over chat */
+    &[data-long] {
+      --user-message-lines: 8;
+      max-height: min(calc(1lh * var(--user-message-lines)), 42vh);
+      overflow: auto;
+      scrollbar-gutter: stable;
+    }
+
+    &[data-collapsed] {
+      overflow: hidden;
+      mask-image: linear-gradient(to bottom, black 72%, transparent);
+    }
+    /* raya_change end */
+  }
+
+  /* raya_change - explicit expansion keeps truncation discoverable and keyboard-accessible */
+  [data-slot="user-message-toggle"] {
+    display: block;
+    margin: 4px 8px 0 auto;
+    padding: 2px 0;
+    border: 0;
+    background: transparent;
+    color: var(--text-weak);
+    font: inherit;
+    cursor: pointer;
+
+    &:hover {
+      color: var(--text-strong);
+    }
+
+    &:focus-visible {
+      outline: 1px solid var(--border-focus);
+      outline-offset: 2px;
+    }
   }
 
   [data-slot="user-message-queued-indicator"] {

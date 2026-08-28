@@ -97,13 +97,19 @@ describe("RayaGoal", () => {
     Effect.gen(function* () {
       const storage = yield* Storage.Service
       const sessionID = SessionID.make(`ses_goal_${crypto.randomUUID()}`)
+      const messageID = MessageID.ascending()
       const goals = setup(storage, () => [])
       yield* Effect.addFinalizer(() => goals.clear(sessionID))
 
-      const created = yield* goals.create(sessionID, "Ship verified goal mode")
+      const created = yield* goals.create(sessionID, "Ship verified goal mode", messageID)
       expect(created.status).toBe("active")
+      expect(created.startMessageID).toBe(messageID)
       expect((yield* goals.create(sessionID, "Ship verified goal mode")).createdAt).toBe(created.createdAt)
       yield* goals.control(sessionID, "paused")
+      const revised = yield* goals.revise(sessionID, "Ship the revised verified goal")
+      expect(revised.objective).toBe("Ship the revised verified goal")
+      expect(revised.status).toBe("paused")
+      expect(revised.progress.at(-1)?.message).toContain("current step will finish")
 
       const reloaded = setup(storage, () => [])
       expect((yield* reloaded.get(sessionID))?.status).toBe("paused")

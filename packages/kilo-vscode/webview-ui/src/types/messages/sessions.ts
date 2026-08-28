@@ -1,7 +1,8 @@
-import type { KilocodeSessionModelUsageResponse } from "@kilocode/sdk/v2"
+import type { KilocodeProjectUsageResponse, KilocodeSessionModelUsageResponse } from "@kilocode/sdk/v2"
 import type { Part, TokenUsage } from "./parts"
 
 export type SessionModelUsage = KilocodeSessionModelUsageResponse
+export type ProjectUsage = KilocodeProjectUsageResponse // raya_change - historical model usage response
 
 export type SessionCloseReason = "completed" | "error" | "interrupted" | "superseded"
 

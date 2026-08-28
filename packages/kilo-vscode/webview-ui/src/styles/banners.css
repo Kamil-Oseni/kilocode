@@ -370,73 +370,355 @@
   line-height: 1.4;
 }
 
-/* raya_change start - Milestone A persistent goal banner */
+/* raya_change start - Milestone A persistent goal banner, redesigned on Eden tokens.
+ * Component-tier tokens are declared and consumed in the same rule block so each
+ * var() resolves against the theme that is live where the banner renders: the
+ * VS Code semantic bridge in the editor, theme mocks in the preview harness.
+ */
 .goal-banner {
-  margin: 8px 12px 0;
-  padding: 10px 12px;
-  border: 1px solid var(--vscode-focusBorder);
-  border-radius: 6px;
-  background: var(--vscode-editorWidget-background);
-  color: var(--vscode-editorWidget-foreground);
+  --goal-surface: var(--surface-raised-base, var(--raya-eden-surface-raised));
+  --goal-text: var(--text-base, var(--raya-eden-ink));
+  --goal-text-strong: var(--text-strong, var(--raya-eden-ink-strong));
+  --goal-text-quiet: var(--text-weak, var(--raya-eden-ink-soft));
+  --goal-line: var(--border-base, var(--raya-eden-line));
+  --goal-focus: var(--border-focus, var(--raya-eden-accent));
+  --goal-warning: var(--surface-warning-strong, var(--raya-eden-warning));
+  --goal-detail-max: var(--raya-panel-detail-max);
+  /* The status accent defaults to the live focus color; status rules below
+   * redeclare it. Status colors stay reserved for status meaning. */
+  --goal-status: var(--goal-focus);
+
+  display: grid;
+  gap: var(--raya-space-6);
+  margin: var(--raya-space-8) var(--raya-space-12) 0;
+  padding: var(--raya-space-8) var(--raya-space-10);
+  border: var(--raya-hairline) solid var(--goal-line);
+  border-radius: var(--raya-radius-md);
+  background: var(--goal-surface);
+  color: var(--goal-text);
+  font-family: var(--font-body);
+  animation: goal-banner-enter var(--raya-duration-base) var(--raya-ease-out);
 }
 
-.goal-banner--blocked {
-  border-color: var(--vscode-inputValidation-errorBorder);
-  background: var(--vscode-inputValidation-errorBackground);
+.goal-banner[data-status="paused"] {
+  --goal-status: var(--surface-warning-strong, var(--raya-eden-warning));
 }
 
-.goal-banner__header,
-.goal-banner__notice,
-.goal-banner__actions {
+.goal-banner[data-status="complete"] {
+  --goal-status: var(--surface-success-strong, var(--raya-eden-success));
+}
+
+.goal-banner[data-status="blocked"] {
+  --goal-status: var(--surface-critical-strong, var(--raya-eden-critical));
+}
+
+/* Header: status cluster reads first, usage meta yields to the right. */
+.goal-banner__header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--raya-space-2) var(--raya-space-8);
 }
 
-.goal-banner__header {
-  justify-content: space-between;
-  color: var(--vscode-descriptionForeground);
-  font-size: var(--kilo-font-size-11);
+.goal-banner__status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--raya-space-6);
+  min-width: 0;
+  color: var(--goal-status);
 }
 
-.goal-banner__header strong {
-  color: var(--vscode-foreground);
-  text-transform: capitalize;
+/* "Goal" sets the category in quiet small caps; the serif italic carries the
+ * state. The size and weight contrast is the banner's hierarchy in one line. */
+.goal-banner__label {
+  font-size: var(--kilo-font-size-10);
+  font-weight: 600;
+  letter-spacing: var(--raya-tracking-caps);
+  text-transform: uppercase;
+  color: var(--goal-text-quiet);
 }
 
-.goal-banner__objective {
-  margin-top: 6px;
-  font-size: var(--kilo-font-size-12);
-  line-height: 1.4;
-  white-space: pre-wrap;
+.goal-banner__status-word {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: var(--kilo-font-size-15);
+  line-height: var(--raya-leading-tight);
+  color: var(--goal-status);
 }
 
-.goal-banner__notice,
-.goal-banner__reason,
-.goal-banner__progress {
-  margin-top: 6px;
-  color: var(--vscode-descriptionForeground);
-  font-size: var(--kilo-font-size-11);
+.goal-banner__usage {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--kilo-font-size-10);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--goal-text-quiet);
 }
 
-.goal-banner__notice {
-  justify-content: space-between;
-  margin-top: 0;
-}
-
-.goal-banner__notice button {
+.goal-banner__toggle {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--raya-space-20);
+  height: var(--raya-space-20);
+  padding: 0;
   border: 0;
+  border-radius: var(--raya-radius-sm);
   background: transparent;
-  color: inherit;
+  color: var(--goal-text-quiet);
   cursor: pointer;
 }
 
+.goal-banner__toggle:hover {
+  background: var(--button-ghost-hover, var(--raya-eden-surface-hover));
+  color: var(--goal-text-strong);
+}
+
+.goal-banner__toggle:focus-visible {
+  outline: var(--raya-hairline) solid var(--goal-focus);
+  outline-offset: var(--raya-hairline);
+}
+
+.goal-banner__toggle[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+.goal-banner__summary {
+  min-width: 0;
+}
+
+.goal-banner__objective {
+  font-size: var(--kilo-font-size-12);
+  font-weight: var(--raya-weight-body);
+  line-height: var(--raya-leading-body);
+  color: var(--goal-text-strong);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.goal-banner__objective[data-expanded] {
+  display: block;
+  overflow: visible;
+}
+
+.goal-banner__progress {
+  margin-top: var(--raya-space-4);
+  font-size: var(--kilo-font-size-11);
+  line-height: var(--raya-leading-body);
+  color: var(--goal-text-quiet);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Renders only while blocked, so the status accent here is the critical color. */
 .goal-banner__reason {
-  color: var(--vscode-errorForeground);
+  font-size: var(--kilo-font-size-11);
+  line-height: var(--raya-leading-body);
+  color: var(--goal-status);
+}
+
+.goal-banner__details {
+  max-height: var(--goal-detail-max);
+  overflow: auto;
+  display: grid;
+  gap: var(--raya-space-10);
+  padding: var(--raya-space-8) 0;
+  border-top: var(--raya-hairline) solid var(--goal-line);
+  border-bottom: var(--raya-hairline) solid var(--goal-line);
+  scrollbar-gutter: stable;
+}
+
+.goal-banner__section-title,
+.goal-banner__editor label {
+  display: block;
+  margin-bottom: var(--raya-space-6);
+  color: var(--goal-text-quiet);
+  font-size: var(--kilo-font-size-10);
+  font-weight: 600;
+  letter-spacing: var(--raya-tracking-caps);
+  text-transform: uppercase;
+}
+
+.goal-banner__tasks,
+.goal-banner__history,
+.goal-banner__editor {
+  display: grid;
+  gap: var(--raya-space-6);
+}
+
+.goal-banner__task {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--raya-space-6);
+  color: var(--goal-text);
+  font-size: var(--kilo-font-size-11);
+  line-height: var(--raya-leading-body);
+}
+
+.goal-banner__task[data-status="completed"] {
+  color: var(--goal-text-quiet);
+}
+
+.goal-banner__task[data-status="completed"] span {
+  text-decoration: line-through;
+}
+
+.goal-banner__history-item {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--raya-space-8);
+  color: var(--goal-text-quiet);
+  font-size: var(--kilo-font-size-10);
+  line-height: var(--raya-leading-body);
+}
+
+.goal-banner__history-item span:first-child {
+  font-family: var(--font-mono);
+}
+
+.goal-banner__editor textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: calc(var(--raya-space-24) * 4);
+  resize: vertical;
+  padding: var(--raya-space-8);
+  border: var(--raya-hairline) solid var(--goal-line);
+  border-radius: var(--raya-radius-sm);
+  background: var(--surface-base, var(--raya-eden-surface));
+  color: var(--goal-text-strong);
+  font: inherit;
+  line-height: var(--raya-leading-body);
+}
+
+.goal-banner__editor textarea:focus-visible {
+  outline: var(--raya-hairline) solid var(--goal-focus);
+  outline-offset: var(--raya-hairline);
+}
+
+.goal-banner__editor > div,
+.goal-banner__discard {
+  color: var(--goal-text-quiet);
+  font-size: var(--kilo-font-size-10);
+  line-height: var(--raya-leading-body);
+}
+
+.goal-banner__discard {
+  display: grid;
+  gap: var(--raya-space-6);
+}
+
+.goal-banner__discard-hint {
+  color: var(--goal-warning);
+}
+
+.goal-banner__editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--raya-space-6);
+  justify-content: flex-end;
+}
+
+.goal-banner__notice {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--raya-space-8);
+  font-size: var(--kilo-font-size-11);
+  line-height: var(--raya-leading-body);
+  color: var(--goal-text-quiet);
+}
+
+.goal-banner__notice-dismiss {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--raya-space-20);
+  height: var(--raya-space-20);
+  padding: 0;
+  border: 0;
+  border-radius: var(--raya-radius-sm);
+  background: transparent;
+  color: var(--icon-base, var(--goal-text-quiet));
+  cursor: pointer;
+  transition:
+    background-color var(--raya-duration-fast) var(--raya-ease-out),
+    color var(--raya-duration-fast) var(--raya-ease-out);
+}
+
+.goal-banner__notice-dismiss:hover {
+  background: var(--button-ghost-hover, var(--raya-eden-surface-hover));
+  color: var(--icon-hover, var(--goal-text-strong));
+}
+
+.goal-banner__notice-dismiss:focus-visible {
+  outline: var(--raya-hairline) solid var(--goal-focus);
+  outline-offset: var(--raya-hairline);
 }
 
 .goal-banner__actions {
+  display: flex;
   justify-content: flex-end;
-  margin-top: 8px;
+  flex-wrap: wrap;
+  gap: var(--raya-space-6);
+}
+
+.goal-banner__actions [data-component="button"] {
+  font-family: var(--font-body);
+  transition:
+    background-color var(--raya-duration-fast) var(--raya-ease-out),
+    color var(--raya-duration-fast) var(--raya-ease-out),
+    opacity var(--raya-duration-fast) var(--raya-ease-out),
+    transform var(--raya-duration-fast) var(--raya-ease-out);
+}
+
+/* Press feedback scoped to this banner: settle down one hairline under the finger. */
+.goal-banner__actions [data-component="button"]:active:not(:disabled) {
+  transform: translateY(var(--raya-hairline));
+}
+
+/* Design-preview state forcing. Renders hover/focus/pressed statically for
+ * screenshots and visual QA; the selectors mirror the real pseudo-class rules. */
+.goal-banner[data-pv="hover"] .goal-banner__actions [data-component="button"]:first-child:not(:disabled) {
+  background-color: var(--button-secondary-hover, var(--raya-eden-surface-hover));
+}
+
+.goal-banner[data-pv="focus"] .goal-banner__actions [data-component="button"]:first-child:not(:disabled) {
+  outline: var(--raya-hairline) solid var(--goal-focus);
+  outline-offset: var(--raya-hairline);
+}
+
+.goal-banner[data-pv="active"] .goal-banner__actions [data-component="button"]:first-child:not(:disabled) {
+  opacity: var(--raya-opacity-pressed);
+  transform: translateY(var(--raya-hairline));
+}
+
+.goal-banner--disabled .goal-banner__usage,
+.goal-banner--disabled .goal-banner__label {
+  opacity: 0.6;
+}
+
+@keyframes goal-banner-enter {
+  from {
+    opacity: 0;
+    transform: translateY(calc(var(--raya-space-4) * -1));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .goal-banner {
+    animation: none;
+  }
+
+  .goal-banner__actions [data-component="button"],
+  .goal-banner__notice-dismiss,
+  .goal-banner__toggle {
+    transition: none;
+  }
 }
 /* raya_change end */

@@ -14,6 +14,7 @@ import { AgentManager } from "@/kilocode/agent-manager/service"
 import type { RequestID as NotebookRequestID } from "@/kilocode/notebook/protocol"
 import { Notebook } from "@/kilocode/notebook/service"
 import { ModelUsage } from "@/kilocode/session/model-usage"
+import { ProjectUsage } from "@/kilocode/session/project-usage" // raya_change - historical project usage
 import { ProviderUsage } from "@opencode-ai/core/kilocode/provider-usage"
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-services"
@@ -43,6 +44,7 @@ import {
   RemoveSkillPayload,
   BackgroundJobInfo,
   BackgroundJobsQuery,
+  ProjectUsageQuery, // raya_change - historical project usage
   GoalCreatePayload, // raya_change - Milestone A goal API
   GoalUpdatePayload, // raya_change - Milestone A goal API
   BrowserReplyPayload, // raya_change - Milestone F browser API
@@ -167,6 +169,13 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         Effect.mapError(() => new HttpApiError.ServiceUnavailable({})),
       )
     })
+
+    const projectUsage = Effect.fn("KilocodeHttpApi.projectUsage")(function* (ctx: {
+      query: typeof ProjectUsageQuery.Type
+    }) {
+      const project = (yield* InstanceState.context).project.id
+      return yield* located(ProjectUsage.get(project, ctx.query.range ?? "all"))
+    }) // raya_change - aggregate existing settled step records without a second write path
 
     const notebookList = Effect.fn("KilocodeHttpApi.notebookList")(function* () {
       return yield* notebook.list()
@@ -315,7 +324,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       yield* sessions
         .get(ctx.params.sessionID)
         .pipe(Effect.catchTag("NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))))
-      return yield* goals.create(ctx.params.sessionID, ctx.payload.objective).pipe(
+      return yield* goals.create(ctx.params.sessionID, ctx.payload.objective, ctx.payload.messageID).pipe(
         Effect.catchTag("RayaGoal.ExistsError", () => Effect.fail(new HttpApiError.BadRequest({}))),
         Effect.catchTag("RayaGoal.AuditError", () => Effect.fail(new HttpApiError.BadRequest({}))),
       )
@@ -332,11 +341,24 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       payload: typeof GoalUpdatePayload.Type
     }) {
       const prior = yield* goals.get(ctx.params.sessionID)
-      const goal = yield* goals.control(ctx.params.sessionID, ctx.payload.status).pipe(
-        Effect.catchTag("RayaGoal.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
-        Effect.catchTag("RayaGoal.AuditError", () => Effect.fail(new HttpApiError.BadRequest({}))),
-      )
-      if (prior?.status === "paused" && goal.status === "active") {
+      if (!ctx.payload.status && ctx.payload.objective === undefined) {
+        return yield* new HttpApiError.BadRequest({})
+      }
+      const revised =
+        ctx.payload.objective === undefined
+          ? prior
+          : yield* goals.revise(ctx.params.sessionID, ctx.payload.objective).pipe(
+              Effect.catchTag("RayaGoal.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+              Effect.catchTag("RayaGoal.AuditError", () => Effect.fail(new HttpApiError.BadRequest({}))),
+            )
+      const goal = ctx.payload.status
+        ? yield* goals.control(ctx.params.sessionID, ctx.payload.status).pipe(
+            Effect.catchTag("RayaGoal.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+            Effect.catchTag("RayaGoal.AuditError", () => Effect.fail(new HttpApiError.BadRequest({}))),
+          )
+        : revised
+      if (!goal) return yield* new HttpApiError.NotFound({})
+      if ((prior?.status === "paused" || prior?.status === "blocked") && goal.status === "active") {
         yield* RayaGoalContinuation.resume({
           sessionID: ctx.params.sessionID,
           storage,
@@ -361,6 +383,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .handle("removeAgent", removeAgent)
         .handle("providerUsage", providerUsage)
         .handle("providerUsageRefresh", providerUsageRefresh)
+        .handle("projectUsage", projectUsage)
         .handle("notebookList", notebookList)
         .handle("notebookReply", notebookReply)
         .handle("notebookReject", notebookReject)

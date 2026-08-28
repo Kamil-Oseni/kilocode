@@ -186,15 +186,18 @@ export const MessageList: Component<MessageListProps> = (props) => {
     ),
   )
   const queuedIDs = createMemo(
-    () =>
-      new Set(
+    () => {
+      const queued = session.queuedMessages()
+      if (queued) return new Set(queued)
+      return new Set(
         queuedUserMessageIDs(
           session.messages(),
           session.statusInfo(),
           (msg) => session.getParts(msg.id),
           session.submitting(),
         ),
-      ),
+      )
+    }, // raya_change - prefer runtime queue truth while retaining startup compatibility
   )
   const rows = createMemo((prev: TranscriptRow[] | undefined) => {
     const active = activeUserID()

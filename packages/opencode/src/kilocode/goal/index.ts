@@ -46,6 +46,7 @@ export namespace RayaGoal {
 
   export const State = Schema.Struct({
     objective: Schema.String,
+    startMessageID: Schema.optional(MessageID), // raya_change - restore the pre-goal checkpoint on discard
     status: Status,
     createdAt: Schema.Number,
     updatedAt: Schema.Number,
@@ -58,10 +59,12 @@ export namespace RayaGoal {
 
   export const Create = Schema.Struct({
     objective: Schema.String,
+    messageID: Schema.optional(MessageID), // raya_change - bind review/discard to the goal's first turn
   })
 
   export const Control = Schema.Struct({
-    status: Schema.Literals(["active", "paused"]),
+    status: Schema.optional(Schema.Literals(["active", "paused"])),
+    objective: Schema.optional(Schema.String), // raya_change - steer the next goal turn without cancelling this one
   })
 
   // raya_change - model providers require tool parameters to be a top-level JSON object
@@ -129,7 +132,11 @@ export namespace RayaGoal {
       return state
     })
 
-    const create = Effect.fn("RayaGoal.create")(function* (sessionID: SessionID, objective: string) {
+    const create = Effect.fn("RayaGoal.create")(function* (
+      sessionID: SessionID,
+      objective: string,
+      startMessageID?: MessageID,
+    ) {
       const text = clean(objective)
       if (!text) return yield* new AuditError({ message: "A goal objective is required." })
       const existing = yield* get(sessionID)
@@ -138,6 +145,7 @@ export namespace RayaGoal {
       const now = Date.now()
       return yield* save(sessionID, {
         objective: text,
+        startMessageID,
         status: "active",
         createdAt: now,
         updatedAt: now,
@@ -165,6 +173,33 @@ export namespace RayaGoal {
         }),
       })
     })
+
+    // raya_change start - persist steering immediately; the current model turn
+    // remains untouched and the continuation reads the revised objective.
+    const revise = Effect.fn("RayaGoal.revise")(function* (sessionID: SessionID, objective: string) {
+      const state = yield* requireGoal(sessionID)
+      if (state.status === "complete") {
+        return yield* new AuditError({ message: "A completed goal cannot be revised." })
+      }
+      const text = clean(objective)
+      if (!text) return yield* new AuditError({ message: "A goal objective is required." })
+      if (text === state.objective) return state
+      const now = Date.now()
+      return yield* save(sessionID, {
+        ...state,
+        objective: text,
+        blockedReason: undefined,
+        status: state.status === "blocked" ? "active" : state.status,
+        updatedAt: now,
+        audit: undefined,
+        progress: progress(state, {
+          at: now,
+          kind: "status",
+          message: "Goal updated. The current step will finish before the revision takes effect.",
+        }),
+      })
+    })
+    // raya_change end
 
     const clear = Effect.fn("RayaGoal.clear")(function* (sessionID: SessionID) {
       yield* deps.storage.remove(key(sessionID)).pipe(Effect.orDie)
@@ -389,6 +424,6 @@ export namespace RayaGoal {
       })
     })
 
-    return { get, create, control, clear, update, evidence, recordTurn, continued }
+    return { get, create, control, revise, clear, update, evidence, recordTurn, continued }
   }
 }

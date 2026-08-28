@@ -221,6 +221,8 @@ import type {
   KilocodeNotebookRejectResponses,
   KilocodeNotebookReplyErrors,
   KilocodeNotebookReplyResponses,
+  KilocodeProjectUsageErrors,
+  KilocodeProjectUsageResponses,
   KilocodeProviderUsageGetErrors,
   KilocodeProviderUsageGetResponses,
   KilocodeProviderUsageRefreshErrors,
@@ -8222,9 +8224,9 @@ export class Goal extends HeyApiClient {
   }
 
   /**
-   * Pause or resume a session goal
+   * Control or revise a session goal
    *
-   * Apply a user-controlled pause or resume transition.
+   * Pause, resume, or revise a goal without cancelling its current model turn.
    */
   public update<ThrowOnError extends boolean = false>(
     parameters: {
@@ -8232,6 +8234,7 @@ export class Goal extends HeyApiClient {
       directory?: string
       workspace?: string
       status?: "active" | "paused"
+      objective?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -8244,6 +8247,7 @@ export class Goal extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "body", key: "status" },
+            { in: "body", key: "objective" },
           ],
         },
       ],
@@ -8271,6 +8275,7 @@ export class Goal extends HeyApiClient {
       directory?: string
       workspace?: string
       objective?: string
+      messageID?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -8283,6 +8288,7 @@ export class Goal extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "body", key: "objective" },
+            { in: "body", key: "messageID" },
           ],
         },
       ],
@@ -8997,6 +9003,42 @@ export class Kilocode extends HeyApiClient {
         },
       },
     )
+  }
+
+  /**
+   * Get project model usage
+   *
+   * Aggregate settled model tokens and costs for the routed project over a UTC rolling range.
+   */
+  public projectUsage<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      range?: "24h" | "7d" | "30d" | "all"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "range" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      KilocodeProjectUsageResponses,
+      KilocodeProjectUsageErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/usage",
+      ...options,
+      ...params,
+    })
   }
 
   /**

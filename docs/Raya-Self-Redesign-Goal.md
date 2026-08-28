@@ -10,16 +10,41 @@ before pointing it at anything larger.
 Read `Raya-Self-Redesign-Guide.md` first for the one-time setup (branch, watch build,
 Qwen provider check).
 
+## Design direction (premium, applies to every goal below)
+
+Raya's redesign should feel premium and distinctly Eden's, not like a default AI chat
+panel. Type carries most of that. Use Instrument Serif as the display face for large,
+expressive headings and hero or empty-state moments, and Outfit as the body and UI
+face for everything functional, with a monospace (Geist Mono, falling back to the
+editor's own monospace) for code and terminal output. Bundle both fonts with the
+webview so they render offline under the VS Code content-security policy rather than
+relying on a network fetch, and expose them through the token layer as `--font-display`
+and `--font-body`, mirroring Eden's own setup (Instrument Serif over Georgia, Outfit
+over system-ui). Every surface then consumes type through those tokens rather than
+naming a font family directly.
+
+Take navigation and interaction inspiration from ChatGPT where it is genuinely good, a
+calm and uncluttered transcript, a focused composer, clear model and mode affordances,
+and an unobtrusive history rail, and then build past it: warmer type, a more considered
+spatial rhythm, real empty and loading states, and motion that feels physical. The bar
+is a UI more refined than ChatGPT's, not a copy of it. All of this still answers to the
+designer prompt's fundamentals, laws of UX, anti-slop rules, and physics-based motion;
+the premium aesthetic sits on top of that discipline, never in place of it. Each goal
+below restates the parts of this direction it needs so the pasted block stays
+self-contained.
+
 ## The goal prompt
 
 ```
-/goal Stand up a localhost visual-preview harness for Raya's SolidJS webview and use it to redesign one small presentational component to design tokens. Work in the raya repo at C:\Users\User\Desktop\raya on the feature branch raya-self-redesign. This goal is complete only when every item below is true and verified against the current working tree; do not narrow the objective to an easier subset.
+/goal Stand up a localhost visual-preview harness for Raya's SolidJS webview and use it to redesign one small presentational component to design tokens with Eden's premium typography. Work in the raya repo at C:\Users\User\Desktop\raya on the feature branch raya-self-redesign. This goal is complete only when every item below is true and verified against the current working tree; do not narrow the objective to an easier subset.
+
+Design direction: the result should feel premium and distinctly Eden's, using Instrument Serif for display headings and Outfit for body and UI, and it may borrow interaction cues from ChatGPT where they are genuinely good while aiming to look more refined. Everything still answers to the designer prompt's fundamentals, laws of UX, anti-slop rules, and physics-based motion.
 
 Deliverables and definition of done:
 
 1. Preview harness. Add a dev-only preview entry under packages/kilo-vscode/webview-ui/preview/ and a "preview" script that runs esbuild in serve mode and renders isolated presentational components at a fixed localhost address (for example http://localhost:5199). Provide a mocked acquireVsCodeApi and mock props so components render with no running backend. Mark every fork addition with a // raya_change comment. Done when: `bun run preview` serves the page and it loads with no console errors.
 
-2. Design tokens. Make the chosen component consume a small, named set of design tokens for color, spacing, radius, and type instead of magic values. If no token layer exists for the webview, add a minimal one and bind the component to it. Done when: the component has no hardcoded hex or px that should be a token, and every value traces to a token.
+2. Design tokens and type. Make the chosen component consume a small, named set of design tokens for color, spacing, radius, and type instead of magic values. If no token layer exists for the webview, add a minimal one and bind the component to it. As part of this, wire Eden's typography into the token layer: bundle Instrument Serif (display) and Outfit (body) with the webview so they load offline under the VS Code content-security policy, expose them as --font-display and --font-body tokens with fallbacks (Georgia, serif and system-ui, sans-serif), and add a monospace token for code. Done when: the component has no hardcoded hex or px that should be a token, every value traces to a token, and its type is set through --font-display or --font-body rather than a hardcoded family.
 
 3. Component redesign. Choose one small, self-contained presentational component, preferring the goal status banner or the primary button, and redesign it against the design fundamentals. Render every state it implies: default, hover, focus, active, disabled, and any status variants it carries. Done when: all states render correctly in the preview in both light and dark VS Code themes.
 
@@ -57,7 +82,9 @@ for repair rather than preserve it; that is the designer prompt working as inten
 ### Goal 2: a full panel (the composer region)
 
 ```
-/goal Redesign Raya's chat composer region as one coherent surface, reusing the localhost preview harness from the first goal. Work in C:\Users\User\Desktop\raya on the branch raya-self-redesign. Complete only when every item is true and verified.
+/goal Redesign Raya's chat composer region as one coherent, premium surface, reusing the localhost preview harness from the first goal. Work in C:\Users\User\Desktop\raya on the branch raya-self-redesign. Complete only when every item is true and verified.
+
+Design direction: keep it premium and distinctly Eden's, setting type through the --font-display (Instrument Serif) and --font-body (Outfit) tokens from the first goal rather than any hardcoded family, and borrow composer cues from ChatGPT where they are genuinely good while aiming to look more refined. Everything answers to the designer prompt's fundamentals, laws of UX, anti-slop rules, and physics-based motion.
 
 Scope: the prompt input (PromptInput.tsx), the goal banner (GoalBanner.tsx), and the selectable-options dock (QuestionDock.tsx) as a single composed region.
 
@@ -76,7 +103,9 @@ Constraints: stay on the branch; match SolidJS idioms; keep edits scoped to the 
 ### Goal 3: a whole screen (the settings hub)
 
 ```
-/goal Redesign Raya's settings hub as a full screen, reusing and extending the localhost preview harness. Work in C:\Users\User\Desktop\raya on the branch raya-self-redesign. Complete only when every item is true and verified.
+/goal Redesign Raya's settings hub as a full, premium screen, reusing and extending the localhost preview harness. Work in C:\Users\User\Desktop\raya on the branch raya-self-redesign. Complete only when every item is true and verified.
+
+Design direction: keep it premium and distinctly Eden's, setting type through the --font-display (Instrument Serif) and --font-body (Outfit) tokens rather than any hardcoded family, and borrow settings and navigation cues from ChatGPT where they are genuinely good while aiming to look more refined. Everything answers to the designer prompt's fundamentals, laws of UX, anti-slop rules, and physics-based motion.
 
 Scope: the settings hub screen and its primary sections (Providers, Agents & models, Speech, Goals & routing), including the section navigation and the tab surfaces (SpeechTab.tsx, GoalsRoutingTab.tsx, and their siblings).
 
@@ -95,15 +124,18 @@ Constraints: stay on the branch; match SolidJS idioms; scope to the settings hub
 ### Goal 4: the full overhaul
 
 ```
-/goal Perform a full design overhaul of Raya's webview UI to a single coherent design system, reusing and extending the localhost preview harness. Work in C:\Users\User\Desktop\raya on the branch raya-self-redesign. This is the largest goal; keep the full objective intact across turns and commit after each surface. Complete only when every item is true and verified.
+/goal Perform a full, premium design overhaul of Raya's webview UI to a single coherent design system, reusing and extending the localhost preview harness. Work in C:\Users\User\Desktop\raya on the branch raya-self-redesign. This is the largest goal; keep the full objective intact across turns and commit after each surface. Complete only when every item is true and verified.
+
+Design direction: the finished UI should feel premium and distinctly Eden's and read as more refined than ChatGPT's, not a copy of it. Borrow navigation and interaction cues from ChatGPT where they are genuinely good (a calm transcript, a focused composer, clear model and mode affordances, an unobtrusive history rail) and build past them with warmer type, a more considered spatial rhythm, real empty and loading states, and physical motion. All of it answers to the designer prompt's fundamentals, laws of UX, anti-slop rules, and physics-based motion.
 
 Definition of done:
 1. Token foundation. Establish or complete a tiered token architecture for the webview: base tokens (palette, spacing, radii, type, durations, easing), semantic tokens (surface, text, border, status, accent), and component tokens minted only where a real decision is named. Light and dark are mode axes, not forks. Done when: the token layer exists, is documented in one place, and is the single source of truth.
-2. Surface coverage. Restyle every primary surface to the system: the chat transcript (MessageList, VscodeSessionTurn, AssistantMessage), the composer region (PromptInput, GoalBanner, QuestionDock), the tool renderings (TaskToolExpanded and the tool overrides), and the settings hub. Done when: each primary surface consumes only tokens and shared components, with no stray literals.
-3. Audit and repair. Across all surfaces, audit against the design fundamentals, the laws of UX, and the anti-slop rules in the designer prompt. Name every violation (arbitrary values, broken hierarchy, misalignment, failing contrast, duplicated or one-off components, slop styling) and repair it. Where a structural change would improve the system, propose it with reasoning rather than silently diverging. Done when: no primary surface violates the fundamentals or the anti-slop checks.
-4. States, themes, motion. Every surface renders its full state cycle (default, hover, focus, active, disabled, empty, loading, error) in light and dark, and all motion follows the physics-based, frequency-gated rules. Done when: verified in the preview across surfaces and both themes.
-5. Comprehensive smoke. Run browser_smoke_test named raya-overhaul-v1 that walks the main flows across every restyled surface, asserts render and key interactions, and screenshots each surface and state in both themes. Done when: the run is green with the full screenshot set, and you have read them and confirmed the overhaul holds up against the fundamentals.
-6. Build. Done when: `bun run compile` passes and the extension still builds.
+2. Premium typography. Wire Eden's type into the token layer and use it everywhere: Instrument Serif as the display face for large, expressive headings and hero or empty-state moments, Outfit for body and UI, and a monospace (Geist Mono, falling back to the editor's monospace) for code and terminal output. Bundle the fonts with the webview so they render offline under the content-security policy, and expose them as --font-display and --font-body tokens with Georgia and system-ui fallbacks, mirroring Eden. Done when: every surface sets type through the font tokens, no surface hardcodes a font family, and display and body faces are used deliberately rather than interchangeably.
+3. Surface coverage. Restyle every primary surface to the system: the chat transcript (MessageList, VscodeSessionTurn, AssistantMessage), the composer region (PromptInput, GoalBanner, QuestionDock), the tool renderings (TaskToolExpanded and the tool overrides), and the settings hub. Done when: each primary surface consumes only tokens and shared components, with no stray literals.
+4. Audit and repair. Across all surfaces, audit against the design fundamentals, the laws of UX, and the anti-slop rules in the designer prompt. Name every violation (arbitrary values, broken hierarchy, misalignment, failing contrast, duplicated or one-off components, slop styling) and repair it. Where a structural change would improve the system, propose it with reasoning rather than silently diverging. Done when: no primary surface violates the fundamentals or the anti-slop checks.
+5. States, themes, motion. Every surface renders its full state cycle (default, hover, focus, active, disabled, empty, loading, error) in light and dark, and all motion follows the physics-based, frequency-gated rules. Done when: verified in the preview across surfaces and both themes.
+6. Comprehensive smoke. Run browser_smoke_test named raya-overhaul-v1 that walks the main flows across every restyled surface, asserts render and key interactions, and screenshots each surface and state in both themes. Done when: the run is green with the full screenshot set, and you have read them and confirmed the overhaul holds up against the fundamentals and the premium bar.
+7. Build. Done when: `bun run compile` passes and the extension still builds.
 
 Constraints: stay on the branch and commit after each surface so progress is reversible; match SolidJS idioms and reactivity; keep the token layer the single source of truth; mark fork additions with // raya_change; do not break behavior while restyling. If a required decision is missing or a change needs your approval, set the goal blocked with a plain reason rather than guessing. Keep working across turns until every surface is on the system, the overhaul smoke run is green with verified screenshots, and the build passes.
 ```

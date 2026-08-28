@@ -13,15 +13,16 @@ Qwen provider check).
 ## Design direction (premium, applies to every goal below)
 
 Raya's redesign should feel premium and distinctly Eden's, not like a default AI chat
-panel. Type carries most of that. Use Instrument Serif as the display face for large,
-expressive headings and hero or empty-state moments, and Outfit as the body and UI
-face for everything functional, with a monospace (Geist Mono, falling back to the
-editor's own monospace) for code and terminal output. Bundle both fonts with the
-webview so they render offline under the VS Code content-security policy rather than
-relying on a network fetch, and expose them through the token layer as `--font-display`
-and `--font-body`, mirroring Eden's own setup (Instrument Serif over Georgia, Outfit
-over system-ui). Every surface then consumes type through those tokens rather than
-naming a font family directly.
+panel. Type carries most of that. Use exactly two faces and no others: Instrument Serif
+as the display face for large, expressive headings and hero or empty-state moments, and
+Outfit as the body and UI face for everything else, including code and terminal output.
+Both are free on Google Fonts; source their woff2 files from there and bundle them with
+the webview so they render offline under the VS Code content-security policy rather than
+relying on a network fetch. Expose them through the token layer as `--font-display`
+(Instrument Serif) and `--font-body` (Outfit) with no fallback stack, so these two fonts
+are the only type in the product and every surface consumes type through those tokens
+rather than naming a family directly. Because there is no fallback, bundling the fonts so
+they always load is what keeps text from dropping to a browser default.
 
 Take navigation and interaction inspiration from ChatGPT where it is genuinely good, a
 calm and uncluttered transcript, a focused composer, clear model and mode affordances,
@@ -44,7 +45,7 @@ Deliverables and definition of done:
 
 1. Preview harness. Add a dev-only preview entry under packages/kilo-vscode/webview-ui/preview/ and a "preview" script that runs esbuild in serve mode and renders isolated presentational components at a fixed localhost address (for example http://localhost:5199). Provide a mocked acquireVsCodeApi and mock props so components render with no running backend. Mark every fork addition with a // raya_change comment. Done when: `bun run preview` serves the page and it loads with no console errors.
 
-2. Design tokens and type. Make the chosen component consume a small, named set of design tokens for color, spacing, radius, and type instead of magic values. If no token layer exists for the webview, add a minimal one and bind the component to it. As part of this, wire Eden's typography into the token layer: bundle Instrument Serif (display) and Outfit (body) with the webview so they load offline under the VS Code content-security policy, expose them as --font-display and --font-body tokens with fallbacks (Georgia, serif and system-ui, sans-serif), and add a monospace token for code. Done when: the component has no hardcoded hex or px that should be a token, every value traces to a token, and its type is set through --font-display or --font-body rather than a hardcoded family.
+2. Design tokens and type. Make the chosen component consume a small, named set of design tokens for color, spacing, radius, and type instead of magic values. If no token layer exists for the webview, add a minimal one and bind the component to it. As part of this, wire the typography into the token layer: source Instrument Serif (display) and Outfit (body) from Google Fonts, bundle their woff2 files with the webview so they load offline under the VS Code content-security policy, and expose them as --font-display and --font-body tokens with no fallback stack. Use only these two faces; do not add a monospace or any other family, and code uses --font-body. Done when: the component has no hardcoded hex or px that should be a token, every value traces to a token, and its type is set through --font-display or --font-body rather than a hardcoded family.
 
 3. Component redesign. Choose one small, self-contained presentational component, preferring the goal status banner or the primary button, and redesign it against the design fundamentals. Render every state it implies: default, hover, focus, active, disabled, and any status variants it carries. Done when: all states render correctly in the preview in both light and dark VS Code themes.
 
@@ -130,7 +131,7 @@ Design direction: the finished UI should feel premium and distinctly Eden's and 
 
 Definition of done:
 1. Token foundation. Establish or complete a tiered token architecture for the webview: base tokens (palette, spacing, radii, type, durations, easing), semantic tokens (surface, text, border, status, accent), and component tokens minted only where a real decision is named. Light and dark are mode axes, not forks. Done when: the token layer exists, is documented in one place, and is the single source of truth.
-2. Premium typography. Wire Eden's type into the token layer and use it everywhere: Instrument Serif as the display face for large, expressive headings and hero or empty-state moments, Outfit for body and UI, and a monospace (Geist Mono, falling back to the editor's monospace) for code and terminal output. Bundle the fonts with the webview so they render offline under the content-security policy, and expose them as --font-display and --font-body tokens with Georgia and system-ui fallbacks, mirroring Eden. Done when: every surface sets type through the font tokens, no surface hardcodes a font family, and display and body faces are used deliberately rather than interchangeably.
+2. Premium typography. Wire the type into the token layer and use it everywhere, with exactly two faces and no others: Instrument Serif as the display face for large, expressive headings and hero or empty-state moments, and Outfit for body, UI, code, and terminal output. Both are free on Google Fonts; source their woff2 files from there and bundle them with the webview so they render offline under the content-security policy, and expose them as --font-display and --font-body tokens with no fallback stack. Done when: every surface sets type through the font tokens, no surface hardcodes a font family or introduces a third font (including any monospace), and display and body faces are used deliberately rather than interchangeably.
 3. Surface coverage. Restyle every primary surface to the system: the chat transcript (MessageList, VscodeSessionTurn, AssistantMessage), the composer region (PromptInput, GoalBanner, QuestionDock), the tool renderings (TaskToolExpanded and the tool overrides), and the settings hub. Done when: each primary surface consumes only tokens and shared components, with no stray literals.
 4. Audit and repair. Across all surfaces, audit against the design fundamentals, the laws of UX, and the anti-slop rules in the designer prompt. Name every violation (arbitrary values, broken hierarchy, misalignment, failing contrast, duplicated or one-off components, slop styling) and repair it. Where a structural change would improve the system, propose it with reasoning rather than silently diverging. Done when: no primary surface violates the fundamentals or the anti-slop checks.
 5. States, themes, motion. Every surface renders its full state cycle (default, hover, focus, active, disabled, empty, loading, error) in light and dark, and all motion follows the physics-based, frequency-gated rules. Done when: verified in the preview across surfaces and both themes.

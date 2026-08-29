@@ -29,6 +29,7 @@ function transcript(input: {
   tool?: string
   exit?: number
   output?: string
+  text?: string
   metadata?: Record<string, unknown>
 }) {
   const user: MessageV2.User = {
@@ -72,9 +73,19 @@ function transcript(input: {
         },
       }
     : undefined
+  const text: MessageV2.TextPart | undefined = input.text
+    ? {
+        id: PartID.ascending(),
+        messageID: assistant.id,
+        sessionID: input.sessionID,
+        type: "text",
+        text: input.text,
+        time: { start: Date.now(), end: Date.now() },
+      }
+    : undefined
   const rows: MessageV2.WithParts[] = [
     { info: user, parts: [] },
-    { info: assistant, parts: part ? [part] : [] },
+    { info: assistant, parts: [...(part ? [part] : []), ...(text ? [text] : [])] },
   ]
   return { rows, part }
 }
@@ -169,7 +180,71 @@ describe("RayaGoal", () => {
     }),
   )
 
-  it.live("rejects unmet or failed evidence and suppresses no-tool continuation", () =>
+  it.live("completes when the audit summary lives on the top-level argument", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const sessionID = SessionID.make(`ses_goal_${crypto.randomUUID()}`)
+      let rows: MessageV2.WithParts[] = []
+      const goals = setup(storage, () => rows)
+      yield* Effect.addFinalizer(() => goals.clear(sessionID))
+      yield* goals.create(sessionID, "Accept a top-level completion summary")
+      const data = transcript({ sessionID, tool: "bash", exit: 0 })
+      rows = data.rows
+      const complete = yield* goals.update(sessionID, {
+        status: "complete",
+        summary: "The required command passed.",
+        audit: {
+          requirements: [
+            {
+              requirement: "The test command passes",
+              passed: true,
+              evidence: [
+                {
+                  callID: data.part!.callID,
+                  summary: "The persisted bash result exited with code 0.",
+                },
+              ],
+            },
+          ],
+        },
+      })
+      expect(complete.status).toBe("complete")
+      expect(complete.audit?.summary).toBe("The required command passed.")
+    }),
+  )
+
+  it.live("resumes a blocked goal and then completes it", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const sessionID = SessionID.make(`ses_goal_${crypto.randomUUID()}`)
+      let rows: MessageV2.WithParts[] = []
+      const goals = setup(storage, () => rows)
+      yield* Effect.addFinalizer(() => goals.clear(sessionID))
+      yield* goals.create(sessionID, "Finish the remaining append")
+      const data = transcript({ sessionID, tool: "bash", exit: 0 })
+      rows = data.rows
+      yield* goals.update(sessionID, { status: "blocked", reason: "The append could not be delegated." })
+      const resumed = yield* goals.update(sessionID, { status: "active" })
+      expect(resumed.status).toBe("active")
+      yield* goals.update(sessionID, { status: "blocked", reason: "Still missing the append." })
+      const complete = yield* goals.update(sessionID, {
+        status: "complete",
+        summary: "The remaining append is verified.",
+        audit: {
+          requirements: [
+            {
+              requirement: "Append Hello World to the final file",
+              passed: true,
+              evidence: [{ callID: data.part!.callID, summary: "The append command exited 0." }],
+            },
+          ],
+        },
+      })
+      expect(complete.status).toBe("complete")
+    }),
+  )
+
+  it.live("rejects unmet evidence and blocks a no-tool goal turn", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service
       const sessionID = SessionID.make(`ses_goal_${crypto.randomUUID()}`)
@@ -209,13 +284,8 @@ describe("RayaGoal", () => {
       const idle = yield* goals.recordTurn(sessionID)
       expect(idle?.productive).toBe(false)
       expect(idle?.state.usage.continuations).toBe(0)
-
-      const blocked = yield* goals.update(sessionID, {
-        status: "blocked",
-        reason: "The required external service is unavailable.",
-      })
-      expect(blocked.status).toBe("blocked")
-      expect(blocked.blockedReason).toContain("unavailable")
+      expect(idle?.state.status).toBe("blocked")
+      expect(idle?.state.blockedReason).toContain("without work")
     }),
   )
 
@@ -308,6 +378,29 @@ describe("RayaGoal", () => {
       expect(stalled?.productive).toBe(false)
       expect(stalled?.state.status).toBe("blocked")
       expect(stalled?.state.blockedReason).toContain("repeated the same tool work")
+    }),
+  )
+
+  // raya_change - malformed provider tool markup must not repeat completed work
+  it.live("blocks textual completion when update_goal did not execute", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const sessionID = SessionID.make(`ses_goal_${crypto.randomUUID()}`)
+      const data = transcript({
+        sessionID,
+        tool: "bash",
+        exit: 0,
+        text: `The task is complete. Nothing further is needed.
+<｜｜DSML｜｜tool_calls><｜｜DSML｜｜invoke name="update_goal"></｜｜DSML｜｜invoke></｜｜DSML｜｜tool_calls>`,
+      })
+      const goals = setup(storage, () => data.rows)
+      yield* Effect.addFinalizer(() => goals.clear(sessionID))
+      yield* goals.create(sessionID, "Create one temporary test file")
+
+      const result = yield* goals.recordTurn(sessionID)
+      expect(result?.productive).toBe(false)
+      expect(result?.state.status).toBe("blocked")
+      expect(result?.state.blockedReason).toContain("without successfully calling update_goal")
     }),
   )
 
@@ -410,6 +503,34 @@ describe("RayaGoal", () => {
       yield* Effect.sleep(50)
       expect(runs).toBe(0)
       expect((yield* goals.get(sessionID))?.status).toBe("active")
+    }),
+  )
+
+  it.live("expires completed goals after one month without pruning blocked work", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const goals = setup(storage, () => [])
+      const doneID = SessionID.make(`ses_goal_${crypto.randomUUID()}`)
+      const blockedID = SessionID.make(`ses_goal_${crypto.randomUUID()}`)
+      const old = Date.now() - 31 * 24 * 60 * 60 * 1000
+      const state = {
+        objective: "Retention fixture",
+        createdAt: old,
+        updatedAt: old,
+        usage: { turns: 1, continuations: 0, toolCalls: 1 },
+        progress: [{ at: old, kind: "status" as const, message: "Goal fixture." }],
+      }
+      yield* Effect.addFinalizer(() =>
+        Effect.all([goals.clear(doneID).pipe(Effect.ignore), goals.clear(blockedID).pipe(Effect.ignore)]).pipe(
+          Effect.asVoid,
+        ),
+      )
+      yield* storage.write(["raya", "goal", doneID], { ...state, status: "complete" }).pipe(Effect.orDie)
+      yield* storage.write(["raya", "goal", blockedID], { ...state, status: "blocked" }).pipe(Effect.orDie)
+
+      expect((yield* goals.get(blockedID))?.status).toBe("blocked")
+      expect((yield* storage.list(["raya", "goal"])).some((path) => path.at(-1) === doneID)).toBe(false)
+      expect(yield* goals.get(doneID)).toBeUndefined()
     }),
   )
 })

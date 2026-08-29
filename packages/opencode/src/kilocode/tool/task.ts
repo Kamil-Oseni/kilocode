@@ -20,20 +20,7 @@ const log = Log.create({ service: "kilocode-task-model" })
 const STEP_KEY = "raya.task.stepCap"
 const DEFAULT_CAP = 12
 const MAX_CAP = 50
-const ignored = new Set([
-  "agent",
-  "and",
-  "for",
-  "from",
-  "into",
-  "the",
-  "this",
-  "that",
-  "task",
-  "use",
-  "when",
-  "with",
-])
+const ignored = new Set(["agent", "and", "for", "from", "into", "the", "this", "that", "task", "use", "when", "with"])
 
 function words(value: string) {
   return new Set(
@@ -248,7 +235,7 @@ export namespace KiloTask {
   export const resolveModel = Effect.fn("KiloTask.resolveModel")(function* (input: {
     name: string
     agent: Pick<Agent.Info, "model" | "variant">
-    config: Pick<Config.Info, "subagent_model" | "subagent_variant" | "subagent_variant_overrides">
+    config: Pick<Config.Info, "small_model" | "subagent_model" | "subagent_variant" | "subagent_variant_overrides">
     parent: Model
     variant?: string
     workflow?: Workflow
@@ -256,6 +243,7 @@ export namespace KiloTask {
   }) {
     const state = yield* saved(input.name)
     const cfg = parse(input.config.subagent_model)
+    const fast = input.name === "generalist" ? parse(input.config.small_model ?? undefined) : undefined // raya_change
     const override = (model: Model) => input.config.subagent_variant_overrides?.[key(model)] ?? undefined
     const choices: Array<Choice | undefined> = [
       input.workflow ? { ...input.workflow, direct: true } : undefined,
@@ -267,6 +255,7 @@ export namespace KiloTask {
           }
         : undefined,
       input.agent.model ? { model: input.agent.model, variant: input.agent.variant, direct: true } : undefined,
+      fast ? { model: fast } : undefined, // raya_change - route trivial work through the user's swappable small model
       cfg ? { model: cfg, variant: input.config.subagent_variant ?? undefined } : undefined,
     ]
 

@@ -4,9 +4,13 @@ export type GoalStatus = "active" | "paused" | "complete" | "blocked"
 export interface GoalState {
   objective: string
   startMessageID?: string
+  startSnapshot?: string // raya_change - durable workspace checkpoint for reliable discard
+  selfHealID?: string // raya_change - global feedback item repaired by this isolated goal
   status: GoalStatus
   createdAt: number
   updatedAt: number
+  activeMs?: number // raya_change - accumulated running time excluding pauses
+  activeAt?: number // raya_change - current active interval start
   usage: {
     turns: number
     continuations: number

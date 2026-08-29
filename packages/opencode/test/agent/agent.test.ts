@@ -101,6 +101,8 @@ it.instance("primary and routed specialist prompts infer goal, choice, delegatio
     expect(designer?.prompt).toContain("never require the user to request a subagent")
     expect(designer?.prompt).toContain("browser-testing intent")
     expect(designer?.prompt).toContain("canvas intent")
+    expect(designer?.prompt).toContain("tinted section, panel, card, message, and page backgrounds as AI slop")
+    expect(designer?.prompt).toContain("required to communicate hierarchy or state")
     const researcher = yield* load((svc) => svc.get("researcher"))
     expect(evalPerm(researcher, "browser_navigate")).toBe("allow")
     expect(evalPerm(researcher, "browser_smoke_test")).toBe("allow")

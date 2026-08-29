@@ -9,27 +9,50 @@ export namespace RayaChief {
   export const logKey = "raya.chief.decisions"
   export const requestKey = "raya.chief.request" // raya_change - Auto must route the user's exact request
   export const phaseKey = "raya.chief.phase" // raya_change - enforce the Chief → task → synthesis state machine
+  export const lastStep =
+    "This is Auto's final allowed step. Call get_goal if you still need evidence IDs, then call update_goal to complete or honestly block the persistent goal. If no goal exists, reply with a concise synthesis and no tool call. Do not call chief_route." // raya_change - last Auto step must close the goal instead of refusing tools
+
+  // raya_change - route only user-authored text; synthetic goal and review guidance is policy, not intent
+  export function requestText(parts: readonly { type: string; text?: string; synthetic?: boolean }[], goal?: string) {
+    const text = parts
+      .filter(
+        (part): part is { type: string; text: string; synthetic?: boolean } =>
+          part.type === "text" && typeof part.text === "string" && !part.synthetic,
+      )
+      .map((part) => part.text)
+      .join("\n")
+      .trim()
+    return text || goal?.trim() || "" // raya_change - steered continuations have no new user-authored part
+  }
 
   // raya_change start - Auto runtime state machine
-  export type Phase = "route" | "task" | "synthesize"
+  export type Phase = "route" | "task" | "goal" | "done"
 
   export function phase(metadata: Record<string, unknown> | undefined): Phase {
     const value = metadata?.[phaseKey]
-    if (value === "task" || value === "synthesize") return value
+    if (value === "task" || value === "goal" || value === "done") return value
     return "route"
   }
+
+  export function begin(metadata: Record<string, unknown> | undefined, continuation?: boolean): Phase {
+    if (!continuation) return "route"
+    return "task"
+  } // raya_change - steered and idle continuations skip Chief and may call task again
 
   export function request(metadata: Record<string, unknown> | undefined) {
     const value = metadata?.[requestKey]
     return typeof value === "string" && value.trim() ? value : undefined
   }
 
-  export function tools<T>(available: Record<string, T>, metadata: Record<string, unknown> | undefined) {
-    const current = phase(metadata)
-    if (current === "synthesize") return {} as Record<string, T>
-    const name = current === "route" ? "chief_route" : "task"
-    const tool = available[name]
-    return tool ? { [name]: tool } : {}
+  export function tools<T>(available: Record<string, T>, _metadata: Record<string, unknown> | undefined) {
+    return Object.fromEntries(
+      ["chief_route", "task", "get_goal", "update_goal"].flatMap((name) =>
+        available[name] ? [[name, available[name]]] : [],
+      ),
+    ) as Record<string, T>
+    // raya_change - some providers emit the whole workflow in one response, so every
+    // orchestration call remains dispatchable even during final synthesis; tool choice
+    // and handlers enforce ordering without producing misleading Unknown tool failures
   }
 
   export function repair(input: { agent: string; tools: Readonly<Record<string, unknown>> }) {
@@ -54,7 +77,7 @@ export namespace RayaChief {
   }
   // raya_change end
 
-  export const Role = Schema.Literals(["coder", "designer", "researcher", "accountant", "reasoner"])
+  export const Role = Schema.Literals(["generalist", "coder", "designer", "researcher", "accountant", "reasoner"])
   export type Role = typeof Role.Type
 
   export const Candidate = Schema.Struct({
@@ -106,6 +129,12 @@ export namespace RayaChief {
   }
 
   const profiles: readonly Profile[] = [
+    {
+      role: "generalist",
+      names: ["generalist", "general", "coder"],
+      terms: {},
+      reason: "The request is a small, direct task that does not need a specialist.",
+    },
     {
       role: "accountant",
       names: ["accountant", "finance", "general"],
@@ -246,6 +275,21 @@ export namespace RayaChief {
       .find((item): item is Agent => item !== undefined)
   }
 
+  // raya_change - cheap direct work should use the configured small model instead of a design or reasoning specialist
+  function trivial(request: string) {
+    const value = request.trim()
+    if (value.length > 180 || tokens(value).length > 28) return false
+    if (
+      !/\b(?:add|answer|change|create|delete|explain|find|open|read|rename|replace|say|show|summarize|write)\b/i.test(
+        value,
+      )
+    )
+      return false
+    return !/\b(?:accounting|architecture|audit|benchmark|codebase|concurrency|design system|endpoint|evidence|figma|implement|investigate|migration|payroll|product|refactor|research|security|suite|tradeoffs?|ui|ux|validation|webhook|website)\b/i.test(
+      value,
+    )
+  }
+
   export function route(input: { request: string; agents: readonly Agent[] }) {
     const ranked = profiles
       .map((profile) => {
@@ -260,16 +304,20 @@ export namespace RayaChief {
       .toSorted((a, b) => b.score - a.score || a.agent.name.localeCompare(b.agent.name))
     const first = ranked[0]
     if (!first) throw new Error("Auto routing requires at least one eligible specialist")
+    const quick = ranked.find((item) => item.profile.role === "generalist")
+    const direct = trivial(input.request)
     // raya_change - zero-signal conversational requests should proceed through a capable generalist instead of prompting
-    const top = first.score === 0 ? (ranked.find((item) => item.profile.role === "coder") ?? first) : first
+    const top = direct && quick ? quick : first.score === 0 ? (quick ?? first) : first
 
     const next = ranked.find((item) => item !== top)?.score ?? 0
     const confidence =
-      top.score === 0
-        ? 0.35
-        : next === top.score
-          ? 0.55
-          : Math.min(0.98, 0.74 + top.score * 0.03 + (top.score - next) * 0.02)
+      top.profile.role === "generalist" && direct
+        ? 0.94
+        : top.score === 0
+          ? 0.35
+          : next === top.score
+            ? 0.55
+            : Math.min(0.98, 0.74 + top.score * 0.03 + (top.score - next) * 0.02)
     const candidates = [top, ...ranked.filter((item) => item !== top)].slice(0, 3).map(
       (item): Candidate => ({
         agent: item.agent.name,
@@ -321,7 +369,7 @@ export namespace RayaChief {
           `- ${item.name}: ${item.description ?? "No capability card"}${item.model ? ` [${item.model.providerID}/${item.model.modelID}]` : ""}`,
       )
       .join("\n")
-    return `You are Raya's Chief router. Do not inspect the repository, answer the request, narrate an approach, or name a tool that is not currently available. The runtime exposes exactly the one action allowed at each stage. First call chief_route exactly once; its runtime uses the user's original request, regardless of how you phrase the objective argument. After it returns, call task exactly once. When task completes, give the user a concise synthesis without calling another tool.
+    return `You are Raya's Chief router. Do not inspect the repository, answer the request, narrate an approach, or name a tool that is not currently available. Make exactly one tool call per response and wait for its result before choosing the next call. On a new user request, first call chief_route exactly once; its runtime uses the user's original request, regardless of how you phrase the objective argument. After it returns, call task exactly once. On a continuation, skip chief_route and call task if concrete work remains. When the delegated work is done, call get_goal. If a goal exists, formally complete or honestly block it with update_goal; if no goal exists, give the concise synthesis directly. After goal handling, give the user a concise synthesis without another tool call. Never write tool-call markup as prose. Never invent a tool name.
 
 Registry:
 ${registry}`
@@ -356,4 +404,14 @@ ${registry}`
     if (!Array.isArray(value)) return [] as Decision[]
     return value.filter(Schema.is(Decision)).slice(-49)
   }
+
+  export function follow(metadata: Record<string, unknown> | undefined) {
+    const ready = pending(metadata)
+    if (ready) return ready
+    const last = history(metadata).at(-1)
+    if (!last) return undefined
+    const role = last.candidates.find((item: Candidate) => item.agent === last.agent)?.role
+    if (!role) return undefined
+    return { ...last, role } satisfies Pending
+  } // raya_change - later Auto tasks reuse the logged specialist after pending is consumed
 }

@@ -111,7 +111,7 @@ export namespace KiloToolRegistry {
         : undefined
       // raya_change end
       // raya_change start - Milestone A model-facing goal tools
-      const goals = goalDeps ? goalTools(RayaGoal.make(goalDeps)) : undefined
+      const goals = goalDeps ? goalTools(RayaGoal.make(goalDeps), goalDeps.sessions) : undefined
       const goalCreate = goals ? yield* goals.create : undefined
       const goalGet = goals ? yield* goals.get : undefined
       const goalUpdate = goals ? yield* goals.update : undefined

@@ -18,7 +18,7 @@ An active persistent goal must continue without a new user request.
 Objective:
 ${objective}
 
-Perform the next concrete unit of work now. Preserve the full objective. Do not stop after planning. Use work or verification tools when progress is possible. Keep the session todowrite list current with exactly one in-progress item so the user sees concise work status without exposing private chain-of-thought. Immediately before update_goal(status="complete"), call get_goal to obtain the exact eligible evidence IDs, then derive every concrete requirement and cite real successful tool evidence for each one. If evidence is missing, keep working. A goal must never remain active while waiting for user approval, input, credentials, or another external dependency: call update_goal(status="blocked") with a plain reason instead of repeatedly checking unchanged evidence.
+Do not call chief_route. If concrete work remains, call task exactly once and wait for it. Then call get_goal. If the objective is fully evidenced, call update_goal(status="complete"); if honest progress is impossible, call update_goal(status="blocked") with a plain reason. Preserve the full objective. Do not stop after planning. Keep the session todowrite list current with exactly one in-progress item so the user sees concise work status without exposing private chain-of-thought. Immediately before update_goal(status="complete"), derive every concrete requirement from get_goal and cite real successful tool evidence for each one.
 </system-reminder>`
 
 async function continueGoal(sessionID: SessionID, objective: string, directory: string) {
@@ -35,6 +35,7 @@ async function continueGoal(sessionID: SessionID, objective: string, directory: 
           service.prompt({
             sessionID,
             parts: [{ type: "text", text: prompt(objective), synthetic: true }],
+            goalObjective: objective, // raya_change - route the latest steered objective, not the original turn
           }),
         ),
       ),

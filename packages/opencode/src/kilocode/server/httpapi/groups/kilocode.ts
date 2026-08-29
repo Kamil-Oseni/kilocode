@@ -27,6 +27,7 @@ import { ProjectUsage } from "@/kilocode/session/project-usage" // raya_change -
 import { SessionID } from "@/session/schema"
 import { CommandFiles } from "@/kilocode/command-files"
 import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal API contracts
+import { RayaSelfHeal } from "@/kilocode/self-heal" // raya_change - global feedback backlog contracts
 // raya_change start - Milestone F browser API contracts
 import {
   Failure as BrowserFailure,
@@ -87,6 +88,8 @@ export const AgentManagerReplyPayload = Schema.Struct({ result: AgentManagerResu
 export const AgentManagerRejectPayload = Schema.Struct({ error: AgentManagerFailure })
 export const GoalCreatePayload = RayaGoal.Create // raya_change - Milestone A goal API contracts
 export const GoalUpdatePayload = RayaGoal.Control // raya_change - Milestone A goal API contracts
+export const SelfHealCreatePayload = RayaSelfHeal.Create // raya_change
+export const SelfHealUpdatePayload = RayaSelfHeal.Update // raya_change
 export const BrowserReplyPayload = Schema.Struct({ result: BrowserResult }) // raya_change - Milestone F
 export const BrowserRejectPayload = Schema.Struct({ error: BrowserFailure }) // raya_change - Milestone F
 export const CanvasReplyPayload = Schema.Struct({ result: CanvasResult }) // raya_change - Milestone E
@@ -111,6 +114,9 @@ export const KilocodePaths = {
   backgroundJobs: `${root}/background-jobs`,
   backgroundJobCancel: `${root}/background-jobs/:jobID/cancel`,
   goal: `/session/:sessionID/goal`, // raya_change - Milestone A session-scoped goal API
+  goalDiscard: `/session/:sessionID/goal/discard`, // raya_change - reliable workspace rollback
+  selfHeal: `${root}/self-heal`, // raya_change - global structured feedback backlog
+  selfHealItem: `${root}/self-heal/:itemID`, // raya_change
   browserList: `${root}/browser`, // raya_change - Milestone F browser host API
   browserReply: `${root}/browser/:requestID/reply`, // raya_change - Milestone F browser host API
   browserReject: `${root}/browser/:requestID/reject`, // raya_change - Milestone F browser host API
@@ -443,6 +449,66 @@ export const KilocodeApi = HttpApi.make("kilocode")
             identifier: "kilocode.goal.clear",
             summary: "Clear a session goal",
             description: "Remove the durable goal state for a session.",
+          }),
+        ),
+        HttpApiEndpoint.post("goalDiscard", KilocodePaths.goalDiscard, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Boolean, "Goal workspace restored and state cleared"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.goal.discard",
+            summary: "Discard a session goal",
+            description:
+              "Restore the goal's workspace checkpoint, including files created by child sessions, then clear it.",
+          }),
+        ),
+        HttpApiEndpoint.post("selfHealCreate", KilocodePaths.selfHeal, {
+          query: WorkspaceRoutingQuery,
+          payload: SelfHealCreatePayload,
+          success: described(RayaSelfHeal.Item, "Triaged self-heal feedback"),
+          error: HttpApiError.BadRequest,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.selfHeal.create",
+            summary: "Capture self-heal feedback",
+            description: "Classify, deduplicate, and persist one globally visible Raya feedback item.",
+          }),
+        ),
+        HttpApiEndpoint.get("selfHealList", KilocodePaths.selfHeal, {
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Array(RayaSelfHeal.Item), "Global self-heal backlog"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.selfHeal.list",
+            summary: "List self-heal feedback",
+            description: "List durable feedback across Raya sessions and workspaces.",
+          }),
+        ),
+        HttpApiEndpoint.get("selfHealGet", KilocodePaths.selfHealItem, {
+          params: { itemID: Schema.String },
+          query: WorkspaceRoutingQuery,
+          success: described(RayaSelfHeal.Item, "Self-heal feedback item"),
+          error: HttpApiError.NotFound,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.selfHeal.get",
+            summary: "Get self-heal feedback",
+            description: "Get one durable feedback item and its verification evidence.",
+          }),
+        ),
+        HttpApiEndpoint.patch("selfHealUpdate", KilocodePaths.selfHealItem, {
+          params: { itemID: Schema.String },
+          query: WorkspaceRoutingQuery,
+          payload: SelfHealUpdatePayload,
+          success: described(RayaSelfHeal.Item, "Updated self-heal feedback"),
+          error: HttpApiError.NotFound,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.selfHeal.update",
+            summary: "Update self-heal feedback",
+            description: "Move an item through queued, active, blocked, and verified states with evidence.",
           }),
         ),
         // raya_change end

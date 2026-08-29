@@ -27,9 +27,11 @@ import { BackgroundJob } from "@/background/job"
 import { SessionRunState } from "@/session/run-state"
 import { SessionID } from "@/session/schema"
 import { Session } from "@/session/session" // raya_change - Milestone A goal session validation
+import { Snapshot } from "@/snapshot" // raya_change - durable goal workspace checkpoints
 import { Storage } from "@/storage/storage" // raya_change - Milestone A durable goal storage
 import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal operations
 import { RayaGoalContinuation } from "@/kilocode/goal/continuation" // raya_change - Milestone A resume behavior
+import { RayaSelfHeal } from "@/kilocode/self-heal" // raya_change - global feedback backlog
 import type { RequestID as BrowserRequestID } from "@/kilocode/browser/protocol" // raya_change - Milestone F
 import { Browser } from "@/kilocode/browser/service" // raya_change - Milestone F browser bridge
 import type { RequestID as CanvasRequestID } from "@/kilocode/canvas/protocol" // raya_change - Milestone E
@@ -47,6 +49,8 @@ import {
   ProjectUsageQuery, // raya_change - historical project usage
   GoalCreatePayload, // raya_change - Milestone A goal API
   GoalUpdatePayload, // raya_change - Milestone A goal API
+  SelfHealCreatePayload, // raya_change
+  SelfHealUpdatePayload, // raya_change
   BrowserReplyPayload, // raya_change - Milestone F browser API
   BrowserRejectPayload, // raya_change - Milestone F browser API
   CanvasReplyPayload, // raya_change - Milestone E canvas API
@@ -66,10 +70,12 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     const canvas = yield* Canvas.Service // raya_change - Milestone E canvas bridge
     const background = yield* BackgroundJob.Service
     const runState = yield* SessionRunState.Service
+    const snapshots = yield* Snapshot.Service // raya_change - goal rollback survives child sessions
     const locations = yield* LocationServiceMap.Service
     const sessions = yield* Session.Service // raya_change - Milestone A goal state and evidence
     const storage = yield* Storage.Service // raya_change - Milestone A durable goal storage
     const goals = RayaGoal.make({ storage, sessions }) // raya_change - Milestone A goal operations
+    const healing = RayaSelfHeal.make(storage) // raya_change - one backlog shared across sessions and projects
 
     // Location-scoped services, keyed by the request's directory and workspace.
     const located = Effect.fnUntraced(function* <A, E, R>(effect: Effect.Effect<A, E, R>) {
@@ -324,10 +330,15 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       yield* sessions
         .get(ctx.params.sessionID)
         .pipe(Effect.catchTag("NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))))
-      return yield* goals.create(ctx.params.sessionID, ctx.payload.objective, ctx.payload.messageID).pipe(
-        Effect.catchTag("RayaGoal.ExistsError", () => Effect.fail(new HttpApiError.BadRequest({}))),
-        Effect.catchTag("RayaGoal.AuditError", () => Effect.fail(new HttpApiError.BadRequest({}))),
-      )
+      const checkpoint = yield* snapshots.track({
+        sessionID: ctx.params.sessionID,
+      })
+      return yield* goals
+        .create(ctx.params.sessionID, ctx.payload.objective, ctx.payload.messageID, checkpoint, ctx.payload.selfHealID)
+        .pipe(
+          Effect.catchTag("RayaGoal.ExistsError", () => Effect.fail(new HttpApiError.BadRequest({}))),
+          Effect.catchTag("RayaGoal.AuditError", () => Effect.fail(new HttpApiError.BadRequest({}))),
+        )
     })
 
     const goalGet = Effect.fn("KilocodeHttpApi.goalGet")(function* (ctx: { params: { sessionID: SessionID } }) {
@@ -372,6 +383,46 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       yield* goals.clear(ctx.params.sessionID)
       return true
     })
+
+    const goalDiscard = Effect.fn("KilocodeHttpApi.goalDiscard")(function* (ctx: { params: { sessionID: SessionID } }) {
+      yield* runState
+        .assertNotBusy(ctx.params.sessionID)
+        .pipe(Effect.catch(() => Effect.fail(new HttpApiError.BadRequest({}))))
+      const goal = yield* goals.get(ctx.params.sessionID)
+      if (!goal) return yield* new HttpApiError.NotFound({})
+      if (!goal.startSnapshot) return yield* new HttpApiError.BadRequest({})
+      const patch = yield* snapshots.patch(goal.startSnapshot)
+      yield* snapshots.revert([patch])
+      yield* goals.clear(ctx.params.sessionID)
+      return true
+    })
+
+    const selfHealCreate = Effect.fn("KilocodeHttpApi.selfHealCreate")(function* (ctx: {
+      payload: typeof SelfHealCreatePayload.Type
+    }) {
+      return yield* healing
+        .create(ctx.payload)
+        .pipe(Effect.catchTag("RayaSelfHeal.InputError", () => Effect.fail(new HttpApiError.BadRequest({}))))
+    })
+
+    const selfHealList = Effect.fn("KilocodeHttpApi.selfHealList")(function* () {
+      return yield* healing.list()
+    })
+
+    const selfHealGet = Effect.fn("KilocodeHttpApi.selfHealGet")(function* (ctx: { params: { itemID: string } }) {
+      const item = yield* healing.get(ctx.params.itemID)
+      if (!item) return yield* new HttpApiError.NotFound({})
+      return item
+    })
+
+    const selfHealUpdate = Effect.fn("KilocodeHttpApi.selfHealUpdate")(function* (ctx: {
+      params: { itemID: string }
+      payload: typeof SelfHealUpdatePayload.Type
+    }) {
+      const item = yield* healing.update(ctx.params.itemID, ctx.payload)
+      if (!item) return yield* new HttpApiError.NotFound({})
+      return item
+    })
     // raya_change end
 
     return (
@@ -408,6 +459,11 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .handle("goalGet", goalGet)
         .handle("goalUpdate", goalUpdate)
         .handle("goalClear", goalClear)
+        .handle("goalDiscard", goalDiscard)
+        .handle("selfHealCreate", selfHealCreate)
+        .handle("selfHealList", selfHealList)
+        .handle("selfHealGet", selfHealGet)
+        .handle("selfHealUpdate", selfHealUpdate)
     )
     // raya_change end
   }),

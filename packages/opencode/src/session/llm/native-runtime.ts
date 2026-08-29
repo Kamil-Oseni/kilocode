@@ -43,6 +43,14 @@ type StreamInput = {
   readonly abort: AbortSignal
 }
 
+// kilocode_change start - raya_change: DeepSeek gateways can emit DSML in text;
+// the native protocol parser recovers and executes those calls while AI SDK cannot.
+export function requiresNative(model: Provider.Model) {
+  if (model.api.npm !== "@ai-sdk/openai-compatible") return false
+  return [model.providerID, model.id, model.api.id].some((value) => value.toLowerCase().includes("deepseek"))
+}
+// kilocode_change end
+
 export function status(input: Pick<StreamInput, "model" | "provider" | "auth">): RuntimeStatus {
   return statusWithFetch(input, providerFetch(input))
 }
@@ -52,8 +60,15 @@ function statusWithFetch(
   fetch: typeof globalThis.fetch | undefined,
 ): RuntimeStatus {
   const providerID = input.model.providerID
-  if (providerID !== "openai" && providerID !== "anthropic" && !providerID.startsWith("opencode"))
-    return { type: "unsupported", reason: "provider is not openai, opencode, or anthropic" }
+  // kilocode_change start - raya_change: custom DeepSeek endpoints need native DSML recovery
+  if (
+    providerID !== "openai" &&
+    providerID !== "anthropic" &&
+    !providerID.startsWith("opencode") &&
+    !requiresNative(input.model)
+  )
+    return { type: "unsupported", reason: "provider is not openai, opencode, anthropic, or DSML-compatible DeepSeek" }
+  // kilocode_change end
   const npm = input.model.api.npm
   if (npm !== "@ai-sdk/openai" && npm !== "@ai-sdk/openai-compatible" && npm !== "@ai-sdk/anthropic")
     return { type: "unsupported", reason: "provider package is not OpenAI, OpenAI-compatible, or Anthropic" }

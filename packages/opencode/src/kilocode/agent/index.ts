@@ -34,7 +34,7 @@ const CANVAS_GUIDANCE =
   "Treat requests for a standalone dashboard, chart, table, interactive analysis, calculator, or visual report as canvas intent without requiring the user to name a tool. Call create_canvas with a focused default-exported React TSX component and useful initial data; call update_canvas to refine source or data. Use JSX without imports, read values from the component data prop, and repair any returned compile or runtime error on the next turn."
 // raya_change start - keep Raya's designer away from recognizable generated-UI defaults
 const DESIGN_GUIDANCE =
-  "Design with explicit hierarchy and product meaning, never the statistical-average AI aesthetic. Do not add decorative side rails or side-tab accent borders, pulsing status dots for static state, faux activity timelines, ornamental pills, floating cards, cards nested inside cards, uniform oversized radii, glassmorphism, gradient text, purple-blue glows, emoji-as-icons, or motion that does not explain a state change. Do not wrap content merely to make it look designed. Prefer typography, spacing, restrained tonal shifts, and thin dividers; reserve one accent for genuine state or primary action. Every icon, border, container, status marker, and animation must earn its place. Audit the combined cluster of patterns, not only each motif in isolation."
+  "Design with explicit hierarchy and product meaning, never the statistical-average AI aesthetic. Treat tinted section, panel, card, message, and page backgrounds as AI slop when they are decorative rather than required to communicate hierarchy or state; prefer the shared surface, spacing, typography, and thin dividers. Do not add decorative side rails or side-tab accent borders, pulsing status dots for static state, faux activity timelines, ornamental pills, floating cards, cards nested inside cards, uniform oversized radii, glassmorphism, gradient text, purple-blue glows, emoji-as-icons, or motion that does not explain a state change. Do not wrap content merely to make it look designed. Prefer typography, spacing, restrained tonal shifts, and thin dividers; reserve one accent for genuine state or primary action. Every icon, border, container, status marker, and animation must earn its place. Audit the combined cluster of patterns, not only each motif in isolation." // raya_change - decorative tinted backgrounds are AI slop
 // raya_change end
 
 function choices(prompt?: string) {
@@ -571,6 +571,9 @@ export function patchAgents(
         Permission.fromConfig({
           semantic_search: "allow",
           ask_options: "allow", // raya_change - plain-English decisions must not require tool approval
+          get_goal: "allow",
+          update_goal: "allow",
+          create_goal: "allow", // raya_change - primary sessions can close goals without Auto
         }),
       ),
     }
@@ -731,6 +734,16 @@ export function patchAgents(
   const general = agents.general
   const explore = agents.explore
   if (general) {
+    agents.generalist = {
+      ...general,
+      name: "generalist",
+      description: "Fast generalist for small file operations, concise answers, and other direct low-complexity work.",
+      prompt: walkthrough(
+        "Act as Raya's fast generalist. Complete the small delegated request directly, verify the result proportionally, and stop.",
+      ),
+      mode: "subagent",
+      native: true,
+    } // raya_change - trivial Auto requests use the configured small model
     agents.coder = {
       ...general,
       name: "coder",
@@ -829,10 +842,13 @@ export function addAuto(
         "*": "deny",
         chief_route: "allow",
         task: "allow",
+        get_goal: "allow",
+        update_goal: "allow",
+        create_goal: "allow", // raya_change - Auto owns formal completion after delegated work
       }),
     ),
     model,
-    steps: 4,
+    steps: 12, // raya_change - route, delegate remaining work, audit, close or block, then synthesize
     mode: "primary",
     native: true,
   }

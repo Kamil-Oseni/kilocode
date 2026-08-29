@@ -140,14 +140,10 @@ function isOrphanedInterruptedTool(part: SessionV1.ToolPart) {
 
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
-  readonly prompt: (
-    input: PromptInput,
-  ) => Effect.Effect<SessionV1.WithParts, Image.Error>
+  readonly prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error>
   readonly loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts>
   readonly shell: (input: ShellInput) => Effect.Effect<SessionV1.WithParts, Session.BusyError>
-  readonly command: (
-    input: CommandInput,
-  ) => Effect.Effect<SessionV1.WithParts, Image.Error | Error>
+  readonly command: (input: CommandInput) => Effect.Effect<SessionV1.WithParts, Image.Error | Error>
   readonly resolvePromptParts: (template: string) => Effect.Effect<PromptInput["parts"]>
 }
 
@@ -866,18 +862,15 @@ export const layer = Layer.effect(
       // raya_change start - Milestone B target-model precedence starts from the user's selected model, not Chief's
       if (ag.name === "auto") {
         // raya_change start - preserve the exact request and reset Auto's enforced per-turn phase
-        const objective = input.parts
-          .filter((part): part is Extract<PromptInput["parts"][number], { type: "text" }> => part.type === "text")
-          .map((part) => part.text)
-          .join("\n")
-          .trim()
+        const objective =
+          RayaChief.requestText(input.parts, input.goalObjective) || RayaChief.request(current.metadata) || "" // kilocode_change - raya_change: continuations route the latest steered objective
         // raya_change end
         yield* sessions.setMetadata({
           sessionID: input.sessionID,
           metadata: {
             ...current.metadata,
             [RayaChief.requestKey]: objective,
-            [RayaChief.phaseKey]: "route",
+            [RayaChief.phaseKey]: RayaChief.begin(current.metadata, !!input.goalObjective),
             [RayaChief.modelKey]: {
               providerID: requested.providerID,
               modelID: requested.modelID,
@@ -1709,7 +1702,8 @@ export const layer = Layer.effect(
           const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
           const promptOps = yield* ops()
 
-          const resolved = yield* SessionTools.resolve({ // kilocode_change // raya_change - filter Auto tools by phase
+          const resolved = yield* SessionTools.resolve({
+            // kilocode_change // raya_change - filter Auto tools by phase
             agent,
             session,
             model,
@@ -1734,7 +1728,7 @@ export const layer = Layer.effect(
             // kilocode_change end
           )
           // kilocode_change start
-          // raya_change start - Auto exposes exactly one phase-appropriate tool, then none for synthesis
+          // raya_change start - Auto exposes its bounded workflow until goal handling releases synthesis
           const current = agent.name === "auto" ? yield* sessions.get(sessionID).pipe(Effect.orDie) : session
           const tools = agent.name === "auto" ? RayaChief.tools(resolved, current.metadata) : resolved
           const phase = agent.name === "auto" ? RayaChief.phase(current.metadata) : undefined
@@ -1812,17 +1806,25 @@ export const layer = Layer.effect(
             system,
             messages: [
               ...modelMsgs,
-              ...(isLastStep ? [{ role: "user" as const, content: MAX_STEPS_PROMPT }] : []), // kilocode_change - avoid provider-incompatible assistant prefill
+              ...(isLastStep
+                ? [
+                    {
+                      role: "user" as const,
+                      content:
+                        agent.name === "auto" && phase !== "done" ? RayaChief.lastStep : MAX_STEPS_PROMPT, // kilocode_change - raya_change: Auto's last step must still close the goal
+                    },
+                  ]
+                : []),
             ],
             tools,
             model,
             // kilocode_change start
-            // raya_change - force Auto's one legal action and forbid tools during final synthesis
+            // raya_change - require orchestration until goal handling deterministically releases synthesis
             toolChoice:
               format.type === "json_schema"
                 ? "required"
                 : agent.name === "auto"
-                  ? phase === "synthesize"
+                  ? phase === "done"
                     ? "none"
                     : "required"
                   : undefined,
@@ -2568,11 +2570,15 @@ export const PromptInput = Schema.Struct({
 // `parts` type from the exported Schema input types so callers see a proper
 // tagged union.
 type PartInputUnion =
-  MessageV2.TextPartInput | MessageV2.FilePartInput | MessageV2.AgentPartInput | MessageV2.SubtaskPartInput
+  | MessageV2.TextPartInput
+  | MessageV2.FilePartInput
+  | MessageV2.AgentPartInput
+  | MessageV2.SubtaskPartInput
 export type PromptInput = Omit<Schema.Schema.Type<typeof PromptInput>, "parts" | "editorContext"> & {
   parts: PartInputUnion[]
   editorContext?: MessageV2.EditorContext
   ephemeralTools?: Record<string, boolean>
+  goalObjective?: string // kilocode_change - raya_change: internal continuation routing, never accepted from HTTP clients
 }
 // kilocode_change end
 

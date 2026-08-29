@@ -41,6 +41,15 @@ export const ChiefRouteTool = Tool.define<
         Effect.gen(function* () {
           const started = Date.now()
           const session = yield* sessions.get(ctx.sessionID).pipe(Effect.orDie)
+          if (RayaChief.phase(session.metadata) !== "route") {
+            const decision = RayaChief.history(session.metadata).at(-1)
+            if (!decision) return yield* Effect.die(new Error("Auto routing phase advanced without a decision"))
+            return {
+              title: "Auto already routed",
+              output: "Routing is already complete for this turn. Continue with task, then goal verification.",
+              metadata: { decision },
+            }
+          } // raya_change - repeated same-response calls stay known but cannot restart the workflow
           const cfg = yield* config.get() // raya_change - Milestone I runtime routing settings
           const threshold = cfg.raya_routing?.confidence_threshold // raya_change - Milestone I
           const available = (yield* agents.list()).filter(

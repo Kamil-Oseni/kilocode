@@ -2,6 +2,7 @@
 import { Effect, Schema } from "effect"
 import type { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Storage } from "@/storage/storage"
+import { RayaSelfHeal } from "@/kilocode/self-heal" // raya_change - synchronize autonomous repair outcomes
 import type { Session } from "@/session/session"
 import { MessageID, SessionID } from "@/session/schema"
 
@@ -47,9 +48,13 @@ export namespace RayaGoal {
   export const State = Schema.Struct({
     objective: Schema.String,
     startMessageID: Schema.optional(MessageID), // raya_change - restore the pre-goal checkpoint on discard
+    startSnapshot: Schema.optional(Schema.String), // raya_change - restore edits made by child sessions and missing patch parts
+    selfHealID: Schema.optional(Schema.String), // raya_change - link an isolated repair session to the global backlog
     status: Status,
     createdAt: Schema.Number,
     updatedAt: Schema.Number,
+    activeMs: Schema.optional(Schema.Number), // raya_change - accumulated execution time excluding paused/terminal time
+    activeAt: Schema.optional(Schema.Number), // raya_change - start of the current active interval
     usage: Usage,
     blockedReason: Schema.optional(Schema.String),
     audit: Schema.optional(Audit),
@@ -60,6 +65,7 @@ export namespace RayaGoal {
   export const Create = Schema.Struct({
     objective: Schema.String,
     messageID: Schema.optional(MessageID), // raya_change - bind review/discard to the goal's first turn
+    selfHealID: Schema.optional(Schema.String), // raya_change - autonomous feedback work linkage
   })
 
   export const Control = Schema.Struct({
@@ -69,8 +75,9 @@ export namespace RayaGoal {
 
   // raya_change - model providers require tool parameters to be a top-level JSON object
   export const ModelUpdate = Schema.Struct({
-    status: Schema.Literals(["blocked", "complete"]),
+    status: Schema.Literals(["blocked", "complete", "active"]),
     reason: Schema.optional(Schema.String),
+    summary: Schema.optional(Schema.String), // raya_change - top-level summary fills a missing nested audit.summary
     audit: Schema.optional(
       Schema.Struct({
         requirements: Schema.Array(
@@ -80,7 +87,7 @@ export namespace RayaGoal {
             evidence: Schema.Array(Evidence),
           }),
         ),
-        summary: Schema.String,
+        summary: Schema.optional(Schema.String), // raya_change - accept a complete audit when only the top-level summary is present
       }),
     ),
   })
@@ -98,7 +105,7 @@ export namespace RayaGoal {
     message: Schema.String,
   }) {}
 
-  type Store = Pick<Storage.Interface, "read" | "write" | "remove">
+  type Store = Pick<Storage.Interface, "read" | "write" | "remove" | "list">
   type Sessions = Pick<Session.Interface, "messages">
   type Deps = {
     storage: Store
@@ -110,15 +117,39 @@ export namespace RayaGoal {
   const key = (sessionID: SessionID) => ["raya", "goal", sessionID]
   const clean = (value: string) => value.trim()
   const progress = (state: State, item: Progress): Progress[] => [...state.progress, item].slice(-30)
+  const retention = 30 * 24 * 60 * 60 * 1000 // raya_change - completed goals expire after one month
+  const elapsed = (state: State, now: number) =>
+    (state.activeMs ?? 0) + (state.status === "active" ? Math.max(0, now - (state.activeAt ?? state.updatedAt)) : 0)
 
   export function make(deps: Deps) {
+    const healing = RayaSelfHeal.make(deps.storage) // raya_change - linked repairs close or block their global item
+    const prune = Effect.fn("RayaGoal.prune")(function* () {
+      const keys = yield* deps.storage.list(["raya", "goal"]).pipe(Effect.orDie)
+      const rows = yield* Effect.forEach(keys, (path) =>
+        deps.storage.read<unknown>(path).pipe(
+          Effect.flatMap(decode),
+          Effect.map((state) => ({ path, state })),
+          Effect.orDie,
+        ),
+      )
+      yield* Effect.forEach(
+        rows.filter((row) => row.state.status === "complete" && row.state.updatedAt < Date.now() - retention),
+        (row) => deps.storage.remove(row.path).pipe(Effect.orDie),
+        { discard: true },
+      )
+    }) // raya_change - sweep orphaned completed goals whenever goal state is read
+
     const get = Effect.fn("RayaGoal.get")(function* (sessionID: SessionID) {
+      yield* prune()
       const raw = yield* deps.storage.read<unknown>(key(sessionID)).pipe(
         Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(undefined)),
         Effect.orDie,
       )
       if (raw === undefined) return undefined
-      return yield* decode(raw).pipe(Effect.orDie)
+      const state = yield* decode(raw).pipe(Effect.orDie)
+      if (state.status !== "complete" || state.updatedAt >= Date.now() - retention) return state
+      yield* deps.storage.remove(key(sessionID)).pipe(Effect.orDie)
+      return undefined // raya_change - lazy retention avoids an always-running cleanup process
     })
 
     const requireGoal = Effect.fn("RayaGoal.require")(function* (sessionID: SessionID) {
@@ -136,6 +167,8 @@ export namespace RayaGoal {
       sessionID: SessionID,
       objective: string,
       startMessageID?: MessageID,
+      startSnapshot?: string,
+      selfHealID?: string,
     ) {
       const text = clean(objective)
       if (!text) return yield* new AuditError({ message: "A goal objective is required." })
@@ -146,9 +179,13 @@ export namespace RayaGoal {
       return yield* save(sessionID, {
         objective: text,
         startMessageID,
+        startSnapshot,
+        selfHealID,
         status: "active",
         createdAt: now,
         updatedAt: now,
+        activeMs: 0,
+        activeAt: now,
         usage: { turns: 0, continuations: 0, toolCalls: 0 },
         progress: [{ at: now, kind: "status", message: "Goal armed." }],
       })
@@ -156,16 +193,21 @@ export namespace RayaGoal {
 
     const control = Effect.fn("RayaGoal.control")(function* (sessionID: SessionID, status: "active" | "paused") {
       const state = yield* requireGoal(sessionID)
-      if (state.status === "complete" || state.status === "blocked") {
+      if (state.status === "complete") {
         return yield* new AuditError({
           message: `A ${state.status} goal cannot be ${status === "active" ? "resumed" : "paused"}.`,
         })
+      }
+      if (status === "paused" && state.status === "blocked") {
+        return yield* new AuditError({ message: "A blocked goal cannot be paused." })
       }
       const now = Date.now()
       return yield* save(sessionID, {
         ...state,
         status,
         updatedAt: now,
+        activeMs: elapsed(state, now),
+        activeAt: status === "active" ? now : undefined,
         progress: progress(state, {
           at: now,
           kind: "status",
@@ -191,11 +233,15 @@ export namespace RayaGoal {
         blockedReason: undefined,
         status: state.status === "blocked" ? "active" : state.status,
         updatedAt: now,
+        activeAt: state.status === "blocked" ? now : state.activeAt,
         audit: undefined,
         progress: progress(state, {
           at: now,
           kind: "status",
-          message: "Goal updated. The current step will finish before the revision takes effect.",
+          message:
+            state.status === "blocked"
+              ? "Goal updated. Work will resume with the revision."
+              : "Goal updated. The current step will finish before the revision takes effect.",
         }),
       })
     })
@@ -255,33 +301,85 @@ export namespace RayaGoal {
 
     const update = Effect.fn("RayaGoal.update")(function* (sessionID: SessionID, input: ModelUpdate) {
       const state = yield* requireGoal(sessionID)
-      if (state.status !== "active") {
-        return yield* new AuditError({ message: `Only an active goal can be marked ${input.status}.` })
-      }
       const now = Date.now()
+      if (input.status === "active") {
+        if (state.status !== "blocked" && state.status !== "paused") {
+          return yield* new AuditError({ message: `Only a blocked or paused goal can be marked active.` })
+        }
+        return yield* save(sessionID, {
+          ...state,
+          status: "active",
+          blockedReason: undefined,
+          updatedAt: now,
+          activeAt: now,
+          progress: progress(state, { at: now, kind: "status", message: "Goal resumed." }),
+        })
+      }
       if (input.status === "blocked") {
+        if (state.status !== "active") {
+          return yield* new AuditError({ message: `Only an active goal can be marked blocked.` })
+        }
         const reason = clean(input.reason ?? "")
         if (!reason) return yield* new AuditError({ message: "A blocked goal requires a plain reason." })
-        return yield* save(sessionID, {
+        const next = yield* save(sessionID, {
           ...state,
           status: "blocked",
           blockedReason: reason,
           updatedAt: now,
+          activeMs: elapsed(state, now),
+          activeAt: undefined,
           progress: progress(state, { at: now, kind: "status", message: `Blocked: ${reason}` }),
         })
+        if (state.selfHealID) {
+          yield* healing
+            .update(state.selfHealID, { status: "blocked", blockedReason: reason, reloadRequired: false })
+            .pipe(Effect.orDie)
+        }
+        return next
+      }
+      if (state.status !== "active" && state.status !== "blocked") {
+        return yield* new AuditError({ message: `Only an active or blocked goal can be marked complete.` })
       }
       if (!input.audit) {
         return yield* new AuditError({ message: "Completion requires a requirement-by-requirement audit." })
       }
       const messages = yield* deps.sessions.messages({ sessionID })
-      const audit = yield* validateForSession(input.audit, messages, state.createdAt, state.objective)
-      return yield* save(sessionID, {
+      const audit = yield* validateForSession(
+        {
+          ...input.audit,
+          summary: input.audit.summary ?? input.summary ?? input.audit.requirements[0]?.requirement ?? "",
+        },
+        messages,
+        state.createdAt,
+        state.objective,
+      )
+      const next = yield* save(sessionID, {
         ...state,
         status: "complete",
         audit,
         updatedAt: now,
+        activeMs: elapsed(state, now),
+        activeAt: undefined,
         progress: progress(state, { at: now, kind: "status", message: "Completion audit passed." }),
       })
+      if (state.selfHealID) {
+        const evidence = audit.requirements.flatMap((requirement) =>
+          requirement.evidence.map((item) => ({
+            summary: `${requirement.requirement}: ${item.summary}`,
+            artifact: item.callID,
+            at: now,
+          })),
+        )
+        yield* healing
+          .update(state.selfHealID, {
+            status: "verified",
+            evidence,
+            blockedReason: undefined,
+            reloadRequired: true,
+          })
+          .pipe(Effect.orDie)
+      }
+      return next
     })
 
     const validateForSession = Effect.fn("RayaGoal.validateAuditForSession")(function* (
@@ -361,7 +459,7 @@ export namespace RayaGoal {
         }
         // raya_change end
       }
-      const summary = clean(audit.summary)
+      const summary = clean(audit.summary ?? "")
       if (!summary) return yield* new AuditError({ message: "Completion requires an audit summary." })
       return { requirements: audit.requirements, summary, verifiedAt: Date.now() } satisfies Audit
     })
@@ -373,21 +471,45 @@ export namespace RayaGoal {
       const users = messages.filter((message) => message.info.role === "user")
       const user = users.toSorted((a, b) => a.info.time.created - b.info.time.created).at(-1)
       if (!user) return
-      const calls = messages
-        .filter((message) => message.info.role === "assistant" && message.info.parentID === user.info.id)
+      const assistants = messages.filter(
+        (message) => message.info.role === "assistant" && message.info.parentID === user.info.id,
+      )
+      const calls = assistants
         .flatMap((message) => message.parts)
         .filter((part): part is SessionV1.ToolPart => part.type === "tool" && !controls.has(part.tool))
+      // raya_change start - a provider can expose tool-call markup as plain text.
+      // Stop instead of repeating destructive work when the model says it is done
+      // but update_goal never actually reached the runtime.
+      const reply = assistants
+        .flatMap((message) => message.parts)
+        .filter((part): part is SessionV1.TextPart => part.type === "text")
+        .map((part) => part.text)
+        .join("\n")
+      const claimed =
+        /\b(?:task|goal|objective|work)\s+(?:is|was|has been)\s+(?:now\s+)?(?:complete|completed|done|satisfied)\b|\bnothing further\b|\bno further (?:work|action)\b|\bobjective is satisfied\b/i.test(
+          reply,
+        )
+      const invalid = state.status === "active" && claimed
+      // raya_change end
       const current = new Set(calls.map((part) => part.callID))
       const prior = tools(messages).filter((part) => !current.has(part.callID) && started(part) >= state.createdAt)
       const repeated =
         calls.length > 0 && calls.every((call) => prior.some((part) => fingerprint(part) === fingerprint(call)))
+      const stalled = state.status === "active" && calls.length === 0 // raya_change - never leave a silent active zombie
       const now = Date.now()
-      const reason = "Automatic continuation repeated the same tool work without new evidence."
+      const reason = invalid
+        ? "The model reported completion without successfully calling update_goal. Review the result, then steer or stop it."
+        : repeated
+          ? "Automatic continuation repeated the same tool work without new evidence."
+          : "The turn ended without work, verification, or a goal status update. Steer the goal or stop it."
+      const stopped = invalid || repeated || stalled
       const next = yield* save(sessionID, {
         ...state,
-        status: repeated ? "blocked" : state.status,
-        blockedReason: repeated ? reason : state.blockedReason,
+        status: stopped ? "blocked" : state.status,
+        blockedReason: stopped ? reason : state.blockedReason,
         updatedAt: now,
+        activeMs: stopped ? elapsed(state, now) : state.activeMs,
+        activeAt: stopped ? undefined : state.activeAt,
         usage: {
           ...state.usage,
           turns: state.usage.turns + 1,
@@ -395,15 +517,15 @@ export namespace RayaGoal {
         },
         progress: progress(state, {
           at: now,
-          kind: repeated ? "status" : "turn",
-          message: repeated
+          kind: stopped ? "status" : "turn",
+          message: stopped
             ? `Blocked: ${reason}`
             : calls.length > 0
               ? `Turn finished with ${calls.length} work or verification tool call${calls.length === 1 ? "" : "s"}.`
               : "Automatic continuation suppressed because the turn made no work or verification tool calls.",
         }),
       })
-      return { state: next, productive: calls.length > 0 && !repeated }
+      return { state: next, productive: calls.length > 0 && !stopped }
     })
 
     const continued = Effect.fn("RayaGoal.continued")(function* (sessionID: SessionID) {

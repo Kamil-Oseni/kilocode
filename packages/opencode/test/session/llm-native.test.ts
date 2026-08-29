@@ -416,13 +416,42 @@ describe("session.llm-native.request", () => {
       type: "supported",
       apiKey: "test-openai-key",
     })
+    // kilocode_change start - raya_change: DeepSeek DSML must use the parser that also dispatches recovered tools
+    const deepseek: Provider.Model = {
+      ...baseModel,
+      id: ModelV2.ID.make("deepseek-v4"),
+      providerID: ProviderV2.ID.make("alibaba-cn"),
+      api: {
+        ...baseModel.api,
+        id: "deepseek-v4",
+        npm: "@ai-sdk/openai-compatible",
+        url: "https://example.com/compatible-mode/v1",
+      },
+    }
+    expect(LLMNativeRuntime.requiresNative(deepseek)).toBe(true)
+    expect(
+      LLMNativeRuntime.status({
+        model: deepseek,
+        provider: {
+          ...providerInfo,
+          id: ProviderV2.ID.make("alibaba-cn"),
+          options: { apiKey: "test-deepseek-key" },
+        },
+        auth: undefined,
+      }),
+    ).toMatchObject({ type: "supported", apiKey: "test-deepseek-key" })
+    expect(LLMNativeRuntime.requiresNative(baseModel)).toBe(false)
     expect(
       LLMNativeRuntime.status({
         model: { ...baseModel, providerID: ProviderV2.ID.make("google") },
         provider: { ...providerInfo, id: ProviderV2.ID.make("google") },
         auth: undefined,
       }),
-    ).toEqual({ type: "unsupported", reason: "provider is not openai, opencode, or anthropic" })
+    ).toEqual({
+      type: "unsupported",
+      reason: "provider is not openai, opencode, anthropic, or DSML-compatible DeepSeek",
+    })
+    // kilocode_change end
     expect(
       LLMNativeRuntime.status({
         model: baseModel,

@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { ConfigProvider, Layer } from "effect"
 import { HttpRouter } from "effect/unstable/http"
+import path from "node:path"
 import * as Log from "@opencode-ai/core/util/log"
 import * as HttpApiServer from "@/server/routes/instance/httpapi/server"
 import { disposeAllInstances, tmpdir } from "../../fixture/fixture"
@@ -31,7 +32,7 @@ afterEach(async () => {
 
 describe("goal HTTP API", () => {
   test("creates, reloads, updates, and clears session goal state", async () => {
-    await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
+    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
     const request = (handler: ReturnType<typeof app>, method: string, route: string, body?: unknown) =>
       handler(
         new Request(new URL(route, "http://localhost"), {
@@ -80,5 +81,39 @@ describe("goal HTTP API", () => {
     expect(cleared.status).toBe(200)
     const missing = await request(reloaded, "GET", `/session/${session.id}/goal`)
     expect(missing.status).toBe(404)
+  }, 30_000)
+
+  // raya_change - goal rollback uses its own workspace checkpoint, including child-created files
+  test("discard removes files created after the goal checkpoint", async () => {
+    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    const request = (handler: ReturnType<typeof app>, method: string, route: string, body?: unknown) =>
+      handler(
+        new Request(new URL(route, "http://localhost"), {
+          method,
+          headers: { "content-type": "application/json", "x-kilo-directory": tmp.path },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        }),
+        HttpApiServer.context,
+      )
+    const handler = app()
+    const created = await request(handler, "POST", "/session", {})
+    const session = (await created.json()) as { id: string }
+    const goal = await request(handler, "POST", `/session/${session.id}/goal`, {
+      objective: "Create one temporary file",
+      messageID: "msg_goal_discard",
+    })
+    expect(goal.status).toBe(200)
+    expect((await goal.json()) as { startSnapshot?: string }).toMatchObject({
+      startSnapshot: expect.any(String),
+    })
+
+    const file = path.join(tmp.path, "created-by-child.txt")
+    await Bun.write(file, "temporary\n")
+    expect(await Bun.file(file).exists()).toBe(true)
+
+    const discarded = await request(handler, "POST", `/session/${session.id}/goal/discard`)
+    expect(discarded.status).toBe(200)
+    expect(await Bun.file(file).exists()).toBe(false)
+    expect((await request(handler, "GET", `/session/${session.id}/goal`)).status).toBe(404)
   }, 30_000)
 })

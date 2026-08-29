@@ -29,6 +29,7 @@ import { useLanguage } from "../../context/language"
 import { useVSCode } from "../../context/vscode"
 import { useFeedback } from "../../context/feedback"
 import { visibleError } from "../../context/session-errors"
+import { isRenderable, bundlableTool } from "../../utils/transcript-parts"
 import type { ErrorDisplayProps } from "./ErrorDisplay"
 import type { Message as WebMessage } from "../../types/messages"
 
@@ -71,6 +72,46 @@ export const VscodeSessionTurn: Component<VscodeSessionTurnProps> = (props) => {
   })
 
   const assistantMessages = createMemo(() => props.turn.assistant as SDKAssistantMessage[])
+
+  // raya_change start - progressive disclosure across messages. AssistantMessage
+  // only collapses tool one-liners within a single message, but the Auto flow
+  // spreads chief_route, the delegated task, get_goal/update_goal, etc. across
+  // separate assistant messages in one turn — so nothing collapsed and the
+  // transcript bloated. Coalesce a run of consecutive assistant messages whose
+  // renderable parts are ALL bundlable tool calls into one AssistantMessage (via
+  // its `parts` override), letting the existing within-message grouping collapse
+  // the combined run into a single inline "N steps" group. Any message carrying a
+  // prominent part (text, reasoning, edit, bash, question) breaks the run and
+  // renders on its own, unchanged. isRenderable is message-independent for tool
+  // parts, so merging tool-only parts under the run's first message id is safe.
+  const renderableParts = (m: SDKAssistantMessage) =>
+    ((data.store.part?.[m.id] ?? emptyParts) as SDKPart[]).filter((part) => isRenderable(part, m))
+  const coalescible = (m: SDKAssistantMessage) => {
+    const ps = renderableParts(m)
+    return ps.length > 0 && ps.every(bundlableTool)
+  }
+  type Row = { key: string; message: SDKAssistantMessage; parts?: SDKPart[] }
+  const rows = createMemo<Row[]>(() => {
+    const out: Row[] = []
+    let run: SDKAssistantMessage[] = []
+    const flush = () => {
+      if (run.length === 0) return
+      if (run.length === 1) out.push({ key: run[0]!.id, message: run[0]! })
+      else out.push({ key: run[0]!.id, message: run[0]!, parts: run.flatMap(renderableParts) })
+      run = []
+    }
+    for (const m of assistantMessages()) {
+      if (coalescible(m)) {
+        run.push(m)
+        continue
+      }
+      flush()
+      out.push({ key: m.id, message: m })
+    }
+    flush()
+    return out
+  })
+  // raya_change end
 
   const interrupted = createMemo(() => assistantMessages().some((m) => m.error?.name === "MessageAbortedError"))
 
@@ -151,22 +192,23 @@ export const VscodeSessionTurn: Component<VscodeSessionTurnProps> = (props) => {
           {/* Assistant parts — flat list, no context grouping */}
           <Show when={assistantMessages().length > 0}>
             <div class="vscode-session-turn-assistant">
-              <For each={assistantMessages()}>
-                {(amsg) => (
+              <For each={rows()}>
+                {(row) => (
                   <AssistantMessage
-                    message={amsg}
+                    message={row.message}
+                    parts={row.parts}
                     showAssistantCopyPartID={showAssistantCopyPartID()}
                     feedback={{
                       enabled: feedback.telemetryEnabled(),
-                      rating: feedback.getRating(amsg.id),
+                      rating: feedback.getRating(row.message.id),
                       onRate: (next) =>
                         feedback.rate({
-                          messageID: amsg.id,
-                          sessionID: amsg.sessionID,
-                          parentMessageID: amsg.parentID,
-                          providerID: amsg.providerID,
-                          modelID: amsg.modelID,
-                          variant: (amsg as SDKAssistantMessage & { variant?: string }).variant,
+                          messageID: row.message.id,
+                          sessionID: row.message.sessionID,
+                          parentMessageID: row.message.parentID,
+                          providerID: row.message.providerID,
+                          modelID: row.message.modelID,
+                          variant: (row.message as SDKAssistantMessage & { variant?: string }).variant,
                           next,
                         }),
                     }}

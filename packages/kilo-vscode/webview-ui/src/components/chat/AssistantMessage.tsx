@@ -31,7 +31,7 @@ import { useConfig } from "../../context/config"
 import { useLanguage } from "../../context/language"
 import { useServer } from "../../context/server"
 import { planDisplayPath } from "../../utils/plan-path"
-import { isRenderable, UPSTREAM_SUPPRESSED_TOOLS } from "../../utils/transcript-parts"
+import { isRenderable, UPSTREAM_SUPPRESSED_TOOLS, PROMINENT_TOOLS } from "../../utils/transcript-parts"
 import { messageThroughput, formatTG } from "../../context/session-utils"
 import { color as timelineColor } from "../../utils/timeline/colors"
 import type { Part as TimelinePart } from "../../types/messages"
@@ -260,18 +260,7 @@ export const AssistantMessage: Component<AssistantMessageProps> = (props) => {
   // single inline "N steps" group. Prominent parts stay inline and un-bundled:
   // assistant text/reasoning, file edits (their inline review chrome must show),
   // terminal (bash), plan hand-offs, and any active question/suggestion.
-  const PROMINENT_TOOLS = new Set([
-    "question",
-    "ask_options",
-    "suggest",
-    "bash",
-    "plan_exit",
-    "write",
-    "edit",
-    "apply_patch",
-    "multiedit",
-    "patch",
-  ])
+  // PROMINENT_TOOLS lives in transcript-parts so VscodeSessionTurn shares it.
   const bundles = (part: SDKPart) => {
     if (part.type !== "tool") return false
     const tp = part as unknown as ToolPart

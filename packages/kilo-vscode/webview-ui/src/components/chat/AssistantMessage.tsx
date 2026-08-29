@@ -8,7 +8,7 @@
  * Active questions render inline via QuestionDock; permissions are in the bottom dock.
  */
 
-import { Component, For, Show, createMemo, type JSX } from "solid-js"
+import { Component, For, Show, createMemo, createSignal, type JSX } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import {
   Part,
@@ -37,6 +37,7 @@ import { color as timelineColor } from "../../utils/timeline/colors"
 import type { Part as TimelinePart } from "../../types/messages"
 import type { TimelineHighlight } from "../../utils/timeline/highlight"
 import { Tooltip } from "@kilocode/kilo-ui/tooltip"
+import { Icon } from "@kilocode/kilo-ui/icon"
 import { QuestionDock } from "./QuestionDock"
 import { SuggestBar } from "./SuggestBar"
 import { toolDefaultOpen } from "./tool-default-open"
@@ -253,10 +254,65 @@ export const AssistantMessage: Component<AssistantMessageProps> = (props) => {
         ([] as TimelinePart[]),
     ),
   )
-  return (
-    <>
-      <For each={parts()}>
-        {(part) => {
+  // raya_change start - progressive disclosure. Consecutive "meta/read" tool
+  // calls (get_goal, update_goal, subagent tasks, read/grep/glob/list, etc.)
+  // stacked as one-liners bloat the transcript, so a run of 2+ collapses into a
+  // single inline "N steps" group. Prominent parts stay inline and un-bundled:
+  // assistant text/reasoning, file edits (their inline review chrome must show),
+  // terminal (bash), plan hand-offs, and any active question/suggestion.
+  const PROMINENT_TOOLS = new Set([
+    "question",
+    "ask_options",
+    "suggest",
+    "bash",
+    "plan_exit",
+    "write",
+    "edit",
+    "apply_patch",
+    "multiedit",
+    "patch",
+  ])
+  const bundles = (part: SDKPart) => {
+    if (part.type !== "tool") return false
+    const tp = part as unknown as ToolPart
+    if (PROMINENT_TOOLS.has(tp.tool)) return false
+    if (UPSTREAM_SUPPRESSED_TOOLS.has(tp.tool)) return false // todo cards stay inline
+    if (matchToolRequest(part, undefined, session.questions())) return false
+    if (matchToolRequest(part, "suggest", session.suggestions())) return false
+    return true
+  }
+  const running = (part: SDKPart) =>
+    part.type === "tool" &&
+    ((part as unknown as ToolPart).state?.status === "pending" ||
+      (part as unknown as ToolPart).state?.status === "running")
+
+  type Segment = { kind: "solo"; part: SDKPart } | { kind: "group"; parts: SDKPart[] }
+  const segments = createMemo<Segment[]>(() => {
+    const out: Segment[] = []
+    let run: SDKPart[] = []
+    const flush = () => {
+      if (run.length === 0) return
+      if (run.length === 1) out.push({ kind: "solo", part: run[0]! })
+      else out.push({ kind: "group", parts: run })
+      run = []
+    }
+    for (const part of parts()) {
+      if (bundles(part)) {
+        run.push(part)
+        continue
+      }
+      flush()
+      out.push({ kind: "solo", part })
+    }
+    flush()
+    return out
+  })
+
+  const toolName = (part: SDKPart) => (part.type === "tool" ? (part as unknown as ToolPart).tool : part.type)
+
+  const PartRow: Component<{ part: SDKPart }> = (rp) => {
+    const part = rp.part
+    {
           // Upstream PART_MAPPING["tool"] returns null for todowrite/todoread,
           // so we detect them here and render via ToolRegistry directly.
           const isUpstreamSuppressed =
@@ -379,7 +435,54 @@ export const AssistantMessage: Component<AssistantMessageProps> = (props) => {
               </div>
             </Show>
           )
-        }}
+    }
+  }
+
+  // Inline collapsible for a run of bundled tool calls. Collapsed by default so
+  // the transcript reads as a conversation; auto-opens while any child is live
+  // or when a chat-search match lands inside, so nothing important is hidden.
+  const ToolGroup: Component<{ parts: SDKPart[] }> = (gp) => {
+    const [opened, setOpened] = createSignal(false)
+    const auto = createMemo(
+      () =>
+        gp.parts.some((part) => running(part)) ||
+        (!!props.forceOpenPartID && gp.parts.some((part) => part.id === props.forceOpenPartID)),
+    )
+    const expanded = createMemo(() => opened() || auto())
+    const summary = createMemo(() => {
+      const names = gp.parts.map(toolName)
+      const head = names.slice(0, 3).join(", ")
+      return names.length > 3 ? `${head} +${names.length - 3}` : head
+    })
+    return (
+      <div class="tool-group" data-open={expanded() ? "" : undefined}>
+        <button
+          type="button"
+          class="tool-group__summary"
+          aria-expanded={expanded()}
+          onClick={() => setOpened((v) => !v)}
+        >
+          <Icon name="chevron-right" size="small" />
+          <span class="tool-group__count">{gp.parts.length} steps</span>
+          <span class="tool-group__names">{summary()}</span>
+        </button>
+        <Show when={expanded()}>
+          <div class="tool-group__body">
+            <For each={gp.parts}>{(part) => <PartRow part={part} />}</For>
+          </div>
+        </Show>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <For each={segments()}>
+        {(seg) => (
+          <Show when={seg.kind === "group"} fallback={<PartRow part={(seg as { part: SDKPart }).part} />}>
+            <ToolGroup parts={(seg as { parts: SDKPart[] }).parts} />
+          </Show>
+        )}
       </For>
     </>
   )

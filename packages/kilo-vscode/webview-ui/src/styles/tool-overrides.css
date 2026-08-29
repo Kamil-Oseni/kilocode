@@ -99,3 +99,66 @@ html[data-theme="kilo-vscode"]
     }
   }
 }
+
+/* ============================================
+   Progressive disclosure: bundled tool-call group
+   A run of meta/read tool one-liners collapses into a single quiet inline
+   row so the transcript reads like a conversation. Expands in place.
+   raya_change - new file section
+   ============================================ */
+
+.tool-group {
+  margin-block: 2px;
+}
+
+.tool-group__summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 8px;
+  border: none;
+  border-radius: var(--raya-radius-pill, 999px);
+  background: transparent;
+  color: var(--text-muted, var(--vscode-descriptionForeground));
+  font: inherit;
+  font-size: 0.82em;
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.tool-group__summary:hover {
+  background: color-mix(in srgb, var(--text-base, var(--vscode-foreground)) 6%, transparent);
+  color: var(--text-base, var(--vscode-foreground));
+}
+
+.tool-group__summary [data-component="icon"] {
+  flex: none;
+  opacity: 0.7;
+  transition: transform 140ms ease;
+}
+
+.tool-group[data-open] .tool-group__summary [data-component="icon"] {
+  transform: rotate(90deg);
+}
+
+.tool-group__count {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-base, var(--vscode-foreground));
+}
+
+.tool-group__names {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.75;
+}
+
+.tool-group__body {
+  padding-left: 8px;
+  margin-left: 7px;
+  border-left: 1px solid color-mix(in srgb, var(--text-base, var(--vscode-foreground)) 12%, transparent);
+}

@@ -90,11 +90,21 @@ function transcript(input: {
   return { rows, part }
 }
 
-function setup(storage: Storage.Interface, rows: () => MessageV2.WithParts[]) {
+function setup(
+  storage: Storage.Interface,
+  rows: () => MessageV2.WithParts[],
+  opts?: {
+    // raya_change - model subagent child sessions: messagesFor branches on id,
+    // children returns the descendants that hold the delegated tool calls.
+    messagesFor?: (id: SessionID) => MessageV2.WithParts[]
+    children?: (id: SessionID) => Session.Info[]
+  },
+) {
   return RayaGoal.make({
     storage,
     sessions: {
-      messages: () => Effect.succeed(rows()),
+      messages: (input) => Effect.succeed(opts?.messagesFor ? opts.messagesFor(input.sessionID) : rows()),
+      children: (id) => Effect.succeed(opts?.children ? opts.children(id) : []),
     },
   })
 }
@@ -132,7 +142,8 @@ describe("RayaGoal", () => {
         sessions: {
           get: () => Effect.succeed({ directory: process.cwd() }),
           messages: () => Effect.succeed([]),
-        } as unknown as Pick<Session.Interface, "get" | "messages">,
+          children: () => Effect.succeed([]),
+        } as unknown as Pick<Session.Interface, "get" | "messages" | "children">,
         run: async (_sid, _goal, dir) => {
           directory = dir
         },
@@ -177,6 +188,46 @@ describe("RayaGoal", () => {
       })
       expect(complete.status).toBe("complete")
       expect(complete.audit?.requirements).toHaveLength(1)
+    }),
+  )
+
+  // raya_change - the Auto orchestrator delegates the real work to a subagent, so
+  // the proving tool call lives in a child session. Evidence gathering and the
+  // completion audit must see it, otherwise a genuinely finished goal is forced to
+  // blocked because none of its evidence is "eligible".
+  it.live("accepts evidence from a delegated subagent child session", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const parentID = SessionID.make(`ses_goal_${crypto.randomUUID()}`)
+      const childID = SessionID.make(`ses_goal_${crypto.randomUUID()}`)
+      let childRows: MessageV2.WithParts[] = []
+      const goals = setup(storage, () => [], {
+        messagesFor: (id) => (id === childID ? childRows : []),
+        children: (id) => (id === parentID ? [{ id: childID } as unknown as Session.Info] : []),
+      })
+      yield* Effect.addFinalizer(() => goals.clear(parentID))
+      yield* goals.create(parentID, "Create jesus.txt via a delegated agent")
+      const child = transcript({ sessionID: childID, tool: "write", output: "wrote jesus.txt" })
+      childRows = child.rows
+
+      expect(yield* goals.evidence(parentID)).toEqual([
+        expect.objectContaining({ callID: child.part!.callID }),
+      ])
+
+      const complete = yield* goals.update(parentID, {
+        status: "complete",
+        audit: {
+          summary: "The delegated subagent write created the file.",
+          requirements: [
+            {
+              requirement: "The file is created by the subagent",
+              passed: true,
+              evidence: [{ callID: child.part!.callID, summary: "The child-session write completed." }],
+            },
+          ],
+        },
+      })
+      expect(complete.status).toBe("complete")
     }),
   )
 
@@ -465,7 +516,8 @@ describe("RayaGoal", () => {
         sessions: {
           get: () => Effect.succeed({ directory: process.cwd() }),
           messages: () => Effect.succeed(rows),
-        } as unknown as Pick<Session.Interface, "get" | "messages">,
+          children: () => Effect.succeed([]),
+        } as unknown as Pick<Session.Interface, "get" | "messages" | "children">,
         run: async () => {
           runs += 1
           await Effect.runPromise(
@@ -530,7 +582,8 @@ describe("RayaGoal", () => {
         sessions: {
           get: () => Effect.succeed({ directory: process.cwd() }),
           messages: () => Effect.succeed(data.rows),
-        } as unknown as Pick<Session.Interface, "get" | "messages">,
+          children: () => Effect.succeed([]),
+        } as unknown as Pick<Session.Interface, "get" | "messages" | "children">,
         enabled: () => Effect.succeed(false),
         run: async () => void runs++,
       })

@@ -1,12 +1,10 @@
 // raya_change - Raya primary webview branding
 import { type Component, For, Show } from "solid-js"
 import { Icon } from "@kilocode/kilo-ui/icon"
-import { useDialog } from "@kilocode/kilo-ui/context/dialog"
 import { useSession } from "../../context/session"
 import { useLanguage } from "../../context/language"
 import { recentSessions } from "../../context/session-utils"
 import { formatRelativeDate } from "../../utils/date"
-import { FeedbackDialog } from "./FeedbackDialog"
 
 interface WelcomeEmptyStateProps {
   onSelectSession?: (id: string) => void
@@ -29,7 +27,6 @@ export const KiloLogo = () => {
 export const WelcomeEmptyState: Component<WelcomeEmptyStateProps> = (props) => {
   const session = useSession()
   const language = useLanguage()
-  const dialog = useDialog()
   const recent = () => recentSessions(session.sessions())
 
   return (
@@ -57,18 +54,10 @@ export const WelcomeEmptyState: Component<WelcomeEmptyStateProps> = (props) => {
           </Show>
         </div>
       </Show>
-      {/* raya_change - the welcome slot leads with the primary action (start a
-          chat) as a rounded Eden pill; feedback demotes to a quiet text link. */}
-      <button
-        class="welcome-start-btn"
-        onClick={() => window.dispatchEvent(new CustomEvent("newTaskRequest"))}
-      >
-        <Icon name="add" size="small" />
-        {language.t("sidebar.session.newSession")}
-      </button>
-      <button class="feedback-link" onClick={() => dialog.show(() => <FeedbackDialog />)}>
-        {language.t("feedback.button")}
-      </button>
+      {/* raya_change - the welcome screen is already a fresh session and the
+          toolbar "+" opens a new chat, so a New Session button is redundant.
+          Feedback/Support is a carried-over kilo affordance with no place in an
+          internal tool. Both removed to keep the startup screen minimal. */}
     </div>
   )
 }

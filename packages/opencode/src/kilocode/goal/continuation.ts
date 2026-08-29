@@ -47,7 +47,7 @@ export namespace RayaGoalContinuation {
   export function resume(input: {
     sessionID: SessionID
     storage: Storage.Interface
-    sessions: Pick<Session.Interface, "get" | "messages"> // raya_change
+    sessions: Pick<Session.Interface, "get" | "messages" | "children"> // raya_change - evidence spans child sessions
     run?: (sessionID: SessionID, objective: string, directory: string) => Promise<unknown>
   }) {
     const goals = RayaGoal.make(input)
@@ -75,7 +75,7 @@ export namespace RayaGoalContinuation {
   export function subscribe(input: {
     bus: Bus.Interface
     storage: Storage.Interface
-    sessions: Pick<Session.Interface, "get" | "messages"> // raya_change
+    sessions: Pick<Session.Interface, "get" | "messages" | "children"> // raya_change - evidence spans child sessions
     run?: (sessionID: SessionID, objective: string, directory: string) => Promise<unknown>
     enabled?: () => Effect.Effect<boolean> // raya_change - Milestone I continuation default
   }) {

@@ -106,7 +106,7 @@ export namespace RayaGoal {
   }) {}
 
   type Store = Pick<Storage.Interface, "read" | "write" | "remove" | "list">
-  type Sessions = Pick<Session.Interface, "messages">
+  type Sessions = Pick<Session.Interface, "messages" | "children">
   type Deps = {
     storage: Store
     sessions: Sessions
@@ -258,6 +258,27 @@ export namespace RayaGoal {
           : [],
       )
 
+    // raya_change start - the Auto orchestrator delegates work to subagents whose
+    // tool calls (the real file writes and verifications) land in child sessions.
+    // The completion audit and get_goal evidence must see those callIDs, otherwise
+    // valid evidence is rejected and the goal can never complete — it gets forced
+    // to blocked. Gather the goal session plus every descendant, matching how
+    // files-only discard (SessionRevert.discardChanges) already walks children.
+    const collect = Effect.fn("RayaGoal.collect")(function* (sessionID: SessionID) {
+      const all: SessionV1.WithParts[] = []
+      const queue: SessionID[] = [sessionID]
+      while (queue.length > 0) {
+        const id = queue.shift()
+        if (!id) break
+        const msgs = yield* deps.sessions.messages({ sessionID: id })
+        for (const msg of msgs) all.push(msg)
+        const kids = yield* deps.sessions.children(id)
+        for (const kid of kids) queue.push(kid.id)
+      }
+      return all
+    })
+    // raya_change end
+
     const fingerprint = (part: SessionV1.ToolPart) =>
       JSON.stringify({
         tool: part.tool,
@@ -273,7 +294,7 @@ export namespace RayaGoal {
 
     const evidence = Effect.fn("RayaGoal.evidence")(function* (sessionID: SessionID) {
       const state = yield* requireGoal(sessionID)
-      const messages = yield* deps.sessions.messages({ sessionID })
+      const messages = yield* collect(sessionID) // raya_change - include subagent child-session tool calls
       return tools(messages)
         .filter(
           (part) =>
@@ -364,7 +385,7 @@ export namespace RayaGoal {
       if (!input.audit) {
         return yield* new AuditError({ message: "Completion requires a requirement-by-requirement audit." })
       }
-      const messages = yield* deps.sessions.messages({ sessionID })
+      const messages = yield* collect(sessionID) // raya_change - subagent child-session calls are valid evidence
       const audit = yield* validateForSession(
         {
           ...input.audit,

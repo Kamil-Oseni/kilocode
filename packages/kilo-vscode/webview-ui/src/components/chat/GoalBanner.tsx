@@ -39,6 +39,9 @@ export interface GoalBannerProps {
   onDismissNotice?: () => void
 }
 
+// raya_change - avoid "1 turns"; pluralize the metric label off its count
+const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`
+
 export const GoalBannerView: Component<GoalBannerProps> = (props) => {
   const latest = () => props.goal?.progress.at(-1)?.message
   const done = () => props.todos?.filter((todo) => todo.status === "completed").length ?? 0
@@ -136,7 +139,7 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                   <Show when={props.todos?.length}>
                     {done()}/{props.todos!.length} tasks ·{" "}
                   </Show>
-                  {state().usage.turns} turns · {state().usage.toolCalls} tools
+                  {plural(state().usage.turns, "turn")} · {plural(state().usage.toolCalls, "tool")}
                 </span>
                 <button
                   type="button"

@@ -249,13 +249,22 @@ html[data-theme="kilo-vscode"]
   line-height: 1.62;
 } /* raya_change - every conversation element inherits Raya typography without prompt-dependent markdown */
 
+/* raya_change start - #12 conversation rhythm. Anchor each user turn in a
+   quiet solid bubble (Eden card language: faint surface + hairline, no tint)
+   so a turn reads as "person said this", then the assistant answers below in
+   flowing prose. This is what makes the transcript read like a conversation
+   rather than one undifferentiated column of text. */
 html[data-theme="kilo-vscode"] .chat-view [data-component="user-message"] [data-slot="user-message-text"] {
   font-family: var(--font-body);
   font-weight: var(--raya-weight-body);
   line-height: 1.62;
   letter-spacing: 0.005em;
-  padding-block: var(--raya-space-10);
+  padding: var(--raya-space-10) var(--raya-space-14);
+  background: color-mix(in srgb, var(--text-base, var(--vscode-foreground)) 5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text-base, var(--vscode-foreground)) 8%, transparent);
+  border-radius: var(--raya-radius-lg, 14px);
 }
+/* raya_change end */
 
 html[data-theme="kilo-vscode"] .chat-view [data-slot="user-message-text"] [data-highlight="slash"] {
   font-weight: 600;

@@ -9,6 +9,8 @@ import "../src/styles/task-header.css"
 import "../src/styles/session-actions.css" // raya_change - preview the Review/Keep/Undo cluster
 import "../src/styles/prompt-input.css" // raya_change - preview the composer chrome
 import "../src/styles/history.css" // raya_change - preview the history + session-list surfaces
+import "../src/styles/tool-overrides.css" // raya_change - preview the bundled tool-call group (#8)
+import "../src/styles/chat-layout.css" // raya_change - preview conversation lane + turn rhythm (#12)
 import "./preview.css"
 import { render } from "solid-js/web"
 import { For, Show, type Component } from "solid-js"
@@ -45,6 +47,7 @@ type PvState =
   | "transcript"
   | "edit-review"
   | "history"
+  | "conversation"
 type Theme = "light" | "dark"
 
 const states: PvState[] = [
@@ -71,6 +74,7 @@ const states: PvState[] = [
   "transcript",
   "edit-review",
   "history",
+  "conversation",
 ]
 const themes: Theme[] = ["light", "dark"]
 
@@ -468,7 +472,92 @@ const History: Component = () => {
   )
 }
 
+// raya_change - #12/#15: a full user->assistant turn using the real class
+// contract so the conversation rhythm can be judged by eye: user bubble, a
+// bundled tool-call group (#8), assistant prose, then the edit-review card and
+// the diff summary. Verifies turns read as a conversation, not a text column.
+const Conversation: Component = () => (
+  <div class="chat-view">
+    <div class="message-list-content">
+      <div class="vscode-session-turn" data-row="assistant">
+        <div class="vscode-session-turn-user">
+          <div data-component="user-message">
+            <div data-slot="user-message-text">
+              <span data-highlight="slash" data-command="goal">
+                /goal
+              </span>{" "}
+              Make the transcript read like a real conversation and bundle the noisy tool calls.
+            </div>
+          </div>
+        </div>
+        <div class="vscode-session-turn-assistant">
+          <div data-component="tool-part-wrapper" data-part-type="text">
+            <div data-component="text-part">
+              <div data-component="markdown">
+                <p>
+                  On it. I grouped the routing and goal-bookkeeping steps into a single quiet row so the
+                  conversation stays readable, then made the edits.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div class="tool-group" data-open="">
+            <button type="button" class="tool-group__summary" aria-expanded="true">
+              <span data-component="icon">›</span>
+              <span class="tool-group__count">3 steps</span>
+              <span class="tool-group__names">get_goal, generalist agent, update_goal</span>
+            </button>
+          </div>
+          <div class="tool-group">
+            <button type="button" class="tool-group__summary" aria-expanded="false">
+              <span data-component="icon">›</span>
+              <span class="tool-group__count">2 steps</span>
+              <span class="tool-group__names">read, grep</span>
+            </button>
+          </div>
+          <div data-component="tool-part-wrapper" data-part-type="text">
+            <div data-component="text-part">
+              <div data-component="markdown">
+                <p>Here's the change to the composer stylesheet.</p>
+              </div>
+            </div>
+          </div>
+          <div data-component="edit-review-block" data-review-status="modified" data-review-pending="">
+            <div data-component="tool-part-wrapper" data-tool="edit">
+              <div data-component="tool-trigger">
+                <div data-component="edit-trigger">
+                  <div data-slot="message-part-title-area">
+                    <div data-slot="message-part-title">
+                      <span data-slot="message-part-title-filename">eden.css</span>
+                      <span data-slot="message-part-directory-inline">webview-ui/src/styles</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div data-slot="edit-review-actions">
+              <button type="button" data-slot="edit-review-undo">
+                Undo
+              </button>
+              <button type="button" data-slot="edit-review-keep">
+                Keep
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="vscode-session-turn-diffs" data-component="session-turn">
+          <button type="button" class="vscode-session-turn-diffs-trigger">
+            <span data-slot="session-turn-diffs-label">Modified</span>
+            <span data-slot="session-turn-diffs-count">1 file</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)
+
 const chrome = new Set<PvState>([
+  "conversation",
   "slash",
   "review",
   "review-undo",
@@ -519,6 +608,9 @@ const Fixture: Component<{ id: string; theme: Theme; state: PvState }> = (props)
       </Show>
       <Show when={props.state === "history"}>
         <History />
+      </Show>
+      <Show when={props.state === "conversation"}>
+        <Conversation />
       </Show>
       <Show when={props.state !== "usage" && !chrome.has(props.state)}>
         <GoalBannerView {...propsFor(props.state)} />

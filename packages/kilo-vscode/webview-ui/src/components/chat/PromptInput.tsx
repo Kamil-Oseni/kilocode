@@ -1862,8 +1862,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   aria-disabled={!canSend()}
                   aria-label={sendLabel()}
                 >
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M1.5 1.5L14.5 8L1.5 14.5V9L10 8L1.5 7V1.5Z" />
+                  {/* raya_change - editorial send: a clean stroked up-arrow (Eden
+                      lucide style), not a filled paper-plane triangle */}
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M12 19V5" />
+                    <path d="M6 11l6-6 6 6" />
                   </svg>
                 </Button>
               </Tooltip>

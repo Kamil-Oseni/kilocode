@@ -393,11 +393,11 @@
   --goal-progress-fill: var(--raya-accent, var(--goal-focus));
 
   display: grid;
-  gap: var(--raya-space-6);
+  gap: var(--raya-space-10); /* raya_change - more vertical air between header, track, summary, actions */
   margin: var(--raya-space-8) var(--raya-space-12) 0;
-  padding: var(--raya-space-8) var(--raya-space-10);
+  padding: var(--raya-space-12) var(--raya-space-14, 14px); /* raya_change - text no longer hugs the walls */
   border: var(--raya-hairline) solid var(--goal-line);
-  border-radius: var(--raya-radius-md);
+  border-radius: var(--raya-radius-lg);
   background: var(--goal-surface);
   color: var(--goal-text);
   font-family: var(--font-body);
@@ -452,20 +452,21 @@
   color: var(--goal-status);
 }
 
-/* "Goal" sets the category in quiet small caps; the serif italic carries the
- * state. The size and weight contrast is the banner's hierarchy in one line. */
+/* raya_change - one voice: "Goal <status>" both in Instrument Serif at one
+ * size. "Goal" stays quiet; the status word takes the status color. No small
+ * caps, no italic mismatch, no leading icon. */
 .goal-banner__label {
-  font-size: var(--kilo-font-size-10);
-  font-weight: 600;
-  letter-spacing: var(--raya-tracking-caps);
-  text-transform: uppercase;
+  font-family: var(--font-display);
+  font-size: var(--kilo-font-size-16);
+  line-height: var(--raya-leading-tight);
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--goal-text-quiet);
 }
 
 .goal-banner__status-word {
   font-family: var(--font-display);
-  font-style: italic;
-  font-size: var(--kilo-font-size-15);
+  font-size: var(--kilo-font-size-16);
   line-height: var(--raya-leading-tight);
   color: var(--goal-status);
 }
@@ -686,17 +687,38 @@
   outline-offset: var(--raya-hairline);
 }
 
+/* raya_change - Steer leads on the left; run controls group on the right. */
 .goal-banner__actions {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--raya-space-8);
   flex-wrap: wrap;
-  gap: var(--raya-space-6);
 }
 
-.goal-banner__actions [data-component="button"] {
+.goal-banner__actions-lead,
+.goal-banner__actions-run {
+  display: flex;
+  align-items: center;
+  gap: var(--raya-space-6);
+  flex-wrap: wrap;
+}
+
+.goal-banner__actions-run {
+  margin-left: auto;
+}
+
+/* raya_change - all banner buttons share one rounded Eden treatment: a soft
+ * radius (not pill, not square), comfortable horizontal padding, hairline
+ * secondary / borderless ghost — matching Eden's button family. This also
+ * rounds the editor (Update goal/Cancel) and discard (Stop goal/Cancel) rows. */
+.goal-banner [data-component="button"] {
   font-family: var(--font-body);
+  border-radius: var(--raya-radius-md-plus, 10px);
+  padding-inline: var(--raya-space-14, 14px);
   transition:
     background-color var(--raya-duration-fast) var(--raya-ease-out),
+    border-color var(--raya-duration-fast) var(--raya-ease-out),
     color var(--raya-duration-fast) var(--raya-ease-out),
     opacity var(--raya-duration-fast) var(--raya-ease-out),
     transform var(--raya-duration-fast) var(--raya-ease-out);

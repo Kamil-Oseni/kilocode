@@ -215,7 +215,10 @@ const ReviewCluster: Component<{ confirming?: boolean }> = (props) => (
 // class contract. The overlay mirrors the textarea so the in-field slash pill
 // and caret alignment can be judged by eye. Empty draft shows the placeholder.
 const Composer: Component<{ focus?: boolean; empty?: boolean }> = (props) => (
-  <div class="prompt-input-container" style={props.focus ? "border-color: var(--border-focus)" : ""}>
+  <div
+    class="prompt-input-container"
+    style={props.focus ? "border-color: color-mix(in srgb, var(--text-base) 32%, transparent)" : ""}
+  >
     <div class="prompt-input-wrapper">
       <div class="prompt-input-ghost-wrapper">
         <Show when={!props.empty}>

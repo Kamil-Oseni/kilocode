@@ -124,10 +124,10 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
           {(state) => (
             <>
               <div class="goal-banner__header">
+                {/* raya_change - one typographic voice: "Goal <status>" both in
+                    Instrument Serif, no per-status icons (they were inconsistent
+                    across states). Status color carries the meaning. */}
                 <span class="goal-banner__status">
-                  <Show when={state().status === "complete" || state().status === "blocked"}>
-                    <Icon name={state().status === "complete" ? "circle-check" : "circle-ban-sign"} size="small" />
-                  </Show>
                   <span class="goal-banner__label">Goal</span>
                   <span class="goal-banner__status-word">{statusWord[state().status]}</span>
                 </span>
@@ -242,30 +242,37 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                   </Show>
                 </div>
               </Show>
+              {/* raya_change - intentional grouping: Steer (adjust the goal) leads
+                  on the left; the run controls (Pause/Resume, Stop/Dismiss) sit
+                  together on the right. All share one rounded Eden treatment. */}
               <div class="goal-banner__actions">
-                <Button size="small" variant="ghost" onClick={() => props.onEdit?.()}>
-                  Steer
-                </Button>
-                <Show when={state().status === "active"}>
-                  <Button size="small" variant="secondary" disabled={props.disabled} onClick={() => props.onPause?.()}>
-                    Pause
+                <div class="goal-banner__actions-lead">
+                  <Button size="small" variant="secondary" onClick={() => props.onEdit?.()}>
+                    Steer
                   </Button>
-                </Show>
-                <Show when={state().status === "paused"}>
-                  <Button size="small" variant="secondary" disabled={props.disabled} onClick={() => props.onResume?.()}>
-                    Resume
-                  </Button>
-                </Show>
-                <Show when={state().status !== "complete"}>
-                  <Button size="small" variant="secondary" onClick={() => props.onClear?.()}>
-                    Stop goal
-                  </Button>
-                </Show>
-                <Show when={state().status === "complete"}>
-                  <Button size="small" variant="secondary" disabled={props.disabled} onClick={() => props.onStop?.()}>
-                    Dismiss goal
-                  </Button>
-                </Show>
+                </div>
+                <div class="goal-banner__actions-run">
+                  <Show when={state().status === "active"}>
+                    <Button size="small" variant="secondary" disabled={props.disabled} onClick={() => props.onPause?.()}>
+                      Pause
+                    </Button>
+                  </Show>
+                  <Show when={state().status === "paused"}>
+                    <Button size="small" variant="secondary" disabled={props.disabled} onClick={() => props.onResume?.()}>
+                      Resume
+                    </Button>
+                  </Show>
+                  <Show when={state().status !== "complete"}>
+                    <Button size="small" variant="ghost" onClick={() => props.onClear?.()}>
+                      Stop goal
+                    </Button>
+                  </Show>
+                  <Show when={state().status === "complete"}>
+                    <Button size="small" variant="ghost" disabled={props.disabled} onClick={() => props.onStop?.()}>
+                      Dismiss goal
+                    </Button>
+                  </Show>
+                </div>
               </div>
             </>
           )}

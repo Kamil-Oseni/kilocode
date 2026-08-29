@@ -331,12 +331,13 @@ html[data-theme="kilo-vscode"]
 }
 /* raya_change end */
 
-/* raya_change start - inline agent-edit review: a quiet hued block wrapping the
- * edit card, with rounded Undo/Keep pills and an Instrument-Serif "N of M"
- * navigator. Hue keys off the edit status (added/deleted/modified) with a low
- * wash and a single left stroke — no amber, no gratuitous borders. */
+/* raya_change start - inline agent-edit review: a SOLID Eden card wrapping the
+ * edit, with a dashed Undo pill, a filled-primary Keep pill, and an
+ * Instrument-Serif "N of M" navigator. No card tint, no colored left stroke —
+ * the diff's own +/- lines carry status color; a small status dot is the only
+ * hue on the chrome. This matches Eden's raised-surface cards. */
 html[data-theme="kilo-vscode"] .chat-view [data-component="edit-review-block"] {
-  --review-hue: var(--raya-primary);
+  --review-hue: var(--text-weak, var(--vscode-descriptionForeground));
 }
 html[data-theme="kilo-vscode"] .chat-view [data-component="edit-review-block"][data-review-status="added"] {
   --review-hue: #2f9e5f;
@@ -345,22 +346,30 @@ html[data-theme="kilo-vscode"] .chat-view [data-component="edit-review-block"][d
   --review-hue: #d1554b;
 }
 html[data-theme="kilo-vscode"] .chat-view [data-component="edit-review-block"][data-review-pending] {
-  border-radius: var(--raya-radius-md);
-  border: var(--raya-hairline) solid color-mix(in srgb, var(--review-hue) 26%, transparent);
-  border-inline-start: 2px solid color-mix(in srgb, var(--review-hue) 60%, transparent);
-  background: color-mix(in srgb, var(--review-hue) 6%, transparent);
+  border-radius: var(--raya-radius-md-plus, 10px);
+  border: var(--raya-hairline) solid var(--border-weak-base, var(--vscode-panel-border));
+  background: var(--surface-raised-base, var(--vscode-editorWidget-background));
   overflow: hidden;
 }
 html[data-theme="kilo-vscode"] .chat-view [data-slot="edit-review-actions"] {
   display: flex;
   align-items: center;
-  gap: var(--raya-space-6);
-  padding: var(--raya-space-6) var(--raya-space-10);
-  border-top: var(--raya-hairline) solid color-mix(in srgb, var(--review-hue) 18%, transparent);
+  gap: var(--raya-space-8);
+  padding: var(--raya-space-8) var(--raya-space-12);
+  border-top: var(--raya-hairline) solid var(--border-weak-base, var(--vscode-panel-border));
+}
+/* Restrained status cue: a single dot before the pills, tinted by edit status. */
+html[data-theme="kilo-vscode"] .chat-view [data-slot="edit-review-actions"]::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: var(--raya-radius-pill);
+  background: var(--review-hue);
+  flex: none;
 }
 html[data-theme="kilo-vscode"] .chat-view :where([data-slot="edit-review-undo"], [data-slot="edit-review-keep"]) {
-  height: 24px;
-  padding: 0 var(--raya-space-12);
+  height: 26px;
+  padding: 0 var(--raya-space-14, 14px);
   font-family: var(--font-body);
   font-size: var(--kilo-font-size-12);
   border-radius: var(--raya-radius-pill);
@@ -369,15 +378,16 @@ html[data-theme="kilo-vscode"] .chat-view :where([data-slot="edit-review-undo"],
     background-color var(--raya-duration-fast) var(--raya-ease-out),
     border-color var(--raya-duration-fast) var(--raya-ease-out);
 }
-/* Undo is the quiet, reversible choice: a hairline pill. */
+/* Undo is the quiet, reversible choice: an Eden dashed pill. */
 html[data-theme="kilo-vscode"] .chat-view [data-slot="edit-review-undo"] {
   background: transparent;
-  border: var(--raya-hairline) solid color-mix(in srgb, var(--text-weak) 30%, transparent);
+  border: var(--raya-hairline) dashed color-mix(in srgb, var(--text-weak) 36%, transparent);
   color: var(--text-base, var(--vscode-foreground));
 }
 html[data-theme="kilo-vscode"] .chat-view [data-slot="edit-review-undo"]:hover {
-  background: color-mix(in srgb, var(--text-weak) 10%, transparent);
-  border-color: color-mix(in srgb, var(--text-weak) 44%, transparent);
+  background: color-mix(in srgb, var(--raya-primary) 6%, transparent);
+  border-color: color-mix(in srgb, var(--raya-primary) 45%, transparent);
+  color: var(--raya-primary);
 }
 /* Keep is the primary action: a filled Eden-blue pill. */
 html[data-theme="kilo-vscode"] .chat-view [data-slot="edit-review-keep"] {

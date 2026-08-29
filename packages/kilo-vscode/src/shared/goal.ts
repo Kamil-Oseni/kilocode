@@ -53,10 +53,26 @@ export function hasGoalIntent(text: string) {
 }
 // raya_change end
 
+// raya_change - a bare /goal token anywhere in the message arms a goal, matching how
+// Cursor lets the command sit at the start, middle, or end of a sentence. The token is
+// stripped and the remaining prose becomes the objective.
+const inline = /(^|\s)\/goal(?=\s|$)/i
+
 export function parseGoalCommand(text: string): GoalCommand | undefined {
   const match = text.trim().match(/^\/goal(?:\s+([\s\S]*))?$/i)
   if (!match) {
     const objective = text.trim()
+    // raya_change start - accept /goal placed after or inside a sentence, not only leading
+    if (inline.test(objective)) {
+      const stripped = objective.replace(inline, "$1").replace(/\s{2,}/g, " ").trim()
+      if (!stripped) return { kind: "usage", notice: usage }
+      return {
+        kind: "start",
+        objective: stripped,
+        notice: "Raya recognized the /goal command and will continue until it is verified or honestly blocked.",
+      }
+    }
+    // raya_change end
     if (!hasGoalIntent(objective)) return
     return {
       kind: "start",

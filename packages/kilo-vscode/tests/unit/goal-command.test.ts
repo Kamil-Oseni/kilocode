@@ -23,6 +23,24 @@ describe("native goal command", () => {
     })
   })
 
+  // raya_change start - /goal anywhere in the message, not only leading
+  it("arms a goal when /goal is placed after or inside the sentence", () => {
+    expect(parseGoalCommand("make the tests green /goal")).toMatchObject({
+      kind: "start",
+      objective: "make the tests green",
+      notice: expect.stringContaining("/goal command"),
+    })
+    expect(parseGoalCommand("ship /goal the provider hub")).toMatchObject({
+      kind: "start",
+      objective: "ship the provider hub",
+    })
+  })
+
+  it("does not treat a path-like token as the /goal command", () => {
+    expect(parseGoalCommand("update packages/goal/index.ts")).toBeUndefined()
+  })
+  // raya_change end
+
   it("requires concrete work and a real evidence audit in the same turn", () => {
     const text = goalPrompt("ship goal mode")
     expect(text).toContain("first concrete unit of work now in this same turn")

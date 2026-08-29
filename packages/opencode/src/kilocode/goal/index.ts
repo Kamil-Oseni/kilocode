@@ -337,20 +337,26 @@ export namespace RayaGoal {
         })
       }
       if (input.status === "blocked") {
-        if (state.status !== "active") {
-          return yield* new AuditError({ message: `Only an active goal can be marked blocked.` })
+        // raya_change start - blocking is idempotent. recordTurn can auto-block a goal
+        // when the model narrates completion without a clean update_goal; the model then
+        // has no way to report blocked because the old rule required an active goal, so it
+        // burned steps retrying a rejected call. Only a completed goal cannot be blocked.
+        if (state.status === "complete") {
+          return yield* new AuditError({ message: `A completed goal cannot be marked blocked.` })
         }
         const reason = clean(input.reason ?? "")
         if (!reason) return yield* new AuditError({ message: "A blocked goal requires a plain reason." })
+        const wasActive = state.status === "active"
         const next = yield* save(sessionID, {
           ...state,
           status: "blocked",
           blockedReason: reason,
           updatedAt: now,
-          activeMs: elapsed(state, now),
+          activeMs: wasActive ? elapsed(state, now) : state.activeMs,
           activeAt: undefined,
           progress: progress(state, { at: now, kind: "status", message: `Blocked: ${reason}` }),
         })
+        // raya_change end
         if (state.selfHealID) {
           yield* healing
             .update(state.selfHealID, { status: "blocked", blockedReason: reason, reloadRequired: false })
@@ -434,6 +440,20 @@ export namespace RayaGoal {
         return yield* new AuditError({ message: "Completion requires at least one concrete requirement." })
       }
       const parts = tools(messages)
+      // raya_change start - build an actionable menu of the real, eligible evidence callIDs.
+      // Providers that expose tool calls as text markup emit unstable/colliding callIDs
+      // (e.g. dsml-0), so the model repeatedly cites the wrong one and exhausts its step
+      // budget guessing. Listing the true eligible IDs in the rejection lets it self-correct
+      // in one retry instead of many.
+      const eligible = parts.filter(
+        (part) => part.state.status === "completed" && started(part) >= createdAt && !controls.has(part.tool),
+      )
+      const menu =
+        eligible
+          .map((part) => `${part.callID} (${part.tool})`)
+          .slice(0, 20)
+          .join(", ") || "none yet — perform and verify concrete work before completing"
+      // raya_change end
       const needsSmoke = (value: string) =>
         /smoke(?:\s|-)*test.{0,40}(?:pass|green)|(?:pass|green).{0,40}smoke(?:\s|-)*test/i.test(value)
       for (const requirement of audit.requirements) {
@@ -459,7 +479,8 @@ export namespace RayaGoal {
             controls.has(part.tool)
           ) {
             return yield* new AuditError({
-              message: `Evidence ${ref} is not a completed post-goal work or verification tool call.`,
+              // raya_change - name the real eligible callIDs so the model retries correctly once
+              message: `Evidence ${ref} is not a completed post-goal work or verification tool call. Eligible evidence callIDs: ${menu}.`,
             })
           }
           cited.push(part)

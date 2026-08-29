@@ -190,6 +190,11 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     // user message, which wiped the chat and offered a nonsensical redo.)
     const sid = id()
     if (!sid || session.status() !== "idle") return
+    // raya_change - retire the Keep all/Undo all cluster immediately, same as keepAll.
+    // The backend revert + reviewStats refresh is async, so without pinning kept() the
+    // buttons linger after "Confirm undo" until stats happen to drop to zero.
+    const key = changeKey()
+    if (key) setKept(key)
     vscode.postMessage({ type: "discardSessionChanges", sessionID: sid })
     editReview.keepAll(sid) // raya_change - clear inline review chrome for every edit
     setDiscarding(false)

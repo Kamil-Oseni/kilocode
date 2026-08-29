@@ -295,6 +295,22 @@ describe("RayaGoal", () => {
     }),
   )
 
+  // raya_change - blocking is idempotent: once recordTurn auto-blocks a goal, the model's
+  // own update_goal(status="blocked") must succeed (updating the reason) instead of dead-ending.
+  it.live("re-blocks an already blocked goal instead of rejecting", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const sessionID = SessionID.make(`ses_goal_${crypto.randomUUID()}`)
+      const goals = setup(storage, () => [])
+      yield* Effect.addFinalizer(() => goals.clear(sessionID))
+      yield* goals.create(sessionID, "Do the thing")
+      yield* goals.update(sessionID, { status: "blocked", reason: "First block." })
+      const again = yield* goals.update(sessionID, { status: "blocked", reason: "Still blocked, refined reason." })
+      expect(again.status).toBe("blocked")
+      expect(again.blockedReason).toBe("Still blocked, refined reason.")
+    }),
+  )
+
   // raya_change - the agent can self-pause when it hits an approval wall, and resume later
   it.live("lets the model pause an active goal and resume it", () =>
     Effect.gen(function* () {

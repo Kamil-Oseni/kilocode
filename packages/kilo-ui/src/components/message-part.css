@@ -214,6 +214,21 @@
     box-shadow 0.15s;
 }
 
+[data-slot="user-message-text"] [data-highlight="slash"] {
+  font-weight: 600;
+  color: var(--vscode-foreground);
+  background: color-mix(in srgb, var(--vscode-foreground) 9%, transparent);
+  border-radius: 6px;
+  padding: 0.05em 0.34em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+[data-slot="user-message-text"] [data-highlight="slash"][data-command="goal"] {
+  color: var(--raya-primary, var(--raya-accent));
+  background: color-mix(in srgb, var(--raya-primary, var(--raya-accent)) 18%, transparent);
+}
+
 [data-slot="user-message-text"] [data-highlight="file"][data-clickable]:hover {
   background-color: color-mix(in srgb, var(--vscode-textLink-foreground, var(--syntax-property)) 25%, transparent);
   box-shadow: 0 0 0 0.5px color-mix(in srgb, var(--vscode-textLink-foreground, var(--syntax-property)) 40%, transparent);

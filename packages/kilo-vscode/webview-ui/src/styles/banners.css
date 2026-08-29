@@ -376,7 +376,7 @@
  * VS Code semantic bridge in the editor, theme mocks in the preview harness.
  */
 .goal-banner {
-  --goal-surface: var(--surface-raised-base, var(--raya-eden-surface-raised));
+  --goal-surface: transparent; /* raya_change - hierarchy comes from type and dividers, not decorative tint */
   --goal-text: var(--text-base, var(--raya-eden-ink));
   --goal-text-strong: var(--text-strong, var(--raya-eden-ink-strong));
   --goal-text-quiet: var(--text-weak, var(--raya-eden-ink-soft));
@@ -387,6 +387,10 @@
   /* The status accent defaults to the live focus color; status rules below
    * redeclare it. Status colors stay reserved for status meaning. */
   --goal-status: var(--goal-focus);
+  /* An active goal's progress is the one place the reserved warm accent belongs.
+   * Terminal states below hand the fill to the status color so it agrees with
+   * the status word. */
+  --goal-progress-fill: var(--raya-accent, var(--goal-focus));
 
   display: grid;
   gap: var(--raya-space-6);
@@ -402,14 +406,35 @@
 
 .goal-banner[data-status="paused"] {
   --goal-status: var(--surface-warning-strong, var(--raya-eden-warning));
+  --goal-progress-fill: var(--goal-status);
 }
 
 .goal-banner[data-status="complete"] {
   --goal-status: var(--surface-success-strong, var(--raya-eden-success));
+  --goal-progress-fill: var(--goal-status);
 }
 
 .goal-banner[data-status="blocked"] {
   --goal-status: var(--surface-critical-strong, var(--raya-eden-critical));
+  --goal-progress-fill: var(--goal-status);
+}
+
+/* raya_change - hairline progress track: a 2px inset rail with a warm fill, the
+   goal-bar analogue to Cursor's bottom progress. No glow, no gradient. */
+.goal-banner__track {
+  height: 2px;
+  border-radius: var(--raya-radius-full, 999px);
+  background: color-mix(in srgb, var(--goal-line) 70%, transparent);
+  overflow: hidden;
+}
+
+.goal-banner__track-fill {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  border-radius: inherit;
+  background: var(--goal-progress-fill);
+  transition: width var(--raya-duration-base) var(--raya-ease-out);
 }
 
 /* Header: status cluster reads first, usage meta yields to the right. */
@@ -447,8 +472,8 @@
 
 .goal-banner__usage {
   margin-left: auto;
-  font-family: var(--font-mono);
-  font-size: var(--kilo-font-size-10);
+  font-family: var(--font-display); /* raya_change - Instrument Serif for the run amounts, Eden-style */
+  font-size: var(--kilo-font-size-13);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   color: var(--goal-text-quiet);

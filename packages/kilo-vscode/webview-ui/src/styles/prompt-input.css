@@ -3,16 +3,20 @@
    ============================================ */
 
 :root {
-  --prompt-min-gutter: 6px;
+  --prompt-min-gutter: var(--raya-space-8);
 }
 
+/* raya_change - editorial composer: a calm raised sheet with a hairline and a
+   generous radius, not a boxed VS Code input. Focus is a single quiet border
+   shift, no glow. */
 .prompt-input-container {
   position: relative;
   margin: var(--prompt-min-gutter);
-  border-radius: 0.25rem;
-  background-color: var(--input-base, var(--vscode-input-background, #3c3c3c));
-  border: 1px solid var(--border-weak-base, var(--vscode-input-border, #3c3c3c));
+  border-radius: var(--raya-radius-lg);
+  background-color: var(--surface-raised-base, var(--input-base, var(--vscode-input-background, #3c3c3c)));
+  border: var(--raya-hairline) solid var(--border-base, var(--vscode-input-border, #3c3c3c));
   box-shadow: none;
+  transition: border-color var(--raya-duration-fast) var(--raya-ease-out);
 
   &:focus-within {
     border-color: var(--border-focus, var(--vscode-focusBorder, #007fd4));
@@ -321,7 +325,16 @@
   outline: 1px solid var(--border-focus, var(--vscode-focusBorder));
 }
 
-/* Image Attachments */
+/* Attachments */
+.prompt-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .image-attachments {
   display: flex;
   flex-wrap: wrap;
@@ -334,6 +347,31 @@
   width: 48px;
   height: 48px;
   flex-shrink: 0;
+}
+
+.image-attachment[data-file] {
+  width: min(220px, 70%);
+}
+
+.file-attachment {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 48px;
+  padding: 8px 10px;
+  overflow: hidden;
+  border: 1px solid var(--border-weak-base, var(--vscode-widget-border));
+  border-radius: var(--raya-radius-sm, 4px);
+  color: var(--text-base, var(--vscode-foreground));
+  font-family: var(--font-body, var(--font-family-sans));
+}
+
+.file-attachment > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .image-attachment img {
@@ -387,16 +425,20 @@
   align-items: flex-end;
 }
 
+/* raya_change - the composer speaks in Outfit like the rest of Raya. The
+   overlay below mirrors these metrics exactly (font, size, line-height,
+   padding) so the highlight pills and caret stay aligned character for
+   character. */
 .prompt-input {
   flex: 1;
-  min-height: 54px;
+  min-height: 56px;
   max-height: 200px;
-  padding: 8px 8px calc(8px + 1.4em);
+  padding: var(--raya-space-10) var(--raya-space-12) calc(var(--raya-space-10) + 1.5em);
   color: transparent;
   caret-color: var(--vscode-input-foreground);
-  font-family: var(--vscode-font-family);
+  font-family: var(--font-body);
   font-size: var(--font-size-base);
-  line-height: 1.4;
+  line-height: 1.5;
   resize: none;
   outline: none;
   scrollbar-gutter: stable;
@@ -437,10 +479,10 @@
   right: 0;
   bottom: 0;
   pointer-events: none;
-  padding: 8px 8px calc(8px + 1.4em);
-  font-family: var(--vscode-font-family);
+  padding: var(--raya-space-10) var(--raya-space-12) calc(var(--raya-space-10) + 1.5em);
+  font-family: var(--font-body); /* raya_change - match .prompt-input exactly */
   font-size: var(--font-size-base);
-  line-height: 1.4;
+  line-height: 1.5;
   white-space: pre-wrap;
   /* Match textarea plaintext bidi behavior for each hard-newline paragraph. */
   unicode-bidi: plaintext;
@@ -450,6 +492,28 @@
   scrollbar-gutter: stable;
   z-index: 2;
   color: var(--vscode-input-foreground);
+}
+
+/* raya_change - slash commands read as filled pills. The overlay mirrors the
+   textarea character-for-character, so horizontal padding would drift the caret;
+   the box-shadow spread supplies the pill's visual padding without changing text
+   metrics. A calm neutral fill identifies any command; /goal keeps the one warm
+   accent so the persistent-goal verb stays the single emphasized token. */
+.prompt-input-slash {
+  font-weight: 600;
+  color: var(--raya-slash-fg, var(--vscode-foreground));
+  background: color-mix(in srgb, var(--vscode-foreground) 9%, transparent);
+  border-radius: 6px;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--vscode-foreground) 9%, transparent);
+}
+
+/* /goal carries Raya's Eden-blue primary — the persistent-goal verb is the one
+   emphasized token. Full-primary text on a faint primary wash keeps AA contrast
+   in both themes. */
+.prompt-input-slash[data-command="goal"] {
+  color: var(--raya-primary);
+  background: color-mix(in srgb, var(--raya-primary) 18%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--raya-primary) 18%, transparent);
 }
 
 .prompt-input-file-mention {
@@ -510,52 +574,65 @@
   line-height: 1.4;
 }
 
+/* raya_change - the toolbar reads as a quiet ledger line under the field, set
+   off by a hairline rather than its own surface, so the composer is one sheet. */
 .prompt-input-hint {
   display: flex;
   flex-wrap: nowrap;
   align-items: flex-start;
-  gap: 8px;
+  gap: var(--raya-space-8);
   font-size: var(--kilo-font-size-11);
   color: var(--vscode-descriptionForeground);
-  padding: 6px;
+  padding: var(--raya-space-6) var(--raya-space-8) var(--raya-space-8);
+  border-top: var(--raya-hairline) solid color-mix(in srgb, var(--border-base) 60%, transparent);
 }
 
 .prompt-input-hint-selectors {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--raya-space-4);
   flex: 1;
   min-width: 0;
 
+  /* raya_change - Eden selectors: rounded pills with a quiet hairline that fill
+     with the primary-ghost tint when open or hovered. No translucent-white chip
+     border, no transition:all. */
   [data-component="button"] {
     height: auto !important;
-    min-height: 22px;
-    padding: 4px 6px !important;
+    min-height: 24px;
+    padding: var(--raya-space-4) var(--raya-space-10) !important;
     font-size: var(--kilo-font-size-12);
     line-height: normal;
-    border-radius: 6px;
-    background: var(--surface-base);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--raya-radius-pill);
+    background: transparent;
+    border: var(--raya-hairline) solid color-mix(in srgb, var(--text-weak) 22%, transparent);
     box-shadow: none;
     opacity: 1;
-    gap: 6px;
+    gap: var(--raya-space-6);
     white-space: nowrap;
-    transition: all 150ms;
-    color: var(--text-base, var(--vscode-foreground));
+    transition:
+      background-color var(--raya-duration-fast) var(--raya-ease-out),
+      border-color var(--raya-duration-fast) var(--raya-ease-out),
+      color var(--raya-duration-fast) var(--raya-ease-out);
+    color: var(--text-weak, var(--vscode-descriptionForeground));
 
     &[data-expanded] {
-      background: var(--surface-base-hover) !important;
-      background-color: var(--surface-base-hover) !important;
+      background: var(--raya-primary-ghost) !important;
+      background-color: var(--raya-primary-ghost) !important;
+      border-color: color-mix(in srgb, var(--raya-primary) 40%, transparent);
+      color: var(--text-base, var(--vscode-foreground));
     }
 
     &:hover:not(:disabled) {
-      background: var(--surface-base-hover);
-      background-color: var(--surface-base-hover);
+      background: var(--raya-primary-ghost);
+      background-color: var(--raya-primary-ghost);
+      border-color: color-mix(in srgb, var(--raya-primary) 40%, transparent);
+      color: var(--text-base, var(--vscode-foreground));
     }
 
     &:focus-visible {
       outline: none;
-      box-shadow: 0 0 0 1px var(--border-focus);
+      box-shadow: 0 0 0 2px var(--raya-primary-soft);
     }
   }
 }
@@ -618,6 +695,25 @@
   color: var(--text-weak);
   opacity: 0.7;
   font-style: italic;
+}
+
+/* raya_change - the send button is Raya's primary action. Idle it stays a quiet
+   ghost icon; once there is something to send it fills with Eden blue and rounds
+   into a pill, so the primary is unmistakable and on-brand in both themes. */
+.prompt-input-hint-actions .prompt-send-button.prompt-send-button--ready {
+  background: var(--raya-primary) !important;
+  border-radius: var(--raya-radius-pill) !important;
+  padding: 4px 7px !important;
+  color: var(--raya-on-primary) !important;
+}
+
+.prompt-input-hint-actions .prompt-send-button.prompt-send-button--ready [data-slot="icon-svg"],
+.prompt-input-hint-actions .prompt-send-button.prompt-send-button--ready svg {
+  color: var(--raya-on-primary) !important;
+}
+
+.prompt-input-hint-actions .prompt-send-button.prompt-send-button--ready:hover:not(:disabled) {
+  background: var(--raya-primary-strong) !important;
 }
 
 .prompt-input-hint-actions {

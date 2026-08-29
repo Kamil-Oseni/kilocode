@@ -6,6 +6,8 @@ import "@kilocode/kilo-ui/styles"
 import "../src/styles/eden.css"
 import "../src/styles/banners.css"
 import "../src/styles/task-header.css"
+import "../src/styles/session-actions.css" // raya_change - preview the Review/Keep/Undo cluster
+import "../src/styles/prompt-input.css" // raya_change - preview the composer chrome
 import "./preview.css"
 import { render } from "solid-js/web"
 import { For, Show, type Component } from "solid-js"
@@ -33,6 +35,13 @@ type PvState =
   | "complete"
   | "blocked"
   | "notice"
+  | "slash"
+  | "review"
+  | "review-undo"
+  | "composer"
+  | "composer-focus"
+  | "topnav"
+  | "transcript"
 type Theme = "light" | "dark"
 
 const states: PvState[] = [
@@ -50,6 +59,13 @@ const states: PvState[] = [
   "complete",
   "blocked",
   "notice",
+  "slash",
+  "review",
+  "review-undo",
+  "composer",
+  "composer-focus",
+  "topnav",
+  "transcript",
 ]
 const themes: Theme[] = ["light", "dark"]
 
@@ -111,15 +127,13 @@ const propsFor = (state: PvState): GoalBannerProps => {
   if (state === "disabled") return { goal: goal("active"), disabled: true }
   if (state === "expanded") return { goal: goal("active"), todos, expanded: true }
   if (state === "editing") return { goal: goal("active"), todos, expanded: true, editing: true }
-  if (state === "discard") return { goal: goal("paused"), todos, expanded: true, confirmingDiscard: true }
+  if (state === "discard") return { goal: goal("paused"), todos, expanded: true, confirmingStop: true }
   if (state === "discard-busy") {
     return {
       goal: goal("paused"),
       todos,
       expanded: true,
-      confirmingDiscard: true,
-      discardDisabled: true,
-      discardHint: "Pause the goal and wait for the current step to stop before discarding.",
+      confirmingStop: true,
     }
   }
   if (state === "paused") return { goal: goal("paused") }
@@ -138,14 +152,227 @@ const propsFor = (state: PvState): GoalBannerProps => {
   return { goal: goal("active") }
 }
 
+// raya_change - presentational replica of the slash pill in a rendered user
+// bubble, using the real kilo-ui class contract so the composer and transcript
+// pill treatment can be verified by eye in both themes.
+const SlashBubble: Component = () => (
+  <div class="chat-view">
+    <div data-component="user-message">
+      <div data-slot="user-message-text">
+        <span data-highlight="slash" data-command="goal">
+          /goal
+        </span>{" "}
+        Redesign the composer, then run{" "}
+        <span data-highlight="slash" data-command="loop">
+          /loop
+        </span>{" "}
+        to keep iterating on the preview.
+      </div>
+    </div>
+  </div>
+)
+
+// raya_change - the chat-level Review changes cluster: Review changes with counts,
+// Keep all, and the in-place Undo all -> Confirm undo swap (no clipping question).
+const ReviewCluster: Component<{ confirming?: boolean }> = (props) => (
+  <div class="session-actions-row">
+    <div class="session-review-cluster">
+      <button type="button" class="session-move-changes session-move-changes--has-changes">
+        <span class="session-review-label">Review changes</span>
+        <span class="session-diff-add">+128</span>
+        <span class="session-diff-del">-14</span>
+      </button>
+      <Show when={!props.confirming}>
+        <button type="button" class="session-move-changes">
+          Keep all
+        </button>
+      </Show>
+      <Show
+        when={props.confirming}
+        fallback={
+          <button type="button" class="session-move-changes">
+            Undo all
+          </button>
+        }
+      >
+        <button type="button" class="session-move-changes session-move-changes--confirm">
+          Confirm undo
+        </button>
+        <button type="button" class="session-move-changes">
+          Cancel
+        </button>
+      </Show>
+    </div>
+  </div>
+)
+
+// raya_change - presentational replica of the composer chrome using the real
+// class contract. The overlay mirrors the textarea so the in-field slash pill
+// and caret alignment can be judged by eye. Empty draft shows the placeholder.
+const Composer: Component<{ focus?: boolean; empty?: boolean }> = (props) => (
+  <div class="prompt-input-container" style={props.focus ? "border-color: var(--border-focus)" : ""}>
+    <div class="prompt-input-wrapper">
+      <div class="prompt-input-ghost-wrapper">
+        <Show when={!props.empty}>
+          <div class="prompt-input-highlight-overlay" aria-hidden="true">
+            <span class="prompt-input-slash" data-command="goal">
+              /goal
+            </span>{" "}
+            Redesign the composer as one calm editorial sheet.
+          </div>
+        </Show>
+        <textarea
+          class="prompt-input"
+          placeholder="Ask Raya, or start a durable goal with /goal"
+          value={props.empty ? "" : "/goal Redesign the composer as one calm editorial sheet."}
+          rows={1}
+        />
+      </div>
+    </div>
+    <div class="prompt-input-hint">
+      <div class="prompt-input-hint-selectors">
+        <button type="button" data-component="button">
+          Agent
+        </button>
+        <button type="button" data-component="button">
+          qwen3-max
+        </button>
+        <button type="button" data-component="button">
+          Thinking
+        </button>
+      </div>
+      <div class="prompt-input-hint-actions">
+        <button type="button" data-component="button" aria-label="Attach">
+          +
+        </button>
+        <button
+          type="button"
+          data-component="button"
+          class="prompt-send-button prompt-send-button--ready"
+          aria-label="Send"
+        >
+          ↑
+        </button>
+      </div>
+    </div>
+  </div>
+)
+
+// raya_change - top-nav replica using the real task-header class contract:
+// serif title, mono run metrics, text-first Summarize, quiet expand chevron.
+const TopNav: Component = () => (
+  <div data-component="task-header">
+    <div data-slot="task-header-title">
+      <span data-slot="task-header-title-trigger">
+        <span data-slot="task-header-title-label" dir="auto">
+          Redesign Raya into an editorial system
+        </span>
+      </span>
+    </div>
+    <div data-slot="task-header-stats">
+      <span>$0.42</span>
+      <span>38%</span>
+      <button type="button" data-component="button" class="task-header-compact">
+        Summarize
+      </button>
+      <button type="button" data-slot="task-header-expand" aria-label="Toggle timeline">
+        ⌄
+      </button>
+    </div>
+  </div>
+)
+
+// raya_change - transcript replica exercising the three treatments the objective
+// names: grey Thought/Explored affordance, compact mono file-edit header, grey
+// terminal output. Uses the real kilo-ui class contract inside .chat-view so the
+// theme-scoped rules apply.
+const Transcript: Component = () => (
+  <div class="chat-view">
+    <div data-component="reasoning-part">
+      <div data-slot="collapsible-trigger">
+        <div data-slot="reasoning-header">
+          <span data-component="icon">◦</span>
+          <span data-slot="reasoning-label">Thought</span>
+          <span data-slot="reasoning-title">for 6s · weighed the composer focus treatment</span>
+        </div>
+      </div>
+    </div>
+    <div data-component="tool-part-wrapper" data-tool="edit">
+      <div data-component="tool-trigger">
+        <div data-component="edit-trigger">
+          <div data-slot="message-part-title-area">
+            <div data-slot="message-part-title">
+              <span data-slot="message-part-title-filename">prompt-input.css</span>
+              <span data-slot="message-part-directory-inline">webview-ui/src/styles</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div data-component="bash-output">
+      <div data-slot="bash-terminal">
+        <div data-slot="bash-section" data-kind="command">
+          <span data-slot="bash-prompt">$</span>
+          <div data-slot="bash-section-code">
+            <pre data-slot="bash-pre">
+              <code>bun run typecheck</code>
+            </pre>
+          </div>
+        </div>
+        <div data-slot="bash-section" data-kind="output">
+          <div data-slot="bash-section-code">
+            <pre data-slot="bash-pre">
+              <code>Checked 42 files in 1.2s. No errors.</code>
+            </pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+)
+
+const chrome = new Set<PvState>([
+  "slash",
+  "review",
+  "review-undo",
+  "composer",
+  "composer-focus",
+  "topnav",
+  "transcript",
+])
+
 const Fixture: Component<{ id: string; theme: Theme; state: PvState }> = (props) => (
   <figure class="pv-fixture" data-fixture={props.id}>
     <figcaption class="pv-fixture__label">
       {props.theme} · {props.state}
     </figcaption>
     <div class={`pv-panel pv-theme--${props.theme}`}>
-      <Show when={props.state === "usage"} fallback={<GoalBannerView {...propsFor(props.state)} />}>
+      <Show when={props.state === "usage"}>
         <UsageHistoryView range="7d" usage={usage} locale="en" providers={{}} />
+      </Show>
+      <Show when={props.state === "slash"}>
+        <SlashBubble />
+      </Show>
+      <Show when={props.state === "review"}>
+        <ReviewCluster />
+      </Show>
+      <Show when={props.state === "review-undo"}>
+        <ReviewCluster confirming />
+      </Show>
+      <Show when={props.state === "composer"}>
+        <Composer empty />
+      </Show>
+      <Show when={props.state === "composer-focus"}>
+        <Composer focus />
+      </Show>
+      <Show when={props.state === "topnav"}>
+        <TopNav />
+      </Show>
+      <Show when={props.state === "transcript"}>
+        <Transcript />
+      </Show>
+      <Show when={props.state !== "usage" && !chrome.has(props.state)}>
+        <GoalBannerView {...propsFor(props.state)} />
       </Show>
     </div>
   </figure>

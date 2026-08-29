@@ -120,11 +120,18 @@
   --raya-space-20: 20px;
   --raya-space-24: 24px;
 
-  /* Radius */
+  /* Radius — Eden's scale (sm 4 · md 8 · md-plus 10 fields · lg 12 cards · xl 16
+   * modals · pill 9999). */
   --raya-radius-sm: 4px;
-  --raya-radius-md: 6px;
-  --raya-radius-lg: 10px;
-  --raya-radius-full: 999px;
+  --raya-radius-md: 8px;
+  --raya-radius-md-plus: 10px;
+  --raya-radius-lg: 12px;
+  --raya-radius-xl: 16px;
+  --raya-radius-pill: 9999px;
+  --raya-radius-full: 9999px;
+
+  /* Eden dashed-selector border, reused by pills and idle selectors. */
+  --raya-dash: 1.5px;
 
   /* Hairline borders */
   --raya-hairline: 1px;
@@ -136,21 +143,191 @@
   --raya-ease-out: cubic-bezier(0.2, 0, 0, 1);
   --raya-ease-in-out: cubic-bezier(0.45, 0, 0.55, 1);
 
-  /* Eden fallback palette.
-   * Day is warm paper with a deep garden emerald; night is warm near-black with
-   * a dusk gold. These resolve only when a semantic token has no theme source.
+  /* Eden fallback palette — neutral greys, never warm/amber. Resolves only when
+   * a semantic token has no theme source (e.g. the preview harness). Matches
+   * Eden's canvas (#f5f5f5 / raised #ececec) and ink (#222).
    */
-  --raya-eden-surface: #f4f1ea;
-  --raya-eden-surface-raised: #faf8f3;
-  --raya-eden-surface-hover: #ebe7dc;
-  --raya-eden-ink: #3a382f;
-  --raya-eden-ink-strong: #211f19;
-  --raya-eden-ink-soft: #776f5c;
-  --raya-eden-line: #e0d9c8;
-  --raya-eden-accent: #2e6b50;
-  --raya-eden-on-accent: #f6f4ee;
-  --raya-eden-success: #2f7d51;
-  --raya-eden-warning: #a07a1f;
-  --raya-eden-critical: #b3452f;
+  --raya-eden-surface: #f5f5f5;
+  --raya-eden-surface-raised: #ececec;
+  --raya-eden-surface-hover: #dedede;
+  --raya-eden-ink: #222222;
+  --raya-eden-ink-strong: #111111;
+  --raya-eden-ink-soft: rgba(34, 34, 34, 0.64);
+  --raya-eden-line: #d0d0d0;
+  --raya-eden-accent: #45557a;
+  --raya-eden-on-accent: #ffffff;
+  --raya-eden-success: #1b6e3a;
+  --raya-eden-warning: #b45309;
+  --raya-eden-critical: #b42318;
+
+  /* Eden blue is Raya's one primary — buttons, focus, /goal, and goal progress.
+   * Theme-aware: the deep slate reads on light paper, the light slate reads on
+   * dark. Dark is the default here; the .vscode-light / preview-light overrides
+   * below swap in the deep slate. No amber anywhere. */
+  --raya-primary: #9ab0d6;
+  --raya-primary-strong: #b4c5e1;
+  --raya-on-primary: #16223b;
+  --raya-primary-soft: color-mix(in srgb, var(--raya-primary) 16%, transparent);
+  --raya-primary-ghost: color-mix(in srgb, var(--raya-primary) 9%, transparent);
+
+  /* Legacy accent name kept as an alias so every prior amber usage (/goal pill,
+   * goal progress) now resolves to the Eden-blue primary. */
+  --raya-accent: var(--raya-primary);
+  --raya-accent-strong: var(--raya-primary-strong);
 }
+
+/* Light editor themes swap in Eden's deep slate primary with white on-color.
+ * VS Code adds .vscode-light to <body> for light and high-contrast-light themes. */
+body.vscode-light,
+.vscode-high-contrast-light {
+  --raya-primary: #45557a;
+  --raya-primary-strong: #303b54;
+  --raya-on-primary: #ffffff;
+  --raya-eden-ink-soft: rgba(34, 34, 34, 0.64);
+}
+
+/* ===== Applied type system =====
+ * kilo-ui defaults to the host editor font. Raya deliberately overrides that
+ * compatibility token so every chat surface uses Outfit, then gives semantic
+ * headings and response structure the quieter Instrument Serif display voice.
+ */
+html[data-theme="kilo-vscode"] {
+  --font-family-sans: var(--font-body);
+  --font-family-mono: var(--font-mono);
+  font-family: var(--font-body);
+  font-weight: var(--raya-weight-body);
+  line-height: var(--raya-leading-body);
+}
+
+html[data-theme="kilo-vscode"] :where(h1, h2, h3, h4, h5, h6),
+html[data-theme="kilo-vscode"] [data-slot="task-header-title-label"],
+html[data-theme="kilo-vscode"] .work-style-welcome {
+  font-family: var(--font-display);
+  font-weight: 400;
+  line-height: var(--raya-leading-tight);
+}
+
+html[data-theme="kilo-vscode"] [data-component="markdown"] h1 {
+  font-size: 1.5em;
+}
+
+html[data-theme="kilo-vscode"] [data-component="markdown"] h2 {
+  font-size: 1.3em;
+}
+
+html[data-theme="kilo-vscode"] [data-component="markdown"] h3 {
+  font-size: 1.15em;
+}
+
+html[data-theme="kilo-vscode"] [data-component="markdown"] :where(h4, h5, h6) {
+  font-size: 1em;
+}
+
+/* Editorial transcript rhythm: ordinary streamed responses receive the same
+ * hierarchy as compaction reports, while keeping prose on the shared surface. */
+html[data-theme="kilo-vscode"] .chat-view .vscode-session-turn[data-row="assistant"] {
+  padding-bottom: var(--raya-space-24);
+}
+
+html[data-theme="kilo-vscode"] .chat-view .vscode-session-turn-assistant {
+  gap: var(--raya-space-12);
+  max-width: var(--chat-readable-width);
+  margin-inline: auto;
+  background: transparent;
+}
+
+html[data-theme="kilo-vscode"]
+  .chat-view
+  :where(
+    .vscode-session-turn,
+    [data-component="assistant-parts"],
+    [data-component="user-message"],
+    [data-component="tool-part-wrapper"]
+  ) {
+  font-family: var(--font-body);
+  font-weight: var(--raya-weight-body);
+  line-height: 1.62;
+} /* raya_change - every conversation element inherits Raya typography without prompt-dependent markdown */
+
+html[data-theme="kilo-vscode"] .chat-view [data-component="user-message"] [data-slot="user-message-text"] {
+  font-family: var(--font-body);
+  font-weight: var(--raya-weight-body);
+  line-height: 1.62;
+  letter-spacing: 0.005em;
+  padding-block: var(--raya-space-10);
+}
+
+html[data-theme="kilo-vscode"] .chat-view [data-slot="user-message-text"] [data-highlight="slash"] {
+  font-weight: 600;
+  color: var(--vscode-foreground);
+  background: color-mix(in srgb, var(--vscode-foreground) 9%, transparent);
+  border-radius: 6px;
+  padding: 0.05em 0.34em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+html[data-theme="kilo-vscode"] .chat-view [data-slot="user-message-text"] [data-highlight="slash"][data-command="goal"] {
+  color: var(--raya-primary);
+  background: color-mix(in srgb, var(--raya-primary) 18%, transparent);
+}
+
+html[data-theme="kilo-vscode"] .chat-view [data-component="assistant-parts"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--raya-space-12);
+  background: transparent;
+}
+
+html[data-theme="kilo-vscode"] .chat-view :where([data-component="text-part"], [data-slot="text-part-body"]) {
+  margin-top: 0;
+  background: transparent;
+  font-family: var(--font-body);
+}
+
+html[data-theme="kilo-vscode"] .chat-view [data-component="text-part"] [data-component="markdown"] {
+  background: transparent;
+  line-height: 1.62;
+}
+
+html[data-theme="kilo-vscode"] .chat-view [data-component="text-part"] [data-component="markdown"] :where(p, ul, ol) {
+  margin-block: 0 var(--raya-space-12);
+}
+
+html[data-theme="kilo-vscode"]
+  .chat-view
+  [data-component="text-part"]
+  [data-component="markdown"]
+  :where(h1, h2, h3) {
+  margin-block: var(--raya-space-24) var(--raya-space-8);
+}
+
+html[data-theme="kilo-vscode"]
+  .chat-view
+  [data-component="text-part"]
+  [data-component="markdown"]
+  > :first-child {
+  margin-top: 0;
+}
+
+html[data-theme="kilo-vscode"]
+  .chat-view
+  [data-component="text-part"]
+  [data-component="markdown"]
+  > :last-child {
+  margin-bottom: 0;
+}
+
+/* Compact file-edit headers: the changed path stays in Outfit (mono is
+ * backup-only), tightened and quiet. One line names the file; the diff and
+ * actions stay subordinate. */
+html[data-theme="kilo-vscode"]
+  .chat-view
+  :where([data-component="edit-trigger"], [data-component="write-trigger"])
+  :where([data-slot="message-part-title-filename"], [data-slot="message-part-directory-inline"]) {
+  font-family: var(--font-body);
+  font-size: var(--kilo-font-size-12);
+  letter-spacing: 0;
+}
+/* raya_change end */
 /* raya_change end */

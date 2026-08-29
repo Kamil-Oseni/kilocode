@@ -225,6 +225,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   let textareaRef: HTMLTextAreaElement | undefined
   let highlightRef: HTMLDivElement | undefined
   let dropdownRef: HTMLDivElement | undefined
+  let uploadRef: HTMLInputElement | undefined // raya_change - explicit file attachment picker
   let slashDropdownRef: HTMLDivElement | undefined
 
   const boxKey = () => props.boxId ?? "prompt:default"
@@ -1470,6 +1471,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       onDragLeave={imageAttach.handleDragLeave}
       onDrop={imageAttach.handleDrop}
     >
+      <input
+        ref={uploadRef}
+        class="prompt-file-input"
+        type="file"
+        multiple
+        onChange={(event) => {
+          for (const file of Array.from(event.currentTarget.files ?? [])) imageAttach.add(file)
+          event.currentTarget.value = ""
+        }}
+      />
       <Show when={reviewComments().length > 0}>
         <ReviewComments
           comments={reviewComments()}
@@ -1588,15 +1599,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         <div class="image-attachments">
           <For each={imageAttach.images()}>
             {(img) => (
-              <div class="image-attachment">
-                <img
-                  src={img.dataUrl}
-                  alt={img.filename}
-                  title={img.filename}
-                  onClick={() =>
-                    vscode.postMessage({ type: "previewImage", dataUrl: img.dataUrl, filename: img.filename })
+              <div class="image-attachment" data-file={!img.mime.startsWith("image/") ? "" : undefined}>
+                <Show
+                  when={img.mime.startsWith("image/")}
+                  fallback={
+                    <span class="file-attachment" title={img.filename}>
+                      <FileIcon node={{ path: img.filename, type: "file" }} />
+                      <span>{img.filename}</span>
+                    </span>
                   }
-                />
+                >
+                  <img
+                    src={img.dataUrl}
+                    alt={img.filename}
+                    title={img.filename}
+                    onClick={() =>
+                      vscode.postMessage({ type: "previewImage", dataUrl: img.dataUrl, filename: img.filename })
+                    }
+                  />
+                </Show>
                 <button
                   type="button"
                   class="image-attachment-remove"
@@ -1617,8 +1638,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               {(seg) => (
                 <Show when={seg().highlight} fallback={<span>{seg().text}</span>}>
                   <span
-                    class="prompt-input-file-mention"
-                    classList={{ "prompt-input-file-mention--file": isPathMention(seg().text) }}
+                    class={seg().slash ? "prompt-input-slash" : "prompt-input-file-mention"}
+                    data-command={seg().slash}
+                    classList={{ "prompt-input-file-mention--file": !seg().slash && isPathMention(seg().text) }}
                     onClick={(e) => {
                       if (!isPathMention(seg().text)) return
                       if (mention.mentionedSessions().has(seg().text.replace(/^@/, ""))) return
@@ -1716,6 +1738,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           </Show>
         </div>
         <div class="prompt-input-hint-actions">
+          <Tooltip value={language.t("prompt.action.attach")} placement="top" openDelay={0}>
+            <IconButton
+              icon="plus"
+              size="small"
+              variant="ghost"
+              disabled={isDisabled()}
+              onClick={() => uploadRef?.click()}
+              aria-label={language.t("prompt.action.attach")}
+            />
+          </Tooltip>
+          {/* raya_change - explicit attachment entry point complements paste, drop, and @ mentions */}
           <Show when={showIndexing()}>
             <Tooltip value={indexing.status().message || indexing.label()} placement="top" openDelay={0}>
               <Button
@@ -1801,10 +1834,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 style={{
                   "border-radius": "999px",
                   background: voiceActive()
-                    ? "radial-gradient(circle at 35% 30%, #8be9ff, #6c63ff 48%, #282a68)"
+                    ? "radial-gradient(circle at 35% 30%, var(--raya-primary-strong), var(--raya-primary) 55%)"
                     : "radial-gradient(circle at 35% 30%, var(--vscode-descriptionForeground), var(--vscode-editor-background) 70%)",
                   "box-shadow": voiceActive()
-                    ? "0 0 0 1px color-mix(in srgb, #8be9ff 60%, transparent), 0 0 10px color-mix(in srgb, #6c63ff 65%, transparent)"
+                    ? "0 0 0 1px color-mix(in srgb, var(--raya-primary) 60%, transparent)"
                     : "inset 0 0 0 1px var(--vscode-widget-border)",
                 }}
               >
@@ -1819,9 +1852,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             when={showStop()}
             fallback={
               <Tooltip value={sendLabel()} placement="top" openDelay={0}>
+                {/* raya_change - send is the primary action: Eden-blue rounded button when armed */}
                 <Button
                   variant="ghost"
                   size="small"
+                  class="prompt-send-button"
+                  classList={{ "prompt-send-button--ready": canSend() }}
                   onClick={handleSendClick}
                   aria-disabled={!canSend()}
                   aria-label={sendLabel()}

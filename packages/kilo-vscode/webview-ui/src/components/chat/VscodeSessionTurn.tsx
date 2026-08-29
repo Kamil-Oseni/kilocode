@@ -29,7 +29,7 @@ import { useLanguage } from "../../context/language"
 import { useVSCode } from "../../context/vscode"
 import { useFeedback } from "../../context/feedback"
 import { visibleError } from "../../context/session-errors"
-import { isRenderable, bundlableTool } from "../../utils/transcript-parts"
+import { coalesceToolRows } from "../../utils/transcript-parts"
 import type { ErrorDisplayProps } from "./ErrorDisplay"
 import type { Message as WebMessage } from "../../types/messages"
 
@@ -77,40 +77,13 @@ export const VscodeSessionTurn: Component<VscodeSessionTurnProps> = (props) => {
   // only collapses tool one-liners within a single message, but the Auto flow
   // spreads chief_route, the delegated task, get_goal/update_goal, etc. across
   // separate assistant messages in one turn — so nothing collapsed and the
-  // transcript bloated. Coalesce a run of consecutive assistant messages whose
-  // renderable parts are ALL bundlable tool calls into one AssistantMessage (via
-  // its `parts` override), letting the existing within-message grouping collapse
-  // the combined run into a single inline "N steps" group. Any message carrying a
-  // prominent part (text, reasoning, edit, bash, question) breaks the run and
-  // renders on its own, unchanged. isRenderable is message-independent for tool
-  // parts, so merging tool-only parts under the run's first message id is safe.
-  const renderableParts = (m: SDKAssistantMessage) =>
-    ((data.store.part?.[m.id] ?? emptyParts) as SDKPart[]).filter((part) => isRenderable(part, m))
-  const coalescible = (m: SDKAssistantMessage) => {
-    const ps = renderableParts(m)
-    return ps.length > 0 && ps.every(bundlableTool)
-  }
-  type Row = { key: string; message: SDKAssistantMessage; parts?: SDKPart[] }
-  const rows = createMemo<Row[]>(() => {
-    const out: Row[] = []
-    let run: SDKAssistantMessage[] = []
-    const flush = () => {
-      if (run.length === 0) return
-      if (run.length === 1) out.push({ key: run[0]!.id, message: run[0]! })
-      else out.push({ key: run[0]!.id, message: run[0]!, parts: run.flatMap(renderableParts) })
-      run = []
-    }
-    for (const m of assistantMessages()) {
-      if (coalescible(m)) {
-        run.push(m)
-        continue
-      }
-      flush()
-      out.push({ key: m.id, message: m })
-    }
-    flush()
-    return out
-  })
+  // transcript bloated. coalesceToolRows merges a run of consecutive tool-only
+  // messages into one AssistantMessage (via its `parts` override), letting the
+  // within-message grouping collapse the combined run into a single inline
+  // "N steps" group. The coalescing logic is unit-tested in transcript-parts.
+  const rows = createMemo(() =>
+    coalesceToolRows(assistantMessages(), (m) => (data.store.part?.[m.id] ?? emptyParts) as SDKPart[]),
+  )
   // raya_change end
 
   const interrupted = createMemo(() => assistantMessages().some((m) => m.error?.name === "MessageAbortedError"))

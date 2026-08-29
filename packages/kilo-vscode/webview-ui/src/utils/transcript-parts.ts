@@ -32,6 +32,44 @@ export function bundlableTool(part: Part): boolean {
   if (UPSTREAM_SUPPRESSED_TOOLS.has(part.tool)) return false
   return true
 }
+
+export type CoalescedRow<M> = { key: string; message: M; parts?: Part[] }
+
+// Coalesce a run of consecutive assistant messages whose renderable parts are ALL
+// bundlable tool calls into a single row (carrying the combined parts), so the
+// within-message tool grouping collapses the whole run into one inline "N steps"
+// group. Messages carrying any prominent part (text, reasoning, edit, bash,
+// question) break the run and render on their own with no parts override. Pure so
+// it can be unit-tested independently of the Solid render tree; VscodeSessionTurn
+// passes the live store lookup as `partsOf`.
+export function coalesceToolRows<M extends AssistantMessage>(
+  messages: readonly M[],
+  partsOf: (message: M) => readonly Part[],
+): CoalescedRow<M>[] {
+  const renderable = (m: M) => partsOf(m).filter((part) => isRenderable(part, m))
+  const coalescible = (m: M) => {
+    const ps = renderable(m)
+    return ps.length > 0 && ps.every(bundlableTool)
+  }
+  const out: CoalescedRow<M>[] = []
+  let run: M[] = []
+  const flush = () => {
+    if (run.length === 0) return
+    if (run.length === 1) out.push({ key: run[0]!.id, message: run[0]! })
+    else out.push({ key: run[0]!.id, message: run[0]!, parts: run.flatMap(renderable) })
+    run = []
+  }
+  for (const m of messages) {
+    if (coalescible(m)) {
+      run.push(m)
+      continue
+    }
+    flush()
+    out.push({ key: m.id, message: m })
+  }
+  flush()
+  return out
+}
 // raya_change end
 
 export function isRenderable(part: Part, message: AssistantMessage): boolean {

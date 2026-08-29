@@ -168,7 +168,25 @@ const layer = Layer.effect(
     }) {
       yield* state.assertNotBusy(input.sessionID)
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
-      const all = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
+      // A delegated turn (agent=auto → @coder/@designer/@generalist) makes its
+      // file edits inside child subagent sessions, which is where the "patch"
+      // parts land — the displayed parent turn frequently owns none of its own.
+      // Gather the parent plus every descendant session so files-only discard
+      // reverts what the subagents actually wrote, matching what the review diff
+      // (which is workspace-wide) already shows. Sorted by message id, which is
+      // globally monotonic in one backend process, so each file's earliest
+      // pre-session baseline is restored.
+      const all: SessionV1.WithParts[] = []
+      const queue: SessionID[] = [input.sessionID]
+      while (queue.length > 0) {
+        const id = queue.shift()
+        if (!id) break
+        const msgs = yield* sessions.messages({ sessionID: id }).pipe(Effect.orDie)
+        for (const msg of msgs) all.push(msg)
+        const kids = yield* sessions.children(id)
+        for (const kid of kids) queue.push(kid.id)
+      }
+      all.sort((a, b) => (a.info.id < b.info.id ? -1 : a.info.id > b.info.id ? 1 : 0))
       const result = yield* KiloSessionRevert.discardAll(snap, all, input.files ? [...input.files] : undefined)
       if (result.files.length === 0) return session
       // Discarding everything clears the review UI outright; a per-file undo leaves

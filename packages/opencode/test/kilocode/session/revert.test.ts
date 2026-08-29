@@ -563,4 +563,86 @@ describe("files-only discard (Undo all)", () => {
     ),
     30_000,
   )
+
+  it.live(
+    "discardChanges on the parent reverts a file a child subagent edited",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const sessions = yield* Session.Service
+          const revert = yield* SessionRevert.Service
+          const snapshot = yield* Snapshot.Service
+          const providerID = ProviderV2.ID.make("test")
+          const file = path.join(dir, "greeting.txt")
+          yield* Effect.promise(() => fs.writeFile(file, "before"))
+
+          // Parent turn (agent=auto) delegates via the task tool. It records NO
+          // patch part of its own — mirroring the real orchestrator turn.
+          const parent = yield* sessions.create({})
+          const parentUser = yield* sessions.updateMessage({
+            id: MessageID.ascending(),
+            sessionID: parent.id,
+            role: "user",
+            agent: "auto",
+            model: { providerID, modelID: ModelV2.ID.make("test") },
+            time: { created: Date.now() },
+          })
+          yield* sessions.updateMessage({
+            id: MessageID.ascending(),
+            sessionID: parent.id,
+            role: "assistant",
+            parentID: parentUser.id,
+            mode: "default",
+            agent: "auto",
+            path: { cwd: dir, root: dir },
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            modelID: ModelV2.ID.make("test"),
+            providerID,
+            time: { created: Date.now() },
+            finish: "end_turn",
+          })
+
+          // Child subagent session (edit/write denied → it edits via bash), which
+          // is where the patch part actually lands.
+          const child = yield* sessions.create({ parentID: parent.id })
+          const childAssistant = yield* sessions.updateMessage({
+            id: MessageID.ascending(),
+            sessionID: child.id,
+            role: "assistant",
+            parentID: parentUser.id,
+            mode: "default",
+            agent: "generalist",
+            path: { cwd: dir, root: dir },
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            modelID: ModelV2.ID.make("test"),
+            providerID,
+            time: { created: Date.now() },
+            finish: "end_turn",
+          })
+          const base = yield* snapshot.track()
+          if (!base) throw new Error("expected snapshot")
+          yield* Effect.promise(() => fs.writeFile(file, "after"))
+          const patch = yield* snapshot.patch(base)
+          expect(patch.files.some((f) => f.endsWith("greeting.txt"))).toBe(true)
+          yield* sessions.updatePart({
+            id: PartID.ascending(),
+            messageID: childAssistant.id,
+            sessionID: child.id,
+            type: "patch",
+            hash: patch.hash,
+            files: patch.files,
+          })
+
+          // Undo all is invoked on the displayed PARENT session, which owns no
+          // patch part. It must still restore the child subagent's edit.
+          yield* revert.discardChanges({ sessionID: parent.id })
+
+          expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe("before")
+        }),
+      { git: true },
+    ),
+    30_000,
+  )
 })

@@ -306,7 +306,7 @@ describe("KiloSnapshotTrack.wrap", () => {
     expect(state.asked).toBe(true)
   })
 
-  test("timeout without sessionID skips the prompt and disables silently", async () => {
+  test("timeout without sessionID skips this call but does NOT disable the session", async () => {
     const state = KiloSnapshotTrack.makeState()
     const { hooks, calls } = makeHooks("continue")
 
@@ -323,10 +323,43 @@ describe("KiloSnapshotTrack.wrap", () => {
     expect(result).toBeUndefined()
     expect(calls.ask).toBe(0)
     expect(calls.persist).toBe(0)
-    expect(state.disabledForSession).toBe(true)
+    // A background (no-session) warmup timing out must not poison the whole
+    // session: it would otherwise short-circuit the user's first real turn to
+    // undefined, record no patch, and leave Undo silently doing nothing.
+    expect(state.disabledForSession).toBe(false)
     expect(state.asked).toBe(false)
     // No messageID either → progress indicator is suppressed entirely.
     expect(calls.progress).toEqual([])
+  })
+
+  test("a real turn after a background timeout still attempts and can prompt", async () => {
+    const state = KiloSnapshotTrack.makeState()
+
+    // Background warmup (no session) times out — skips without disabling.
+    const first = makeHooks("continue")
+    const background = await Effect.runPromise(
+      KiloSnapshotTrack.wrap({ inner: hangInner(), state, hooks: first.hooks, timeoutMs: 10, progressDelayMs: 2 }),
+    )
+    expect(background).toBeUndefined()
+    expect(state.disabledForSession).toBe(false)
+
+    // The next session-bearing turn is NOT short-circuited: it runs the inner,
+    // is still slow, prompts, and on "continue" joins the fiber to a real hash.
+    const second = makeHooks("continue")
+    const turn = await Effect.runPromise(
+      KiloSnapshotTrack.wrap({
+        inner: slowInner(80, "warm-hash"),
+        state,
+        sessionID: SESSION,
+        messageID: MESSAGE,
+        hooks: second.hooks,
+        timeoutMs: 20,
+        progressDelayMs: 5,
+      }),
+    )
+    expect(turn).toBe("warm-hash")
+    expect(second.calls.ask).toBe(1)
+    expect(state.disabledForSession).toBe(false)
   })
 
   test("subsequent call after disable returns undefined without starting the inner", async () => {

@@ -439,8 +439,18 @@ export namespace KiloSnapshotTrack {
             // Slow path. No target session to prompt against, or we've already
             // prompted through this service scope — skip silently.
             if (!input.sessionID || input.state.asked || input.state.owner) {
-              log.warn("snapshot track slow; skipping for this service scope", { timeoutMs })
-              if (!input.state.owner) input.state.disabledForSession = true
+              // A background (no-session) track — e.g. the seed/materialize warmup
+              // on session load — must NOT permanently disable snapshots for the
+              // whole session. Doing so would make the user's first real turn
+              // short-circuit to `undefined`, record no `patch` part, and leave
+              // "Undo" silently doing nothing with no dialog ever shown. Skip just
+              // this background call; the next session-bearing turn still builds
+              // the (now-warm) index and, if still slow, gets the slow-repo dialog.
+              // Session-bearing skips (already asked this scope) keep latching so
+              // we don't re-prompt or re-stall every turn.
+              const background = !input.sessionID
+              log.warn("snapshot track slow; skipping for this service scope", { timeoutMs, background })
+              if (!input.state.owner && !background) input.state.disabledForSession = true
               yield* cancelSnapshot
               yield* stopProgress
               return undefined

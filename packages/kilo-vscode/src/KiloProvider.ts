@@ -479,6 +479,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
   private createWorktreeHandler: ((baseBranch?: string, branchName?: string) => Promise<void>) | null = null
 
+  private inEditorReview: { refresh(): void } | undefined // raya_change
   private diffVirtualProvider: import("./DiffVirtualProvider").DiffVirtualProvider | undefined
   private diffViewerProvider: import("./diff/DiffViewerProvider").DiffViewerProvider | undefined
   private documentViewerProvider: import("./DocumentViewerProvider").DocumentViewerProvider | undefined
@@ -923,6 +924,17 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   /** Return the currently active session ID, if any. */
   public getCurrentSessionId(): string | undefined {
     return this.currentSession?.id ?? undefined
+  }
+
+  // raya_change - workspace directory a session's diff paths resolve against,
+  // exposed for the in-editor edit-review decorations/CodeLens.
+  public directoryForSession(sessionID?: string): string {
+    return this.getWorkspaceDirectory(sessionID)
+  }
+
+  // raya_change - in-editor edit review (green highlight + inline Keep/Undo).
+  public setInEditorReview(review: { refresh(): void }): void {
+    this.inEditorReview = review
   }
 
   /** Return the Git root used by the Changes panel for a session. */
@@ -4434,6 +4446,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.refreshes.set(sessionID, (this.refreshes.get(sessionID) ?? 0) + 1)
     if (this.currentSession?.id === sessionID) this.setCurrentSession(data)
     this.postMessage({ type: "sessionUpdated", session: sessionToWebview(data) })
+    this.scheduleReview(sessionID) // raya_change - refresh review counts + in-editor highlights after undo
   }
 
   private async handleUnrevertSession(sessionID: string): Promise<void> {
@@ -5661,6 +5674,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     }
     this.cachedReview = msg
     this.postMessage(msg)
+    this.inEditorReview?.refresh() // raya_change - keep in-editor highlights in sync
   }
 
   // ── Worktree stats polling (sidebar diff badge) ──────────────────

@@ -8,6 +8,7 @@ import { DiffViewerProvider } from "./diff/DiffViewerProvider"
 import { DocumentViewerProvider } from "./DocumentViewerProvider"
 import { DiffSourceCatalog } from "./diff/sources/catalog"
 import { DiffVirtualProvider } from "./DiffVirtualProvider"
+import { registerInEditorReview } from "./edit-review/InEditorReview" // raya_change
 import { SettingsEditorProvider } from "./SettingsEditorProvider"
 import { MarketplacePanelProvider } from "./MarketplacePanelProvider"
 import { MarketplaceNotifier } from "./services/marketplace/notifier"
@@ -316,6 +317,15 @@ export function activate(context: vscode.ExtensionContext) {
   provider.setDiffVirtualProvider(diffVirtualProvider)
   agentManagerHost.setDiffVirtualProvider(diffVirtualProvider)
   context.subscriptions.push(diffVirtualProvider)
+
+  // raya_change - in-editor agent-edit review: green highlight + inline
+  // Keep/Undo CodeLens inside the edited file, driven by the session diff.
+  const inEditorReview = registerInEditorReview(context, {
+    connection: connectionService,
+    session: () => provider.getCurrentSessionId(),
+    directory: (id) => provider.directoryForSession(id),
+  })
+  provider.setInEditorReview(inEditorReview)
 
   // Create standalone editor providers (open in editor area, not sidebar)
   const settingsEditorProvider = new SettingsEditorProvider(context.extensionUri, connectionService, context, {

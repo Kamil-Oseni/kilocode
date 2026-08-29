@@ -4,7 +4,7 @@ import * as vscode from "vscode"
 type Post = (msg: unknown) => void
 
 export function buildThroughputSettingMessage() {
-  const config = vscode.workspace.getConfiguration("kilo-code.new")
+  const config = vscode.workspace.getConfiguration("raya") // raya_change - declared settings namespace
   return {
     type: "throughputSettingLoaded" as const,
     visible: config.get<boolean>("showTokenThroughput", true),

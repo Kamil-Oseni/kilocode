@@ -92,7 +92,7 @@ export class ServerManager {
 
     return new Promise((resolve, reject) => {
       console.log("[Kilo New] ServerManager: 🎬 Spawning CLI process:", cliPath, ["serve", "--port", "0"])
-      const cfg = vscode.workspace.getConfiguration("kilo-code.new")
+      const cfg = vscode.workspace.getConfiguration("raya") // raya_change - declared settings namespace
       const claudeCompat = cfg.get<boolean>("claudeCodeCompat", false)
       // Pin cwd so the CLI doesn't inherit the extension host's cwd ("/" under F5 debug)
       // or "$HOME" in empty VS Code windows.

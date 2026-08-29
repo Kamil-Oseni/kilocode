@@ -750,7 +750,7 @@ async function migrateLanguage(language: string): Promise<MigrationResultItem> {
     }
   }
   try {
-    const config = vscode.workspace.getConfiguration("kilo-code.new")
+    const config = vscode.workspace.getConfiguration("raya") // raya_change - migrated values target current namespace
     await config.update("language", mapped, vscode.ConfigurationTarget.Global)
     return { item: "Language preference", category: "settings", status: "success" }
   } catch (err) {

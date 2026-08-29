@@ -120,6 +120,13 @@ describe("dirName", () => {
 })
 
 describe("buildHighlightSegments", () => {
+  it("highlights a leading slash command when there are no mentions", () => {
+    expect(buildHighlightSegments("/goal Create three files", new Set())).toEqual([
+      { text: "/goal", highlight: true, slash: "goal" },
+      { text: " Create three files", highlight: false },
+    ])
+  })
+
   it("returns single non-highlighted segment when paths set is empty", () => {
     const result = buildHighlightSegments("hello world", new Set())
     expect(result).toEqual([{ text: "hello world", highlight: false }])

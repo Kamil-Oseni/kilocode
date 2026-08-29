@@ -58,8 +58,8 @@ export function registerCommitMessageService(
     try {
       client = await connectionService.getClientAsync(path)
     } catch (err) {
-      console.error("[Kilo New] Failed to connect to Kilo backend:", err)
-      vscode.window.showErrorMessage("Failed to connect to Kilo backend. Please try again.")
+      console.error("[Raya] Failed to connect to Raya backend:", err) // raya_change
+      vscode.window.showErrorMessage("Failed to connect to Raya backend. Please try again.") // raya_change
       return
     }
 

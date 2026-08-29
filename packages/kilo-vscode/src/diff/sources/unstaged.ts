@@ -63,7 +63,7 @@ export interface UnstagedDiffSourceOptions {
  * polls on the standard interval.
  */
 export function createUnstagedDiffSource(opts: UnstagedDiffSourceOptions = {}): DiffSource {
-  const output = opts.git ? undefined : vscode.window.createOutputChannel("Kilo Diff: Unstaged")
+  const output = opts.git ? undefined : vscode.window.createOutputChannel("Raya Changes: Unstaged") // raya_change
   const log = opts.log ?? ((...args: unknown[]) => appendOutput(output!, "UnstagedDiffSource", ...args))
   const git = opts.git ?? new GitOps({ log })
 

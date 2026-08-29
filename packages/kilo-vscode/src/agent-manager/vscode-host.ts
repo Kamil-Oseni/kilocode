@@ -85,9 +85,10 @@ export class VscodeHost implements Host {
     }
 
     panel.iconPath = {
-      light: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "kilo-light.svg"),
-      dark: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "kilo-dark.svg"),
+      light: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "eden-logo-light.svg"),
+      dark: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "eden-logo-dark.svg"),
     }
+    // raya_change - use Raya branding in Agent Manager
 
     const port = this.connectionService.getServerInfo()?.port
     panel.webview.html = buildWebviewHtml(panel.webview, {

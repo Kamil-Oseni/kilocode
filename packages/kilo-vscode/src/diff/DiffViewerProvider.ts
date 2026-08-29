@@ -1,5 +1,6 @@
 // raya_change - Raya extension namespace
 import * as vscode from "vscode"
+import * as nodePath from "path" // raya_change - validate inline review file paths
 import type { KiloConnectionService } from "../services/cli-backend"
 import { appendOutput, getWorkspaceRoot, openRelativeFile } from "../review-utils"
 import { getDiffMarkdownRender, setDiffMarkdownRender } from "../review-settings"
@@ -15,6 +16,18 @@ type CommentHandler = (comments: unknown[], autoSend: boolean) => void
 export interface DiffViewerProviderOptions {
   sessionIdProvider?: () => string | undefined
   sessionDirectoryProvider?: (sessionId: string) => string | undefined
+}
+
+// raya_change - validate the untrusted webview payload before touching disk
+function hunkMessage(msg: Record<string, unknown>) {
+  if (
+    typeof msg.file !== "string" ||
+    typeof msg.expected !== "string" ||
+    typeof msg.content !== "string" ||
+    typeof msg.remove !== "boolean"
+  )
+    return
+  return { file: msg.file, expected: msg.expected, content: msg.content, remove: msg.remove }
 }
 
 /**
@@ -44,7 +57,7 @@ export class DiffViewerProvider implements vscode.Disposable {
   ) {
     this.sessionIdProvider = opts.sessionIdProvider ?? (() => undefined)
     this.sessionDirectoryProvider = opts.sessionDirectoryProvider ?? (() => undefined)
-    this.output = vscode.window.createOutputChannel("Kilo Diff Panel")
+    this.output = vscode.window.createOutputChannel("Raya Changes") // raya_change - user-facing identity
   }
 
   setCommentHandler(handler: CommentHandler): void {
@@ -127,9 +140,10 @@ export class DiffViewerProvider implements vscode.Disposable {
       localResourceRoots: [this.extensionUri],
     })
     panel.iconPath = {
-      light: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "kilo-light.svg"),
-      dark: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "kilo-dark.svg"),
+      light: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "eden-logo-light.svg"),
+      dark: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "eden-logo-dark.svg"),
     }
+    // raya_change - Changes is a Raya editor, not an inherited Kilo surface
     panel.webview.html = this.getHtml(panel.webview)
     this.panel = panel
 
@@ -186,6 +200,9 @@ export class DiffViewerProvider implements vscode.Disposable {
     "diffViewer.revertFile": (msg) => {
       if (typeof msg.file === "string") void this.controller?.revertFile(msg.file)
     },
+    "diffViewer.discardHunk": (msg) => {
+      void this.discardHunk(msg) // raya_change - keep/discard one inline change
+    },
     "diffViewer.requestFile": (msg) => {
       if (typeof msg.file === "string") void this.controller?.requestFile(msg.file)
     },
@@ -212,6 +229,55 @@ export class DiffViewerProvider implements vscode.Disposable {
     },
   }
 
+  // raya_change start - apply one reviewed hunk only when the editor still
+  // matches the exact content used to calculate it.
+  private async discardHunk(msg: Record<string, unknown>): Promise<void> {
+    const input = hunkMessage(msg)
+    if (!input) return
+    const root = this.ctx?.dir ?? this.ctx?.workspaceRoot
+    if (!root) return
+    const file = nodePath.resolve(root, input.file)
+    const relative = nodePath.relative(nodePath.resolve(root), file)
+    if (!relative || relative === ".." || relative.startsWith(`..${nodePath.sep}`) || nodePath.isAbsolute(relative)) return
+    const uri = vscode.Uri.file(file)
+    const exists = await vscode.workspace.fs.stat(uri).then(
+      () => true,
+      () => false,
+    )
+    if (!exists) {
+      if (input.expected !== "" || input.remove) {
+        void vscode.window.showWarningMessage(
+          "This file changed after the review loaded. Refresh Changes before discarding.",
+        )
+        return
+      }
+      await vscode.workspace.fs.writeFile(uri, new TextEncoder().encode(input.content))
+      await this.controller?.reactivate()
+      return
+    }
+    const document = await vscode.workspace.openTextDocument(uri)
+    if (document.getText() !== input.expected) {
+      void vscode.window.showWarningMessage(
+        "This file changed after the review loaded. Refresh Changes before discarding.",
+      )
+      return
+    }
+    const edit = new vscode.WorkspaceEdit()
+    if (input.remove) {
+      edit.deleteFile(uri, { ignoreIfNotExists: true })
+    } else {
+      const end = document.positionAt(document.getText().length)
+      edit.replace(uri, new vscode.Range(new vscode.Position(0, 0), end), input.content)
+    }
+    if (!(await vscode.workspace.applyEdit(edit))) {
+      void vscode.window.showErrorMessage(`Raya could not discard the selected change in ${input.file}.`)
+      return
+    }
+    if (!input.remove) await document.save()
+    await this.controller?.reactivate()
+  }
+  // raya_change end
+
   private async sendBranches(): Promise<void> {
     if (!this.panel) return
     try {
@@ -236,7 +302,7 @@ export class DiffViewerProvider implements vscode.Disposable {
     void this.panel.webview.postMessage({
       type: "ready",
       vscodeLanguage: vscode.env.language,
-      languageOverride: vscode.workspace.getConfiguration("kilo-code.new").get<string>("language"),
+      languageOverride: vscode.workspace.getConfiguration("raya").get<string>("language"), // raya_change
       fontSize: getWebviewFontSize(),
       workspaceDirectory: this.ctx?.dir ?? getWorkspaceRoot(),
     })

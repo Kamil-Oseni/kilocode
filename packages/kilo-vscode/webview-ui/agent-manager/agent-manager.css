@@ -2069,42 +2069,16 @@ body.am-wt-dragging-active * {
   user-select: none;
 }
 
-.am-diff-end-mascot-wrap {
-  filter: drop-shadow(0 6px 12px color-mix(in oklab, var(--surface-base) 45%, black));
-}
-
-.am-diff-end-mascot {
-  image-rendering: pixelated;
-}
-
-.am-kiloman-upper {
-  transform-box: fill-box;
-  transform-origin: center bottom;
-  animation: am-kiloman-idle 520ms linear infinite;
+.am-diff-end-rule {
+  width: min(96px, 30%);
+  height: 1px;
+  background: var(--border-weak-base);
 }
 
 .am-diff-end-text {
   margin: 0;
   font-size: var(--font-size-base);
   color: var(--text-weak);
-}
-
-@keyframes am-kiloman-idle {
-  0% {
-    transform: translateY(0px);
-  }
-  25% {
-    transform: translateY(1px);
-  }
-  50% {
-    transform: translateY(0px);
-  }
-  75% {
-    transform: translateY(-1px);
-  }
-  100% {
-    transform: translateY(0px);
-  }
 }
 
 .am-diff-content {
@@ -2443,6 +2417,24 @@ body.am-wt-dragging-active * {
   align-items: center;
   gap: 8px;
   font-size: var(--font-size-base);
+}
+
+/* raya_change - compact inline hunk decisions in the editor-area Changes view */
+.am-change-review {
+  justify-content: space-between;
+  min-height: 28px;
+  border-left: 2px solid var(--vscode-editorInfo-foreground);
+}
+
+.am-change-review__label {
+  flex: 1;
+  color: var(--text-weak);
+  font-family: var(--raya-font-mono, monospace);
+  font-size: var(--kilo-font-size-11);
+}
+
+.am-change-review__discard {
+  color: var(--text-critical, var(--vscode-errorForeground));
 }
 
 .am-annotation-draft {

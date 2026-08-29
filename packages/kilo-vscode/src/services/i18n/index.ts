@@ -63,13 +63,13 @@ export function resolveLocale(lang: string | undefined): string {
 }
 
 export function selectedLocale(vscode: typeof import("vscode")): string {
-  const cfg = vscode.workspace.getConfiguration("kilo-code.new")
+  const cfg = vscode.workspace.getConfiguration("raya") // raya_change - declared settings namespace
   const lang = cfg.get<string>("language")
   return resolveLocale(lang || vscode.env.language)
 }
 
 export function getCommitMessageLanguage(vscode: typeof import("vscode")): string {
-  const cfg = vscode.workspace.getConfiguration("kilo-code.new")
+  const cfg = vscode.workspace.getConfiguration("raya") // raya_change - declared settings namespace
   const commitLang = cfg.get<string>("languageCommitMessage") ?? "sync"
   if (commitLang === "sync") return selectedLocale(vscode)
   return resolveLocale(commitLang)
@@ -87,7 +87,7 @@ export function translate(
       text = text.replaceAll(`{{${k}}}`, String(v))
     }
   }
-  return text
+  return text.replace(/\bKilo Code\b|\bKilo\b/g, "Raya") // raya_change - scrub inherited host copy in every locale
 }
 
 export function t(key: keyof typeof enDict | string, vars?: Record<string, string | number>): string {

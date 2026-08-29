@@ -350,7 +350,25 @@ export class GitStatsPoller {
     try {
       const status = await this.snapshots.status(root)
       const branch = status.branch
-      if (!branch || branch === "HEAD") return
+      // raya_change - detached HEAD and unnamed branches still have a working tree to review
+      if (!branch || branch === "HEAD") {
+        const stats = await this.git.workingTreeStats(root).catch((err) => {
+          this.options.log("Failed to fetch detached working-tree stats:", err)
+          return undefined
+        })
+        if (!stats) return
+        if (generation !== this.generation) return
+        const name = branch || "HEAD"
+        const hash = `local:${name}:${stats.files}:${stats.additions}:${stats.deletions}:0:0`
+        if (hash === this.lastLocalHash) {
+          this.options.log(`Local stats: unchanged (${hash})`)
+          return
+        }
+        this.lastLocalHash = hash
+        this.lastLocalStats = { branch: name, ...stats, ahead: 0, behind: 0 }
+        this.options.onLocalStats(this.lastLocalStats)
+        return
+      }
       const stats = await this.local(root, branch, status, refs, refresh).catch((err) => {
         this.options.log("Failed to fetch local diff stats:", err)
         return undefined

@@ -76,6 +76,11 @@ export function useSlashCommand(
       hints: [],
     }, // raya_change - Milestone A native command appears in the slash picker
     {
+      name: "self-heal",
+      description: "Report, track, and autonomously repair a Raya issue",
+      hints: ["feedback", "issue", "bug", "heal"],
+    }, // raya_change - globally durable self-healing intake
+    {
       name: "new",
       description: "Start a new session",
       hints: ["clear"],

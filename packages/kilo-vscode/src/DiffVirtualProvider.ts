@@ -27,7 +27,7 @@ export class DiffVirtualProvider implements vscode.Disposable {
   private fontConfigDisposable: vscode.Disposable | undefined
 
   constructor(private readonly extensionUri: vscode.Uri) {
-    this.outputChannel = vscode.window.createOutputChannel("Kilo Diff Virtual")
+    this.outputChannel = vscode.window.createOutputChannel("Raya Change Preview") // raya_change - user-facing identity
   }
 
   private log(...args: unknown[]) {
@@ -54,9 +54,10 @@ export class DiffVirtualProvider implements vscode.Disposable {
     })
 
     panel.iconPath = {
-      light: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "kilo-light.svg"),
-      dark: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "kilo-dark.svg"),
+      light: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "eden-logo-light.svg"),
+      dark: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "eden-logo-dark.svg"),
     }
+    // raya_change - use Raya branding in virtual change previews
 
     panel.webview.html = this.getHtml(panel.webview)
     panel.webview.onDidReceiveMessage((msg) => this.onMessage(msg))
@@ -80,7 +81,7 @@ export class DiffVirtualProvider implements vscode.Disposable {
       this.post({
         type: "ready",
         vscodeLanguage: vscode.env.language,
-        languageOverride: vscode.workspace.getConfiguration("kilo-code.new").get<string>("language"),
+        languageOverride: vscode.workspace.getConfiguration("raya").get<string>("language"), // raya_change
         fontSize: getWebviewFontSize(),
         workspaceDirectory: getWorkspaceRoot(),
       })

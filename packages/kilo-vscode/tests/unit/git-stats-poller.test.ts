@@ -709,6 +709,45 @@ describe("GitStatsPoller", () => {
     })
   })
 
+  it("emits working-tree stats when HEAD is detached", async () => {
+    const emitted: Array<{
+      branch: string
+      files: number
+      additions: number
+      deletions: number
+      ahead: number
+      behind: number
+    }> = []
+
+    const poller = new GitStatsPoller({
+      getWorktrees: () => [],
+      getWorkspaceRoot: () => "/workspace",
+      source: source(async () => diff(0, 0), "HEAD"),
+      onStats: () => undefined,
+      onLocalStats: (stats) => emitted.push(stats),
+      log: () => undefined,
+      intervalMs: 500,
+      git: gitOps(async (args) => {
+        if (args[0] === "diff") return "2\t0\ttemp1.txt\n1\t0\ttemp2.txt"
+        if (args[0] === "ls-files") return "temp3.txt"
+        return ""
+      }),
+    })
+
+    poller.setEnabled(true)
+    await waitFor(() => emitted.length >= 1)
+    poller.stop()
+
+    expect(emitted[0]).toEqual({
+      branch: "HEAD",
+      files: 3,
+      additions: 3,
+      deletions: 0,
+      ahead: 0,
+      behind: 0,
+    })
+  })
+
   it("does not fetch from remote for ahead/behind counts", async () => {
     const commands: string[][] = []
     const emitted: Array<

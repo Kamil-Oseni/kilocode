@@ -25,6 +25,7 @@ import { DiffPickerHeader } from "./DiffPickerHeader"
 import { BaseBranchPicker } from "./BaseBranchPicker"
 import { SpeechToTextPrewarm } from "../src/components/speech-to-text/SpeechToTextPrewarm"
 import { SpeechToTextModelsProvider } from "../src/context/speech-to-text-models"
+import { withReviewCounts } from "./review-hunks" // raya_change - repair zeroed snapshot stats
 
 const NOTICE_KEYS: Record<DiffViewerNotice, string> = {
   "snapshots-disabled": "diffViewer.notice.snapshotsDisabled",
@@ -110,7 +111,7 @@ const DiffViewerContent: Component = () => {
       // updates don't clobber loaded detail. Mirrors the agent manager's
       // worktree diff merge — see worktree-diff-controller.ts.
       const merged = mergeWorktreeDiffs(diffs(), msg.diffs)
-      setDiffs(merged.diffs)
+      setDiffs(merged.diffs.map(withReviewCounts))
       if (merged.stale.size > 0) refreshStaleDiffs(merged.stale)
       return
     }
@@ -119,7 +120,7 @@ const DiffViewerContent: Component = () => {
       markLoadingFile(msg.file, false)
       const fresh = msg.diff
       if (!fresh) return
-      setDiffs((prev) => prev.map((entry) => (entry.file === fresh.file ? fresh : entry)))
+      setDiffs((prev) => prev.map((entry) => (entry.file === fresh.file ? withReviewCounts(fresh) : entry)))
       return
     }
 
@@ -279,6 +280,16 @@ const DiffViewerContent: Component = () => {
         onRevertFile={(file) => {
           markReverting(file, true)
           post({ type: "diffViewer.revertFile", file })
+        }}
+        onDiscardHunk={(file, hunk) => {
+          // raya_change - inline per-change rollback
+          post({
+            type: "diffViewer.discardHunk",
+            file,
+            expected: hunk.expected,
+            content: hunk.content,
+            remove: hunk.remove,
+          })
         }}
         revertingFiles={reverting()}
         canRevert={capabilities()?.revert ?? true}

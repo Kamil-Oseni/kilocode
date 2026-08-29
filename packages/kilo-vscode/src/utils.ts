@@ -14,7 +14,7 @@ function clamp(size: number) {
 }
 
 export function getWebviewFontSize(): number {
-  const raw = vscode.workspace.getConfiguration("kilo-code.new").get<number>("fontSize", 13)
+  const raw = vscode.workspace.getConfiguration("raya").get<number>("fontSize", 13) // raya_change - declared namespace
   return clamp(raw)
 }
 

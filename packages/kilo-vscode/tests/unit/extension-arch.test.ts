@@ -114,6 +114,21 @@ describe("Extension — package.json command sync", () => {
     expect(registered).toContain("kilo-code.new.openBrowser")
   })
 
+  // raya_change - Raya owns the explicit browser shortcut on both platforms
+  it("opens the Raya browser with the cross-platform browser shortcut", () => {
+    const bindings = pkg.contributes?.keybindings ?? []
+    expect(bindings).toContainEqual({
+      command: "-workbench.action.tasks.build",
+      key: "ctrl+shift+b",
+      mac: "cmd+shift+b",
+    })
+    expect(bindings).toContainEqual({
+      command: "raya.openBrowser",
+      key: "ctrl+shift+b",
+      mac: "cmd+shift+b",
+    })
+  })
+
   it("scopes Agent Manager search to the panel and leaves the integrated terminal alone", () => {
     const binding = pkg.contributes?.keybindings?.find(
       (item: { command: string }) => item.command === "raya.agentManager.search",
@@ -309,7 +324,7 @@ describe("Extension — editor panel placement", () => {
   it("uses Raya identity for settings panels and restores their view types", () => {
     expect(settings).toContain('settings: "Raya Settings"')
     expect(settings).toContain('profile: "Raya Profile"')
-    expect(settings).toContain('type.match(/^raya\\.(\\w+)Panel$/)')
+    expect(settings).toContain("type.match(/^raya\\.(\\w+)Panel$/)")
     expect(settings).toContain("panel.title = PANEL_TITLES[view]")
     expect(settings).toContain('"eden-logo-light.svg"')
     expect(settings).toContain('"eden-logo-dark.svg"')

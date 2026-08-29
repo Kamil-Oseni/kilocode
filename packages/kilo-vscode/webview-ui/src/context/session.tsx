@@ -74,6 +74,7 @@ import {
   type MessagePageState,
 } from "./session-utils"
 import { Identifier } from "../utils/id"
+import { apply, gather, type ReviewCounts } from "../components/chat/review-stats" // raya_change - session-scoped review counts
 import { resolveModelSelection } from "./model-selection"
 import { getAgentModel } from "./session-model-store"
 import { resolveMessagePrefs } from "./session-preferences"
@@ -245,8 +246,8 @@ interface SessionContextValue {
   revertedCount: Accessor<number>
   summary: Accessor<SessionInfo["summary"]>
 
-  // Live worktree diff stats (polled from CLI backend)
-  worktreeStats: Accessor<{ files: number; additions: number; deletions: number } | undefined>
+  worktreeStats: Accessor<ReviewCounts | undefined>
+  reviewStats: Accessor<ReviewCounts | undefined>
 
   // Actions
   revertSession: (messageID: string, partID?: string) => void
@@ -462,10 +463,8 @@ export const SessionProvider: ParentComponent = (props) => {
   const [cloudPreviewId, setCloudPreviewId] = createSignal<string | null>(null)
   const [hiddenErrors, setHiddenErrors] = createSignal<Set<string>>(new Set())
 
-  // Live worktree diff stats from extension polling
-  const [worktreeStats, setWorktreeStats] = createSignal<
-    { files: number; additions: number; deletions: number } | undefined
-  >()
+  const [worktreeStats, setWorktreeStats] = createSignal<ReviewCounts | undefined>()
+  const [diffStats, setDiffStats] = createSignal<ReviewCounts | undefined>() // raya_change - session.diff counts
 
   // Tracks optimistic messageIDs that haven't been confirmed by the server yet.
   // Prevents handleMessagesLoaded from wiping them when it replaces the array.
@@ -1110,8 +1109,11 @@ export const SessionProvider: ParentComponent = (props) => {
       setStore("queues", message.sessionID, message.queued)
       return true
     }
+    if (message.type === "worktreeStatsLoaded" || message.type === "reviewStatsLoaded") {
+      return apply(message, currentSessionID(), setWorktreeStats, setDiffStats)
+    }
     return false
-  } // raya_change - keep todo and authoritative queue updates out of the large dispatcher
+  } // raya_change - keep todo and queue updates out of the large dispatcher
 
   function handleExtensionMessage(message: ExtensionMessage): void {
     // Route suggestion messages (extracted to stay within complexity limit)
@@ -1256,10 +1258,6 @@ export const SessionProvider: ParentComponent = (props) => {
         console.error("[Kilo New] Cloud session import failed:", message.error)
         break
       }
-
-      case "worktreeStatsLoaded":
-        setWorktreeStats({ files: message.files, additions: message.additions, deletions: message.deletions })
-        break
     }
   }
 
@@ -2831,6 +2829,8 @@ export const SessionProvider: ParentComponent = (props) => {
     return id ? (store.sessions[id]?.summary ?? undefined) : undefined
   })
 
+  const reviewStats = createMemo(() => gather(currentSessionID(), store.sessions, visible, getParts, diffStats(), worktreeStats()))
+
   function revertSession(messageID: string, partID?: string) {
     const id = currentSessionID()
     if (!id) return
@@ -3056,7 +3056,7 @@ export const SessionProvider: ParentComponent = (props) => {
     revert,
     revertedCount,
     summary,
-    worktreeStats,
+    worktreeStats, reviewStats,
     revertSession,
     unrevertSession,
     deleteQueuedMessage,

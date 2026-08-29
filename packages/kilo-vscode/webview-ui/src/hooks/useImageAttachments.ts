@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js"
-import { ACCEPTED_IMAGE_TYPES, isAcceptedImageType, isDragLeavingComponent } from "./image-attachments-utils"
+import { ACCEPTED_IMAGE_TYPES, isDragLeavingComponent } from "./image-attachments-utils"
 import { extractDropPaths, KILO_FILE_PATH_MIME } from "../utils/path-mentions"
 
 export interface ImageAttachment {
@@ -23,19 +23,18 @@ export function useImageAttachments() {
   }
 
   const add = (file: File) => {
-    if (!isAcceptedImageType(file.type)) return
     const reader = new FileReader()
     reader.onload = () => {
       const attachment: ImageAttachment = {
         id: crypto.randomUUID(),
-        filename: file.name || "image",
-        mime: file.type,
+        filename: file.name || "attachment",
+        mime: file.type || "application/octet-stream",
         dataUrl: reader.result as string,
       }
       setImages((prev) => [...prev, attachment])
     }
     reader.readAsDataURL(file)
-  }
+  } // raya_change - the composer accepts ordinary files as well as images
 
   const remove = (id: string) => {
     setImages((prev) => prev.filter((img) => img.id !== id))

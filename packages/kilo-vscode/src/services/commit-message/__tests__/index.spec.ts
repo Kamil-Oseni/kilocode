@@ -128,7 +128,7 @@ describe("commit-message service", () => {
       await commandCallback()
 
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        "Failed to connect to Kilo backend. Please try again.",
+        "Failed to connect to Raya backend. Please try again.", // raya_change
       )
     })
 

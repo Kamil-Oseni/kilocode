@@ -46,10 +46,35 @@ export function dirName(path: string): string {
   return dir.length > 30 ? `…/${parts.slice(-3, -1).join("/")}` : dir
 }
 
-export function buildHighlightSegments(val: string, paths: Set<string>): { text: string; highlight: boolean }[] {
-  if (paths.size === 0) return [{ text: val, highlight: false }]
+export type HighlightSeg = { text: string; highlight: boolean; slash?: string }
 
-  const segments: { text: string; highlight: boolean }[] = []
+const SLASH_RE = /(^|[\s])(\/[a-z][\w-]*)\b/gim
+
+function withSlash(segments: HighlightSeg[]): HighlightSeg[] {
+  const out: HighlightSeg[] = []
+  for (const seg of segments) {
+    if (seg.highlight) {
+      out.push(seg)
+      continue
+    }
+    SLASH_RE.lastIndex = 0
+    let cursor = 0
+    for (const match of seg.text.matchAll(SLASH_RE)) {
+      const token = match[2] ?? ""
+      const start = (match.index ?? 0) + (match[1]?.length ?? 0)
+      if (start > cursor) out.push({ text: seg.text.slice(cursor, start), highlight: false })
+      out.push({ text: token, highlight: true, slash: token.slice(1).toLowerCase() })
+      cursor = start + token.length
+    }
+    if (cursor < seg.text.length) out.push({ text: seg.text.slice(cursor), highlight: false })
+  }
+  return out
+}
+
+export function buildHighlightSegments(val: string, paths: Set<string>): HighlightSeg[] {
+  if (paths.size === 0) return withSlash([{ text: val, highlight: false }])
+
+  const segments: HighlightSeg[] = []
   let remaining = val
 
   while (remaining.length > 0) {
@@ -79,7 +104,7 @@ export function buildHighlightSegments(val: string, paths: Set<string>): { text:
     remaining = remaining.substring(earliest + token.length)
   }
 
-  return segments
+  return withSlash(segments)
 }
 
 export function atEnd(start: number, end: number, len: number): boolean {

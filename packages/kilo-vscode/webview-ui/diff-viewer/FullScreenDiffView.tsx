@@ -64,6 +64,7 @@ import { isMarkdownFile, MarkdownDiffView } from "./MarkdownDiffView"
 import { ImageDiffView } from "./ImageDiffView"
 import { createDiffRows, diffSizeKey } from "./diff-state"
 import { createDiffRequests } from "./diff-requests"
+import { reviewHunks, type ReviewHunk } from "./review-hunks" // raya_change - per-change Keep/Discard
 
 type DiffStyle = "unified" | "split"
 
@@ -93,6 +94,7 @@ interface FullScreenDiffViewProps {
   onOpenFile?: (relativePath: string, line?: number) => void
   initialFile?: string
   onRevertFile?: (file: string) => void
+  onDiscardHunk?: (file: string, hunk: ReviewHunk) => void // raya_change - one-change rollback
   revertingFiles?: Set<string>
   activeTerminalId?: string
   /** Defaults to true. Hides the per-file Revert action when false. */
@@ -137,6 +139,14 @@ export const FullScreenDiffView: Component<FullScreenDiffViewProps> = (props) =>
   const localComposer = createReviewComposer()
   const composer = () => props.composer ?? localComposer
   const [manualOpen, setManualOpen] = createSignal<Record<string, string[]>>({})
+  const [kept, setKept] = createSignal(new Set<string>()) // raya_change - accepted hunks leave the pending review surface
+  createEffect(
+    on(
+      () => props.sessionKey,
+      () => setKept(new Set<string>()),
+      { defer: true },
+    ),
+  ) // raya_change - decisions never leak across sessions or diff sources
   const [knownFiles, setKnownFiles] = createSignal<Record<string, string[]>>({})
   const open = createMemo(() => {
     const key = props.sessionKey ?? ""
@@ -423,10 +433,62 @@ export const FullScreenDiffView: Component<FullScreenDiffViewProps> = (props) =>
     editMeta = result.editMeta
     composer().draft = draft() ? draftMeta : null
     composer().edit = editing() ? editMeta : null
-    return result.annotations
+    if (!props.onDiscardHunk) return result.annotations
+    const diff = props.diffs.find((item) => item.file === file)
+    if (!diff) return result.annotations
+    const changes = reviewHunks(diff)
+      .filter((hunk) => !kept().has(hunk.id))
+      .map(
+        (hunk): DiffLineAnnotation<AnnotationMeta> => ({
+          side: hunk.side,
+          lineNumber: hunk.line,
+          metadata: {
+            type: "change",
+            comment: null,
+            file,
+            side: hunk.side,
+            line: hunk.line,
+            id: hunk.id,
+            label: hunk.label,
+            expected: hunk.expected,
+            content: hunk.content,
+            remove: hunk.remove,
+          },
+        }),
+      )
+    return [...changes, ...result.annotations]
   }
 
   const buildAnnotation = (annotation: DiffLineAnnotation<AnnotationMeta>): HTMLElement | undefined => {
+    const meta = annotation.metadata
+    if (meta?.type === "change" && meta.id && meta.expected !== undefined && meta.content !== undefined) {
+      const wrapper = document.createElement("div")
+      wrapper.className = "am-annotation am-change-review"
+      const label = document.createElement("span")
+      label.className = "am-change-review__label"
+      label.textContent = `Review change ${meta.label ?? ""}`.trim()
+      const actions = document.createElement("div")
+      actions.className = "am-annotation-actions"
+      const keep = document.createElement("button")
+      keep.className = "am-annotation-btn"
+      keep.textContent = "Keep"
+      keep.addEventListener("click", (event) => {
+        event.stopPropagation()
+        setKept((current) => new Set([...current, meta.id!]))
+      })
+      const discard = document.createElement("button")
+      discard.className = "am-annotation-btn am-change-review__discard"
+      discard.textContent = "Discard"
+      discard.addEventListener("click", (event) => {
+        event.stopPropagation()
+        const diff = props.diffs.find((item) => item.file === meta.file)
+        const hunk = diff ? reviewHunks(diff).find((item) => item.id === meta.id) : undefined
+        if (hunk) props.onDiscardHunk?.(meta.file, hunk)
+      })
+      actions.append(keep, discard)
+      wrapper.append(label, actions)
+      return wrapper
+    }
     return buildReviewAnnotation(annotation, {
       diffs: props.diffs,
       editing: editing(),

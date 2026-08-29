@@ -683,9 +683,10 @@ function openKiloInNewTab(
   })
 
   panel.iconPath = {
-    light: vscode.Uri.joinPath(context.extensionUri, "assets", "icons", "kilo-light.svg"),
-    dark: vscode.Uri.joinPath(context.extensionUri, "assets", "icons", "kilo-dark.svg"),
+    light: vscode.Uri.joinPath(context.extensionUri, "assets", "icons", "eden-logo-light.svg"),
+    dark: vscode.Uri.joinPath(context.extensionUri, "assets", "icons", "eden-logo-dark.svg"),
   }
+  // raya_change - use Raya branding in editor panels
 
   const tabProvider = new KiloProvider(context.extensionUri, connectionService, context, {
     tabTitle: panelTitleHandler(panel),

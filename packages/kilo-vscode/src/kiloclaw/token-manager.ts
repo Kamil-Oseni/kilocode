@@ -67,7 +67,7 @@ export class TokenManager {
 
   private async fetch(): Promise<ChatToken> {
     const client = this.getClient()
-    if (!client) throw new Error("Kilo backend not connected")
+    if (!client) throw new Error("Raya backend not connected") // raya_change - user-facing identity
     const res = await client.kilo.claw.chatCredentials()
     const errResponse = (res as Record<string, unknown> | null)?.error
     if (!res || errResponse || !res.data) {

@@ -19,7 +19,7 @@ export interface AnnotationLabels {
 // A draft is the active unsaved inline comment composer opened from the gutter.
 // It becomes a normal comment only after the user submits the textarea.
 export interface AnnotationMeta {
-  type: "comment" | "draft"
+  type: "comment" | "draft" | "change" // raya_change - inline per-hunk review actions share Pierre annotations
   comment: ReviewComment | null
   file: string
   side: AnnotationSide
@@ -27,6 +27,11 @@ export interface AnnotationMeta {
   endLine?: number
   editing?: boolean
   text?: string
+  id?: string // raya_change - stable hunk decision identity
+  label?: string // raya_change
+  expected?: string // raya_change - optimistic concurrency guard
+  content?: string // raya_change - file after discarding only this hunk
+  remove?: boolean // raya_change - the hunk created the complete file
 }
 
 export type ReviewDraft = Pick<AnnotationMeta, "file" | "side" | "line" | "endLine">
@@ -69,6 +74,7 @@ export function reviewEditSpeechKey(id: string): string {
 
 export function reviewAnnotationSpeechKey(meta: AnnotationMeta): string | undefined {
   if (meta.type === "draft") return reviewDraftSpeechKey(meta)
+  if (meta.type === "change") return undefined // raya_change
   if (!meta.editing || !meta.comment) return undefined
   return reviewEditSpeechKey(meta.comment.id)
 }

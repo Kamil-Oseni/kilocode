@@ -4,7 +4,7 @@ import * as vscode from "vscode"
 type Post = (msg: unknown) => void
 
 export function buildAutoApprovalReasonSettingMessage() {
-  const config = vscode.workspace.getConfiguration("kilo-code.new")
+  const config = vscode.workspace.getConfiguration("raya") // raya_change - declared settings namespace
   return {
     type: "autoApprovalReasonSettingLoaded" as const,
     visible: config.get<boolean>("showAutoApprovalReason", true),

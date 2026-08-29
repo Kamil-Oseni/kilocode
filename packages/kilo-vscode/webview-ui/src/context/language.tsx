@@ -159,6 +159,8 @@ function resolveTemplate(text: string, params?: UiI18nParams) {
   return _resolveTemplate(text, params as Record<string, string | number | boolean | undefined>)
 }
 
+const brand = (text: string) => text.replace(/\bKilo Code\b|\bKilo\b/g, "Raya") // raya_change - scrub inherited copy in every locale
+
 interface LanguageProviderProps {
   vscodeLanguage?: Accessor<string | undefined>
   languageOverride?: Accessor<string | undefined>
@@ -203,7 +205,7 @@ export const LanguageProvider: ParentComponent<LanguageProviderProps> = (props) 
 
   const t = (key: UiI18nKey, params?: UiI18nParams) => {
     const text = (dict() as Record<string, string>)[key] ?? (dicts.en as Record<string, string>)[key] ?? String(key)
-    return resolveTemplate(text, params)
+    return brand(resolveTemplate(text, params)) // raya_change - user-facing translations always use Raya identity
   }
   const plural = (key: UiI18nPluralKey, count: number, params?: UiI18nParams) =>
     t(pluralKey(key, pluralCategory(localeToBcp47(locale()), count)), { ...params, count })

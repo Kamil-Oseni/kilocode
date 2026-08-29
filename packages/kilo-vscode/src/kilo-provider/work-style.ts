@@ -7,7 +7,7 @@ import { handleWorkStyleApplyMessage } from "./work-style-apply-handler"
 export const WORK_STYLE_SETTING_KEYS = ["showTaskTimeline"] as const
 
 function getConfig() {
-  return vscode.workspace.getConfiguration("kilo-code.new")
+  return vscode.workspace.getConfiguration("raya") // raya_change - declared settings namespace
 }
 
 function isWorkStyleConfigured(): boolean {

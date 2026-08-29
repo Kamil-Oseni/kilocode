@@ -78,12 +78,12 @@ describe("extension host i18n", () => {
     expect(resolveLocale("sv-SE")).toBe("en")
   })
 
-  it("prefers Kilo new language setting over VS Code language", () => {
+  it("prefers the Raya language setting over VS Code language", () => {
     const vscode = {
       env: { language: "en" },
       workspace: {
         getConfiguration: (section: string) => ({
-          get: () => (section === "kilo-code.new" ? "de" : undefined),
+          get: () => (section === "raya" ? "de" : undefined), // raya_change
         }),
       },
     } as unknown as typeof import("vscode")

@@ -2,6 +2,7 @@
 
 import { render } from "solid-js/web"
 import "@kilocode/kilo-ui/styles"
+import "../src/styles/eden.css" // raya_change - apply Raya typography in auxiliary webviews
 import "./kiloclaw.css"
 import { KiloClawApp } from "./KiloClawApp"
 

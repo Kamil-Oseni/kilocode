@@ -132,9 +132,10 @@ export class KiloClawProvider implements vscode.Disposable {
     this.panel = panel
 
     panel.iconPath = {
-      light: vscode.Uri.joinPath(this.uri, "assets", "icons", "kilo-light.svg"),
-      dark: vscode.Uri.joinPath(this.uri, "assets", "icons", "kilo-dark.svg"),
+      light: vscode.Uri.joinPath(this.uri, "assets", "icons", "eden-logo-light.svg"),
+      dark: vscode.Uri.joinPath(this.uri, "assets", "icons", "eden-logo-dark.svg"),
     }
+    // raya_change - use Raya branding in the managed agent editor
 
     panel.webview.options = {
       enableScripts: true,
@@ -242,7 +243,7 @@ export class KiloClawProvider implements vscode.Disposable {
   }
 
   private get locale(): string {
-    const override = vscode.workspace.getConfiguration("kilo-code.new").get<string>("language")
+    const override = vscode.workspace.getConfiguration("raya").get<string>("language") // raya_change
     return override || vscode.env.language
   }
 

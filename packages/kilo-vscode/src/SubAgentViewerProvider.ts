@@ -39,9 +39,10 @@ export class SubAgentViewerProvider implements vscode.Disposable {
     })
 
     panel.iconPath = {
-      light: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "kilo-light.svg"),
-      dark: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "kilo-dark.svg"),
+      light: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "eden-logo-light.svg"),
+      dark: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "eden-logo-dark.svg"),
     }
+    // raya_change - use Raya branding in delegated task editors
 
     const provider = new KiloProvider(this.extensionUri, this.connectionService, this.context, { hideTopBar: true })
     if (directory) provider.setSessionDirectory(sessionID, directory)

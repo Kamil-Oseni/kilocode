@@ -103,9 +103,10 @@ export class MarketplacePanelProvider implements vscode.Disposable {
     this.project = project
     this.ready = false
     panel.iconPath = {
-      light: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "kilo-light.svg"),
-      dark: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "kilo-dark.svg"),
+      light: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "eden-logo-light.svg"),
+      dark: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "eden-logo-dark.svg"),
     }
+    // raya_change - use Raya branding in the marketplace editor
     panel.webview.options = {
       enableScripts: true,
       localResourceRoots: [this.extensionUri],
@@ -179,7 +180,7 @@ export class MarketplacePanelProvider implements vscode.Disposable {
     if (!this.ready) return
     const info = this.connection.getServerInfo()
     if (info) {
-      const cfg = vscode.workspace.getConfiguration("kilo-code.new")
+      const cfg = vscode.workspace.getConfiguration("raya") // raya_change - declared settings namespace
       this.post({
         type: "ready",
         serverInfo: info,

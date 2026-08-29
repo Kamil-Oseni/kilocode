@@ -12,7 +12,7 @@
   "publisher": "eden",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Kilo-Org/kilocode.git",
+    "url": "https://github.com/Kamil-Oseni/kilocode.git",
     "directory": "packages/kilo-vscode"
   },
   "engines": {
@@ -194,8 +194,8 @@
         "title": "Open in Tab",
         "category": "Raya",
         "icon": {
-          "light": "assets/icons/kilo-light.svg",
-          "dark": "assets/icons/kilo-dark.svg"
+          "light": "assets/icons/eden-logo-light.svg",
+          "dark": "assets/icons/eden-logo-dark.svg"
         }
       },
       {
@@ -397,8 +397,8 @@
         "title": "Generate Commit Message",
         "category": "Raya",
         "icon": {
-          "light": "assets/icons/kilo-light.svg",
-          "dark": "assets/icons/kilo-dark.svg"
+          "light": "assets/icons/eden-logo-light.svg",
+          "dark": "assets/icons/eden-logo-dark.svg"
         }
       },
       {
@@ -650,6 +650,16 @@
         "command": "raya.focusChatInput",
         "key": "ctrl+shift+a",
         "mac": "cmd+shift+a"
+      },
+      {
+        "command": "-workbench.action.tasks.build",
+        "key": "ctrl+shift+b",
+        "mac": "cmd+shift+b"
+      },
+      {
+        "command": "raya.openBrowser",
+        "key": "ctrl+shift+b",
+        "mac": "cmd+shift+b"
       },
       {
         "command": "raya.toggleAutoApprove",
@@ -1021,9 +1031,9 @@
             "mercury-next-edit"
           ],
           "enumDescriptions": [
-            "Codestral via Kilo Gateway",
-            "Mercury Edit 2 (FIM) via Kilo Gateway",
-            "Mercury Edit 2 (Next Edit), multi-line edit predictions with jump-to-edit UX, via Kilo Gateway",
+            "Codestral via Raya Gateway",
+            "Mercury Edit 2 (FIM) via Raya Gateway",
+            "Mercury Edit 2 (Next Edit), multi-line edit predictions with jump-to-edit UX, via Raya Gateway",
             "Codestral via your connected Mistral provider API key",
             "Mercury Edit 2 (FIM) via your connected Inception provider API key",
             "Mercury Edit 2 (Next Edit), multi-line edit predictions with jump-to-edit UX, via your connected Inception provider API key"
@@ -1038,11 +1048,11 @@
             "inception"
           ],
           "enumDescriptions": [
-            "Use autocomplete models through Kilo Gateway",
+            "Use autocomplete models through Raya Gateway",
             "Use autocomplete models through your connected Mistral provider API key",
             "Use autocomplete models through your connected Inception provider API key"
           ],
-          "description": "Provider to use for inline autocomplete suggestions. If unset, Kilo Gateway is used."
+          "description": "Provider to use for inline autocomplete suggestions. If unset, Raya Gateway is used."
         },
         "raya.autocomplete.enableAutoTrigger": {
           "type": "boolean",
@@ -1100,12 +1110,12 @@
         "raya.claudeCodeCompat": {
           "type": "boolean",
           "default": false,
-          "description": "Load CLAUDE.md instructions and skills from your Claude Code configuration directory into Kilo sessions. Enable this if you want Kilo to use your Claude Code instructions and skills."
+          "description": "Load CLAUDE.md instructions and skills from your Claude Code configuration directory into Raya sessions. Enable this if you want Raya to use your Claude Code instructions and skills."
         },
         "raya.extraCaCerts": {
           "type": "string",
           "default": "",
-          "description": "Absolute path to a PEM file containing extra CA certificates to trust when the Kilo backend makes HTTPS requests (sets NODE_EXTRA_CA_CERTS on the CLI process). Use this if you're behind a corporate proxy that performs SSL inspection. Leave empty to rely on the OS trust store."
+          "description": "Absolute path to a PEM file containing extra CA certificates to trust when the Raya backend makes HTTPS requests (sets NODE_EXTRA_CA_CERTS on the CLI process). Use this if you're behind a corporate proxy that performs SSL inspection. Leave empty to rely on the OS trust store."
         },
         "raya.autoApprove.enabled": {
           "type": "boolean",
@@ -1222,7 +1232,7 @@
           "enumDescriptions": [
             "Show work style onboarding so you can choose again",
             "Human in the Loop: review agent actions as they happen",
-            "High autonomy: let Kilo take most actions with fewer interruptions",
+            "High autonomy: let Raya take most actions with fewer interruptions",
             "Onboarding was skipped without changing work style settings"
           ],
           "description": "Preferred agent work style. Set to Unset to show the onboarding flow again."
@@ -1230,7 +1240,7 @@
         "raya.diff.renderMarkdown": {
           "type": "boolean",
           "default": false,
-          "description": "Render Markdown files in Kilo diff viewers by default. Toggle this from a Markdown file header in the diff viewer."
+          "description": "Render Markdown files in Raya diff viewers by default. Toggle this from a Markdown file header in the diff viewer."
         }
       }
     }

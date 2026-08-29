@@ -315,19 +315,23 @@ const Transcript: Component = () => (
       </div>
     </div>
     <div data-component="bash-output">
-      <div data-slot="bash-terminal">
+      <div data-slot="bash-terminal" data-kind="command">
         <div data-slot="bash-section" data-kind="command">
-          <span data-slot="bash-prompt">$</span>
+          <span data-slot="bash-prompt" aria-hidden="true">
+            $
+          </span>
           <div data-slot="bash-section-code">
             <pre data-slot="bash-pre">
-              <code>bun run typecheck</code>
+              <code data-lang="shellscript">bun run typecheck</code>
             </pre>
           </div>
         </div>
+      </div>
+      <div data-slot="bash-terminal" data-kind="output">
         <div data-slot="bash-section" data-kind="output">
           <div data-slot="bash-section-code">
             <pre data-slot="bash-pre">
-              <code>Checked 42 files in 1.2s. No errors.</code>
+              <code data-lang="log">Checked 42 files in 1.2s. No errors.</code>
             </pre>
           </div>
         </div>

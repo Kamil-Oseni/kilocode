@@ -122,6 +122,25 @@ it.instance("voice agent is direct and cannot delegate", () =>
 )
 // kilocode_change end
 
+// raya_change - Auto only routes, but its permission is inherited as the ceiling
+// for every delegated subagent (KiloTask.inherited). A blanket edit/write deny here
+// forced specialists to mutate files through bash instead of the edit/write tools,
+// which also broke per-file review/undo. Auto must resolve edit/write to allow so
+// delegates keep their own mutation capability.
+it.instance("auto orchestrator permits edit and write so subagents inherit no mutation deny", () =>
+  Effect.gen(function* () {
+    const auto = yield* load((svc) => svc.get("auto"))
+    expect(auto).toBeDefined()
+    expect(evalPerm(auto, "edit")).toBe("allow")
+    expect(evalPerm(auto, "write")).toBe("allow")
+    expect(evalPerm(auto, "notebook_edit")).toBe("allow")
+    expect(evalPerm(auto, "notebook_execute")).toBe("allow")
+    // Still a router: the blanket deny keeps arbitrary/unknown tools off.
+    expect(evalPerm(auto, "chief_route")).toBe("allow")
+    expect(evalPerm(auto, "task")).toBe("allow")
+  }),
+)
+
 it.instance("plan agent denies edits except .opencode/plans/*", () =>
   Effect.gen(function* () {
     const plan = yield* load((svc) => svc.get("plan"))

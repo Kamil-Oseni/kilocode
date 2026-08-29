@@ -16,7 +16,7 @@
     "directory": "packages/kilo-vscode"
   },
   "engines": {
-    "vscode": "^1.105.1"
+    "vscode": "^1.106.0"
   },
   "license": "MIT",
   "author": {
@@ -60,6 +60,9 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
+    "markdown.previewStyles": [
+      "./assets/markdown/raya-markdown.css"
+    ],
     "configurationDefaults": {
       "files.watcherExclude": {
         "**/.kilo/worktrees/**": true,
@@ -87,7 +90,7 @@
       }
     },
     "viewsContainers": {
-      "activitybar": [
+      "secondarySidebar": [
         {
           "id": "raya-ActivityBar",
           "title": "Raya",
@@ -111,6 +114,18 @@
         "title": "New Task",
         "category": "Raya",
         "icon": "$(add)"
+      },
+      {
+        "command": "raya.checkpoint.save",
+        "title": "Save Named Checkpoint",
+        "category": "Raya",
+        "icon": "$(bookmark)"
+      },
+      {
+        "command": "raya.checkpoint.jump",
+        "title": "Jump to Checkpoint",
+        "category": "Raya",
+        "icon": "$(history)"
       },
       {
         "command": "raya.agentManagerOpen",
@@ -1139,6 +1154,11 @@
           "type": "boolean",
           "default": true,
           "description": "Enable Raya's shared Playwright browser tools and in-editor browser panel."
+        },
+        "raya.permissions.grantAllTools": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Grant every agent every tool automatically, across all workspaces. When enabled, Raya stops asking for per-action approval (edits, writes, terminal commands, etc.) and applies this globally rather than per-workspace. Leave off unless you want fully autonomous, unattended agents."
         },
         "raya.attention.enabled": {
           "type": "boolean",

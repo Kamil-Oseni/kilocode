@@ -18038,6 +18038,20 @@ export type KilocodeGoalGetResponses = {
       summary: string
       verifiedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     }
+    auditAttempt?: {
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      accepted: boolean
+      reason?: string
+      requirements: Array<{
+        requirement: string
+        passed: boolean
+        evidence: Array<{
+          messageID?: string
+          callID: string
+          summary: string
+        }>
+      }>
+    }
     progress: Array<{
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       kind: "status" | "turn" | "continuation"
@@ -18108,6 +18122,20 @@ export type KilocodeGoalUpdateResponses = {
       }>
       summary: string
       verifiedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
+    auditAttempt?: {
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      accepted: boolean
+      reason?: string
+      requirements: Array<{
+        requirement: string
+        passed: boolean
+        evidence: Array<{
+          messageID?: string
+          callID: string
+          summary: string
+        }>
+      }>
     }
     progress: Array<{
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -18181,6 +18209,20 @@ export type KilocodeGoalCreateResponses = {
       summary: string
       verifiedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     }
+    auditAttempt?: {
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      accepted: boolean
+      reason?: string
+      requirements: Array<{
+        requirement: string
+        passed: boolean
+        evidence: Array<{
+          messageID?: string
+          callID: string
+          summary: string
+        }>
+      }>
+    }
     progress: Array<{
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       kind: "status" | "turn" | "continuation"
@@ -18224,6 +18266,146 @@ export type KilocodeGoalDiscardResponses = {
 }
 
 export type KilocodeGoalDiscardResponse = KilocodeGoalDiscardResponses[keyof KilocodeGoalDiscardResponses]
+
+export type KilocodeCheckpointListData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/checkpoint"
+}
+
+export type KilocodeCheckpointListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type KilocodeCheckpointListError = KilocodeCheckpointListErrors[keyof KilocodeCheckpointListErrors]
+
+export type KilocodeCheckpointListResponses = {
+  /**
+   * Named checkpoints for the session
+   */
+  200: Array<{
+    id: string
+    name: string
+    hash: string
+    createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }>
+}
+
+export type KilocodeCheckpointListResponse = KilocodeCheckpointListResponses[keyof KilocodeCheckpointListResponses]
+
+export type KilocodeCheckpointCreateData = {
+  body?: {
+    name?: string
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/checkpoint"
+}
+
+export type KilocodeCheckpointCreateErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type KilocodeCheckpointCreateError = KilocodeCheckpointCreateErrors[keyof KilocodeCheckpointCreateErrors]
+
+export type KilocodeCheckpointCreateResponses = {
+  /**
+   * Created checkpoint
+   */
+  200: {
+    id: string
+    name: string
+    hash: string
+    createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+}
+
+export type KilocodeCheckpointCreateResponse =
+  KilocodeCheckpointCreateResponses[keyof KilocodeCheckpointCreateResponses]
+
+export type KilocodeCheckpointRemoveData = {
+  body?: never
+  path: {
+    sessionID: string
+    checkpointID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/checkpoint/{checkpointID}"
+}
+
+export type KilocodeCheckpointRemoveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type KilocodeCheckpointRemoveError = KilocodeCheckpointRemoveErrors[keyof KilocodeCheckpointRemoveErrors]
+
+export type KilocodeCheckpointRemoveResponses = {
+  /**
+   * Checkpoint removed
+   */
+  200: boolean
+}
+
+export type KilocodeCheckpointRemoveResponse =
+  KilocodeCheckpointRemoveResponses[keyof KilocodeCheckpointRemoveResponses]
+
+export type KilocodeCheckpointJumpData = {
+  body?: never
+  path: {
+    sessionID: string
+    checkpointID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/checkpoint/{checkpointID}"
+}
+
+export type KilocodeCheckpointJumpErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeCheckpointJumpError = KilocodeCheckpointJumpErrors[keyof KilocodeCheckpointJumpErrors]
+
+export type KilocodeCheckpointJumpResponses = {
+  /**
+   * Workspace restored to the checkpoint
+   */
+  200: boolean
+}
+
+export type KilocodeCheckpointJumpResponse = KilocodeCheckpointJumpResponses[keyof KilocodeCheckpointJumpResponses]
 
 export type KilocodeSelfHealListData = {
   body?: never

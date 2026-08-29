@@ -1,0 +1,182 @@
+/* raya_change - Raya markdown preview theme.
+   Applies to VS Code's built-in Markdown preview (Open Preview / Open Preview to the
+   Side). The source stays fully editable in the editor; this only restyles the rendered
+   pane: Instrument Serif for headings and display figures, Outfit for body, with a
+   Notion-like spacing and padding system. Theme-aware via VS Code CSS variables. */
+
+@font-face {
+  font-family: "Raya Instrument Serif";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("instrument-serif-400-latin.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Raya Instrument Serif";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("instrument-serif-400italic-latin.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Raya Outfit";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("outfit-latin.woff2") format("woff2");
+}
+
+:root {
+  --raya-md-serif: "Raya Instrument Serif", ui-serif, Georgia, serif;
+  --raya-md-body: "Raya Outfit", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --raya-md-measure: 46rem;
+  --raya-md-gap: 1.1em;
+}
+
+body.vscode-body {
+  font-family: var(--raya-md-body);
+  font-size: 16px;
+  line-height: 1.7;
+  letter-spacing: 0.005em;
+  max-width: var(--raya-md-measure);
+  margin: 0 auto;
+  padding: 40px 56px 96px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Headings and display figures in Instrument Serif, Notion-like breathing room. */
+body.vscode-body h1,
+body.vscode-body h2,
+body.vscode-body h3,
+body.vscode-body h4,
+body.vscode-body h5,
+body.vscode-body h6 {
+  font-family: var(--raya-md-serif);
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: 0;
+  font-variant-numeric: lining-nums proportional-nums;
+  margin: 1.9em 0 0.6em;
+}
+
+body.vscode-body h1 {
+  font-size: 2.6em;
+  margin-top: 0.2em;
+}
+body.vscode-body h2 {
+  font-size: 1.9em;
+}
+body.vscode-body h3 {
+  font-size: 1.5em;
+}
+body.vscode-body h4 {
+  font-size: 1.25em;
+}
+body.vscode-body h5 {
+  font-size: 1.08em;
+}
+body.vscode-body h6 {
+  font-size: 1em;
+  opacity: 0.72;
+}
+
+body.vscode-body p,
+body.vscode-body ul,
+body.vscode-body ol,
+body.vscode-body blockquote,
+body.vscode-body table,
+body.vscode-body pre {
+  margin: 0 0 var(--raya-md-gap);
+}
+
+body.vscode-body li {
+  margin: 0.3em 0;
+  padding-left: 0.2em;
+}
+
+body.vscode-body ul,
+body.vscode-body ol {
+  padding-left: 1.4em;
+}
+
+body.vscode-body li > ul,
+body.vscode-body li > ol {
+  margin: 0.3em 0 0.3em;
+}
+
+/* Notion-style muted blockquote with a soft accent rule. */
+body.vscode-body blockquote {
+  margin-left: 0;
+  padding: 0.2em 0 0.2em 1.1em;
+  border-left: 3px solid color-mix(in srgb, var(--vscode-editor-foreground) 22%, transparent);
+  color: color-mix(in srgb, var(--vscode-editor-foreground) 78%, transparent);
+  font-style: normal;
+}
+
+body.vscode-body hr {
+  border: none;
+  height: 1px;
+  margin: 2.4em 0;
+  background: color-mix(in srgb, var(--vscode-editor-foreground) 16%, transparent);
+}
+
+/* Inline code and code blocks: monospace, quiet surface, generous padding. */
+body.vscode-body code {
+  font-family: var(--vscode-editor-font-family, ui-monospace, monospace);
+  font-size: 0.88em;
+  padding: 0.14em 0.36em;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--vscode-editor-foreground) 8%, transparent);
+}
+
+body.vscode-body pre {
+  padding: 16px 18px;
+  border-radius: 10px;
+  line-height: 1.55;
+  background: color-mix(in srgb, var(--vscode-editor-foreground) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--vscode-editor-foreground) 10%, transparent);
+  overflow: auto;
+}
+
+body.vscode-body pre code {
+  padding: 0;
+  background: none;
+  font-size: 0.9em;
+}
+
+/* Tables: clean hairlines, comfortable cell padding. */
+body.vscode-body table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+body.vscode-body th,
+body.vscode-body td {
+  padding: 0.55em 0.85em;
+  border: 1px solid color-mix(in srgb, var(--vscode-editor-foreground) 14%, transparent);
+  text-align: left;
+}
+
+body.vscode-body th {
+  font-weight: 600;
+  background: color-mix(in srgb, var(--vscode-editor-foreground) 5%, transparent);
+}
+
+body.vscode-body a {
+  color: var(--vscode-textLink-foreground);
+  text-underline-offset: 2px;
+}
+
+body.vscode-body img {
+  max-width: 100%;
+  border-radius: 8px;
+}
+
+/* Large standalone figures (e.g. a lone number or price on its own line) inherit the
+   serif so headline metrics read on-brand, matching Raya's chat typography. */
+body.vscode-body strong {
+  font-weight: 650;
+}

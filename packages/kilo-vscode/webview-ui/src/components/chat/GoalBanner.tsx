@@ -175,6 +175,46 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                   <Show when={state().blockedReason}>
                     {(reason) => <div class="goal-banner__reason">Blocked: {reason()}</div>}
                   </Show>
+                  {/* raya_change - goal audit log: for a stuck, blocked, or completed goal,
+                      show the last completion attempt requirement-by-requirement with the
+                      cited evidence and the exact rejection reason, instead of leaving that
+                      detail buried in chat narration. */}
+                  <Show when={state().auditAttempt}>
+                    {(attempt) => (
+                      <div class="goal-banner__audit" aria-label="Completion audit log">
+                        <div class="goal-banner__section-title">
+                          <span>Completion audit</span>
+                          <span
+                            class="goal-banner__audit-verdict"
+                            data-accepted={attempt().accepted ? "" : undefined}
+                          >
+                            {attempt().accepted ? "Passed" : "Rejected"}
+                          </span>
+                        </div>
+                        <Show when={!attempt().accepted && attempt().reason}>
+                          {(reason) => <div class="goal-banner__audit-reason">{reason()}</div>}
+                        </Show>
+                        <For each={attempt().requirements}>
+                          {(req) => (
+                            <div class="goal-banner__audit-req" data-passed={req.passed ? "" : undefined}>
+                              <div class="goal-banner__audit-req-head">
+                                <Icon name={req.passed ? "circle-check" : "circle"} size="small" />
+                                <span>{req.requirement}</span>
+                              </div>
+                              <For each={req.evidence}>
+                                {(ev) => (
+                                  <div class="goal-banner__audit-evidence">
+                                    <code>{ev.callID}</code>
+                                    <span>{ev.summary}</span>
+                                  </div>
+                                )}
+                              </For>
+                            </div>
+                          )}
+                        </For>
+                      </div>
+                    )}
+                  </Show>
                   <Show when={props.todos?.length}>
                     <div class="goal-banner__tasks" aria-label="Goal tasks">
                       <div class="goal-banner__section-title">Work plan</div>

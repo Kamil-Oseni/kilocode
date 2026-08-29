@@ -20,6 +20,8 @@ import { ensureBackendForAutocomplete } from "./services/autocomplete/ensure-bac
 import { AutocompleteServiceManager } from "./services/autocomplete/AutocompleteServiceManager"
 import { AttentionService } from "./services/attention"
 import { BrowserAutomationService, BrowserPanel } from "./services/browser-automation" // raya_change - Milestone F
+import { registerGrantAllPermissions } from "./kilo-provider/grant-all-permissions" // raya_change - global all-tools toggle
+import { registerCheckpointCommands } from "./kilo-provider/checkpoint-commands" // raya_change - named checkpoints
 import { CanvasPanel, CanvasService } from "./services/canvas" // raya_change - Milestone E
 import { TelemetryEventName, TelemetryProxy } from "./services/telemetry"
 import { registerCommitMessageService } from "./services/commit-message"
@@ -61,6 +63,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Create shared connection service (one server for all webviews)
   const connectionService = new KiloConnectionService(context)
+  context.subscriptions.push(registerGrantAllPermissions(connectionService)) // raya_change - global all-tools toggle
   const notebookBridge = createNotebookBridge(connectionService)
   let restore = context.workspaceState.get<RestoreState>(RESTORE_KEY) ?? {}
   const remember = (patch: RestoreState) => {
@@ -157,6 +160,7 @@ export function activate(context: vscode.ExtensionContext) {
     focusContext: "raya.sidebarFocused",
   })
   provider.setRemoteService(remoteService)
+  context.subscriptions.push(registerCheckpointCommands(connectionService, provider)) // raya_change - named checkpoints
 
   // Register the webview view provider for the sidebar.
   // retainContextWhenHidden keeps the webview alive when switching to other sidebar panels.

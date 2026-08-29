@@ -27,6 +27,7 @@ import { ProjectUsage } from "@/kilocode/session/project-usage" // raya_change -
 import { SessionID } from "@/session/schema"
 import { CommandFiles } from "@/kilocode/command-files"
 import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal API contracts
+import { RayaCheckpoint } from "@/kilocode/checkpoint" // raya_change - named workspace checkpoints
 import { RayaSelfHeal } from "@/kilocode/self-heal" // raya_change - global feedback backlog contracts
 // raya_change start - Milestone F browser API contracts
 import {
@@ -88,6 +89,7 @@ export const AgentManagerReplyPayload = Schema.Struct({ result: AgentManagerResu
 export const AgentManagerRejectPayload = Schema.Struct({ error: AgentManagerFailure })
 export const GoalCreatePayload = RayaGoal.Create // raya_change - Milestone A goal API contracts
 export const GoalUpdatePayload = RayaGoal.Control // raya_change - Milestone A goal API contracts
+export const CheckpointCreatePayload = RayaCheckpoint.CreatePayload // raya_change - named workspace checkpoints
 export const SelfHealCreatePayload = RayaSelfHeal.Create // raya_change
 export const SelfHealUpdatePayload = RayaSelfHeal.Update // raya_change
 export const BrowserReplyPayload = Schema.Struct({ result: BrowserResult }) // raya_change - Milestone F
@@ -115,6 +117,8 @@ export const KilocodePaths = {
   backgroundJobCancel: `${root}/background-jobs/:jobID/cancel`,
   goal: `/session/:sessionID/goal`, // raya_change - Milestone A session-scoped goal API
   goalDiscard: `/session/:sessionID/goal/discard`, // raya_change - reliable workspace rollback
+  checkpoint: `/session/:sessionID/checkpoint`, // raya_change - named workspace checkpoints
+  checkpointItem: `/session/:sessionID/checkpoint/:checkpointID`, // raya_change - jump to / remove a named checkpoint
   selfHeal: `${root}/self-heal`, // raya_change - global structured feedback backlog
   selfHealItem: `${root}/self-heal/:itemID`, // raya_change
   browserList: `${root}/browser`, // raya_change - Milestone F browser host API
@@ -464,6 +468,55 @@ export const KilocodeApi = HttpApi.make("kilocode")
               "Restore the goal's workspace checkpoint, including files created by child sessions, then clear it.",
           }),
         ),
+        // raya_change start - named workspace checkpoints
+        HttpApiEndpoint.get("checkpointList", KilocodePaths.checkpoint, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(RayaCheckpoint.List, "Named checkpoints for the session"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.checkpoint.list",
+            summary: "List session checkpoints",
+            description: "List the named workspace checkpoints saved for a session, newest first.",
+          }),
+        ),
+        HttpApiEndpoint.post("checkpointCreate", KilocodePaths.checkpoint, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          payload: CheckpointCreatePayload,
+          success: described(RayaCheckpoint.Info, "Created checkpoint"),
+          error: HttpApiError.BadRequest,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.checkpoint.create",
+            summary: "Create a named checkpoint",
+            description: "Capture the current workspace as a named checkpoint the user can jump back to.",
+          }),
+        ),
+        HttpApiEndpoint.post("checkpointJump", KilocodePaths.checkpointItem, {
+          params: { sessionID: SessionID, checkpointID: Schema.String },
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Boolean, "Workspace restored to the checkpoint"),
+          error: HttpApiError.NotFound,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.checkpoint.jump",
+            summary: "Jump to a checkpoint",
+            description: "Restore the workspace to a previously named checkpoint.",
+          }),
+        ),
+        HttpApiEndpoint.delete("checkpointRemove", KilocodePaths.checkpointItem, {
+          params: { sessionID: SessionID, checkpointID: Schema.String },
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Boolean, "Checkpoint removed"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.checkpoint.remove",
+            summary: "Remove a checkpoint",
+            description: "Delete a named checkpoint without touching the workspace.",
+          }),
+        ),
+        // raya_change end
         HttpApiEndpoint.post("selfHealCreate", KilocodePaths.selfHeal, {
           query: WorkspaceRoutingQuery,
           payload: SelfHealCreatePayload,

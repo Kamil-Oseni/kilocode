@@ -17534,6 +17534,78 @@
                       "required": ["requirements", "summary", "verifiedAt"],
                       "additionalProperties": false
                     },
+                    "auditAttempt": {
+                      "type": "object",
+                      "properties": {
+                        "at": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["NaN"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["-Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity", "-Infinity", "NaN"]
+                            }
+                          ]
+                        },
+                        "accepted": {
+                          "type": "boolean"
+                        },
+                        "reason": {
+                          "type": "string"
+                        },
+                        "requirements": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "requirement": {
+                                "type": "string"
+                              },
+                              "passed": {
+                                "type": "boolean"
+                              },
+                              "evidence": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "messageID": {
+                                      "type": "string",
+                                      "pattern": "^msg"
+                                    },
+                                    "callID": {
+                                      "type": "string"
+                                    },
+                                    "summary": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["callID", "summary"],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": ["requirement", "passed", "evidence"],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": ["at", "accepted", "requirements"],
+                      "additionalProperties": false
+                    },
                     "progress": {
                       "type": "array",
                       "items": {
@@ -17937,6 +18009,78 @@
                       "required": ["requirements", "summary", "verifiedAt"],
                       "additionalProperties": false
                     },
+                    "auditAttempt": {
+                      "type": "object",
+                      "properties": {
+                        "at": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["NaN"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["-Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity", "-Infinity", "NaN"]
+                            }
+                          ]
+                        },
+                        "accepted": {
+                          "type": "boolean"
+                        },
+                        "reason": {
+                          "type": "string"
+                        },
+                        "requirements": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "requirement": {
+                                "type": "string"
+                              },
+                              "passed": {
+                                "type": "boolean"
+                              },
+                              "evidence": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "messageID": {
+                                      "type": "string",
+                                      "pattern": "^msg"
+                                    },
+                                    "callID": {
+                                      "type": "string"
+                                    },
+                                    "summary": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["callID", "summary"],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": ["requirement", "passed", "evidence"],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": ["at", "accepted", "requirements"],
+                      "additionalProperties": false
+                    },
                     "progress": {
                       "type": "array",
                       "items": {
@@ -18310,6 +18454,78 @@
                       "required": ["requirements", "summary", "verifiedAt"],
                       "additionalProperties": false
                     },
+                    "auditAttempt": {
+                      "type": "object",
+                      "properties": {
+                        "at": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["NaN"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["-Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity", "-Infinity", "NaN"]
+                            }
+                          ]
+                        },
+                        "accepted": {
+                          "type": "boolean"
+                        },
+                        "reason": {
+                          "type": "string"
+                        },
+                        "requirements": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "requirement": {
+                                "type": "string"
+                              },
+                              "passed": {
+                                "type": "boolean"
+                              },
+                              "evidence": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "messageID": {
+                                      "type": "string",
+                                      "pattern": "^msg"
+                                    },
+                                    "callID": {
+                                      "type": "string"
+                                    },
+                                    "summary": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["callID", "summary"],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": ["requirement", "passed", "evidence"],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": ["at", "accepted", "requirements"],
+                      "additionalProperties": false
+                    },
                     "progress": {
                       "type": "array",
                       "items": {
@@ -18554,6 +18770,381 @@
           {
             "lang": "js",
             "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.goal.discard({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/{sessionID}/checkpoint": {
+      "get": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.checkpoint.list",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Named checkpoints for the session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "hash": {
+                        "type": "string"
+                      },
+                      "createdAt": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["NaN"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["-Infinity"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity", "-Infinity", "NaN"]
+                          }
+                        ]
+                      }
+                    },
+                    "required": ["id", "name", "hash", "createdAt"],
+                    "additionalProperties": false
+                  },
+                  "description": "Named checkpoints for the session"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "List the named workspace checkpoints saved for a session, newest first.",
+        "summary": "List session checkpoints",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.checkpoint.list({\n  ...\n})"
+          }
+        ]
+      },
+      "post": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.checkpoint.create",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Created checkpoint",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "hash": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["NaN"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["Infinity"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["-Infinity"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["Infinity", "-Infinity", "NaN"]
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["id", "name", "hash", "createdAt"],
+                  "additionalProperties": false,
+                  "description": "Created checkpoint"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Capture the current workspace as a named checkpoint the user can jump back to.",
+        "summary": "Create a named checkpoint",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.checkpoint.create({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/{sessionID}/checkpoint/{checkpointID}": {
+      "post": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.checkpoint.jump",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            },
+            "required": true
+          },
+          {
+            "name": "checkpointID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Workspace restored to the checkpoint",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Workspace restored to the checkpoint"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Restore the workspace to a previously named checkpoint.",
+        "summary": "Jump to a checkpoint",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.checkpoint.jump({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.checkpoint.remove",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            },
+            "required": true
+          },
+          {
+            "name": "checkpointID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Checkpoint removed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Checkpoint removed"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Delete a named checkpoint without touching the workspace.",
+        "summary": "Remove a checkpoint",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.checkpoint.remove({\n  ...\n})"
           }
         ]
       }

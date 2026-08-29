@@ -30,6 +30,7 @@ import { Session } from "@/session/session" // raya_change - Milestone A goal se
 import { Snapshot } from "@/snapshot" // raya_change - durable goal workspace checkpoints
 import { Storage } from "@/storage/storage" // raya_change - Milestone A durable goal storage
 import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal operations
+import { RayaCheckpoint } from "@/kilocode/checkpoint" // raya_change - named workspace checkpoints
 import { RayaGoalContinuation } from "@/kilocode/goal/continuation" // raya_change - Milestone A resume behavior
 import { RayaSelfHeal } from "@/kilocode/self-heal" // raya_change - global feedback backlog
 import type { RequestID as BrowserRequestID } from "@/kilocode/browser/protocol" // raya_change - Milestone F
@@ -49,6 +50,7 @@ import {
   ProjectUsageQuery, // raya_change - historical project usage
   GoalCreatePayload, // raya_change - Milestone A goal API
   GoalUpdatePayload, // raya_change - Milestone A goal API
+  CheckpointCreatePayload, // raya_change - named workspace checkpoints
   SelfHealCreatePayload, // raya_change
   SelfHealUpdatePayload, // raya_change
   BrowserReplyPayload, // raya_change - Milestone F browser API
@@ -75,6 +77,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     const sessions = yield* Session.Service // raya_change - Milestone A goal state and evidence
     const storage = yield* Storage.Service // raya_change - Milestone A durable goal storage
     const goals = RayaGoal.make({ storage, sessions }) // raya_change - Milestone A goal operations
+    const checkpoints = RayaCheckpoint.make({ storage, snapshots }) // raya_change - named workspace checkpoints
     const healing = RayaSelfHeal.make(storage) // raya_change - one backlog shared across sessions and projects
 
     // Location-scoped services, keyed by the request's directory and workspace.
@@ -397,6 +400,37 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       return true
     })
 
+    // raya_change start - named workspace checkpoints
+    const checkpointList = Effect.fn("KilocodeHttpApi.checkpointList")(function* (ctx: {
+      params: { sessionID: SessionID }
+    }) {
+      return yield* checkpoints.list(ctx.params.sessionID)
+    })
+
+    const checkpointCreate = Effect.fn("KilocodeHttpApi.checkpointCreate")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof CheckpointCreatePayload.Type
+    }) {
+      const info = yield* checkpoints.create(ctx.params.sessionID, ctx.payload.name)
+      if (!info) return yield* new HttpApiError.BadRequest({})
+      return info
+    })
+
+    const checkpointJump = Effect.fn("KilocodeHttpApi.checkpointJump")(function* (ctx: {
+      params: { sessionID: SessionID; checkpointID: string }
+    }) {
+      const ok = yield* checkpoints.jump(ctx.params.sessionID, ctx.params.checkpointID)
+      if (!ok) return yield* new HttpApiError.NotFound({})
+      return true
+    })
+
+    const checkpointRemove = Effect.fn("KilocodeHttpApi.checkpointRemove")(function* (ctx: {
+      params: { sessionID: SessionID; checkpointID: string }
+    }) {
+      return yield* checkpoints.remove(ctx.params.sessionID, ctx.params.checkpointID)
+    })
+    // raya_change end
+
     const selfHealCreate = Effect.fn("KilocodeHttpApi.selfHealCreate")(function* (ctx: {
       payload: typeof SelfHealCreatePayload.Type
     }) {
@@ -460,6 +494,10 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .handle("goalUpdate", goalUpdate)
         .handle("goalClear", goalClear)
         .handle("goalDiscard", goalDiscard)
+        .handle("checkpointList", checkpointList)
+        .handle("checkpointCreate", checkpointCreate)
+        .handle("checkpointJump", checkpointJump)
+        .handle("checkpointRemove", checkpointRemove)
         .handle("selfHealCreate", selfHealCreate)
         .handle("selfHealList", selfHealList)
         .handle("selfHealGet", selfHealGet)

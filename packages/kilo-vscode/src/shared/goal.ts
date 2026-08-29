@@ -26,6 +26,17 @@ export interface GoalState {
     summary: string
     verifiedAt: number
   }
+  // raya_change - last completion attempt (accepted or rejected) for the audit-log view
+  auditAttempt?: {
+    at: number
+    accepted: boolean
+    reason?: string
+    requirements: Array<{
+      requirement: string
+      passed: boolean
+      evidence: Array<{ messageID?: string; callID: string; summary: string }>
+    }>
+  }
   progress: Array<{
     at: number
     kind: "status" | "turn" | "continuation"

@@ -94,8 +94,6 @@
   <!-- packages/opencode/src/kilocode/encoding.ts -->
 - <https://github.com/Kilo-Org/kilocode/issues/9755>
   <!-- packages/opencode/src/kilocode/encoding.ts -->
-- <https://github.com/Kilo-Org/kilocode/issues/new/choose>
-  <!-- packages/kilo-vscode/webview-ui/src/components/chat/FeedbackDialog.tsx -->
 - <https://github.com/microsoft/vscode-eslint/archive/refs/heads/main.zip>
   <!-- packages/opencode/src/lsp/server.ts -->
 - <https://github.com/oven-sh/bun/issues/16682>
@@ -120,7 +118,6 @@
 - <https://kilo.ai/cli/install>
   <!-- packages/opencode/src/kilocode/installation/index.ts -->
 - <https://kilo.ai/discord>
-  <!-- packages/kilo-vscode/webview-ui/src/components/chat/FeedbackDialog.tsx -->
   <!-- packages/kilo-vscode/webview-ui/src/components/settings/AboutKiloCodeTab.tsx -->
 - <https://kilo.ai/docs>
   <!-- packages/kilo-vscode/webview-ui/src/hooks/useSlashCommand.ts -->
@@ -150,7 +147,6 @@
 - <https://kilo.ai/pricing/kilo-pass>
   <!-- packages/kilo-vscode/webview-ui/src/components/profile/ProfileView.tsx -->
 - <https://kilo.ai/support>
-  <!-- packages/kilo-vscode/webview-ui/src/components/chat/FeedbackDialog.tsx -->
   <!-- packages/kilo-vscode/webview-ui/src/components/settings/AboutKiloCodeTab.tsx -->
 - <https://kilocode.ai>
   <!-- packages/opencode/src/kilocode/const.ts -->

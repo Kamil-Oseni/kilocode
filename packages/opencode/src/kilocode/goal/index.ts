@@ -31,6 +31,17 @@ export namespace RayaGoal {
   })
   export type Audit = typeof Audit.Type
 
+  // raya_change - the last completion-audit attempt, accepted or rejected. A rejected audit
+  // otherwise only surfaces as an AuditError the model narrates into chat; persisting it lets
+  // the goal audit-log view show exactly which requirement failed and which evidence was cited.
+  export const AuditAttempt = Schema.Struct({
+    at: Schema.Number,
+    accepted: Schema.Boolean,
+    reason: Schema.optional(Schema.String),
+    requirements: Schema.Array(Requirement),
+  })
+  export type AuditAttempt = typeof AuditAttempt.Type
+
   export const Progress = Schema.Struct({
     at: Schema.Number,
     kind: Schema.Literals(["status", "turn", "continuation"]),
@@ -58,6 +69,7 @@ export namespace RayaGoal {
     usage: Usage,
     blockedReason: Schema.optional(Schema.String),
     audit: Schema.optional(Audit),
+    auditAttempt: Schema.optional(AuditAttempt), // raya_change - last completion attempt for the audit-log view
     progress: Schema.Array(Progress),
   })
   export type State = typeof State.Type
@@ -392,24 +404,38 @@ export namespace RayaGoal {
         return yield* new AuditError({ message: "Completion requires a requirement-by-requirement audit." })
       }
       const messages = yield* collect(sessionID) // raya_change - subagent child-session calls are valid evidence
-      const audit = yield* validateForSession(
-        {
-          ...input.audit,
-          summary: input.audit.summary ?? input.summary ?? input.audit.requirements[0]?.requirement ?? "",
-        },
-        messages,
-        state.createdAt,
-        state.objective,
+      const submitted = {
+        ...input.audit,
+        summary: input.audit.summary ?? input.summary ?? input.audit.requirements[0]?.requirement ?? "",
+      }
+      // raya_change start - persist the attempt whether it passes or fails, so a goal that
+      // stays blocked/active after a rejected completion still carries the requirement-by-
+      // requirement detail and rejection reason for the audit-log view.
+      const audit = yield* validateForSession(submitted, messages, state.createdAt, state.objective).pipe(
+        Effect.catchTag("RayaGoal.AuditError", (err) =>
+          save(sessionID, {
+            ...state,
+            updatedAt: now,
+            auditAttempt: { at: now, accepted: false, reason: err.message, requirements: submitted.requirements },
+            progress: progress(state, {
+              at: now,
+              kind: "status",
+              message: `Completion audit rejected: ${err.message}`,
+            }),
+          }).pipe(Effect.flatMap(() => Effect.fail(err))),
+        ),
       )
       const next = yield* save(sessionID, {
         ...state,
         status: "complete",
         audit,
+        auditAttempt: { at: now, accepted: true, requirements: audit.requirements },
         updatedAt: now,
         activeMs: elapsed(state, now),
         activeAt: undefined,
         progress: progress(state, { at: now, kind: "status", message: "Completion audit passed." }),
       })
+      // raya_change end
       if (state.selfHealID) {
         const evidence = audit.requirements.flatMap((requirement) =>
           requirement.evidence.map((item) => ({

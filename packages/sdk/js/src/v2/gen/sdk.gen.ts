@@ -203,6 +203,14 @@ import type {
   KilocodeCanvasRejectResponses,
   KilocodeCanvasReplyErrors,
   KilocodeCanvasReplyResponses,
+  KilocodeCheckpointCreateErrors,
+  KilocodeCheckpointCreateResponses,
+  KilocodeCheckpointJumpErrors,
+  KilocodeCheckpointJumpResponses,
+  KilocodeCheckpointListErrors,
+  KilocodeCheckpointListResponses,
+  KilocodeCheckpointRemoveErrors,
+  KilocodeCheckpointRemoveResponses,
   KilocodeCommandFilesErrors,
   KilocodeCommandFilesResponses,
   KilocodeGoalClearErrors,
@@ -8397,6 +8405,163 @@ export class Goal extends HeyApiClient {
   }
 }
 
+export class Checkpoint extends HeyApiClient {
+  /**
+   * List session checkpoints
+   *
+   * List the named workspace checkpoints saved for a session, newest first.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      KilocodeCheckpointListResponses,
+      KilocodeCheckpointListErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/checkpoint",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Create a named checkpoint
+   *
+   * Capture the current workspace as a named checkpoint the user can jump back to.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      name?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "name" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeCheckpointCreateResponses,
+      KilocodeCheckpointCreateErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/checkpoint",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Remove a checkpoint
+   *
+   * Delete a named checkpoint without touching the workspace.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      checkpointID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "checkpointID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      KilocodeCheckpointRemoveResponses,
+      KilocodeCheckpointRemoveErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/checkpoint/{checkpointID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Jump to a checkpoint
+   *
+   * Restore the workspace to a previously named checkpoint.
+   */
+  public jump<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      checkpointID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "checkpointID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeCheckpointJumpResponses,
+      KilocodeCheckpointJumpErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/checkpoint/{checkpointID}",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class SelfHeal extends HeyApiClient {
   /**
    * List self-heal feedback
@@ -9411,6 +9576,11 @@ export class Kilocode extends HeyApiClient {
   private _goal?: Goal
   get goal(): Goal {
     return (this._goal ??= new Goal({ client: this.client }))
+  }
+
+  private _checkpoint?: Checkpoint
+  get checkpoint(): Checkpoint {
+    return (this._checkpoint ??= new Checkpoint({ client: this.client }))
   }
 
   private _selfHeal?: SelfHeal

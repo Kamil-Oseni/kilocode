@@ -244,6 +244,42 @@ describe("RayaGoal", () => {
     }),
   )
 
+  // raya_change - the agent can self-pause when it hits an approval wall, and resume later
+  it.live("lets the model pause an active goal and resume it", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const sessionID = SessionID.make(`ses_goal_${crypto.randomUUID()}`)
+      let rows: MessageV2.WithParts[] = []
+      const goals = setup(storage, () => rows)
+      yield* Effect.addFinalizer(() => goals.clear(sessionID))
+      yield* goals.create(sessionID, "Finish the append after approval")
+      rows = transcript({ sessionID, tool: "bash", exit: 0 }).rows
+
+      const paused = yield* goals.update(sessionID, { status: "paused", reason: "Waiting on the user to approve." })
+      expect(paused.status).toBe("paused")
+      expect(paused.progress.at(-1)?.message).toContain("Waiting on the user to approve.")
+
+      const resumed = yield* goals.update(sessionID, { status: "active" })
+      expect(resumed.status).toBe("active")
+    }),
+  )
+
+  it.live("rejects pausing a goal that is not active", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const sessionID = SessionID.make(`ses_goal_${crypto.randomUUID()}`)
+      let rows: MessageV2.WithParts[] = []
+      const goals = setup(storage, () => rows)
+      yield* Effect.addFinalizer(() => goals.clear(sessionID))
+      yield* goals.create(sessionID, "Finish the append")
+      rows = transcript({ sessionID, tool: "bash", exit: 0 }).rows
+      yield* goals.update(sessionID, { status: "blocked", reason: "Cannot proceed." })
+
+      const failed = yield* Effect.flip(goals.update(sessionID, { status: "paused" }))
+      expect(failed).toBeInstanceOf(RayaGoal.AuditError)
+    }),
+  )
+
   it.live("rejects unmet evidence and blocks a no-tool goal turn", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service

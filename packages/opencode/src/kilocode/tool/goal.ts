@@ -80,24 +80,35 @@ export function goalTools(goals: Goals, sessions?: Pick<Session.Interface, "get"
   const update = Tool.define(
     "update_goal",
     Effect.succeed({
-      description: `Finish or block the active goal. To mark complete, derive every concrete requirement from the full objective and submit a requirement-by-requirement audit. Every requirement must pass and cite one or more real completed work or verification tool calls by callID; include messageID only when it is available. Successful command evidence must have exit code 0. Missing, failed, uncertain, goal-control-only, or invented evidence is rejected and leaves the goal active. When honest progress is impossible, mark blocked with a plain reason. You cannot pause, resume, or clear a goal.`,
+      description: `Finish, block, pause, or resume the active goal. To mark complete, derive every concrete requirement from the full objective and submit a requirement-by-requirement audit. Every requirement must pass and cite one or more real completed work or verification tool calls by callID; include messageID only when it is available. Successful command evidence must have exit code 0. Missing, failed, uncertain, goal-control-only, or invented evidence is rejected and leaves the goal active. When honest progress is impossible, mark blocked with a plain reason. Pause (with a short reason) instead of grinding when you hit an approval wall or genuinely need the user to act; the goal stops auto-continuing until they resume, and mark active again to resume a paused or blocked goal. You cannot clear a goal.`,
       parameters: RayaGoal.ModelUpdate,
       execute: (input: RayaGoal.ModelUpdate, ctx) =>
         Effect.gen(function* () {
+          const rejected: Record<RayaGoal.ModelUpdate["status"], string> = {
+            complete: "Completion audit rejected",
+            blocked: "Goal not blocked",
+            paused: "Goal not paused",
+            active: "Goal not resumed",
+          }
+          const succeeded: Record<RayaGoal.Status, string> = {
+            complete: "Goal complete",
+            blocked: "Goal blocked",
+            paused: "Goal paused",
+            active: "Goal resumed",
+          }
           const output = yield* goals.update(ctx.sessionID, input).pipe(
             Effect.match({
-              onFailure: (err) =>
-                result(
-                  input.status === "complete" ? "Completion audit rejected" : "Goal not blocked",
-                  `${failure(err)} The goal remains active.`,
-                  "active",
-                ),
+              onFailure: (err) => result(rejected[input.status], `${failure(err)} The goal remains active.`, "active"),
               onSuccess: (goal) =>
                 result(
-                  goal.status === "complete" ? "Goal complete" : "Goal blocked",
+                  succeeded[goal.status],
                   goal.status === "complete"
                     ? "The requirement-by-requirement completion audit passed against persisted tool evidence."
-                    : `Goal blocked: ${goal.blockedReason}`,
+                    : goal.status === "blocked"
+                      ? `Goal blocked: ${goal.blockedReason}`
+                      : goal.status === "paused"
+                        ? "Goal paused. It will not auto-continue until it is resumed."
+                        : "Goal resumed.",
                   goal.status,
                 ),
             }),

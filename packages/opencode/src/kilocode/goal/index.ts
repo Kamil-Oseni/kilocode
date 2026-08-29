@@ -75,7 +75,7 @@ export namespace RayaGoal {
 
   // raya_change - model providers require tool parameters to be a top-level JSON object
   export const ModelUpdate = Schema.Struct({
-    status: Schema.Literals(["blocked", "complete", "active"]),
+    status: Schema.Literals(["blocked", "complete", "active", "paused"]),
     reason: Schema.optional(Schema.String),
     summary: Schema.optional(Schema.String), // raya_change - top-level summary fills a missing nested audit.summary
     audit: Schema.optional(
@@ -337,6 +337,27 @@ export namespace RayaGoal {
         }
         return next
       }
+      // raya_change start - let the agent self-pause when it hits an approval wall
+      // instead of blocking, so the user can act and the goal resumes cleanly.
+      if (input.status === "paused") {
+        if (state.status !== "active") {
+          return yield* new AuditError({ message: `Only an active goal can be paused.` })
+        }
+        const reason = clean(input.reason ?? "")
+        return yield* save(sessionID, {
+          ...state,
+          status: "paused",
+          updatedAt: now,
+          activeMs: elapsed(state, now),
+          activeAt: undefined,
+          progress: progress(state, {
+            at: now,
+            kind: "status",
+            message: reason ? `Paused: ${reason}` : "Goal paused.",
+          }),
+        })
+      }
+      // raya_change end
       if (state.status !== "active" && state.status !== "blocked") {
         return yield* new AuditError({ message: `Only an active or blocked goal can be marked complete.` })
       }

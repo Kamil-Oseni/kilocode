@@ -219,7 +219,14 @@ export const layer: Layer.Layer<Service, never, Requirements> =
           // kilocode_change end
 
           const enabled = Effect.fnUntraced(function* () {
-            if (state.vcs !== "git") return false
+            // kilocode_change start - snapshots run in a private git-dir (state.gitdir) with the
+            // workspace as work-tree, so they do not require the workspace itself to be a git repo.
+            // Gating on state.vcs left undo/redo silently dead in non-git folders: track() returned
+            // early, no patch part was ever recorded, and "Undo all" had nothing to revert. The seed
+            // path already degrades to cold init when there is no source index, and the slow-repo
+            // guard still protects huge/home directories, so it is safe to track any worktree.
+            void state.vcs
+            // kilocode_change end
             if (Flag.KILO_CLIENT === "acp") return false // kilocode_change - ACP clients do not support snapshots
             return (yield* config.get()).snapshot !== false
           })

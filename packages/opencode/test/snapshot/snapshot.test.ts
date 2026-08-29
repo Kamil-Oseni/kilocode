@@ -130,6 +130,26 @@ it.instance(
   { git: true },
 )
 
+// raya_change start - snapshots must work outside git repos so "Undo all" can revert
+// agent writes in non-git folders. Regression guard for the jesus.txt case: a write to a
+// non-git workspace produced no patch part, so undo had nothing to revert.
+it.instance(
+  "tracks and reverts a created file in a non-git workspace",
+  Effect.gen(function* () {
+    const tmp = yield* bootstrap()
+    const snapshot = yield* Snapshot.Service
+    const before = yield* snapshot.track()
+    expect(before).toBeTruthy()
+    yield* write(`${tmp.path}/created.txt`, "Jesus is good.")
+    const patch = yield* snapshot.patch(before!)
+    expect(patch.files.some((file) => file.replaceAll("\\", "/").endsWith("/created.txt"))).toBe(true)
+    yield* snapshot.revert([patch])
+    expect(yield* exists(`${tmp.path}/created.txt`)).toBe(false)
+  }),
+  { git: false },
+)
+// raya_change end
+
 it.instance(
   "revert in subdirectory",
   withTrackedSnapshot(({ tmp, snapshot, before }) =>

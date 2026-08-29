@@ -70,6 +70,8 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   const [transferring, setTransferring] = createSignal(false)
   const [transferDetail, setTransferDetail] = createSignal("")
   const [repoBranch, setRepoBranch] = createSignal<string>()
+  const [kept, setKept] = createSignal<string>()
+  const [discarding, setDiscarding] = createSignal(false)
   let worktreeRef: HTMLDivElement | undefined
 
   // Permissions and questions scoped to this session's family (self + subagents).
@@ -164,6 +166,33 @@ export const ChatView: Component<ChatViewProps> = (props) => {
 
   const openChanges = () => vscode.postMessage({ type: "openChanges" })
 
+  const stats = createMemo(() => session.reviewStats()) // raya_change - session snapshots, child tasks, then git
+
+  const changeKey = () => {
+    const sid = id()
+    const next = stats()
+    if (!sid || !next?.files) return
+    return `${sid}:${next.files}:${next.additions}:${next.deletions}`
+  }
+  const pending = () => {
+    const key = changeKey()
+    return !!key && kept() !== key && !session.revert()
+  }
+  const keepAll = () => {
+    const key = changeKey()
+    if (key) setKept(key)
+    setDiscarding(false)
+  }
+  const discardAll = () => {
+    // raya_change - Undo all discards the session's file edits only; the conversation
+    // stays and nothing becomes redoable. (Previously this reverted to the first
+    // user message, which wiped the chat and offered a nonsensical redo.)
+    const sid = id()
+    if (!sid || session.status() !== "idle") return
+    vscode.postMessage({ type: "discardSessionChanges", sessionID: sid })
+    setDiscarding(false)
+  }
+
   const moveToWorktree = () => {
     if (transferring()) return
     const sid = id()
@@ -185,14 +214,14 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   }
 
   const changesTooltip = () => {
-    const stats = session.worktreeStats()
-    if (!stats?.files) return language.t("sidebar.session.showChanges.tooltip.empty")
+    const next = stats()
+    if (!next?.files) return language.t("sidebar.session.showChanges.tooltip.empty")
     return (
       <span class="session-changes-tooltip">
-        <span>{stats.files === 1 ? "1 file changed" : `${stats.files} files changed`}</span>
+        <span>{next.files === 1 ? "1 file changed" : `${next.files} files changed`}</span>
         <span class="session-changes-tooltip-separator">·</span>
-        <span class="session-diff-add">+{stats.additions}</span>
-        <span class="session-diff-del">-{stats.deletions}</span>
+        <span class="session-diff-add">+{next.additions}</span>
+        <span class="session-diff-del">-{next.deletions}</span>
         <span>Open the changes view.</span>
       </span>
     )
@@ -203,6 +232,11 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   createEffect(() => {
     if (!isSidebar() || !server.gitInstalled()) return
     vscode.postMessage({ type: "agentManager.requestRepoInfo" })
+  })
+
+  createEffect(() => {
+    id()
+    setDiscarding(false)
   })
 
   const canStartSession = (hasChat: boolean) => hasChat
@@ -216,9 +250,14 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   const canStartWorktree = () => isSidebar() && server.gitInstalled()
 
   const canMoveToWorktree = (hasChat: boolean) => hasChat && canContinueInWorktree() && server.gitInstalled()
+  const canReviewChanges = (hasChat: boolean) => hasChat // raya_change - snapshot review belongs to every chat, including non-Git folders
 
   const hasActions = (hasChat: boolean) =>
-    canStartSession(hasChat) || canFork(hasChat) || canStartWorktree() || canMoveToWorktree(hasChat)
+    canStartSession(hasChat) ||
+    canFork(hasChat) ||
+    canStartWorktree() ||
+    canMoveToWorktree(hasChat) ||
+    canReviewChanges(hasChat)
 
   const renderActions = (hasChat: boolean) => (
     <Show when={hasActions(hasChat)}>
@@ -296,45 +335,98 @@ export const ChatView: Component<ChatViewProps> = (props) => {
             </div>
           </Show>
           <Show when={canMoveToWorktree(hasChat)}>
-            <>
-              <Tooltip value={moveTooltip()} placement="top">
-                <Button
-                  variant="ghost"
-                  size="small"
-                  class="session-move-action"
-                  aria-disabled={transferring()}
-                  onClick={moveToWorktree}
-                  aria-label={language.t("sidebar.session.moveToWorktree")}
-                >
-                  <Show when={transferring()} fallback={<Icon name="branch" size="small" />}>
-                    <Spinner class="chat-spinner-small" />
-                  </Show>
-                  <span class="session-move-label">
-                    {transferring() ? transferDetail() : language.t("sidebar.session.moveToWorktree")}
-                  </span>
-                </Button>
-              </Tooltip>
-              <Tooltip value={changesTooltip()} placement="top" class="session-move-changes-trigger">
+            <Tooltip value={moveTooltip()} placement="top">
+              <Button
+                variant="ghost"
+                size="small"
+                class="session-move-action"
+                aria-disabled={transferring()}
+                onClick={moveToWorktree}
+                aria-label={language.t("sidebar.session.moveToWorktree")}
+              >
+                <Show when={transferring()} fallback={<Icon name="branch" size="small" />}>
+                  <Spinner class="chat-spinner-small" />
+                </Show>
+                <span class="session-move-label">
+                  {transferring() ? transferDetail() : language.t("sidebar.session.moveToWorktree")}
+                </span>
+              </Button>
+            </Tooltip>
+          </Show>
+          <Show when={canReviewChanges(hasChat)}>
+            <div class="session-review-cluster">
+            <Tooltip value={changesTooltip()} placement="top" class="session-move-changes-trigger">
+              <Button
+                variant="ghost"
+                size="small"
+                class="session-move-changes"
+                classList={{
+                  "session-move-changes--empty": !stats()?.files,
+                  "session-move-changes--has-changes": !!stats()?.files,
+                }}
+                onClick={openChanges}
+                aria-label={language.t("command.session.show.changes")}
+              >
+                <Icon name="layers" size="small" />
+                <span class="session-review-label">Review changes</span>
+                <Show when={stats()?.files}>
+                  <span class="session-diff-add">+{stats()!.additions}</span>
+                  <span class="session-diff-del">-{stats()!.deletions}</span>
+                </Show>
+              </Button>
+            </Tooltip>
+            {/* raya_change - Undo all swaps to Confirm undo in place; Keep all persists, no clipping question line */}
+            <Show when={!discarding()}>
+              <Tooltip value="Keep every file edit in this chat" placement="top">
                 <Button
                   variant="ghost"
                   size="small"
                   class="session-move-changes"
-                  classList={{
-                    "session-move-changes--empty": !session.worktreeStats()?.files,
-                    "session-move-changes--has-changes": !!session.worktreeStats()?.files,
-                  }}
-                  onClick={openChanges}
-                  aria-label={language.t("command.session.show.changes")}
+                  disabled={session.status() !== "idle"}
+                  onClick={keepAll}
                 >
-                  <Icon name="layers" size="small" />
-                  <Show when={session.worktreeStats()?.files}>
-                    <span class="session-diff-add">+{session.worktreeStats()!.additions}</span>
-                    <span class="session-diff-del">-{session.worktreeStats()!.deletions}</span>
-                    <span class="session-move-dot" aria-hidden="true" />
-                  </Show>
+                  Keep all
                 </Button>
               </Tooltip>
-            </>
+            </Show>
+            <Show
+              when={discarding()}
+              fallback={
+                <Tooltip value="Undo every file edit in this chat" placement="top">
+                  <Button
+                    variant="ghost"
+                    size="small"
+                    class="session-move-changes"
+                    disabled={session.status() !== "idle"}
+                    onClick={() => setDiscarding(true)}
+                  >
+                    Undo all
+                  </Button>
+                </Tooltip>
+              }
+            >
+              <Tooltip value="This can't be undone" placement="top">
+                <Button
+                  variant="secondary"
+                  size="small"
+                  class="session-move-changes session-move-changes--confirm"
+                  disabled={session.status() !== "idle"}
+                  onClick={discardAll}
+                >
+                  Confirm undo
+                </Button>
+              </Tooltip>
+              <Button
+                variant="ghost"
+                size="small"
+                class="session-move-changes"
+                aria-label="Cancel undo"
+                onClick={() => setDiscarding(false)}
+              >
+                Cancel
+              </Button>
+            </Show>
+            </div>
           </Show>
         </div>
       </div>

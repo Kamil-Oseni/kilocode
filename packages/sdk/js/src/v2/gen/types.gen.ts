@@ -3978,6 +3978,60 @@ export type Session9 = {
   }
 }
 
+export type Session10 = {
+  id: string
+  slug: string
+  projectID: string
+  workspaceID?: string
+  directory: string
+  path?: string
+  parentID?: string
+  summary?: {
+    additions: number
+    deletions: number
+    files: number
+    diffs?: Array<SnapshotSummaryFileDiff>
+  }
+  cost?: number
+  tokens?: {
+    input: number
+    output: number
+    reasoning: number
+    cache: {
+      read: number
+      write: number
+    }
+  }
+  share?: {
+    url: string
+  }
+  title: string
+  agent?: string
+  model?: {
+    id: string
+    providerID: string
+    variant?: string
+  }
+  version: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    created: number
+    updated: number
+    compacting?: number
+    archived?: number
+  }
+  permission?: PermissionRuleset
+  revert?: {
+    messageID: string
+    partID?: string
+    snapshot?: string
+    diff?: string
+    workspace?: "restored" | "snapshots-disabled" | "unavailable"
+  }
+}
+
 export type EventTuiPromptAppend2 = {
   type: "tui.prompt.append"
   properties: {
@@ -14419,6 +14473,44 @@ export type SessionUnrevertResponses = {
 
 export type SessionUnrevertResponse = SessionUnrevertResponses[keyof SessionUnrevertResponses]
 
+export type SessionDiscardChangesData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/discard_changes"
+}
+
+export type SessionDiscardChangesErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * SessionBusyError
+   */
+  409: SessionBusyError
+}
+
+export type SessionDiscardChangesError = SessionDiscardChangesErrors[keyof SessionDiscardChangesErrors]
+
+export type SessionDiscardChangesResponses = {
+  /**
+   * Updated session
+   */
+  200: Session10
+}
+
+export type SessionDiscardChangesResponse = SessionDiscardChangesResponses[keyof SessionDiscardChangesResponses]
+
 export type PermissionRespondData = {
   body?: {
     response: "once" | "always" | "reject"
@@ -17918,9 +18010,13 @@ export type KilocodeGoalGetResponses = {
   200: {
     objective: string
     startMessageID?: string
+    startSnapshot?: string
+    selfHealID?: string
     status: "active" | "paused" | "complete" | "blocked"
     createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    activeMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    activeAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     usage: {
       turns: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       continuations: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -17985,9 +18081,13 @@ export type KilocodeGoalUpdateResponses = {
   200: {
     objective: string
     startMessageID?: string
+    startSnapshot?: string
+    selfHealID?: string
     status: "active" | "paused" | "complete" | "blocked"
     createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    activeMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    activeAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     usage: {
       turns: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       continuations: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -18021,6 +18121,7 @@ export type KilocodeGoalCreateData = {
   body?: {
     objective: string
     messageID?: string
+    selfHealID?: string
   }
   path: {
     sessionID: string
@@ -18052,9 +18153,13 @@ export type KilocodeGoalCreateResponses = {
   200: {
     objective: string
     startMessageID?: string
+    startSnapshot?: string
+    selfHealID?: string
     status: "active" | "paused" | "complete" | "blocked"
     createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    activeMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    activeAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     usage: {
       turns: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       continuations: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -18083,6 +18188,275 @@ export type KilocodeGoalCreateResponses = {
 }
 
 export type KilocodeGoalCreateResponse = KilocodeGoalCreateResponses[keyof KilocodeGoalCreateResponses]
+
+export type KilocodeGoalDiscardData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/goal/discard"
+}
+
+export type KilocodeGoalDiscardErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeGoalDiscardError = KilocodeGoalDiscardErrors[keyof KilocodeGoalDiscardErrors]
+
+export type KilocodeGoalDiscardResponses = {
+  /**
+   * Goal workspace restored and state cleared
+   */
+  200: boolean
+}
+
+export type KilocodeGoalDiscardResponse = KilocodeGoalDiscardResponses[keyof KilocodeGoalDiscardResponses]
+
+export type KilocodeSelfHealListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/self-heal"
+}
+
+export type KilocodeSelfHealListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type KilocodeSelfHealListError = KilocodeSelfHealListErrors[keyof KilocodeSelfHealListErrors]
+
+export type KilocodeSelfHealListResponses = {
+  /**
+   * Global self-heal backlog
+   */
+  200: Array<{
+    id: string
+    fingerprint: string
+    title: string
+    description: string
+    category: "ui" | "chat" | "routing" | "goal" | "browser" | "settings" | "build" | "test" | "docs" | "other"
+    severity: "low" | "medium" | "high"
+    explanation: string
+    approach: string
+    status: "triaged" | "queued" | "in_progress" | "verified" | "blocked" | "duplicate" | "cancelled"
+    createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    reports: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    reporterSessionID?: string
+    workSessionID?: string
+    blockedReason?: string
+    evidence: Array<{
+      summary: string
+      command?: string
+      artifact?: string
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }>
+    reloadRequired: boolean
+    notifiedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }>
+}
+
+export type KilocodeSelfHealListResponse = KilocodeSelfHealListResponses[keyof KilocodeSelfHealListResponses]
+
+export type KilocodeSelfHealCreateData = {
+  body?: {
+    description: string
+    reporterSessionID?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/self-heal"
+}
+
+export type KilocodeSelfHealCreateErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type KilocodeSelfHealCreateError = KilocodeSelfHealCreateErrors[keyof KilocodeSelfHealCreateErrors]
+
+export type KilocodeSelfHealCreateResponses = {
+  /**
+   * Triaged self-heal feedback
+   */
+  200: {
+    id: string
+    fingerprint: string
+    title: string
+    description: string
+    category: "ui" | "chat" | "routing" | "goal" | "browser" | "settings" | "build" | "test" | "docs" | "other"
+    severity: "low" | "medium" | "high"
+    explanation: string
+    approach: string
+    status: "triaged" | "queued" | "in_progress" | "verified" | "blocked" | "duplicate" | "cancelled"
+    createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    reports: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    reporterSessionID?: string
+    workSessionID?: string
+    blockedReason?: string
+    evidence: Array<{
+      summary: string
+      command?: string
+      artifact?: string
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }>
+    reloadRequired: boolean
+    notifiedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+}
+
+export type KilocodeSelfHealCreateResponse = KilocodeSelfHealCreateResponses[keyof KilocodeSelfHealCreateResponses]
+
+export type KilocodeSelfHealGetData = {
+  body?: never
+  path: {
+    itemID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/self-heal/{itemID}"
+}
+
+export type KilocodeSelfHealGetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeSelfHealGetError = KilocodeSelfHealGetErrors[keyof KilocodeSelfHealGetErrors]
+
+export type KilocodeSelfHealGetResponses = {
+  /**
+   * Self-heal feedback item
+   */
+  200: {
+    id: string
+    fingerprint: string
+    title: string
+    description: string
+    category: "ui" | "chat" | "routing" | "goal" | "browser" | "settings" | "build" | "test" | "docs" | "other"
+    severity: "low" | "medium" | "high"
+    explanation: string
+    approach: string
+    status: "triaged" | "queued" | "in_progress" | "verified" | "blocked" | "duplicate" | "cancelled"
+    createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    reports: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    reporterSessionID?: string
+    workSessionID?: string
+    blockedReason?: string
+    evidence: Array<{
+      summary: string
+      command?: string
+      artifact?: string
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }>
+    reloadRequired: boolean
+    notifiedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+}
+
+export type KilocodeSelfHealGetResponse = KilocodeSelfHealGetResponses[keyof KilocodeSelfHealGetResponses]
+
+export type KilocodeSelfHealUpdateData = {
+  body?: {
+    status?: "triaged" | "queued" | "in_progress" | "verified" | "blocked" | "duplicate" | "cancelled"
+    workSessionID?: string
+    blockedReason?: string
+    evidence?: Array<{
+      summary: string
+      command?: string
+      artifact?: string
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }>
+    reloadRequired?: boolean
+    notifiedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  path: {
+    itemID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/self-heal/{itemID}"
+}
+
+export type KilocodeSelfHealUpdateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeSelfHealUpdateError = KilocodeSelfHealUpdateErrors[keyof KilocodeSelfHealUpdateErrors]
+
+export type KilocodeSelfHealUpdateResponses = {
+  /**
+   * Updated self-heal feedback
+   */
+  200: {
+    id: string
+    fingerprint: string
+    title: string
+    description: string
+    category: "ui" | "chat" | "routing" | "goal" | "browser" | "settings" | "build" | "test" | "docs" | "other"
+    severity: "low" | "medium" | "high"
+    explanation: string
+    approach: string
+    status: "triaged" | "queued" | "in_progress" | "verified" | "blocked" | "duplicate" | "cancelled"
+    createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    reports: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    reporterSessionID?: string
+    workSessionID?: string
+    blockedReason?: string
+    evidence: Array<{
+      summary: string
+      command?: string
+      artifact?: string
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }>
+    reloadRequired: boolean
+    notifiedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+}
+
+export type KilocodeSelfHealUpdateResponse = KilocodeSelfHealUpdateResponses[keyof KilocodeSelfHealUpdateResponses]
 
 export type AnacondaDesktopStatusData = {
   body?: never

@@ -209,6 +209,8 @@ import type {
   KilocodeGoalClearResponses,
   KilocodeGoalCreateErrors,
   KilocodeGoalCreateResponses,
+  KilocodeGoalDiscardErrors,
+  KilocodeGoalDiscardResponses,
   KilocodeGoalGetErrors,
   KilocodeGoalGetResponses,
   KilocodeGoalUpdateErrors,
@@ -233,6 +235,14 @@ import type {
   KilocodeRemoveCommandResponses,
   KilocodeRemoveSkillErrors,
   KilocodeRemoveSkillResponses,
+  KilocodeSelfHealCreateErrors,
+  KilocodeSelfHealCreateResponses,
+  KilocodeSelfHealGetErrors,
+  KilocodeSelfHealGetResponses,
+  KilocodeSelfHealListErrors,
+  KilocodeSelfHealListResponses,
+  KilocodeSelfHealUpdateErrors,
+  KilocodeSelfHealUpdateResponses,
   KilocodeSessionImportMessageErrors,
   KilocodeSessionImportMessageResponses,
   KilocodeSessionImportPartErrors,
@@ -415,6 +425,8 @@ import type {
   SessionDeleteResponses,
   SessionDiffErrors,
   SessionDiffResponses,
+  SessionDiscardChangesErrors,
+  SessionDiscardChangesResponses,
   SessionForkErrors,
   SessionForkResponses,
   SessionGetErrors,
@@ -5243,6 +5255,42 @@ export class Session2 extends HeyApiClient {
   }
 
   /**
+   * Discard file changes
+   *
+   * Restore every file edited in this session to its pre-session state without removing messages or arming a redo.
+   */
+  public discardChanges<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SessionDiscardChangesResponses,
+      SessionDiscardChangesErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/discard_changes",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
    * Set viewed sessions
    *
    * Notify the server which sessions the user is currently viewing, or clear all.
@@ -8276,6 +8324,7 @@ export class Goal extends HeyApiClient {
       workspace?: string
       objective?: string
       messageID?: string
+      selfHealID?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -8289,12 +8338,216 @@ export class Goal extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "body", key: "objective" },
             { in: "body", key: "messageID" },
+            { in: "body", key: "selfHealID" },
           ],
         },
       ],
     )
     return (options?.client ?? this.client).post<KilocodeGoalCreateResponses, KilocodeGoalCreateErrors, ThrowOnError>({
       url: "/session/{sessionID}/goal",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Discard a session goal
+   *
+   * Restore the goal's workspace checkpoint, including files created by child sessions, then clear it.
+   */
+  public discard<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<KilocodeGoalDiscardResponses, KilocodeGoalDiscardErrors, ThrowOnError>(
+      {
+        url: "/session/{sessionID}/goal/discard",
+        ...options,
+        ...params,
+      },
+    )
+  }
+}
+
+export class SelfHeal extends HeyApiClient {
+  /**
+   * List self-heal feedback
+   *
+   * List durable feedback across Raya sessions and workspaces.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      KilocodeSelfHealListResponses,
+      KilocodeSelfHealListErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/self-heal",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Capture self-heal feedback
+   *
+   * Classify, deduplicate, and persist one globally visible Raya feedback item.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      description?: string
+      reporterSessionID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "description" },
+            { in: "body", key: "reporterSessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeSelfHealCreateResponses,
+      KilocodeSelfHealCreateErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/self-heal",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Get self-heal feedback
+   *
+   * Get one durable feedback item and its verification evidence.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      itemID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "itemID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<KilocodeSelfHealGetResponses, KilocodeSelfHealGetErrors, ThrowOnError>({
+      url: "/kilocode/self-heal/{itemID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Update self-heal feedback
+   *
+   * Move an item through queued, active, blocked, and verified states with evidence.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      itemID: string
+      directory?: string
+      workspace?: string
+      status?: "triaged" | "queued" | "in_progress" | "verified" | "blocked" | "duplicate" | "cancelled"
+      workSessionID?: string
+      blockedReason?: string
+      evidence?: Array<{
+        summary: string
+        command?: string
+        artifact?: string
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }>
+      reloadRequired?: boolean
+      notifiedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "itemID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "status" },
+            { in: "body", key: "workSessionID" },
+            { in: "body", key: "blockedReason" },
+            { in: "body", key: "evidence" },
+            { in: "body", key: "reloadRequired" },
+            { in: "body", key: "notifiedAt" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<
+      KilocodeSelfHealUpdateResponses,
+      KilocodeSelfHealUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/self-heal/{itemID}",
       ...options,
       ...params,
       headers: {
@@ -9151,6 +9404,11 @@ export class Kilocode extends HeyApiClient {
   private _goal?: Goal
   get goal(): Goal {
     return (this._goal ??= new Goal({ client: this.client }))
+  }
+
+  private _selfHeal?: SelfHeal
+  get selfHeal(): SelfHeal {
+    return (this._selfHeal ??= new SelfHeal({ client: this.client }))
   }
 
   private _sessionImport?: SessionImport

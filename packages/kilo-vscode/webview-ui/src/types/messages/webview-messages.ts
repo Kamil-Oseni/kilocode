@@ -94,6 +94,12 @@ export interface UnrevertSessionRequest {
   sessionID: string
 }
 
+// raya_change - Undo all: discard file edits only, keep the conversation
+export interface DiscardSessionChangesRequest {
+  type: "discardSessionChanges"
+  sessionID: string
+}
+
 export interface DeleteMessageRequest {
   type: "deleteMessage"
   sessionID: string
@@ -1250,6 +1256,14 @@ export interface DiffViewerRevertFileRequest {
   file: string
 }
 
+export interface DiffViewerDiscardHunkRequest {
+  type: "diffViewer.discardHunk"
+  file: string
+  expected: string
+  content: string
+  remove: boolean
+} // raya_change - one-change rollback from the inline review surface
+
 export interface DiffViewerRequestFileRequest {
   type: "diffViewer.requestFile"
   file: string
@@ -1583,6 +1597,7 @@ export type WebviewMessage =
   | BackgroundSubagentsMessage
   | RevertSessionRequest
   | UnrevertSessionRequest
+  | DiscardSessionChangesRequest
   | DeleteMessageRequest
   | PermissionResponseRequest
   | CreateSessionRequest
@@ -1765,6 +1780,7 @@ export type WebviewMessage =
   | DiffViewerSetDiffStyleRequest
   | DiffViewerSetMarkdownRenderRequest
   | DiffViewerRevertFileRequest
+  | DiffViewerDiscardHunkRequest
   | DiffViewerRequestFileRequest
   | DiffViewerCloseRequest
   | DiffViewerRequestBranchesRequest

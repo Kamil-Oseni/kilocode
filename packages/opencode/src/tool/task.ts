@@ -133,9 +133,10 @@ export const TaskTool = Tool.define(
       }
 
       const parent = yield* sessions.get(ctx.sessionID)
-      // raya_change start - resolve resumed, explicit, or Chief-routed specialists before permission checks
+      // kilocode_change start - resolve resumed, explicit, or Chief-routed specialists before permission checks
       const chief = ctx.agent === "auto" ? RayaChief.pending(parent.metadata) : undefined
-      if (ctx.agent === "auto" && !chief) {
+      const follow = ctx.agent === "auto" ? RayaChief.follow(parent.metadata) : undefined
+      if (ctx.agent === "auto" && !follow) {
         return yield* Effect.fail(new Error("Auto must call chief_route before delegating with task"))
       }
       const resumed = params.task_id
@@ -156,17 +157,24 @@ export const TaskTool = Tool.define(
           Permission.evaluate(id, item.name, ruleset).action !== "deny",
       )
       const explicit = params.subagent_type && params.subagent_type !== "auto" ? params.subagent_type : undefined
-      const routed = chief?.agent ?? explicit ?? resumed?.agent ?? KiloTask.route({
-        request: [
-          params.description,
-          params.prompt ?? "",
-          params.brief?.objective ?? "",
-          params.brief?.context ?? "",
-          ...(params.brief?.constraints ?? []),
-          params.brief?.expected_return ?? "",
-        ].join("\n"),
-        agents: candidates,
-      }).name
+      // kilocode_change start
+      const routed =
+        chief?.agent ??
+        follow?.agent ??
+        explicit ??
+        resumed?.agent ??
+        KiloTask.route({
+          request: [
+            params.description,
+            params.prompt ?? "",
+            params.brief?.objective ?? "",
+            params.brief?.context ?? "",
+            ...(params.brief?.constraints ?? []),
+            params.brief?.expected_return ?? "",
+          ].join("\n"),
+          agents: candidates,
+        }).name
+      // kilocode_change end
       const limit = KiloTask.cap(params.step_cap)
       const handoff = KiloTask.brief({
         prompt: chief?.request ?? params.prompt,
@@ -181,7 +189,7 @@ export const TaskTool = Tool.define(
           : params.brief,
         cap: limit,
       })
-      // raya_change end
+      // kilocode_change end
       let current = parent
       let depth = 0
       while (current.parentID) {
@@ -305,21 +313,25 @@ export const TaskTool = Tool.define(
       const model = selected.model
       const variant = selected.variant
       // kilocode_change end
+      // kilocode_change start
       // raya_change start - consume the already logged Chief decision exactly once
       if (chief) {
         const latest = yield* sessions.get(ctx.sessionID)
-        const clean = Object.fromEntries(Object.entries(latest.metadata ?? {}).filter(([key]) => key !== RayaChief.pendingKey))
+        const clean = Object.fromEntries(
+          Object.entries(latest.metadata ?? {}).filter(([key]) => key !== RayaChief.pendingKey),
+        )
         yield* sessions.setMetadata({
           sessionID: ctx.sessionID,
           // kilocode_change start
           metadata: {
             ...clean,
-            [RayaChief.phaseKey]: "synthesize", // raya_change - final Auto step cannot call tools
+            [RayaChief.phaseKey]: "goal", // raya_change - reserve the next Auto step for goal verification
           },
           // kilocode_change end
         })
       }
       // raya_change end
+      // kilocode_change end
       const metadata: {
         parentSessionId: SessionID
         sessionId: SessionID

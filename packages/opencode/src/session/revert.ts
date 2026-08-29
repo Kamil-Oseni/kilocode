@@ -22,6 +22,9 @@ export type RevertInput = Schema.Schema.Type<typeof RevertInput>
 export interface Interface {
   readonly revert: (input: RevertInput) => Effect.Effect<Session.Info, Session.BusyError>
   readonly unrevert: (input: { sessionID: SessionID }) => Effect.Effect<Session.Info, Session.BusyError>
+  // kilocode_change start - files-only discard: undo every session file edit, keep the conversation
+  readonly discardChanges: (input: { sessionID: SessionID }) => Effect.Effect<Session.Info, Session.BusyError>
+  // kilocode_change end
   readonly cleanup: (session: Session.Info) => Effect.Effect<void>
 }
 
@@ -151,6 +154,24 @@ const layer = Layer.effect(
       return yield* sessions.get(input.sessionID).pipe(Effect.orDie)
     })
 
+    // kilocode_change start - discard every file edit in the session without removing
+    // messages or arming a revert boundary. Fixes "Undo all" wiping the conversation
+    // and offering a nonsensical redo. Files are restored to their pre-session state;
+    // the review UI is cleared by publishing an empty diff.
+    const discardChanges = Effect.fn("SessionRevert.discardChanges")(function* (input: { sessionID: SessionID }) {
+      yield* state.assertNotBusy(input.sessionID)
+      const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
+      const all = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
+      const result = yield* KiloSessionRevert.discardAll(snap, all)
+      if (result.files.length === 0) return session
+      yield* storage.write(["session_diff", input.sessionID], []).pipe(Effect.ignore)
+      yield* events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: [] })
+      // A prior partial revert boundary would otherwise keep a redo affordance alive.
+      if (session.revert) yield* sessions.clearRevert(input.sessionID)
+      return yield* sessions.get(input.sessionID).pipe(Effect.orDie)
+    })
+    // kilocode_change end
+
     const cleanup = Effect.fn("SessionRevert.cleanup")(function* (session: Session.Info) {
       if (!session.revert) return
       const sessionID = session.id
@@ -193,7 +214,7 @@ const layer = Layer.effect(
       yield* sessions.clearRevert(sessionID)
     })
 
-    return Service.of({ revert, unrevert, cleanup })
+    return Service.of({ revert, unrevert, discardChanges, cleanup }) // kilocode_change - discardChanges
   }),
 )
 

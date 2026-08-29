@@ -112,6 +112,7 @@ export const SessionPaths = {
   shell: `${root}/:sessionID/shell`,
   revert: `${root}/:sessionID/revert`,
   unrevert: `${root}/:sessionID/unrevert`,
+  discardChanges: `${root}/:sessionID/discard_changes`, // kilocode_change - files-only discard
   permissions: `${root}/:sessionID/permissions/:permissionID`,
   deleteMessage: `${root}/:sessionID/message/:messageID`,
   deletePart: `${root}/:sessionID/message/:messageID/part/:partID`,
@@ -407,6 +408,21 @@ export const SessionApi = HttpApi.make("session")
             description: "Restore all previously reverted messages in a session.",
           }),
         ),
+        // kilocode_change start - discard every file edit without touching the conversation
+        HttpApiEndpoint.post("discardChanges", SessionPaths.discardChanges, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(Session.Info, "Updated session"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError, SessionBusyError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.discardChanges",
+            summary: "Discard file changes",
+            description:
+              "Restore every file edited in this session to its pre-session state without removing messages or arming a redo.",
+          }),
+        ),
+        // kilocode_change end
         HttpApiEndpoint.post("permissionRespond", SessionPaths.permissions, {
           params: { sessionID: SessionID, permissionID: PermissionV1.ID },
           query: WorkspaceRoutingQuery,

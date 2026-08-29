@@ -17,13 +17,15 @@ describe("Milestone A goal UI", () => {
     expect(host).toContain("parseGoalCommand(text)")
     expect(host).toContain("this.client.kilocode.goal.create")
     expect(host).toContain("goalPrompt(command.objective)")
-    expect(host.indexOf("this.client.kilocode.goal.create")).toBeLessThan(
-      host.indexOf("this.client!.session.promptAsync"),
+    const goal = host.indexOf("const command = parseGoalCommand(text)")
+    expect(host.indexOf("this.client.kilocode.goal.create", goal)).toBeLessThan(
+      host.indexOf("this.client!.session.promptAsync", goal),
     )
   })
 
-  it("shows compact status, real work progress, steering, and review controls", async () => {
+  it("separates goal lifecycle controls from chat-level change review", async () => {
     const banner = await Bun.file(path.join(root, "webview-ui/src/components/chat/GoalBanner.tsx")).text()
+    const chat = await Bun.file(path.join(root, "webview-ui/src/components/chat/ChatView.tsx")).text()
     const host = await Bun.file(path.join(root, "src/KiloProvider.ts")).text()
     const styles = await Bun.file(path.join(root, "webview-ui/src/styles/banners.css")).text()
     const user = await Bun.file(path.join(root, "webview-ui/src/components/chat/VscodeUserMessage.tsx")).text()
@@ -33,18 +35,33 @@ describe("Milestone A goal UI", () => {
     expect(banner).toContain('type: "goalGet"')
     expect(banner).toContain("state().blockedReason")
     expect(banner).toContain("session.todos()")
+    expect(banner).toContain("Math.round((done() / props.todos.length) * 100)")
+    expect(banner).toContain("goal.activeMs")
+    expect(banner).toContain("Stop goal")
     expect(banner).toContain("Update the goal")
     expect(banner).toContain("The current step keeps running")
-    expect(banner).toContain('type: "openChanges"')
-    expect(banner).toContain("turnId: start()")
-    expect(banner).toContain("Confirm discard")
-    expect(banner).toContain('type: "goalDiscard"')
-    expect(banner).not.toContain("session.revertSession(start)")
-    expect(banner).toContain('session.status() !== "idle"')
-    expect(host).toContain('message.type === "goalDiscard"')
-    expect(host.indexOf("await this.handleRevertSession(sid, id)")).toBeLessThan(
-      host.indexOf('await this.handleGoalControl(sid, "clear")'),
-    )
+    expect(banner).toContain("const [draft, setDraft]")
+    expect(banner).toContain("onInput={(event) => setDraft(event.currentTarget.value)}")
+    expect(banner).not.toContain("editor.value = props.goal.objective")
+    expect(banner).toContain("Stop tracking this goal?")
+    expect(banner).toContain("Existing edits will remain available")
+    expect(banner).not.toContain('type: "openChanges"')
+    expect(banner).not.toContain('type: "goalDiscard"')
+    expect(chat).toContain("canReviewChanges")
+    expect(chat).toContain("session.reviewStats()")
+    expect(chat).toContain('class="session-review-label">Review changes</span>')
+    expect(chat).toContain('vscode.postMessage({ type: "openChanges" })')
+    expect(chat).toContain("Keep all")
+    expect(chat).toContain("Undo all")
+    expect(chat).toContain("session-review-cluster")
+    expect(chat).toContain("Confirm undo")
+    // raya_change - Undo all discards file edits only; it must NOT revert the session
+    // (which would delete the conversation and offer a nonsensical redo).
+    expect(chat).toContain('type: "discardSessionChanges"')
+    expect(chat).not.toContain("session.revertSession(first.id)")
+    expect(host).toContain("sessionSourceId(sessionId)")
+    expect(host).toContain("type: \"reviewStatsLoaded\"")
+    expect(host).toContain("this.client.session.diff")
     expect(banner).toContain('act("pause")')
     expect(banner).toContain('act("resume")')
     expect(banner).toContain('act("clear")')

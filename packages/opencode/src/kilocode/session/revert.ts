@@ -48,4 +48,30 @@ export namespace KiloSessionRevert {
     if (files.length === 0) return
     yield* snap.revert([{ hash, files }])
   })
+
+  /**
+   * Discard every file edit made in the session, restoring each edited file to
+   * its state before the session's first edit — without touching messages and
+   * without arming a revert boundary (so nothing becomes "redoable").
+   *
+   * Every "patch" part records the snapshot hash captured *before* that turn's
+   * edits. `snap.revert` dedupes by first occurrence per file, so passing all
+   * patches in message order restores each file to its earliest baseline. The
+   * whole restore is wrapped so a mid-way failure rolls back to the current
+   * (edited) state, keeping the operation atomic.
+   */
+  export const discardAll = Effect.fn("KiloSessionRevert.discardAll")(function* (
+    snap: Snapshot.Interface,
+    messages: MessageV2.WithParts[],
+  ) {
+    const patches: Snapshot.Patch[] = []
+    for (const msg of messages) for (const part of msg.parts) if (part.type === "patch") patches.push(part)
+    const files = [...new Set(patches.flatMap((patch) => patch.files))]
+    if (files.length === 0) return { files: [] as string[] }
+    const baseline = yield* snap.track()
+    if (!baseline)
+      return yield* Effect.die(new Error("Cannot discard changes because the current workspace snapshot is unavailable"))
+    yield* apply(snap, baseline, files, snap.revert(patches))
+    return { files }
+  })
 }

@@ -67,6 +67,7 @@ import { renameSession } from "./kilo-provider/rename-session"
 import { handleFileSearch } from "./kilo-provider/file-search"
 import { handleSessionSearch } from "./kilo-provider/session-search"
 import { handleFilePicker } from "./kilo-provider/file-picker"
+import { sessionSourceId } from "./diff/sources/session" // raya_change - chat review opens its own snapshot, not unrelated workspace edits
 import { watchFontSizeConfig } from "./kilo-provider/font-size"
 import { getTerminalContents } from "./services/terminal/context"
 import { disposeGitChangesTarget } from "./kilo-provider/git-changes-target"
@@ -178,6 +179,7 @@ import { SPEECH_TO_TEXT_MODELS } from "./speech-to-text/models"
 import { stopSessionProcesses } from "./kilo-provider/background-process"
 import { sandboxDefault, sandboxSessionMetadata } from "./shared/sandbox-session"
 import { goalPrompt, parseGoalCommand, type GoalState } from "./shared/goal" // raya_change - Milestone A native goal mode
+import { parseSelfHealCommand, selfHealPrompt } from "./shared/self-heal" // raya_change - global autonomous feedback repair
 import { SpeechService } from "./speech/service" // raya_change - Milestone H voice orchestration
 import {
   buildIndexingSettingsMessage,
@@ -460,6 +462,10 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private statsPoller: GitStatsPoller | null = null
   private statsGitOps: GitOps | null = null
   private cachedStats: unknown = null
+  private cachedReview: { type: "reviewStatsLoaded"; sessionID: string; files: number; additions: number; deletions: number } | null =
+    null // raya_change - session.diff review counts survive webview reload
+  private reviewTimer: ReturnType<typeof setTimeout> | undefined
+  private lastReviewHash = ""
   private cachedGitRepo = false
   private cachedGitDirectory: string | undefined
   private gitStatusRevision = 0
@@ -692,7 +698,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
     // Re-send ready so the webview can recover after refresh.
     if (serverInfo) {
-      const langConfig = vscode.workspace.getConfiguration("kilo-code.new")
+      const langConfig = vscode.workspace.getConfiguration("raya") // raya_change - declared settings namespace
       this.postMessage({
         type: "ready",
         serverInfo,
@@ -722,6 +728,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
       // Re-send cached worktree stats and git status after webview reload.
       if (this.cachedStats) this.postMessage(this.cachedStats)
+      if (this.cachedReview) this.postMessage(this.cachedReview)
       this.postMessage({ type: "gitStatus", repo: this.cachedGitRepo })
 
       // Seed session status map so the Settings panel knows about already-running sessions.
@@ -1076,6 +1083,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
             vscode.commands.executeCommand("raya.showChanges", {
               sessionId,
               turnId,
+              initialSourceId: sessionId && !turnId ? sessionSourceId(sessionId) : undefined,
               directory: sessionId ? this.sessionGitDirectories.get(sessionId) : undefined,
             }),
           openProfile: () => vscode.commands.executeCommand("raya.profileButtonClicked"),
@@ -1097,6 +1105,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       if (await this.handleProfileDataMessage(message)) return
       if (this.handleLegacyMigrationMessage(message)) return
       if (this.handleUsageMessage(message)) return
+      if (this.handleCheckpointMessage(message)) return // raya_change - revert/redo/discard routing
       switch (message.type) {
         case "webviewReady":
           console.log("[Kilo New] KiloProvider: ✅ webviewReady received")
@@ -1147,14 +1156,6 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         case "abort":
           this.cancelRetry(message.sessionID ?? "")
           await this.handleAbort(message.sessionID)
-          break
-        case "revertSession":
-          this.checkpoint(message.sessionID, () =>
-            this.handleRevertSession(message.sessionID, message.messageID, message.partID),
-          )
-          break
-        case "unrevertSession":
-          this.checkpoint(message.sessionID, () => this.handleUnrevertSession(message.sessionID))
           break
         case "deleteMessage":
           await this.handleDeleteMessage(message.sessionID, message.messageID)
@@ -1397,7 +1398,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           break
         case "setLanguage":
           await vscode.workspace
-            .getConfiguration("kilo-code.new")
+            .getConfiguration("raya") // raya_change - declared settings namespace
             .update("language", message.locale || undefined, vscode.ConfigurationTarget.Global)
           this.connectionService.notifyLanguageChanged(message.locale as string)
           break
@@ -1593,7 +1594,18 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       const id = message.messageID
       this.checkpoint(sid, async () => {
         await this.handleRevertSession(sid, id)
-        await this.handleGoalControl(sid, "clear")
+        const dir = this.getWorkspaceDirectory(sid)
+        const { error } = await this.client!.kilocode.goal.discard({ sessionID: sid, directory: dir })
+        if (error) {
+          this.postMessage({
+            type: "goalState",
+            sessionID: sid,
+            notice:
+              "The conversation was rewound, but Raya could not restore every goal file. The goal was kept for review.",
+          })
+          throw error
+        }
+        await this.fetchAndSendGoal(sid)
       })
       return true
     }
@@ -1684,6 +1696,30 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     }
     if (message.scope === "inspector") this.inspectorSessionIds.delete(message.sessionID)
     this.releaseChildSession(message.sessionID)
+    return true
+  }
+
+  // raya_change - route revert/redo/discard through the shared checkpoint guard so
+  // the main webview message switch stays under its complexity budget. "Undo all"
+  // (discardSessionChanges) undoes file edits only and never touches the conversation.
+  private handleCheckpointMessage(
+    message: TypedWebviewMessage & { sessionID?: unknown; messageID?: unknown; partID?: unknown },
+  ): boolean {
+    if (message.type !== "revertSession" && message.type !== "unrevertSession" && message.type !== "discardSessionChanges")
+      return false
+    if (typeof message.sessionID !== "string") return true
+    const sid = message.sessionID
+    if (message.type === "revertSession") {
+      const messageID = typeof message.messageID === "string" ? message.messageID : ""
+      const partID = typeof message.partID === "string" ? message.partID : undefined
+      this.checkpoint(sid, () => this.handleRevertSession(sid, messageID, partID))
+      return true
+    }
+    if (message.type === "unrevertSession") {
+      this.checkpoint(sid, () => this.handleUnrevertSession(sid))
+      return true
+    }
+    this.checkpoint(sid, () => this.handleDiscardSessionChanges(sid))
     return true
   }
 
@@ -1949,7 +1985,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       this.connectionState = this.connectionService.getConnectionState()
 
       if (serverInfo) {
-        const langConfig = vscode.workspace.getConfiguration("kilo-code.new")
+        const langConfig = vscode.workspace.getConfiguration("raya") // raya_change - declared settings namespace
         this.postMessage({
           type: "ready",
           serverInfo,
@@ -2203,6 +2239,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       if (options.preserveStream) this.streams.flush(sessionID)
       // Recover any prompts missed while the webview was loading or during an SSE reconnection.
       this.recoverPendingPrompts()
+      this.scheduleReview(sessionID)
     } catch (error) {
       if (abort?.signal.aborted) return
       console.error("[Kilo New] KiloProvider: Failed to load messages:", error)
@@ -2266,6 +2303,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
       // Recover any prompts emitted by the child before we started tracking it.
       this.recoverPendingPrompts()
+      this.scheduleReview(parentSessionID ?? this.currentSession?.id)
     } catch (err) {
       this.syncedChildSessions.delete(sessionID)
       console.error("[Kilo New] KiloProvider: Failed to sync child session:", err)
@@ -3094,7 +3132,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           const base = `${w.path}\n  ${w.message}`
           return w.detail ? `${base}\n  ${w.detail}` : base
         })
-        const channel = vscode.window.createOutputChannel("Kilo Config Warnings")
+        const channel = vscode.window.createOutputChannel("Raya Config Warnings") // raya_change - user-facing identity
         channel.clear()
         channel.appendLine(lines.join("\n\n"))
         channel.show()
@@ -3140,7 +3178,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   private sendTimelineSetting(): void {
-    const config = vscode.workspace.getConfiguration("kilo-code.new")
+    const config = vscode.workspace.getConfiguration("raya") // raya_change - declared settings namespace
     this.postMessage({
       type: "timelineSettingLoaded",
       visible: config.get<boolean>("showTaskTimeline", true),
@@ -3719,11 +3757,11 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   private maxCostSetting(): number {
-    return this.setMaxCost(vscode.workspace.getConfiguration("kilo-code.new").get<number>("maxCost", 0))
+    return this.setMaxCost(vscode.workspace.getConfiguration("raya").get<number>("maxCost", 0)) // raya_change
   }
 
   private commitMessageLanguageSetting(): string {
-    return vscode.workspace.getConfiguration("kilo-code.new").get<string>("languageCommitMessage", "sync")
+    return vscode.workspace.getConfiguration("raya").get<string>("languageCommitMessage", "sync") // raya_change
   }
 
   private multiProjectSetting(): boolean {
@@ -3999,6 +4037,78 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.costs.removeMessageCost(id)
   }
 
+  // raya_change start - capture feedback globally and start its repair in an isolated goal session
+  private async startSelfHeal(
+    text: string,
+    reporter: string,
+    dir: string,
+    providerID?: string,
+    modelID?: string,
+  ): Promise<{ handled: boolean; context?: string }> {
+    const command = parseSelfHealCommand(text)
+    if (!command) return { handled: false }
+    if (command.kind === "usage") {
+      this.postMessage({ type: "goalState", sessionID: reporter, notice: command.notice })
+      return { handled: true }
+    }
+    if (command.kind === "list") {
+      const { data: items } = await this.client!.kilocode.selfHeal.list({ directory: dir }, { throwOnError: true })
+      const summary = items.length
+        ? items
+            .map(
+              (item) =>
+                `${item.id} | ${item.status} | ${item.category}/${item.severity} | ${item.title}${item.workSessionID ? ` | session ${item.workSessionID}` : ""}`,
+            )
+            .join("\n")
+        : "No self-heal feedback has been recorded."
+      return {
+        handled: false,
+        context: `Present this global Raya self-heal backlog clearly. Do not start or duplicate work:\n${summary}`,
+      }
+    }
+    const { data: item } = await this.client!.kilocode.selfHeal.create(
+      { directory: dir, description: command.description, reporterSessionID: reporter },
+      { throwOnError: true },
+    )
+    const metadata = await sandboxSessionMetadata(this.connectionService.sandboxPreference, this.client!, dir)
+    const { data: session } = await this.client!.session.create(
+      { directory: dir, platform: this.opts.platform, metadata },
+      { throwOnError: true },
+    )
+    const objective = `Repair Raya self-heal item ${item.id}: ${item.title}. Done when the report is reproduced, the root cause is fixed, and authoritative tests plus relevant runtime or visual evidence pass.`
+    await this.client!.kilocode.goal.create(
+      { sessionID: session.id, directory: dir, objective, selfHealID: item.id },
+      { throwOnError: true },
+    )
+    await this.client!.kilocode.selfHeal.update(
+      {
+        itemID: item.id,
+        directory: dir,
+        status: "in_progress",
+        workSessionID: session.id,
+      },
+      { throwOnError: true },
+    )
+    await this.client!.session.promptAsync({
+      sessionID: session.id,
+      directory: dir,
+      parts: [{ type: "text", text: selfHealPrompt(item), synthetic: true }],
+      model: providerID && modelID ? { providerID, modelID } : undefined,
+      agent: "chief",
+      snapshotInitialization: this.opts.snapshotInitialization,
+    })
+    this.postMessage({
+      type: "goalState",
+      sessionID: reporter,
+      notice: `Captured ${item.id} as ${item.category}/${item.severity}. Raya started an isolated repair session: ${session.id}.`,
+    })
+    return {
+      handled: false,
+      context: `Feedback ${item.id} was categorized as ${item.category} (${item.severity}) and started in isolated session ${session.id}. Explain the categorization and repair approach briefly. Do not duplicate the repair in this chat.`,
+    }
+  }
+  // raya_change end
+
   private async handleSendMessage(
     text: string,
     messageID?: string,
@@ -4037,6 +4147,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       if (sandbox) await sandbox
       const sid = resolved.sid
       const dir = resolved.dir
+      const heal = await this.startSelfHeal(text, sid, dir, providerID, modelID)
+      if (heal.handled) return
       // raya_change start - Milestone A arm /goal before the first model turn
       const command = parseGoalCommand(text)
       if (command?.kind === "usage") {
@@ -4070,6 +4182,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       if (command?.kind === "start") {
         parts.push({ type: "text", text: goalPrompt(command.objective), synthetic: true })
       } // raya_change - Milestone A same-turn work reminder
+      if (heal.context) parts.push({ type: "text", text: heal.context, synthetic: true }) // raya_change - intake receipt
 
       const editorContext = await this.gatherEditorContext(dir)
       if (draftID && this.closedDrafts.delete(draftID)) {
@@ -4303,6 +4416,24 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.postMessage({ type: "sessionUpdated", session: sessionToWebview(data) })
   }
 
+  // raya_change - Undo all discards the session's file edits and keeps the chat.
+  // Restores every edited file to its pre-session state via the files-only server
+  // op; no revert boundary is set, so nothing becomes redoable.
+  private async handleDiscardSessionChanges(sessionID: string): Promise<void> {
+    if (!this.client) return
+    const dir = this.getWorkspaceDirectory(sessionID)
+    const { data, error } = await this.client.session.discardChanges({ sessionID, directory: dir })
+    if (error) {
+      console.error("[Kilo New] KiloProvider: Failed to discard session changes:", error)
+      this.postMessage({ type: "error", message: "Failed to undo file changes", sessionID })
+      throw error
+    }
+    if (!data) throw new Error("Discard returned no session")
+    this.refreshes.set(sessionID, (this.refreshes.get(sessionID) ?? 0) + 1)
+    if (this.currentSession?.id === sessionID) this.setCurrentSession(data)
+    this.postMessage({ type: "sessionUpdated", session: sessionToWebview(data) })
+  }
+
   private async handleUnrevertSession(sessionID: string): Promise<void> {
     if (!this.client) return
     const dir = this.getWorkspaceDirectory(sessionID)
@@ -4464,13 +4595,13 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
   /**
    * Handle a generic setting update from the webview.
-   * The key uses dot notation relative to `kilo-code.new` (e.g. "browserAutomation.enabled").
+   * The key uses dot notation relative to `raya` (e.g. "browserAutomation.enabled"). // raya_change
    */
   private async handleUpdateSetting(key: string, value: unknown): Promise<void> {
     if (key === "maxCost") {
       const normalized = this.setMaxCost(value)
       await vscode.workspace
-        .getConfiguration("kilo-code.new")
+        .getConfiguration("raya") // raya_change - declared settings namespace
         .update("maxCost", normalized, vscode.ConfigurationTarget.Global)
       for (const sid of this.trackedSessionIds) {
         const oldLimit = this.activeAlerts.get(sid)
@@ -4487,7 +4618,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     if (section === "autocomplete" && !validAutocompleteSetting(leaf, value)) return
     if (section === "indexing" && !validIndexingSetting(leaf, value)) return
     if (section === "chat" && !validChatSetting(leaf, value)) return
-    const config = vscode.workspace.getConfiguration(`kilo-code.new${section ? `.${section}` : ""}`)
+    const config = vscode.workspace.getConfiguration(`raya${section ? `.${section}` : ""}`) // raya_change
     // Normalize a webview-side clear to `undefined` so VS Code removes the
     // key from settings.json rather than persisting a literal `null`. This
     // lets the runtime fall back to the resolved default.
@@ -4574,7 +4705,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
    * Read the current Claude Code compatibility setting and push it to the webview.
    */
   private sendClaudeCompatSetting(): void {
-    const enabled = vscode.workspace.getConfiguration("kilo-code.new").get<boolean>("claudeCodeCompat", false)
+    const enabled = vscode.workspace.getConfiguration("raya").get<boolean>("claudeCodeCompat", false) // raya_change
     this.postMessage({
       type: "claudeCompatSettingLoaded",
       enabled: enabled ?? false,
@@ -4834,6 +4965,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       if (event.properties.status.type === "idle") {
         void this.speech?.speakOnIdle(sid, (message) => this.postMessage(message)) // raya_change - reliable spoken completion
         setTimeout(() => void this.fetchAndSendGoal(sid), 100)
+        this.scheduleReview(sid)
       } // raya_change - Milestone A refresh audit/block/progress after turn settlement
       return
     }
@@ -5470,6 +5602,65 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
   // legacy-migration end ---------------------------------------------------------
 
+  // raya_change - session snapshot review counts, including child task sessions
+  private scheduleReview(sessionID?: string): void {
+    if (this.reviewTimer) clearTimeout(this.reviewTimer)
+    this.reviewTimer = setTimeout(() => void this.refreshReview(sessionID), 250)
+  }
+
+  private async refreshReview(sessionID?: string): Promise<void> {
+    const sid = sessionID ?? this.currentSession?.id
+    if (!sid || !this.client) return
+    const ids = new Set([sid, ...this.syncedChildSessions])
+    const files = new Map<string, { additions: number; deletions: number }>()
+    for (const id of ids) {
+      const directory = this.getWorkspaceDirectory(id)
+      const result = await this.client.session.diff({ sessionID: id, directory }).catch((err) => {
+        console.error("[Kilo New] session review stats failed:", err)
+        return { data: undefined as { file?: string; additions?: number; deletions?: number }[] | undefined }
+      })
+      for (const item of result.data ?? []) {
+        if (!item.file || files.has(item.file)) continue
+        files.set(item.file, { additions: item.additions ?? 0, deletions: item.deletions ?? 0 })
+      }
+    }
+    let additions = 0
+    let deletions = 0
+    for (const item of files.values()) {
+      additions += item.additions
+      deletions += item.deletions
+    }
+    // raya_change - session snapshots miss bash-created files; fall back to the working tree
+    if (!files.size) {
+      const root = this.cachedGitDirectory ?? this.getWorkspaceDirectory(sid)
+      const git = this.statsGitOps ?? new GitOps({ log: () => {} })
+      const fallback = root
+        ? await git.workingTreeStats(root).catch((err) => {
+            console.error("[Kilo New] worktree review fallback failed:", err)
+            return undefined
+          })
+        : undefined
+      if (!this.statsGitOps) git.dispose()
+      if (fallback?.files) {
+        files.set("*", { additions: fallback.additions, deletions: fallback.deletions })
+        additions = fallback.additions
+        deletions = fallback.deletions
+      }
+    }
+    const hash = `${sid}:${files.size}:${additions}:${deletions}`
+    if (hash === this.lastReviewHash) return
+    this.lastReviewHash = hash
+    const msg = {
+      type: "reviewStatsLoaded" as const,
+      sessionID: sid,
+      files: files.size,
+      additions,
+      deletions,
+    }
+    this.cachedReview = msg
+    this.postMessage(msg)
+  }
+
   // ── Worktree stats polling (sidebar diff badge) ──────────────────
   private startStatsPolling(): void {
     this.statsPoller?.stop()
@@ -5513,6 +5704,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.connectionService.unregisterAttached(this.instanceId)
     this.statsPoller?.stop()
     this.statsGitOps?.dispose()
+    if (this.reviewTimer) clearTimeout(this.reviewTimer)
     this.unsubscribeEvent?.()
     this.unsubscribeState?.()
     this.unsubscribeNotificationDismiss?.()

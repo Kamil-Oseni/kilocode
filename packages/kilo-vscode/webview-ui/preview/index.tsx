@@ -8,6 +8,7 @@ import "../src/styles/banners.css"
 import "../src/styles/task-header.css"
 import "../src/styles/session-actions.css" // raya_change - preview the Review/Keep/Undo cluster
 import "../src/styles/prompt-input.css" // raya_change - preview the composer chrome
+import "../src/styles/history.css" // raya_change - preview the history + session-list surfaces
 import "./preview.css"
 import { render } from "solid-js/web"
 import { For, Show, type Component } from "solid-js"
@@ -43,6 +44,7 @@ type PvState =
   | "topnav"
   | "transcript"
   | "edit-review"
+  | "history"
 type Theme = "light" | "dark"
 
 const states: PvState[] = [
@@ -68,6 +70,7 @@ const states: PvState[] = [
   "topnav",
   "transcript",
   "edit-review",
+  "history",
 ]
 const themes: Theme[] = ["light", "dark"]
 
@@ -374,6 +377,90 @@ const ReviewEdit: Component<{ status?: "added" | "deleted" | "modified"; nav?: b
   </div>
 )
 
+// raya_change - history + session-list replica mirroring the real kilo-ui List
+// DOM contract (search field, caps group headers, rows with title + relative
+// date, selected/active states) so the Eden dressing can be checked in both
+// themes without the session context, dialog, and context-menu providers.
+const sessions: { id: string; title: string; when: string; group: string }[] = [
+  { id: "s1", title: "Reskin the composer and goal bar", when: "2h ago", group: "Today" },
+  { id: "s2", title: "Inline edit-review chrome", when: "5h ago", group: "Today" },
+  { id: "s3", title: "Per-file undo, keep the conversation", when: "Yesterday", group: "Yesterday" },
+  { id: "s4", title: "Eden token layer for the webview", when: "Tue", group: "This week" },
+  { id: "s5", title: "Bundle Instrument Serif and Outfit offline", when: "Mon", group: "This week" },
+]
+
+const HistoryRow: Component<{
+  s: (typeof sessions)[number]
+  active?: boolean
+  selected?: boolean
+}> = (props) => (
+  <div class="session-row">
+    <button
+      type="button"
+      data-slot="list-item"
+      data-active={props.active ? "true" : "false"}
+      data-selected={props.selected ? "true" : "false"}
+    >
+      <span data-slot="list-item-title" dir="auto">
+        {props.s.title}
+      </span>
+      <span data-slot="list-item-description">{props.s.when}</span>
+    </button>
+    <span data-slot="session-row-action">✎</span>
+    <span data-slot="session-row-action">🗑</span>
+  </div>
+)
+
+const History: Component = () => {
+  const groups = ["Today", "Yesterday", "This week"]
+  return (
+    <div class="history-view">
+      <div class="history-view-header">
+        <span style={{ color: "var(--text-weak)", "font-size": "12px" }}>‹ Back</span>
+        <div class="history-view-tabs" role="tablist">
+          <button type="button" class="history-tab-btn history-tab-btn--active">
+            Local
+          </button>
+          <button type="button" class="history-tab-btn">
+            Cloud
+          </button>
+        </div>
+        <span class="history-import-btn" style={{ color: "var(--text-weak)", "font-size": "12px" }}>
+          Import
+        </span>
+      </div>
+      <div class="history-view-content">
+        <div class="session-list">
+          <div data-component="list">
+            <div data-slot="list-search-wrapper">
+              <div data-slot="list-search">
+                <div data-slot="list-search-container">
+                  <span style={{ opacity: 0.5 }}>⌕</span>
+                  <span style={{ color: "var(--text-weak)", "font-size": "13px" }}>Search sessions…</span>
+                </div>
+              </div>
+            </div>
+            <div data-slot="list-scroll">
+              <For each={groups}>
+                {(group) => (
+                  <div data-slot="list-group">
+                    <div data-slot="list-header">{group}</div>
+                    <div data-slot="list-items">
+                      <For each={sessions.filter((s) => s.group === group)}>
+                        {(s) => <HistoryRow s={s} active={s.id === "s2"} selected={s.id === "s1"} />}
+                      </For>
+                    </div>
+                  </div>
+                )}
+              </For>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const chrome = new Set<PvState>([
   "slash",
   "review",
@@ -383,6 +470,7 @@ const chrome = new Set<PvState>([
   "topnav",
   "transcript",
   "edit-review",
+  "history",
 ])
 
 const Fixture: Component<{ id: string; theme: Theme; state: PvState }> = (props) => (
@@ -421,6 +509,9 @@ const Fixture: Component<{ id: string; theme: Theme; state: PvState }> = (props)
           <ReviewEdit status="modified" />
           <ReviewEdit status="deleted" />
         </div>
+      </Show>
+      <Show when={props.state === "history"}>
+        <History />
       </Show>
       <Show when={props.state !== "usage" && !chrome.has(props.state)}>
         <GoalBannerView {...propsFor(props.state)} />

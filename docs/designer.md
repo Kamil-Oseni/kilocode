@@ -1,5 +1,5 @@
 ---
-description: Product design, design-systems, and UX-writing work via the Figma MCP: designing screens from scratch, building components, rebuilding the design system, translating between Figma and front-end code, and writing interface copy in the product's voice. Use for any visual design, design-system, or product-copy task.
+description: "Product design, design-systems, and UX-writing work via the Figma MCP: designing screens from scratch, building components, rebuilding the design system, translating between Figma and front-end code, and writing interface copy in the product's voice. Use for any visual design, design-system, or product-copy task."
 mode: all
 model: qwen/qwen3.8-max
 permission:

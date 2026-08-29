@@ -468,3 +468,99 @@ describe("workspace revert status", () => {
     30_000,
   )
 })
+
+// The webview "Undo all" / "Confirm undo" cluster posts discardSessionChanges,
+// which the extension host forwards to SessionRevert.discardChanges. These prove
+// the files-only discard actually restores the workspace end to end (modify and
+// create) while leaving the conversation intact and arming no redo boundary, so
+// a real-world "Confirm undo does nothing" can only stem from a missing patch
+// part (snapshot track degraded at runtime), not from this code path.
+describe("files-only discard (Undo all)", () => {
+  const exists = (file: string) =>
+    Effect.promise(() =>
+      fs.stat(file).then(
+        () => true,
+        () => false,
+      ),
+    )
+
+  it.live(
+    "discardChanges reverts every edited file and keeps the conversation",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const item = yield* setup(dir)
+          const before = yield* item.sessions.messages({ sessionID: item.session.id })
+
+          const updated = yield* item.revert.discardChanges({ sessionID: item.session.id })
+
+          expect(yield* Effect.promise(() => fs.readFile(item.protected, "utf8"))).toBe("before")
+          expect(yield* Effect.promise(() => fs.readFile(item.writable, "utf8"))).toBe("before")
+          // Undoing file edits must not arm a redo boundary or drop any messages.
+          expect(updated.revert).toBeUndefined()
+          const after = yield* item.sessions.messages({ sessionID: item.session.id })
+          expect(after.length).toBe(before.length)
+        }),
+      { git: true },
+    ),
+    30_000,
+  )
+
+  it.live(
+    "discardChanges removes a file the turn newly created",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const sessions = yield* Session.Service
+          const revert = yield* SessionRevert.Service
+          const snapshot = yield* Snapshot.Service
+          const session = yield* sessions.create({})
+          const providerID = ProviderV2.ID.make("test")
+          const created = path.join(dir, "greeting.txt")
+          const user = yield* sessions.updateMessage({
+            id: MessageID.ascending(),
+            sessionID: session.id,
+            role: "user",
+            agent: "default",
+            model: { providerID, modelID: ModelV2.ID.make("test") },
+            time: { created: Date.now() },
+          })
+          const assistant = yield* sessions.updateMessage({
+            id: MessageID.ascending(),
+            sessionID: session.id,
+            role: "assistant",
+            parentID: user.id,
+            mode: "default",
+            agent: "default",
+            path: { cwd: dir, root: dir },
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            modelID: ModelV2.ID.make("test"),
+            providerID,
+            time: { created: Date.now() },
+            finish: "end_turn",
+          })
+          // Track before the file exists so the patch records its creation.
+          const base = yield* snapshot.track()
+          if (!base) throw new Error("expected snapshot")
+          yield* Effect.promise(() => fs.writeFile(created, "hello"))
+          const patch = yield* snapshot.patch(base)
+          expect(patch.files.some((file) => file.endsWith("greeting.txt"))).toBe(true)
+          yield* sessions.updatePart({
+            id: PartID.ascending(),
+            messageID: assistant.id,
+            sessionID: session.id,
+            type: "patch",
+            hash: patch.hash,
+            files: patch.files,
+          })
+
+          yield* revert.discardChanges({ sessionID: session.id })
+
+          expect(yield* exists(created)).toBe(false)
+        }),
+      { git: true },
+    ),
+    30_000,
+  )
+})

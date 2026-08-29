@@ -31,6 +31,7 @@ import { AbsolutePath, type DeepMutable } from "@opencode-ai/core/schema"
 import * as KiloAgent from "@/kilocode/agent"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import * as KiloReference from "@/kilocode/reference"
+import { RayaToolModel } from "@/kilocode/chief/tool-model" // raya_change - pin goal orchestration to a tool-capable model
 // kilocode_change end
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -335,10 +336,15 @@ const layer = Layer.effect(
 
         // kilocode_change start - rename build→code, add debug/orchestrator/ask, patch plan/explore
         KiloAgent.patchAgents(agents, defaults, user, cfg, kilo, ctx.worktree, whitelistedDirs)
-        // raya_change start - Milestone B binds Auto's Chief turn to the configured cheap model
-        const small = cfg.small_model
-          ? Provider.parseModel(cfg.small_model)
-          : { providerID: ProviderV2.ID.kilo, modelID: ModelV2.ID.make("kilo-auto/small") }
+        // raya_change start - Milestone B binds Auto's Chief turn to the configured cheap model,
+        // resolved to a native-tool-calling model so goal orchestration never stalls on a
+        // no-tool model like DeepSeek
+        const small = yield* RayaToolModel.orchestration(
+          provider,
+          cfg.small_model
+            ? Provider.parseModel(cfg.small_model)
+            : { providerID: ProviderV2.ID.kilo, modelID: ModelV2.ID.make("kilo-auto/small") },
+        )
         KiloAgent.addAuto(agents, defaults, small)
         // raya_change end
 

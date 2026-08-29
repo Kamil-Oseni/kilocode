@@ -12,6 +12,7 @@ import type { Session } from "../../session/session"
 import type { Agent } from "../../agent/agent"
 import type { Config } from "../../config/config"
 import { Provider } from "../../provider/provider"
+import { RayaToolModel } from "@/kilocode/chief/tool-model" // raya_change - guarantee delegated subagents can call tools
 import z from "zod"
 
 const log = Log.create({ service: "kilocode-task-model" })
@@ -232,7 +233,7 @@ export namespace KiloTask {
   })
 
   /** Resolve the task subagent model while discarding stale unavailable overrides. */
-  export const resolveModel = Effect.fn("KiloTask.resolveModel")(function* (input: {
+  const resolveRaw = Effect.fn("KiloTask.resolveRaw")(function* (input: {
     name: string
     agent: Pick<Agent.Info, "model" | "variant">
     config: Pick<Config.Info, "small_model" | "subagent_model" | "subagent_variant" | "subagent_variant_overrides">
@@ -297,6 +298,22 @@ export namespace KiloTask {
       .pipe(Effect.catchTag("ProviderModelNotFoundError", () => Effect.succeed(undefined)))
     const variant = full?.variants?.[value] ? value : input.variant
     return { model: input.parent, variant }
+  })
+
+  // Every delegated subagent needs native tool calls to do real work. Resolve the model as
+  // configured/routed, then upgrade to the best tool-capable model when the pick cannot call
+  // tools (e.g. a DeepSeek-configured specialist), dropping the now-meaningless variant.
+  export const resolveModel = Effect.fn("KiloTask.resolveModel")(function* (input: Parameters<typeof resolveRaw>[0]) {
+    const chosen = yield* resolveRaw(input)
+    const guard = yield* RayaToolModel.ensure(input.provider, chosen.model)
+    if (!guard.changed) return chosen
+    return {
+      model: {
+        providerID: ProviderV2.ID.make(guard.model.providerID),
+        modelID: ModelV2.ID.make(guard.model.modelID),
+      },
+      variant: undefined,
+    }
   })
 
   export function workflow(value: unknown): Workflow | undefined {

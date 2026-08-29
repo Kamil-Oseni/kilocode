@@ -845,6 +845,17 @@ export function addAuto(
         get_goal: "allow",
         update_goal: "allow",
         create_goal: "allow", // raya_change - Auto owns formal completion after delegated work
+        // raya_change start - Auto only routes, but KiloTask.inherited turns the
+        // parent's blanket "*": "deny" into hard edit/write/notebook ceilings on
+        // every delegated subagent, forcing specialists to mutate files through
+        // bash instead of the edit/write tools (which also breaks per-file undo
+        // review chrome). Permit the mutation tools here so delegates keep their
+        // own edit/write capability rather than inheriting a deny they never set.
+        edit: "allow",
+        write: "allow",
+        notebook_edit: "allow",
+        notebook_execute: "allow",
+        // raya_change end
       }),
     ),
     model,

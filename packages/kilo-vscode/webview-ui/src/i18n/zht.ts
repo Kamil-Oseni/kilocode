@@ -1052,7 +1052,6 @@ export const dict = {
   "profile.personalAccount": "個人帳戶",
   "profile.switchingAccount": "正在切換帳戶…",
 
-  "prompt.action.indexing": "索引設定",
 
   "settings.indexing.dimension.description": "留空以自動從模型偵測嵌入維度。",
   "settings.indexing.dimension.placeholder": "自動",

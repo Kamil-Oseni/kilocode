@@ -698,7 +698,6 @@ export const dict = {
   "settings.indexing.status.title": "الحالة",
   "settings.indexing.tuning.description": "معامل متقدم للبحث والدفعات.",
   "settings.indexing.providerField.description": "إعداد اتصال خاص بالموفر.",
-  "prompt.action.indexing": "إعدادات الفهرسة",
   "settings.experimental.title": "تجريبي",
   "settings.language.title": "اللغة",
   "settings.aboutKiloCode.title": "حول Raya",

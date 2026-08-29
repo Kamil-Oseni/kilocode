@@ -106,15 +106,18 @@ const SessionList: Component<SessionListProps> = (props) => {
     dialog.show(
       () => (
         <Dialog title={language.t("session.delete.title")} fit>
+          {/* raya_change - Eden confirm card: rounded surface, rounded buttons, and
+              a proper destructive (not primary-blue) action for a delete. */}
           <div class="dialog-confirm-body">
             <span>{language.t("session.delete.confirm", { name: name(s) })}</span>
             <div class="dialog-confirm-actions">
-              <Button variant="ghost" size="large" onClick={() => dialog.close()}>
+              <Button variant="secondary" size="large" onClick={() => dialog.close()}>
                 {language.t("common.cancel")}
               </Button>
               <Button
-                variant="primary"
+                variant="ghost"
                 size="large"
+                class="dialog-destructive-btn"
                 onClick={() => {
                   session.deleteSession(s.id)
                   dialog.close()

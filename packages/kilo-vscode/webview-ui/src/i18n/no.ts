@@ -192,7 +192,6 @@ export const dict = {
     "Automatisk godkjenning er deaktivert. Klikk for å godkjenne tillatelsesforespørsler automatisk.",
   "prompt.action.attach": "Legg ved filer",
   "prompt.action.resetModel": "Tilbakestill modell til standard",
-  "prompt.action.indexing": "Indekseringsinnstillinger",
   "prompt.action.enhanceDescription":
     "Knappen 'Forbedre prompt' hjelper med å forbedre forespørselen din ved å gi ekstra kontekst, avklaring eller omformulering. Prøv å skrive en forespørsel her og klikk på knappen igjen for å se hvordan det fungerer.",
   "prompt.action.sandbox.enable": "Aktiver sandbox",

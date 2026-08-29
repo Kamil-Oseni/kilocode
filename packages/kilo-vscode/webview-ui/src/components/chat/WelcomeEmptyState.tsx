@@ -57,8 +57,16 @@ export const WelcomeEmptyState: Component<WelcomeEmptyStateProps> = (props) => {
           </Show>
         </div>
       </Show>
-      <button class="feedback-button" onClick={() => dialog.show(() => <FeedbackDialog />)}>
-        <Icon name="bubble-5" size="small" />
+      {/* raya_change - the welcome slot leads with the primary action (start a
+          chat) as a rounded Eden pill; feedback demotes to a quiet text link. */}
+      <button
+        class="welcome-start-btn"
+        onClick={() => window.dispatchEvent(new CustomEvent("newTaskRequest"))}
+      >
+        <Icon name="add" size="small" />
+        {language.t("sidebar.session.newSession")}
+      </button>
+      <button class="feedback-link" onClick={() => dialog.show(() => <FeedbackDialog />)}>
         {language.t("feedback.button")}
       </button>
     </div>

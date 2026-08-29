@@ -182,7 +182,6 @@ export const dict = {
   "prompt.action.send.recording": "Transcriberen en verzenden",
   "prompt.action.stop": "Stop",
   "prompt.action.enhance": "Prompt verbeteren",
-  "prompt.action.indexing": "Indexeringsinstellingen",
   "prompt.action.autoApprove.enable": "Automatisch goedkeuren inschakelen",
   "prompt.action.autoApprove.disable": "Automatisch goedkeuren uitschakelen",
   "prompt.action.autoApprove.enabled":

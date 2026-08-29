@@ -160,7 +160,6 @@ export const dict = {
   "prompt.action.send.blocked": "Rispondi alla domanda in sospeso o ignorala prima di continuare",
   "prompt.action.stop": "Ferma",
   "prompt.action.enhance": "Migliora prompt",
-  "prompt.action.indexing": "Impostazioni indicizzazione",
   "prompt.action.autoApprove.enable": "Abilita approvazione automatica",
   "prompt.action.autoApprove.disable": "Disabilita approvazione automatica",
   "prompt.action.autoApprove.enabled":

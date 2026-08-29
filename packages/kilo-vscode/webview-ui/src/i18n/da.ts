@@ -386,7 +386,6 @@ export const dict = {
   "sound.option.yup05": "Ja 05",
   "sound.option.yup06": "Ja 06",
 
-  "prompt.action.indexing": "Indekseringsindstillinger",
 
   "settings.indexing.title": "Indeksering",
   "settings.indexing.enable.title": "Aktivér indeksering",

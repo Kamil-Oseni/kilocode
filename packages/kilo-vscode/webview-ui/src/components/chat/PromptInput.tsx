@@ -14,8 +14,6 @@ import { isTextControl } from "../../utils/focus"
 import { useSession } from "../../context/session"
 import { useLocalTabs } from "../../context/local-tabs"
 import { useServer } from "../../context/server"
-import { useIndexing } from "../../context/indexing"
-import { indexingButtonVisible } from "../../context/indexing-utils"
 import { useLanguage } from "../../context/language"
 import { useVSCode } from "../../context/vscode"
 import { useConfig } from "../../context/config"
@@ -44,7 +42,6 @@ import { convertToMentionPath } from "../../utils/path-mentions"
 import { SessionMentionPicker } from "./SessionMentionPicker"
 import { usePromptHistory } from "../../hooks/usePromptHistory"
 import { cycleVariant } from "../../context/session-variant-store"
-import { WandSparkles } from "@kilocode/kilo-ui/lucide"
 import {
   fileName,
   dirName,
@@ -182,7 +179,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const session = useSession()
   const tabs = useLocalTabs()
   const server = useServer()
-  const indexing = useIndexing()
   const { config, globalConfig, settings, features } = useConfig()
   const provider = useProvider()
   const voice = useVoice() // raya_change - Milestone H
@@ -251,7 +247,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const [text, setText] = createSignal("")
   const [reviewComments, setReviewComments] = createSignal<ReviewCommentEntry[]>([])
-  const [enhancing, setEnhancing] = createSignal(false)
   const [autoApprove, setAutoApprove] = createSignal(false)
   const [sandboxes, setSandboxes] = createSignal<Record<string, SandboxState>>({})
   const [sandboxDefault, setSandboxDefault] = createSignal<SandboxDefaultState>()
@@ -386,9 +381,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (sandboxID() === sessionID) requestSandbox()
     }, 1000)
   }
-  let enhanceCounter = 0
-  let preEnhanceText: string | null = null
-
   createEffect(() => {
     const sessionID = sandboxID()
     const connected = server.connectionState() === "connected"
@@ -446,8 +438,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       setText(draft)
       setReviewComments(pending)
       imageAttach.replace(imageDrafts.get(key) ?? [])
-      setEnhancing(false)
-      preEnhanceText = null
       history.reset()
       if (textareaRef) {
         textareaRef.value = draft
@@ -578,13 +568,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const isBusy = () =>
     isPromptBusy(session.status(), !!props.suggesting?.(), !!props.questioning?.(), session.submitting())
-  const showIndexing = () =>
-    indexingButtonVisible(
-      features().indexing,
-      Boolean(settings()["indexing.showButtonWhenDisabled"] ?? true),
-      config(),
-      globalConfig(),
-    )
   const isDisabled = () => !server.isConnected()
   const canUseSpeech = () =>
     (!!voice.settings().sttEndpoint && voice.settings().hasSttKey) ||
@@ -856,27 +839,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       textareaRef?.focus()
     }
 
-    if (message.type === "enhancePromptResult") {
-      const result = message as import("../../types/messages").EnhancePromptResultMessage
-      if (result.requestId === `enhance-${draftKey()}-${enhanceCounter}`) {
-        setText(result.text)
-        mention.seedFromText(result.text)
-        setEnhancing(false)
-        if (textareaRef) {
-          textareaRef.value = result.text
-          adjustHeight()
-          textareaRef.focus()
-        }
-      }
-    }
-
-    if (message.type === "enhancePromptError") {
-      const result = message as import("../../types/messages").EnhancePromptErrorMessage
-      if (result.requestId === `enhance-${draftKey()}-${enhanceCounter}`) {
-        setEnhancing(false)
-      }
-    }
-
     if (message.type === "filePickerResult") {
       mention.insertFilePickerResult(message.path, message.requestId)
     }
@@ -948,7 +910,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const target = e.target as HTMLTextAreaElement
     const val = target.value
     setText(val)
-    preEnhanceText = null
     adjustHeight()
     syncHighlightScroll()
     history.reset()
@@ -960,19 +921,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const handleKeyDown = (e: KeyboardEvent) => {
-    // Undo enhanced prompt with Ctrl+Z / ⌘Z
-    if (e.key === "z" && (e.metaKey || e.ctrlKey) && !e.shiftKey && preEnhanceText !== null) {
-      e.preventDefault()
-      const restored = preEnhanceText
-      preEnhanceText = null
-      setText(restored)
-      if (textareaRef) {
-        textareaRef.value = restored
-        adjustHeight()
-      }
-      return
-    }
-
     // Atomic mention removal on backspace
     if (
       mention.handleBackspace(e, textareaRef, setText, () => {
@@ -1058,31 +1006,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       e.preventDefault()
       handleSend()
     }
-  }
-
-  const canEnhance = () => !isBusy() && !isDisabled() && !enhancing()
-
-  const handleOpenIndexingSettings = () => {
-    vscode.postMessage({ type: "openSettingsTab", tab: "indexing" })
-  }
-
-  const handleEnhance = () => {
-    if (isDisabled() || enhancing() || isBusy()) return
-    const draft = text().trim()
-    if (!draft) {
-      const description = language.t("prompt.action.enhanceDescription")
-      setText(description)
-      if (textareaRef) {
-        textareaRef.value = description
-        adjustHeight()
-        textareaRef.focus()
-      }
-      return
-    }
-    preEnhanceText = text()
-    enhanceCounter++
-    setEnhancing(true)
-    vscode.postMessage({ type: "enhancePrompt", text: draft, requestId: `enhance-${draftKey()}-${enhanceCounter}` })
   }
 
   const insertSpeechText = (value: string) => {
@@ -1749,32 +1672,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             />
           </Tooltip>
           {/* raya_change - explicit attachment entry point complements paste, drop, and @ mentions */}
-          <Show when={showIndexing()}>
-            <Tooltip value={indexing.status().message || indexing.label()} placement="top" openDelay={0}>
-              <Button
-                variant="ghost"
-                size="small"
-                onClick={handleOpenIndexingSettings}
-                aria-label={language.t("prompt.action.indexing")}
-                class={`prompt-indexing-button prompt-indexing-button--${indexing.tone()}`}
-              >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                  <ellipse cx="8" cy="3.5" rx="4.5" ry="2" stroke="currentColor" stroke-width="1.2" />
-                  <path
-                    d="M3.5 3.5V12.5C3.5 13.6046 5.51472 14.5 8 14.5C10.4853 14.5 12.5 13.6046 12.5 12.5V3.5"
-                    stroke="currentColor"
-                    stroke-width="1.2"
-                  />
-                  <path
-                    d="M3.5 8C3.5 9.10457 5.51472 10 8 10C10.4853 10 12.5 9.10457 12.5 8"
-                    stroke="currentColor"
-                    stroke-width="1.2"
-                  />
-                  <circle cx="13" cy="3" r="2.5" fill="currentColor" />
-                </svg>
-              </Button>
-            </Tooltip>
-          </Show>
           <Tooltip
             value={
               autoApprove()
@@ -1810,42 +1707,24 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               onToggle={toggleSandbox}
             />
           </Show>
-          <Tooltip value={language.t("prompt.action.enhance")} placement="top" openDelay={0}>
-            <Button
-              variant="ghost"
-              size="small"
-              onClick={handleEnhance}
-              disabled={!canEnhance()}
-              aria-label={language.t("prompt.action.enhance")}
-            >
-              <WandSparkles size={16} class={enhancing() ? "enhance-spinner" : ""} />
-            </Button>
-          </Tooltip>
           <Show when={canUseSpeech()}>
             <SpeechToTextButton speech={speech} disabled={isDisabled()} start={startSpeech} label={language.t} />
-            {/* raya_change - Milestone H keeps dictation on the mic and hands-free conversation on a distinct orb */}
+            {/* raya_change - Milestone H keeps dictation on the mic and hands-free
+                conversation on a distinct orb. The orb is a 2026 ElevenLabs-style
+                sphere: layered gradients + a slow flowing sheen, calm when idle and
+                alive when the hands-free session is live. */}
             <Tooltip value={voiceLabel()} placement="top" openDelay={0}>
-              <Button
-                variant="ghost"
-                size="small"
+              <button
+                type="button"
+                class="prompt-voice-orb"
+                classList={{ "prompt-voice-orb--active": voiceActive() }}
                 aria-label={voiceLabel()}
                 aria-pressed={voiceActive()}
                 onClick={toggleVoice}
-                style={{
-                  "border-radius": "999px",
-                  background: voiceActive()
-                    ? "radial-gradient(circle at 35% 30%, var(--raya-primary-strong), var(--raya-primary) 55%)"
-                    : "radial-gradient(circle at 35% 30%, var(--vscode-descriptionForeground), var(--vscode-editor-background) 70%)",
-                  "box-shadow": voiceActive()
-                    ? "0 0 0 1px color-mix(in srgb, var(--raya-primary) 60%, transparent)"
-                    : "inset 0 0 0 1px var(--vscode-widget-border)",
-                }}
               >
-                <span
-                  aria-hidden="true"
-                  style={{ width: "10px", height: "10px", "border-radius": "999px", background: "currentColor" }}
-                />
-              </Button>
+                <span class="prompt-voice-orb__core" aria-hidden="true" />
+                <span class="prompt-voice-orb__sheen" aria-hidden="true" />
+              </button>
             </Tooltip>
           </Show>
           <Show

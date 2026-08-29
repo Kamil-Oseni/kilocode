@@ -622,7 +622,9 @@ html[data-theme="kilo-vscode"] [data-slot="task-header-title-label"] {
   display: grid;
   gap: var(--raya-space-8, 8px);
   margin-top: var(--raya-space-8, 8px);
-  padding-top: var(--raya-space-8, 8px);
+  /* raya_change - the spend card was flush to its walls; give it real left/right
+     breathing room to match Eden's card padding. */
+  padding: var(--raya-space-10, 10px) var(--raya-space-12, 12px) var(--raya-space-4, 4px);
   border-top: 1px solid var(--border-weak-base);
   font-variant-numeric: tabular-nums;
 }
@@ -686,10 +688,22 @@ html[data-theme="kilo-vscode"] [data-slot="task-header-title-label"] {
   color: var(--text-base, var(--vscode-foreground));
 }
 
+/* raya_change - Eden's real "dented"/pressed segment: the active tab sinks into
+   the well with a dark top-inset plus a light lower-edge inset, instead of a flat
+   single shadow that just read as a raised chip. Theme-aware to match Eden. */
 .usage-history__ranges button[data-active] {
-  background: var(--surface-base, var(--vscode-editor-background));
+  background: color-mix(in srgb, var(--text-base, var(--vscode-foreground)) 10%, var(--surface-raised-base, var(--vscode-editor-background)));
   color: var(--text-strong, var(--vscode-foreground));
-  box-shadow: inset 0 2px 4px 0 color-mix(in srgb, var(--text-base, #222) 20%, transparent);
+  box-shadow:
+    inset -1px -1px 2px rgba(255, 255, 255, 0.1),
+    inset 0 2px 4px rgba(20, 20, 20, 0.7);
+}
+
+.vscode-light .usage-history__ranges button[data-active] {
+  background: color-mix(in srgb, var(--text-base, var(--vscode-foreground)) 6%, var(--surface-raised-base, #fff));
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.1),
+    inset 0 -1px 2px rgba(255, 255, 255, 0.55);
 }
 
 .usage-history__ranges button:focus-visible {

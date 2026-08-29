@@ -673,7 +673,6 @@ export const dict = {
   "settings.language.title": "언어",
   "settings.aboutKiloCode.title": "Raya 정보",
 
-  "prompt.action.indexing": "인덱싱 설정",
   "settings.indexing.dimension.description": "비워두면 모델에서 임베딩 차원을 자동으로 감지합니다.",
   "settings.indexing.dimension.placeholder": "자동",
   "settings.indexing.dimension.title": "벡터 차원",

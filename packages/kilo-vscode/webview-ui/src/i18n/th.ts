@@ -188,7 +188,6 @@ export const dict = {
   "prompt.action.resetModel": "รีเซ็ตโมเดลเป็นค่าเริ่มต้น",
   "prompt.action.enhanceDescription":
     "ปุ่ม 'ปรับปรุงพรอมต์' ช่วยปรับปรุงพรอมต์ของคุณโดยให้บริบทเพิ่มเติม ชี้แจง หรือเขียนใหม่ ลองพิมพ์พรอมต์ที่นี่และคลิกปุ่มอีกครั้งเพื่อดูว่ามันทำงานอย่างไร",
-  "prompt.action.indexing": "การตั้งค่าการสร้างดัชนี",
   "prompt.action.sandbox.enable": "เปิดใช้งาน sandbox",
   "prompt.action.sandbox.disable": "ปิดใช้งาน sandbox",
   "prompt.action.sandbox.enabled":

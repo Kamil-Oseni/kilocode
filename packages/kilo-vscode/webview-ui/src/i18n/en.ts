@@ -182,7 +182,6 @@ export const dict = {
   "prompt.action.stop": "Stop",
   "prompt.action.attach": "Attach files",
   "prompt.action.enhance": "Enhance prompt",
-  "prompt.action.indexing": "Indexing settings",
   "prompt.action.autoApprove.enable": "Enable auto-approve",
   "prompt.action.autoApprove.disable": "Disable auto-approve",
   "prompt.action.autoApprove.enabled": "Auto-approve is enabled. Permission prompts will be approved automatically.",

@@ -506,8 +506,11 @@
   font-weight: 600;
   color: var(--raya-slash-fg, var(--vscode-foreground));
   background: color-mix(in srgb, var(--vscode-foreground) 9%, transparent);
-  border-radius: 6px;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--vscode-foreground) 9%, transparent);
+  border-radius: var(--raya-radius-pill, 999px);
+  /* raya_change - the pill's visual padding comes from the shadow spread (real
+     padding would drift the caret since the overlay mirrors the textarea). A
+     larger spread gives the token more room to breathe. */
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--vscode-foreground) 9%, transparent);
 }
 
 /* /goal carries Raya's Eden-blue primary — the persistent-goal verb is the one
@@ -516,7 +519,9 @@
 .prompt-input-slash[data-command="goal"] {
   color: var(--raya-primary);
   background: color-mix(in srgb, var(--raya-primary) 18%, transparent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--raya-primary) 18%, transparent);
+  /* raya_change - a touch more spread than neutral commands so the persistent-goal
+     verb reads as the one emphasized, well-padded pill. */
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--raya-primary) 18%, transparent);
 }
 
 .prompt-input-file-mention {
@@ -895,18 +900,106 @@
 }
 
 /* ============================================
-   Enhance Prompt Spinner
+   Voice orb (raya_change - 2026 ElevenLabs-style hands-free orb)
+   A layered glossy sphere: a highlight, a shaded core, and a flowing conic
+   sheen. Calm and monochrome at rest; Eden-blue, glowing, breathing, and
+   slowly spinning while a hands-free session is live.
    ============================================ */
+.prompt-voice-orb {
+  all: unset;
+  position: relative;
+  box-sizing: border-box;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  display: inline-flex;
+  flex-shrink: 0;
+  cursor: pointer;
+}
 
-@keyframes enhance-spin {
-  from {
-    transform: rotate(0deg);
-  }
+.prompt-voice-orb:focus-visible {
+  outline: var(--raya-hairline) solid color-mix(in srgb, var(--text-base) 40%, transparent);
+  outline-offset: 2px;
+}
+
+.prompt-voice-orb__core,
+.prompt-voice-orb__sheen {
+  position: absolute;
+  inset: 4px;
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.prompt-voice-orb__core {
+  background:
+    radial-gradient(circle at 30% 26%, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 44%),
+    radial-gradient(circle at 72% 80%, rgba(0, 0, 0, 0.22), rgba(0, 0, 0, 0) 58%),
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--vscode-descriptionForeground) 75%, transparent),
+      color-mix(in srgb, var(--vscode-editor-background) 82%, var(--vscode-descriptionForeground))
+    );
+  box-shadow:
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.16),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.28);
+  transition: box-shadow var(--raya-duration-fast) var(--raya-ease-out);
+}
+
+.prompt-voice-orb__sheen {
+  opacity: 0;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    color-mix(in srgb, var(--raya-primary) 70%, transparent) 90deg,
+    transparent 200deg
+  );
+  mix-blend-mode: screen;
+  transition: opacity var(--raya-duration-med, 200ms) var(--raya-ease-out);
+}
+
+.prompt-voice-orb:hover .prompt-voice-orb__core {
+  box-shadow:
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.22),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.3),
+    0 0 0 1px color-mix(in srgb, var(--raya-primary) 30%, transparent);
+}
+
+.prompt-voice-orb--active .prompt-voice-orb__core {
+  background:
+    radial-gradient(circle at 30% 26%, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0) 46%),
+    radial-gradient(circle at 74% 80%, var(--raya-primary-strong), transparent 62%),
+    linear-gradient(145deg, var(--raya-primary), var(--raya-primary-strong));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--raya-primary) 55%, transparent),
+    0 0 10px 1px color-mix(in srgb, var(--raya-primary) 45%, transparent),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.3);
+  animation: orb-breathe 3.2s ease-in-out infinite;
+}
+
+.prompt-voice-orb--active .prompt-voice-orb__sheen {
+  opacity: 1;
+  animation: orb-spin 4s linear infinite;
+}
+
+@keyframes orb-spin {
   to {
     transform: rotate(360deg);
   }
 }
 
-.enhance-spinner {
-  animation: enhance-spin 1s linear infinite;
+@keyframes orb-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.07);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .prompt-voice-orb--active .prompt-voice-orb__core,
+  .prompt-voice-orb--active .prompt-voice-orb__sheen {
+    animation: none;
+  }
 }

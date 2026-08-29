@@ -395,7 +395,6 @@ export const dict = {
   "sound.option.yup05": "Ja 05",
   "sound.option.yup06": "Ja 06",
 
-  "prompt.action.indexing": "Indizierungseinstellungen",
   "settings.indexing.dimension.description":
     "Leer lassen, um die Embedding-Dimension automatisch aus dem Modell zu erkennen.",
   "settings.indexing.dimension.placeholder": "Auto",

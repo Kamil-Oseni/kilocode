@@ -182,7 +182,6 @@ export const dict = {
   "prompt.action.send.recording": "رونویسی و ارسال",
   "prompt.action.stop": "توقف",
   "prompt.action.enhance": "بهبود پرامپت",
-  "prompt.action.indexing": "تنظیمات ایندکس‌گذاری",
   "prompt.action.autoApprove.enable": "فعال‌سازی تأیید خودکار",
   "prompt.action.autoApprove.disable": "غیرفعال‌سازی تأیید خودکار",
   "prompt.action.autoApprove.enabled": "تأیید خودکار فعال است. درخواست‌های مجوز به‌صورت خودکار تأیید می‌شوند.",

@@ -242,9 +242,11 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                   </Show>
                 </div>
               </Show>
-              {/* raya_change - intentional grouping: Steer (adjust the goal) leads
-                  on the left; the run controls (Pause/Resume, Stop/Dismiss) sit
-                  together on the right. All share one rounded Eden treatment. */}
+              {/* raya_change - the banner stays a quiet one-line status until the
+                  chevron expands it; Steer and the run controls (Pause/Resume,
+                  Stop/Dismiss) only appear in the expanded card so the collapsed
+                  goal carries no button chrome. */}
+              <Show when={props.expanded}>
               <div class="goal-banner__actions">
                 <div class="goal-banner__actions-lead">
                   <Button size="small" variant="secondary" onClick={() => props.onEdit?.()}>
@@ -274,6 +276,7 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                   </Show>
                 </div>
               </div>
+              </Show>
             </>
           )}
         </Show>

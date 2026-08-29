@@ -59,8 +59,6 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   // Show "Show Changes" only in the standalone sidebar, not inside Agent Manager
   const isSidebar = () => worktreeMode === undefined
   const pendingSessionID = () => props.pendingSessionID ?? tabs?.pending()
-  // Show "Continue in Worktree": only when explicitly enabled via prop
-  const canContinueInWorktree = () => props.continueInWorktree === true
 
   const id = () => session.currentSessionID()
   // Counts the in-flight first message too, so the dock reserves the same row on
@@ -243,7 +241,12 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     setDiscarding(false)
   })
 
-  const canStartSession = (hasChat: boolean) => hasChat
+  // raya_change - New session, New worktree, and Move to worktree were bloating
+  // the conversation footer. New session already lives in the top bar and the
+  // worktree flows live in Agent Manager, so the dock keeps only Review changes /
+  // Keep all / Undo all. These predicates stay false to retire that chrome
+  // without unwinding the worktree/transfer machinery they were wired to.
+  const canStartSession = (_hasChat: boolean) => false
 
   // Deliberately status-independent: the dock reserves this row's height even
   // while the working indicator covers it, so a button that came and went with
@@ -251,9 +254,9 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   // and non-interactive while a turn runs.
   const canFork = (hasChat: boolean) => hasChat && !isSidebar() && !!props.onForkSession
 
-  const canStartWorktree = () => isSidebar() && server.gitInstalled()
+  const canStartWorktree = () => false
 
-  const canMoveToWorktree = (hasChat: boolean) => hasChat && canContinueInWorktree() && server.gitInstalled()
+  const canMoveToWorktree = (_hasChat: boolean) => false
   const canReviewChanges = (hasChat: boolean) => hasChat // raya_change - snapshot review belongs to every chat, including non-Git folders
 
   const hasActions = (hasChat: boolean) =>
@@ -379,7 +382,12 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                 </Show>
               </Button>
             </Tooltip>
-            {/* raya_change - Undo all swaps to Confirm undo in place; Keep all persists, no clipping question line */}
+            {/* raya_change - Keep all / Undo all only make sense when there are
+                unreviewed file edits. pending() already requires changed files
+                that haven't been kept or reverted, so a conversation-only turn
+                shows neither, and Keep all dismisses the cluster by marking the
+                current change set reviewed. */}
+            <Show when={pending()}>
             <Show when={!discarding()}>
               <Tooltip value="Keep every file edit in this chat" placement="top">
                 <Button
@@ -429,6 +437,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
               >
                 Cancel
               </Button>
+            </Show>
             </Show>
             </div>
           </Show>

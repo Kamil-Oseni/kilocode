@@ -192,7 +192,6 @@ export const dict = {
   "prompt.action.resetModel": "Réinitialiser le modèle par défaut",
   "prompt.action.enhanceDescription":
     "Le bouton 'Améliorer la requête' aide à améliorer votre demande en fournissant un contexte supplémentaire, des clarifications ou des reformulations. Essayez de taper une demande ici et cliquez à nouveau sur le bouton pour voir comment cela fonctionne.",
-  "prompt.action.indexing": "Paramètres d'indexation",
   "prompt.action.sandbox.enable": "Activer le sandbox",
   "prompt.action.sandbox.disable": "Désactiver le sandbox",
   "prompt.action.sandbox.enabled":

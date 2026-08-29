@@ -198,43 +198,50 @@
    Feedback Button (empty state)
    ============================================ */
 
-.feedback-button {
+/* raya_change - primary welcome action: a fully rounded Eden-blue pill. */
+.welcome-start-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 16px;
-  border: 1px dashed var(--vscode-textLink-foreground, #3794ff);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--vscode-textLink-foreground, #3794ff);
-  font-family: inherit;
+  gap: var(--raya-space-6, 6px);
+  padding: var(--raya-space-8, 8px) var(--raya-space-16, 16px);
+  border: none;
+  border-radius: var(--raya-radius-pill, 999px);
+  background: var(--raya-primary);
+  color: var(--raya-on-primary, #fff);
+  font-family: var(--font-body, inherit);
   font-size: var(--kilo-font-size-12);
-  font-weight: 500;
+  font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
-  transition:
-    background-color 0.15s,
-    color 0.15s,
-    border-color 0.15s;
+  transition: background-color var(--raya-duration-fast, 0.12s) var(--raya-ease-out);
 }
 
-.feedback-button:hover {
-  background: var(--vscode-textLink-foreground, #3794ff);
-  color: var(--vscode-editor-background, #1e1e1e);
-  border-style: solid;
-  border-color: var(--vscode-textLink-foreground, #3794ff);
+.welcome-start-btn:hover {
+  background: var(--raya-primary-strong, var(--raya-primary));
 }
 
-.feedback-button [data-component="icon"] {
+.welcome-start-btn [data-component="icon"] {
   --icon-base: currentColor;
 }
 
-.feedback-button:hover [data-slot="icon-svg"] {
-  color: var(--vscode-editor-background, #1e1e1e);
+/* raya_change - feedback demoted to a quiet, rounded text link under the pill. */
+.feedback-link {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--raya-space-4, 4px) var(--raya-space-8, 8px);
+  border: none;
+  border-radius: var(--raya-radius-pill, 999px);
+  background: transparent;
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-family: var(--font-body, inherit);
+  font-size: var(--kilo-font-size-11);
+  cursor: pointer;
+  transition: color var(--raya-duration-fast, 0.12s) var(--raya-ease-out);
 }
 
-.feedback-button:hover [data-component="icon"] {
-  --icon-base: var(--vscode-editor-background, #1e1e1e);
+.feedback-link:hover {
+  color: var(--text-base, var(--vscode-foreground));
+  text-decoration: underline;
 }
 
 /* Feedback Dialog */

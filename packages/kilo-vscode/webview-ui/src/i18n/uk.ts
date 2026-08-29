@@ -182,7 +182,6 @@ export const dict = {
   "prompt.action.send.recording": "Транскрибувати та надіслати",
   "prompt.action.stop": "Зупинити",
   "prompt.action.enhance": "Покращити запит",
-  "prompt.action.indexing": "Налаштування індексування",
   "prompt.action.autoApprove.enable": "Увімкнути автоматичне схвалення",
   "prompt.action.autoApprove.disable": "Вимкнути автоматичне схвалення",
   "prompt.action.autoApprove.enabled": "Автоматичне схвалення увімкнено. Запити дозволів схвалюватимуться автоматично.",

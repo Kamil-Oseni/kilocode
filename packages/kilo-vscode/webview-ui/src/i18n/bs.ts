@@ -388,7 +388,6 @@ export const dict = {
   "sound.option.yup05": "Da 05",
   "sound.option.yup06": "Da 06",
 
-  "prompt.action.indexing": "Postavke indeksiranja",
   "settings.indexing.dimension.description":
     "Ostavite prazno za automatsko prepoznavanje dimenzije embeddinga iz modela.",
   "settings.indexing.dimension.placeholder": "Auto",

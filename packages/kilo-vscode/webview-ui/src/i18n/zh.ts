@@ -171,7 +171,6 @@ export const dict = {
   "common.default": "默认",
 
   "prompt.thinking.tooltip": "推理强度",
-  "prompt.action.indexing": "索引设置",
   "prompt.action.autoApprove.enable": "启用自动审批",
   "prompt.action.autoApprove.disable": "禁用自动审批",
   "prompt.action.autoApprove.enabled": "自动审批已启用。权限请求将自动获批。",

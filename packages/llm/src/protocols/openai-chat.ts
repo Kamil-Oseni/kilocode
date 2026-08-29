@@ -20,6 +20,7 @@ import {
 import { isRecord, JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
 import { OpenAIOptions } from "./utils/openai-options"
 import { Lifecycle } from "./utils/lifecycle"
+import { Dsml } from "./utils/dsml" // kilocode_change - raya_change: recover DeepSeek DSML tool calls exposed as text
 import { ToolSchemaProjection } from "./utils/tool-schema"
 import { ToolStream } from "./utils/tool-stream"
 
@@ -163,6 +164,7 @@ type OpenAIChatRequestMessage = LLMRequest["messages"][number]
 interface ParserState {
   readonly tools: ToolStream.State<number>
   readonly toolCallEvents: ReadonlyArray<LLMEvent>
+  readonly dsml: Dsml.State // kilocode_change - raya_change: incremental DSML suppression and parsing
   readonly usage?: Usage
   readonly finishReason?: FinishReason
   readonly lifecycle: Lifecycle.State
@@ -413,6 +415,8 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     const delta = choice?.delta
     const toolDeltas = delta?.tool_calls ?? []
     let tools = state.tools
+    let dsml = state.dsml // kilocode_change - raya_change
+    let toolCallEvents = state.toolCallEvents // kilocode_change - raya_change
 
     let lifecycle = state.lifecycle
 
@@ -421,7 +425,26 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
 
     if (delta?.content) {
       lifecycle = Lifecycle.reasoningEnd(lifecycle, events, "reasoning-0")
-      lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.content)
+      // kilocode_change start - raya_change: DeepSeek V3.2/V4 gateways can stream proprietary
+      // DSML through content instead of returning OpenAI tool_calls.
+      const parsed = Dsml.push(dsml, delta.content)
+      dsml = parsed.state
+      if (parsed.text) lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", parsed.text)
+      if (parsed.calls.length) {
+        toolCallEvents = [
+          ...toolCallEvents,
+          ...parsed.calls.flatMap((call) => {
+            const text = JSON.stringify(call.input)
+            return [
+              LLMEvent.toolInputStart({ id: call.id, name: call.name }),
+              LLMEvent.toolInputDelta({ id: call.id, name: call.name, text }),
+              LLMEvent.toolInputEnd({ id: call.id, name: call.name }),
+              LLMEvent.toolCall({ id: call.id, name: call.name, input: call.input }),
+            ]
+          }),
+        ]
+      }
+      // kilocode_change end
     }
 
     if (toolDeltas.length) lifecycle = Lifecycle.reasoningEnd(lifecycle, events, "reasoning-0")
@@ -450,7 +473,8 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     return [
       {
         tools: finished?.tools ?? tools,
-        toolCallEvents: finished?.events ?? state.toolCallEvents,
+        toolCallEvents: [...toolCallEvents, ...(finished?.events ?? [])], // kilocode_change - raya_change
+        dsml, // kilocode_change - raya_change
         usage,
         finishReason,
         lifecycle,
@@ -461,9 +485,13 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
 
 const finishEvents = (state: ParserState): ReadonlyArray<LLMEvent> => {
   const events: LLMEvent[] = []
+  // kilocode_change start - raya_change: never silently drop malformed partial provider output
+  const pending = Dsml.flush(state.dsml)
+  const current = pending ? Lifecycle.textDelta(state.lifecycle, events, "text-0", pending) : state.lifecycle
   const hasToolCalls = state.toolCallEvents.length > 0
   const reason = state.finishReason === "stop" && hasToolCalls ? "tool-calls" : state.finishReason
-  const lifecycle = state.toolCallEvents.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle
+  const lifecycle = state.toolCallEvents.length ? Lifecycle.stepStart(current, events) : current
+  // kilocode_change end
   events.push(...state.toolCallEvents)
   if (reason) Lifecycle.finish(lifecycle, events, { reason, usage: state.usage })
   return events
@@ -486,7 +514,14 @@ export const protocol = Protocol.make({
   },
   stream: {
     event: Protocol.jsonEvent(OpenAIChatEvent),
-    initial: () => ({ tools: ToolStream.empty<number>(), toolCallEvents: [], lifecycle: Lifecycle.initial() }),
+    // kilocode_change start - raya_change: incremental DSML parser state
+    initial: () => ({
+      tools: ToolStream.empty<number>(),
+      toolCallEvents: [],
+      dsml: Dsml.initial(),
+      lifecycle: Lifecycle.initial(),
+    }),
+    // kilocode_change end
     step,
     onHalt: finishEvents,
   },

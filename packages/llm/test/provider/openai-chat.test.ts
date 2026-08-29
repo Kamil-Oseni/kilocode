@@ -602,6 +602,41 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  // kilocode_change start - raya_change: DeepSeek V3.2/V4 gateways may expose DSML as content
+  it.effect("recovers split DSML calls without leaking protocol text", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        deltaChunk({ content: "Checking the goal.\n<｜｜DS" }),
+        deltaChunk({ content: 'ML｜｜tool_calls><｜｜DSML｜｜invoke name="get_goal"><｜｜DSML｜｜parameter ' }),
+        deltaChunk({
+          content: 'name="description" string="true">Read current state.</｜｜DSML｜｜parameter></｜｜DSML｜｜invoke>',
+        }),
+        deltaChunk({ content: "</｜｜DSML｜｜tool_calls>" }),
+        deltaChunk({}, "stop"),
+      )
+      const response = yield* LLMClient.generate(
+        LLM.updateRequest(request, {
+          tools: [{ name: "get_goal", description: "Read goal state", inputSchema: { type: "object" } }],
+        }),
+      ).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.text).toBe("Checking the goal.\n")
+      expect(response.toolCalls).toEqual([
+        {
+          type: "tool-call",
+          id: "dsml-0",
+          name: "get_goal",
+          input: { description: "Read current state." },
+          providerExecuted: undefined,
+          providerMetadata: undefined,
+        },
+      ])
+      expect(response.finishReason).toBe("tool-calls")
+      expect(response.events.some((event) => JSON.stringify(event).includes("DSML"))).toBe(false)
+    }),
+  )
+  // kilocode_change end
+
   it.effect("does not finalize streamed tool calls without a finish reason", () =>
     Effect.gen(function* () {
       const body = sseEvents(

@@ -1703,7 +1703,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   // the main webview message switch stays under its complexity budget. "Undo all"
   // (discardSessionChanges) undoes file edits only and never touches the conversation.
   private handleCheckpointMessage(
-    message: TypedWebviewMessage & { sessionID?: unknown; messageID?: unknown; partID?: unknown },
+    message: TypedWebviewMessage & { sessionID?: unknown; messageID?: unknown; partID?: unknown; files?: unknown },
   ): boolean {
     if (message.type !== "revertSession" && message.type !== "unrevertSession" && message.type !== "discardSessionChanges")
       return false
@@ -1719,7 +1719,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       this.checkpoint(sid, () => this.handleUnrevertSession(sid))
       return true
     }
-    this.checkpoint(sid, () => this.handleDiscardSessionChanges(sid))
+    const files = Array.isArray(message.files) ? message.files.filter((f): f is string => typeof f === "string") : undefined
+    this.checkpoint(sid, () => this.handleDiscardSessionChanges(sid, files && files.length > 0 ? files : undefined))
     return true
   }
 
@@ -4416,13 +4417,14 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.postMessage({ type: "sessionUpdated", session: sessionToWebview(data) })
   }
 
-  // raya_change - Undo all discards the session's file edits and keeps the chat.
-  // Restores every edited file to its pre-session state via the files-only server
-  // op; no revert boundary is set, so nothing becomes redoable.
-  private async handleDiscardSessionChanges(sessionID: string): Promise<void> {
+  // raya_change - discards the session's file edits and keeps the chat. Restores
+  // edited files to their pre-session state via the files-only server op; no revert
+  // boundary is set, so nothing becomes redoable. Passing `files` undoes just that
+  // subset (a single inline edit's Undo); omitting it undoes every edit (Undo all).
+  private async handleDiscardSessionChanges(sessionID: string, files?: string[]): Promise<void> {
     if (!this.client) return
     const dir = this.getWorkspaceDirectory(sessionID)
-    const { data, error } = await this.client.session.discardChanges({ sessionID, directory: dir })
+    const { data, error } = await this.client.session.discardChanges({ sessionID, directory: dir, files })
     if (error) {
       console.error("[Kilo New] KiloProvider: Failed to discard session changes:", error)
       this.postMessage({ type: "error", message: "Failed to undo file changes", sessionID })

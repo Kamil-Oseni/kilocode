@@ -104,6 +104,13 @@ describe("message highlight", () => {
     ])
   })
 
+  test("highlights slash commands and colors goal distinctly", () => {
+    expect(buildHighlightedTextSegments("/goal Create three temporary files", [], [])).toEqual([
+      { text: "/goal", type: "slash", command: "goal" },
+      { text: " Create three temporary files" },
+    ])
+  })
+
   test("fallback regex does not match filenames containing spaces (requires source offsets)", () => {
     // The fallback regex intentionally excludes spaces: a pattern permissive enough to
     // span space-separated path segments would also swallow ordinary prose following

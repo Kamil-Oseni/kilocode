@@ -42,6 +42,7 @@ type PvState =
   | "composer-focus"
   | "topnav"
   | "transcript"
+  | "edit-review"
 type Theme = "light" | "dark"
 
 const states: PvState[] = [
@@ -66,6 +67,7 @@ const states: PvState[] = [
   "composer-focus",
   "topnav",
   "transcript",
+  "edit-review",
 ]
 const themes: Theme[] = ["light", "dark"]
 
@@ -331,6 +333,47 @@ const Transcript: Component = () => (
   </div>
 )
 
+// raya_change - presentational replica of the inline edit-review chrome, mirroring
+// the DOM the VS Code override emits so the hued block + pills + navigator can be
+// checked in both themes without the full tool registry.
+const ReviewEdit: Component<{ status?: "added" | "deleted" | "modified"; nav?: boolean }> = (props) => (
+  <div class="chat-view">
+    <div data-component="edit-review-block" data-review-status={props.status ?? "modified"} data-review-pending="">
+      <div data-component="tool-part-wrapper" data-tool="edit">
+        <div data-component="tool-trigger">
+          <div data-component="edit-trigger">
+            <div data-slot="message-part-title-area">
+              <div data-slot="message-part-title">
+                <span data-slot="message-part-title-filename">prompt-input.css</span>
+                <span data-slot="message-part-directory-inline">webview-ui/src/styles</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div data-slot="edit-review-actions">
+        <button type="button" data-slot="edit-review-undo">
+          Undo
+        </button>
+        <button type="button" data-slot="edit-review-keep">
+          Keep
+        </button>
+        <Show when={props.nav}>
+          <span data-slot="edit-review-nav">
+            <button type="button" aria-label="Previous edit">
+              ‹
+            </button>
+            <span data-slot="edit-review-count">1 of 2</span>
+            <button type="button" aria-label="Next edit">
+              ›
+            </button>
+          </span>
+        </Show>
+      </div>
+    </div>
+  </div>
+)
+
 const chrome = new Set<PvState>([
   "slash",
   "review",
@@ -339,6 +382,7 @@ const chrome = new Set<PvState>([
   "composer-focus",
   "topnav",
   "transcript",
+  "edit-review",
 ])
 
 const Fixture: Component<{ id: string; theme: Theme; state: PvState }> = (props) => (
@@ -370,6 +414,13 @@ const Fixture: Component<{ id: string; theme: Theme; state: PvState }> = (props)
       </Show>
       <Show when={props.state === "transcript"}>
         <Transcript />
+      </Show>
+      <Show when={props.state === "edit-review"}>
+        <div style={{ display: "flex", "flex-direction": "column", gap: "12px" }}>
+          <ReviewEdit status="added" nav />
+          <ReviewEdit status="modified" />
+          <ReviewEdit status="deleted" />
+        </div>
       </Show>
       <Show when={props.state !== "usage" && !chrome.has(props.state)}>
         <GoalBannerView {...propsFor(props.state)} />

@@ -33,6 +33,7 @@ import {
   ForkPayload,
   InitPayload,
   ListQuery,
+  DiscardChangesPayload, // kilocode_change - per-edit / all file discard payload
   MessagesQuery,
   PermissionResponsePayload,
   PromptPayload,
@@ -383,12 +384,15 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       return yield* SessionError.mapBusy(revertSvc.unrevert({ sessionID: ctx.params.sessionID }))
     })
 
-    // kilocode_change start - files-only discard
+    // kilocode_change start - files-only discard (all, or a subset for per-edit Undo)
     const discardChanges = Effect.fn("SessionHttpApi.discardChanges")(function* (ctx: {
       params: { sessionID: SessionID }
+      payload: typeof DiscardChangesPayload.Type
     }) {
       yield* requireSession(ctx.params.sessionID)
-      return yield* SessionError.mapBusy(revertSvc.discardChanges({ sessionID: ctx.params.sessionID }))
+      return yield* SessionError.mapBusy(
+        revertSvc.discardChanges({ sessionID: ctx.params.sessionID, files: ctx.payload.files }),
+      )
     })
     // kilocode_change end
 

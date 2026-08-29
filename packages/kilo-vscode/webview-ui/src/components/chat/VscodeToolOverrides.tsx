@@ -7,13 +7,18 @@
  * upstream tool registrations have run (i.e. after importing message-part).
  */
 
-import { createMemo, For, Show } from "solid-js"
+import { createMemo, For, onCleanup, onMount, Show, type Component } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { BasicTool } from "@kilocode/kilo-ui/basic-tool"
 import { ToolRegistry, type ToolProps } from "@kilocode/kilo-ui/message-part"
+import { useSession } from "../../context/session"
+import { useVSCode } from "../../context/vscode"
+import { editReview } from "./edit-review"
 
 /** Tools that should be open by default in the VS Code sidebar. */
 const DEFAULT_OPEN_TOOLS = ["bash"]
+/** Single-file edit tools that get the inline review chrome (Undo/Keep + navigator). */
+const REVIEW_TOOLS = ["edit", "write"]
 const registered = new Set<string>()
 
 const TITLE: Record<string, string> = {
@@ -151,7 +156,91 @@ function BackgroundProcessTool(props: ToolProps) {
   )
 }
 
+// raya_change - wrap an edit/write renderer with inline review chrome: a hued
+// block plus rounded Undo/Keep pills and an "N of M" navigator to step between
+// unaccepted edits, matching the Cursor-style review affordance the user asked
+// for. Undo restores just this file (files-only server discard); Keep hides the
+// chrome for this file. The chrome only appears once the edit has completed.
+function reviewed(upstream: Component<ToolProps>): Component<ToolProps> {
+  return (props) => {
+    const session = useSession()
+    const vscode = useVSCode()
+    let ref: HTMLDivElement | undefined
+
+    const sid = () => session.currentSessionID() ?? ""
+    const file = () => (props.metadata?.filediff?.file || props.input.filePath || "") as string
+    const status = () => (props.metadata?.filediff?.status as string | undefined) ?? "modified"
+    const show = () => props.status === "completed" && !!file() && !!sid() && !editReview.isKept(sid(), file())
+    const nav = () => {
+      const list = editReview.pending(sid())
+      return { index: list.indexOf(file()), total: list.length }
+    }
+
+    onMount(() => {
+      if (!ref || !file() || !sid()) return
+      const dispose = editReview.register({ session: sid(), file: file(), el: ref })
+      onCleanup(dispose)
+    })
+
+    const undo = () => {
+      if (!sid() || !file()) return
+      vscode.postMessage({ type: "discardSessionChanges", sessionID: sid(), files: [file()] })
+      editReview.keep(sid(), file())
+    }
+    const keep = () => editReview.keep(sid(), file())
+    const step = (delta: number) => {
+      const list = editReview.pending(sid())
+      if (list.length === 0) return
+      const at = list.indexOf(file())
+      const next = list[(at + delta + list.length) % list.length]
+      if (next) editReview.focus(sid(), next)
+    }
+
+    return (
+      <div
+        ref={ref}
+        data-component="edit-review-block"
+        data-review-status={status()}
+        data-review-pending={show() ? "" : undefined}
+      >
+        <Dynamic component={upstream} {...props} />
+        <Show when={show()}>
+          <div data-slot="edit-review-actions">
+            <button type="button" data-slot="edit-review-undo" onClick={undo}>
+              Undo
+            </button>
+            <button type="button" data-slot="edit-review-keep" onClick={keep}>
+              Keep
+            </button>
+            <Show when={nav().total > 1 && nav().index >= 0}>
+              <span data-slot="edit-review-nav">
+                <button type="button" aria-label="Previous edit" onClick={() => step(-1)}>
+                  ‹
+                </button>
+                <span data-slot="edit-review-count">
+                  {nav().index + 1} of {nav().total}
+                </span>
+                <button type="button" aria-label="Next edit" onClick={() => step(1)}>
+                  ›
+                </button>
+              </span>
+            </Show>
+          </div>
+        </Show>
+      </div>
+    )
+  }
+}
+
 export function registerVscodeToolOverrides() {
+  for (const name of REVIEW_TOOLS) {
+    if (registered.has(name)) continue
+    const upstream = ToolRegistry.render(name)
+    if (!upstream) continue
+    ToolRegistry.register({ name, render: reviewed(upstream) })
+    registered.add(name)
+  }
+
   if (!registered.has("background_process")) {
     ToolRegistry.register({
       name: "background_process",

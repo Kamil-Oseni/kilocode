@@ -49,10 +49,21 @@ export namespace KiloSessionRevert {
     yield* snap.revert([{ hash, files }])
   })
 
+  // A patch file (absolute, worktree-joined, forward-slashed) matches a caller
+  // filter when it equals the filter or ends with it as a path segment. Lets the
+  // webview pass either an absolute path or a worktree-relative one for per-file
+  // undo without the client needing to know the exact snapshot path form.
+  const matches = (file: string, filter: Set<string>) => {
+    if (filter.has(file)) return true
+    for (const want of filter) if (file === want || file.endsWith(`/${want}`)) return true
+    return false
+  }
+
   /**
-   * Discard every file edit made in the session, restoring each edited file to
-   * its state before the session's first edit — without touching messages and
-   * without arming a revert boundary (so nothing becomes "redoable").
+   * Discard file edits made in the session, restoring each edited file to its
+   * state before the session's first edit — without touching messages and
+   * without arming a revert boundary (so nothing becomes "redoable"). Pass
+   * `only` to discard a specific subset (per-edit Undo); omit it to discard all.
    *
    * Every "patch" part records the snapshot hash captured *before* that turn's
    * edits. `snap.revert` dedupes by first occurrence per file, so passing all
@@ -63,9 +74,16 @@ export namespace KiloSessionRevert {
   export const discardAll = Effect.fn("KiloSessionRevert.discardAll")(function* (
     snap: Snapshot.Interface,
     messages: MessageV2.WithParts[],
+    only?: string[],
   ) {
+    const filter = only && only.length > 0 ? new Set(only.map((file) => file.replaceAll("\\", "/"))) : undefined
     const patches: Snapshot.Patch[] = []
-    for (const msg of messages) for (const part of msg.parts) if (part.type === "patch") patches.push(part)
+    for (const msg of messages)
+      for (const part of msg.parts)
+        if (part.type === "patch") {
+          const keep = filter ? part.files.filter((file) => matches(file.replaceAll("\\", "/"), filter)) : part.files
+          if (keep.length > 0) patches.push({ hash: part.hash, files: keep })
+        }
     const files = [...new Set(patches.flatMap((patch) => patch.files))]
     if (files.length === 0) return { files: [] as string[] }
     const baseline = yield* snap.track()

@@ -1031,6 +1031,7 @@ function HighlightedText(props: { text: string; references: FilePart[]; agents: 
       {(segment) => (
         <span
           data-highlight={segment.type}
+          data-command={segment.command}
           data-clickable={
             segment.type === "file" && (session(segment) ? data.navigateToSession : data.openFile) ? "" : undefined
           }

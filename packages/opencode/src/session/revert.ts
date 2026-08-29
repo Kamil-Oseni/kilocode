@@ -22,8 +22,12 @@ export type RevertInput = Schema.Schema.Type<typeof RevertInput>
 export interface Interface {
   readonly revert: (input: RevertInput) => Effect.Effect<Session.Info, Session.BusyError>
   readonly unrevert: (input: { sessionID: SessionID }) => Effect.Effect<Session.Info, Session.BusyError>
-  // kilocode_change start - files-only discard: undo every session file edit, keep the conversation
-  readonly discardChanges: (input: { sessionID: SessionID }) => Effect.Effect<Session.Info, Session.BusyError>
+  // kilocode_change start - files-only discard: undo session file edits (all, or a
+  // specific subset for per-edit Undo), keep the conversation
+  readonly discardChanges: (input: {
+    sessionID: SessionID
+    files?: readonly string[]
+  }) => Effect.Effect<Session.Info, Session.BusyError>
   // kilocode_change end
   readonly cleanup: (session: Session.Info) => Effect.Effect<void>
 }
@@ -154,18 +158,25 @@ const layer = Layer.effect(
       return yield* sessions.get(input.sessionID).pipe(Effect.orDie)
     })
 
-    // kilocode_change start - discard every file edit in the session without removing
-    // messages or arming a revert boundary. Fixes "Undo all" wiping the conversation
-    // and offering a nonsensical redo. Files are restored to their pre-session state;
-    // the review UI is cleared by publishing an empty diff.
-    const discardChanges = Effect.fn("SessionRevert.discardChanges")(function* (input: { sessionID: SessionID }) {
+    // kilocode_change start - discard session file edits (all, or a subset for
+    // per-edit Undo) without removing messages or arming a revert boundary. Fixes
+    // "Undo all" wiping the conversation and offering a nonsensical redo. Files are
+    // restored to their pre-session state.
+    const discardChanges = Effect.fn("SessionRevert.discardChanges")(function* (input: {
+      sessionID: SessionID
+      files?: readonly string[]
+    }) {
       yield* state.assertNotBusy(input.sessionID)
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
       const all = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
-      const result = yield* KiloSessionRevert.discardAll(snap, all)
+      const result = yield* KiloSessionRevert.discardAll(snap, all, input.files ? [...input.files] : undefined)
       if (result.files.length === 0) return session
-      yield* storage.write(["session_diff", input.sessionID], []).pipe(Effect.ignore)
-      yield* events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: [] })
+      // Discarding everything clears the review UI outright; a per-file undo leaves
+      // other edits intact, so let the client re-poll the remaining diff instead.
+      if (!input.files || input.files.length === 0) {
+        yield* storage.write(["session_diff", input.sessionID], []).pipe(Effect.ignore)
+        yield* events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: [] })
+      }
       // A prior partial revert boundary would otherwise keep a redo affordance alive.
       if (session.revert) yield* sessions.clearRevert(input.sessionID)
       return yield* sessions.get(input.sessionID).pipe(Effect.orDie)

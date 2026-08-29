@@ -72,6 +72,10 @@ export const PromptPayload = Schema.Struct(Struct.omit(SessionPrompt.PromptInput
 export const CommandPayload = Schema.Struct(Struct.omit(SessionPrompt.CommandInput.fields, ["sessionID"]))
 export const ShellPayload = Schema.Struct(Struct.omit(SessionPrompt.ShellInput.fields, ["sessionID"]))
 export const RevertPayload = Schema.Struct(Struct.omit(SessionRevert.RevertInput.fields, ["sessionID"]))
+// kilocode_change - optional file subset for per-edit Undo; omit to discard every edit
+export const DiscardChangesPayload = Schema.Struct({
+  files: Schema.optional(Schema.Array(Schema.String)),
+})
 export const PermissionResponsePayload = Schema.Struct({
   response: PermissionV1.Reply,
 })
@@ -408,10 +412,11 @@ export const SessionApi = HttpApi.make("session")
             description: "Restore all previously reverted messages in a session.",
           }),
         ),
-        // kilocode_change start - discard every file edit without touching the conversation
+        // kilocode_change start - discard file edits without touching the conversation
         HttpApiEndpoint.post("discardChanges", SessionPaths.discardChanges, {
           params: { sessionID: SessionID },
           query: WorkspaceRoutingQuery,
+          payload: DiscardChangesPayload,
           success: described(Session.Info, "Updated session"),
           error: [HttpApiError.BadRequest, ApiNotFoundError, SessionBusyError],
         }).annotateMerge(
@@ -419,7 +424,7 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.discardChanges",
             summary: "Discard file changes",
             description:
-              "Restore every file edited in this session to its pre-session state without removing messages or arming a redo.",
+              "Restore files edited in this session to their pre-session state without removing messages or arming a redo. Pass `files` to discard a specific subset (per-edit Undo); omit it to discard every edit.",
           }),
         ),
         // kilocode_change end

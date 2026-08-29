@@ -330,4 +330,98 @@ html[data-theme="kilo-vscode"]
   letter-spacing: 0;
 }
 /* raya_change end */
+
+/* raya_change start - inline agent-edit review: a quiet hued block wrapping the
+ * edit card, with rounded Undo/Keep pills and an Instrument-Serif "N of M"
+ * navigator. Hue keys off the edit status (added/deleted/modified) with a low
+ * wash and a single left stroke — no amber, no gratuitous borders. */
+html[data-theme="kilo-vscode"] .chat-view [data-component="edit-review-block"] {
+  --review-hue: var(--raya-primary);
+}
+html[data-theme="kilo-vscode"] .chat-view [data-component="edit-review-block"][data-review-status="added"] {
+  --review-hue: #2f9e5f;
+}
+html[data-theme="kilo-vscode"] .chat-view [data-component="edit-review-block"][data-review-status="deleted"] {
+  --review-hue: #d1554b;
+}
+html[data-theme="kilo-vscode"] .chat-view [data-component="edit-review-block"][data-review-pending] {
+  border-radius: var(--raya-radius-md);
+  border: var(--raya-hairline) solid color-mix(in srgb, var(--review-hue) 26%, transparent);
+  border-inline-start: 2px solid color-mix(in srgb, var(--review-hue) 60%, transparent);
+  background: color-mix(in srgb, var(--review-hue) 6%, transparent);
+  overflow: hidden;
+}
+html[data-theme="kilo-vscode"] .chat-view [data-slot="edit-review-actions"] {
+  display: flex;
+  align-items: center;
+  gap: var(--raya-space-6);
+  padding: var(--raya-space-6) var(--raya-space-10);
+  border-top: var(--raya-hairline) solid color-mix(in srgb, var(--review-hue) 18%, transparent);
+}
+html[data-theme="kilo-vscode"] .chat-view :where([data-slot="edit-review-undo"], [data-slot="edit-review-keep"]) {
+  height: 24px;
+  padding: 0 var(--raya-space-12);
+  font-family: var(--font-body);
+  font-size: var(--kilo-font-size-12);
+  border-radius: var(--raya-radius-pill);
+  cursor: pointer;
+  transition:
+    background-color var(--raya-duration-fast) var(--raya-ease-out),
+    border-color var(--raya-duration-fast) var(--raya-ease-out);
+}
+/* Undo is the quiet, reversible choice: a hairline pill. */
+html[data-theme="kilo-vscode"] .chat-view [data-slot="edit-review-undo"] {
+  background: transparent;
+  border: var(--raya-hairline) solid color-mix(in srgb, var(--text-weak) 30%, transparent);
+  color: var(--text-base, var(--vscode-foreground));
+}
+html[data-theme="kilo-vscode"] .chat-view [data-slot="edit-review-undo"]:hover {
+  background: color-mix(in srgb, var(--text-weak) 10%, transparent);
+  border-color: color-mix(in srgb, var(--text-weak) 44%, transparent);
+}
+/* Keep is the primary action: a filled Eden-blue pill. */
+html[data-theme="kilo-vscode"] .chat-view [data-slot="edit-review-keep"] {
+  background: var(--raya-primary);
+  border: var(--raya-hairline) solid transparent;
+  color: var(--raya-on-primary);
+}
+html[data-theme="kilo-vscode"] .chat-view [data-slot="edit-review-keep"]:hover {
+  background: var(--raya-primary-strong);
+}
+/* Navigator sits to the right; the count reads in Instrument Serif, Eden-style. */
+html[data-theme="kilo-vscode"] .chat-view [data-slot="edit-review-nav"] {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--raya-space-4);
+  margin-inline-start: auto;
+  padding: 2px var(--raya-space-6);
+  border-radius: var(--raya-radius-pill);
+  border: var(--raya-hairline) solid color-mix(in srgb, var(--text-weak) 22%, transparent);
+}
+html[data-theme="kilo-vscode"] .chat-view [data-slot="edit-review-nav"] button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: var(--raya-radius-pill);
+  background: transparent;
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  cursor: pointer;
+  font-size: var(--kilo-font-size-13);
+  line-height: 1;
+}
+html[data-theme="kilo-vscode"] .chat-view [data-slot="edit-review-nav"] button:hover {
+  background: color-mix(in srgb, var(--text-weak) 14%, transparent);
+  color: var(--text-base, var(--vscode-foreground));
+}
+html[data-theme="kilo-vscode"] .chat-view [data-slot="edit-review-count"] {
+  font-family: var(--font-display);
+  font-size: var(--kilo-font-size-12);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  white-space: nowrap;
+}
 /* raya_change end */

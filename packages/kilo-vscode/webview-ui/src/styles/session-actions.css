@@ -31,15 +31,14 @@
   display: flex;
   gap: 4px;
   align-items: center;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   min-height: 22px;
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .session-actions-row > * {
   flex: 0 0 auto;
   min-width: 0;
-  overflow: hidden;
 }
 
 .session-actions-row > [data-component="tooltip-trigger"] {
@@ -235,12 +234,23 @@
   opacity: 0.7;
 }
 
+.session-review-cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
 .session-move-changes {
   display: inline-flex;
   align-items: center;
   gap: 3px;
   flex: 0 0 auto;
-  overflow: hidden;
+  width: auto;
+  min-width: max-content;
+  overflow: visible;
   position: relative;
   border-radius: var(--session-action-radius);
   color: var(--vscode-descriptionForeground);
@@ -250,6 +260,11 @@
   transition:
     background-color 150ms ease,
     color 150ms ease;
+}
+
+.session-review-label {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .session-move-changes:hover:not(:disabled),
@@ -268,6 +283,22 @@
 
 .session-move-changes--empty {
   opacity: 0.7;
+}
+
+/* raya_change - Confirm undo is the destructive commit. It carries the semantic
+   critical color as a quiet hairline and text, never a loud red fill, so the
+   consequence is legible without shouting. */
+.session-move-changes--confirm {
+  color: var(--surface-critical-strong, #b3452f);
+  box-shadow: inset 0 0 0 var(--raya-hairline)
+    color-mix(in srgb, var(--surface-critical-strong, #b3452f) 42%, transparent);
+}
+
+.session-move-changes--confirm:hover:not(:disabled),
+.session-move-changes--confirm:focus-visible:not(:disabled),
+.session-move-changes--confirm:active:not(:disabled) {
+  color: var(--surface-critical-strong, #b3452f);
+  background: color-mix(in srgb, var(--surface-critical-strong, #b3452f) 12%, transparent);
 }
 
 .session-move-dot {
@@ -301,7 +332,7 @@
   color: var(--vscode-descriptionForeground);
 }
 
-/* Collapse diff stats to icon-only before the row wraps. */
+/* Hide +N −N in a narrow sidebar, but keep the Review changes label readable. */
 @container (max-width: 420px) {
   .session-actions-row {
     gap: 4px;
@@ -319,18 +350,14 @@
   }
 
   .session-move-changes {
-    gap: 0;
-    width: 26px;
-    min-width: 26px;
-    padding-left: 5px !important;
-    padding-right: 5px !important;
+    width: auto;
+    min-width: max-content;
+    gap: 3px;
   }
 
   .session-diff-add,
   .session-diff-del {
-    width: 0;
-    opacity: 0;
-    overflow: hidden;
+    display: none;
   }
 
   .session-move-dot {

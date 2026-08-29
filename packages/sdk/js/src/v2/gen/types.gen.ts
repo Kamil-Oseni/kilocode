@@ -14474,7 +14474,9 @@ export type SessionUnrevertResponses = {
 export type SessionUnrevertResponse = SessionUnrevertResponses[keyof SessionUnrevertResponses]
 
 export type SessionDiscardChangesData = {
-  body?: never
+  body?: {
+    files?: Array<string>
+  }
   path: {
     sessionID: string
   }

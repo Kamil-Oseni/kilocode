@@ -185,6 +185,7 @@ export const dict = {
   "prompt.action.autoApprove.enabled": "Автоодобрение включено. Запросы разрешений будут одобряться автоматически.",
   "prompt.action.autoApprove.disabled":
     "Автоодобрение отключено. Нажмите, чтобы автоматически одобрять запросы разрешений.",
+  "prompt.action.attach": "Прикрепить файлы",
   "prompt.action.resetModel": "Сбросить модель на значение по умолчанию",
   "prompt.action.indexing": "Настройки индексации",
   "prompt.action.enhanceDescription":

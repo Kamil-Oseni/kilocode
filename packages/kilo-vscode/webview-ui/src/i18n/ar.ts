@@ -181,6 +181,7 @@ export const dict = {
   "prompt.action.autoApprove.disable": "تعطيل الموافقة التلقائية",
   "prompt.action.autoApprove.enabled": "الموافقة التلقائية مفعلة. ستتم الموافقة على طلبات الأذونات تلقائياً.",
   "prompt.action.autoApprove.disabled": "الموافقة التلقائية معطلة. انقر للموافقة على طلبات الأذونات تلقائياً.",
+  "prompt.action.attach": "إرفاق ملفات",
   "prompt.action.resetModel": "إعادة تعيين النموذج إلى الافتراضي",
   "prompt.action.enhanceDescription":
     "زر «حسّن الموجه» يطوّر موجهك بإضافة سياق أو توضيح أو إعادة صياغة. جرّب اكتب موجه هنا ثم اضغط الزر مرة ثانية وشوف النتيجة.",

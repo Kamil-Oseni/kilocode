@@ -1,4 +1,4 @@
-export type HighlightSegment = { text: string; type?: "file" | "agent" }
+export type HighlightSegment = { text: string; type?: "file" | "agent" | "slash"; command?: string }
 
 type Source = {
   value: string
@@ -18,7 +18,7 @@ type AgentRef = {
 
 type Ref = {
   source: Source
-  type: "file" | "agent"
+  type: "file" | "agent" | "slash"
 }
 
 /**
@@ -32,12 +32,21 @@ type Ref = {
  * which locates the exact known mention text rather than pattern-matching prose.
  */
 const MENTION_RE = /@([\w./-]+\.[\w]+|[\w.-]+\/[\w./-]+)/g
+const SLASH_RE = /(^|[\s])(\/[a-z][\w-]*)\b/gim
 
 function detect(text: string): Ref[] {
   return Array.from(text.matchAll(MENTION_RE), (match) => ({
     source: { value: match[0] ?? "", start: match.index, end: match.index + match[0].length },
     type: "file" as const,
   }))
+}
+
+function slashes(text: string): Ref[] {
+  return Array.from(text.matchAll(SLASH_RE), (match) => {
+    const token = match[2] ?? ""
+    const start = (match.index ?? 0) + (match[1]?.length ?? 0)
+    return { source: { value: token, start, end: start + token.length }, type: "slash" as const }
+  })
 }
 
 function locate(text: string, ref: Ref, claimed: { start: number; end: number }[]): Ref | undefined {
@@ -179,7 +188,7 @@ export function buildHighlightedTextSegments(text: string, files: FileRef[], age
       .map((source) => ({ source, type: "agent" as const })),
   ]
 
-  const ranges = (refs.length > 0 ? resolve(text, refs) : detect(text)).sort(
+  const ranges = [...(refs.length > 0 ? resolve(text, refs) : detect(text)), ...slashes(text)].sort(
     (a, b) => a.source.start - b.source.start || b.source.end - a.source.end,
   )
 
@@ -193,7 +202,11 @@ export function buildHighlightedTextSegments(text: string, files: FileRef[], age
       result.push({ text: text.slice(index, ref.source.start) })
     }
 
-    result.push({ text: text.slice(ref.source.start, ref.source.end), type: ref.type })
+    result.push({
+      text: text.slice(ref.source.start, ref.source.end),
+      type: ref.type,
+      command: ref.type === "slash" ? ref.source.value.slice(1).toLowerCase() : undefined,
+    })
     index = ref.source.end
   }
 

@@ -8675,8 +8675,26 @@
             }
           }
         },
-        "description": "Restore every file edited in this session to its pre-session state without removing messages or arming a redo.",
+        "description": "Restore files edited in this session to their pre-session state without removing messages or arming a redo. Pass `files` to discard a specific subset (per-edit Undo); omit it to discard every edit.",
         "summary": "Discard file changes",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
         "x-codeSamples": [
           {
             "lang": "js",

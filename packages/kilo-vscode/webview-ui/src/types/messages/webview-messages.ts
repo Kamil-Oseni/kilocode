@@ -94,10 +94,12 @@ export interface UnrevertSessionRequest {
   sessionID: string
 }
 
-// raya_change - Undo all: discard file edits only, keep the conversation
+// raya_change - discard file edits only, keep the conversation. Omit `files` to
+// discard every edit (Undo all); pass a subset for a single inline edit's Undo.
 export interface DiscardSessionChangesRequest {
   type: "discardSessionChanges"
   sessionID: string
+  files?: string[]
 }
 
 export interface DeleteMessageRequest {

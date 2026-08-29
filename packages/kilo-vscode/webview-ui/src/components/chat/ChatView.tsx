@@ -28,6 +28,7 @@ import { useWorktreeMode } from "../../context/worktree-mode"
 import { useServer } from "../../context/server"
 import { TranscriptSearchProvider } from "../../context/transcript-search"
 import { isPromptBlocked, isSuggesting, isQuestioning } from "./prompt-input-utils"
+import { editReview } from "./edit-review" // raya_change - inline edit review chrome
 import { showTabStrip } from "../../utils/local-tabs"
 
 interface ChatViewProps {
@@ -181,6 +182,8 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   const keepAll = () => {
     const key = changeKey()
     if (key) setKept(key)
+    const sid = id()
+    if (sid) editReview.keepAll(sid) // raya_change - clear inline review chrome too
     setDiscarding(false)
   }
   const discardAll = () => {
@@ -190,6 +193,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     const sid = id()
     if (!sid || session.status() !== "idle") return
     vscode.postMessage({ type: "discardSessionChanges", sessionID: sid })
+    editReview.keepAll(sid) // raya_change - clear inline review chrome for every edit
     setDiscarding(false)
   }
 

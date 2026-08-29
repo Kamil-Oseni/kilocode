@@ -187,6 +187,7 @@ export const dict = {
     "Automatyczne zatwierdzanie jest włączone. Prośby o uprawnienia będą zatwierdzane automatycznie.",
   "prompt.action.autoApprove.disabled":
     "Automatyczne zatwierdzanie jest wyłączone. Kliknij, aby automatycznie zatwierdzać prośby o uprawnienia.",
+  "prompt.action.attach": "Załącz pliki",
   "prompt.action.resetModel": "Zresetuj model do domyślnego",
   "prompt.action.enhanceDescription":
     "Przycisk 'Ulepsz podpowiedź' pomaga ulepszyć Twoją prośbę, dostarczając dodatkowy kontekst, wyjaśnienia lub przeformułowania. Spróbuj wpisać prośbę tutaj i kliknij przycisk ponownie, aby zobaczyć, jak to działa.",

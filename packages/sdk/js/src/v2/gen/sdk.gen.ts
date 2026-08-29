@@ -5257,13 +5257,14 @@ export class Session2 extends HeyApiClient {
   /**
    * Discard file changes
    *
-   * Restore every file edited in this session to its pre-session state without removing messages or arming a redo.
+   * Restore files edited in this session to their pre-session state without removing messages or arming a redo. Pass `files` to discard a specific subset (per-edit Undo); omit it to discard every edit.
    */
   public discardChanges<ThrowOnError extends boolean = false>(
     parameters: {
       sessionID: string
       directory?: string
       workspace?: string
+      files?: Array<string>
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5275,6 +5276,7 @@ export class Session2 extends HeyApiClient {
             { in: "path", key: "sessionID" },
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "body", key: "files" },
           ],
         },
       ],
@@ -5287,6 +5289,11 @@ export class Session2 extends HeyApiClient {
       url: "/session/{sessionID}/discard_changes",
       ...options,
       ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 

@@ -1,5 +1,5 @@
 // raya_change - Milestone A persistent goal banner and controls
-import { For, Show, createEffect, createSignal, onCleanup, onMount, type Component } from "solid-js"
+import { For, Show, createEffect, createSignal, on, onCleanup, onMount, type Component } from "solid-js"
 import { Button } from "@kilocode/kilo-ui/button"
 import { Icon } from "@kilocode/kilo-ui/icon" // raya_change - self-redesign status icons
 import { useSession } from "../../context/session"
@@ -24,19 +24,15 @@ export interface GoalBannerProps {
   disabled?: boolean
   expanded?: boolean
   editing?: boolean
-  confirmingDiscard?: boolean
-  discardDisabled?: boolean
-  discardHint?: string
+  confirmingStop?: boolean
   /** Design-preview only: statically render the hover, focus, or pressed state. */
   pv?: "hover" | "focus" | "active"
   onToggle?: () => void
   onEdit?: () => void
   onCancelEdit?: () => void
   onRevise?: (objective: string) => void
-  onReview?: () => void
-  onKeep?: () => void
-  onDiscard?: () => void
-  onCancelDiscard?: () => void
+  onStop?: () => void
+  onCancelStop?: () => void
   onPause?: () => void
   onResume?: () => void
   onClear?: () => void
@@ -46,21 +42,58 @@ export interface GoalBannerProps {
 export const GoalBannerView: Component<GoalBannerProps> = (props) => {
   const latest = () => props.goal?.progress.at(-1)?.message
   const done = () => props.todos?.filter((todo) => todo.status === "completed").length ?? 0
+  const percent = () => {
+    if (props.todos?.length) return Math.round((done() / props.todos.length) * 100)
+    return props.goal?.status === "complete" ? 100 : 0
+  }
   const current = () => props.todos?.find((todo) => todo.status === "in_progress")
   const progress = () => {
     const todo = current()
     return todo ? `Now: ${todo.content}` : latest()
   }
   let editor: HTMLTextAreaElement | undefined
+  const [draft, setDraft] = createSignal("")
+  const [now, setNow] = createSignal(Date.now())
+  const runtime = () => {
+    const goal = props.goal
+    if (!goal) return 0
+    if (goal.activeMs === undefined) {
+      const end = goal.status === "active" ? now() : goal.updatedAt
+      return Math.max(0, end - goal.createdAt)
+    }
+    return goal.activeMs + (goal.status === "active" ? Math.max(0, now() - (goal.activeAt ?? goal.updatedAt)) : 0)
+  }
+  const duration = () => {
+    const seconds = Math.floor(runtime() / 1000)
+    const hours = Math.floor(seconds / 3600)
+    const minutes = Math.floor((seconds % 3600) / 60)
+    const rest = seconds % 60
+    if (hours) return `${hours}h ${minutes}m`
+    if (minutes) return `${minutes}m ${rest}s`
+    return `${rest}s`
+  }
 
-  createEffect(() => {
-    if (!props.editing || !editor || !props.goal) return
-    editor.value = props.goal.objective
-    queueMicrotask(() => editor?.focus())
-  })
+  onMount(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    onCleanup(() => window.clearInterval(timer))
+  }) // raya_change - keep elapsed goal time current without backend polling
+
+  // raya_change start - seed steering once when editing opens. Goal progress
+  // refreshes must never overwrite text while the user is typing.
+  createEffect(
+    on(
+      () => props.editing,
+      (editing) => {
+        if (!editing || !props.goal) return
+        setDraft(props.goal.objective)
+        queueMicrotask(() => editor?.focus())
+      },
+    ),
+  )
+  // raya_change end
 
   const submit = () => {
-    const objective = editor?.value.trim()
+    const objective = draft().trim()
     if (objective) props.onRevise?.(objective)
   }
 
@@ -99,6 +132,7 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                   <span class="goal-banner__status-word">{statusWord[state().status]}</span>
                 </span>
                 <span class="goal-banner__usage">
+                  {percent()}% · {duration()} ·{" "}
                   <Show when={props.todos?.length}>
                     {done()}/{props.todos!.length} tasks ·{" "}
                   </Show>
@@ -113,6 +147,13 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                 >
                   <Icon name="chevron-down" size="small" />
                 </button>
+              </div>
+              {/* raya_change - a hairline progress track gives the one reserved
+                  warm accent its intended home: the persistent goal's progress.
+                  Terminal states adopt the status color so the fill agrees with
+                  the status word. */}
+              <div class="goal-banner__track" aria-hidden="true">
+                <span class="goal-banner__track-fill" style={{ width: `${percent()}%` }} />
               </div>
               <div class="goal-banner__summary">
                 <div class="goal-banner__objective" data-expanded={props.expanded ? "" : undefined}>
@@ -164,10 +205,14 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                         id="goal-objective-editor"
                         ref={editor}
                         rows="6"
+                        value={draft()}
+                        onInput={(event) => setDraft(event.currentTarget.value)}
                         aria-describedby="goal-objective-help"
                       />
                       <div id="goal-objective-help">
-                        The current step keeps running. Your revision applies to the next step.
+                        {state().status === "blocked"
+                          ? "Raya will resume from this revision."
+                          : "The current step keeps running. Your revision applies to the next step."}
                       </div>
                       <div class="goal-banner__editor-actions">
                         <Button size="small" variant="secondary" onClick={submit}>
@@ -179,22 +224,17 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                       </div>
                     </div>
                   </Show>
-                  <Show when={props.confirmingDiscard}>
+                  <Show when={props.confirmingStop}>
                     <div class="goal-banner__discard" role="alert">
-                      <span>Discard the workspace edits made since this goal began?</span>
-                      <Show when={props.discardHint}>
-                        {(hint) => <span class="goal-banner__discard-hint">{hint()}</span>}
-                      </Show>
+                      <span>Stop tracking this goal?</span>
+                      <span class="goal-banner__discard-hint">
+                        Existing edits will remain available from the chat-level Review changes action.
+                      </span>
                       <div class="goal-banner__editor-actions">
-                        <Button
-                          size="small"
-                          variant="secondary"
-                          disabled={props.discardDisabled}
-                          onClick={() => props.onDiscard?.()}
-                        >
-                          Confirm discard
+                        <Button size="small" variant="secondary" onClick={() => props.onStop?.()}>
+                          Stop goal
                         </Button>
-                        <Button size="small" variant="ghost" onClick={() => props.onCancelDiscard?.()}>
+                        <Button size="small" variant="ghost" onClick={() => props.onCancelStop?.()}>
                           Cancel
                         </Button>
                       </div>
@@ -203,9 +243,6 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                 </div>
               </Show>
               <div class="goal-banner__actions">
-                <Button size="small" variant="ghost" onClick={() => props.onReview?.()}>
-                  Review changes
-                </Button>
                 <Button size="small" variant="ghost" onClick={() => props.onEdit?.()}>
                   Steer
                 </Button>
@@ -219,17 +256,14 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                     Resume
                   </Button>
                 </Show>
-                <Show when={state().status !== "active"}>
-                  <Button size="small" variant="secondary" disabled={props.disabled} onClick={() => props.onKeep?.()}>
-                    Keep
+                <Show when={state().status !== "complete"}>
+                  <Button size="small" variant="secondary" onClick={() => props.onClear?.()}>
+                    Stop goal
                   </Button>
-                  <Button
-                    size="small"
-                    variant="ghost"
-                    disabled={props.disabled || props.discardDisabled}
-                    onClick={() => props.onClear?.()}
-                  >
-                    Discard
+                </Show>
+                <Show when={state().status === "complete"}>
+                  <Button size="small" variant="secondary" disabled={props.disabled} onClick={() => props.onStop?.()}>
+                    Dismiss goal
                   </Button>
                 </Show>
               </div>
@@ -249,15 +283,8 @@ export const GoalBanner: Component = () => {
   const [notice, setNotice] = createSignal<string>()
   const [expanded, setExpanded] = createSignal(false)
   const [editing, setEditing] = createSignal(false)
-  const [discarding, setDiscarding] = createSignal(false)
+  const [stopping, setStopping] = createSignal(false)
   const sid = () => session.currentSessionID()
-  const start = () => goal()?.startMessageID
-  const discardDisabled = () => session.status() !== "idle" || !start()
-  const discardHint = () => {
-    if (session.status() !== "idle") return "Pause the goal and wait for the current step to stop before discarding."
-    if (!start()) return "This legacy goal has no safe starting checkpoint. Review changes and discard them manually."
-    return undefined
-  }
 
   createEffect(() => {
     const id = sid()
@@ -265,7 +292,7 @@ export const GoalBanner: Component = () => {
     setNotice(undefined)
     setExpanded(false)
     setEditing(false)
-    setDiscarding(false)
+    setStopping(false)
     if (id) vscode.postMessage({ type: "goalGet", sessionID: id })
   })
 
@@ -293,15 +320,10 @@ export const GoalBanner: Component = () => {
     setEditing(false)
   }
 
-  const keep = () => act("clear")
-
-  const discard = () => {
-    const id = sid()
-    const messageID = start()
-    if (!id || !messageID || discardDisabled()) return
-    vscode.postMessage({ type: "goalDiscard", sessionID: id, messageID })
-    setDiscarding(false)
-  }
+  const stop = () => {
+    act("clear")
+    setStopping(false)
+  } // raya_change - stopping goal tracking never accepts or discards session edits
 
   return (
     <GoalBannerView
@@ -310,27 +332,23 @@ export const GoalBanner: Component = () => {
       todos={session.todos()}
       expanded={expanded()}
       editing={editing()}
-      confirmingDiscard={discarding()}
-      discardDisabled={discardDisabled()}
-      discardHint={discarding() ? discardHint() : undefined}
+      confirmingStop={stopping()}
       onToggle={() => setExpanded((value) => !value)}
       onEdit={() => {
         setExpanded(true)
-        setDiscarding(false)
+        setStopping(false)
         setEditing(true)
       }}
       onCancelEdit={() => setEditing(false)}
       onRevise={revise}
-      onReview={() => vscode.postMessage({ type: "openChanges", turnId: start() })}
-      onKeep={keep}
-      onDiscard={discard}
-      onCancelDiscard={() => setDiscarding(false)}
+      onStop={stop}
+      onCancelStop={() => setStopping(false)}
       onPause={() => act("pause")}
       onResume={() => act("resume")}
       onClear={() => {
         setExpanded(true)
         setEditing(false)
-        setDiscarding(true)
+        setStopping(true)
       }}
       onDismissNotice={() => setNotice(undefined)}
     />

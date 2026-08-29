@@ -11,6 +11,7 @@
 
 import { Component, For, Show, createMemo, createSignal, createEffect, on, onMount, onCleanup } from "solid-js"
 import { IconButton } from "@kilocode/kilo-ui/icon-button"
+import { Button } from "@kilocode/kilo-ui/button" // raya_change - labeled compact-session action
 import { Tooltip } from "@kilocode/kilo-ui/tooltip"
 import { Icon } from "@kilocode/kilo-ui/icon"
 import { Checkbox } from "@kilocode/kilo-ui/checkbox"
@@ -247,14 +248,17 @@ export const TaskHeader: Component<TaskHeaderProps> = (props) => {
           </Show>
           <Show when={!props.readonly}>
             <Tooltip value={language.t("command.session.compact")} placement="bottom">
-              <IconButton
+              <Button
                 icon="compress"
                 size="small"
                 variant="ghost"
+                class="task-header-compact"
                 disabled={!canCompact()}
                 onClick={() => session.compact()}
                 aria-label={language.t("command.session.compact")}
-              />
+              >
+                Summarize
+              </Button>
             </Tooltip>
           </Show>
           <Show when={hasMessages()}>

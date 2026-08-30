@@ -22,6 +22,17 @@ export class DeniedError extends Schema.TaggedErrorClass<DeniedError>()("Permiss
   ruleset: Schema.Any,
 }) {
   override get message() {
+    // kilocode_change start - Auto and other agents own deny rules (source: "agent").
+    // Blaming "the user" for those is wrong and makes a successful delegated /goal
+    // turn look like the user blocked the tool.
+    const items = Array.isArray(this.ruleset) ? this.ruleset : this.ruleset != null ? [this.ruleset] : []
+    const agent = items.some(
+      (item) => item && typeof item === "object" && (item as { source?: unknown }).source === "agent",
+    )
+    if (agent) {
+      return `This agent is not allowed to use this tool directly. Delegate the work with the task tool instead of calling it yourself. Relevant rules: ${JSON.stringify(this.ruleset)}`
+    }
+    // kilocode_change end
     return `The user has specified a rule which prevents you from using this specific tool call. Here are some of the relevant rules ${JSON.stringify(this.ruleset)}`
   }
 }

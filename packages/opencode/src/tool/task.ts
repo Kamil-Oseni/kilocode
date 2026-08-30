@@ -183,24 +183,19 @@ export const TaskTool = Tool.define(
           [chief?.request, params.prompt, params.brief?.objective].filter(Boolean).join("\n"),
         )
       const canvasRule = "You MUST call create_canvas as your first tool. Do NOT write .html/.htm files or open a browser for this artifact."
+      const extras = canvas ? [canvasRule] : []
       const handoff = KiloTask.brief({
         prompt: chief?.request ?? params.prompt,
-        brief: chief
-          ? {
-              ...params.brief,
-              objective: chief.request,
-              context: [params.brief?.context, chief.needs_plan ? "Plan the approach before execution." : undefined]
+        brief: {
+          objective: chief?.request ?? params.brief?.objective ?? params.prompt ?? "",
+          context: chief
+            ? [params.brief?.context, chief.needs_plan ? "Plan the approach before execution." : undefined]
                 .filter(Boolean)
-                .join("\n"),
-              constraints: [
-                ...(params.brief?.constraints ?? []),
-                ...(canvas ? [canvasRule] : []),
-              ],
-            }
-          : {
-              ...params.brief,
-              constraints: [...(params.brief?.constraints ?? []), ...(canvas ? [canvasRule] : [])],
-            },
+                .join("\n")
+            : params.brief?.context,
+          expected_return: params.brief?.expected_return,
+          constraints: [...(params.brief?.constraints ?? []), ...extras],
+        },
         cap: limit,
       })
       // kilocode_change end

@@ -1124,11 +1124,6 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       if (this.handleLegacyMigrationMessage(message)) return
       if (this.handleUsageMessage(message)) return
       if (this.handleCheckpointMessage(message)) return // raya_change - revert/redo/discard routing
-      if (message.type === "editReviewKeepAll" && typeof message.sessionID === "string") {
-        this.inEditorReview?.dismissAll()
-        this.lastReviewHash = ""
-        return
-      }
       switch (message.type) {
         case "webviewReady":
           console.log("[Kilo New] KiloProvider: ✅ webviewReady received")
@@ -1728,6 +1723,13 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private handleCheckpointMessage(
     message: TypedWebviewMessage & { sessionID?: unknown; messageID?: unknown; partID?: unknown; files?: unknown },
   ): boolean {
+    if (message.type === "editReviewKeepAll") {
+      if (typeof message.sessionID === "string") {
+        this.inEditorReview?.dismissAll()
+        this.lastReviewHash = ""
+      }
+      return true
+    }
     if (message.type !== "revertSession" && message.type !== "unrevertSession" && message.type !== "discardSessionChanges")
       return false
     if (typeof message.sessionID !== "string") return true

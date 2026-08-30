@@ -845,6 +845,7 @@ export function addAuto(
         get_goal: "allow",
         update_goal: "allow",
         create_goal: "allow", // raya_change - Auto owns formal completion after delegated work
+        refine_self_heal: "allow", // raya_change - Auto reconciles a self-heal item's classification in repair sessions
         ask_options: "allow", // raya_change - Auto must be able to ask the user a clarifying question directly
         question: "allow", // raya_change - legacy ask tool, allowed for parity
         // raya_change start - Auto only routes, but KiloTask.inherited turns the

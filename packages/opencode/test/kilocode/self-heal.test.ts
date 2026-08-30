@@ -57,6 +57,41 @@ describe("RayaSelfHeal", () => {
     }),
   )
 
+  it.live("lets the repair agent refine classification and flag duplicates via update", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const backlog = RayaSelfHeal.make(storage)
+      // Keyword triage lands this as "goal"/"high"; the model can sharpen it later.
+      const item = yield* backlog.create({ description: `The goal loops forever ${crypto.randomUUID()}` })
+      const canonical = yield* backlog.create({ description: `Unrelated browser scroll defect ${crypto.randomUUID()}` })
+      yield* Effect.addFinalizer(() =>
+        Effect.all([
+          storage.remove(["raya", "self-heal", "item", item.id]).pipe(Effect.ignore),
+          storage.remove(["raya", "self-heal", "item", canonical.id]).pipe(Effect.ignore),
+        ]).pipe(Effect.asVoid),
+      )
+      expect(item.category).toBe("goal")
+
+      const refined = yield* backlog.update(item.id, {
+        category: "ui",
+        severity: "low",
+        approach: "Repair the shared visual primitive and compare screenshots.",
+        title: "Refined title",
+        classifiedBy: "model",
+      })
+      expect(refined?.category).toBe("ui")
+      expect(refined?.severity).toBe("low")
+      expect(refined?.title).toBe("Refined title")
+      expect(refined?.classifiedBy).toBe("model")
+      // Reclassification must not disturb the fingerprint used for intake dedupe.
+      expect(refined?.fingerprint).toBe(item.fingerprint)
+
+      const marked = yield* backlog.update(item.id, { status: "duplicate", duplicateOf: canonical.id })
+      expect(marked?.status).toBe("duplicate")
+      expect(marked?.duplicateOf).toBe(canonical.id)
+    }),
+  )
+
   it.live("keeps only the newest fifty evidence records", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service

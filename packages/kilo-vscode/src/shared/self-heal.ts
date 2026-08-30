@@ -20,16 +20,19 @@ export function selfHealPrompt(input: {
   title: string
   description: string
   category: string
+  severity?: string
   approach: string
 }) {
   return `<system-reminder>
 This is an isolated Raya self-healing session for feedback item ${input.id}.
 
 Title: ${input.title}
-Category: ${input.category}
+Category: ${input.category}${input.severity ? `\nSeverity: ${input.severity}` : ""}
 Report: ${input.description}
 Suggested approach: ${input.approach}
 
-Reproduce the report from current evidence, implement the complete repair, and verify it with the smallest authoritative tests plus runtime or visual evidence when relevant. Keep todowrite current. Do not create another self-heal item from this session. Complete the linked goal only when the fix is proven; otherwise block it with the exact reason.
+The category, severity, and approach above come from a fast keyword classifier and may be rough. Your FIRST action is to call refine_self_heal to reconcile them: after reading the report, pass your best category, severity, approach, and title. The tool returns the other open backlog items — if this report clearly duplicates one, call refine_self_heal again with duplicateOf set to that item's id and stop (the canonical item owns the fix). Only reconcile once; do not loop on it.
+
+Then reproduce the report from current evidence, implement the complete repair, and verify it with the smallest authoritative tests plus runtime or visual evidence when relevant. Keep todowrite current. Do not create another self-heal item from this session. Complete the linked goal only when the fix is proven; otherwise block it with the exact reason.
 </system-reminder>`
 }

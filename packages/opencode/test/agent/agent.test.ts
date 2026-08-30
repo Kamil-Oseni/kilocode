@@ -141,6 +141,8 @@ it.instance("auto orchestrator permits edit and write so subagents inherit no mu
     // kilocode_change start - Auto must be able to ask the user a clarifying question directly.
     expect(evalPerm(auto, "ask_options")).toBe("allow")
     expect(evalPerm(auto, "question")).toBe("allow")
+    // Auto reconciles a self-heal item's classification as the first repair step.
+    expect(evalPerm(auto, "refine_self_heal")).toBe("allow")
     // kilocode_change end
   }),
 )

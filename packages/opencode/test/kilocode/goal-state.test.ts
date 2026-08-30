@@ -264,6 +264,37 @@ describe("RayaGoal", () => {
     }),
   )
 
+  // raya_change - regression for the drawing-canvas.html goal loop: every provider attempt put
+  // `requirements` at the top level (a sibling of status) instead of under `audit`. Effect's Struct
+  // dropped the unknown key, so a valid completion decoded with audit=undefined and was rejected as
+  // "requires an audit" seven times until the model self-blocked. The flattened shape must complete.
+  it.live("completes when requirements are flattened to the top-level argument", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const sessionID = SessionID.make(`ses_goal_${crypto.randomUUID()}`)
+      let rows: MessageV2.WithParts[] = []
+      const goals = setup(storage, () => rows)
+      yield* Effect.addFinalizer(() => goals.clear(sessionID))
+      yield* goals.create(sessionID, "Accept a flattened top-level requirements array")
+      const data = transcript({ sessionID, tool: "edit", output: "Edit applied successfully." })
+      rows = data.rows
+      const complete = yield* goals.update(sessionID, {
+        status: "complete",
+        summary: "Today's date was added as line 1 and verified.",
+        requirements: [
+          {
+            requirement: "Add today's date as a comment at the top of the file",
+            passed: true,
+            evidence: [{ callID: data.part!.callID, summary: "Edit applied adding the date comment." }],
+          },
+        ],
+      })
+      expect(complete.status).toBe("complete")
+      expect(complete.audit?.requirements).toHaveLength(1)
+      expect(complete.audit?.summary).toBe("Today's date was added as line 1 and verified.")
+    }),
+  )
+
   it.live("resumes a blocked goal and then completes it", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service

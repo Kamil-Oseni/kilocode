@@ -221,6 +221,39 @@ export class CanvasPanel implements vscode.Disposable {
   <script src="${artifact}"></script>
 </body>
 </html>`
+    // Escape every less-than char as \u003c so a closing script tag inside the embedded
+    // document cannot end this outer inline script early (JSON.stringify escapes quotes
+    // but not markup). The JS engine decodes \u003c back at runtime, so srcdoc still gets
+    // valid HTML.
+    const src = JSON.stringify(frame).replaceAll("<", "\\u003c")
+    const bridge = `
+    const vscode = acquireVsCodeApi();
+    const frame = document.getElementById("raya-canvas-frame");
+    frame.srcdoc = ${src};
+    const toInner = (message) => frame.contentWindow?.postMessage({ source: "raya-canvas-host", ...message }, "*");
+    let design = false;
+    const designBtn = document.getElementById("raya-design");
+    const captureBtn = document.getElementById("raya-capture");
+    designBtn.addEventListener("click", () => {
+      design = !design;
+      designBtn.classList.toggle("active", design);
+      toInner({ type: "designMode", enabled: design });
+    });
+    captureBtn.addEventListener("click", () => toInner({ type: "capture" }));
+    window.addEventListener("message", (event) => {
+      if (event.source === frame.contentWindow && event.data?.source === "raya-canvas") {
+        vscode.postMessage({ type: event.data.type, error: event.data.error, data: event.data.data, text: event.data.text });
+        return;
+      }
+      if (event.data?.type !== "data") return;
+      toInner({ type: "data", data: event.data.data });
+    });
+`
+    // A raw closing-script sequence anywhere in this hand-written bridge would let the
+    // HTML parser end the inline script early and dump the rest as visible text (this bug
+    // has bitten twice, once from a comment). src is already escaped; fail loudly if any
+    // future edit reintroduces a literal tag terminator.
+    if (bridge.includes("\u003c/")) throw new Error("canvas bridge contains a raw closing tag; escape it as \\u003c")
     return `<!doctype html>
 <html>
 <head>
@@ -244,33 +277,7 @@ export class CanvasPanel implements vscode.Disposable {
     <button id="raya-capture" type="button" title="Save a PNG snapshot of this canvas">Capture</button>
   </header>
   <iframe id="raya-canvas-frame" title="Raya canvas artifact" sandbox="allow-scripts"></iframe>
-  <script nonce="${nonce}">
-    const vscode = acquireVsCodeApi();
-    const frame = document.getElementById("raya-canvas-frame");
-    // Escape every "<" as \\u003c so the inner document's own </script> tags
-    // cannot terminate this outer inline <script> early (JSON.stringify escapes
-    // quotes but not "</script>"). The JS engine decodes \\u003c back to "<" so
-    // srcdoc still receives valid HTML.
-    frame.srcdoc = ${JSON.stringify(frame).replaceAll("<", "\\u003c")};
-    const toInner = (message) => frame.contentWindow?.postMessage({ source: "raya-canvas-host", ...message }, "*");
-    let design = false;
-    const designBtn = document.getElementById("raya-design");
-    const captureBtn = document.getElementById("raya-capture");
-    designBtn.addEventListener("click", () => {
-      design = !design;
-      designBtn.classList.toggle("active", design);
-      toInner({ type: "designMode", enabled: design });
-    });
-    captureBtn.addEventListener("click", () => toInner({ type: "capture" }));
-    window.addEventListener("message", (event) => {
-      if (event.source === frame.contentWindow && event.data?.source === "raya-canvas") {
-        vscode.postMessage({ type: event.data.type, error: event.data.error, data: event.data.data, text: event.data.text });
-        return;
-      }
-      if (event.data?.type !== "data") return;
-      toInner({ type: "data", data: event.data.data });
-    });
-  </script>
+  <script nonce="${nonce}">${bridge}</script>
 </body>
 </html>`
   }

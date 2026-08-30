@@ -90,15 +90,14 @@ export namespace RayaGoal {
     status: Schema.Literals(["blocked", "complete", "active", "paused"]),
     reason: Schema.optional(Schema.String),
     summary: Schema.optional(Schema.String), // raya_change - top-level summary fills a missing nested audit.summary
+    // raya_change - models overwhelmingly flatten the audit, emitting `requirements` at the top
+    // level as a sibling of `status` instead of under `audit`. Effect's Struct silently drops
+    // unknown keys, so those valid completions used to decode with audit=undefined and get
+    // rejected as "requires an audit", exhausting the step budget. Accept both shapes.
+    requirements: Schema.optional(Schema.Array(Requirement)),
     audit: Schema.optional(
       Schema.Struct({
-        requirements: Schema.Array(
-          Schema.Struct({
-            requirement: Schema.String,
-            passed: Schema.Boolean,
-            evidence: Schema.Array(Evidence),
-          }),
-        ),
+        requirements: Schema.Array(Requirement),
         summary: Schema.optional(Schema.String), // raya_change - accept a complete audit when only the top-level summary is present
       }),
     ),
@@ -304,6 +303,15 @@ export namespace RayaGoal {
       })
     const started = (part: SessionV1.ToolPart) => ("time" in part.state ? part.state.time.start : 0)
 
+    // raya_change - the real, eligible completion-evidence callIDs, listed so a rejected audit
+    // (missing or mis-cited evidence) can be corrected in a single retry instead of many guesses.
+    const eligibleMenu = (messages: SessionV1.WithParts[], createdAt: number) =>
+      tools(messages)
+        .filter((part) => part.state.status === "completed" && started(part) >= createdAt && !controls.has(part.tool))
+        .map((part) => `${part.callID} (${part.tool})`)
+        .slice(0, 20)
+        .join(", ") || "none yet — perform and verify concrete work before completing"
+
     const evidence = Effect.fn("RayaGoal.evidence")(function* (sessionID: SessionID) {
       const state = yield* requireGoal(sessionID)
       const messages = yield* collect(sessionID) // raya_change - include subagent child-session tool calls
@@ -400,14 +408,29 @@ export namespace RayaGoal {
       if (state.status !== "active" && state.status !== "blocked") {
         return yield* new AuditError({ message: `Only an active or blocked goal can be marked complete.` })
       }
-      if (!input.audit) {
-        return yield* new AuditError({ message: "Completion requires a requirement-by-requirement audit." })
-      }
       const messages = yield* collect(sessionID) // raya_change - subagent child-session calls are valid evidence
-      const submitted = {
-        ...input.audit,
-        summary: input.audit.summary ?? input.summary ?? input.audit.requirements[0]?.requirement ?? "",
+      // raya_change start - accept the flattened audit (top-level `requirements`) that models emit
+      // far more often than the nested `audit` object, and make the rejection actionable so a model
+      // that still gets it wrong can copy the exact shape and the real evidence IDs in one retry.
+      const auditInput =
+        input.audit ??
+        (input.requirements && input.requirements.length > 0
+          ? { requirements: input.requirements, summary: input.summary }
+          : undefined)
+      if (!auditInput) {
+        return yield* new AuditError({
+          message:
+            `Completion requires a requirement-by-requirement audit. Call update_goal with ` +
+            `{ "status": "complete", "audit": { "summary": "<one line>", "requirements": [ { "requirement": ` +
+            `"<what was done>", "passed": true, "evidence": [ { "callID": "<a completed work/verification call>", ` +
+            `"summary": "<what it proved>" } ] } ] } }. Eligible evidence callIDs: ${eligibleMenu(messages, state.createdAt)}.`,
+        })
       }
+      const submitted = {
+        ...auditInput,
+        summary: auditInput.summary ?? input.summary ?? auditInput.requirements[0]?.requirement ?? "",
+      }
+      // raya_change end
       // raya_change start - persist the attempt whether it passes or fails, so a goal that
       // stays blocked/active after a rejected completion still carries the requirement-by-
       // requirement detail and rejection reason for the audit-log view.
@@ -466,20 +489,10 @@ export namespace RayaGoal {
         return yield* new AuditError({ message: "Completion requires at least one concrete requirement." })
       }
       const parts = tools(messages)
-      // raya_change start - build an actionable menu of the real, eligible evidence callIDs.
-      // Providers that expose tool calls as text markup emit unstable/colliding callIDs
-      // (e.g. dsml-0), so the model repeatedly cites the wrong one and exhausts its step
-      // budget guessing. Listing the true eligible IDs in the rejection lets it self-correct
-      // in one retry instead of many.
-      const eligible = parts.filter(
-        (part) => part.state.status === "completed" && started(part) >= createdAt && !controls.has(part.tool),
-      )
-      const menu =
-        eligible
-          .map((part) => `${part.callID} (${part.tool})`)
-          .slice(0, 20)
-          .join(", ") || "none yet — perform and verify concrete work before completing"
-      // raya_change end
+      // raya_change - list the real, eligible evidence callIDs in every rejection. Providers that
+      // expose tool calls as text markup emit unstable/colliding callIDs (e.g. dsml-0), so the model
+      // otherwise cites the wrong one and exhausts its step budget guessing.
+      const menu = eligibleMenu(messages, createdAt)
       const needsSmoke = (value: string) =>
         /smoke(?:\s|-)*test.{0,40}(?:pass|green)|(?:pass|green).{0,40}smoke(?:\s|-)*test/i.test(value)
       for (const requirement of audit.requirements) {

@@ -1259,7 +1259,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     // command named e.g. "continue" is not hijacked by a client alias.
     const cmdMatch = draft.match(/^\/(\S+)/)
     const word = cmdMatch?.[1]
-    const runnable = slash.commands().filter((command) => command.name !== "goal") // raya_change
+    const runnable = slash.commands().filter((command) => command.name !== "goal" && command.name !== "self-heal") // raya_change - goal and self-heal resolve client-side, not as server commands
     const matched = word
       ? (runnable.find((command) => command.name === word) ?? runnable.find((command) => command.hints.includes(word)))
       : undefined

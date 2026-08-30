@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { LLMError, LLMEvent, type ProviderMetadata, type ToolCall } from "../../schema"
+import { LLMError, LLMEvent, type ProviderMetadata } from "../../schema" // kilocode_change - LLMError used for recoverable tool-call parse failures
 import { eventError, parseToolInput, type ToolAccumulator } from "../shared"
 
 type StreamKey = string | number
@@ -66,7 +66,7 @@ const inputDelta = (tool: PendingTool, text: string) =>
 const toolCall = (route: string, tool: PendingTool, inputOverride?: string) =>
   parseToolInput(route, tool.name, inputOverride ?? tool.input).pipe(
     Effect.map(
-      (input): ToolCall =>
+      (input): LLMEvent => // kilocode_change - widened to LLMEvent so a parse failure can resolve to a tool-error
         LLMEvent.toolCall({
           id: tool.id,
           name: tool.name,
@@ -75,6 +75,24 @@ const toolCall = (route: string, tool: PendingTool, inputOverride?: string) =>
           providerMetadata: tool.providerMetadata,
         }),
     ),
+    // kilocode_change start - a malformed or truncated streamed tool call (e.g. a `task`
+    // call whose JSON arguments were cut off) must not abort the entire model turn.
+    // Convert the parse failure into a recoverable tool-error event; the session processor
+    // fails just that one tool call (failToolCall) and the stream keeps going.
+    Effect.catch((cause) =>
+      Effect.succeed(
+        LLMEvent.toolError({
+          id: tool.id,
+          name: tool.name,
+          message:
+            cause instanceof LLMError && cause.message
+              ? cause.message
+              : `Invalid JSON input for ${route} tool call ${tool.name}`,
+          error: cause,
+        }),
+      ),
+    ),
+    // kilocode_change end
   )
 
 /** Store the updated tool and produce the optional public delta event. */

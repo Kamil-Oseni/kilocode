@@ -138,6 +138,10 @@ it.instance("auto orchestrator permits edit and write so subagents inherit no mu
     // Still a router: the blanket deny keeps arbitrary/unknown tools off.
     expect(evalPerm(auto, "chief_route")).toBe("allow")
     expect(evalPerm(auto, "task")).toBe("allow")
+    // kilocode_change start - Auto must be able to ask the user a clarifying question directly.
+    expect(evalPerm(auto, "ask_options")).toBe("allow")
+    expect(evalPerm(auto, "question")).toBe("allow")
+    // kilocode_change end
   }),
 )
 

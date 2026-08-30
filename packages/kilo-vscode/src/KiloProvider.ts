@@ -4063,11 +4063,26 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.costs.removeMessageCost(id)
   }
 
+  // raya_change start - resolve Raya's own source checkout so /self-heal repairs
+  // her own code no matter which project is open. Prefer the configured path;
+  // otherwise derive the repo root from the (dev-loaded) extension location.
+  private rayaSourceDir(fallback: string): string {
+    const configured = vscode.workspace.getConfiguration("raya.selfHeal").get<string>("sourcePath", "").trim()
+    const root = (() => {
+      if (configured) return configured
+      const ext = this.extensionUri.fsPath
+      const marker = path.join("packages", "kilo-vscode")
+      if (ext.endsWith(marker)) return path.resolve(ext, "..", "..")
+      return fallback
+    })()
+    return existsSync(path.join(root, "packages", "opencode")) ? root : fallback
+  }
+
   // raya_change start - capture feedback globally and start its repair in an isolated goal session
   private async startSelfHeal(
     text: string,
     reporter: string,
-    dir: string,
+    workspace: string,
     providerID?: string,
     modelID?: string,
   ): Promise<{ handled: boolean; context?: string }> {
@@ -4077,6 +4092,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       this.postMessage({ type: "goalState", sessionID: reporter, notice: command.notice })
       return { handled: true }
     }
+    const dir = this.rayaSourceDir(workspace)
     if (command.kind === "list") {
       const { data: items } = await this.client!.kilocode.selfHeal.list({ directory: dir }, { throwOnError: true })
       const summary = items.length
@@ -4123,10 +4139,14 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       agent: "chief",
       snapshotInitialization: this.opts.snapshotInitialization,
     })
+    const targetNote =
+      dir === workspace
+        ? " Repairing the current workspace — set raya.selfHeal.sourcePath to point Raya at her own checkout."
+        : ` Repairing Raya's own source at ${dir}.`
     this.postMessage({
       type: "goalState",
       sessionID: reporter,
-      notice: `Captured ${item.id} as ${item.category}/${item.severity}. Raya started an isolated repair session: ${session.id}.`,
+      notice: `Captured ${item.id} as ${item.category}/${item.severity}. Raya started an isolated repair session: ${session.id}.${targetNote}`,
     })
     return {
       handled: false,

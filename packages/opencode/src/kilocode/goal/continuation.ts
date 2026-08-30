@@ -18,7 +18,7 @@ An active persistent goal must continue without a new user request.
 Objective:
 ${objective}
 
-Do not call chief_route. If concrete work remains, call task exactly once and wait for it. Then call get_goal. If the objective is fully evidenced, call update_goal(status="complete"); if honest progress is impossible, call update_goal(status="blocked") with a plain reason. Preserve the full objective. Do not stop after planning. Keep the session todowrite list current with exactly one in-progress item so the user sees concise work status without exposing private chain-of-thought. Immediately before update_goal(status="complete"), derive every concrete requirement from get_goal and cite real successful tool evidence for each one.
+Do not call chief_route. If concrete work remains, call task exactly once and wait for it. Then call get_goal. If the objective is fully evidenced, call update_goal(status="complete"); if honest progress is impossible, call update_goal(status="blocked") with a plain reason. If a genuine decision only the user can make is blocking progress, call ask_options with concrete choices and wait for the answer before continuing — do not block the goal merely because you want clarification. Preserve the full objective. Do not stop after planning. Keep the session todowrite list current with exactly one in-progress item so the user sees concise work status without exposing private chain-of-thought. Immediately before update_goal(status="complete"), derive every concrete requirement from get_goal and cite real successful tool evidence for each one.
 </system-reminder>`
 
 async function continueGoal(sessionID: SessionID, objective: string, directory: string) {

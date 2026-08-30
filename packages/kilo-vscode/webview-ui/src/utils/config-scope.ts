@@ -3,7 +3,9 @@ import type { Config } from "../types/messages"
 // Top-level config keys that persist to the project's kilo.json rather than the
 // global one. Settings that are inherently per-repository (e.g. commit message
 // conventions) belong here so they don't leak across workspaces.
-const PROJECT_SCOPED_KEYS: ReadonlySet<string> = new Set(["commit_message"])
+// `snapshot` is inherently per-repository: the slow-repo prompt persists a disable
+// to project scope, so the Checkpoints toggle must write the same scope to clear it.
+const PROJECT_SCOPED_KEYS: ReadonlySet<string> = new Set(["commit_message", "snapshot"])
 export function splitConfigByScope(draft: Partial<Config>) {
   const global: Record<string, unknown> = {}
   const project: Record<string, unknown> = {}

@@ -24,7 +24,26 @@ function abort(signal: AbortSignal) {
 }
 
 function run(canvas: Canvas.Interface, input: Input, signal: AbortSignal) {
-  return canvas.request(input).pipe(Effect.raceFirst(abort(signal)), Effect.orDie)
+  // A canvas host timeout/disconnect must not kill the whole model turn. Surface it as a
+  // normal "needs repair" canvas result so the model can retry with update_canvas instead
+  // of aborting the stream (a hard abort here also truncated the next tool call's streamed
+  // JSON, producing "Invalid JSON input for openai-chat tool call task"). Genuine tool-call
+  // cancellation still dies so the run stops promptly.
+  return canvas.request(input).pipe(
+    Effect.raceFirst(abort(signal)),
+    Effect.catchTag("CanvasHostError", (err) =>
+      err.code === "cancelled"
+        ? Effect.die(err)
+        : Effect.succeed({
+            operation: input.operation,
+            name: input.name,
+            path: input.name,
+            status: "error" as const,
+            version: 0,
+            error: `The canvas host did not respond (${err.code}): ${err.detail}. The panel may still be opening — call update_canvas with the same name to retry; do not switch to writing an HTML file.`,
+          }),
+    ),
+  )
 }
 
 const CreateParams = Schema.Struct({

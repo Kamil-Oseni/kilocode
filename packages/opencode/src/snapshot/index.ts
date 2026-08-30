@@ -531,9 +531,14 @@ export const layer: Layer.Layer<Service, never, Requirements> =
 
                 const single = Effect.fnUntraced(function* (op: (typeof ops)[number]) {
                   yield* Effect.logInfo("reverting", { file: op.file, hash: op.hash })
-                  const result = yield* git([...core, ...args(["checkout", op.hash, "--", op.file])], {
+                  // kilocode_change start - check out via the worktree-relative pathspec, not the
+                  // absolute file. On Windows non-git folders the stored path is drive-stripped
+                  // ("/Users/.../file"), which git rejects as "outside repository at 'C:/'" (exit 128)
+                  // and turns Undo into a silent no-op. `op.rel` is already relative to state.worktree.
+                  const result = yield* git([...core, ...args(["checkout", op.hash, "--", op.rel])], {
                     cwd: state.worktree,
                   })
+                  // kilocode_change end
                   if (result.code === 0) return
                   const tree = yield* git([...core, ...args(["ls-tree", op.hash, "--", op.rel])], {
                     cwd: state.worktree,
@@ -946,7 +951,10 @@ export const layer: Layer.Layer<Service, never, Requirements> =
         // kilocode_change start - isolate turn-facing snapshot work from poisoned locks
         track: Effect.fn("Snapshot.track")(function* (opts) {
           const ctx = yield* InstanceState.context
-          const guard = trackState(ctx.worktree)
+          // kilocode_change - key the turn guard on the real directory. Non-git projects share
+          // worktree "/", so one dismissed/slow snapshot would otherwise poison tracking for every
+          // plain folder (dropping patch parts -> Undo no-op and no in-editor lenses).
+          const guard = trackState(ctx.worktree === "/" ? ctx.directory : ctx.worktree)
           return yield* KiloSnapshotTrack.protect({
             inner: KiloSnapshotTrack.wrap({
               inner: InstanceState.useEffect(state, (s) => s.track(opts)),

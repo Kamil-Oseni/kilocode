@@ -1117,6 +1117,12 @@
           "scope": "application",
           "description": "Allow Agent Manager to manage sessions and worktrees across multiple repositories as projects. The current workspace repository is always the default project; additional projects can be added and persist across restarts."
         },
+        "raya.selfHeal.sourcePath": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "description": "Absolute path to Raya's own source checkout. /self-heal repair sessions run against this folder so Raya can fix her own code, regardless of which project you have open. Leave empty to repair the current workspace instead."
+        },
         "raya.agentManager.terminalButtonDestination": {
           "type": "string",
           "scope": "application",

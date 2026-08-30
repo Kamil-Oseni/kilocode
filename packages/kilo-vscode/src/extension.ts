@@ -160,6 +160,7 @@ export function activate(context: vscode.ExtensionContext) {
   // Create the provider with shared service
   const provider = new KiloProvider(context.extensionUri, connectionService, context, {
     focusContext: "raya.sidebarFocused",
+    snapshotInitialization: "wait", // raya_change - wait out slow first snapshots instead of prompting to disable them for the project
   })
   provider.setRemoteService(remoteService)
   context.subscriptions.push(registerCheckpointCommands(connectionService, provider)) // raya_change - named checkpoints
@@ -282,6 +283,7 @@ export function activate(context: vscode.ExtensionContext) {
         const tabProvider = new KiloProvider(context.extensionUri, connectionService, context, {
           tabTitle: panelTitleHandler(panel),
           topBarSurface: "tab",
+          snapshotInitialization: "wait", // raya_change - never prompt to disable snapshots for the project
         })
         tabProvider.setRemoteService(remoteService)
         tabProvider.setAutoApproveController(autoApprove)
@@ -716,6 +718,7 @@ function openKiloInNewTab(
   const tabProvider = new KiloProvider(context.extensionUri, connectionService, context, {
     tabTitle: panelTitleHandler(panel),
     topBarSurface: "tab",
+    snapshotInitialization: "wait", // raya_change - never prompt to disable snapshots for the project
   })
   tabProvider.setRemoteService(remoteService)
   tabProvider.setAutoApproveController(autoApprove)

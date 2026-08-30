@@ -12,6 +12,7 @@ type BrowserPanelMessage =
   | { type: "resume" }
   | { type: "takeover" }
   | { type: "pointer"; input: BrowserPointer }
+  | { type: "scroll"; input: { deltaX: number; deltaY: number } }
   | { type: "key"; input: BrowserKey }
 
 export class BrowserPanel implements vscode.Disposable {
@@ -113,6 +114,10 @@ export class BrowserPanel implements vscode.Disposable {
     }
     if (message.type === "pointer") {
       await this.session.pointer(message.input)
+      return
+    }
+    if (message.type === "scroll") {
+      await this.session.scroll(message.input.deltaX, message.input.deltaY)
       return
     }
     await this.session.key(message.input)
@@ -258,6 +263,7 @@ export class BrowserPanel implements vscode.Disposable {
     });
     screen.addEventListener("keydown", (event) => { key("keyDown", event); event.preventDefault(); });
     screen.addEventListener("keyup", (event) => { key("keyUp", event); event.preventDefault(); });
+    screen.addEventListener("wheel", (event) => { send("scroll", { input: { deltaX: event.deltaX, deltaY: event.deltaY } }); event.preventDefault(); }, { passive: false });
     window.addEventListener("message", (event) => {
       if (event.data.type === "frame") {
         screen.src = "data:image/jpeg;base64," + event.data.data;

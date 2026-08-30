@@ -414,6 +414,12 @@ export class BrowserSession {
     })
   }
 
+  async scroll(deltaX: number, deltaY: number): Promise<void> {
+    await this.ready()
+    this.assertInput()
+    await this.active().mouse.wheel(deltaX, deltaY)
+  }
+
   async dispose(): Promise<void> {
     const context = this.context
     const cdp = this.cdp

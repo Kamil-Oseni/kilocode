@@ -1,0 +1,89 @@
+# raya_change - new file: build platform VSIXes on a version tag and publish them to a GitHub Release.
+# Cut a release with a single `git tag raya-vX.Y.Z && git push origin raya-vX.Y.Z`.
+name: raya-release
+run-name: "Raya release ${{ github.ref_name }}"
+
+on:
+  push:
+    tags:
+      - "raya-v*"
+
+permissions:
+  contents: write
+
+concurrency: raya-release-${{ github.ref_name }}
+
+jobs:
+  build:
+    name: Build VSIX (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: win32-x64
+          - os: macos-latest
+            target: darwin-arm64
+          - os: ubuntu-latest
+            target: linux-x64
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Setup Zig for Linux sandbox helper
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          curl --fail --location --retry 3 \
+            https://ziglang.org/download/0.14.0/zig-linux-x86_64-0.14.0.tar.xz \
+            --output "$RUNNER_TEMP/zig.tar.xz"
+          echo "473ec26806133cf4d1918caf1a410f8403a13d979726a9045b421b685031a982  $RUNNER_TEMP/zig.tar.xz" | sha256sum --check --status
+          tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/zig-linux-x86_64-0.14.0" >> "$GITHUB_PATH"
+
+      - name: Resolve version from tag
+        shell: bash
+        run: |
+          v="${GITHUB_REF_NAME#raya-}"; v="${v#v}"
+          echo "RAYA_VERSION=$v" >> "$GITHUB_ENV"
+
+      - name: Build VSIX
+        run: bun run snapshot:release
+        working-directory: packages/kilo-vscode
+        env:
+          RAYA_RELEASE_VERSION: ${{ env.RAYA_VERSION }}
+          RAYA_VSCE_TARGET: ${{ matrix.target }}
+          KILO_VERSION: ${{ env.RAYA_VERSION }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: raya-${{ matrix.target }}
+          path: packages/kilo-vscode/out/*.vsix
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create release with VSIX assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#raya-}"; version="${version#v}"
+          prerelease=""
+          case "$version" in *-*) prerelease="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" dist/*.vsix \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Raya $version" \
+            --generate-notes \
+            $prerelease

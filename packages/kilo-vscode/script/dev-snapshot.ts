@@ -8,6 +8,8 @@ import { rmSync, mkdirSync, existsSync } from "node:fs"
 
 const mode = process.argv[2] ?? "install"
 const shouldInstall = mode === "install"
+// raya_change - "release" builds a versioned, platform-targeted VSIX into out/ for a GitHub Release
+const isRelease = mode === "release"
 
 const root = join(import.meta.dir, "..")
 const pkgPath = join(root, "package.json")
@@ -21,11 +23,23 @@ const user =
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "") || "local"
 const stamp = Date.now() // raya_change - unique local identity prevents stale VS Code webview service-worker state
-const snapshotVersion = `${pkg.version}-snapshot+${sha}.${user}.${stamp}`
+// raya_change start - release mode takes its version from the pushed tag and its platform from the runner
+const target = process.env.RAYA_VSCE_TARGET?.trim() || undefined
+// vsce requires a plain major.minor.patch version, so coerce off any prerelease/build suffix.
+const releaseVersion = (process.env.RAYA_RELEASE_VERSION ?? "")
+  .trim()
+  .replace(/^raya-/, "")
+  .replace(/^v/, "")
+  .replace(/[-+].*$/, "")
+if (isRelease && !/^\d+\.\d+\.\d+$/.test(releaseVersion))
+  throw new Error(`release mode needs RAYA_RELEASE_VERSION as x.y.z (got "${process.env.RAYA_RELEASE_VERSION ?? ""}")`)
+const snapshotVersion = isRelease ? releaseVersion : `${pkg.version}-snapshot+${sha}.${user}.${stamp}`
+// raya_change end
 
-console.log(`Building snapshot version: ${snapshotVersion}`)
+console.log(`Building ${isRelease ? "release" : "snapshot"} version: ${snapshotVersion}`)
 console.log(`Base version: ${pkg.version}`)
 console.log(`Commit: ${sha}`)
+if (target) console.log(`Target: ${target}`)
 console.log(`Mode: ${mode}\n`)
 
 console.log("🧹 Cleaning build directories...")
@@ -35,7 +49,7 @@ if (existsSync(dist)) {
   console.log("  ✓ Cleaned dist/")
 }
 
-const outDir = join(tmpdir(), "raya-vscode-snapshots")
+const outDir = isRelease ? join(root, "out") : join(tmpdir(), "raya-vscode-snapshots") // raya_change - release assets land in out/
 mkdirSync(outDir, { recursive: true })
 
 console.log("\n📦 Preparing SDK...")
@@ -46,7 +60,10 @@ await $`bun script/local-bin.ts --compiled`.cwd(root)
 await $`bun run build:check:production`.cwd(root)
 
 console.log("\n📦 Packaging VSIX...")
-const vsixPath = join(outDir, `raya-vscode-snapshot-${sha}-${user}-${stamp}.vsix`)
+// raya_change - release VSIX names carry the platform target so VS Code installs the matching build
+const vsixPath = isRelease
+  ? join(outDir, `raya-${target ?? "universal"}.vsix`)
+  : join(outDir, `raya-vscode-snapshot-${sha}-${user}-${stamp}.vsix`)
 const require = createRequire(import.meta.url)
 const vsceRequire = createRequire(require.resolve("@vscode/vsce"))
 if (shouldInstall) {
@@ -72,6 +89,7 @@ await createVSIX({
   cwd: root,
   packagePath: vsixPath,
   version: snapshotVersion,
+  ...(target ? { target } : {}), // raya_change - platform-tagged VSIX for GitHub Release assets
   updatePackageJson: false,
   dependencies: false,
   skipLicense: true,

@@ -48,6 +48,7 @@ const active = new Set([
   "publish-jetbrains-bundled.yml",
   "publish-jetbrains.yml",
   "publish.yml",
+  "raya-release.yml",
   "smoke-test.yml",
   "source-check-links.yml",
   "test-jetbrains.yml",

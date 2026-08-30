@@ -33,6 +33,7 @@ import { RemoteStatusService } from "./services/RemoteStatusService"
 import { markWorkspace } from "./util/spotlight"
 import { createNotebookBridge } from "./services/notebook"
 import { createGitExecutable } from "./util/git-executable"
+import { registerUpdateChecker } from "./services/update-checker" // raya_change - GitHub Release auto-update
 import { isCursorHost } from "./utils"
 
 let agentManager: AgentManagerProvider | undefined
@@ -66,6 +67,7 @@ export function activate(context: vscode.ExtensionContext) {
   const connectionService = new KiloConnectionService(context)
   context.subscriptions.push(registerGrantAllPermissions(connectionService)) // raya_change - global all-tools toggle
   context.subscriptions.push(registerDesignSystemLock(connectionService)) // raya_change - owner design-system lock
+  context.subscriptions.push(registerUpdateChecker(context)) // raya_change - poll GitHub Releases for newer Raya builds
   const notebookBridge = createNotebookBridge(connectionService)
   let restore = context.workspaceState.get<RestoreState>(RESTORE_KEY) ?? {}
   const remember = (patch: RestoreState) => {

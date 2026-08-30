@@ -11,6 +11,7 @@ import { SessionID, MessageID, PartID } from "./schema"
 import { SessionRunState } from "./run-state"
 import { SessionSummary } from "./summary"
 import { KiloSessionRevert } from "@/kilocode/session/revert" // kilocode_change
+import { RayaRevertNote } from "@/kilocode/session/revert-note" // kilocode_change
 
 export const RevertInput = Schema.Struct({
   sessionID: SessionID,
@@ -189,6 +190,9 @@ const layer = Layer.effect(
       all.sort((a, b) => (a.info.id < b.info.id ? -1 : a.info.id > b.info.id ? 1 : 0))
       const result = yield* KiloSessionRevert.discardAll(snap, all, input.files ? [...input.files] : undefined)
       if (result.files.length === 0) return session
+      // kilocode_change - surface the undo to the model on its next turn so it re-reads
+      // instead of trusting the now-stale edits still shown in the conversation history.
+      RayaRevertNote.record(input.sessionID, result.files)
       // Discarding everything clears the review UI outright; a per-file undo leaves
       // other edits intact, so let the client re-poll the remaining diff instead.
       if (!input.files || input.files.length === 0) {

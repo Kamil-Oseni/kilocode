@@ -12,6 +12,7 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import CODE_SWITCH from "./prompt/code-switch.txt" // kilocode_change
 import ASK_CODE_SWITCH from "@/kilocode/session/ask-code-switch.txt" // kilocode_change
 import { RayaDesignSystem } from "@/kilocode/design-system" // kilocode_change - owner design-system lock
+import { RayaRevertNote } from "@/kilocode/session/revert-note" // kilocode_change - note undone edits on next turn
 
 export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
   messages: SessionV1.WithParts[]
@@ -53,6 +54,22 @@ export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
         sessionID: userMessage.info.sessionID,
         type: "text",
         text: designReminder,
+        synthetic: true,
+      }),
+    )
+
+  // A user "Undo all" / per-file discard restores files but keeps the conversation, so the
+  // model's history still shows edits that no longer exist. Inject a one-shot note (read and
+  // cleared from a process cache set by discardChanges) so it re-reads instead of trusting them.
+  const revertNote = RayaRevertNote.reminder(RayaRevertNote.take(input.session.id))
+  if (revertNote)
+    userMessage.parts.push(
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        messageID: userMessage.info.id,
+        sessionID: userMessage.info.sessionID,
+        type: "text",
+        text: revertNote,
         synthetic: true,
       }),
     )

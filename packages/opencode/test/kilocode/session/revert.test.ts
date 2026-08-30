@@ -9,6 +9,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { MessageV2 } from "@/session/message-v2"
 import { KiloSessionRevert } from "@/kilocode/session/revert"
+import { RayaRevertNote } from "@/kilocode/session/revert-note"
 import { SessionRevert } from "@/session/revert"
 import { MessageID, PartID } from "@/session/schema"
 import { Session } from "@/session/session"
@@ -500,6 +501,12 @@ describe("files-only discard (Undo all)", () => {
           expect(updated.revert).toBeUndefined()
           const after = yield* item.sessions.messages({ sessionID: item.session.id })
           expect(after.length).toBe(before.length)
+          // The discard records a one-shot note so the model learns its edits were undone.
+          const noted = RayaRevertNote.take(item.session.id)
+          expect(noted?.some((file) => file.endsWith("writable.txt"))).toBe(true)
+          expect(RayaRevertNote.reminder(noted)).toContain("restored to their state before your edits")
+          // The note is consumed exactly once.
+          expect(RayaRevertNote.take(item.session.id)).toBeUndefined()
         }),
       { git: true },
     ),

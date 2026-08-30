@@ -148,6 +148,27 @@ it.instance(
   }),
   { git: false },
 )
+
+// raya_change - regression guard for the dummy-folder undo bug: a non-git workspace resolves to the
+// synthetic "global" project whose worktree is "/". Git then reports work-tree paths relative to "/",
+// dropping the Windows drive letter, so `git checkout -- <file>` could not match on a MODIFY revert
+// (create/delete still worked because a leading-slash path resolves to the current drive). Undo of an
+// edited (not newly created) file must restore its original content.
+it.instance(
+  "reverts a modified file in a non-git workspace",
+  Effect.gen(function* () {
+    const tmp = yield* bootstrap()
+    const snapshot = yield* Snapshot.Service
+    const before = yield* snapshot.track()
+    expect(before).toBeTruthy()
+    yield* write(`${tmp.path}/a.txt`, "edited by the agent")
+    const patch = yield* snapshot.patch(before!)
+    expect(patch.files.some((file) => file.replaceAll("\\", "/").endsWith("/a.txt"))).toBe(true)
+    yield* snapshot.revert([patch])
+    expect(yield* readText(`${tmp.path}/a.txt`)).toBe(tmp.extra.aContent)
+  }),
+  { git: false },
+)
 // raya_change end
 
 it.instance(

@@ -101,12 +101,20 @@ export const layer: Layer.Layer<Service, never, Requirements> =
 
       const state = yield* InstanceState.make<State>(
         Effect.fn("Snapshot.state")(function* (ctx) {
+          // kilocode_change start - non-git (global) projects set worktree to "/", which git treats
+          // as the filesystem root: it then reports work-tree paths relative to "/", dropping the
+          // Windows drive letter (e.g. "/Users/.../file" instead of "C:/Users/.../file"). Those
+          // drive-stripped paths break `git checkout -- <file>` (Undo) and make diff patch matching
+          // return empty text (no per-hunk lenses). Fall back to the real directory like every other
+          // subsystem does, and key the private git-dir on it so each folder stays isolated.
+          const worktree = ctx.worktree === "/" ? ctx.directory : ctx.worktree
           const state = {
             directory: ctx.directory,
-            worktree: ctx.worktree,
-            gitdir: path.join(Global.Path.data, "snapshot", ctx.project.id, Hash.fast(ctx.worktree)),
+            worktree,
+            gitdir: path.join(Global.Path.data, "snapshot", ctx.project.id, Hash.fast(worktree)),
             vcs: ctx.project.vcs,
           }
+          // kilocode_change end
 
           const args = (cmd: string[]) => ["--git-dir", state.gitdir, "--work-tree", state.worktree, ...cmd]
 

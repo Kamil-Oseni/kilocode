@@ -247,7 +247,11 @@ export class CanvasPanel implements vscode.Disposable {
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     const frame = document.getElementById("raya-canvas-frame");
-    frame.srcdoc = ${JSON.stringify(frame)};
+    // Escape every "<" as \\u003c so the inner document's own </script> tags
+    // cannot terminate this outer inline <script> early (JSON.stringify escapes
+    // quotes but not "</script>"). The JS engine decodes \\u003c back to "<" so
+    // srcdoc still receives valid HTML.
+    frame.srcdoc = ${JSON.stringify(frame).replaceAll("<", "\\u003c")};
     const toInner = (message) => frame.contentWindow?.postMessage({ source: "raya-canvas-host", ...message }, "*");
     let design = false;
     const designBtn = document.getElementById("raya-design");

@@ -11,7 +11,7 @@
 import * as vscode from "vscode"
 import * as path from "node:path"
 import type { KiloConnectionService } from "../services/cli-backend/connection-service"
-import { addedRanges, type LineRange } from "./patch-ranges"
+import { addedRanges, planReviewLenses, type LineRange } from "./patch-ranges"
 
 export interface InEditorReviewDeps {
   readonly connection: KiloConnectionService
@@ -131,26 +131,17 @@ export function registerInEditorReview(context: vscode.ExtensionContext, deps: I
     provideCodeLenses(document) {
       const key = norm(document.uri.fsPath)
       const review = reviews.get(key)
-      if (!review || dismissed.has(key) || !review.ranges.length) return []
-      const total = review.ranges.reduce((sum, r) => sum + (r.end - r.start + 1), 0)
-      // One Keep/Undo cluster per contiguous changed region, so the affordance
-      // sits next to each hunk. The backend only reverts whole files, so the
-      // labels say "file" to stay honest even though they're rendered per hunk.
-      const out: vscode.CodeLens[] = []
-      review.ranges.forEach((range, i) => {
-        const at = new vscode.Range(range.start, 0, range.start, 0)
-        const hunk = range.end - range.start + 1
-        const label =
-          i === 0
-            ? `$(sparkle) ${total} agent ${total === 1 ? "line" : "lines"}`
-            : `$(sparkle) +${hunk}`
-        out.push(
-          new vscode.CodeLens(at, { title: label, command: "" }),
-          new vscode.CodeLens(at, { title: "$(check) Keep file", command: "raya.editReview.keepFile", arguments: [key] }),
-          new vscode.CodeLens(at, { title: "$(discard) Undo file", command: "raya.editReview.undoFile", arguments: [key] }),
-        )
-      })
-      return out
+      if (!review || dismissed.has(key)) return []
+      // One Keep/Undo cluster per contiguous changed region (see planReviewLenses),
+      // so the affordance sits next to each hunk even though undo reverts the file.
+      return planReviewLenses(review.ranges, key).map(
+        (lens) =>
+          new vscode.CodeLens(new vscode.Range(lens.line, 0, lens.line, 0), {
+            title: lens.title,
+            command: lens.command,
+            arguments: lens.arguments,
+          }),
+      )
     },
   }
 

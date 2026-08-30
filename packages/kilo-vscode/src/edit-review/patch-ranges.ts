@@ -58,3 +58,37 @@ export function addedRanges(patch: string): LineRange[] {
   flush()
   return ranges
 }
+
+/** A single in-editor review CodeLens descriptor, decoupled from `vscode`. */
+export interface ReviewLens {
+  /** Zero-based line the lens anchors to (the first line of its hunk). */
+  line: number
+  title: string
+  /** Command id, or "" for the non-clickable summary badge. */
+  command: string
+  arguments?: string[]
+}
+
+/**
+ * Plan the Keep/Undo CodeLenses for a reviewed file: one cluster (summary badge
+ * + Keep + Undo) at the top of every contiguous changed region, so an affordance
+ * sits next to each hunk. The backend only reverts whole files, so the actions
+ * are file-scoped and the labels say "file" to stay honest. The first badge
+ * reports the file's total changed-line count; later badges show the hunk size.
+ * Pure so it can be unit-tested without the `vscode` API.
+ */
+export function planReviewLenses(ranges: LineRange[], key: string): ReviewLens[] {
+  if (!ranges.length) return []
+  const total = ranges.reduce((sum, r) => sum + (r.end - r.start + 1), 0)
+  const out: ReviewLens[] = []
+  ranges.forEach((range, i) => {
+    const hunk = range.end - range.start + 1
+    const title = i === 0 ? `$(sparkle) ${total} agent ${total === 1 ? "line" : "lines"}` : `$(sparkle) +${hunk}`
+    out.push(
+      { line: range.start, title, command: "" },
+      { line: range.start, title: "$(check) Keep file", command: "raya.editReview.keepFile", arguments: [key] },
+      { line: range.start, title: "$(discard) Undo file", command: "raya.editReview.undoFile", arguments: [key] },
+    )
+  })
+  return out
+}

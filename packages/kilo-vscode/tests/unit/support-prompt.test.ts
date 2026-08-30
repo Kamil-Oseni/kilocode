@@ -91,6 +91,31 @@ describe("createPrompt", () => {
     })
   })
 
+  describe("EDIT", () => {
+    it("includes file path and line range", () => {
+      const result = createPrompt("EDIT", base)
+      expect(result).toContain("src/foo.ts:10-20")
+    })
+
+    it("carries the instruction and the selected code fence", () => {
+      const result = createPrompt("EDIT", { ...base, userInput: "extract into a helper" })
+      expect(result).toContain("according to this instruction:")
+      expect(result).toContain("extract into a helper")
+      expect(result).toContain("```\nconst x = 1\n```")
+    })
+
+    it("tells the agent to apply the edit directly and stay scoped", () => {
+      const result = createPrompt("EDIT", { ...base, userInput: "rename x to count" })
+      expect(result).toContain("Apply the change directly to the file")
+      expect(result).toContain("tightly scoped")
+    })
+
+    it("does not leak unresolved placeholders", () => {
+      const result = createPrompt("EDIT", { ...base, userInput: "do it" })
+      expect(result).not.toMatch(/\$\{[a-zA-Z]+\}/)
+    })
+  })
+
   describe("ADD_TO_CONTEXT", () => {
     it("produces compact file reference with code fence", () => {
       const result = createPrompt("ADD_TO_CONTEXT", base)

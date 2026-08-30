@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { addedRanges } from "./patch-ranges"
+import { addedRanges, planReviewLenses } from "./patch-ranges"
 
 describe("addedRanges", () => {
   test("returns nothing for an empty patch", () => {
@@ -67,5 +67,54 @@ describe("addedRanges", () => {
   test("coalesces a contiguous added block", () => {
     const patch = ["--- a/f", "+++ b/f", "@@ -1,1 +1,4 @@", " a", "+b", "+c", "+d"].join("\n")
     expect(addedRanges(patch)).toEqual([{ start: 1, end: 3 }])
+  })
+})
+
+describe("planReviewLenses", () => {
+  test("returns nothing when there are no ranges", () => {
+    expect(planReviewLenses([], "/f")).toEqual([])
+  })
+
+  test("emits a summary + Keep + Undo cluster for a single hunk", () => {
+    const lenses = planReviewLenses([{ start: 4, end: 6 }], "/abs/file.ts")
+    expect(lenses).toHaveLength(3)
+    expect(lenses[0]).toEqual({ line: 4, title: "$(sparkle) 3 agent lines", command: "" })
+    expect(lenses[1]).toEqual({
+      line: 4,
+      title: "$(check) Keep file",
+      command: "raya.editReview.keepFile",
+      arguments: ["/abs/file.ts"],
+    })
+    expect(lenses[2]).toEqual({
+      line: 4,
+      title: "$(discard) Undo file",
+      command: "raya.editReview.undoFile",
+      arguments: ["/abs/file.ts"],
+    })
+  })
+
+  test("uses the singular badge for a one-line change", () => {
+    const lenses = planReviewLenses([{ start: 0, end: 0 }], "/f")
+    expect(lenses[0].title).toBe("$(sparkle) 1 agent line")
+  })
+
+  test("renders one cluster per hunk, anchored at each hunk start", () => {
+    const lenses = planReviewLenses(
+      [
+        { start: 1, end: 1 },
+        { start: 10, end: 12 },
+      ],
+      "/f",
+    )
+    // Two hunks -> two clusters of three lenses each.
+    expect(lenses).toHaveLength(6)
+    // First badge reports the file total (1 + 3 = 4 lines).
+    expect(lenses[0]).toEqual({ line: 1, title: "$(sparkle) 4 agent lines", command: "" })
+    // Later hunks anchor at their own start and show the hunk size.
+    expect(lenses[3]).toEqual({ line: 10, title: "$(sparkle) +3", command: "" })
+    expect(lenses[4].line).toBe(10)
+    expect(lenses[5].line).toBe(10)
+    // Every clickable lens carries the file key so the command targets it.
+    expect(lenses.filter((l) => l.command).every((l) => l.arguments?.[0] === "/f")).toBe(true)
   })
 })

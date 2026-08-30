@@ -198,6 +198,16 @@ const layer = Layer.effect(
       if (!input.files || input.files.length === 0) {
         yield* storage.write(["session_diff", input.sessionID], []).pipe(Effect.ignore)
         yield* events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: [] })
+      } else {
+        // Per-file undo must drop that file from the stored review diff so chat
+        // Keep all / Undo all and in-editor lenses stay in sync with the workspace.
+        const raw = yield* storage
+          .read<Snapshot.FileDiff[]>(["session_diff", input.sessionID])
+          .pipe(Effect.catch(() => Effect.succeed([] as Snapshot.FileDiff[])))
+        const gone = new Set(result.files.map((file) => file.replaceAll("\\", "/")))
+        const left = raw.filter((item) => !gone.has((item.file ?? "").replaceAll("\\", "/")))
+        yield* storage.write(["session_diff", input.sessionID], left).pipe(Effect.ignore)
+        yield* events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: left })
       }
       // A prior partial revert boundary would otherwise keep a redo affordance alive.
       if (session.revert) yield* sessions.clearRevert(input.sessionID)

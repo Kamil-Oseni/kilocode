@@ -81,13 +81,13 @@ describe("planReviewLenses", () => {
     expect(lenses[0]).toEqual({ line: 4, title: "$(sparkle) 3 agent lines", command: "" })
     expect(lenses[1]).toEqual({
       line: 4,
-      title: "$(check) Keep file",
+      title: "$(check) Keep",
       command: "raya.editReview.keepFile",
       arguments: ["/abs/file.ts"],
     })
     expect(lenses[2]).toEqual({
       line: 4,
-      title: "$(discard) Undo file",
+      title: "$(discard) Undo",
       command: "raya.editReview.undoFile",
       arguments: ["/abs/file.ts"],
     })

@@ -49,6 +49,16 @@ export namespace RayaGoal {
   })
   export type Progress = typeof Progress.Type
 
+  // Completed goals stay visible in the session carousel after a new one is armed.
+  export const HistoryItem = Schema.Struct({
+    objective: Schema.String,
+    status: Status,
+    createdAt: Schema.Number,
+    updatedAt: Schema.Number,
+    blockedReason: Schema.optional(Schema.String),
+  })
+  export type HistoryItem = typeof HistoryItem.Type
+
   export const Usage = Schema.Struct({
     turns: Schema.Number,
     continuations: Schema.Number,
@@ -71,6 +81,7 @@ export namespace RayaGoal {
     audit: Schema.optional(Audit),
     auditAttempt: Schema.optional(AuditAttempt), // raya_change - last completion attempt for the audit-log view
     progress: Schema.Array(Progress),
+    history: Schema.optional(Schema.Array(HistoryItem)),
   })
   export type State = typeof State.Type
 
@@ -185,7 +196,23 @@ export namespace RayaGoal {
       if (!text) return yield* new AuditError({ message: "A goal objective is required." })
       const existing = yield* get(sessionID)
       if (existing?.objective === text && existing.status === "active") return existing // raya_change - retry failed first request
-      if (existing) return yield* new ExistsError({ sessionID })
+      // A completed goal must not block the next /goal. Archive it so the banner
+      // can page through past work, then arm the new one. An active/paused/blocked
+      // goal still rejects so the HTTP layer can steer it instead of 400-ing the prompt.
+      if (existing && existing.status !== "complete") return yield* new ExistsError({ sessionID })
+      const prior =
+        existing?.status === "complete"
+          ? [
+              ...(existing.history ?? []),
+              {
+                objective: existing.objective,
+                status: existing.status,
+                createdAt: existing.createdAt,
+                updatedAt: existing.updatedAt,
+                blockedReason: existing.blockedReason,
+              },
+            ].slice(-20)
+          : existing?.history
       const now = Date.now()
       return yield* save(sessionID, {
         objective: text,
@@ -199,6 +226,7 @@ export namespace RayaGoal {
         activeAt: now,
         usage: { turns: 0, continuations: 0, toolCalls: 0 },
         progress: [{ at: now, kind: "status", message: "Goal armed." }],
+        history: prior,
       })
     })
 

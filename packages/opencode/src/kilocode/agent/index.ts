@@ -758,9 +758,9 @@ export function patchAgents(
       ...general,
       name: "designer",
       description: "Product and interface design specialist for UI, UX, Figma, layouts, visual systems, and motion.",
-      prompt: walkthrough(
-        `Act as Raya's design specialist. Produce or implement a coherent UI/UX solution and verify it visually when possible.\n\n${DESIGN_GUIDANCE}`,
-      ),
+      prompt: `${walkthrough(
+        `${CANVAS_GUIDANCE}\n\nAct as Raya's design specialist. For a live beside-chat artifact, call create_canvas first — never write a standalone .html file or open the browser to preview it.\n\nProduce or implement a coherent UI/UX solution and verify it visually when possible.\n\n${DESIGN_GUIDANCE}`,
+      )}\n\nCanvas work wins over browser work. If the user used /canvas or asked for a live beside-chat artifact, call create_canvas first and do not write HTML or open the browser.`,
       mode: "subagent",
       native: true,
     }

@@ -72,9 +72,9 @@ export interface ReviewLens {
 /**
  * Plan the Keep/Undo CodeLenses for a reviewed file: one cluster (summary badge
  * + Keep + Undo) at the top of every contiguous changed region, so an affordance
- * sits next to each hunk. The backend only reverts whole files, so the actions
- * are file-scoped and the labels say "file" to stay honest. The first badge
- * reports the file's total changed-line count; later badges show the hunk size.
+ * sits next to each hunk. Keep dismisses review chrome for this file; Undo
+ * restores the whole file to its pre-session state (the backend cannot revert a
+ * single hunk). Chat Keep all / Undo all is the workspace-wide counterpart.
  * Pure so it can be unit-tested without the `vscode` API.
  */
 export function planReviewLenses(ranges: LineRange[], key: string): ReviewLens[] {
@@ -86,8 +86,8 @@ export function planReviewLenses(ranges: LineRange[], key: string): ReviewLens[]
     const title = i === 0 ? `$(sparkle) ${total} agent ${total === 1 ? "line" : "lines"}` : `$(sparkle) +${hunk}`
     out.push(
       { line: range.start, title, command: "" },
-      { line: range.start, title: "$(check) Keep file", command: "raya.editReview.keepFile", arguments: [key] },
-      { line: range.start, title: "$(discard) Undo file", command: "raya.editReview.undoFile", arguments: [key] },
+      { line: range.start, title: "$(check) Keep", command: "raya.editReview.keepFile", arguments: [key] },
+      { line: range.start, title: "$(discard) Undo", command: "raya.editReview.undoFile", arguments: [key] },
     )
   })
   return out

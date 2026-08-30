@@ -338,6 +338,7 @@ export function activate(context: vscode.ExtensionContext) {
     connection: connectionService,
     session: () => provider.getCurrentSessionId(),
     directory: (id) => provider.directoryForSession(id),
+    onFile: (input) => provider.syncEditReview(input),
   })
   provider.setInEditorReview(inEditorReview)
 

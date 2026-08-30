@@ -83,6 +83,36 @@ describe("goal HTTP API", () => {
     expect(missing.status).toBe(404)
   }, 30_000)
 
+  test("steers an active goal instead of 400ing a second /goal", async () => {
+    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    const request = (handler: ReturnType<typeof app>, method: string, route: string, body?: unknown) =>
+      handler(
+        new Request(new URL(route, "http://localhost"), {
+          method,
+          headers: { "content-type": "application/json", "x-kilo-directory": tmp.path },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        }),
+        HttpApiServer.context,
+      )
+    const handler = app()
+    const createdSession = await request(handler, "POST", "/session", {})
+    const session = (await createdSession.json()) as { id: string }
+    const first = await request(handler, "POST", `/session/${session.id}/goal`, {
+      objective: "Add the date comment",
+      messageID: "msg_goal_first",
+    })
+    expect(first.status).toBe(200)
+    const steered = await request(handler, "POST", `/session/${session.id}/goal`, {
+      objective: "Add it again and say Jesus Rocks",
+      messageID: "msg_goal_steer",
+    })
+    expect(steered.status).toBe(200)
+    expect((await steered.json()) as { objective: string; status: string }).toMatchObject({
+      objective: "Add it again and say Jesus Rocks",
+      status: "active",
+    })
+  }, 30_000)
+
   // raya_change - goal rollback uses its own workspace checkpoint, including child-created files
   test("discard removes files created after the goal checkpoint", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })

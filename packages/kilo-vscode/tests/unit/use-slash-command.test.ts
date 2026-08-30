@@ -31,6 +31,13 @@ function setup(
 }
 
 describe("useSlashCommand sandbox action", () => {
+  it("matches /canvas before the server command list loads", () => {
+    const ctx = setup(() => {})
+    ctx.slash.onInput("/canvas", 7)
+    expect(ctx.slash.results()[0]).toEqual(expect.objectContaining({ name: "canvas" }))
+    ctx.dispose()
+  })
+
   it("supports the singular model alias", () => {
     const ctx = setup(() => {})
 

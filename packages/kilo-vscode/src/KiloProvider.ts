@@ -479,7 +479,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
   private createWorktreeHandler: ((baseBranch?: string, branchName?: string) => Promise<void>) | null = null
 
-  private inEditorReview: { refresh(): void } | undefined // raya_change
+  private inEditorReview: { refresh(): void; dismissAll(): void; reset(): void } | undefined // raya_change
   private diffVirtualProvider: import("./DiffVirtualProvider").DiffVirtualProvider | undefined
   private diffViewerProvider: import("./diff/DiffViewerProvider").DiffViewerProvider | undefined
   private documentViewerProvider: import("./DocumentViewerProvider").DocumentViewerProvider | undefined
@@ -933,8 +933,14 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   // raya_change - in-editor edit review (green highlight + inline Keep/Undo).
-  public setInEditorReview(review: { refresh(): void }): void {
+  public setInEditorReview(review: { refresh(): void; dismissAll(): void; reset(): void }): void {
     this.inEditorReview = review
+  }
+
+  // raya_change - in-editor Keep/Undo must retire the matching chat Keep all / Undo all cluster
+  public syncEditReview(input: { sessionID: string; file: string; action: "keep" | "undo" }): void {
+    this.postMessage({ type: "editReviewSync", sessionID: input.sessionID, file: input.file, action: input.action })
+    this.scheduleReview(input.sessionID)
   }
 
   /** Return the Git root used by the Changes panel for a session. */
@@ -1118,6 +1124,11 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       if (this.handleLegacyMigrationMessage(message)) return
       if (this.handleUsageMessage(message)) return
       if (this.handleCheckpointMessage(message)) return // raya_change - revert/redo/discard routing
+      if (message.type === "editReviewKeepAll" && typeof message.sessionID === "string") {
+        this.inEditorReview?.dismissAll()
+        this.lastReviewHash = ""
+        return
+      }
       switch (message.type) {
         case "webviewReady":
           console.log("[Kilo New] KiloProvider: ✅ webviewReady received")
@@ -4169,12 +4180,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         return
       }
       const armed =
-        command?.kind === "start"
-          ? await this.client.kilocode.goal.create(
-              { sessionID: sid, directory: dir, objective: command.objective, messageID },
-              { throwOnError: true },
-            )
-          : undefined
+        command?.kind === "start" ? await this.armGoal(sid, dir, command.objective, messageID) : undefined
       if (armed?.data) {
         this.postMessage({
           type: "goalState",
@@ -4242,6 +4248,26 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   // raya_change start - Milestone A persistent goal state and user controls
+  // A completed goal must archive and arm the next one. An active goal is steered
+  // instead of 400-ing the prompt. Either way the user message still sends.
+  private async armGoal(sessionID: string, directory: string, objective: string, messageID?: string) {
+    if (!this.client) return
+    try {
+      return await this.client.kilocode.goal.create(
+        { sessionID, directory, objective, messageID },
+        { throwOnError: true },
+      )
+    } catch (err) {
+      console.error("[Raya] goal.create failed; steering the active goal instead", err)
+      try {
+        return await this.client.kilocode.goal.update({ sessionID, directory, objective }, { throwOnError: true })
+      } catch (updateErr) {
+        console.error("[Raya] goal.update failed; sending the prompt without blocking", updateErr)
+        return undefined
+      }
+    }
+  }
+
   private async fetchAndSendGoal(sessionID: string, notice?: string): Promise<void> {
     if (!this.client) return
     const directory = this.getWorkspaceDirectory(sessionID)
@@ -4443,6 +4469,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       throw error
     }
     if (!data) throw new Error("Discard returned no session")
+    this.inEditorReview?.dismissAll()
+    this.lastReviewHash = ""
     this.refreshes.set(sessionID, (this.refreshes.get(sessionID) ?? 0) + 1)
     if (this.currentSession?.id === sessionID) this.setCurrentSession(data)
     this.postMessage({ type: "sessionUpdated", session: sessionToWebview(data) })
@@ -4969,6 +4997,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       const prev = this.sessionStatusMap.get(sid)
       if ((prev === undefined || prev === "idle") && event.properties.status.type !== "idle") {
         this.costs.rearm(sid)
+        this.lastReviewHash = ""
+        this.inEditorReview?.reset()
       }
       this.sessionStatusMap.set(sid, event.properties.status.type)
       this.aborts.observe(sid, event.properties.status.type, directory)
@@ -5663,7 +5693,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       }
     }
     const hash = `${sid}:${files.size}:${additions}:${deletions}`
-    if (hash === this.lastReviewHash) return
+    this.inEditorReview?.refresh()
     this.lastReviewHash = hash
     const msg = {
       type: "reviewStatsLoaded" as const,
@@ -5674,7 +5704,6 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     }
     this.cachedReview = msg
     this.postMessage(msg)
-    this.inEditorReview?.refresh() // raya_change - keep in-editor highlights in sync
   }
 
   // ── Worktree stats polling (sidebar diff badge) ──────────────────

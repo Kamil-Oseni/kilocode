@@ -2311,6 +2311,15 @@ export const layer = Layer.effect(
         throw error
       }
       const agentName = cmd.agent ?? input.agent
+      // kilocode_change start - /canvas must reach delegated specialists, not just the parent prompt
+      if (input.command === "canvas") {
+        const current = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
+        yield* sessions.setMetadata({
+          sessionID: input.sessionID,
+          metadata: { ...current.metadata, "raya.canvas.command": true },
+        })
+      }
+      // kilocode_change end
       // kilocode_change start - resume commands import external transcripts
       const fmt = isResumeCommand(input.command)
       if (fmt) {

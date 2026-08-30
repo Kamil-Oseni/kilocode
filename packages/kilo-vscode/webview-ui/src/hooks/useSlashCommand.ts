@@ -76,6 +76,11 @@ export function useSlashCommand(
       hints: [],
     }, // raya_change - Milestone A native command appears in the slash picker
     {
+      name: "canvas",
+      description: "build a live React canvas beside chat",
+      hints: ["dashboard", "chart"],
+    }, // raya_change - always match /canvas before the server command list loads
+    {
       name: "self-heal",
       description: "Report, track, and autonomously repair a Raya issue",
       hints: ["feedback", "issue", "bug", "heal"],

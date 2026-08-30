@@ -5,8 +5,8 @@
 // the edited file* and offers inline "Keep" / "Undo" CodeLens at the top of the
 // change — so review no longer only lives in the separate "review changes"
 // screen. Undo reuses the same per-file server op the webview uses
-// (session.discardChanges with a single `files` entry); Keep just dismisses the
-// in-editor chrome for that file for the rest of the session.
+// (session.discardChanges with a single `files` entry); Keep dismisses the
+// in-editor chrome for that file until a later edit in the same session.
 
 import * as vscode from "vscode"
 import * as path from "node:path"
@@ -19,6 +19,8 @@ export interface InEditorReviewDeps {
   readonly session: () => string | undefined
   /** Workspace directory the session's diff paths are relative to. */
   readonly directory: (sessionID?: string) => string
+  /** Tell the chat review bar that an in-editor Keep/Undo happened. */
+  readonly onFile?: (input: { sessionID: string; file: string; action: "keep" | "undo" }) => void
 }
 
 interface FileReview {
@@ -32,6 +34,10 @@ interface FileReview {
 export interface InEditorReview extends vscode.Disposable {
   /** Re-derive highlights from the backend session diff. */
   refresh(): void
+  /** Hide every in-editor Keep/Undo cluster (chat Keep all / Undo all). */
+  dismissAll(): void
+  /** Forget Keep/Undo dismissals so a later edit in this session can show them again. */
+  reset(): void
 }
 
 export function registerInEditorReview(context: vscode.ExtensionContext, deps: InEditorReviewDeps): InEditorReview {
@@ -47,14 +53,15 @@ export function registerInEditorReview(context: vscode.ExtensionContext, deps: I
 
   let reviews = new Map<string, FileReview>()
   let sid: string | undefined
-  // Files the user Kept (or just Undid) this session — stop painting them even
-  // before the next backend refresh confirms the change is gone.
-  const dismissed = new Set<string>()
+  // Optimistic hide keyed by the patch fingerprint that was dismissed. A later
+  // edit of the same file produces a new fingerprint and must show Keep/Undo again.
+  const dismissed = new Map<string, string>()
+  const print = (review: FileReview) => review.ranges.map((r) => `${r.start}:${r.end}`).join(",")
 
   const apply = (editor: vscode.TextEditor) => {
     const key = norm(editor.document.uri.fsPath)
     const review = reviews.get(key)
-    if (!review || dismissed.has(key)) {
+    if (!review || dismissed.get(key) === print(review)) {
       editor.setDecorations(decoration, [])
       return
     }
@@ -94,11 +101,25 @@ export function registerInEditorReview(context: vscode.ExtensionContext, deps: I
       }
     }
     reviews = built
+    for (const [key, review] of built) {
+      if (dismissed.get(key) && dismissed.get(key) !== print(review)) dismissed.delete(key)
+    }
     applyAll()
     changes.fire()
   }
 
   const refresh = () => void reload()
+  const dismissAll = () => {
+    for (const [key, review] of reviews) dismissed.set(key, print(review))
+    applyAll()
+    changes.fire()
+  }
+
+  const reset = () => {
+    dismissed.clear()
+    applyAll()
+    changes.fire()
+  }
 
   const targetKey = (arg?: string) => arg ?? norm(vscode.window.activeTextEditor?.document.uri.fsPath ?? "")
 
@@ -114,16 +135,20 @@ export function registerInEditorReview(context: vscode.ExtensionContext, deps: I
         console.error("[Raya] in-editor undo failed:", err)
         void vscode.window.showErrorMessage("Raya: couldn't undo this file's changes.")
       })
-    dismissed.add(key)
+    dismissed.set(key, print(review))
     applyAll()
     changes.fire()
+    if (sid) deps.onFile?.({ sessionID: sid, file: review.file, action: "undo" })
     refresh()
   }
 
   const keep = (arg?: string) => {
-    dismissed.add(targetKey(arg))
+    const key = targetKey(arg)
+    const review = reviews.get(key)
+    if (review) dismissed.set(key, print(review))
     applyAll()
     changes.fire()
+    if (sid && review) deps.onFile?.({ sessionID: sid, file: review.file, action: "keep" })
   }
 
   const lenses: vscode.CodeLensProvider = {
@@ -131,7 +156,7 @@ export function registerInEditorReview(context: vscode.ExtensionContext, deps: I
     provideCodeLenses(document) {
       const key = norm(document.uri.fsPath)
       const review = reviews.get(key)
-      if (!review || dismissed.has(key)) return []
+      if (!review || dismissed.get(key) === print(review)) return []
       // One Keep/Undo cluster per contiguous changed region (see planReviewLenses),
       // so the affordance sits next to each hunk even though undo reverts the file.
       return planReviewLenses(review.ranges, key).map(
@@ -158,5 +183,5 @@ export function registerInEditorReview(context: vscode.ExtensionContext, deps: I
     vscode.workspace.onDidSaveTextDocument(() => refresh()),
   )
 
-  return { refresh, dispose: () => decoration.dispose() }
+  return { refresh, dismissAll, reset, dispose: () => decoration.dispose() }
 }

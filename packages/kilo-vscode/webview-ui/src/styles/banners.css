@@ -471,6 +471,39 @@
   color: var(--goal-status);
 }
 
+.goal-banner__pages {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--raya-space-4);
+  font-family: var(--font-display);
+  font-size: var(--kilo-font-size-13);
+  font-variant-numeric: tabular-nums;
+  color: var(--goal-text-quiet);
+}
+
+.goal-banner__page {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--raya-space-20);
+  height: var(--raya-space-20);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.goal-banner__page:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.goal-banner__page:focus-visible {
+  outline: 1px solid var(--goal-status);
+  outline-offset: 2px;
+}
+
 .goal-banner__usage {
   margin-left: auto;
   font-family: var(--font-display); /* raya_change - Instrument Serif for the run amounts, Eden-style */

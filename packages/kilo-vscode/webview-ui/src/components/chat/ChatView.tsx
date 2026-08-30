@@ -181,7 +181,10 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     const key = changeKey()
     if (key) setKept(key)
     const sid = id()
-    if (sid) editReview.keepAll(sid) // raya_change - clear inline review chrome too
+    if (sid) {
+      editReview.keepAll(sid)
+      vscode.postMessage({ type: "editReviewKeepAll", sessionID: sid })
+    }
     setDiscarding(false)
   }
   const discardAll = () => {
@@ -244,6 +247,29 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   createEffect(() => {
     id()
     setDiscarding(false)
+    setKept(undefined)
+  })
+
+  // A new agent turn can re-edit a file with the same add/del counts; drop the
+  // Keep-all pin so Keep all / Undo all come back instead of staying single-use.
+  createEffect(() => {
+    if (session.status() === "idle") return
+    setKept(undefined)
+    const sid = id()
+    if (sid) editReview.reset(sid)
+  })
+
+  onMount(() => {
+    const off = vscode.onMessage((message) => {
+      if (message.type !== "editReviewSync" || message.sessionID !== id()) return
+      editReview.keep(message.sessionID, message.file)
+      const left = editReview.pending(message.sessionID)
+      if (left.length === 0) {
+        const key = changeKey()
+        if (key) setKept(key)
+      }
+    })
+    onCleanup(off)
   })
 
   // raya_change - New session, New worktree, and Move to worktree were bloating

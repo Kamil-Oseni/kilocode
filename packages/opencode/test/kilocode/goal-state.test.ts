@@ -154,6 +154,40 @@ describe("RayaGoal", () => {
     }),
   )
 
+  it.live("archives a completed goal when a new /goal is armed", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const sessionID = SessionID.make(`ses_goal_${crypto.randomUUID()}`)
+      let rows: MessageV2.WithParts[] = []
+      const goals = setup(storage, () => rows)
+      yield* Effect.addFinalizer(() => goals.clear(sessionID))
+      yield* goals.create(sessionID, "Add the date comment")
+      const data = transcript({ sessionID, tool: "bash", exit: 0 })
+      rows = data.rows
+      yield* goals.update(sessionID, {
+        status: "complete",
+        summary: "The date comment is on line 1.",
+        audit: {
+          requirements: [
+            {
+              requirement: "The date comment is on line 1",
+              passed: true,
+              evidence: [{ callID: data.part!.callID, summary: "The edit completed." }],
+            },
+          ],
+        },
+      })
+      const next = yield* goals.create(sessionID, "Add it again")
+      expect(next.status).toBe("active")
+      expect(next.objective).toBe("Add it again")
+      expect(next.history).toEqual([
+        expect.objectContaining({ objective: "Add the date comment", status: "complete" }),
+      ])
+      const clash = yield* goals.create(sessionID, "A second live goal").pipe(Effect.flip)
+      expect(clash._tag).toBe("RayaGoal.ExistsError")
+    }),
+  )
+
   it.live("completes only when every requirement cites real green command evidence", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service

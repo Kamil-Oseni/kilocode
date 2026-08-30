@@ -39,6 +39,15 @@ function keepAll(session: string) {
   })
 }
 
+/** Forget kept files for a session so a later edit can show review chrome again. */
+function reset(session: string) {
+  setKept((set) => {
+    const next = new Set<string>()
+    for (const item of set) if (!item.startsWith(`${session}\u0000`)) next.add(item)
+    return next
+  })
+}
+
 /** Ordered, de-duplicated files still awaiting review for a session (transcript order). */
 function pending(session: string) {
   const seen = new Set<string>()
@@ -56,4 +65,4 @@ function focus(session: string, file: string) {
   hit?.el.scrollIntoView({ behavior: "smooth", block: "center" })
 }
 
-export const editReview = { register, isKept, keep, keepAll, pending, focus }
+export const editReview = { register, isKept, keep, keepAll, reset, pending, focus }

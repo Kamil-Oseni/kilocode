@@ -43,7 +43,21 @@ export interface GoalBannerProps {
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`
 
 export const GoalBannerView: Component<GoalBannerProps> = (props) => {
-  const latest = () => props.goal?.progress.at(-1)?.message
+  const [page, setPage] = createSignal(0)
+  const pages = () => {
+    const current = props.goal
+    if (!current) return []
+    return [current, ...(current.history ?? []).toReversed()]
+  }
+  createEffect(
+    on(
+      () => props.goal?.createdAt,
+      () => setPage(0),
+    ),
+  )
+  const viewing = () => pages()[page()] ?? props.goal
+  const archive = () => page() > 0
+  const latest = () => (archive() ? undefined : props.goal?.progress.at(-1)?.message)
   const done = () => props.todos?.filter((todo) => todo.status === "completed").length ?? 0
   const percent = () => {
     if (props.todos?.length) return Math.round((done() / props.todos.length) * 100)
@@ -104,7 +118,7 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
     <Show when={props.goal || props.notice}>
       <section
         classList={{ "goal-banner": true, "goal-banner--disabled": !!props.disabled }}
-        data-status={props.goal?.status ?? "notice"}
+        data-status={(viewing() ?? props.goal)?.status ?? "notice"}
         data-pv={props.pv}
         aria-label="Goal status"
       >
@@ -132,15 +146,42 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                     across states). Status color carries the meaning. */}
                 <span class="goal-banner__status">
                   <span class="goal-banner__label">Goal</span>
-                  <span class="goal-banner__status-word">{statusWord[state().status]}</span>
+                  <span class="goal-banner__status-word">{statusWord[(viewing() ?? state()).status]}</span>
                 </span>
-                <span class="goal-banner__usage">
-                  {percent()}% · {duration()} ·{" "}
-                  <Show when={props.todos?.length}>
-                    {done()}/{props.todos!.length} tasks ·{" "}
-                  </Show>
-                  {plural(state().usage.turns, "turn")} · {plural(state().usage.toolCalls, "tool")}
-                </span>
+                <Show when={pages().length > 1}>
+                  <span class="goal-banner__pages">
+                    <button
+                      type="button"
+                      class="goal-banner__page"
+                      disabled={page() >= pages().length - 1}
+                      aria-label="Previous goal"
+                      onClick={() => setPage((n) => Math.min(n + 1, pages().length - 1))}
+                    >
+                      <Icon name="arrow-left" size="small" />
+                    </button>
+                    <span>
+                      {page() + 1}/{pages().length}
+                    </span>
+                    <button
+                      type="button"
+                      class="goal-banner__page"
+                      disabled={page() === 0}
+                      aria-label="Next goal"
+                      onClick={() => setPage((n) => Math.max(n - 1, 0))}
+                    >
+                      <Icon name="arrow-right" size="small" />
+                    </button>
+                  </span>
+                </Show>
+                <Show when={!archive()}>
+                  <span class="goal-banner__usage">
+                    {percent()}% · {duration()} ·{" "}
+                    <Show when={props.todos?.length}>
+                      {done()}/{props.todos!.length} tasks ·{" "}
+                    </Show>
+                    {plural(state().usage.turns, "turn")} · {plural(state().usage.toolCalls, "tool")}
+                  </span>
+                </Show>
                 <button
                   type="button"
                   class="goal-banner__toggle"
@@ -160,7 +201,7 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
               </div>
               <div class="goal-banner__summary">
                 <div class="goal-banner__objective" data-expanded={props.expanded ? "" : undefined}>
-                  {state().objective}
+                  {(viewing() ?? state()).objective}
                 </div>
                 <Show when={progress()}>
                   {(line) => (
@@ -170,7 +211,7 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                   )}
                 </Show>
               </div>
-              <Show when={props.expanded}>
+              <Show when={props.expanded && !archive()}>
                 <div class="goal-banner__details">
                   <Show when={state().blockedReason}>
                     {(reason) => <div class="goal-banner__reason">Blocked: {reason()}</div>}
@@ -289,7 +330,7 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                   chevron expands it; Steer and the run controls (Pause/Resume,
                   Stop/Dismiss) only appear in the expanded card so the collapsed
                   goal carries no button chrome. */}
-              <Show when={props.expanded}>
+              <Show when={props.expanded && !archive()}>
               <div class="goal-banner__actions">
                 <div class="goal-banner__actions-lead">
                   <Button size="small" variant="secondary" onClick={() => props.onEdit?.()}>

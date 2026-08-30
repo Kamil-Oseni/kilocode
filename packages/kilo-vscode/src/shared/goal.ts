@@ -42,6 +42,13 @@ export interface GoalState {
     kind: "status" | "turn" | "continuation"
     message: string
   }>
+  history?: Array<{
+    objective: string
+    status: GoalStatus
+    createdAt: number
+    updatedAt: number
+    blockedReason?: string
+  }>
 }
 
 export type GoalCommand = { kind: "usage"; notice: string } | { kind: "start"; objective: string; notice?: string }

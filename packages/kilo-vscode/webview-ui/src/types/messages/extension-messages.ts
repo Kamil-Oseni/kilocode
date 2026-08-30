@@ -1263,6 +1263,14 @@ export interface ReviewStatsLoadedMessage {
   deletions: number
 }
 
+// raya_change - in-editor Keep/Undo must hide the matching chat review cluster
+export interface EditReviewSyncMessage {
+  type: "editReviewSync"
+  sessionID: string
+  file: string
+  action: "keep" | "undo"
+}
+
 // Set the model for a session (extension → webview, used during multi-version creation)
 export interface AgentManagerSetSessionModelMessage {
   type: "agentManager.setSessionModel"
@@ -1698,6 +1706,7 @@ export type ExtensionMessage =
   | ContinueInWorktreeProgressMessage
   | WorktreeStatsLoadedMessage
   | ReviewStatsLoadedMessage
+  | EditReviewSyncMessage
   | McpStatusLoadedMessage
   | ClearPendingPromptsMessage
   | ExtensionDataReadyMessage

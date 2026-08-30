@@ -116,3 +116,10 @@ describe("canvas host tools", () => {
     }),
   )
 })
+
+test("canvas command requires create_canvas and forbids standalone HTML", async () => {
+  const { canvasCommand } = await import("@/kilocode/command/canvas")
+  const cmd = canvasCommand()
+  expect(cmd.template).toContain("create_canvas")
+  expect(cmd.template).toMatch(/Do NOT create a standalone \.html/i)
+})

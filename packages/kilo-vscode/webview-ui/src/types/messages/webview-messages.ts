@@ -102,6 +102,12 @@ export interface DiscardSessionChangesRequest {
   files?: string[]
 }
 
+// raya_change - chat Keep all hides in-editor Keep/Undo without reverting files
+export interface EditReviewKeepAllRequest {
+  type: "editReviewKeepAll"
+  sessionID: string
+}
+
 export interface DeleteMessageRequest {
   type: "deleteMessage"
   sessionID: string
@@ -1600,6 +1606,7 @@ export type WebviewMessage =
   | RevertSessionRequest
   | UnrevertSessionRequest
   | DiscardSessionChangesRequest
+  | EditReviewKeepAllRequest
   | DeleteMessageRequest
   | PermissionResponseRequest
   | CreateSessionRequest

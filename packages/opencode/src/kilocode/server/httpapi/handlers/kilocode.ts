@@ -342,7 +342,12 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       return yield* goals
         .create(ctx.params.sessionID, ctx.payload.objective, ctx.payload.messageID, checkpoint, ctx.payload.selfHealID)
         .pipe(
-          Effect.catchTag("RayaGoal.ExistsError", () => Effect.fail(new HttpApiError.BadRequest({}))),
+          Effect.catchTag("RayaGoal.ExistsError", () =>
+            // Steer the live goal. The client still sends the user prompt, so do
+            // not also resume a continuation here — that double-starts a turn.
+            goals.revise(ctx.params.sessionID, ctx.payload.objective),
+          ),
+          Effect.catchTag("RayaGoal.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
           Effect.catchTag("RayaGoal.AuditError", () => Effect.fail(new HttpApiError.BadRequest({}))),
         )
     })
@@ -375,12 +380,22 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
           )
         : revised
       if (!goal) return yield* new HttpApiError.NotFound({})
-      if ((prior?.status === "paused" || prior?.status === "blocked") && goal.status === "active") {
-        yield* RayaGoalContinuation.resume({
-          sessionID: ctx.params.sessionID,
-          storage,
-          sessions,
-        }).pipe(Effect.forkDetach)
+      if (
+        ((prior?.status === "paused" || prior?.status === "blocked") && goal.status === "active") ||
+        (prior?.status === "active" && ctx.payload.objective !== undefined)
+      ) {
+        // Steer persists immediately. Resume only when idle so we do not collide
+        // with the current model turn (that collision aborted task JSON).
+        yield* runState.assertNotBusy(ctx.params.sessionID).pipe(
+          Effect.andThen(
+            RayaGoalContinuation.resume({
+              sessionID: ctx.params.sessionID,
+              storage,
+              sessions,
+            }).pipe(Effect.ignore, Effect.forkDetach),
+          ),
+          Effect.catch(() => Effect.void),
+        )
       }
       return goal
     })

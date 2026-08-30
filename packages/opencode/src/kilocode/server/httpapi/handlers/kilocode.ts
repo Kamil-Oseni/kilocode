@@ -31,6 +31,7 @@ import { Snapshot } from "@/snapshot" // raya_change - durable goal workspace ch
 import { Storage } from "@/storage/storage" // raya_change - Milestone A durable goal storage
 import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal operations
 import { RayaCheckpoint } from "@/kilocode/checkpoint" // raya_change - named workspace checkpoints
+import { RayaDesignSystem } from "@/kilocode/design-system" // raya_change - owner design-system lock
 import { RayaGoalContinuation } from "@/kilocode/goal/continuation" // raya_change - Milestone A resume behavior
 import { RayaSelfHeal } from "@/kilocode/self-heal" // raya_change - global feedback backlog
 import type { RequestID as BrowserRequestID } from "@/kilocode/browser/protocol" // raya_change - Milestone F
@@ -51,6 +52,7 @@ import {
   GoalCreatePayload, // raya_change - Milestone A goal API
   GoalUpdatePayload, // raya_change - Milestone A goal API
   CheckpointCreatePayload, // raya_change - named workspace checkpoints
+  DesignSystemSetPayload, // raya_change - owner design-system lock
   SelfHealCreatePayload, // raya_change
   SelfHealUpdatePayload, // raya_change
   BrowserReplyPayload, // raya_change - Milestone F browser API
@@ -78,6 +80,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     const storage = yield* Storage.Service // raya_change - Milestone A durable goal storage
     const goals = RayaGoal.make({ storage, sessions }) // raya_change - Milestone A goal operations
     const checkpoints = RayaCheckpoint.make({ storage, snapshots }) // raya_change - named workspace checkpoints
+    const designSystem = RayaDesignSystem.make({ storage }) // raya_change - owner design-system lock
     const healing = RayaSelfHeal.make(storage) // raya_change - one backlog shared across sessions and projects
 
     // Location-scoped services, keyed by the request's directory and workspace.
@@ -431,6 +434,18 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     })
     // raya_change end
 
+    // raya_change start - owner design-system lock
+    const designSystemGet = Effect.fn("KilocodeHttpApi.designSystemGet")(function* () {
+      return yield* designSystem.get()
+    })
+
+    const designSystemSet = Effect.fn("KilocodeHttpApi.designSystemSet")(function* (ctx: {
+      payload: typeof DesignSystemSetPayload.Type
+    }) {
+      return yield* designSystem.set(ctx.payload)
+    })
+    // raya_change end
+
     const selfHealCreate = Effect.fn("KilocodeHttpApi.selfHealCreate")(function* (ctx: {
       payload: typeof SelfHealCreatePayload.Type
     }) {
@@ -498,6 +513,8 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .handle("checkpointCreate", checkpointCreate)
         .handle("checkpointJump", checkpointJump)
         .handle("checkpointRemove", checkpointRemove)
+        .handle("designSystemGet", designSystemGet)
+        .handle("designSystemSet", designSystemSet)
         .handle("selfHealCreate", selfHealCreate)
         .handle("selfHealList", selfHealList)
         .handle("selfHealGet", selfHealGet)

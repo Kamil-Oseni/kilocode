@@ -11,6 +11,7 @@ import { Session } from "./session"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import CODE_SWITCH from "./prompt/code-switch.txt" // kilocode_change
 import ASK_CODE_SWITCH from "@/kilocode/session/ask-code-switch.txt" // kilocode_change
+import { RayaDesignSystem } from "@/kilocode/design-system" // kilocode_change - owner design-system lock
 
 export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
   messages: SessionV1.WithParts[]
@@ -38,6 +39,23 @@ export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
     messages: input.messages,
   })
   if (switched) userMessage.parts.push(yield* sessions.updatePart(switched))
+
+  // owner design-system lock: when on, remind the agent to build UI against the
+  // approved system. No-op (undefined) while unlocked (the default). Reads a
+  // process cache (kept current by the design-system set/get handlers) so this
+  // stays free of an Effect requirement in the R = never prompt loop.
+  const designReminder = RayaDesignSystem.reminder(RayaDesignSystem.current())
+  if (designReminder)
+    userMessage.parts.push(
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        messageID: userMessage.info.id,
+        sessionID: userMessage.info.sessionID,
+        type: "text",
+        text: designReminder,
+        synthetic: true,
+      }),
+    )
   // kilocode_change end
 
   if (!flags.experimentalPlanMode) {

@@ -213,6 +213,10 @@ import type {
   KilocodeCheckpointRemoveResponses,
   KilocodeCommandFilesErrors,
   KilocodeCommandFilesResponses,
+  KilocodeDesignSystemGetErrors,
+  KilocodeDesignSystemGetResponses,
+  KilocodeDesignSystemSetErrors,
+  KilocodeDesignSystemSetResponses,
   KilocodeGoalClearErrors,
   KilocodeGoalClearResponses,
   KilocodeGoalCreateErrors,
@@ -8562,6 +8566,85 @@ export class Checkpoint extends HeyApiClient {
   }
 }
 
+export class DesignSystem extends HeyApiClient {
+  /**
+   * Get design-system lock
+   *
+   * Get whether an owner-approved design system is locked, and its optional source.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      KilocodeDesignSystemGetResponses,
+      KilocodeDesignSystemGetErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/design-system",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Set design-system lock
+   *
+   * Enable or disable the owner design-system lock and record its optional source.
+   */
+  public set<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      locked?: boolean
+      source?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "locked" },
+            { in: "body", key: "source" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeDesignSystemSetResponses,
+      KilocodeDesignSystemSetErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/design-system",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class SelfHeal extends HeyApiClient {
   /**
    * List self-heal feedback
@@ -9581,6 +9664,11 @@ export class Kilocode extends HeyApiClient {
   private _checkpoint?: Checkpoint
   get checkpoint(): Checkpoint {
     return (this._checkpoint ??= new Checkpoint({ client: this.client }))
+  }
+
+  private _designSystem?: DesignSystem
+  get designSystem(): DesignSystem {
+    return (this._designSystem ??= new DesignSystem({ client: this.client }))
   }
 
   private _selfHeal?: SelfHeal

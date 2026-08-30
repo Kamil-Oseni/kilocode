@@ -132,14 +132,25 @@ export function registerInEditorReview(context: vscode.ExtensionContext, deps: I
       const key = norm(document.uri.fsPath)
       const review = reviews.get(key)
       if (!review || dismissed.has(key) || !review.ranges.length) return []
-      const line = review.ranges[0].start
-      const at = new vscode.Range(line, 0, line, 0)
-      const count = review.ranges.reduce((sum, r) => sum + (r.end - r.start + 1), 0)
-      return [
-        new vscode.CodeLens(at, { title: `$(sparkle) ${count} agent ${count === 1 ? "line" : "lines"}`, command: "" }),
-        new vscode.CodeLens(at, { title: "$(check) Keep", command: "raya.editReview.keepFile", arguments: [key] }),
-        new vscode.CodeLens(at, { title: "$(discard) Undo", command: "raya.editReview.undoFile", arguments: [key] }),
-      ]
+      const total = review.ranges.reduce((sum, r) => sum + (r.end - r.start + 1), 0)
+      // One Keep/Undo cluster per contiguous changed region, so the affordance
+      // sits next to each hunk. The backend only reverts whole files, so the
+      // labels say "file" to stay honest even though they're rendered per hunk.
+      const out: vscode.CodeLens[] = []
+      review.ranges.forEach((range, i) => {
+        const at = new vscode.Range(range.start, 0, range.start, 0)
+        const hunk = range.end - range.start + 1
+        const label =
+          i === 0
+            ? `$(sparkle) ${total} agent ${total === 1 ? "line" : "lines"}`
+            : `$(sparkle) +${hunk}`
+        out.push(
+          new vscode.CodeLens(at, { title: label, command: "" }),
+          new vscode.CodeLens(at, { title: "$(check) Keep file", command: "raya.editReview.keepFile", arguments: [key] }),
+          new vscode.CodeLens(at, { title: "$(discard) Undo file", command: "raya.editReview.undoFile", arguments: [key] }),
+        )
+      })
+      return out
     },
   }
 

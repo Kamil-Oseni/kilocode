@@ -1,9 +1,15 @@
 // raya_change - Milestone E sandboxed live canvas webview panel
-import { dirname } from "node:path"
+import { dirname, join } from "node:path"
 import * as vscode from "vscode"
 import type { CanvasBuild } from "./canvas-compiler"
 
-type CanvasPanelMessage = { type: "ready" } | { type: "rendered" } | { type: "runtimeError"; error?: string }
+type CanvasPanelMessage =
+  | { type: "ready" }
+  | { type: "rendered" }
+  | { type: "runtimeError"; error?: string }
+  | { type: "captured"; data?: string } // raya_change - run artifact capture
+  | { type: "captureError"; error?: string } // raya_change - run artifact capture
+  | { type: "designPick"; text?: string } // raya_change - canvas Design Mode
 
 function escape(value: string) {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;")
@@ -16,11 +22,18 @@ export class CanvasPanel implements vscode.Disposable {
   private current: CanvasBuild | undefined
   private settle: ((build: CanvasBuild) => void) | undefined
   private timer: NodeJS.Timeout | undefined
+  // raya_change - Design Mode routes a picked element back to the chat composer.
+  private designPick: ((text: string) => void) | undefined
 
   constructor(
     private readonly runtime: vscode.Uri,
     private readonly extension: vscode.Uri,
   ) {}
+
+  // raya_change - let the extension route Design Mode picks into the chat input.
+  onDesignPick(handler: (text: string) => void): void {
+    this.designPick = handler
+  }
 
   async show(build: CanvasBuild, preserveFocus = true): Promise<CanvasBuild> {
     if (this.settle && this.current) {
@@ -116,6 +129,21 @@ export class CanvasPanel implements vscode.Disposable {
       void this.panel?.webview.postMessage({ type: "data", data: this.current?.data ?? {} })
       return
     }
+    // raya_change start - capture / Design Mode messages are side-channels that
+    // must not resolve the render-confirmation promise below.
+    if (message.type === "captured") {
+      void this.saveCapture(message.data)
+      return
+    }
+    if (message.type === "captureError") {
+      void vscode.window.showErrorMessage(`Raya: canvas capture failed — ${message.error ?? "unknown error"}`)
+      return
+    }
+    if (message.type === "designPick") {
+      if (message.text) this.designPick?.(message.text)
+      return
+    }
+    // raya_change end
     if (!this.current) return
     if (message.type === "runtimeError") {
       this.resolve({
@@ -138,6 +166,35 @@ export class CanvasPanel implements vscode.Disposable {
     if (this.timer) clearTimeout(this.timer)
     this.timer = undefined
     this.settle = undefined
+  }
+
+  // raya_change - persist a PNG snapshot of the live canvas next to its source
+  // (.raya/canvases/captures/) so a finished run has a verifiable artifact.
+  private async saveCapture(dataUrl?: string) {
+    const source = this.current?.path
+    if (!dataUrl || !source) {
+      void vscode.window.showErrorMessage("Raya: nothing to capture yet — render a canvas first.")
+      return
+    }
+    const match = /^data:image\/png;base64,(.+)$/.exec(dataUrl)
+    if (!match) {
+      void vscode.window.showErrorMessage("Raya: unsupported capture format.")
+      return
+    }
+    const dir = join(dirname(source), "captures")
+    const stamp = new Date().toISOString().replaceAll(/[:.]/g, "-")
+    const file = join(dir, `${this.current?.name ?? "canvas"}-${stamp}.png`)
+    try {
+      await vscode.workspace.fs.createDirectory(vscode.Uri.file(dir))
+      await vscode.workspace.fs.writeFile(vscode.Uri.file(file), Buffer.from(match[1], "base64"))
+    } catch (err) {
+      console.error("[Raya] canvas capture save failed:", err)
+      void vscode.window.showErrorMessage("Raya: could not save the canvas capture.")
+      return
+    }
+    const open = "Open"
+    const choice = await vscode.window.showInformationMessage(`Canvas captured: ${file}`, open)
+    if (choice === open) void vscode.commands.executeCommand("vscode.open", vscode.Uri.file(file))
   }
 
   private html(webview: vscode.Webview, bundle: string) {
@@ -172,24 +229,42 @@ export class CanvasPanel implements vscode.Disposable {
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'; frame-src 'self';">
   <style>
     * { box-sizing: border-box; }
-    html, body, iframe { width: 100%; height: 100%; margin: 0; }
-    body { color: var(--vscode-foreground); background: var(--vscode-editor-background); font-family: var(--vscode-font-family); }
-    iframe { display: block; border: 0; }
+    html, body { width: 100%; height: 100%; margin: 0; }
+    body { display: flex; flex-direction: column; color: var(--vscode-foreground); background: var(--vscode-editor-background); font-family: var(--vscode-font-family); }
+    #raya-canvas-bar { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-bottom: 1px solid var(--vscode-panel-border); flex: 0 0 auto; }
+    #raya-canvas-bar button { font: inherit; font-size: 12px; line-height: 1.6; padding: 1px 10px; color: var(--vscode-button-secondaryForeground); background: var(--vscode-button-secondaryBackground); border: none; border-radius: 4px; cursor: pointer; }
+    #raya-canvas-bar button:hover { background: var(--vscode-button-secondaryHoverBackground); }
+    #raya-canvas-bar button.active { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
+    iframe { display: block; border: 0; flex: 1 1 auto; width: 100%; }
   </style>
 </head>
 <body>
+  <header id="raya-canvas-bar">
+    <button id="raya-design" type="button" title="Highlight and pick an element to steer the agent">Design Mode</button>
+    <button id="raya-capture" type="button" title="Save a PNG snapshot of this canvas">Capture</button>
+  </header>
   <iframe id="raya-canvas-frame" title="Raya canvas artifact" sandbox="allow-scripts"></iframe>
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     const frame = document.getElementById("raya-canvas-frame");
     frame.srcdoc = ${JSON.stringify(frame)};
+    const toInner = (message) => frame.contentWindow?.postMessage({ source: "raya-canvas-host", ...message }, "*");
+    let design = false;
+    const designBtn = document.getElementById("raya-design");
+    const captureBtn = document.getElementById("raya-capture");
+    designBtn.addEventListener("click", () => {
+      design = !design;
+      designBtn.classList.toggle("active", design);
+      toInner({ type: "designMode", enabled: design });
+    });
+    captureBtn.addEventListener("click", () => toInner({ type: "capture" }));
     window.addEventListener("message", (event) => {
       if (event.source === frame.contentWindow && event.data?.source === "raya-canvas") {
-        vscode.postMessage({ type: event.data.type, error: event.data.error });
+        vscode.postMessage({ type: event.data.type, error: event.data.error, data: event.data.data, text: event.data.text });
         return;
       }
       if (event.data?.type !== "data") return;
-      frame.contentWindow?.postMessage({ source: "raya-canvas-host", type: "data", data: event.data.data }, "*");
+      toInner({ type: "data", data: event.data.data });
     });
   </script>
 </body>

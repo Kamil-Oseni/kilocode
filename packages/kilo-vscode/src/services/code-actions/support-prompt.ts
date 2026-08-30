@@ -19,6 +19,7 @@ type PromptType =
   | "EXPLAIN"
   | "FIX"
   | "IMPROVE"
+  | "EDIT"
   | "ADD_TO_CONTEXT"
   | "TERMINAL_ADD_TO_CONTEXT"
   | "TERMINAL_FIX"
@@ -65,6 +66,15 @@ Please suggest improvements for:
 4. Error handling and edge cases
 
 Provide the improved code along with explanations for each enhancement.`,
+
+  EDIT: `Edit the following code from file path \${filePath}:\${startLine}-\${endLine} according to this instruction:
+\${userInput}
+
+\`\`\`
+\${selectedText}
+\`\`\`
+
+Apply the change directly to the file, keeping the edit tightly scoped to what the instruction asks for.`,
 
   ADD_TO_CONTEXT: `\${filePath}:\${startLine}-\${endLine}
 \`\`\`

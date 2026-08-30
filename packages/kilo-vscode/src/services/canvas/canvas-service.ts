@@ -34,6 +34,11 @@ export class CanvasService implements vscode.Disposable {
     this.panel.restore(panel)
   }
 
+  // raya_change - route Design Mode element picks to the chat composer.
+  onDesignPick(handler: (text: string) => void): void {
+    this.panel.onDesignPick(handler)
+  }
+
   dispose(): void {
     if (this.disposed) return
     this.disposed = true

@@ -432,6 +432,11 @@
         "category": "Raya"
       },
       {
+        "command": "raya.inlineEdit",
+        "title": "Edit with Raya",
+        "category": "Raya"
+      },
+      {
         "command": "raya.addToContext",
         "title": "Add to Context",
         "category": "Raya"
@@ -623,6 +628,10 @@
       ],
       "raya.editorContextMenu": [
         {
+          "command": "raya.inlineEdit",
+          "group": "1_actions@0"
+        },
+        {
           "command": "raya.explainCode",
           "group": "1_actions@1"
         },
@@ -661,6 +670,12 @@
       ]
     },
     "keybindings": [
+      {
+        "command": "raya.inlineEdit",
+        "key": "ctrl+i",
+        "mac": "cmd+i",
+        "when": "editorTextFocus"
+      },
       {
         "command": "raya.focusChatInput",
         "key": "ctrl+shift+a",
@@ -1159,6 +1174,16 @@
           "type": "boolean",
           "default": false,
           "markdownDescription": "Grant every agent every tool automatically, across all workspaces. When enabled, Raya stops asking for per-action approval (edits, writes, terminal commands, etc.) and applies this globally rather than per-workspace. Leave off unless you want fully autonomous, unattended agents."
+        },
+        "raya.designSystem.lock": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Lock generated UI to one approved design system. When enabled, Raya instructs agents to build UI strictly against the approved system's components, tokens, and styles instead of inventing new ones. Leave off for unconstrained UI generation."
+        },
+        "raya.designSystem.source": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Optional path or identifier for the approved design system (e.g. a repo path or token file). Referenced in the design-system lock reminder when `#raya.designSystem.lock#` is on."
         },
         "raya.attention.enabled": {
           "type": "boolean",

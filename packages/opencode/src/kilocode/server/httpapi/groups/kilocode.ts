@@ -28,6 +28,7 @@ import { SessionID } from "@/session/schema"
 import { CommandFiles } from "@/kilocode/command-files"
 import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal API contracts
 import { RayaCheckpoint } from "@/kilocode/checkpoint" // raya_change - named workspace checkpoints
+import { RayaDesignSystem } from "@/kilocode/design-system" // raya_change - owner design-system lock
 import { RayaSelfHeal } from "@/kilocode/self-heal" // raya_change - global feedback backlog contracts
 // raya_change start - Milestone F browser API contracts
 import {
@@ -90,6 +91,7 @@ export const AgentManagerRejectPayload = Schema.Struct({ error: AgentManagerFail
 export const GoalCreatePayload = RayaGoal.Create // raya_change - Milestone A goal API contracts
 export const GoalUpdatePayload = RayaGoal.Control // raya_change - Milestone A goal API contracts
 export const CheckpointCreatePayload = RayaCheckpoint.CreatePayload // raya_change - named workspace checkpoints
+export const DesignSystemSetPayload = RayaDesignSystem.SetPayload // raya_change - owner design-system lock
 export const SelfHealCreatePayload = RayaSelfHeal.Create // raya_change
 export const SelfHealUpdatePayload = RayaSelfHeal.Update // raya_change
 export const BrowserReplyPayload = Schema.Struct({ result: BrowserResult }) // raya_change - Milestone F
@@ -119,6 +121,7 @@ export const KilocodePaths = {
   goalDiscard: `/session/:sessionID/goal/discard`, // raya_change - reliable workspace rollback
   checkpoint: `/session/:sessionID/checkpoint`, // raya_change - named workspace checkpoints
   checkpointItem: `/session/:sessionID/checkpoint/:checkpointID`, // raya_change - jump to / remove a named checkpoint
+  designSystem: `${root}/design-system`, // raya_change - owner design-system lock
   selfHeal: `${root}/self-heal`, // raya_change - global structured feedback backlog
   selfHealItem: `${root}/self-heal/:itemID`, // raya_change
   browserList: `${root}/browser`, // raya_change - Milestone F browser host API
@@ -514,6 +517,30 @@ export const KilocodeApi = HttpApi.make("kilocode")
             identifier: "kilocode.checkpoint.remove",
             summary: "Remove a checkpoint",
             description: "Delete a named checkpoint without touching the workspace.",
+          }),
+        ),
+        // raya_change end
+        // raya_change start - owner design-system lock
+        HttpApiEndpoint.get("designSystemGet", KilocodePaths.designSystem, {
+          query: WorkspaceRoutingQuery,
+          success: described(RayaDesignSystem.Info, "Current design-system lock state"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.designSystem.get",
+            summary: "Get design-system lock",
+            description: "Get whether an owner-approved design system is locked, and its optional source.",
+          }),
+        ),
+        HttpApiEndpoint.post("designSystemSet", KilocodePaths.designSystem, {
+          query: WorkspaceRoutingQuery,
+          payload: DesignSystemSetPayload,
+          success: described(RayaDesignSystem.Info, "Updated design-system lock state"),
+          error: HttpApiError.BadRequest,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.designSystem.set",
+            summary: "Set design-system lock",
+            description: "Enable or disable the owner design-system lock and record its optional source.",
           }),
         ),
         // raya_change end

@@ -18407,6 +18407,71 @@ export type KilocodeCheckpointJumpResponses = {
 
 export type KilocodeCheckpointJumpResponse = KilocodeCheckpointJumpResponses[keyof KilocodeCheckpointJumpResponses]
 
+export type KilocodeDesignSystemGetData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/design-system"
+}
+
+export type KilocodeDesignSystemGetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type KilocodeDesignSystemGetError = KilocodeDesignSystemGetErrors[keyof KilocodeDesignSystemGetErrors]
+
+export type KilocodeDesignSystemGetResponses = {
+  /**
+   * Current design-system lock state
+   */
+  200: {
+    locked: boolean
+    source?: string
+  }
+}
+
+export type KilocodeDesignSystemGetResponse = KilocodeDesignSystemGetResponses[keyof KilocodeDesignSystemGetResponses]
+
+export type KilocodeDesignSystemSetData = {
+  body?: {
+    locked: boolean
+    source?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/design-system"
+}
+
+export type KilocodeDesignSystemSetErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type KilocodeDesignSystemSetError = KilocodeDesignSystemSetErrors[keyof KilocodeDesignSystemSetErrors]
+
+export type KilocodeDesignSystemSetResponses = {
+  /**
+   * Updated design-system lock state
+   */
+  200: {
+    locked: boolean
+    source?: string
+  }
+}
+
+export type KilocodeDesignSystemSetResponse = KilocodeDesignSystemSetResponses[keyof KilocodeDesignSystemSetResponses]
+
 export type KilocodeSelfHealListData = {
   body?: never
   path?: never

@@ -2,7 +2,7 @@
 import * as vscode from "vscode"
 import type { KiloProvider } from "../../KiloProvider"
 import type { AgentManagerProvider } from "../../agent-manager/AgentManagerProvider"
-import { getEditorContext } from "./editor-utils"
+import { getEditorContext, getEditorContextOrLine } from "./editor-utils"
 import { createPrompt } from "./support-prompt"
 
 export function registerCodeActions(
@@ -65,6 +65,29 @@ export function registerCodeActions(
         selectedText: ctx.selectedText,
         diagnostics: ctx.diagnostics,
         userInput: "",
+      })
+      await reveal()
+      provider.postMessage({ type: "triggerTask", text: prompt })
+    }),
+
+    // Cursor-style inline edit: Cmd/Ctrl+I in the editor. Uses the selection,
+    // or falls back to the cursor's line, then asks for an instruction and
+    // sends the edit to the active Raya chat via the existing triggerTask path.
+    vscode.commands.registerCommand("raya.inlineEdit", async () => {
+      const ctx = getEditorContextOrLine()
+      if (!ctx) return
+      const instruction = await vscode.window.showInputBox({
+        title: "Edit with Raya",
+        prompt: `Describe the edit for ${ctx.filePath}:${ctx.startLine}-${ctx.endLine}`,
+        placeHolder: "e.g. extract this into a helper and add error handling",
+      })
+      if (!instruction) return
+      const prompt = createPrompt("EDIT", {
+        filePath: ctx.filePath,
+        startLine: String(ctx.startLine),
+        endLine: String(ctx.endLine),
+        selectedText: ctx.selectedText,
+        userInput: instruction,
       })
       await reveal()
       provider.postMessage({ type: "triggerTask", text: prompt })

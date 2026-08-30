@@ -21,6 +21,7 @@ import { AutocompleteServiceManager } from "./services/autocomplete/Autocomplete
 import { AttentionService } from "./services/attention"
 import { BrowserAutomationService, BrowserPanel } from "./services/browser-automation" // raya_change - Milestone F
 import { registerGrantAllPermissions } from "./kilo-provider/grant-all-permissions" // raya_change - global all-tools toggle
+import { registerDesignSystemLock } from "./kilo-provider/design-system-lock" // raya_change - owner design-system lock
 import { registerCheckpointCommands } from "./kilo-provider/checkpoint-commands" // raya_change - named checkpoints
 import { CanvasPanel, CanvasService } from "./services/canvas" // raya_change - Milestone E
 import { TelemetryEventName, TelemetryProxy } from "./services/telemetry"
@@ -64,6 +65,7 @@ export function activate(context: vscode.ExtensionContext) {
   // Create shared connection service (one server for all webviews)
   const connectionService = new KiloConnectionService(context)
   context.subscriptions.push(registerGrantAllPermissions(connectionService)) // raya_change - global all-tools toggle
+  context.subscriptions.push(registerDesignSystemLock(connectionService)) // raya_change - owner design-system lock
   const notebookBridge = createNotebookBridge(connectionService)
   let restore = context.workspaceState.get<RestoreState>(RESTORE_KEY) ?? {}
   const remember = (patch: RestoreState) => {
@@ -161,6 +163,14 @@ export function activate(context: vscode.ExtensionContext) {
   })
   provider.setRemoteService(remoteService)
   context.subscriptions.push(registerCheckpointCommands(connectionService, provider)) // raya_change - named checkpoints
+
+  // raya_change start - Canvas Design Mode picks are dropped into the chat composer.
+  canvasService.onDesignPick(async (text) => {
+    await vscode.commands.executeCommand("raya.SidebarProvider.focus")
+    await provider.waitForReady()
+    provider.postMessage({ type: "appendChatBoxMessage", text })
+  })
+  // raya_change end
 
   // Register the webview view provider for the sidebar.
   // retainContextWhenHidden keeps the webview alive when switching to other sidebar panels.

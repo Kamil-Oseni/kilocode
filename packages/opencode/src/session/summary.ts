@@ -166,19 +166,51 @@ const layer = Layer.effect(
       // kilocode_change end
       // kilocode_change start - retain cumulative diffs for legacy TUI and VS Code consumers
       if (!input.messageID) {
-        const diffs = yield* storage
-          .read<Snapshot.FileDiff[]>(["session_diff", input.sessionID])
-          .pipe(Effect.catch(() => Effect.succeed([] as Snapshot.FileDiff[])))
-        const next = diffs.map((item) => {
-          const file = item.file === undefined ? undefined : unquoteGitPath(item.file)
-          const oversized = item.patch !== undefined && Buffer.byteLength(item.patch) > Snapshot.MAX_DIFF_SIZE
-          if (file === item.file && !oversized) return item
-          return { ...item, ...(file === undefined ? {} : { file }), ...(oversized ? { patch: "" } : {}) }
-        })
-        if (next.some((item, index) => item !== diffs[index])) {
-          yield* storage.write(["session_diff", input.sessionID], next).pipe(Effect.ignore)
+        const normalize = (items: Snapshot.FileDiff[]) =>
+          items.map((item) => {
+            const file = item.file === undefined ? undefined : unquoteGitPath(item.file)
+            const oversized = item.patch !== undefined && Buffer.byteLength(item.patch) > Snapshot.MAX_DIFF_SIZE
+            if (file === item.file && !oversized) return item
+            return { ...item, ...(file === undefined ? {} : { file }), ...(oversized ? { patch: "" } : {}) }
+          })
+        const readStored = (id: SessionID) =>
+          storage
+            .read<Snapshot.FileDiff[]>(["session_diff", id])
+            .pipe(Effect.catch(() => Effect.succeed([] as Snapshot.FileDiff[])))
+
+        const raw = yield* readStored(input.sessionID)
+        const own = normalize(raw)
+        // Heal stored data in place when normalization changed a path/patch.
+        if (own.some((item, index) => item !== raw[index])) {
+          yield* storage.write(["session_diff", input.sessionID], own).pipe(Effect.ignore)
         }
-        return next
+
+        // A delegated (agent=auto) turn makes its edits inside child subagent
+        // sessions, which own the real diff; the displayed parent frequently
+        // stores none of its own. Mirror SessionRevert.discardChanges by folding
+        // in every descendant session's diff so the in-editor review and "review
+        // changes" show what the subagents actually wrote. A normal session has
+        // no children, so this is a no-op for the common case.
+        const merged = new Map<string, Snapshot.FileDiff>()
+        const fold = (items: Snapshot.FileDiff[]) => {
+          for (const item of items) {
+            const key = item.file ?? ""
+            const prev = merged.get(key)
+            // Prefer an entry that carries patch text over an empty placeholder.
+            if (!prev || ((prev.patch ?? "") === "" && (item.patch ?? "") !== "")) merged.set(key, item)
+          }
+        }
+        fold(own)
+        const queue: SessionID[] = [input.sessionID]
+        while (queue.length > 0) {
+          const id = queue.shift()
+          if (!id) break
+          for (const kid of yield* sessions.children(id)) {
+            queue.push(kid.id)
+            fold(normalize(yield* readStored(kid.id)))
+          }
+        }
+        return [...merged.values()]
       }
       // kilocode_change end
       const message = (yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)).find(

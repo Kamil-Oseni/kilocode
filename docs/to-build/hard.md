@@ -150,3 +150,5 @@ Each plan is written so any agent can pick it up cold. File paths are relative t
 **Acceptance criteria.** A CI job can run Raya headlessly with a scoped tool allowlist, stream/collect results, and be triggered on a schedule or event; the SDK entrypoint is documented; the Action installs and runs without hand-rolled glue.
 
 **Risk / scope.** Lower than features 1–3 (no VM infra) but touches auth, permission scoping, and CI security. The cron piece overlaps with medium feature 2 (scheduled agents) — share the schedule model where possible.
+
+

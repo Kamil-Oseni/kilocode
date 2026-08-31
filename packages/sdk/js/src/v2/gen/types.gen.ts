@@ -18057,6 +18057,13 @@ export type KilocodeGoalGetResponses = {
       kind: "status" | "turn" | "continuation"
       message: string
     }>
+    history?: Array<{
+      objective: string
+      status: "active" | "paused" | "complete" | "blocked"
+      createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      blockedReason?: string
+    }>
   }
 }
 
@@ -18141,6 +18148,13 @@ export type KilocodeGoalUpdateResponses = {
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       kind: "status" | "turn" | "continuation"
       message: string
+    }>
+    history?: Array<{
+      objective: string
+      status: "active" | "paused" | "complete" | "blocked"
+      createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      blockedReason?: string
     }>
   }
 }
@@ -18227,6 +18241,13 @@ export type KilocodeGoalCreateResponses = {
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       kind: "status" | "turn" | "continuation"
       message: string
+    }>
+    history?: Array<{
+      objective: string
+      status: "active" | "paused" | "complete" | "blocked"
+      createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      blockedReason?: string
     }>
   }
 }
@@ -18519,6 +18540,8 @@ export type KilocodeSelfHealListResponses = {
     }>
     reloadRequired: boolean
     notifiedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    duplicateOf?: string
+    classifiedBy?: "keyword" | "model"
   }>
 }
 
@@ -18574,6 +18597,8 @@ export type KilocodeSelfHealCreateResponses = {
     }>
     reloadRequired: boolean
     notifiedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    duplicateOf?: string
+    classifiedBy?: "keyword" | "model"
   }
 }
 
@@ -18632,6 +18657,8 @@ export type KilocodeSelfHealGetResponses = {
     }>
     reloadRequired: boolean
     notifiedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    duplicateOf?: string
+    classifiedBy?: "keyword" | "model"
   }
 }
 
@@ -18650,6 +18677,13 @@ export type KilocodeSelfHealUpdateData = {
     }>
     reloadRequired?: boolean
     notifiedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    category?: "ui" | "chat" | "routing" | "goal" | "browser" | "settings" | "build" | "test" | "docs" | "other"
+    severity?: "low" | "medium" | "high"
+    approach?: string
+    title?: string
+    explanation?: string
+    duplicateOf?: string
+    classifiedBy?: "keyword" | "model"
   }
   path: {
     itemID: string
@@ -18702,6 +18736,8 @@ export type KilocodeSelfHealUpdateResponses = {
     }>
     reloadRequired: boolean
     notifiedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    duplicateOf?: string
+    classifiedBy?: "keyword" | "model"
   }
 }
 

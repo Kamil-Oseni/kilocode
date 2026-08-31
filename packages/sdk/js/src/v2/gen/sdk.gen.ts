@@ -8776,6 +8776,13 @@ export class SelfHeal extends HeyApiClient {
       }>
       reloadRequired?: boolean
       notifiedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      category?: "ui" | "chat" | "routing" | "goal" | "browser" | "settings" | "build" | "test" | "docs" | "other"
+      severity?: "low" | "medium" | "high"
+      approach?: string
+      title?: string
+      explanation?: string
+      duplicateOf?: string
+      classifiedBy?: "keyword" | "model"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -8793,6 +8800,13 @@ export class SelfHeal extends HeyApiClient {
             { in: "body", key: "evidence" },
             { in: "body", key: "reloadRequired" },
             { in: "body", key: "notifiedAt" },
+            { in: "body", key: "category" },
+            { in: "body", key: "severity" },
+            { in: "body", key: "approach" },
+            { in: "body", key: "title" },
+            { in: "body", key: "explanation" },
+            { in: "body", key: "duplicateOf" },
+            { in: "body", key: "classifiedBy" },
           ],
         },
       ],

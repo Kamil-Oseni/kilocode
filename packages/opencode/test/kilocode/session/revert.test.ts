@@ -571,6 +571,76 @@ describe("files-only discard (Undo all)", () => {
     30_000,
   )
 
+  // raya_change - per-file Undo must step back exactly one edit. Two sequential edits to the
+  // same file ("" -> "Welcome" -> "Good day"); undoing the file restores "Welcome" (the prior
+  // edit) rather than deleting the greeting by rewinding to the pre-session baseline.
+  it.live(
+    "per-file discard steps back to the previous edit, not the first baseline",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const sessions = yield* Session.Service
+          const revert = yield* SessionRevert.Service
+          const snapshot = yield* Snapshot.Service
+          const session = yield* sessions.create({})
+          const providerID = ProviderV2.ID.make("test")
+          const notes = path.join(dir, "notes.txt")
+          const user = yield* sessions.updateMessage({
+            id: MessageID.ascending(),
+            sessionID: session.id,
+            role: "user",
+            agent: "default",
+            model: { providerID, modelID: ModelV2.ID.make("test") },
+            time: { created: Date.now() },
+          })
+          const assistant = yield* sessions.updateMessage({
+            id: MessageID.ascending(),
+            sessionID: session.id,
+            role: "assistant",
+            parentID: user.id,
+            mode: "default",
+            agent: "default",
+            path: { cwd: dir, root: dir },
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            modelID: ModelV2.ID.make("test"),
+            providerID,
+            time: { created: Date.now() },
+            finish: "end_turn",
+          })
+          const commit = (hash: string, files: string[]) =>
+            sessions.updatePart({
+              id: PartID.ascending(),
+              messageID: assistant.id,
+              sessionID: session.id,
+              type: "patch",
+              hash,
+              files,
+            })
+
+          // Edit 1: create the file with "Welcome".
+          const base0 = yield* snapshot.track()
+          if (!base0) throw new Error("expected snapshot")
+          yield* Effect.promise(() => fs.writeFile(notes, "Welcome"))
+          const patch1 = yield* snapshot.patch(base0)
+          yield* commit(patch1.hash, patch1.files)
+
+          // Edit 2: change "Welcome" to "Good day".
+          const base1 = yield* snapshot.track()
+          if (!base1) throw new Error("expected snapshot")
+          yield* Effect.promise(() => fs.writeFile(notes, "Good day"))
+          const patch2 = yield* snapshot.patch(base1)
+          yield* commit(patch2.hash, patch2.files)
+
+          yield* revert.discardChanges({ sessionID: session.id, files: [notes] })
+
+          expect(yield* Effect.promise(() => fs.readFile(notes, "utf8"))).toBe("Welcome")
+        }),
+      { git: true },
+    ),
+    30_000,
+  )
+
   it.live(
     "discardChanges on the parent reverts a file a child subagent edited",
     provideTmpdirInstance(

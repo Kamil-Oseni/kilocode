@@ -13,7 +13,7 @@ type BrowserPanelMessage =
   | { type: "takeover" }
   | { type: "pointer"; input: BrowserPointer }
   | { type: "scroll"; input: { deltaX: number; deltaY: number } }
-  | { type: "resize"; dpr: number } // raya_change - keep capture density matched to the panel's pixel ratio
+  | { type: "resize"; dpr: number; width: number; height: number } // raya_change - drive layout viewport + capture density to the panel
   | { type: "key"; input: BrowserKey }
 
 export class BrowserPanel implements vscode.Disposable {
@@ -122,7 +122,7 @@ export class BrowserPanel implements vscode.Disposable {
       return
     }
     if (message.type === "resize") {
-      await this.session.resize(message.dpr)
+      await this.session.resize(message.dpr, message.width, message.height)
       return
     }
     await this.session.key(message.input)
@@ -292,21 +292,27 @@ export class BrowserPanel implements vscode.Disposable {
       shield.hidden = manual || !state.busy;
       for (const control of controls) control.disabled = state.busy && !manual;
     });
-    // raya_change - report the panel's device pixel ratio so the session captures at a matching
-    // density; a shrunk/HiDPI panel then downscales a dense frame instead of blurring a sparse one.
-    let dpr = 0;
+    // raya_change - report the panel's CSS size and device pixel ratio so the session sets the
+    // page's layout viewport to match (CSS breakpoints then fire like a real browser resize) and
+    // captures at a matching density (a shrunk/HiDPI panel downscales a dense frame instead of
+    // blurring a sparse one). Observe the live viewport area, not just window resize.
+    const main = document.querySelector("main");
+    let last = "";
     let debounce;
-    const reportDpr = () => {
-      const next = window.devicePixelRatio || 1;
-      if (next === dpr) return;
-      dpr = next;
-      send("resize", { dpr: next });
+    const report = () => {
+      const dpr = window.devicePixelRatio || 1;
+      const width = Math.round(main.clientWidth);
+      const height = Math.round(main.clientHeight);
+      if (!width || !height) return;
+      const key = dpr + "x" + width + "x" + height;
+      if (key === last) return;
+      last = key;
+      send("resize", { dpr, width, height });
     };
-    window.addEventListener("resize", () => {
-      clearTimeout(debounce);
-      debounce = setTimeout(reportDpr, 200);
-    });
-    reportDpr();
+    const schedule = () => { clearTimeout(debounce); debounce = setTimeout(report, 150); };
+    if (typeof ResizeObserver !== "undefined") new ResizeObserver(schedule).observe(main);
+    window.addEventListener("resize", schedule);
+    report();
     send("ready");
   </script>
 </body>

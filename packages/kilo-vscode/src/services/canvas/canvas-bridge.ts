@@ -46,7 +46,18 @@ export class CanvasBridge {
       if (controller) this.host.cancel?.()
       return
     }
-    if (value.type !== "kilocode.canvas.requested" || !directory || this.active.has(value.properties.id)) return
+    if (value.type !== "kilocode.canvas.requested") return
+    // raya_change - a canvas request with no directory (or an already-active id) can never be
+    // answered, and the backend then waits out its full two-minute host timeout. Log the drop
+    // instead of silently returning so the cause is visible in the next diagnostic run.
+    if (!directory || this.active.has(value.properties.id)) {
+      console.warn(
+        "[Kilo New] CanvasBridge: dropping canvas request",
+        value.properties.id,
+        !directory ? "(no directory)" : "(already active)",
+      )
+      return
+    }
     void this.run(value.properties, directory)
   }
 
@@ -75,6 +86,7 @@ export class CanvasBridge {
     const controller = new AbortController()
     this.active.set(request.id, controller)
     try {
+      console.log("[Kilo New] CanvasBridge: handling", request.operation, request.name, "in", directory)
       const result = await this.host.execute(request, directory)
       if (controller.signal.aborted) return
       const response = await this.connection.getClient().kilocode.canvas.reply({
@@ -83,6 +95,7 @@ export class CanvasBridge {
         result,
       })
       if (response.error) throw new Error(String(response.error))
+      console.log("[Kilo New] CanvasBridge: replied", request.name, result.status)
     } catch (error) {
       if (controller.signal.aborted) return
       const message = error instanceof Error ? error.message : String(error)
@@ -91,11 +104,15 @@ export class CanvasBridge {
         code: request.operation === "update" && /ENOENT|not found/i.test(message) ? "not_found" : "invalid_request",
         message: message.slice(0, 100_000),
       }
-      await this.connection.getClient().kilocode.canvas.reject({
+      // raya_change - surface a failed rejection too; if neither reply nor reject reaches the
+      // backend the host sits idle until its two-minute timeout, so a broken reply channel must
+      // be visible rather than swallowed.
+      const rejected = await this.connection.getClient().kilocode.canvas.reject({
         requestID: request.id,
         directory,
         error: failure,
       })
+      if (rejected.error) console.error("[Kilo New] CanvasBridge: canvas reject also failed:", rejected.error)
     } finally {
       this.active.delete(request.id)
     }

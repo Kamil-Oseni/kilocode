@@ -60,15 +60,24 @@ export namespace KiloSessionRevert {
   }
 
   /**
-   * Discard file edits made in the session, restoring each edited file to its
-   * state before the session's first edit — without touching messages and
-   * without arming a revert boundary (so nothing becomes "redoable"). Pass
-   * `only` to discard a specific subset (per-edit Undo); omit it to discard all.
+   * Discard file edits made in the session — without touching messages and
+   * without arming a revert boundary (so nothing becomes "redoable").
    *
    * Every "patch" part records the snapshot hash captured *before* that turn's
-   * edits. `snap.revert` dedupes by first occurrence per file, so passing all
-   * patches in message order restores each file to its earliest baseline. The
-   * whole restore is wrapped so a mid-way failure rolls back to the current
+   * edits. The revert target depends on scope:
+   *
+   * - Workspace-wide "Undo all" (`only` omitted): restore each file to its state
+   *   before the session's *first* edit. `snap.revert` dedupes by first
+   *   occurrence per file, so passing every patch in message order rewinds each
+   *   file to its earliest baseline.
+   * - Per-file in-editor "Undo" (`only` set): step back a single edit. Restore
+   *   each filtered file to the state before its *most recent* edit, not the
+   *   session's first edit. Reverting to the earliest baseline deleted content
+   *   that an earlier edit created (e.g. undoing "Welcome" → "Good day" wiped the
+   *   greeting instead of restoring "Welcome"); the last patch per file keeps the
+   *   prior edit's content.
+   *
+   * The whole restore is wrapped so a mid-way failure rolls back to the current
    * (edited) state, keeping the operation atomic.
    */
   export const discardAll = Effect.fn("KiloSessionRevert.discardAll")(function* (
@@ -78,12 +87,22 @@ export namespace KiloSessionRevert {
   ) {
     const filter = only && only.length > 0 ? new Set(only.map((file) => file.replaceAll("\\", "/"))) : undefined
     const patches: Snapshot.Patch[] = []
-    for (const msg of messages)
-      for (const part of msg.parts)
-        if (part.type === "patch") {
-          const keep = filter ? part.files.filter((file) => matches(file.replaceAll("\\", "/"), filter)) : part.files
-          if (keep.length > 0) patches.push({ hash: part.hash, files: keep })
-        }
+    if (filter) {
+      // raya_change - per-file Undo steps back one edit: revert each file to the hash captured
+      // before its LAST edit, so undoing the newest change restores the previous content instead
+      // of the pre-session baseline (which deletes anything earlier edits added).
+      const last = new Map<string, string>()
+      for (const msg of messages)
+        for (const part of msg.parts)
+          if (part.type === "patch")
+            for (const file of part.files) if (matches(file.replaceAll("\\", "/"), filter)) last.set(file, part.hash)
+      const grouped = new Map<string, string[]>()
+      for (const [file, hash] of last) grouped.set(hash, [...(grouped.get(hash) ?? []), file])
+      for (const [hash, group] of grouped) patches.push({ hash, files: group })
+    } else {
+      for (const msg of messages)
+        for (const part of msg.parts) if (part.type === "patch") patches.push({ hash: part.hash, files: part.files })
+    }
     const files = [...new Set(patches.flatMap((patch) => patch.files))]
     if (files.length === 0) return { files: [] as string[] }
     const baseline = yield* snap.track()

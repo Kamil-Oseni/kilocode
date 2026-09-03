@@ -5,6 +5,7 @@ import { useLanguage } from "../../context/language"
 import { useLocalTabs } from "../../context/local-tabs"
 import { useSession } from "../../context/session"
 import { isPendingTab } from "../../utils/local-tabs"
+import { displayTitle } from "../../utils/session-title" // raya_change - mask default session titles
 import { useTabScroll } from "../../utils/tab-scroll"
 import { focusPrompt, focusSelectedTab, focusTabElement, handleTabKey } from "../../utils/tab-navigation"
 import { setTabWidths } from "../../utils/tab-widths"
@@ -26,7 +27,8 @@ export const SessionTabStrip: Component = () => {
   const items = createMemo(() => new Map(session.sessions().map((item) => [item.id, item])))
   const title = (id: string) => {
     if (isPendingTab(id)) return language.t("sidebar.session.newSession")
-    return items().get(id)?.title || language.t("session.untitled")
+    // raya_change - hide the "New session - <ISO>" default until auto-title lands.
+    return displayTitle(items().get(id)?.title, language.t("sidebar.session.newSession"))
   }
   const working = (id: string) => {
     const status = session.allStatusMap()[id]

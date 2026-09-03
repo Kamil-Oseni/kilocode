@@ -14,6 +14,7 @@ import { IconButton } from "@kilocode/kilo-ui/icon-button"
 import { useDialog } from "@kilocode/kilo-ui/context/dialog"
 import { useSession } from "../../context/session"
 import { useLanguage } from "../../context/language"
+import { displayTitle } from "../../utils/session-title" // raya_change - mask default session titles
 import { formatRelativeDate } from "../../utils/date"
 import type { SessionInfo } from "../../types/messages"
 import { SessionRenameEditor } from "../shared/SessionRenameEditor"
@@ -84,7 +85,8 @@ const SessionList: Component<SessionListProps> = (props) => {
   }
 
   function name(s: SessionInfo) {
-    return s.title || language.t("session.untitled")
+    // raya_change - mask the "New session - <ISO>" default in history rows too.
+    return displayTitle(s.title, language.t("session.untitled"))
   }
 
   function label(action: string, s: SessionInfo) {

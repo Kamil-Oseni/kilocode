@@ -2,7 +2,30 @@
 import { createHash } from "node:crypto"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
-import { transform, type TransformOptions } from "esbuild-wasm"
+import { initialize, transform, type TransformOptions } from "esbuild-wasm"
+
+// raya_change start - esbuild-wasm must be initialized before transform() in the packaged
+// Electron extension host. Auto-init (which works in plain Node/Bun) can never signal ready
+// there, so create_canvas hung until the backend host timed out at two minutes and the panel
+// stayed empty. Initialize once from the wasm copied beside the extension (worker: false keeps
+// it on the host thread, avoiding worker_threads restrictions). Dev/test builds where that file
+// is absent fall through to auto-init.
+let esbuildReady: Promise<void> | undefined
+async function ensureEsbuild(): Promise<void> {
+  if (esbuildReady) return esbuildReady
+  esbuildReady = (async () => {
+    const wasm = join(__dirname, "node_modules", "esbuild-wasm", "esbuild.wasm")
+    const bytes = await readFile(wasm).catch(() => undefined)
+    if (!bytes) return // not packaged (dev/test) — transform() auto-initializes instead
+    await initialize({ wasmModule: await WebAssembly.compile(bytes), worker: false }).catch((err) => {
+      if (!/more than once|already been/i.test(String((err as Error)?.message ?? err))) throw err
+    })
+  })().catch((err) => {
+    esbuildReady = undefined // let a later build retry initialization
+    throw err
+  })
+  return esbuildReady
+}
 
 type CanvasData = Record<string, unknown>
 export type CanvasBuild = {
@@ -77,12 +100,12 @@ export class CanvasCompiler {
       if (/^\s*import\s/m.test(source)) throw new Error("Canvas artifacts cannot import packages; use JSX directly.")
       if (!/\bexport\s+default\b/.test(source))
         throw new Error("Canvas source must default-export one React component.")
-      // raya_change - esbuild-wasm spawns a worker service on first transform; if that
-      // service never becomes ready (packaged VSIX, sandbox), transform() can hang forever,
-      // which stalls the whole canvas request until the backend host times out and leaves an
-      // empty panel. Bound it so a hang surfaces as a fast, visible "needs repair" error.
+      // raya_change - esbuild-wasm must be initialized before transform() in the packaged
+      // extension host, and even then a stuck worker/service could hang forever, stalling the
+      // whole canvas request until the backend host times out with an empty panel. Bound init +
+      // transform together so any hang surfaces as a fast, visible "needs repair" error.
       const result = await this.race(
-        this.compile(
+        this.transform(
           `const React = window.RayaCanvas.React
 const { useCallback, useEffect, useMemo, useRef, useState } = React
 ${source}`,
@@ -108,7 +131,13 @@ ${source}`,
     }
   }
 
-  // raya_change - bound a single esbuild transform so a stuck worker cannot hang the request.
+  // raya_change - initialize esbuild-wasm (packaged host) before delegating to the transform.
+  private async transform(source: string, options: TransformOptions): Promise<{ code: string }> {
+    await ensureEsbuild()
+    return this.compile(source, options)
+  }
+
+  // raya_change - bound esbuild init + transform so a stuck worker cannot hang the request.
   private async race<T>(work: Promise<T>, ms = 15_000): Promise<T> {
     let timer: NodeJS.Timeout | undefined
     const guard = new Promise<never>((_, reject) => {

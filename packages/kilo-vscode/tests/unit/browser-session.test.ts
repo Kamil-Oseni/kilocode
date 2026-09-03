@@ -220,6 +220,36 @@ describe("Raya browser session", () => {
     await session.dispose()
   })
 
+  // raya_change - resizing the panel drives the page's layout viewport (so CSS breakpoints fire
+  // like a real browser) and maps pointer input against that live size.
+  it("tracks the panel size as the layout viewport and maps input to it", async () => {
+    const fake = harness()
+    const session = new BrowserSession("test-profile", fake.launch)
+    await session.ready()
+    const cdp = fake.cdps[0]!
+
+    cdp.commands.length = 0
+    await session.resize(2, 640, 480)
+    expect(cdp.commands.find((item) => item.method === "Emulation.setDeviceMetricsOverride")?.params).toMatchObject({
+      width: 640,
+      height: 480,
+      deviceScaleFactor: 2,
+    })
+    expect(cdp.commands.filter((item) => item.method === "Page.startScreencast").at(-1)?.params).toMatchObject({
+      maxWidth: 1280,
+      maxHeight: 960,
+    })
+
+    // Normalized pointer coords now map against the 640×480 layout, not the 1280×720 launch viewport.
+    cdp.commands.length = 0
+    await session.pointer({ type: "mousePressed", x: 0.5, y: 0.5, button: "left", clickCount: 1 })
+    expect(cdp.commands.find((item) => item.method === "Input.dispatchMouseEvent")?.params).toMatchObject({
+      x: 320,
+      y: 240,
+    })
+    await session.dispose()
+  })
+
   it("reuses the persistent profile so login state survives a fresh browser session", async () => {
     const fake = harness()
     const first = new BrowserSession("persistent-profile", fake.launch)

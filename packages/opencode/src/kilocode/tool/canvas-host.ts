@@ -116,12 +116,13 @@ export const UpdateCanvasTool = Tool.define<
     const canvas = yield* Canvas.Service
     return {
       description:
-        "Update an existing live canvas source, its typed data payload, or both. The open panel refreshes automatically; use the returned compile or runtime error to repair the artifact without reopening it.",
+        "Update an existing live canvas source, its typed data payload, or both. The open panel refreshes automatically; use the returned compile or runtime error to repair the artifact without reopening it. Call it with only a name (no source or data) to re-render the persisted canvas unchanged — this is the correct way to follow a create_canvas timeout retry hint.",
       parameters: UpdateParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
-          if (params.source === undefined && params.data === undefined)
-            return yield* Effect.die(new Error("update_canvas requires source, data, or both"))
+          // raya_change - a name-only update re-renders the persisted .raya/canvases source, so
+          // the create-timeout retry hint ("call update_canvas with the same name") is followable
+          // instead of dying with "requires source, data, or both".
           yield* ctx.ask({ permission: "update_canvas", patterns: [params.name], always: [params.name], metadata: {} })
           const result = yield* run(
             canvas,

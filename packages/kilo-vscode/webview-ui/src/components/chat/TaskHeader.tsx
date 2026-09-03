@@ -18,6 +18,7 @@ import { Checkbox } from "@kilocode/kilo-ui/checkbox"
 import { useSession } from "../../context/session"
 import { calcTokenUsage, collapseCostBreakdown } from "../../context/session-utils"
 import { useLanguage } from "../../context/language"
+import { displayTitle } from "../../utils/session-title" // raya_change - mask default session titles
 import { useVSCode } from "../../context/vscode"
 import { TaskTimeline } from "./TaskTimeline"
 import { BackgroundAgents } from "./BackgroundAgents"
@@ -40,7 +41,9 @@ export const TaskHeader: Component<TaskHeaderProps> = (props) => {
   const language = useLanguage()
   const search = useTranscriptSearch()
 
-  const title = createMemo(() => session.currentSession()?.title ?? language.t("command.session.new"))
+  // raya_change - mask the "New session - <ISO>" default so the header shows a clean label
+  // until auto-title generation replaces it.
+  const title = createMemo(() => displayTitle(session.currentSession()?.title, language.t("command.session.new")))
   const canRename = createMemo(() => !props.readonly && !!session.currentSession())
   const hasMessages = createMemo(() => session.messages().length > 0)
   const busy = createMemo(() => session.status() === "busy")

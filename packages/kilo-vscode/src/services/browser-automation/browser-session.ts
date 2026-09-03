@@ -166,6 +166,8 @@ export class BrowserSession {
   private revision = 0
   private running = 0
   private scale = 2 // raya_change - HiDPI capture factor; refined to the webview's devicePixelRatio on resize
+  private width = 1280 // raya_change - layout viewport width; tracks the panel so CSS breakpoints fire
+  private height = 720 // raya_change - layout viewport height; tracks the panel
   private state: BrowserState = { control: "agent", busy: false }
   private readonly listeners = new Set<(frame: BrowserFrame) => void>()
   private readonly states = new Set<(state: BrowserState) => void>()
@@ -204,10 +206,11 @@ export class BrowserSession {
         url: page.url(),
       })
     })
-    // raya_change - render the page at a HiDPI device-scale so the JPEG carries ~scale× the pixels
-    // of the 1280×720 layout viewport. The webview then downscales a dense frame instead of
-    // upscaling a sparse one, which is what made the view blurry/soft once the panel shrank.
-    // The layout viewport stays 1280×720 so pointer/scroll normalization is unchanged.
+    // raya_change - render the page at the panel's real CSS size and a HiDPI device-scale: the
+    // layout viewport width/height drive CSS media queries (so the page reflows across breakpoints
+    // like a real browser instead of just stretching a fixed 1280×720 render), while the
+    // device-scale keeps the JPEG dense enough to stay crisp when the panel shrinks or the display
+    // is HiDPI. Pointer/scroll map against the same layout size so input stays accurate.
     await this.metrics()
     await this.screencast()
     // CDP screencast events can pause when headless Chromium considers the surface hidden.
@@ -395,11 +398,12 @@ export class BrowserSession {
   async pointer(input: BrowserPointer): Promise<void> {
     await this.ready()
     this.assertInput()
-    const size = this.active().viewportSize() ?? { width: 1280, height: 720 }
+    // raya_change - map normalized coords against the live layout viewport (which now tracks the
+    // panel), not Playwright's fixed launch viewport, so clicks land correctly after a resize.
     await this.channel().send("Input.dispatchMouseEvent", {
       ...input,
-      x: Math.max(0, Math.min(1, input.x)) * size.width,
-      y: Math.max(0, Math.min(1, input.y)) * size.height,
+      x: Math.max(0, Math.min(1, input.x)) * this.width,
+      y: Math.max(0, Math.min(1, input.y)) * this.height,
       button: input.button ?? "none",
       clickCount: input.clickCount ?? 0,
     })
@@ -420,13 +424,18 @@ export class BrowserSession {
     await this.active().mouse.wheel(deltaX, deltaY)
   }
 
-  // raya_change start - match the capture density to the panel's real pixel ratio so a resized
-  // (especially HiDPI) view stays crisp. Only the device-scale changes; the 1280×720 layout
-  // viewport is preserved, so input mapping and everything downstream is unaffected.
-  async resize(dpr: number): Promise<void> {
-    const next = Math.min(3, Math.max(1, Math.round(Number.isFinite(dpr) && dpr > 0 ? dpr : 1)))
-    if (next === this.scale) return
-    this.scale = next
+  // raya_change start - re-negotiate the layout viewport and capture density to the panel. Setting
+  // the layout width/height to the panel's CSS size makes the page honor its own responsive
+  // breakpoints (a real browser resize, not a stretched fixed render); deviceScaleFactor = dpr
+  // keeps it crisp. Width/height default to 1280×720 when the caller omits them (density-only).
+  async resize(dpr: number, width?: number, height?: number): Promise<void> {
+    const scale = Math.min(3, Math.max(1, Math.round(Number.isFinite(dpr) && dpr > 0 ? dpr : 1)))
+    const w = width && Number.isFinite(width) ? Math.min(2560, Math.max(320, Math.round(width))) : this.width
+    const h = height && Number.isFinite(height) ? Math.min(1600, Math.max(240, Math.round(height))) : this.height
+    if (scale === this.scale && w === this.width && h === this.height) return
+    this.scale = scale
+    this.width = w
+    this.height = h
     if (!this.cdp) return
     await this.metrics()
     await this.channel().send("Page.stopScreencast").catch(() => undefined)
@@ -436,8 +445,8 @@ export class BrowserSession {
 
   private async metrics(): Promise<void> {
     await this.channel().send("Emulation.setDeviceMetricsOverride", {
-      width: 1280,
-      height: 720,
+      width: this.width,
+      height: this.height,
       deviceScaleFactor: this.scale,
       mobile: false,
     })
@@ -447,8 +456,8 @@ export class BrowserSession {
     await this.channel().send("Page.startScreencast", {
       format: "jpeg",
       quality: 80,
-      maxWidth: 1280 * this.scale,
-      maxHeight: 720 * this.scale,
+      maxWidth: this.width * this.scale,
+      maxHeight: this.height * this.scale,
       everyNthFrame: 1,
     })
   }
@@ -500,7 +509,8 @@ export class BrowserSession {
       .catch(() => undefined)) as { data?: string } | undefined
     this.capturing = false
     if (!result?.data) return
-    const size = page.viewportSize() ?? { width: 1280, height: 720 }
-    this.publish({ data: result.data, width: size.width, height: size.height, url: page.url() })
+    // raya_change - report the live layout size (not Playwright's fixed launch viewport) so the
+    // panel keeps the correct aspect ratio after a responsive resize.
+    this.publish({ data: result.data, width: this.width, height: this.height, url: page.url() })
   }
 }

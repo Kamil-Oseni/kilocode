@@ -1588,12 +1588,18 @@ export const layer = Layer.effect(
 
         step++
         if (step === 1)
+          // kilocode_change start - log auto-title failures instead of silently ignoring them; a
+          // swallowed failure here is why a chat can stay stuck on its "New session" default.
           yield* title({
             session,
             modelID: lastUser.model.modelID,
             providerID: lastUser.model.providerID,
             history: msgs,
-          }).pipe(Effect.ignore, Effect.forkIn(scope))
+          }).pipe(
+            Effect.catchCause((cause) => Effect.logWarning("auto-title generation failed", { cause })),
+            Effect.forkIn(scope),
+          )
+        // kilocode_change end
 
         const model = yield* getModel(lastUser.model.providerID, lastUser.model.modelID, sessionID)
         const task = tasks.pop()

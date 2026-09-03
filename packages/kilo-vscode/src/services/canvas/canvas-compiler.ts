@@ -5,23 +5,20 @@ import { dirname, join } from "node:path"
 import { initialize, transform, type TransformOptions } from "esbuild-wasm"
 
 // raya_change start - esbuild-wasm must be initialized before transform() in the packaged
-// Electron extension host. Auto-init (which works in plain Node/Bun) can never signal ready
-// there, so create_canvas hung until the backend host timed out at two minutes and the panel
-// stayed empty. Initialize once from the wasm copied beside the extension (worker: false keeps
-// it on the host thread, avoiding worker_threads restrictions). Dev/test builds where that file
-// is absent fall through to auto-init.
+// Electron extension host. Its default async service spins up a worker to talk to the wasm, and
+// that worker never signals ready inside the extension host, so create_canvas hung until the
+// backend host timed out at two minutes and the panel stayed empty. `worker: false` runs the wasm
+// synchronously on the host thread instead, which is what makes it reliable here. (`wasmModule` is
+// a browser-only option and throws in Node/Electron, so we let esbuild locate its own wasm.)
+// Initialize once; a genuine failure is rethrown so a later build can retry.
 let esbuildReady: Promise<void> | undefined
 async function ensureEsbuild(): Promise<void> {
   if (esbuildReady) return esbuildReady
-  esbuildReady = (async () => {
-    const wasm = join(__dirname, "node_modules", "esbuild-wasm", "esbuild.wasm")
-    const bytes = await readFile(wasm).catch(() => undefined)
-    if (!bytes) return // not packaged (dev/test) — transform() auto-initializes instead
-    await initialize({ wasmModule: await WebAssembly.compile(bytes), worker: false }).catch((err) => {
-      if (!/more than once|already been/i.test(String((err as Error)?.message ?? err))) throw err
-    })
-  })().catch((err) => {
-    esbuildReady = undefined // let a later build retry initialization
+  esbuildReady = initialize({ worker: false }).catch((err) => {
+    // A prior transform may have already auto-initialized the singleton service; that specific
+    // case is safe to treat as ready. Anything else is a real failure worth surfacing.
+    if (/more than once|already/i.test(String((err as Error)?.message ?? err))) return
+    esbuildReady = undefined
     throw err
   })
   return esbuildReady

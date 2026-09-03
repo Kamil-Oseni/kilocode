@@ -44,15 +44,21 @@ export namespace RayaChief {
     return typeof value === "string" && value.trim() ? value : undefined
   }
 
-  export function tools<T>(available: Record<string, T>, _metadata: Record<string, unknown> | undefined) {
-    return Object.fromEntries(
-      ["chief_route", "task", "get_goal", "update_goal"].flatMap((name) =>
-        available[name] ? [[name, available[name]]] : [],
-      ),
-    ) as Record<string, T>
-    // raya_change - some providers emit the whole workflow in one response, so every
-    // orchestration call remains dispatchable even during final synthesis; tool choice
-    // and handlers enforce ordering without producing misleading Unknown tool failures
+  export function tools<T>(available: Record<string, T>, metadata: Record<string, unknown> | undefined) {
+    // raya_change start - Auto's prompt tells it to call ask_options when a genuine choice
+    // only the user can make is blocking, so those clarification tools must survive the
+    // whitelist or the model hits "Unknown tool: ask_options". When the user invoked
+    // /canvas, Auto may also create and refine the live canvas directly (and follow the
+    // host's update_canvas retry hint) instead of only through a delegated subagent.
+    const names = ["chief_route", "task", "get_goal", "update_goal", "ask_options", "question"]
+    if (metadata?.["raya.canvas.command"] === true) names.push("create_canvas", "update_canvas")
+    return Object.fromEntries(names.flatMap((name) => (available[name] ? [[name, available[name]]] : []))) as Record<
+      string,
+      T
+    >
+    // raya_change end - every orchestration call remains dispatchable even during final
+    // synthesis; tool choice and handlers enforce ordering without producing misleading
+    // Unknown tool failures
   }
 
   export function repair(input: { agent: string; tools: Readonly<Record<string, unknown>> }) {

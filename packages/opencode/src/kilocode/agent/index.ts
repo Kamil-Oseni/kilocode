@@ -848,6 +848,8 @@ export function addAuto(
         refine_self_heal: "allow", // raya_change - Auto reconciles a self-heal item's classification in repair sessions
         ask_options: "allow", // raya_change - Auto must be able to ask the user a clarifying question directly
         question: "allow", // raya_change - legacy ask tool, allowed for parity
+        create_canvas: "allow", // raya_change - /canvas lets Auto build the live canvas directly, not only via a subagent
+        update_canvas: "allow", // raya_change - Auto follows the canvas host's update_canvas retry hint on the parent session
         // raya_change start - Auto only routes, but KiloTask.inherited turns the
         // parent's blanket "*": "deny" into hard edit/write/notebook ceilings on
         // every delegated subagent, forcing specialists to mutate files through

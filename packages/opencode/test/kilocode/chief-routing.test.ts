@@ -130,6 +130,18 @@ describe("Raya Chief routing", () => {
     expect(Object.keys(RayaChief.tools(tools, { [RayaChief.phaseKey]: "task" }))).toEqual(workflow)
     expect(Object.keys(RayaChief.tools(tools, { [RayaChief.phaseKey]: "goal" }))).toEqual(workflow)
     expect(Object.keys(RayaChief.tools(tools, { [RayaChief.phaseKey]: "done" }))).toEqual(workflow)
+
+    // raya_change start - Auto's prompt tells it to ask the user directly, so ask_options must
+    // survive the whitelist; the canvas tools only join it when the user invoked /canvas.
+    const rich = { ...tools, ask_options: { id: "ask" }, create_canvas: { id: "cc" }, update_canvas: { id: "uc" } }
+    expect(Object.keys(RayaChief.tools(rich, { [RayaChief.phaseKey]: "route" }))).toEqual([...workflow, "ask_options"])
+    expect(Object.keys(RayaChief.tools(rich, { "raya.canvas.command": true }))).toEqual([
+      ...workflow,
+      "ask_options",
+      "create_canvas",
+      "update_canvas",
+    ])
+    // raya_change end
     expect(RayaChief.repair({ agent: "auto", tools: { chief_route: tools.chief_route } })).toEqual({
       toolName: "chief_route",
       input: { objective: "Route the current user's exact request." },

@@ -13,6 +13,7 @@ type BrowserPanelMessage =
   | { type: "takeover" }
   | { type: "pointer"; input: BrowserPointer }
   | { type: "scroll"; input: { deltaX: number; deltaY: number } }
+  | { type: "resize"; dpr: number } // raya_change - keep capture density matched to the panel's pixel ratio
   | { type: "key"; input: BrowserKey }
 
 export class BrowserPanel implements vscode.Disposable {
@@ -120,6 +121,10 @@ export class BrowserPanel implements vscode.Disposable {
       await this.session.scroll(message.input.deltaX, message.input.deltaY)
       return
     }
+    if (message.type === "resize") {
+      await this.session.resize(message.dpr)
+      return
+    }
     await this.session.key(message.input)
   }
 
@@ -170,7 +175,7 @@ export class BrowserPanel implements vscode.Disposable {
     #go, #takeover { width: auto; padding: 0 10px; }
     #takeover { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
     main { position: relative; display: grid; place-items: center; min-width: 0; min-height: 0; overflow: hidden; background: #111; }
-    img { display: block; max-width: 100%; max-height: 100%; outline: none; user-select: none; -webkit-user-drag: none; }
+    img { display: block; max-width: 100%; max-height: 100%; outline: none; user-select: none; -webkit-user-drag: none; image-rendering: -webkit-optimize-contrast; }
     #empty { color: var(--vscode-descriptionForeground); }
     #shield { position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; color: white; background: rgb(0 0 0 / 28%); cursor: wait; }
     #shield > div { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 4px; background: rgb(0 0 0 / 72%); }
@@ -287,6 +292,21 @@ export class BrowserPanel implements vscode.Disposable {
       shield.hidden = manual || !state.busy;
       for (const control of controls) control.disabled = state.busy && !manual;
     });
+    // raya_change - report the panel's device pixel ratio so the session captures at a matching
+    // density; a shrunk/HiDPI panel then downscales a dense frame instead of blurring a sparse one.
+    let dpr = 0;
+    let debounce;
+    const reportDpr = () => {
+      const next = window.devicePixelRatio || 1;
+      if (next === dpr) return;
+      dpr = next;
+      send("resize", { dpr: next });
+    };
+    window.addEventListener("resize", () => {
+      clearTimeout(debounce);
+      debounce = setTimeout(reportDpr, 200);
+    });
+    reportDpr();
     send("ready");
   </script>
 </body>

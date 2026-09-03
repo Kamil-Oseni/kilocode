@@ -186,6 +186,40 @@ describe("Raya browser session", () => {
     await session.dispose()
   })
 
+  // raya_change - resize keeps capture density matched to the panel so it stays crisp when scaled.
+  it("captures at HiDPI and re-negotiates density when the panel pixel ratio changes", async () => {
+    const fake = harness()
+    const session = new BrowserSession("test-profile", fake.launch)
+    await session.ready()
+    const cdp = fake.cdps[0]!
+
+    // Opens at a 2× device-scale over a 1280×720 layout viewport.
+    expect(cdp.commands).toContainEqual({
+      method: "Emulation.setDeviceMetricsOverride",
+      params: expect.objectContaining({ width: 1280, height: 720, deviceScaleFactor: 2 }),
+    })
+    expect(cdp.commands.find((item) => item.method === "Page.startScreencast")?.params).toMatchObject({
+      maxWidth: 2560,
+      maxHeight: 1440,
+    })
+
+    cdp.commands.length = 0
+    await session.resize(3)
+    expect(cdp.commands.find((item) => item.method === "Emulation.setDeviceMetricsOverride")?.params).toMatchObject({
+      deviceScaleFactor: 3,
+    })
+    expect(cdp.commands.filter((item) => item.method === "Page.startScreencast").at(-1)?.params).toMatchObject({
+      maxWidth: 3840,
+      maxHeight: 2160,
+    })
+
+    // A no-op ratio must not thrash the stream.
+    cdp.commands.length = 0
+    await session.resize(3)
+    expect(cdp.commands.some((item) => item.method === "Page.startScreencast")).toBe(false)
+    await session.dispose()
+  })
+
   it("reuses the persistent profile so login state survives a fresh browser session", async () => {
     const fake = harness()
     const first = new BrowserSession("persistent-profile", fake.launch)

@@ -77,20 +77,26 @@ export class CanvasCompiler {
       if (/^\s*import\s/m.test(source)) throw new Error("Canvas artifacts cannot import packages; use JSX directly.")
       if (!/\bexport\s+default\b/.test(source))
         throw new Error("Canvas source must default-export one React component.")
-      const result = await this.compile(
-        `const React = window.RayaCanvas.React
+      // raya_change - esbuild-wasm spawns a worker service on first transform; if that
+      // service never becomes ready (packaged VSIX, sandbox), transform() can hang forever,
+      // which stalls the whole canvas request until the backend host times out and leaves an
+      // empty panel. Bound it so a hang surfaces as a fast, visible "needs repair" error.
+      const result = await this.race(
+        this.compile(
+          `const React = window.RayaCanvas.React
 const { useCallback, useEffect, useMemo, useRef, useState } = React
 ${source}`,
-        {
-          loader: "tsx",
-          format: "iife",
-          globalName: "RayaArtifact",
-          target: "es2022",
-          jsxFactory: "window.RayaCanvas.React.createElement",
-          jsxFragment: "window.RayaCanvas.React.Fragment",
-          sourcemap: "inline",
-          sourcefile: path,
-        },
+          {
+            loader: "tsx",
+            format: "iife",
+            globalName: "RayaArtifact",
+            target: "es2022",
+            jsxFactory: "window.RayaCanvas.React.createElement",
+            jsxFragment: "window.RayaCanvas.React.Fragment",
+            sourcemap: "inline",
+            sourcefile: path,
+          },
+        ),
       )
       const dir = join(this.output, createHash("sha256").update(root).digest("hex").slice(0, 12))
       const bundle = join(dir, `${name}.${version}.js`)
@@ -99,6 +105,22 @@ ${source}`,
       return { name, path, bundle, data, status: "ready", version }
     } catch (error) {
       return { name, path, data, status: "error", version, error: message(error) }
+    }
+  }
+
+  // raya_change - bound a single esbuild transform so a stuck worker cannot hang the request.
+  private async race<T>(work: Promise<T>, ms = 15_000): Promise<T> {
+    let timer: NodeJS.Timeout | undefined
+    const guard = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`Canvas compilation timed out after ${ms / 1000}s (esbuild did not respond).`)),
+        ms,
+      )
+    })
+    try {
+      return await Promise.race([work, guard])
+    } finally {
+      if (timer) clearTimeout(timer)
     }
   }
 

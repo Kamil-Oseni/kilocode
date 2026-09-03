@@ -4692,6 +4692,32 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     if (isWorkStyleSetting(key)) this.sendWorkStyle()
   }
 
+  // raya_change start - build a searchable catalog of every contributed raya.* setting from
+  // package.json so the settings UI can index and deep-link even settings without a custom control
+  // (e.g. raya.selfHeal.sourcePath). Derived at render time from the single source of truth.
+  private buildSettingsCatalog(): string {
+    const ext = vscode.extensions.getExtension("eden.raya")
+    const props = ext?.packageJSON?.contributes?.configuration?.properties as
+      | Record<string, { description?: string; markdownDescription?: string; scope?: string; enum?: unknown[] }>
+      | undefined
+    if (!props) return "null"
+    const title = (key: string) =>
+      key
+        .replace(/^raya\./, "")
+        .split(".")
+        .map((seg) => seg.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase()))
+        .join(" › ")
+    const entries = Object.keys(props)
+      .filter((key) => key.startsWith("raya."))
+      .map((key) => {
+        const p = props[key]!
+        const detail = (p.markdownDescription ?? p.description ?? "").replace(/`([^`]+)`/g, "$1").split("\n")[0] ?? ""
+        return { key, title: title(key), detail, scope: p.scope ?? "window" }
+      })
+    return JSON.stringify(entries)
+  }
+  // raya_change end
+
   /**
    * Reset all "raya.*" extension settings to their defaults by reading
    * contributes.configuration from the extension's package.json at runtime.
@@ -5642,6 +5668,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       topBar: this.opts.hideTopBar !== true && isCursorHost(),
       topBarSurface: this.opts.topBarSurface === "tab" ? "tab_title" : "sidebar_title",
       agentManagerSettings: this.opts.agentManagerSettings !== undefined,
+      settingsCatalog: this.buildSettingsCatalog(), // raya_change - searchable index of contributed raya.* settings
     })
   }
 

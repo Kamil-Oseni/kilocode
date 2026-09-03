@@ -66,6 +66,8 @@ export function buildWebviewHtml(
     topBar?: boolean
     topBarSurface?: string
     agentManagerSettings?: boolean
+    /** raya_change - JSON catalog of every raya.* contributed setting, so the settings UI can offer a searchable index. */
+    settingsCatalog?: string
   },
 ): string {
   const nonce = getNonce()
@@ -108,7 +110,7 @@ export function buildWebviewHtml(
 </head>
 <body>
   <div id="root"></div>
-  <script nonce="${nonce}">window.ICONS_BASE_URI = "${opts.iconsBaseUri}"; window.KILO_SHIKI_WORKER_URI = "${opts.workerUri}"; window.KILO_MARKDOWN_SHIKI_WORKER_URI = "${markdownWorkerUri}"; window.KILO_TOP_BAR = ${opts.topBar !== false}; window.KILO_TOP_BAR_SURFACE = "${opts.topBarSurface ?? "sidebar_title"}"; window.KILO_AGENT_MANAGER_SETTINGS = ${opts.agentManagerSettings === true};</script>
+  <script nonce="${nonce}">window.ICONS_BASE_URI = "${opts.iconsBaseUri}"; window.KILO_SHIKI_WORKER_URI = "${opts.workerUri}"; window.KILO_MARKDOWN_SHIKI_WORKER_URI = "${markdownWorkerUri}"; window.KILO_TOP_BAR = ${opts.topBar !== false}; window.KILO_TOP_BAR_SURFACE = "${opts.topBarSurface ?? "sidebar_title"}"; window.KILO_AGENT_MANAGER_SETTINGS = ${opts.agentManagerSettings === true}; window.RAYA_SETTINGS_CATALOG = ${(opts.settingsCatalog ?? "null").replaceAll("<", "\\u003c")};</script>
   <script nonce="${nonce}" src="${opts.scriptUri}"></script>
 </body>
 </html>`

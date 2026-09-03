@@ -42,6 +42,7 @@ import { Select } from "@kilocode/kilo-ui/select"
 import { Card } from "@kilocode/kilo-ui/card"
 import { Spinner } from "@kilocode/kilo-ui/spinner"
 import SettingsRow from "./SettingsRow"
+import SettingsSearch from "./SettingsSearch" // raya_change - indexed settings search
 import { ProjectBranchDialog } from "../../../agent-manager/ProjectBranchDialog"
 
 export interface SettingsProps {
@@ -228,6 +229,32 @@ const Settings: Component<SettingsProps> = (props) => {
   const [errorExpanded, setErrorExpanded] = createSignal(false)
   const sandboxing = createMemo(() => Sandboxing.visible(features()))
 
+  // raya_change - tab index for the settings search (mirrors the visible triggers below).
+  const navItems = createMemo(() => {
+    const items: { value: string; title: string }[] = [
+      { value: "providers", title: language.t("settings.providers.title") },
+      { value: "models", title: language.t("settings.models.title") },
+      { value: "speech", title: language.t("settings.speech.title") },
+      { value: "goalsRouting", title: language.t("settings.goalsRouting.title") },
+      { value: "agentBehaviour", title: language.t("settings.agentBehaviour.title") },
+      { value: "autoApprove", title: language.t("settings.autoApprove.title") },
+      { value: "browser", title: language.t("settings.webTools.title") },
+      { value: "checkpoints", title: language.t("settings.checkpoints.title") },
+      { value: "display", title: language.t("settings.display.title") },
+      { value: "autocomplete", title: language.t("settings.autocomplete.title") },
+      { value: "notifications", title: language.t("settings.notifications.title") },
+      { value: "context", title: language.t("settings.context.title") },
+      { value: "commitMessage", title: language.t("settings.commitMessage.title") },
+      { value: "experimental", title: language.t("settings.experimental.title") },
+      { value: "language", title: language.t("settings.language.title") },
+      { value: "aboutKiloCode", title: language.t("settings.aboutKiloCode.title") },
+    ]
+    if (props.agentManagerSettings) items.push({ value: "agentManager", title: language.t("agentManager.settings.title") })
+    if (features().indexing) items.push({ value: "indexing", title: language.t("settings.indexing.title") })
+    if (sandboxing()) items.push({ value: "sandboxing", title: language.t("settings.sandboxing.title") })
+    return items
+  })
+
   const busyCount = () => Object.values(session.allStatusMap()).filter((s) => s.type === "busy").length
 
   const handleSave = () => {
@@ -291,9 +318,11 @@ const Settings: Component<SettingsProps> = (props) => {
           gap: "8px",
         }}
       >
-        <h2 style={{ "font-size": "var(--kilo-font-size-16)", "font-weight": "600", margin: 0, flex: 1 }}>
+        <h2 style={{ "font-size": "var(--kilo-font-size-16)", "font-weight": "600", margin: 0 }}>
           {language.t("sidebar.settings")}
         </h2>
+        {/* raya_change - indexed search so any setting (even ones without a custom control) is findable */}
+        <SettingsSearch navItems={navItems()} onNavigate={onTabChange} />
         <Button variant="secondary" size="small" icon="edit" onClick={() => open("local")}>
           {language.t("settings.openLocalConfig")}
         </Button>

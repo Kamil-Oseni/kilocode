@@ -165,6 +165,7 @@ export class BrowserSession {
   private last = 0
   private revision = 0
   private running = 0
+  private scale = 2 // raya_change - HiDPI capture factor; refined to the webview's devicePixelRatio on resize
   private state: BrowserState = { control: "agent", busy: false }
   private readonly listeners = new Set<(frame: BrowserFrame) => void>()
   private readonly states = new Set<(state: BrowserState) => void>()
@@ -203,13 +204,12 @@ export class BrowserSession {
         url: page.url(),
       })
     })
-    await cdp.send("Page.startScreencast", {
-      format: "jpeg",
-      quality: 80,
-      maxWidth: 1280,
-      maxHeight: 720,
-      everyNthFrame: 1,
-    })
+    // raya_change - render the page at a HiDPI device-scale so the JPEG carries ~scale× the pixels
+    // of the 1280×720 layout viewport. The webview then downscales a dense frame instead of
+    // upscaling a sparse one, which is what made the view blurry/soft once the panel shrank.
+    // The layout viewport stays 1280×720 so pointer/scroll normalization is unchanged.
+    await this.metrics()
+    await this.screencast()
     // CDP screencast events can pause when headless Chromium considers the surface hidden.
     // Keep the in-editor view live with CDP surface captures while retaining startScreencast as the primary stream.
     this.timer = setInterval(() => void this.capture(), 250)
@@ -419,6 +419,40 @@ export class BrowserSession {
     this.assertInput()
     await this.active().mouse.wheel(deltaX, deltaY)
   }
+
+  // raya_change start - match the capture density to the panel's real pixel ratio so a resized
+  // (especially HiDPI) view stays crisp. Only the device-scale changes; the 1280×720 layout
+  // viewport is preserved, so input mapping and everything downstream is unaffected.
+  async resize(dpr: number): Promise<void> {
+    const next = Math.min(3, Math.max(1, Math.round(Number.isFinite(dpr) && dpr > 0 ? dpr : 1)))
+    if (next === this.scale) return
+    this.scale = next
+    if (!this.cdp) return
+    await this.metrics()
+    await this.channel().send("Page.stopScreencast").catch(() => undefined)
+    await this.screencast()
+    await this.capture()
+  }
+
+  private async metrics(): Promise<void> {
+    await this.channel().send("Emulation.setDeviceMetricsOverride", {
+      width: 1280,
+      height: 720,
+      deviceScaleFactor: this.scale,
+      mobile: false,
+    })
+  }
+
+  private async screencast(): Promise<void> {
+    await this.channel().send("Page.startScreencast", {
+      format: "jpeg",
+      quality: 80,
+      maxWidth: 1280 * this.scale,
+      maxHeight: 720 * this.scale,
+      everyNthFrame: 1,
+    })
+  }
+  // raya_change end
 
   async dispose(): Promise<void> {
     const context = this.context

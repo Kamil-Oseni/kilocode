@@ -445,6 +445,8 @@ import type {
   SessionGetResponses,
   SessionInitErrors,
   SessionInitResponses,
+  SessionKeepChangesErrors,
+  SessionKeepChangesResponses,
   SessionListErrors,
   SessionListResponses,
   SessionMessageErrors,
@@ -5299,6 +5301,45 @@ export class Session2 extends HeyApiClient {
       ThrowOnError
     >({
       url: "/session/{sessionID}/discard_changes",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Keep file changes
+   *
+   * Record the current edits as accepted so a subsequent Undo only rewinds edits made afterward, never the kept work. Pass `files` to keep a specific subset (per-file Keep); omit it to keep every current edit.
+   */
+  public keepChanges<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      files?: Array<string>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "files" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionKeepChangesResponses, SessionKeepChangesErrors, ThrowOnError>({
+      url: "/session/{sessionID}/keep_changes",
       ...options,
       ...params,
       headers: {

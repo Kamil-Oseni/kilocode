@@ -4032,6 +4032,60 @@ export type Session10 = {
   }
 }
 
+export type Session11 = {
+  id: string
+  slug: string
+  projectID: string
+  workspaceID?: string
+  directory: string
+  path?: string
+  parentID?: string
+  summary?: {
+    additions: number
+    deletions: number
+    files: number
+    diffs?: Array<SnapshotSummaryFileDiff>
+  }
+  cost?: number
+  tokens?: {
+    input: number
+    output: number
+    reasoning: number
+    cache: {
+      read: number
+      write: number
+    }
+  }
+  share?: {
+    url: string
+  }
+  title: string
+  agent?: string
+  model?: {
+    id: string
+    providerID: string
+    variant?: string
+  }
+  version: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    created: number
+    updated: number
+    compacting?: number
+    archived?: number
+  }
+  permission?: PermissionRuleset
+  revert?: {
+    messageID: string
+    partID?: string
+    snapshot?: string
+    diff?: string
+    workspace?: "restored" | "snapshots-disabled" | "unavailable"
+  }
+}
+
 export type EventTuiPromptAppend2 = {
   type: "tui.prompt.append"
   properties: {
@@ -14512,6 +14566,46 @@ export type SessionDiscardChangesResponses = {
 }
 
 export type SessionDiscardChangesResponse = SessionDiscardChangesResponses[keyof SessionDiscardChangesResponses]
+
+export type SessionKeepChangesData = {
+  body?: {
+    files?: Array<string>
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/keep_changes"
+}
+
+export type SessionKeepChangesErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * SessionBusyError
+   */
+  409: SessionBusyError
+}
+
+export type SessionKeepChangesError = SessionKeepChangesErrors[keyof SessionKeepChangesErrors]
+
+export type SessionKeepChangesResponses = {
+  /**
+   * Updated session
+   */
+  200: Session11
+}
+
+export type SessionKeepChangesResponse = SessionKeepChangesResponses[keyof SessionKeepChangesResponses]
 
 export type PermissionRespondData = {
   body?: {

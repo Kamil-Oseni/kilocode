@@ -1727,6 +1727,11 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       if (typeof message.sessionID === "string") {
         this.inEditorReview?.dismissAll()
         this.lastReviewHash = ""
+        // raya_change - persist a kept boundary so a later Undo all stops here instead of
+        // rewinding to the session's first edit (which wiped work the user already kept).
+        const sid = message.sessionID
+        const files = Array.isArray(message.files) ? message.files.filter((f): f is string => typeof f === "string") : undefined
+        this.checkpoint(sid, () => this.handleKeepSessionChanges(sid, files && files.length > 0 ? files : undefined))
       }
       return true
     }
@@ -4497,6 +4502,17 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     if (this.currentSession?.id === sessionID) this.setCurrentSession(data)
     this.postMessage({ type: "sessionUpdated", session: sessionToWebview(data) })
     this.scheduleReview(sessionID) // raya_change - refresh review counts + in-editor highlights after undo
+  }
+
+  // raya_change - Keep / Keep all records a "kept boundary" on the backend: the
+  // current edits become accepted, so a later Undo only rewinds edits made after
+  // this point instead of wiping work the user already kept. Passing `files` keeps
+  // a single file (in-editor Keep); omitting it keeps every current edit (Keep all).
+  private async handleKeepSessionChanges(sessionID: string, files?: string[]): Promise<void> {
+    if (!this.client) return
+    const dir = this.getWorkspaceDirectory(sessionID)
+    const { error } = await this.client.session.keepChanges({ sessionID, directory: dir, files })
+    if (error) console.error("[Kilo New] KiloProvider: Failed to record kept changes:", error)
   }
 
   private async handleUnrevertSession(sessionID: string): Promise<void> {

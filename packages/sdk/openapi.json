@@ -8703,6 +8703,114 @@
         ]
       }
     },
+    "/session/{sessionID}/keep_changes": {
+      "post": {
+        "tags": ["session"],
+        "operationId": "session.keepChanges",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session11"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "SessionBusyError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionBusyError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Record the current edits as accepted so a subsequent Undo only rewinds edits made afterward, never the kept work. Pass `files` to keep a specific subset (per-file Keep); omit it to keep every current edit.",
+        "summary": "Keep file changes",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.session.keepChanges({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/session/{sessionID}/permissions/{permissionID}": {
       "post": {
         "tags": ["session"],
@@ -17645,6 +17753,72 @@
                         "required": ["at", "kind", "message"],
                         "additionalProperties": false
                       }
+                    },
+                    "history": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "objective": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": ["active", "paused", "complete", "blocked"]
+                          },
+                          "createdAt": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["NaN"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["-Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity", "-Infinity", "NaN"]
+                              }
+                            ]
+                          },
+                          "updatedAt": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["NaN"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["-Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity", "-Infinity", "NaN"]
+                              }
+                            ]
+                          },
+                          "blockedReason": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["objective", "status", "createdAt", "updatedAt"],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": ["objective", "status", "createdAt", "updatedAt", "usage", "progress"],
@@ -18120,6 +18294,72 @@
                         "required": ["at", "kind", "message"],
                         "additionalProperties": false
                       }
+                    },
+                    "history": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "objective": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": ["active", "paused", "complete", "blocked"]
+                          },
+                          "createdAt": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["NaN"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["-Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity", "-Infinity", "NaN"]
+                              }
+                            ]
+                          },
+                          "updatedAt": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["NaN"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["-Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity", "-Infinity", "NaN"]
+                              }
+                            ]
+                          },
+                          "blockedReason": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["objective", "status", "createdAt", "updatedAt"],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": ["objective", "status", "createdAt", "updatedAt", "usage", "progress"],
@@ -18563,6 +18803,72 @@
                           }
                         },
                         "required": ["at", "kind", "message"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "history": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "objective": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": ["active", "paused", "complete", "blocked"]
+                          },
+                          "createdAt": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["NaN"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["-Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity", "-Infinity", "NaN"]
+                              }
+                            ]
+                          },
+                          "updatedAt": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["NaN"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["-Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity", "-Infinity", "NaN"]
+                              }
+                            ]
+                          },
+                          "blockedReason": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["objective", "status", "createdAt", "updatedAt"],
                         "additionalProperties": false
                       }
                     }
@@ -19510,6 +19816,13 @@
                           "enum": ["Infinity", "-Infinity", "NaN"]
                         }
                       ]
+                    },
+                    "duplicateOf": {
+                      "type": "string"
+                    },
+                    "classifiedBy": {
+                      "type": "string",
+                      "enum": ["keyword", "model"]
                     }
                   },
                   "required": [
@@ -19800,6 +20113,13 @@
                             "enum": ["Infinity", "-Infinity", "NaN"]
                           }
                         ]
+                      },
+                      "duplicateOf": {
+                        "type": "string"
+                      },
+                      "classifiedBy": {
+                        "type": "string",
+                        "enum": ["keyword", "model"]
                       }
                     },
                     "required": [
@@ -20061,6 +20381,13 @@
                           "enum": ["Infinity", "-Infinity", "NaN"]
                         }
                       ]
+                    },
+                    "duplicateOf": {
+                      "type": "string"
+                    },
+                    "classifiedBy": {
+                      "type": "string",
+                      "enum": ["keyword", "model"]
                     }
                   },
                   "required": [
@@ -20329,6 +20656,13 @@
                           "enum": ["Infinity", "-Infinity", "NaN"]
                         }
                       ]
+                    },
+                    "duplicateOf": {
+                      "type": "string"
+                    },
+                    "classifiedBy": {
+                      "type": "string",
+                      "enum": ["keyword", "model"]
                     }
                   },
                   "required": [
@@ -20460,6 +20794,30 @@
                         "enum": ["Infinity", "-Infinity", "NaN"]
                       }
                     ]
+                  },
+                  "category": {
+                    "type": "string",
+                    "enum": ["ui", "chat", "routing", "goal", "browser", "settings", "build", "test", "docs", "other"]
+                  },
+                  "severity": {
+                    "type": "string",
+                    "enum": ["low", "medium", "high"]
+                  },
+                  "approach": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "explanation": {
+                    "type": "string"
+                  },
+                  "duplicateOf": {
+                    "type": "string"
+                  },
+                  "classifiedBy": {
+                    "type": "string",
+                    "enum": ["keyword", "model"]
                   }
                 },
                 "additionalProperties": false
@@ -43301,6 +43659,179 @@
         "additionalProperties": false
       },
       "Session10": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^ses"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "projectID": {
+            "type": "string"
+          },
+          "workspaceID": {
+            "type": "string",
+            "pattern": "^wrk"
+          },
+          "directory": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "parentID": {
+            "type": "string",
+            "pattern": "^ses"
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "additions": {
+                "type": "number"
+              },
+              "deletions": {
+                "type": "number"
+              },
+              "files": {
+                "type": "number"
+              },
+              "diffs": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/SnapshotSummaryFileDiff"
+                }
+              }
+            },
+            "required": ["additions", "deletions", "files"],
+            "additionalProperties": false
+          },
+          "cost": {
+            "type": "number"
+          },
+          "tokens": {
+            "type": "object",
+            "properties": {
+              "input": {
+                "type": "number"
+              },
+              "output": {
+                "type": "number"
+              },
+              "reasoning": {
+                "type": "number"
+              },
+              "cache": {
+                "type": "object",
+                "properties": {
+                  "read": {
+                    "type": "number"
+                  },
+                  "write": {
+                    "type": "number"
+                  }
+                },
+                "required": ["read", "write"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["input", "output", "reasoning", "cache"],
+            "additionalProperties": false
+          },
+          "share": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": ["url"],
+            "additionalProperties": false
+          },
+          "title": {
+            "type": "string"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "model": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "providerID": {
+                "type": "string"
+              },
+              "variant": {
+                "type": "string"
+              }
+            },
+            "required": ["id", "providerID"],
+            "additionalProperties": false
+          },
+          "version": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "updated": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "compacting": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "archived": {
+                "type": "number"
+              }
+            },
+            "required": ["created", "updated"],
+            "additionalProperties": false
+          },
+          "permission": {
+            "$ref": "#/components/schemas/PermissionRuleset"
+          },
+          "revert": {
+            "type": "object",
+            "properties": {
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg"
+              },
+              "partID": {
+                "type": "string",
+                "pattern": "^prt"
+              },
+              "snapshot": {
+                "type": "string"
+              },
+              "diff": {
+                "type": "string"
+              },
+              "workspace": {
+                "type": "string",
+                "enum": ["restored", "snapshots-disabled", "unavailable"]
+              }
+            },
+            "required": ["messageID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "slug", "projectID", "directory", "title", "version", "time"],
+        "additionalProperties": false
+      },
+      "Session11": {
         "type": "object",
         "properties": {
           "id": {

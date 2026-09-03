@@ -641,6 +641,80 @@ describe("files-only discard (Undo all)", () => {
     30_000,
   )
 
+  // raya_change - Keep must fence Undo. After "date" is written and kept, adding
+  // "time" then Undo all must step back to the kept "date", NOT wipe everything to
+  // the pre-session empty file (the reported "Keep all then Undo all deletes the
+  // date too" regression). Each turn is its own assistant message so the kept
+  // boundary (a message id) sits strictly before the post-keep edit.
+  it.live(
+    "keepChanges fences a later Undo all to the kept content, not the session baseline",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const sessions = yield* Session.Service
+          const revert = yield* SessionRevert.Service
+          const snapshot = yield* Snapshot.Service
+          const session = yield* sessions.create({})
+          const providerID = ProviderV2.ID.make("test")
+          const notes = path.join(dir, "notes.txt")
+
+          const turn = Effect.fn(function* (write: string, before: string) {
+            const user = yield* sessions.updateMessage({
+              id: MessageID.ascending(),
+              sessionID: session.id,
+              role: "user",
+              agent: "default",
+              model: { providerID, modelID: ModelV2.ID.make("test") },
+              time: { created: Date.now() },
+            })
+            const assistant = yield* sessions.updateMessage({
+              id: MessageID.ascending(),
+              sessionID: session.id,
+              role: "assistant",
+              parentID: user.id,
+              mode: "default",
+              agent: "default",
+              path: { cwd: dir, root: dir },
+              cost: 0,
+              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              modelID: ModelV2.ID.make("test"),
+              providerID,
+              time: { created: Date.now() },
+              finish: "end_turn",
+            })
+            const base = yield* snapshot.track()
+            if (!base) throw new Error("expected snapshot")
+            yield* Effect.promise(() => fs.writeFile(notes, write))
+            const patch = yield* snapshot.patch(base)
+            yield* sessions.updatePart({
+              id: PartID.ascending(),
+              messageID: assistant.id,
+              sessionID: session.id,
+              type: "patch",
+              hash: patch.hash,
+              files: patch.files,
+            })
+            return before
+          })
+
+          // Turn 1: write the date. Turn 2 (after Keep) appends the time.
+          yield* turn("2026-09-03", "")
+          yield* revert.keepChanges({ sessionID: session.id }) // Keep all
+          yield* turn("2026-09-03\n17:00", "2026-09-03")
+
+          // Undo all must land on the kept content, not the empty pre-session file.
+          yield* revert.discardChanges({ sessionID: session.id })
+          expect(yield* Effect.promise(() => fs.readFile(notes, "utf8"))).toBe("2026-09-03")
+
+          // A second Undo all has nothing below the keep to rewind — the date stays.
+          yield* revert.discardChanges({ sessionID: session.id })
+          expect(yield* Effect.promise(() => fs.readFile(notes, "utf8"))).toBe("2026-09-03")
+        }),
+      { git: true },
+    ),
+    30_000,
+  )
+
   it.live(
     "discardChanges on the parent reverts a file a child subagent edited",
     provideTmpdirInstance(

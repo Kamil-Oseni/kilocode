@@ -64,18 +64,26 @@ export namespace KiloSessionRevert {
    * without arming a revert boundary (so nothing becomes "redoable").
    *
    * Every "patch" part records the snapshot hash captured *before* that turn's
-   * edits. The revert target depends on scope:
+   * edits, and belongs to a message whose id is globally monotonic. A `kept`
+   * boundary (file → message id of that file's last kept edit, set by
+   * `keepChanges` when the user clicks Keep / Keep all) fences off everything at
+   * or before it: only edits *after* a file's boundary are undoable, so Undo can
+   * never rewind past a point the user already accepted. The revert target then
+   * depends on scope:
    *
-   * - Workspace-wide "Undo all" (`only` omitted): restore each file to its state
-   *   before the session's *first* edit. `snap.revert` dedupes by first
-   *   occurrence per file, so passing every patch in message order rewinds each
-   *   file to its earliest baseline.
-   * - Per-file in-editor "Undo" (`only` set): step back a single edit. Restore
-   *   each filtered file to the state before its *most recent* edit, not the
-   *   session's first edit. Reverting to the earliest baseline deleted content
-   *   that an earlier edit created (e.g. undoing "Welcome" → "Good day" wiped the
-   *   greeting instead of restoring "Welcome"); the last patch per file keeps the
-   *   prior edit's content.
+   * - Workspace-wide "Undo all" (`only` omitted): revert each file to its state
+   *   at the boundary — i.e. before its *earliest post-keep* edit. That patch's
+   *   hash is the snapshot captured just before that edit, which is exactly the
+   *   kept content. With no boundary this is the session's first edit (full
+   *   rewind), preserving the original behavior.
+   * - Per-file in-editor "Undo" (`only` set): step back a single edit — revert
+   *   the file to the hash before its *most recent* post-keep edit, so undoing
+   *   the newest change restores the previous content instead of deleting what
+   *   earlier edits created.
+   *
+   * If a file has no edits after its boundary there is nothing to undo, so it is
+   * skipped rather than rewound into kept (or pre-session) territory — this is
+   * what stops Keep-all-then-Undo-all from wiping content the user already kept.
    *
    * The whole restore is wrapped so a mid-way failure rolls back to the current
    * (edited) state, keeping the operation atomic.
@@ -84,24 +92,30 @@ export namespace KiloSessionRevert {
     snap: Snapshot.Interface,
     messages: MessageV2.WithParts[],
     only?: string[],
+    kept?: Record<string, string>,
   ) {
     const filter = only && only.length > 0 ? new Set(only.map((file) => file.replaceAll("\\", "/"))) : undefined
+    // raya_change - group each file's patches in message order, then honor the kept boundary and
+    // scope. Undo-all targets the earliest still-undoable edit (= kept content); per-file Undo
+    // targets the most recent one (step back exactly one edit). A file with nothing after its
+    // boundary is skipped so accepted work is never rewound.
+    const perFile = new Map<string, { id: string; hash: string }[]>()
+    for (const msg of messages)
+      for (const part of msg.parts)
+        if (part.type === "patch")
+          for (const file of part.files) {
+            const norm = file.replaceAll("\\", "/")
+            if (filter && !matches(norm, filter)) continue
+            const list = perFile.get(file) ?? (perFile.set(file, []), perFile.get(file)!)
+            list.push({ id: msg.info.id, hash: part.hash })
+          }
     const patches: Snapshot.Patch[] = []
-    if (filter) {
-      // raya_change - per-file Undo steps back one edit: revert each file to the hash captured
-      // before its LAST edit, so undoing the newest change restores the previous content instead
-      // of the pre-session baseline (which deletes anything earlier edits added).
-      const last = new Map<string, string>()
-      for (const msg of messages)
-        for (const part of msg.parts)
-          if (part.type === "patch")
-            for (const file of part.files) if (matches(file.replaceAll("\\", "/"), filter)) last.set(file, part.hash)
-      const grouped = new Map<string, string[]>()
-      for (const [file, hash] of last) grouped.set(hash, [...(grouped.get(hash) ?? []), file])
-      for (const [hash, group] of grouped) patches.push({ hash, files: group })
-    } else {
-      for (const msg of messages)
-        for (const part of msg.parts) if (part.type === "patch") patches.push({ hash: part.hash, files: part.files })
+    for (const [file, list] of perFile) {
+      const boundary = kept?.[file.replaceAll("\\", "/")]
+      const eligible = boundary ? list.filter((patch) => patch.id > boundary) : list
+      if (eligible.length === 0) continue
+      const target = filter ? eligible[eligible.length - 1]! : eligible[0]!
+      patches.push({ hash: target.hash, files: [file] })
     }
     const files = [...new Set(patches.flatMap((patch) => patch.files))]
     if (files.length === 0) return { files: [] as string[] }

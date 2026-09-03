@@ -394,6 +394,16 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
         revertSvc.discardChanges({ sessionID: ctx.params.sessionID, files: ctx.payload.files }),
       )
     })
+    // raya_change - Keep / Keep all records the kept boundary for undo stepping
+    const keepChanges = Effect.fn("SessionHttpApi.keepChanges")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof DiscardChangesPayload.Type
+    }) {
+      yield* requireSession(ctx.params.sessionID)
+      return yield* SessionError.mapBusy(
+        revertSvc.keepChanges({ sessionID: ctx.params.sessionID, files: ctx.payload.files }),
+      )
+    })
     // kilocode_change end
 
     const permissionRespond = Effect.fn("SessionHttpApi.permissionRespond")(function* (ctx: {
@@ -489,6 +499,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handle("revert", revert)
       .handle("unrevert", unrevert)
       .handle("discardChanges", discardChanges) // kilocode_change - files-only discard
+      .handle("keepChanges", keepChanges) // kilocode_change - raya: kept boundary for undo
       .handle("permissionRespond", permissionRespond)
       .handle("deleteMessage", deleteMessage)
       .handle("deletePart", deletePart)

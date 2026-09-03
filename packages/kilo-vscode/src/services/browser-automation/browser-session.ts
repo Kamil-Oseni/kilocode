@@ -150,7 +150,15 @@ const launch: BrowserLaunch = async (profile) =>
     channel: "chrome",
     headless: true,
     viewport: { width: 1280, height: 720 },
-    args: ["--remote-debugging-port=0"],
+    locale: "en-US",
+    // raya_change - strip the obvious automated-Chrome tells that make sites (Cloudflare, x.ai)
+    // serve a bot wall: drop the "--enable-automation" switch (which sets navigator.webdriver and
+    // the "controlled by automated software" surface) and disable the AutomationControlled blink
+    // feature. Combined with the real installed Chrome (channel) and a persistent profile, this
+    // presents far less like a bot. It does not defeat aggressive challenge pages (Cloudflare Turnstile,
+    // x.ai) — no CDP-driven browser fully does — but removes the trivially-detected signals.
+    ignoreDefaultArgs: ["--enable-automation"],
+    args: ["--remote-debugging-port=0", "--disable-blink-features=AutomationControlled"],
   })) as unknown as BrowserContextLike
 
 export class BrowserSession {
@@ -197,6 +205,22 @@ export class BrowserSession {
     const cdp = await context.newCDPSession(page)
     this.cdp = cdp
     await cdp.send("Page.enable")
+    // raya_change - hide the remaining headless/automation fingerprint before any page loads:
+    // drop "HeadlessChrome" from the User-Agent and make navigator.webdriver read undefined, so a
+    // fresh navigation isn't flagged as a bot on the very first request.
+    const version = (await cdp.send("Browser.getVersion").catch(() => undefined)) as
+      | { userAgent?: string }
+      | undefined
+    const ua = version?.userAgent?.replace(/HeadlessChrome/i, "Chrome")
+    if (ua)
+      await cdp
+        .send("Emulation.setUserAgentOverride", { userAgent: ua, acceptLanguage: "en-US,en;q=0.9", platform: "Win32" })
+        .catch(() => undefined)
+    await cdp
+      .send("Page.addScriptToEvaluateOnNewDocument", {
+        source: "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });",
+      })
+      .catch(() => undefined)
     cdp.on("Page.screencastFrame", (event) => {
       void cdp.send("Page.screencastFrameAck", { sessionId: event.sessionId }).catch(() => undefined)
       this.publish({

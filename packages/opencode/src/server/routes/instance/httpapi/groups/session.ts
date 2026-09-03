@@ -117,6 +117,7 @@ export const SessionPaths = {
   revert: `${root}/:sessionID/revert`,
   unrevert: `${root}/:sessionID/unrevert`,
   discardChanges: `${root}/:sessionID/discard_changes`, // kilocode_change - files-only discard
+  keepChanges: `${root}/:sessionID/keep_changes`, // kilocode_change - raya: record a kept boundary for undo
   permissions: `${root}/:sessionID/permissions/:permissionID`,
   deleteMessage: `${root}/:sessionID/message/:messageID`,
   deletePart: `${root}/:sessionID/message/:messageID/part/:partID`,
@@ -425,6 +426,21 @@ export const SessionApi = HttpApi.make("session")
             summary: "Discard file changes",
             description:
               "Restore files edited in this session to their pre-session state without removing messages or arming a redo. Pass `files` to discard a specific subset (per-edit Undo); omit it to discard every edit.",
+          }),
+        ),
+        // raya_change - Keep / Keep all: mark accepted edits so Undo won't cross them
+        HttpApiEndpoint.post("keepChanges", SessionPaths.keepChanges, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          payload: DiscardChangesPayload,
+          success: described(Session.Info, "Updated session"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError, SessionBusyError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.keepChanges",
+            summary: "Keep file changes",
+            description:
+              "Record the current edits as accepted so a subsequent Undo only rewinds edits made afterward, never the kept work. Pass `files` to keep a specific subset (per-file Keep); omit it to keep every current edit.",
           }),
         ),
         // kilocode_change end

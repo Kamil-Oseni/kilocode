@@ -148,6 +148,15 @@ export function registerInEditorReview(context: vscode.ExtensionContext, deps: I
     if (review) dismissed.set(key, print(review))
     applyAll()
     changes.fire()
+    // raya_change - record a kept boundary for this file so a later Undo steps back only to
+    // this accepted edit, never below it. Fire-and-forget; the local dismiss already updated UI.
+    if (sid && review && deps.connection.getConnectionState() === "connected") {
+      const target = sid
+      deps.connection
+        .getClient()
+        .session.keepChanges({ sessionID: target, directory: deps.directory(target), files: [review.file] })
+        .catch((err) => console.error("[Raya] in-editor keep failed:", err))
+    }
     if (sid && review) deps.onFile?.({ sessionID: sid, file: review.file, action: "keep" })
   }
 

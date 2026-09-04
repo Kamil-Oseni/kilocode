@@ -887,6 +887,7 @@ it.instance(
         auto: { disable: true }, // kilocode_change // raya_change - Auto is now a primary default
         voice: { disable: true }, // kilocode_change // raya_change - dedicated hands-free primary
         designer: { disable: true }, // kilocode_change // raya_change - Designer is picker-visible (mode all)
+        engineer: { disable: true }, // kilocode_change // raya_change - Engineer is picker-visible (mode all)
       },
     },
   },

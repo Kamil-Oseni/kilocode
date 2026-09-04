@@ -30,5 +30,10 @@
   { "prompt": "Browse the vendor website and inspect its documentation", "agent": "researcher" },
   { "prompt": "Open and inspect this website for current product evidence", "agent": "researcher" },
   { "prompt": "Build me a live dashboard from these metrics", "agent": "designer" },
-  { "prompt": "Turn this dataset into an interactive chart beside the chat", "agent": "designer" }
+  { "prompt": "Turn this dataset into an interactive chart beside the chat", "agent": "designer" },
+  { "prompt": "Implement a lock-free concurrent queue with a race-free pop", "agent": "engineer" },
+  { "prompt": "Build a crash-safe write-ahead log with durable fsync", "agent": "engineer" },
+  { "prompt": "Implement Raft consensus and leader election", "agent": "engineer" },
+  { "prompt": "Write a multithreaded scheduler with backpressure", "agent": "engineer" },
+  { "prompt": "Fix lock contention on the transactional hot path", "agent": "engineer" }
 ]

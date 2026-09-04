@@ -767,6 +767,18 @@ export function patchAgents(
       mode: "subagent",
       native: true,
     }
+    agents.engineer = {
+      ...general,
+      name: "engineer",
+      displayName: "Engineer",
+      description:
+        "Hard implementation specialist for concurrency, migrations, protocols, performance-critical paths, and correctness-sensitive systems work.",
+      prompt: walkthrough(
+        "Act as Raya's hard-implementation specialist. Do the difficult coding work: concurrency, durability, protocols, performance-critical paths, and correctness-sensitive systems. Verify the dangerous edges, not only the happy path, and stop when the implementation holds.",
+      ),
+      mode: "all", // raya_change - selectable in the chat picker and still delegable by Auto
+      native: true,
+    }
     agents.designer = {
       ...general,
       name: "designer",

@@ -237,17 +237,19 @@ describe("tool.task", () => {
   )
 
   // kilocode_change start // raya_change start - Milestone D intelligent delegation
-  it.instance("registers Auto as a cheap-model primary agent with five specialist capability cards", () =>
+  it.instance("registers Auto as a cheap-model primary agent with specialist capability cards", () =>
     Effect.gen(function* () {
       const agents = yield* Agent.Service
       const auto = yield* agents.get("auto")
 
       expect(auto.mode).toBe("primary")
       expect(`${auto.model?.providerID}/${auto.model?.modelID}`).toBe("kilo/kilo-auto/small")
-      for (const name of ["coder", "designer", "researcher", "accountant", "reasoner"]) {
-        expect((yield* agents.get(name)).mode).toBe("subagent")
+      for (const name of ["coder", "engineer", "designer", "researcher", "accountant", "reasoner"]) {
         expect(auto.prompt).toContain(`- ${name}:`)
       }
+      expect((yield* agents.get("coder")).mode).toBe("subagent")
+      expect((yield* agents.get("engineer")).mode).toBe("all")
+      expect((yield* agents.get("designer")).mode).toBe("all")
     }),
   )
 

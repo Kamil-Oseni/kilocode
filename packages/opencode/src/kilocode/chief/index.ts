@@ -83,7 +83,15 @@ export namespace RayaChief {
   }
   // raya_change end
 
-  export const Role = Schema.Literals(["generalist", "coder", "designer", "researcher", "accountant", "reasoner"])
+  export const Role = Schema.Literals([
+    "generalist",
+    "coder",
+    "engineer",
+    "designer",
+    "researcher",
+    "accountant",
+    "reasoner",
+  ])
   export type Role = typeof Role.Type
 
   export const Candidate = Schema.Struct({
@@ -196,6 +204,7 @@ export namespace RayaChief {
         tradeoffs: 4,
         distributed: 4,
         concurrency: 4,
+        concurrent: 4,
         consistency: 4,
         threat: 4,
         security: 4,
@@ -205,6 +214,45 @@ export namespace RayaChief {
         complex: 2,
       },
       reason: "The request requires hard reasoning or architectural trade-off analysis.",
+    },
+    {
+      role: "engineer",
+      names: ["engineer"],
+      terms: {
+        implement: 4,
+        "lock-free": 5,
+        lockfree: 5,
+        deadlock: 5,
+        mutex: 5,
+        multithreaded: 5,
+        consensus: 5,
+        raft: 5,
+        paxos: 5,
+        sharding: 5,
+        backpressure: 5,
+        scheduler: 5,
+        contention: 5,
+        fsync: 5,
+        wal: 5,
+        mmap: 5,
+        simd: 5,
+        race: 4,
+        concurrent: 4,
+        replication: 4,
+        invariant: 4,
+        transactional: 4,
+        serializable: 4,
+        compiler: 4,
+        interpreter: 4,
+        saga: 4,
+        throughput: 4,
+        latency: 3,
+        protocol: 3,
+        engine: 3,
+        durable: 3,
+        systems: 3,
+      },
+      reason: "The request is difficult systems or correctness-sensitive implementation.",
     },
     {
       role: "researcher",
@@ -291,7 +339,7 @@ export namespace RayaChief {
       )
     )
       return false
-    return !/\b(?:accounting|architecture|audit|benchmark|codebase|concurrency|design system|endpoint|evidence|figma|implement|investigate|migration|payroll|product|refactor|research|security|suite|tradeoffs?|ui|ux|validation|webhook|website)\b/i.test(
+    return !/\b(?:accounting|architecture|audit|backpressure|benchmark|codebase|concurrency|concurrent|consensus|deadlock|design system|endpoint|evidence|figma|implement|investigate|lock-free|migration|multithreaded|payroll|product|raft|refactor|research|scheduler|security|suite|tradeoffs?|ui|ux|validation|webhook|website)\b/i.test(
       value,
     )
   }

@@ -32,6 +32,8 @@ function words(value: string) {
 function profile(name: string) {
   if (name === "explore") return ["codebase", "find", "inspect", "locate", "map", "search", "where"]
   if (name === "scout") return ["dependency", "documentation", "external", "library", "package", "reference", "source"]
+  if (name === "engineer")
+    return ["backpressure", "concurrent", "consensus", "deadlock", "latency", "multithreaded", "raft", "scheduler", "sharding"]
   return []
 }
 // raya_change end

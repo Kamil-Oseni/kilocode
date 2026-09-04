@@ -12,6 +12,7 @@ const fixtures = data as Fixture[]
 const agents: RayaChief.Agent[] = [
   { name: "generalist", description: "Fast generalist for small direct tasks" },
   { name: "coder", description: "Software implementation, fixes, refactors, APIs, and tests" },
+  { name: "engineer", description: "Hard implementation for concurrency, protocols, and correctness-sensitive systems" },
   { name: "designer", description: "UI, UX, Figma, layouts, visual systems, and motion" },
   { name: "researcher", description: "Research, sources, documentation, evidence, and benchmarks" },
   { name: "accountant", description: "Ledgers, reconciliation, invoices, statements, tax, and finance" },
@@ -29,7 +30,7 @@ describe("Raya Chief routing", () => {
 
     expect(fixtures.length).toBeGreaterThanOrEqual(25)
     expect(new Set(fixtures.map((item) => item.agent))).toEqual(
-      new Set(["coder", "designer", "researcher", "accountant", "reasoner"]),
+      new Set(["coder", "engineer", "designer", "researcher", "accountant", "reasoner"]),
     )
     expect(accuracy).toBeGreaterThanOrEqual(RayaChief.target)
   })
@@ -72,6 +73,28 @@ describe("Raya Chief routing", () => {
   })
 
   // raya_change - regression for a trivial file task previously sent to Designer
+  it("sends difficult implementation to Engineer and everyday coding to coder", () => {
+    const agentsWithEngineer = agents
+    expect(
+      RayaChief.route({
+        request: "Implement a lock-free concurrent queue",
+        agents: agentsWithEngineer,
+      }),
+    ).toMatchObject({ agent: "engineer", role: "engineer" })
+    expect(
+      RayaChief.route({
+        request: "Fix the authentication bug in this function",
+        agents: agentsWithEngineer,
+      }),
+    ).toMatchObject({ agent: "coder", role: "coder" })
+    expect(
+      RayaChief.route({
+        request: "Evaluate the architecture tradeoffs for a distributed queue",
+        agents: agentsWithEngineer,
+      }),
+    ).toMatchObject({ agent: "reasoner", role: "reasoner" })
+  })
+
   it("keeps one small temporary file task away from Designer", () => {
     const decision = RayaChief.route({
       request: "Create one temporary test file, explain what you did, then stop.",

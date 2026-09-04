@@ -150,6 +150,20 @@ describe("Raya browser session", () => {
     expect(evaluate("{ values: Array.from([1, 2]).map((value) => value * 2) }")).toEqual({ values: [2, 4] })
     expect(evaluate("() => ({ ok: true })")).toEqual({ ok: true })
     expect(evaluate("const value = 2; value * 3")).toBe(6)
+    expect(evaluate("var n = 1; n + 2")).toBe(3)
+    expect(evaluate("1 + 1;")).toBe(2)
+  })
+
+  it("evaluates top-level await and surfaces the last failure, not the wrap SyntaxError", async () => {
+    const pending = evaluate("const n = await Promise.resolve(4); return n")
+    expect(pending).toBeInstanceOf(Promise)
+    expect(await pending).toBe(4)
+    expect(() => evaluate("???")).toThrow(SyntaxError)
+    try {
+      evaluate("???")
+    } catch (err) {
+      expect(String(err)).not.toMatch(/Unexpected token ';'/)
+    }
   })
 
   it("drives a page while forwarding CDP screencast frames to watchers", async () => {
@@ -217,6 +231,31 @@ describe("Raya browser session", () => {
     cdp.commands.length = 0
     await session.resize(3)
     expect(cdp.commands.some((item) => item.method === "Page.startScreencast")).toBe(false)
+    await session.dispose()
+  })
+
+  it("keeps screencast as the only live frame source and coalesces a resize burst", async () => {
+    const fake = harness()
+    const session = new BrowserSession("test-profile", fake.launch)
+    const frames: Array<{ data: string; width: number; height: number }> = []
+    session.onFrame((frame) => frames.push({ data: frame.data, width: frame.width, height: frame.height }))
+    await session.ready()
+    const cdp = fake.cdps[0]!
+
+    cdp.emit("live")
+    expect(frames.at(-1)).toEqual({ data: "live", width: 1280, height: 720 })
+    const shots = cdp.commands.filter((item) => item.method === "Page.captureScreenshot").length
+    await new Promise((resolve) => setTimeout(resolve, 350))
+    expect(cdp.commands.filter((item) => item.method === "Page.captureScreenshot").length).toBe(shots)
+
+    cdp.commands.length = 0
+    await session.resize(2, 800, 600)
+    const burst = session.resize(2, 400, 300)
+    await burst
+    await new Promise((resolve) => setTimeout(resolve, 160))
+    const metrics = cdp.commands.filter((item) => item.method === "Emulation.setDeviceMetricsOverride")
+    expect(metrics.at(-1)?.params).toMatchObject({ width: 400, height: 300 })
+    expect(cdp.commands.filter((item) => item.method === "Page.startScreencast").length).toBeLessThanOrEqual(2)
     await session.dispose()
   })
 

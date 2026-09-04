@@ -130,18 +130,21 @@ export interface BrowserContextLike {
 
 export type BrowserLaunch = (profile: string) => Promise<BrowserContextLike>
 
-// raya_change start - accept model-authored JavaScript expressions without object-literal parse failures
+// raya_change start - accept model-authored JS: expressions, statement sequences, and top-level await.
+// Try expression-wrap first (object literals), then raw source, then an async IIFE for await/statements.
+// Throw the last failure — never the first wrap SyntaxError — so the model sees the real problem.
 export function evaluate(source: string): unknown {
   const invoke = (value: unknown) => (typeof value === "function" ? value() : value)
-  try {
-    return invoke(globalThis.eval(`(${source})`) as unknown)
-  } catch (wrapped) {
+  const forms = [`(${source})`, source, `(async () => { ${source}\n })()`]
+  let last: unknown
+  for (const form of forms) {
     try {
-      return invoke(globalThis.eval(source) as unknown)
-    } catch {
-      throw wrapped
+      return invoke(globalThis.eval(form) as unknown)
+    } catch (err) {
+      last = err
     }
   }
+  throw last
 }
 // raya_change end
 
@@ -168,6 +171,8 @@ export class BrowserSession {
   private start: Promise<void> | undefined
   private frame: BrowserFrame | undefined
   private timer: ReturnType<typeof setInterval> | undefined
+  private hold: ReturnType<typeof setTimeout> | undefined
+  private seen = 0
   private capturing = false
   private queue: Promise<void> = Promise.resolve()
   private last = 0
@@ -223,10 +228,12 @@ export class BrowserSession {
       .catch(() => undefined)
     cdp.on("Page.screencastFrame", (event) => {
       void cdp.send("Page.screencastFrameAck", { sessionId: event.sessionId }).catch(() => undefined)
+      // raya_change - publish the layout viewport, not the screencast's physical metadata, so the
+      // panel never swaps between two aspect ratios (the source of the agent-control flicker).
       this.publish({
         data: event.data,
-        width: event.metadata.deviceWidth,
-        height: event.metadata.deviceHeight,
+        width: this.width,
+        height: this.height,
         url: page.url(),
       })
     })
@@ -237,10 +244,10 @@ export class BrowserSession {
     // is HiDPI. Pointer/scroll map against the same layout size so input stays accurate.
     await this.metrics()
     await this.screencast()
-    // CDP screencast events can pause when headless Chromium considers the surface hidden.
-    // Keep the in-editor view live with CDP surface captures while retaining startScreencast as the primary stream.
-    this.timer = setInterval(() => void this.capture(), 250)
-    await this.capture()
+    // raya_change - screencast is the only live producer. capture() is a stall fallback: if no
+    // screencast frame arrives for ~1s (headless Chromium treating the surface as hidden), take a
+    // still. Running both at once published two JPEG streams at different sizes and flickered.
+    this.timer = setInterval(() => void this.pump(), 250)
   }
 
   latest(): BrowserFrame | undefined {
@@ -461,10 +468,27 @@ export class BrowserSession {
     this.width = w
     this.height = h
     if (!this.cdp) return
+    // raya_change - first resize applies immediately (pointer mapping + tests); a burst within 120ms
+    // coalesces to one stop/start so ResizeObserver chatter does not thrash the screencast.
+    if (this.hold) {
+      clearTimeout(this.hold)
+      this.hold = setTimeout(() => {
+        this.hold = undefined
+        void this.apply()
+      }, 120)
+      return
+    }
+    this.hold = setTimeout(() => {
+      this.hold = undefined
+    }, 120)
+    await this.apply()
+  }
+
+  private async apply(): Promise<void> {
+    if (!this.cdp) return
     await this.metrics()
     await this.channel().send("Page.stopScreencast").catch(() => undefined)
     await this.screencast()
-    await this.capture()
   }
 
   private async metrics(): Promise<void> {
@@ -496,6 +520,8 @@ export class BrowserSession {
     this.start = undefined
     if (this.timer) clearInterval(this.timer)
     this.timer = undefined
+    if (this.hold) clearTimeout(this.hold)
+    this.hold = undefined
     this.listeners.clear()
     this.states.clear()
     if (cdp) await cdp.send("Page.stopScreencast").catch(() => undefined)
@@ -519,8 +545,14 @@ export class BrowserSession {
   }
 
   private publish(frame: BrowserFrame): void {
+    this.seen = Date.now()
     this.frame = frame
     for (const listener of this.listeners) listener(frame)
+  }
+
+  private async pump(): Promise<void> {
+    if (this.seen && Date.now() - this.seen < 1000) return
+    await this.capture()
   }
 
   private async capture(): Promise<void> {

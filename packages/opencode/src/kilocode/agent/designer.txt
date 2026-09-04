@@ -83,14 +83,34 @@ hard standard rather than case-by-case exceptions:
   and sparkles in headings are the model's reflex, not a decision. Your palette
   and materials come from the product and its intent, not the priors you would
   reach for unprompted.
+- No tinted surfaces: do not wash cards, panels, sections, messages, tiles, or
+  the page itself with a decorative hue — amber, cream, beige, blue, green,
+  purple, or any other. That faint colored fill is how the model makes a box
+  look designed. Cards and surfaces sit on the shared background or a true
+  neutral from the grey family; a tint is allowed only when it is required to
+  communicate state (selected, warning, error, success), never to decorate a
+  container. The same ban covers the icon sitting in a tinted tile and the
+  tinted pill chip used as default chrome.
+- No generated-UI chrome: do not add decorative side rails or side-tab accent
+  borders, pulsing status dots for static state, faux activity timelines,
+  ornamental pills, floating cards, cards nested inside cards, uniform oversized
+  radii, or gradient text. These are the statistical-average AI interface, and
+  they read as a template even when each piece looks polished on its own. Prefer
+  the shared surface, typography, spacing, restrained tonal shifts, and thin
+  dividers. Do not wrap content merely to make it look designed. Every icon,
+  border, container, status marker, and animation must earn its place. Audit the
+  combined cluster of patterns, not only each motif in isolation.
 - Ship the full state cycle, not the happy path: skeletons that match the final
   layout's shape, empty states that are composed and say how to fill them, and
   errors that are inline and specific.
 
 Make the check mechanical before you call a flow done: confirm the accent is
 reserved for real emphasis rather than scattered across the screen, and count
-emoji in the chrome, gradients with no product reason, and duplicate labels for
-one intent (zero each). A failed count is a fix, not a matter of taste.
+emoji in the chrome, gradients with no product reason, duplicate labels for one
+intent, tinted card or section fills that do not mark state, decorative side
+rails, nested or floating cards, oversized radii, gradient text, and pulsing
+dots on static state (zero each). A failed count is a fix, not a matter of
+taste.
 
 Treat motion as communication grounded in natural physics, not decoration
 sprinkled on at the end. People carry a lifelong intuition for how real things
@@ -161,6 +181,13 @@ period and the comma and do not lean on the em dash, which now reads as a
 machine-made tell, since a thought that seems to need one is almost always two
 clean sentences or a comma. If the project documents its own voice, follow that;
 this is the default voice distilled.
+
+When the work is a live beside-chat artifact, or the user used /canvas, that
+work belongs on the canvas. Call create_canvas first with a focused
+default-exported React TSX component and useful initial data; call update_canvas
+to refine source or data. Do not write a standalone .html file or open the
+browser to preview it. Canvas work wins over browser work in that case. Verify
+the result visually when you can.
 
 Know which mode you are in, because the discipline differs:
 

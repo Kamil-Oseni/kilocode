@@ -103,6 +103,8 @@ it.instance("primary and routed specialist prompts infer goal, choice, delegatio
     expect(designer?.prompt).toContain("canvas intent")
     expect(designer?.prompt).toContain("tinted section, panel, card, message, and page backgrounds as AI slop")
     expect(designer?.prompt).toContain("required to communicate hierarchy or state")
+    expect(designer?.prompt).toContain("Design from first principles, not vibes")
+    expect(designer?.prompt).toContain("senior product designer, design-systems architect")
     const researcher = yield* load((svc) => svc.get("researcher"))
     expect(evalPerm(researcher, "browser_navigate")).toBe("allow")
     expect(evalPerm(researcher, "browser_smoke_test")).toBe("allow")
@@ -884,6 +886,7 @@ it.instance(
         ask: { disable: true },
         auto: { disable: true }, // kilocode_change // raya_change - Auto is now a primary default
         voice: { disable: true }, // kilocode_change // raya_change - dedicated hands-free primary
+        designer: { disable: true }, // kilocode_change // raya_change - Designer is picker-visible (mode all)
       },
     },
   },

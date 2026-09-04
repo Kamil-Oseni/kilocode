@@ -387,6 +387,10 @@ const layer = Layer.effect(
           KiloAgent.hardenExplore(key, item, user, Permission.fromConfig(value.permission ?? {}))
         }
 
+        // kilocode_change start - designer doctrine is global; overlays may set model/mode but not drop the prompt
+        KiloAgent.sealDesigner(agents)
+        // kilocode_change end
+
         function referencePrompt(reference: KiloReference.Resolved) {
           if (reference.kind === "local") {
             return [

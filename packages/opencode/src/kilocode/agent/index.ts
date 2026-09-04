@@ -18,6 +18,7 @@ import PROMPT_DEBUG from "../../agent/prompt/debug.txt"
 import PROMPT_ORCHESTRATOR from "../../agent/prompt/orchestrator.txt"
 import PROMPT_ASK from "../../agent/prompt/ask.txt"
 import PROMPT_EXPLORE from "../../agent/prompt/explore.txt"
+import PROMPT_DESIGNER from "./designer.txt"
 
 // raya_change start - plain-English intelligence across Milestones A, C, D, F, and G
 const GOAL_INTENT_GUIDANCE =
@@ -53,6 +54,18 @@ function choices(prompt?: string) {
 
 function walkthrough(prompt: string) {
   return `${prompt}\n\n${DELEGATION_GUIDANCE}\n\n${BROWSER_GUIDANCE}\n\n${BROWSER_TEST_GUIDANCE}\n\n${CANVAS_GUIDANCE}`
+}
+
+export function designerPrompt() {
+  return `${walkthrough(
+    `${CANVAS_GUIDANCE}\n\nAct as Raya's design specialist. For a live beside-chat artifact, call create_canvas first — never write a standalone .html file or open the browser to preview it.\n\nProduce or implement a coherent UI/UX solution and verify it visually when possible.\n\n${DESIGN_GUIDANCE}`,
+  )}\n\nCanvas work wins over browser work. If the user used /canvas or asked for a live beside-chat artifact, call create_canvas first and do not write HTML or open the browser.\n\n${PROMPT_DESIGNER}`
+}
+
+export function sealDesigner(agents: { designer?: { prompt?: string } }) {
+  const item = agents.designer
+  if (!item) return
+  item.prompt = designerPrompt()
 }
 // raya_change end
 
@@ -758,10 +771,8 @@ export function patchAgents(
       ...general,
       name: "designer",
       description: "Product and interface design specialist for UI, UX, Figma, layouts, visual systems, and motion.",
-      prompt: `${walkthrough(
-        `${CANVAS_GUIDANCE}\n\nAct as Raya's design specialist. For a live beside-chat artifact, call create_canvas first — never write a standalone .html file or open the browser to preview it.\n\nProduce or implement a coherent UI/UX solution and verify it visually when possible.\n\n${DESIGN_GUIDANCE}`,
-      )}\n\nCanvas work wins over browser work. If the user used /canvas or asked for a live beside-chat artifact, call create_canvas first and do not write HTML or open the browser.`,
-      mode: "subagent",
+      prompt: designerPrompt(),
+      mode: "all", // raya_change - selectable in the chat picker and still delegable by Auto
       native: true,
     }
     agents.accountant = {

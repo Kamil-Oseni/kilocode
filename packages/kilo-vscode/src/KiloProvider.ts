@@ -2548,6 +2548,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       return true
     }
     if (message.type === "deleteMessage") {
+      if (!message.sessionID || !message.messageID) return true
       await this.handleDeleteMessage(message.sessionID, message.messageID)
       return true
     }

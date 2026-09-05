@@ -183,6 +183,7 @@ export namespace RayaChief {
       names: ["designer", "design", "general"],
       terms: {
         figma: 5,
+        redesign: 5,
         ui: 4,
         ux: 4,
         visual: 4,
@@ -353,6 +354,14 @@ export namespace RayaChief {
     )
   }
 
+  // raya_change - listing or sequencing a redesign is not Designer work
+  function listing(request: string) {
+    return (
+      /\b(?:do not|don't|dont|just|only|without)\b.{0,40}\b(?:design|redesign|implement|code|build)\b/i.test(request) ||
+      /\b(?:list|enumerate|rank)\b.{0,80}\b(?:order|sequence|pages?)\b/i.test(request)
+    )
+  }
+
   export function route(input: { request: string; agents: readonly Agent[] }) {
     const ranked = profiles
       .map((profile) => {
@@ -364,17 +373,23 @@ export namespace RayaChief {
         }
       })
       .filter((item): item is { profile: Profile; agent: Agent; score: number } => item.agent !== undefined)
-      .toSorted((a, b) => b.score - a.score || a.agent.name.localeCompare(b.agent.name))
+      .toSorted(
+        (a, b) =>
+          b.score - a.score ||
+          (a.profile.role === "engineer" ? 1 : 0) - (b.profile.role === "engineer" ? 1 : 0) ||
+          a.agent.name.localeCompare(b.agent.name),
+      )
     const first = ranked[0]
     if (!first) throw new Error("Auto routing requires at least one eligible specialist")
     const quick = ranked.find((item) => item.profile.role === "generalist")
     const direct = trivial(input.request)
+    const outline = listing(input.request)
     // raya_change - zero-signal conversational requests should proceed through a capable generalist instead of prompting
-    const top = direct && quick ? quick : first.score === 0 ? (quick ?? first) : first
+    const top = (outline || direct) && quick ? quick : first.score === 0 ? (quick ?? first) : first
 
     const next = ranked.find((item) => item !== top)?.score ?? 0
     const confidence =
-      top.profile.role === "generalist" && direct
+      top.profile.role === "generalist" && (direct || outline)
         ? 0.94
         : top.score === 0
           ? 0.35

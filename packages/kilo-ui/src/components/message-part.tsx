@@ -755,6 +755,7 @@ export function UserMessageDisplay(props: {
   toggleLabel?: string // raya_change
   onToggle?: () => void // raya_change
   onDelete?: () => void
+  onEdit?: (text: string) => void
   onFork?: () => void
   onRevert?: () => void
 }) {
@@ -848,6 +849,29 @@ export function UserMessageDisplay(props: {
     </Show>
   )
 
+  const [editing, setEditing] = createSignal(false)
+  const [draft, setDraft] = createSignal("")
+
+  const Edit = () => (
+    <Show when={props.queued && props.onEdit}>
+      <Tooltip value={i18n.t("ui.message.editQueued")} placement="right" gutter={4}>
+        <IconButton
+          data-slot="user-message-edit"
+          icon="edit-small-2"
+          size="normal"
+          variant="ghost"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={(event) => {
+            event.stopPropagation()
+            setDraft(text())
+            setEditing(true)
+          }}
+          aria-label={i18n.t("ui.message.editQueued")}
+        />
+      </Tooltip>
+    </Show>
+  )
+
   return (
     <GrowBox animate={!!props.animate} fade class="w-full min-w-0 self-stretch max-w-full">
       <div data-component="user-message" data-interrupted={props.interrupted ? "" : undefined}>
@@ -887,6 +911,7 @@ export function UserMessageDisplay(props: {
         <Show when={!text() && !props.header && props.queued}>
           <div data-slot="user-message-queued-indicator">
             <TextShimmer text={i18n.t("ui.message.queued")} />
+            <Edit />
             <Delete />
           </div>
         </Show>
@@ -895,15 +920,50 @@ export function UserMessageDisplay(props: {
             <div data-slot="user-message-body">
               {props.header}
               <Show when={text()}>
-                <div
-                  data-slot="user-message-text"
-                  dir="auto"
-                  data-queued={props.queued ? "" : undefined}
-                  data-long={props.onToggle ? "" : undefined}
-                  data-collapsed={props.collapsed ? "" : undefined}
+                <Show
+                  when={editing()}
+                  fallback={
+                    <div
+                      data-slot="user-message-text"
+                      dir="auto"
+                      data-queued={props.queued ? "" : undefined}
+                      data-long={props.onToggle ? "" : undefined}
+                      data-collapsed={props.collapsed ? "" : undefined}
+                    >
+                      <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
+                    </div>
+                  }
                 >
-                  <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
-                </div>
+                  <form
+                    data-slot="user-message-edit-form"
+                    onSubmit={(event) => {
+                      event.preventDefault()
+                      const next = draft().trim()
+                      if (!next) return
+                      props.onEdit?.(next)
+                      setEditing(false)
+                    }}
+                  >
+                    <textarea
+                      data-slot="user-message-edit"
+                      value={draft()}
+                      rows={Math.min(12, Math.max(3, draft().split("\n").length))}
+                      onInput={(event) => setDraft(event.currentTarget.value)}
+                    />
+                    <div data-slot="user-message-edit-actions">
+                      <button type="submit">{i18n.t("ui.common.submit")}</button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditing(false)
+                          setDraft(text())
+                        }}
+                      >
+                        {i18n.t("ui.common.dismiss")}
+                      </button>
+                    </div>
+                  </form>
+                </Show>
               </Show>
               <Show when={props.onToggle}>
                 <button
@@ -918,6 +978,7 @@ export function UserMessageDisplay(props: {
               <GrowBox animate={!!props.animate} open={!!props.queued}>
                 <div data-slot="user-message-queued-indicator">
                   <TextShimmer text={i18n.t("ui.message.queued")} />
+                  <Edit />
                   <Delete />
                 </div>
               </GrowBox>
@@ -1708,6 +1769,7 @@ const userCollapsed = new Set<string>()
 const streamed = new Set<string>()
 const autocollapsed = new Set<string>()
 const userOpened = new Set<string>()
+const heldReasoning = new Set<string>()
 const MAX_REASONING_STATE = 1000
 
 function rememberReasoningState(set: Set<string>, id: string) {
@@ -1759,9 +1821,10 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props: MessagePartProp
   // explicitly collapsed this reasoning part.
   const initial = props.reasoningAutoCollapse ? !done() || was || userOpened.has(id) : !userCollapsed.has(id)
   const [open, setOpen] = createSignal(initial)
-  const [held, setHeld] = createSignal(false)
+  const [held, setHeld] = createSignal(heldReasoning.has(id))
 
   const hold = () => {
+    rememberReasoningState(heldReasoning, id)
     if (held()) return
     setHeld(true)
     window.dispatchEvent(new Event("pauseAutoScroll"))
@@ -1816,7 +1879,7 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props: MessagePartProp
   const onScroll = (e: Event) => {
     const el = e.currentTarget as HTMLDivElement
     y = el.scrollTop
-    if (el.scrollHeight - el.clientHeight - el.scrollTop >= 10) hold()
+    if (el.scrollHeight - el.clientHeight - el.scrollTop >= 1) hold()
   }
 
   const onWheel = () => hold()

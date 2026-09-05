@@ -1,6 +1,6 @@
 import { createSignal } from "solid-js"
 import { ACCEPTED_IMAGE_TYPES, isDragLeavingComponent } from "./image-attachments-utils"
-import { extractDropPaths, isComposerDrop } from "../utils/path-mentions"
+import { extractDropPaths } from "../utils/path-mentions"
 
 export interface ImageAttachment {
   id: string
@@ -56,7 +56,6 @@ export function useImageAttachments() {
   }
 
   const handleDragOver = (event: DragEvent) => {
-    if (!isComposerDrop(event.dataTransfer?.types)) return
     event.preventDefault()
     event.stopPropagation()
     if (event.dataTransfer) event.dataTransfer.dropEffect = "copy"

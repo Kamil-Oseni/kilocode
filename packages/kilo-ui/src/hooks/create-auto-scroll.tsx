@@ -105,7 +105,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
     if (!canScroll(scroll)) return
 
     if (distance < threshold()) {
-      if (store.userScrolled && (distance < 2 || !userActivity.isRecent())) setStore("userScrolled", false)
+      if (store.userScrolled && !active() && (distance < 2 || !userActivity.isRecent())) setStore("userScrolled", false)
       return
     }
 
@@ -165,7 +165,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
       settleTimer = undefined
 
       if (working) {
-        force()
+        follow()
         return
       }
 

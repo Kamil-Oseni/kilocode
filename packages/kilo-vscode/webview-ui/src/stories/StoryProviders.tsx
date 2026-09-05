@@ -255,6 +255,8 @@ export function mockSessionValue(overrides?: {
     worktreeStats: () => undefined,
     revertSession: noop,
     unrevertSession: noop,
+    deleteQueuedMessage: noop,
+    editQueuedMessage: noop,
     favoriteModels: () => [],
     recentModels: () => [],
     modelUsageHistory: () => ({}),

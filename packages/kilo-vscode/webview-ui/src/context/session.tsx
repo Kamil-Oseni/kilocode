@@ -253,6 +253,7 @@ interface SessionContextValue {
   revertSession: (messageID: string, partID?: string) => void
   unrevertSession: () => void
   deleteQueuedMessage: (sessionID: string, messageID: string) => void
+  editQueuedMessage: (sessionID: string, messageID: string, text: string) => void
   sendMessage: (
     text: string,
     providerID?: string,
@@ -2866,6 +2867,15 @@ export const SessionProvider: ParentComponent = (props) => {
     vscode.postMessage({ type: "deleteMessage", sessionID, messageID })
   }
 
+  function editQueuedMessage(sessionID: string, messageID: string, text: string) {
+    if (!server.isConnected()) return
+    const current = getParts(messageID)
+    const part = current.find((item) => item.type === "text" && !item.synthetic)
+    if (!part || part.type !== "text") return
+    setStore("parts", messageID, current.map((item) => (item.id === part.id && item.type === "text" ? { ...item, text } : item)))
+    vscode.postMessage({ type: "updateQueuedMessage", sessionID, messageID, partID: part.id, text })
+  }
+
   function syncSession(sessionID: string, parentSessionID = currentSessionID(), scope: "task" | "inspector" = "task") {
     vscode.postMessage({ type: "syncSession", sessionID, parentSessionID, scope })
   }
@@ -3060,6 +3070,7 @@ export const SessionProvider: ParentComponent = (props) => {
     revertSession,
     unrevertSession,
     deleteQueuedMessage,
+    editQueuedMessage,
     sendMessage,
     sendCommand,
     abort,

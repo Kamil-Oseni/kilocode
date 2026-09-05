@@ -870,6 +870,7 @@ describe("tool.task", () => {
       expect(asked).toBe(false)
       expect(yield* sessions.children(child.id)).toHaveLength(0)
     }),
+    { config: { subagent_depth: 1 } }, // kilocode_change - explicit ceiling; default depth is 2
   )
 
   it.instance(
@@ -992,6 +993,7 @@ describe("tool.task", () => {
           primary_tools: ["bash", "read"],
           openTelemetry: true, // kilocode_change
         },
+        subagent_depth: 1, // kilocode_change - this fixture asserts the no-nesting permission shape
       },
     },
   )

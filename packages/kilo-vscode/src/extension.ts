@@ -21,6 +21,7 @@ import { AutocompleteServiceManager } from "./services/autocomplete/Autocomplete
 import { AttentionService } from "./services/attention"
 import { BrowserAutomationService, BrowserPanel } from "./services/browser-automation" // raya_change - Milestone F
 import { registerGrantAllPermissions } from "./kilo-provider/grant-all-permissions" // raya_change - global all-tools toggle
+import { mentions } from "./kilo-provider/file-picker"
 import { registerDesignSystemLock } from "./kilo-provider/design-system-lock" // raya_change - owner design-system lock
 import { registerCheckpointCommands } from "./kilo-provider/checkpoint-commands" // raya_change - named checkpoints
 import { CanvasPanel, CanvasService } from "./services/canvas" // raya_change - Milestone E
@@ -453,6 +454,13 @@ export function activate(context: vscode.ExtensionContext) {
       const tab = activeTabProvider()
       if (tab) tab.postMessage({ type: "action", action: "plusButtonClicked" })
       else provider.postMessage({ type: "action", action: "plusButtonClicked" })
+    }),
+    vscode.commands.registerCommand("raya.addToChat", async (uri?: vscode.Uri, uris?: vscode.Uri[]) => {
+      const list = uris?.length ? uris : uri ? [uri] : []
+      if (list.length === 0) return
+      await vscode.commands.executeCommand("raya.SidebarProvider.focus")
+      await provider.waitForReady()
+      provider.postMessage({ type: "appendChatBoxMessage", text: mentions(list) })
     }),
     vscode.commands.registerCommand("raya.agentManagerOpen", () => {
       agentManagerProvider.openPanel()

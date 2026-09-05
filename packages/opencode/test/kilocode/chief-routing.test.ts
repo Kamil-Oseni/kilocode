@@ -109,6 +109,28 @@ describe("Raya Chief routing", () => {
     expect(decision.confidence).toBeGreaterThanOrEqual(RayaChief.threshold)
   })
 
+  it("keeps website redesigns on Designer and listing-only redesign plans on the generalist", () => {
+    expect(
+      RayaChief.route({
+        request: "Redesign this website",
+        agents,
+      }),
+    ).toMatchObject({ agent: "designer", role: "designer" })
+    expect(
+      RayaChief.route({
+        request:
+          "This file contains all the pages in the etymon website: SITE_MAP.md I want to redesign the pages and make it modern and neat. I want you to list the order in which i should redesign here in chat. Do not design, just list the order.",
+        agents,
+      }),
+    ).toMatchObject({ agent: "generalist", role: "generalist" })
+    expect(
+      RayaChief.route({
+        request: "Create a responsive Figma mockup for the dashboard",
+        agents,
+      }),
+    ).toMatchObject({ agent: "designer", role: "designer" })
+  })
+
   // raya_change - synthetic persistent-goal policy must not pollute the user's routing intent
   it("classifies only user-authored text when a goal adds synthetic guidance", () => {
     const objective = "Create one text file"

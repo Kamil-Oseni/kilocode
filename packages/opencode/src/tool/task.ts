@@ -211,10 +211,11 @@ export const TaskTool = Tool.define(
         depth++
         current = next // kilocode_change
       }
-      if (depth >= (cfg.subagent_depth ?? 1)) {
+      const nested = cfg.subagent_depth ?? 2 // kilocode_change - specialists may spawn one nested subagent by default
+      if (depth >= nested) {
         return yield* Effect.fail(
           new Error(
-            `Subagent depth limit reached (${cfg.subagent_depth ?? 1}). Increase "subagent_depth" to allow nested subagents.`,
+            `Subagent depth limit reached (${nested}). Increase "subagent_depth" to allow nested subagents.`,
           ),
         )
       }
@@ -239,7 +240,7 @@ export const TaskTool = Tool.define(
       KiloTask.validate(next, routed)
       // kilocode_change end
 
-      const canTask = depth + 1 < (cfg.subagent_depth ?? 1) // kilocode_change - honor upstream's opt-in depth limit
+      const canTask = depth + 1 < (cfg.subagent_depth ?? 2) // kilocode_change - honor upstream's opt-in depth limit
       const canTodo = next.permission.some((rule) => rule.permission === "todowrite")
 
       const session = resumed // raya_change - reuse the child validated before auto-routing

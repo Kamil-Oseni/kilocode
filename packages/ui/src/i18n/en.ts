@@ -213,6 +213,7 @@ export const dict: Record<string, string> = {
   "ui.message.copy": "Copy",
   "ui.message.copyMessage": "Copy message",
   "ui.message.deleteQueued": "Delete queued message", // kilocode_change
+  "ui.message.editQueued": "Edit queued message", // kilocode_change
   "ui.message.forkMessage": "Fork to new session",
   "ui.message.revertMessage": "Revert to here",
   "ui.message.copyResponse": "Copy response",

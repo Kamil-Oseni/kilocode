@@ -3,7 +3,7 @@
  * Text input with send/abort buttons, ghost-text autocomplete, and @ file mention support
  */
 
-import { createSignal, createEffect, on, For, Index, onCleanup, Show, untrack, type Component } from "solid-js"
+import { createSignal, createEffect, on, For, Index, onCleanup, onMount, Show, untrack, type Component } from "solid-js"
 import { Button } from "@kilocode/kilo-ui/button"
 import { IconButton } from "@kilocode/kilo-ui/icon-button"
 import { Tooltip } from "@kilocode/kilo-ui/tooltip"
@@ -216,6 +216,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     ref.setSelectionRange(pos, pos)
     ref.focus()
     adjustHeight()
+  })
+  onMount(() => {
+    if (props.boxId?.startsWith("agent-manager:")) return
+    const over = (event: DragEvent) => imageAttach.handleDragOver(event)
+    const drop = (event: DragEvent) => imageAttach.handleDrop(event)
+    document.addEventListener("dragover", over, true)
+    document.addEventListener("drop", drop, true)
+    onCleanup(() => {
+      document.removeEventListener("dragover", over, true)
+      document.removeEventListener("drop", drop, true)
+    })
   })
   const history = usePromptHistory()
   let textareaRef: HTMLTextAreaElement | undefined

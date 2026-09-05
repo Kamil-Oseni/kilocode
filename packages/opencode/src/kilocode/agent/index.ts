@@ -47,13 +47,15 @@ function choices(prompt?: string) {
     BROWSER_GUIDANCE,
     BROWSER_TEST_GUIDANCE,
     CANVAS_GUIDANCE,
+    DESIGN_GUIDANCE,
+    PROMPT_DESIGNER,
   ]
     .filter(Boolean)
     .join("\n\n")
 }
 
 function walkthrough(prompt: string) {
-  return `${prompt}\n\n${DELEGATION_GUIDANCE}\n\n${BROWSER_GUIDANCE}\n\n${BROWSER_TEST_GUIDANCE}\n\n${CANVAS_GUIDANCE}`
+  return `${prompt}\n\n${DELEGATION_GUIDANCE}\n\n${BROWSER_GUIDANCE}\n\n${BROWSER_TEST_GUIDANCE}\n\n${CANVAS_GUIDANCE}\n\n${DESIGN_GUIDANCE}\n\n${PROMPT_DESIGNER}`
 }
 
 export function designerPrompt() {
@@ -652,7 +654,10 @@ export function patchAgents(
       displayName: "Voice",
       description: "Hands-free conversational mode with concise responses designed for spoken playback.",
       prompt:
-        "You are Raya's hands-free voice agent. Handle the user's request yourself without Chief, delegation, or agent selection. Keep conversational answers concise and natural when spoken. Use your direct tools when the request requires action, but do not narrate routine mechanics or emit unnecessary markdown.",
+        "You are Raya's hands-free voice agent. Handle the user's request yourself without Chief, delegation, or agent selection. Keep conversational answers concise and natural when spoken. Use your direct tools when the request requires action, but do not narrate routine mechanics or emit unnecessary markdown.\n\n" +
+        DESIGN_GUIDANCE +
+        "\n\n" +
+        PROMPT_DESIGNER,
       permission: Permission.merge(
         agents.code.permission,
         Permission.fromConfig({ task: "deny", chief_route: "deny" }),
@@ -712,7 +717,7 @@ export function patchAgents(
         Permission.fromConfig({ bash: exploreBash }),
         denies(user),
       ),
-      prompt: PROMPT_EXPLORE,
+      prompt: choices(PROMPT_EXPLORE),
     }
   }
 
@@ -843,7 +848,7 @@ export function patchAgents(
       name: "accountant",
       description:
         "Accounting specialist for ledgers, reconciliation, invoices, statements, tax, and financial analysis.",
-      prompt: `Act as Raya's accounting specialist. Show auditable calculations, assumptions, and source evidence.\n\n${CANVAS_GUIDANCE}`,
+      prompt: `Act as Raya's accounting specialist. Show auditable calculations, assumptions, and source evidence.\n\n${CANVAS_GUIDANCE}\n\n${DESIGN_GUIDANCE}\n\n${PROMPT_DESIGNER}`,
       mode: "subagent",
       native: true,
     }
@@ -852,7 +857,7 @@ export function patchAgents(
       name: "reasoner",
       description:
         "Hard-reasoning specialist for architecture, algorithms, proofs, security, concurrency, and trade-offs.",
-      prompt: `Act as Raya's hard-reasoning specialist. Analyze constraints and alternatives before reaching a defensible conclusion.\n\n${CANVAS_GUIDANCE}`,
+      prompt: `Act as Raya's hard-reasoning specialist. Analyze constraints and alternatives before reaching a defensible conclusion.\n\n${CANVAS_GUIDANCE}\n\n${DESIGN_GUIDANCE}\n\n${PROMPT_DESIGNER}`,
       mode: "subagent",
       native: true,
     }

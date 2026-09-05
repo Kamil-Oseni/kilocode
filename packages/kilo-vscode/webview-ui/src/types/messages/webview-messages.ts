@@ -114,6 +114,14 @@ export interface DeleteMessageRequest {
   messageID: string
 }
 
+export interface UpdateQueuedMessageRequest {
+  type: "updateQueuedMessage"
+  sessionID: string
+  messageID: string
+  partID: string
+  text: string
+}
+
 export interface PermissionResponseRequest {
   type: "permissionResponse"
   permissionId: string
@@ -1608,6 +1616,7 @@ export type WebviewMessage =
   | DiscardSessionChangesRequest
   | EditReviewKeepAllRequest
   | DeleteMessageRequest
+  | UpdateQueuedMessageRequest
   | PermissionResponseRequest
   | CreateSessionRequest
   | ClearSessionRequest

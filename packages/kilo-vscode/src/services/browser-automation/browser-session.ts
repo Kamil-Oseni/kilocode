@@ -83,7 +83,7 @@ export interface BrowserPage {
   title(): Promise<string>
   goto(
     url: string,
-    options?: { timeout?: number; waitUntil?: "load" },
+    options?: { timeout?: number; waitUntil?: "load" | "domcontentloaded" | "commit" },
   ): Promise<{ status(): number } | null | undefined>
   waitForTimeout(timeout: number): Promise<void>
   addInitScript<A>(script: (arg: A) => void, arg: A): Promise<void>
@@ -105,7 +105,7 @@ export interface BrowserPage {
     options?: { name?: string | RegExp },
   ): ReturnType<BrowserPage["locator"]>
   screenshot(options: { type: "png"; fullPage: boolean; path?: string }): Promise<Buffer>
-  evaluate<R>(fn: (source: string) => R, source: string): Promise<R>
+  evaluate<R, A>(fn: (arg: A) => R, arg: A): Promise<R>
   on(event: "response", listener: (response: SmokeResponse) => void): void
   on(event: "console", listener: (message: SmokeConsole) => void): void
   off(event: "response", listener: (response: SmokeResponse) => void): void
@@ -275,7 +275,6 @@ export class BrowserSession {
   }
 
   resume(): void {
-    if (this.state.control === "manual" && this.state.busy) return
     this.revision += 1
     this.update({ control: "agent", busy: false })
   }
@@ -317,32 +316,58 @@ export class BrowserSession {
           : await this.once(action)
       if (revision !== this.revision) throw new Error("Browser action cancelled for manual takeover.")
       return result
-    } catch (error) {
+    }     catch (error) {
       if (this.state.control === "manual") throw error
       const detail = error instanceof Error ? error.message : String(error)
-      if (/strict mode violation|resolved to \d+ elements/i.test(detail) || /ERR_CONNECTION_REFUSED/i.test(detail)) {
-        this.handover(`The ${action.operation} action failed: ${detail}`, number)
-        throw new Error(
-          /ERR_CONNECTION_REFUSED/i.test(detail)
-            ? `The page is not reachable (${detail}). Start the dev server or use background_process to confirm the real URL/port before navigating.`
-            : `Locator was not unique (${detail}). Use getByRole with a visible name instead of a shared class.`,
-        )
+      if (this.stuck(detail)) {
+        await this.replace()
+        throw new Error(this.explain(action.operation, detail))
+      }
+      if (/strict mode violation|resolved to \d+ elements/i.test(detail)) {
+        throw new Error(`Locator was not unique (${detail}). Use getByRole with a visible name instead of a shared class.`)
       }
       if (number < 3) {
         await new Promise((resolve) => setTimeout(resolve, number * 500))
         return this.attempt(action, number + 1, revision)
       }
-      this.handover(`The ${action.operation} action failed three times: ${detail}`, number)
-      throw new Error(`Manual browser takeover required after three failed attempts: ${detail}`)
+      throw new Error(`The ${action.operation} action failed after three attempts: ${detail}`)
     }
   }
 
+  private stuck(detail: string) {
+    return /ERR_CONNECTION_REFUSED|Timeout \d+ms exceeded|not attached|frame was detached|Target closed|net::ERR_/i.test(
+      detail,
+    )
+  }
+
+  private explain(operation: string, detail: string) {
+    if (/ERR_CONNECTION_REFUSED|ECONNREFUSED/i.test(detail)) {
+      return `The page is not reachable (${detail}). Start the dev server or use background_process to confirm the real URL/port before navigating.`
+    }
+    if (/Timeout \d+ms exceeded/i.test(detail)) {
+      return `Navigation timed out (${detail}). The host was reset; retry with a reachable URL or waitUntil after the app finishes loading.`
+    }
+    return `The ${operation} action failed because the browser host was wedged (${detail}). The page was reset; retry the action.`
+  }
+
+  private async replace(): Promise<void> {
+    if (!this.context) return
+    const page = await this.context.newPage()
+    this.page = page
+    const cdp = await this.context.newCDPSession(page)
+    this.cdp = cdp
+    await cdp.send("Page.enable").catch(() => undefined)
+    await this.metrics().catch(() => undefined)
+    await this.screencast().catch(() => undefined)
+  }
+
   private async probe(url: string): Promise<void> {
+    if (!/^https?:\/\//i.test(url) || !/localhost|127\.0\.0\.1/i.test(url)) return
     try {
-      await fetch(url, { method: "HEAD", signal: AbortSignal.timeout(3_000) })
+      await fetch(url, { method: "GET", signal: AbortSignal.timeout(3_000) })
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error)
-      if (/ECONNREFUSED|fetch failed|Failed to fetch/i.test(detail)) {
+      if (/ECONNREFUSED|ENOTFOUND|fetch failed|Failed to fetch|Unable to connect|network|abort/i.test(detail)) {
         throw new Error(
           `Cannot open ${url}: connection refused. Start the app or inspect background_process for the listening port.`,
         )
@@ -364,7 +389,7 @@ export class BrowserSession {
     const page = this.active()
     if (action.operation === "navigate") {
       await this.probe(action.url)
-      const response = await page.goto(action.url, { timeout: 15_000 })
+      const response = await page.goto(action.url, { timeout: 15_000, waitUntil: "domcontentloaded" })
       const status = response?.status()
       if (status === 403 || status === 429) throw new Error(`Site returned HTTP ${status}`)
     }
@@ -376,12 +401,20 @@ export class BrowserSession {
     }
     if (action.operation === "select")
       await page.locator(action.selector).selectOption(action.values, { timeout: 5_000 })
-    if (action.operation === "scroll" && action.selector) {
-      await page
-        .locator(action.selector)
-        .evaluate((element, delta) => element.scrollBy(delta.x, delta.y), { x: action.deltaX, y: action.deltaY })
+    if (action.operation === "scroll") {
+      const delta = { x: action.deltaX, y: action.deltaY }
+      if (action.selector) {
+        await page
+          .locator(action.selector)
+          .evaluate((element, next) => element.scrollBy(next.x, next.y), delta)
+          .catch(() => page.evaluate((next) => window.scrollBy(next.x, next.y), delta))
+      }
+      if (!action.selector) {
+        await page.mouse.wheel(action.deltaX, action.deltaY).catch(() =>
+          page.evaluate((next) => window.scrollBy(next.x, next.y), delta),
+        )
+      }
     }
-    if (action.operation === "scroll" && !action.selector) await page.mouse.wheel(action.deltaX, action.deltaY)
     const snapshot =
       action.operation === "snapshot" ? await page.locator("body").ariaSnapshot({ timeout: 10_000 }) : undefined
     const data =

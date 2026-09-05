@@ -21,7 +21,23 @@ const log = Log.create({ service: "kilocode-task-model" })
 const STEP_KEY = "raya.task.stepCap"
 const DEFAULT_CAP = 40
 const MAX_CAP = 80
-const ignored = new Set(["agent", "and", "for", "from", "into", "the", "this", "that", "task", "use", "when", "with"])
+const ignored = new Set([
+  "agent",
+  "and",
+  "for",
+  "from",
+  "into",
+  "the",
+  "this",
+  "that",
+  "task",
+  "use",
+  "when",
+  "with",
+  "paths",
+  "path",
+  "work",
+])
 
 function words(value: string) {
   return new Set(
@@ -74,15 +90,27 @@ export namespace KiloTask {
         const overlap = [...description].filter((word) => request.has(word)).length
         const exact = request.has(name) ? 20 : 0
         const specialist = profile(name).filter((word) => request.has(word)).length * 5
-        const fallback = name === "general" ? 0 : 1
+        const fallback = name === "general" || name === "generalist" || name === "coder" ? 0 : 1
         return { item, score: exact + overlap * 2 + specialist + fallback }
       })
       .sort((a, b) => b.score - a.score || a.item.name.localeCompare(b.item.name))
     const selected = ranked[0]?.item
     if (!selected) throw new Error("No eligible subagent is available for automatic routing")
-    if (selected.name === "general") return selected
+    if (selected.name === "general" || selected.name === "generalist" || selected.name === "coder") return selected
+    if (
+      /\b(?:do not|don't|dont|just|only|without)\b.{0,40}\b(?:design|redesign|implement|code|build)\b/i.test(
+        input.request,
+      ) ||
+      /\b(?:list|enumerate|rank)\b.{0,80}\b(?:order|sequence|pages?)\b/i.test(input.request)
+    ) {
+      return (
+        ranked.find((item) => item.item.name === "general" || item.item.name === "generalist")?.item ?? selected
+      )
+    }
     if (ranked[0]!.score > 1) return selected
-    return ranked.find((item) => item.item.name === "general")?.item ?? selected
+    return (
+      ranked.find((item) => item.item.name === "general" || item.item.name === "generalist")?.item ?? selected
+    )
   }
 
   export function cap(value?: number) {

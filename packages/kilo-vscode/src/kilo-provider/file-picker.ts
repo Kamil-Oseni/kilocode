@@ -18,3 +18,7 @@ export async function handleFilePicker(input: Input): Promise<void> {
     requestId: input.requestId,
   })
 }
+
+export function mentions(uris: readonly vscode.Uri[]): string {
+  return uris.map((uri) => `@${vscode.workspace.asRelativePath(uri, false)}`).join(" ") + " "
+}

@@ -65,26 +65,6 @@ const DROP_TYPES = [
   "text",
 ]
 
-export function isComposerDrop(types: ArrayLike<string> | undefined): boolean {
-  if (!types || types.length === 0) return true
-  for (let i = 0; i < types.length; i++) {
-    const name = types[i]!.toLowerCase()
-    if (
-      name === "files" ||
-      name === "text/uri-list" ||
-      name === "text/plain" ||
-      name === "text" ||
-      name === "resourceurls" ||
-      name === "codefiles" ||
-      name === KILO_FILE_PATH_MIME.toLowerCase() ||
-      name.includes("vnd.code") ||
-      name.includes("uri-list")
-    )
-      return true
-  }
-  return false
-}
-
 function isFilePath(line: string): boolean {
   const text = line.trim()
   if (!text) return false

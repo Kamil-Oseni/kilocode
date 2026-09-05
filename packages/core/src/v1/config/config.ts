@@ -199,7 +199,7 @@ export const Info = Schema.Struct({
   }),
   // kilocode_change end
   subagent_depth: Schema.optional(NonNegativeInt).annotate({
-    description: "Maximum subagent nesting depth. Defaults to 1, which prevents subagents from launching subagents.",
+    description: "Maximum subagent nesting depth. Defaults to 2, which lets specialists launch one nested subagent.", // kilocode_change
   }),
   username: Schema.optional(Schema.String).annotate({
     description: "Custom username to display in conversations instead of system username",

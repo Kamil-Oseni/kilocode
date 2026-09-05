@@ -1179,6 +1179,14 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         case "deleteMessage":
           await this.handleDeleteMessage(message.sessionID, message.messageID)
           break
+        case "updateQueuedMessage":
+          await this.handleUpdateQueuedMessage(
+            String(message.sessionID ?? ""),
+            String(message.messageID ?? ""),
+            String((message as { partID?: string }).partID ?? ""),
+            String((message as { text?: string }).text ?? ""),
+          )
+          break
         case "permissionResponse":
           await handlePermissionResponse(
             this.permissionCtx,
@@ -2566,6 +2574,44 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       this.postMessage({
         type: "error",
         message: getErrorMessage(error) || "Failed to delete message",
+        sessionID,
+      })
+    }
+  }
+
+  private async handleUpdateQueuedMessage(
+    sessionID: string,
+    messageID: string,
+    partID: string,
+    text: string,
+  ): Promise<void> {
+    if (!this.client || !sessionID || !messageID || !partID) {
+      this.postMessage({ type: "error", message: "Not connected to CLI backend", sessionID })
+      return
+    }
+    const directory = this.getWorkspaceDirectory(sessionID)
+    try {
+      const { data } = await this.client.session.message({ sessionID, messageID, directory }, { throwOnError: true })
+      const part = data.parts.find((item) => item.id === partID && item.type === "text")
+      if (!part || part.type !== "text") {
+        this.postMessage({ type: "error", message: "Queued message could not be edited", sessionID })
+        return
+      }
+      await this.client.part.update(
+        {
+          sessionID,
+          messageID,
+          partID,
+          directory,
+          part: { ...part, text },
+        },
+        { throwOnError: true },
+      )
+    } catch (error) {
+      console.error("[Kilo New] KiloProvider: Failed to edit queued message:", error)
+      this.postMessage({
+        type: "error",
+        message: getErrorMessage(error) || "Failed to edit queued message",
         sessionID,
       })
     }

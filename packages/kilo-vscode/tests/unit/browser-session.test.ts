@@ -56,8 +56,13 @@ class FakePage implements BrowserPage {
     return "Test page"
   }
 
+  refuse = false
+  hang = false
+
   async goto(url: string): Promise<{ status(): number }> {
     this.gotoAttempts += 1
+    if (this.refuse) throw new Error(`page.goto: net::ERR_CONNECTION_REFUSED at ${url}`)
+    if (this.hang) throw new Error("page.goto: Timeout 30000ms exceeded")
     this.current = url
     return { status: () => (this.gotoAttempts <= this.failNavigations ? 429 : 200) }
   }
@@ -103,8 +108,8 @@ class FakePage implements BrowserPage {
     return Buffer.from("png")
   }
 
-  async evaluate<R>(fn: (source: string) => R, source: string): Promise<R> {
-    const value = source.match(/^document\.cookie\s*=\s*["'](.+)["']$/)?.[1]
+  async evaluate<R>(fn: (source: unknown) => R, source: unknown): Promise<R> {
+    const value = typeof source === "string" ? source.match(/^document\.cookie\s*=\s*["'](.+)["']$/)?.[1] : undefined
     if (value) {
       this.state.cookie = value
       return value as R
@@ -334,29 +339,50 @@ describe("Raya browser session", () => {
     await session.dispose()
   })
 
-  it("hands control to the user after three failed attempts and resumes explicitly", async () => {
+  it("keeps agent control after three failed clicks so the next tool can continue", async () => {
     const fake = harness()
-    const session = new BrowserSession("takeover-profile", fake.launch)
+    const session = new BrowserSession("retry-exhausted-profile", fake.launch)
     await session.ready()
     fake.pages[0]!.failClicks = 3
 
     await expect(session.execute({ operation: "click", selector: "#missing" })).rejects.toThrow(
-      "Manual browser takeover required after three failed attempts",
+      "The click action failed after three attempts",
     )
 
     expect(fake.pages[0]!.clickAttempts).toBe(3)
-    expect(session.current()).toEqual({
-      control: "manual",
-      busy: false,
-      reason: "The click action failed three times: element is not ready",
-      attempts: 3,
-    })
-    await session.pointer({ type: "mousePressed", x: 0.5, y: 0.5, button: "left" })
-    await session.navigate("https://example.org")
-    expect(fake.pages[0]!.current).toBe("https://example.org")
+    expect(session.current()).toEqual({ control: "agent", busy: false })
+    fake.pages[0]!.failClicks = 0
     await session.execute({ operation: "click", selector: "#agent-resumed" })
     expect(fake.pages[0]!.clicks).toEqual(["#agent-resumed"])
+    await session.dispose()
+  })
+
+  it("fails closed on a refused localhost URL without wedging takeover", async () => {
+    const fake = harness()
+    const session = new BrowserSession("refused-profile", fake.launch)
+    await session.ready()
+    fake.pages[0]!.refuse = true
+
+    await expect(session.execute({ operation: "navigate", url: "http://localhost:3000/" })).rejects.toThrow(
+      /not reachable|connection refused/i,
+    )
     expect(session.current()).toEqual({ control: "agent", busy: false })
+    await session.dispose()
+  })
+
+  it("resets a hung navigation instead of requiring manual takeover", async () => {
+    const fake = harness()
+    const session = new BrowserSession("timeout-profile", fake.launch)
+    await session.ready()
+    fake.pages[0]!.hang = true
+
+    await expect(
+      session.execute({ operation: "navigate", url: "http://example.test/lessons/p0-03-the-sound-system" }),
+    ).rejects.toThrow(/timed out|wedged/i)
+    expect(session.current()).toEqual({ control: "agent", busy: false })
+    fake.pages[0]!.hang = false
+    await session.execute({ operation: "navigate", url: "http://example.test/" })
+    expect(fake.pages[0]!.current).toBe("http://example.test/")
     await session.dispose()
   })
 

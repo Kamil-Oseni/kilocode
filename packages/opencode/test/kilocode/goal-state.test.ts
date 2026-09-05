@@ -451,9 +451,9 @@ describe("RayaGoal", () => {
       rows = data.rows
       const idle = yield* goals.recordTurn(sessionID)
       expect(idle?.productive).toBe(false)
+      expect(idle?.retry).toBe(true)
       expect(idle?.state.usage.continuations).toBe(0)
-      expect(idle?.state.status).toBe("blocked")
-      expect(idle?.state.blockedReason).toContain("without work")
+      expect(idle?.state.status).toBe("active")
     }),
   )
 

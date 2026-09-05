@@ -41,7 +41,7 @@ export const SummaryFileDiff = FileDiff.mapFields(Struct.omit(["patch", "before"
 export type SummaryFileDiff = typeof SummaryFileDiff.Type
 // kilocode_change end
 
-const prune = "7.days"
+const prune = "7.days.ago" // kilocode_change
 const retention = 7 * 24 * 60 * 60 * 1000 // kilocode_change
 const limit = 2 * 1024 * 1024
 const core = ["-c", "core.longpaths=true", "-c", "core.symlinks=true"]
@@ -107,7 +107,10 @@ export const layer: Layer.Layer<Service, never, Requirements> =
           // drive-stripped paths break `git checkout -- <file>` (Undo) and make diff patch matching
           // return empty text (no per-hunk lenses). Fall back to the real directory like every other
           // subsystem does, and key the private git-dir on it so each folder stays isolated.
-          const worktree = ctx.worktree === "/" ? ctx.directory : ctx.worktree
+          const worktree =
+            ctx.worktree === "/" || ctx.worktree === "global" || !path.isAbsolute(ctx.worktree)
+              ? ctx.directory
+              : ctx.worktree
           const state = {
             directory: ctx.directory,
             worktree,
@@ -353,6 +356,7 @@ export const layer: Layer.Layer<Service, never, Requirements> =
               Effect.gen(function* () {
                 if (!(yield* enabled())) return
                 if (!(yield* exists(state.gitdir))) return
+                if (!(yield* exists(state.worktree))) return // kilocode_change - skip gc when worktree is missing
                 // kilocode_change start - retain snapshots for the same seven-day window as object pruning
                 yield* KiloSnapshotMaterialize.prune({ gitdir: state.gitdir, git, fs }, Date.now() - retention)
                 // kilocode_change end

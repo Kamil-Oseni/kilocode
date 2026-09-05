@@ -320,7 +320,7 @@ describe("tool.task", () => {
       expect(selected.name).toBe("security")
       expect(KiloTask.steps(undefined, { "raya.task.stepCap": 3 })).toBe(3)
       expect(KiloTask.steps(2, { "raya.task.stepCap": 8 })).toBe(2)
-      expect(KiloTask.cap(500)).toBe(50)
+      expect(KiloTask.cap(500)).toBe(80)
     }),
   )
 

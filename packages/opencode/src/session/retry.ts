@@ -3,6 +3,7 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Cause, Clock, Duration, Effect, Schedule } from "effect"
 import { MessageV2 } from "./message-v2"
 import { isKiloError } from "@/kilocode/kilo-errors" // kilocode_change
+import { KiloLlmError } from "@/kilocode/llm-error" // kilocode_change
 import { SessionNetwork } from "./network" // kilocode_change
 import { iife } from "@/util/iife"
 import { isRecord } from "@/util/record"
@@ -69,6 +70,7 @@ export function delay(attempt: number, error?: SessionV1.APIError) {
 export function retryable(error: Err, _provider?: string): Retryable | undefined {
   // context overflow errors should not be retried
   if (SessionV1.ContextOverflowError.isInstance(error)) return undefined
+  if (KiloLlmError.billing(error)) return undefined // kilocode_change - billing/auth need a model switch, not a hammer
   if (SessionV1.APIError.isInstance(error)) {
     const status = error.data.statusCode
     // kilocode_change start - Current Kilo errors require user action (login/signup), don't retry
@@ -84,8 +86,11 @@ export function retryable(error: Err, _provider?: string): Retryable | undefined
     // because the retry loop holds a stale model ref.
     if (error.data.responseBody?.includes("FreeUsageLimitError")) return undefined
     // kilocode_change end
+    if (KiloLlmError.tpm(error)) return { message: "Rate limited, waiting" } // kilocode_change
     return { message: error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message }
   }
+
+  if (KiloLlmError.stream(error)) return { message: "Provider stream dropped, retrying" } // kilocode_change
 
   // Check for rate limit patterns in plain text error messages
   const msg = isRecord(error.data) ? error.data.message : undefined
@@ -163,14 +168,20 @@ export function policy(opts: {
         // kilocode_change end
 
         const wait = delay(meta.attempt, SessionV1.APIError.isInstance(error) ? error : undefined)
+        // kilocode_change start - TPM must not sit on ~60s forever
+        const capped = KiloLlmError.tpm(error) ? Math.min(wait, 30_000) : wait
+        if (KiloLlmError.tpm(error) && meta.attempt > 4) {
+          return yield* Cause.done(meta.attempt)
+        }
+        // kilocode_change end
         const now = yield* Clock.currentTimeMillis
         yield* opts.set({
           attempt: meta.attempt,
           message: retry.message,
           action: retry.action,
-          next: now + wait,
+          next: now + capped, // kilocode_change
         })
-        return [meta.attempt, Duration.millis(wait)] as [number, Duration.Duration]
+        return [meta.attempt, Duration.millis(capped)] as [number, Duration.Duration] // kilocode_change
       })
     }),
   )

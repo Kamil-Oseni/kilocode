@@ -19,8 +19,8 @@ const log = Log.create({ service: "kilocode-task-model" })
 
 // raya_change start - Milestone D automatic Chief routing and bounded child runs
 const STEP_KEY = "raya.task.stepCap"
-const DEFAULT_CAP = 12
-const MAX_CAP = 50
+const DEFAULT_CAP = 40
+const MAX_CAP = 80
 const ignored = new Set(["agent", "and", "for", "from", "into", "the", "this", "that", "task", "use", "when", "with"])
 
 function words(value: string) {
@@ -91,6 +91,7 @@ export namespace KiloTask {
   }
 
   export function steps(agent: number | undefined, metadata: Record<string, unknown> | undefined) {
+    if (metadata?.["raya.goal.open"] === true) return Infinity
     const value = metadata?.[STEP_KEY]
     const task = typeof value === "number" && Number.isFinite(value) ? cap(value) : Infinity
     return Math.min(agent ?? Infinity, task)

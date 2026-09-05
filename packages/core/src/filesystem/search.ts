@@ -130,7 +130,19 @@ export const ripgrepLayer = Layer.effect(
               : input.type === "directory"
                 ? state.directories
                 : [...state.files, ...state.directories]
-          return fuzzysort.go(input.query, items, { limit: input.limit ?? 50 }).map((item) => {
+          // kilocode_change start - empty find query lists indexed paths instead of matching nothing
+          const limit = input.limit ?? 50
+          const query = input.query.trim()
+          if (!query) {
+            return items.slice(0, limit).map((relative) => {
+              const type = relative.endsWith(path.sep) ? ("directory" as const) : ("file" as const)
+              return FileSystem.Entry.make({
+                path: RelativePath.make(relative),
+                type,
+              })
+            })
+          }
+          return fuzzysort.go(query, items, { limit }).map((item) => {
             const relative = item.target
             const type = relative.endsWith(path.sep) ? ("directory" as const) : ("file" as const)
             return FileSystem.Entry.make({
@@ -138,6 +150,7 @@ export const ripgrepLayer = Layer.effect(
               type,
             })
           })
+          // kilocode_change end
         }),
     })
   }),
@@ -288,9 +301,11 @@ export const fffLayer = Layer.effect(
           // kilocode_change - load the native index only for an actual search.
           const result = yield* get // kilocode_change
           const options = { pageIndex: 0, pageSize: input.limit ?? 50 }
+          // kilocode_change start - FFF rejects empty strings
+          const query = input.query.trim() || "*"
           const items = (() => {
             if (input.type === "file") {
-              const found = result.finder.fileSearch(input.query.trim(), options)
+              const found = result.finder.fileSearch(query, options)
               if (!found.ok) throw found.error
               return found.value.items.map((item, index) => ({
                 path: item.relativePath,
@@ -299,7 +314,7 @@ export const fffLayer = Layer.effect(
               }))
             }
             if (input.type === "directory") {
-              const found = result.finder.directorySearch(input.query.trim(), options)
+              const found = result.finder.directorySearch(query, options)
               if (!found.ok) throw found.error
               return found.value.items.map((item, index) => ({
                 path: item.relativePath,
@@ -307,7 +322,7 @@ export const fffLayer = Layer.effect(
                 score: found.value.scores[index]?.total ?? 0,
               }))
             }
-            const found = result.finder.mixedSearch(input.query.trim(), options)
+            const found = result.finder.mixedSearch(query, options)
             if (!found.ok) throw found.error
             return found.value.items.map((item, index) => ({
               path: item.item.relativePath,
@@ -315,6 +330,7 @@ export const fffLayer = Layer.effect(
               score: found.value.scores[index]?.total ?? 0,
             }))
           })()
+          // kilocode_change end
           return items
             .sort((a, b) => b.score - a.score || a.path.length - b.path.length)
             .map((item) => {

@@ -165,9 +165,11 @@ export namespace RayaGoalContinuation {
               return
             }
 
+            if (event.properties.reason === "interrupted") return
             if (event.properties.reason !== "completed") return
             const turn = yield* goals.recordTurn(sid)
-            if (!turn || turn.state.status !== "active" || !turn.productive) return
+            if (!turn || turn.state.status !== "active") return
+            if (!turn.productive && !turn.retry) return
             if (input.enabled && !(yield* input.enabled())) return // raya_change - Milestone I
             if (KiloSessionPromptQueue.snapshot(sid).length > 0) return
             const current = yield* goals.get(sid)

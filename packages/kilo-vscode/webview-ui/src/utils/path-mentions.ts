@@ -47,51 +47,70 @@ export function convertToMentionPath(path: string, cwd: string): string {
   return cleaned
 }
 
-/** Returns true when the line looks like a file URI or absolute path. */
+export const KILO_FILE_PATH_MIME = "application/x-kilo-file-path"
+
 function isFilePath(line: string): boolean {
-  if (line.startsWith("file://") || line.startsWith("vscode-remote://")) return true
-  // Unix absolute path
-  if (line.startsWith("/")) return true
-  // Windows absolute path (e.g. C:\, D:/)
-  if (/^[A-Za-z]:[\\/]/.test(line)) return true
+  const text = line.trim()
+  if (!text) return false
+  if (text.startsWith("{") && text.includes("resourceurls")) return false
+  if (text.startsWith("file://") || text.startsWith("vscode-remote://")) return true
+  if (text.startsWith("/")) return true
+  if (/^[A-Za-z]:[\\/]/.test(text)) return true
   return false
 }
 
-/**
- * Custom MIME type used for internal drag-and-drop of relative file paths
- * (e.g. from diff panel file headers). Unlike VS Code's URI list, these
- * are workspace-relative paths that can be used directly as @mentions.
- */
-export const KILO_FILE_PATH_MIME = "application/x-kilo-file-path"
+function decodeDrop(value: string): string[] {
+  const trimmed = value.trim()
+  if (!trimmed) return []
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      const json = JSON.parse(trimmed) as unknown
+      const urls =
+        json && typeof json === "object" && "resourceurls" in json
+          ? (json as { resourceurls?: unknown }).resourceurls
+          : json
+      if (Array.isArray(urls)) {
+        return urls.flatMap((item) => {
+          if (typeof item === "string") return decodeDrop(item)
+          if (item && typeof item === "object" && "fsPath" in item && typeof item.fsPath === "string") return [item.fsPath]
+          return []
+        })
+      }
+    } catch (err) {
+      console.error("[Kilo New] Failed to parse drop payload:", err)
+    }
+  }
+  return trimmed
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== "" && !line.startsWith("#"))
+}
 
-/**
- * Extract file paths from a drop's DataTransfer.
- * Checks (in order):
- * 1. Internal relative-path drag (application/x-kilo-file-path)
- * 2. VS Code URI-list (application/vnd.code.uri-list)
- * 3. text/plain — only when every line looks like an absolute file path
- *
- * Returns null if no file paths are found.
- */
 export function extractDropPaths(dt: DataTransfer): string[] | null {
-  // Internal relative-path drag from diff file headers etc.
   const kilo = dt.getData(KILO_FILE_PATH_MIME)
   if (kilo) {
     const paths = kilo.split(/\r?\n/).filter((line) => line.trim() !== "")
     if (paths.length > 0) return paths
   }
 
-  // VS Code-specific URI list (explorer, editor tabs)
-  const uri = dt.getData("application/vnd.code.uri-list")
-  if (uri) {
-    const paths = uri.split(/\r?\n/).filter((line) => line.trim() !== "")
+  for (const type of ["application/vnd.code.resourceurls", "codefiles", "application/vnd.code.uri-list"]) {
+    const raw = dt.getData(type)
+    if (!raw) continue
+    const paths = decodeDrop(raw)
     if (paths.length > 0) return paths
   }
 
-  // Fall back to text/plain only if every line is a recognizable file path
+  const files = dt.files
+  if (files && files.length > 0) {
+    const paths = Array.from(files)
+      .map((file) => (file as File & { path?: string }).path)
+      .filter((item): item is string => typeof item === "string" && item.length > 0)
+    if (paths.length > 0) return paths
+  }
+
   const text = dt.getData("text")
   if (text) {
-    const lines = text.split(/\r?\n/).filter((line) => line.trim() !== "")
+    const lines = decodeDrop(text)
     if (lines.length > 0 && lines.every(isFilePath)) return lines
   }
 

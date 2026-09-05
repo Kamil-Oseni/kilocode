@@ -98,10 +98,12 @@ export namespace KiloSessionOverflow {
       usable: number
     } & (Payload | { tokens: number; continuation: boolean }),
   ) {
-    if (!enabled(input)) return false
     const stats = "tokens" in input ? input : measure(input)
-    if (stats.continuation) return false
     const tokens = "tokens" in stats ? stats.tokens : stats.normalized
+    const hard = input.model.limit.input || input.model.limit.context
+    if (input.cfg.compaction?.auto !== false && hard > 0 && tokens >= hard) return true
+    if (stats.continuation) return false
+    if (!enabled(input)) return false
     return tokens >= limit(input)
   }
 }

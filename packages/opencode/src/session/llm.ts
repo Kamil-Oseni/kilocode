@@ -140,7 +140,7 @@ const live: Layer.Layer<
               ...base.messages,
             ]
           : base.messages
-      const preflight = input.preflight === true && KiloSessionOverflow.enabled({ cfg, model: input.model })
+      const preflight = input.preflight === true && input.model.limit.context !== 0
       const cap = KiloLLM.needsEstimate({ model: input.model, configured: base.params.maxOutputTokens })
       const usage = cap || preflight ? KiloSessionOverflow.measure({ messages: estimated, tools }) : undefined
       const maxOutputTokens = KiloLLM.capOutputTokens({
@@ -154,13 +154,14 @@ const live: Layer.Layer<
       if (
         preflight &&
         usage &&
-        KiloSessionOverflow.shouldCompact({
-          cfg,
-          model: input.model,
-          usable: usable({ cfg, model: input.model, outputTokenMax: flags.outputTokenMax }), // kilocode_change
-          tokens: usage.normalized,
-          continuation: usage.continuation,
-        })
+        (usage.normalized >= (input.model.limit.input || input.model.limit.context) ||
+          KiloSessionOverflow.shouldCompact({
+            cfg,
+            model: input.model,
+            usable: usable({ cfg, model: input.model, outputTokenMax: flags.outputTokenMax }), // kilocode_change
+            tokens: usage.normalized,
+            continuation: usage.continuation,
+          }))
       ) {
         return yield* Effect.fail(new KiloSessionOverflow.PreflightError())
       }
@@ -380,7 +381,11 @@ const live: Layer.Layer<
         async experimental_repairToolCall(failed) {
           // kilocode_change start
           // raya_change start - redirect Auto hallucinations to its sole legal phase action
-          const auto = RayaChief.repair({ agent: input.agent.name, tools: prepared.tools })
+          const auto = RayaChief.repair({
+            agent: input.agent.name,
+            tools: prepared.tools,
+            name: failed.toolCall.toolName,
+          })
           if (auto) {
             l.info("repairing Auto tool call", { tool: failed.toolCall.toolName, repaired: auto.toolName })
             return {

@@ -169,6 +169,13 @@ describe("Raya Chief routing", () => {
       toolName: "chief_route",
       input: { objective: "Route the current user's exact request." },
     })
+    expect(
+      RayaChief.repair({
+        agent: "auto",
+        tools: { chief_route: tools.chief_route, task: tools.task },
+        name: "write",
+      }),
+    ).toMatchObject({ toolName: "task" })
     expect(RayaChief.repair({ agent: "auto", tools: { task: tools.task } })).toMatchObject({
       toolName: "task",
     })

@@ -129,7 +129,11 @@ export namespace RayaGoal {
   }) {}
 
   type Store = Pick<Storage.Interface, "read" | "write" | "remove" | "list">
-  type Sessions = Pick<Session.Interface, "messages" | "children">
+  export const openKey = "raya.goal.open"
+  export const idleLimit = 3
+
+  type Sessions = Pick<Session.Interface, "messages" | "children"> &
+    Partial<Pick<Session.Interface, "get" | "setMetadata">>
   type Deps = {
     storage: Store
     sessions: Sessions
@@ -183,6 +187,17 @@ export namespace RayaGoal {
 
     const save = Effect.fn("RayaGoal.save")(function* (sessionID: SessionID, state: State) {
       yield* deps.storage.write(key(sessionID), state).pipe(Effect.orDie)
+      if (deps.sessions.get && deps.sessions.setMetadata) {
+        const session = yield* deps.sessions.get(sessionID).pipe(Effect.catch(() => Effect.succeed(undefined)))
+        if (session) {
+          yield* deps.sessions
+            .setMetadata({
+              sessionID,
+              metadata: { ...session.metadata, [openKey]: state.status === "active" },
+            })
+            .pipe(Effect.catch(() => Effect.void))
+        }
+      }
       return state
     })
 
@@ -304,16 +319,23 @@ export namespace RayaGoal {
     // valid evidence is rejected and the goal can never complete — it gets forced
     // to blocked. Gather the goal session plus every descendant, matching how
     // files-only discard (SessionRevert.discardChanges) already walks children.
-    const collect = Effect.fn("RayaGoal.collect")(function* (sessionID: SessionID) {
+    const collect = Effect.fn("RayaGoal.collect")(function* (sessionID: SessionID, createdAt?: number) {
       const all: SessionV1.WithParts[] = []
       const queue: SessionID[] = [sessionID]
+      const seen = new Set<string>([sessionID])
       while (queue.length > 0) {
         const id = queue.shift()
         if (!id) break
         const msgs = yield* deps.sessions.messages({ sessionID: id })
         for (const msg of msgs) all.push(msg)
         const kids = yield* deps.sessions.children(id)
-        for (const kid of kids) queue.push(kid.id)
+        for (const kid of kids) {
+          if (seen.has(kid.id)) continue
+          const born = kid.time?.created
+          if (createdAt !== undefined && born !== undefined && born < createdAt) continue
+          seen.add(kid.id)
+          queue.push(kid.id)
+        }
       }
       return all
     })
@@ -343,7 +365,7 @@ export namespace RayaGoal {
 
     const evidence = Effect.fn("RayaGoal.evidence")(function* (sessionID: SessionID) {
       const state = yield* requireGoal(sessionID)
-      const messages = yield* collect(sessionID) // raya_change - include subagent child-session tool calls
+      const messages = yield* collect(sessionID, state.createdAt) // raya_change - include subagent child-session tool calls
       return tools(messages)
         .filter(
           (part) =>
@@ -437,7 +459,7 @@ export namespace RayaGoal {
       if (state.status !== "active" && state.status !== "blocked") {
         return yield* new AuditError({ message: `Only an active or blocked goal can be marked complete.` })
       }
-      const messages = yield* collect(sessionID) // raya_change - subagent child-session calls are valid evidence
+      const messages = yield* collect(sessionID, state.createdAt) // raya_change - subagent child-session calls are valid evidence
       // raya_change start - accept the flattened audit (top-level `requirements`) that models emit
       // far more often than the nested `audit` object, and make the rejection actionable so a model
       // that still gets it wrong can copy the exact shape and the real evidence IDs in one retry.
@@ -605,14 +627,20 @@ export namespace RayaGoal {
       const assistants = messages.filter(
         (message) => message.info.role === "assistant" && message.info.parentID === user.info.id,
       )
-      const calls = assistants
-        .flatMap((message) => message.parts)
-        .filter((part): part is SessionV1.ToolPart => part.type === "tool" && !controls.has(part.tool))
-      // raya_change start - a provider can expose tool-call markup as plain text.
-      // Stop instead of repeating destructive work when the model says it is done
-      // but update_goal never actually reached the runtime.
-      const reply = assistants
-        .flatMap((message) => message.parts)
+      const parts = assistants.flatMap((message) => message.parts)
+      const calls = parts.filter((part): part is SessionV1.ToolPart => part.type === "tool" && !controls.has(part.tool))
+      const abort = assistants.some((message) => {
+        if (message.info.role !== "assistant") return false
+        const err = message.info.error
+        if (!err) return false
+        const name = "name" in err ? String(err.name) : ""
+        const body = JSON.stringify(err)
+        return name === "AbortError" || /aborted/i.test(body)
+      })
+      if (abort && state.status === "active") {
+        return { state, productive: false, retry: false }
+      }
+      const reply = parts
         .filter((part): part is SessionV1.TextPart => part.type === "text")
         .map((part) => part.text)
         .join("\n")
@@ -621,12 +649,16 @@ export namespace RayaGoal {
           reply,
         )
       const invalid = state.status === "active" && claimed
-      // raya_change end
       const current = new Set(calls.map((part) => part.callID))
       const prior = tools(messages).filter((part) => !current.has(part.callID) && started(part) >= state.createdAt)
       const repeated =
         calls.length > 0 && calls.every((call) => prior.some((part) => fingerprint(part) === fingerprint(call)))
-      const stalled = state.status === "active" && calls.length === 0 // raya_change - never leave a silent active zombie
+      const unknown = calls.some(
+        (part) => part.state.status === "error" && /Unknown tool/i.test(part.state.error ?? ""),
+      )
+      const idle = state.status === "active" && calls.length === 0 && !unknown
+      const retries = idle || unknown ? (state.usage.retries ?? 0) + 1 : 0
+      const stalled = idle && retries >= idleLimit
       const now = Date.now()
       const reason = invalid
         ? "The model reported completion without successfully calling update_goal. Review the result, then steer or stop it."
@@ -634,6 +666,7 @@ export namespace RayaGoal {
           ? "Automatic continuation repeated the same tool work without new evidence."
           : "The turn ended without work, verification, or a goal status update. Steer the goal or stop it."
       const stopped = invalid || repeated || stalled
+      const retry = !stopped && state.status === "active" && (idle || unknown)
       const next = yield* save(sessionID, {
         ...state,
         status: stopped ? "blocked" : state.status,
@@ -645,7 +678,7 @@ export namespace RayaGoal {
           ...state.usage,
           turns: state.usage.turns + 1,
           toolCalls: state.usage.toolCalls + calls.length,
-          retries: stopped ? (state.usage.retries ?? 0) : 0,
+          retries: stopped ? retries : retry ? retries : 0,
         },
         progress: progress(state, {
           at: now,
@@ -654,10 +687,12 @@ export namespace RayaGoal {
             ? `Blocked: ${reason}`
             : calls.length > 0
               ? `Turn finished with ${calls.length} work or verification tool call${calls.length === 1 ? "" : "s"}.`
-              : "Automatic continuation suppressed because the turn made no work or verification tool calls.",
+              : retry
+                ? `Idle turn ${retries}/${idleLimit}; continuing the goal.`
+                : "Automatic continuation suppressed because the turn made no work or verification tool calls.",
         }),
       })
-      return { state: next, productive: calls.length > 0 && !stopped }
+      return { state: next, productive: calls.length > 0 && !stopped && !unknown, retry }
     })
 
     const continued = Effect.fn("RayaGoal.continued")(function* (sessionID: SessionID) {

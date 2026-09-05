@@ -10,7 +10,7 @@ export namespace RayaChief {
   export const requestKey = "raya.chief.request" // raya_change - Auto must route the user's exact request
   export const phaseKey = "raya.chief.phase" // raya_change - enforce the Chief → task → synthesis state machine
   export const lastStep =
-    "This is Auto's final allowed step. Call get_goal if you still need evidence IDs, then call update_goal to complete or honestly block the persistent goal. If no goal exists, reply with a concise synthesis and no tool call. Do not call chief_route." // raya_change - last Auto step must close the goal instead of refusing tools
+    "Step budget reached; work continues. Do not call update_goal complete unless every requirement is proven by eligible callIDs from this session. If concrete work remains, call task. Never copy evidence or done-when text from another project." // raya_change - last Auto step must not fake-complete an unfinished goal
 
   // raya_change - route only user-authored text; synthetic goal and review guidance is policy, not intent
   export function requestText(parts: readonly { type: string; text?: string; synthetic?: boolean }[], goal?: string) {
@@ -61,17 +61,26 @@ export namespace RayaChief {
     // Unknown tool failures
   }
 
-  export function repair(input: { agent: string; tools: Readonly<Record<string, unknown>> }) {
+  export function repair(input: { agent: string; tools: Readonly<Record<string, unknown>>; name?: string }) {
     if (input.agent !== "auto") return
+    if (input.name && input.tools[input.name] && input.name !== "invalid") return
+    if (input.tools.task && input.name && input.name !== "task" && input.name !== "chief_route") {
+      return {
+        toolName: "task",
+        input: {
+          description: "Delegate work Auto cannot run directly",
+          prompt: `Auto cannot call ${input.name}. Delegate the user's current request to a write-capable specialist and wait for the result.`,
+        },
+      }
+    }
     const names = Object.keys(input.tools).filter((name) => name !== "invalid")
-    if (names.length !== 1) return
-    if (names[0] === "chief_route") {
+    if (names.includes("chief_route") && (!input.name || input.name === "chief_route")) {
       return {
         toolName: "chief_route",
         input: { objective: "Route the current user's exact request." },
       }
     }
-    if (names[0] === "task") {
+    if (names.includes("task")) {
       return {
         toolName: "task",
         input: {

@@ -69,14 +69,17 @@ function last(text: string) {
 }
 
 function format(info: BackgroundProcess.Info) {
+  const done = info.status === "exited" && (info.exitCode === 0 || info.exitCode === undefined)
   return [
     `id: ${info.id}`,
-    `status: ${info.status}`,
+    `status: ${done ? "completed" : info.status}`,
     info.pid ? `pid: ${info.pid}` : undefined,
+    info.exitCode !== undefined ? `exit: ${info.exitCode}` : undefined,
     `cwd: ${info.cwd}`,
     `command: ${info.command}`,
     `lifetime: ${info.lifetime}`,
     last(info.output) ? `last_output: ${last(info.output)}` : undefined,
+    done ? "The process finished successfully (exit 0)." : undefined,
   ]
     .filter(Boolean)
     .join("\n")

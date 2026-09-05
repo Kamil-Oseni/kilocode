@@ -100,6 +100,10 @@ export interface BrowserPage {
     isVisible(options?: { timeout?: number }): Promise<boolean>
     textContent(options?: { timeout?: number }): Promise<string | null>
   }
+  getByRole(
+    role: string,
+    options?: { name?: string | RegExp },
+  ): ReturnType<BrowserPage["locator"]>
   screenshot(options: { type: "png"; fullPage: boolean; path?: string }): Promise<Buffer>
   evaluate<R>(fn: (source: string) => R, source: string): Promise<R>
   on(event: "response", listener: (response: SmokeResponse) => void): void
@@ -315,11 +319,19 @@ export class BrowserSession {
       return result
     } catch (error) {
       if (this.state.control === "manual") throw error
+      const detail = error instanceof Error ? error.message : String(error)
+      if (/strict mode violation|resolved to \d+ elements/i.test(detail) || /ERR_CONNECTION_REFUSED/i.test(detail)) {
+        this.handover(`The ${action.operation} action failed: ${detail}`, number)
+        throw new Error(
+          /ERR_CONNECTION_REFUSED/i.test(detail)
+            ? `The page is not reachable (${detail}). Start the dev server or use background_process to confirm the real URL/port before navigating.`
+            : `Locator was not unique (${detail}). Use getByRole with a visible name instead of a shared class.`,
+        )
+      }
       if (number < 3) {
         await new Promise((resolve) => setTimeout(resolve, number * 500))
         return this.attempt(action, number + 1, revision)
       }
-      const detail = error instanceof Error ? error.message : String(error)
       this.handover(`The ${action.operation} action failed three times: ${detail}`, number)
       throw new Error(`Manual browser takeover required after three failed attempts: ${detail}`)
     }
@@ -328,11 +340,30 @@ export class BrowserSession {
   private async once(action: BrowserNativeAction): Promise<BrowserResult> {
     const page = this.active()
     if (action.operation === "navigate") {
+      try {
+        const probe = await fetch(action.url, { method: "HEAD", signal: AbortSignal.timeout(3_000) })
+        void probe
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error)
+        if (/ECONNREFUSED|fetch failed|Failed to fetch/i.test(detail)) {
+          throw new Error(
+            `Cannot open ${action.url}: connection refused. Start the app or inspect background_process for the listening port.`,
+          )
+        }
+      }
       const response = await page.goto(action.url, { timeout: 15_000 })
       const status = response?.status()
       if (status === 403 || status === 429) throw new Error(`Site returned HTTP ${status}`)
     }
-    if (action.operation === "click") await page.locator(action.selector).click({ timeout: 5_000 })
+    if (action.operation === "click") {
+      const named = action.selector.match(/^button(?:\[name=['"](.+)['"]\]|\.(.+))$/)
+      if (named?.[1] || named?.[2]) {
+        const name = named[1] ?? named[2]!.replace(/-/g, " ")
+        await page.getByRole("button", { name: new RegExp(name, "i") }).click({ timeout: 5_000 })
+      } else {
+        await page.locator(action.selector).click({ timeout: 5_000 })
+      }
+    }
     if (action.operation === "type") {
       const locator = page.locator(action.selector)
       await locator.fill(action.text, { timeout: 5_000 })

@@ -210,7 +210,7 @@ export namespace KiloSessionProcessor {
   }) {
     const limit = Flag.KILO_SESSION_RETRY_LIMIT
     return {
-      limit: limit === undefined ? undefined : Math.max(0, limit - (input.used ?? 0)),
+      limit: Math.max(0, (limit === undefined ? 8 : limit) - (input.used ?? 0)),
       offline: (info: { error: unknown; message: string }) =>
         handleOffline({
           error: info.error,

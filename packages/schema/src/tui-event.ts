@@ -42,7 +42,11 @@ export const ToastShow = Event.define({
   schema: {
     title: optional(Schema.String),
     message: Schema.String,
-    variant: Schema.Literals(["info", "success", "warning", "error"]),
+    // kilocode_change start - jobs toasts omit variant
+    variant: Schema.Literals(["info", "success", "warning", "error"]).pipe(
+      Schema.withDecodingDefault(Effect.succeed("info" as const)),
+    ),
+    // kilocode_change end
     duration: PositiveInt.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_TOAST_DURATION))).annotate({
       description: "Duration in milliseconds",
     }),

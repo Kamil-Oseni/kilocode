@@ -407,6 +407,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private lastReconciledAt = new Map<string, number>() // Per-session focus-mode reconcile timestamp.
   private pendingSessionRefresh = false // Refresh requested before the client is ready.
   private readonly streams = new SessionStreamScheduler((msg) => this.postMessage(msg))
+  private jobsBackoff = 0
   private readonly visibleTaskStreams = new VisibleTaskStreams((id, visible) => this.streams.setVisible(id, visible))
   private readonly confirmations = new MessageConfirmation()
   private readonly costs = new MaxCostNudge()
@@ -3047,20 +3048,25 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       this.postMessage({ type: "backgroundJobsLoaded", sessionID, requestID, jobs: [], error: "Not connected" })
       return
     }
+    if (this.jobsBackoff > Date.now()) {
+      this.postMessage({ type: "backgroundJobsLoaded", sessionID, requestID, jobs: [] })
+      return
+    }
     try {
       const { data } = await client.kilocode.backgroundJobs(
         { directory: this.getWorkspaceDirectory(sessionID), sessionID },
         { throwOnError: true },
       )
+      this.jobsBackoff = 0
       this.postMessage({ type: "backgroundJobsLoaded", sessionID, requestID, jobs: data })
     } catch (error) {
-      console.error("[Kilo New] KiloProvider: Failed to fetch background jobs:", error)
+      this.jobsBackoff = Date.now() + 15_000
+      console.warn("[Kilo New] KiloProvider: Failed to fetch background jobs:", getErrorMessage(error))
       this.postMessage({
         type: "backgroundJobsLoaded",
         sessionID,
         requestID,
         jobs: [],
-        error: getErrorMessage(error) || "Failed to fetch background jobs",
       })
     }
   }

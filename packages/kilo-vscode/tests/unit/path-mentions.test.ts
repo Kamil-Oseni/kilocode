@@ -60,6 +60,16 @@ describe("convertToMentionPath", () => {
 })
 
 describe("extractDropPaths", () => {
+  it("extracts VS Code resourceurls JSON drops", () => {
+    const dt = {
+      getData: (type: string) =>
+        type === "application/vnd.code.resourceurls"
+          ? JSON.stringify({ resourceurls: ["file:///home/user/folder"] })
+          : "",
+    } as unknown as DataTransfer
+    expect(extractDropPaths(dt)).toEqual(["file:///home/user/folder"])
+  })
+
   it("returns null when no text or URI data is present", () => {
     const dt = { getData: () => "" } as unknown as DataTransfer
     expect(extractDropPaths(dt)).toBe(null)

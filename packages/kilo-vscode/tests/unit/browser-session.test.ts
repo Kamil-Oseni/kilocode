@@ -94,6 +94,11 @@ class FakePage implements BrowserPage {
     }
   }
 
+  getByRole(role: string, options?: { name?: string | RegExp }) {
+    const name = options?.name instanceof RegExp ? options.name.source : (options?.name ?? "")
+    return this.locator(`${role}:${name}`)
+  }
+
   async screenshot(): Promise<Buffer> {
     return Buffer.from("png")
   }

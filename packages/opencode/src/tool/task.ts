@@ -279,11 +279,18 @@ export const TaskTool = Tool.define(
           permission: childPermission, // kilocode_change - persist inherited Kilo ceilings and upstream child denies
         }))
       // kilocode_change end
-      // raya_change - persist a task-specific ceiling consumed by SessionPrompt.runLoop
+      // kilocode_change start - persist a task-specific ceiling consumed by SessionPrompt.runLoop
       yield* sessions.setMetadata({
         sessionID: nextSession.id,
-        metadata: KiloTask.metadata(nextSession.metadata, params.step_cap),
+        metadata: KiloTask.metadata(
+          {
+            ...nextSession.metadata,
+            ...(parent.metadata?.["raya.goal.open"] === true ? { "raya.goal.open": true } : {}),
+          },
+          params.step_cap,
+        ),
       })
+      // kilocode_change end
       // kilocode_change start - rebuild in-memory ancestry and inherit confinement after creation/resume
       KiloSession.register({ id: nextSession.id, parentID: ctx.sessionID, platform })
       yield* SandboxPolicy.inherit(ctx.sessionID, nextSession.id, fallback).pipe(

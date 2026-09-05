@@ -270,6 +270,26 @@ describe("session.retry.retryable", () => {
 
     expect(SessionRetry.retryable(error, "kilo")).toBeUndefined()
   })
+
+  test("does not retry billing or suspended-account errors", () => {
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({
+        message: "account suspended / insufficient balance",
+        isRetryable: true,
+        statusCode: 402,
+      }).toObject(),
+    )
+    expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
+  })
+
+  test("retries provider stream-read failures", () => {
+    expect(
+      SessionRetry.retryable(
+        wrap("ProviderShared.stream: Failed to read deepseek-byok/openai-compatible-chat stream"),
+        retryProvider,
+      ),
+    ).toEqual({ message: "Provider stream dropped, retrying" })
+  })
   // kilocode_change end
 })
 

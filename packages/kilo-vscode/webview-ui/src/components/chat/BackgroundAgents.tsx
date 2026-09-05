@@ -74,7 +74,7 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
       setLoaded(true)
     })
     requestJobs()
-    const timer = setInterval(requestJobs, 1000)
+    const timer = setInterval(requestJobs, 5_000)
     onCleanup(() => {
       setMounted(false)
       unsub()

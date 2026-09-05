@@ -135,7 +135,7 @@ export const layer = Layer.effect(
       const pending = (yield* InstanceState.get(state)).pending
       const existing = pending.get(input.requestID)
       if (!existing) {
-        yield* Effect.logWarning("reply for unknown request", { requestID: input.requestID })
+        yield* Effect.logDebug("reply for unknown request", { requestID: input.requestID }) // kilocode_change
         return yield* new NotFoundError({ requestID: input.requestID })
       }
       pending.delete(input.requestID)
@@ -152,7 +152,7 @@ export const layer = Layer.effect(
       const pending = (yield* InstanceState.get(state)).pending
       const existing = pending.get(requestID)
       if (!existing) {
-        yield* Effect.logWarning("reject for unknown request", { requestID })
+        yield* Effect.logDebug("reject for unknown request", { requestID }) // kilocode_change
         return yield* new NotFoundError({ requestID })
       }
       pending.delete(requestID)

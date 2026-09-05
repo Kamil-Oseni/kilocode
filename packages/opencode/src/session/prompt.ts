@@ -1502,6 +1502,7 @@ export const layer = Layer.effect(
       const ctx = yield* InstanceState.context
       let structured: unknown
       let step = 0
+      let extras = 0 // kilocode_change - raya_change: refresh the step budget while a goal is armed
       const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
       while (true) {
@@ -1660,8 +1661,13 @@ export const layer = Layer.effect(
           yield* events.publish(Session.Event.Error, { sessionID, error: error.toObject() })
           throw error
         }
-        const maxSteps = KiloTask.steps(agent.steps, session.metadata) // kilocode_change // raya_change
-        const isLastStep = step >= maxSteps
+        const live = yield* sessions.get(sessionID).pipe(Effect.orDie) // kilocode_change - raya_change: pick up raya.goal.open mid-turn
+        const maxSteps = KiloTask.steps(agent.steps, live.metadata) // kilocode_change // raya_change
+        if (Number.isFinite(maxSteps) && step >= maxSteps && extras < 16 && live.metadata?.["raya.goal.open"] === true) {
+          extras++
+          step = 1
+        }
+        const isLastStep = Number.isFinite(maxSteps) && step >= maxSteps
         msgs = yield* SessionReminders.apply({ messages: msgs, agent, session }).pipe(
           Effect.provideService(RuntimeFlags.Service, flags),
           Effect.provideService(FSUtil.Service, fsys),

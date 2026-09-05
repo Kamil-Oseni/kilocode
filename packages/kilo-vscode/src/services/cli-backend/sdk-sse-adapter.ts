@@ -182,6 +182,13 @@ export class SdkSSEAdapter {
             if (error instanceof DOMException && error.name === "AbortError") {
               return
             }
+            const transient =
+              error instanceof TypeError ||
+              (error instanceof Error && /terminated|ECONNRESET|fetch failed/i.test(error.message))
+            if (transient) {
+              console.warn("[Kilo New] SSE: SDK stream dropped, reconnecting:", error)
+              return
+            }
             console.error("[Kilo New] SSE: ❌ SDK SSE error callback:", error)
             this.notifyError(error instanceof Error ? error : new Error(String(error)))
           },
@@ -214,9 +221,16 @@ export class SdkSSEAdapter {
         // Suppress AbortErrors — they are expected when the heartbeat timer
         // or reconnect() aborts the per-attempt controller.
         const aborted = signal.aborted || (error instanceof DOMException && error.name === "AbortError")
+        const transient =
+          (error instanceof TypeError && /terminated|network|fetch/i.test(error.message)) ||
+          (error instanceof Error && /terminated|ECONNRESET|fetch failed/i.test(error.message))
         if (!aborted) {
-          console.error("[Kilo New] SSE: ❌ Stream error:", error)
-          this.notifyError(error instanceof Error ? error : new Error(String(error)))
+          if (transient) {
+            console.warn("[Kilo New] SSE: stream dropped, reconnecting:", error)
+          } else {
+            console.error("[Kilo New] SSE: ❌ Stream error:", error)
+            this.notifyError(error instanceof Error ? error : new Error(String(error)))
+          }
         }
       } finally {
         signal.removeEventListener("abort", onAbort)

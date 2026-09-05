@@ -1028,7 +1028,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     toast.show({
       title: evt.properties.title,
       message: evt.properties.message,
-      variant: evt.properties.variant,
+      variant: evt.properties.variant ?? "info", // kilocode_change
       duration: evt.properties.duration,
     })
   })

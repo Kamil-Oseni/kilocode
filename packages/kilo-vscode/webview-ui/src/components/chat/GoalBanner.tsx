@@ -346,7 +346,7 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                       Pause
                     </Button>
                   </Show>
-                  <Show when={state().status === "paused"}>
+                  <Show when={state().status === "paused" || state().status === "blocked"}>
                     <Button size="small" variant="secondary" disabled={props.disabled} onClick={() => props.onResume?.()}>
                       Resume
                     </Button>

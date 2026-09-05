@@ -15,6 +15,7 @@ export interface GoalState {
     turns: number
     continuations: number
     toolCalls: number
+    retries?: number
   }
   blockedReason?: string
   audit?: {

@@ -63,6 +63,7 @@ export namespace RayaGoal {
     turns: Schema.Number,
     continuations: Schema.Number,
     toolCalls: Schema.Number,
+    retries: Schema.optional(Schema.Number), // consecutive provider-error recoveries; reset after productive work
   })
   export type Usage = typeof Usage.Type
 
@@ -224,7 +225,7 @@ export namespace RayaGoal {
         updatedAt: now,
         activeMs: 0,
         activeAt: now,
-        usage: { turns: 0, continuations: 0, toolCalls: 0 },
+        usage: { turns: 0, continuations: 0, toolCalls: 0, retries: 0 },
         progress: [{ at: now, kind: "status", message: "Goal armed." }],
         history: prior,
       })
@@ -644,6 +645,7 @@ export namespace RayaGoal {
           ...state.usage,
           turns: state.usage.turns + 1,
           toolCalls: state.usage.toolCalls + calls.length,
+          retries: stopped ? (state.usage.retries ?? 0) : 0,
         },
         progress: progress(state, {
           at: now,
@@ -676,6 +678,29 @@ export namespace RayaGoal {
       })
     })
 
-    return { get, create, control, revise, clear, update, evidence, recordTurn, continued }
+    const retried = Effect.fn("RayaGoal.retried")(function* (sessionID: SessionID, detail: string) {
+      const state = yield* requireGoal(sessionID)
+      if (state.status !== "active") {
+        return yield* new AuditError({ message: `A ${state.status} goal cannot continue automatically.` })
+      }
+      const count = (state.usage.retries ?? 0) + 1
+      const now = Date.now()
+      return yield* save(sessionID, {
+        ...state,
+        updatedAt: now,
+        usage: {
+          ...state.usage,
+          continuations: state.usage.continuations + 1,
+          retries: count,
+        },
+        progress: progress(state, {
+          at: now,
+          kind: "continuation",
+          message: `Retry ${count} after ${detail}.`,
+        }),
+      })
+    })
+
+    return { get, create, control, revise, clear, update, evidence, recordTurn, continued, retried }
   }
 }

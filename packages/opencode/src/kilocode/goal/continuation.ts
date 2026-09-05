@@ -43,12 +43,67 @@ async function continueGoal(sessionID: SessionID, objective: string, directory: 
   )
 }
 
+type Goals = ReturnType<typeof RayaGoal.make>
+type Run = (sessionID: SessionID, objective: string, directory: string) => Promise<unknown>
+
+function launch(input: {
+  goals: Goals
+  sessionID: SessionID
+  objective: string
+  directory: string
+  run?: Run
+  quiet?: boolean
+}) {
+  return Effect.tryPromise({
+    try: () => (input.run ?? continueGoal)(input.sessionID, input.objective, input.directory),
+    catch: (err) => err,
+  }).pipe(
+    Effect.catch((err) =>
+      input.goals
+        .update(input.sessionID, {
+          status: "blocked",
+          reason: `Automatic continuation failed: ${err instanceof Error ? err.message : String(err)}`,
+        })
+        .pipe(
+          input.quiet
+            ? Effect.asVoid
+            : Effect.catchCause((cause) =>
+                Effect.sync(() =>
+                  log.error("failed to continue or block goal", {
+                    sessionID: input.sessionID,
+                    err: Cause.squash(cause),
+                  }),
+                ),
+              ),
+          Effect.asVoid,
+        ),
+    ),
+  )
+}
+
+function detail(error: unknown) {
+  const text =
+    typeof error === "string"
+      ? error
+      : error && typeof error === "object" && "data" in error
+        ? JSON.stringify((error as { data?: unknown }).data)
+        : error instanceof Error
+          ? error.message
+          : error
+            ? String(error)
+            : ""
+  if (/Failed to read \S+ stream/i.test(text)) return "the provider stream dropped"
+  return "a turn error"
+}
+
 export namespace RayaGoalContinuation {
+  export const limit = 3
+
   export function resume(input: {
     sessionID: SessionID
     storage: Storage.Interface
     sessions: Pick<Session.Interface, "get" | "messages" | "children"> // raya_change - evidence spans child sessions
-    run?: (sessionID: SessionID, objective: string, directory: string) => Promise<unknown>
+    run?: Run
   }) {
     const goals = RayaGoal.make(input)
     return Effect.gen(function* () {
@@ -56,19 +111,14 @@ export namespace RayaGoalContinuation {
       if (!goal || goal.status !== "active") return
       const session = yield* input.sessions.get(input.sessionID)
       yield* goals.continued(input.sessionID)
-      yield* Effect.tryPromise({
-        try: () => (input.run ?? continueGoal)(input.sessionID, goal.objective, session.directory),
-        catch: (err) => err,
-      }).pipe(
-        Effect.catch((err) =>
-          goals
-            .update(input.sessionID, {
-              status: "blocked",
-              reason: `Automatic continuation failed: ${err instanceof Error ? err.message : String(err)}`,
-            })
-            .pipe(Effect.asVoid),
-        ),
-      )
+      yield* launch({
+        goals,
+        sessionID: input.sessionID,
+        objective: goal.objective,
+        directory: session.directory,
+        run: input.run,
+        quiet: true,
+      })
     })
   }
 
@@ -76,52 +126,65 @@ export namespace RayaGoalContinuation {
     bus: Bus.Interface
     storage: Storage.Interface
     sessions: Pick<Session.Interface, "get" | "messages" | "children"> // raya_change - evidence spans child sessions
-    run?: (sessionID: SessionID, objective: string, directory: string) => Promise<unknown>
+    run?: Run
     enabled?: () => Effect.Effect<boolean> // raya_change - Milestone I continuation default
   }) {
     return Effect.gen(function* () {
       const bridge = yield* EffectBridge.make()
       const goals = RayaGoal.make(input)
       yield* input.bus.subscribeCallback(KiloSession.Event.TurnClose, (event) => {
-        if (event.properties.reason !== "completed" || event.properties.parentID) return
+        if (event.properties.parentID) return
+        const sid = event.properties.sessionID
         bridge.fork(
           Effect.gen(function* () {
-            const turn = yield* goals.recordTurn(event.properties.sessionID)
+            if (event.properties.reason === "error") {
+              if (input.enabled && !(yield* input.enabled())) return
+              if (KiloSessionPromptQueue.snapshot(sid).length > 0) return
+              const current = yield* goals.get(sid)
+              if (!current || current.status !== "active") return
+              const used = current.usage.retries ?? 0
+              if (used >= limit) {
+                yield* goals.update(sid, {
+                  status: "blocked",
+                  reason: `Automatic continuation stopped after ${limit} provider errors. Resume the goal or send a message to continue.`,
+                })
+                return
+              }
+              const messages = yield* input.sessions.messages({ sessionID: sid })
+              const last = messages.toReversed().find((row) => row.info.role === "assistant")
+              yield* goals.retried(sid, detail(last?.info.error))
+              const session = yield* input.sessions.get(sid)
+              yield* launch({
+                goals,
+                sessionID: sid,
+                objective: current.objective,
+                directory: session.directory,
+                run: input.run,
+              })
+              return
+            }
+
+            if (event.properties.reason !== "completed") return
+            const turn = yield* goals.recordTurn(sid)
             if (!turn || turn.state.status !== "active" || !turn.productive) return
             if (input.enabled && !(yield* input.enabled())) return // raya_change - Milestone I
-            if (KiloSessionPromptQueue.snapshot(event.properties.sessionID).length > 0) return
-            const current = yield* goals.get(event.properties.sessionID)
+            if (KiloSessionPromptQueue.snapshot(sid).length > 0) return
+            const current = yield* goals.get(sid)
             if (!current || current.status !== "active") return
-            const session = yield* input.sessions.get(event.properties.sessionID)
-            yield* goals.continued(event.properties.sessionID)
-            yield* Effect.tryPromise({
-              try: () => (input.run ?? continueGoal)(event.properties.sessionID, current.objective, session.directory),
-              catch: (err) => err,
-            }).pipe(
-              Effect.catch((err) =>
-                goals
-                  .update(event.properties.sessionID, {
-                    status: "blocked",
-                    reason: `Automatic continuation failed: ${err instanceof Error ? err.message : String(err)}`,
-                  })
-                  .pipe(
-                    Effect.catchCause((cause) =>
-                      Effect.sync(() =>
-                        log.error("failed to continue or block goal", {
-                          sessionID: event.properties.sessionID,
-                          err: Cause.squash(cause),
-                        }),
-                      ),
-                    ),
-                    Effect.asVoid,
-                  ),
-              ),
-            )
+            const session = yield* input.sessions.get(sid)
+            yield* goals.continued(sid)
+            yield* launch({
+              goals,
+              sessionID: sid,
+              objective: current.objective,
+              directory: session.directory,
+              run: input.run,
+            })
           }).pipe(
             Effect.catchCause((cause) =>
               Effect.sync(() =>
                 log.error("goal turn-close subscriber failed", {
-                  sessionID: event.properties.sessionID,
+                  sessionID: sid,
                   err: Cause.squash(cause),
                 }),
               ),

@@ -640,6 +640,109 @@ describe("RayaGoal", () => {
     }),
   )
 
+  it.live("retries a provider stream error while the goal is still active", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const sessionID = SessionID.make(`ses_goal_${crypto.randomUUID()}`)
+      const data = transcript({ sessionID, tool: "bash", exit: 0 })
+      const assistant = data.rows[1]!.info
+      if (assistant.role === "assistant") {
+        assistant.error = {
+          name: "UnknownError",
+          data: { message: "ProviderShared.stream: Failed to read deepseek-byok/openai-compatible-chat stream" },
+        }
+      }
+      const goals = setup(storage, () => data.rows)
+      yield* Effect.addFinalizer(() => goals.clear(sessionID))
+      yield* goals.create(sessionID, "Keep going after a dropped stream")
+      let close:
+        | ((event: { properties: { sessionID: SessionID; reason: "completed" | "error" | "interrupted" } }) => unknown)
+        | undefined
+      const bus = {
+        subscribeCallback: (_event, callback) => {
+          close = callback as typeof close
+          return Effect.succeed(() => {})
+        },
+      } as Pick<Bus.Interface, "subscribeCallback"> as Bus.Interface
+      let runs = 0
+      yield* RayaGoalContinuation.subscribe({
+        bus,
+        storage,
+        sessions: {
+          get: () => Effect.succeed({ directory: process.cwd() }),
+          messages: () => Effect.succeed(data.rows),
+          children: () => Effect.succeed([]),
+        } as unknown as Pick<Session.Interface, "get" | "messages" | "children">,
+        run: async () => void runs++,
+      })
+
+      close?.({ properties: { sessionID, reason: "error" } })
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const goal = yield* goals.get(sessionID)
+          return runs === 1 && goal?.status === "active" && goal.usage.retries === 1 ? goal : undefined
+        }),
+        "goal did not retry after a stream error",
+      )
+      expect((yield* goals.get(sessionID))?.progress.at(-1)?.message).toContain("provider stream dropped")
+      close?.({ properties: { sessionID, reason: "interrupted" } })
+      yield* Effect.sleep(25)
+      expect(runs).toBe(1)
+    }),
+  )
+
+  it.live("blocks after exhausting provider-error retries", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const sessionID = SessionID.make(`ses_goal_${crypto.randomUUID()}`)
+      const data = transcript({ sessionID, tool: "bash", exit: 0 })
+      const goals = setup(storage, () => data.rows)
+      yield* Effect.addFinalizer(() => goals.clear(sessionID))
+      yield* goals.create(sessionID, "Stop after repeated provider errors")
+      let close: ((event: { properties: { sessionID: SessionID; reason: "error" } }) => unknown) | undefined
+      const bus = {
+        subscribeCallback: (_event, callback) => {
+          close = callback as typeof close
+          return Effect.succeed(() => {})
+        },
+      } as Pick<Bus.Interface, "subscribeCallback"> as Bus.Interface
+      let runs = 0
+      yield* RayaGoalContinuation.subscribe({
+        bus,
+        storage,
+        sessions: {
+          get: () => Effect.succeed({ directory: process.cwd() }),
+          messages: () => Effect.succeed(data.rows),
+          children: () => Effect.succeed([]),
+        } as unknown as Pick<Session.Interface, "get" | "messages" | "children">,
+        run: async () => void runs++,
+      })
+
+      for (const count of [1, 2, 3] as const) {
+        close?.({ properties: { sessionID, reason: "error" } })
+        yield* pollWithTimeout(
+          Effect.gen(function* () {
+            const goal = yield* goals.get(sessionID)
+            return goal?.usage.retries === count ? goal : undefined
+          }),
+          `goal retry ${count} did not start`,
+        )
+      }
+      close?.({ properties: { sessionID, reason: "error" } })
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const goal = yield* goals.get(sessionID)
+          return goal?.status === "blocked" ? goal : undefined
+        }),
+        "goal did not block after exhausting retries",
+      )
+      expect(runs).toBe(RayaGoalContinuation.limit)
+      expect((yield* goals.get(sessionID))?.blockedReason).toContain(
+        `${RayaGoalContinuation.limit} provider errors`,
+      )
+    }),
+  )
+
   // raya_change - Milestone I goal-continuation setting
   it.live("respects a disabled automatic continuation default", () =>
     Effect.gen(function* () {

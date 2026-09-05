@@ -1391,6 +1391,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       class="prompt-input-container"
       classList={{ "prompt-input-container--dragging": imageAttach.dragging() }}
       onDragOver={imageAttach.handleDragOver}
+      onDragEnter={imageAttach.handleDragEnter}
       onDragLeave={imageAttach.handleDragLeave}
       onDrop={imageAttach.handleDrop}
     >
@@ -1603,6 +1604,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               syncGhost()
             }}
             onPaste={handlePaste}
+            onDragOver={imageAttach.handleDragOver}
+            onDragEnter={imageAttach.handleDragEnter}
+            onDrop={imageAttach.handleDrop}
             onClick={syncGhost}
             onFocus={() => {
               syncGhost()

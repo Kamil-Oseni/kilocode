@@ -1,6 +1,6 @@
 import { createSignal } from "solid-js"
 import { ACCEPTED_IMAGE_TYPES, isDragLeavingComponent } from "./image-attachments-utils"
-import { extractDropPaths, KILO_FILE_PATH_MIME } from "../utils/path-mentions"
+import { extractDropPaths, isComposerDrop } from "../utils/path-mentions"
 
 export interface ImageAttachment {
   id: string
@@ -56,18 +56,10 @@ export function useImageAttachments() {
   }
 
   const handleDragOver = (event: DragEvent) => {
-    const types = event.dataTransfer?.types
-    if (!types) return
-    // Accept file drops, VS Code URI-list drops, and internal file-path drags.
-    // Do NOT accept bare text/plain here — that would intercept normal text drags.
-    const acceptable =
-      types.includes("Files") ||
-      types.includes("application/vnd.code.uri-list") ||
-      types.includes("application/vnd.code.resourceurls") ||
-      types.includes("codefiles") ||
-      types.includes(KILO_FILE_PATH_MIME)
-    if (!acceptable) return
+    if (!isComposerDrop(event.dataTransfer?.types)) return
     event.preventDefault()
+    event.stopPropagation()
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "copy"
     setDragging(true)
   }
 
@@ -80,6 +72,7 @@ export function useImageAttachments() {
   const handleDrop = (event: DragEvent) => {
     setDragging(false)
     event.preventDefault()
+    event.stopPropagation()
     const dt = event.dataTransfer
     if (!dt) return
 
@@ -105,6 +98,7 @@ export function useImageAttachments() {
     replace,
     handlePaste,
     handleDragOver,
+    handleDragEnter: handleDragOver,
     handleDragLeave,
     handleDrop,
     setFilePathDropHandler,

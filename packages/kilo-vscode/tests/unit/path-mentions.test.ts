@@ -57,6 +57,12 @@ describe("convertToMentionPath", () => {
     expect(result).toBe("src/app.ts")
     expect(result.startsWith("@")).toBe(false)
   })
+
+  it("strips vscode-file:// protocol", () => {
+    expect(convertToMentionPath("vscode-file://vscode-app/D:/Projects/app/src/main.ts", "D:\\Projects\\app")).toBe(
+      "src/main.ts",
+    )
+  })
 })
 
 describe("extractDropPaths", () => {
@@ -136,5 +142,27 @@ describe("extractDropPaths", () => {
       getData: (type: string) => (type === "application/vnd.code.uri-list" ? "file:///a.ts\n\n  \nfile:///b.ts" : ""),
     } as unknown as DataTransfer
     expect(extractDropPaths(dt)).toEqual(["file:///a.ts", "file:///b.ts"])
+  })
+
+  it("extracts VS Code ResourceURLs JSON arrays", () => {
+    const dt = {
+      getData: (type: string) =>
+        type === "ResourceURLs" ? JSON.stringify(["file:///home/user/folder"]) : "",
+    } as unknown as DataTransfer
+    expect(extractDropPaths(dt)).toEqual(["file:///home/user/folder"])
+  })
+
+  it("extracts CodeFiles newline paths", () => {
+    const dt = {
+      getData: (type: string) => (type === "CodeFiles" ? "C:\\Users\\me\\a.ts\nC:\\Users\\me\\b.ts" : ""),
+    } as unknown as DataTransfer
+    expect(extractDropPaths(dt)).toEqual(["C:\\Users\\me\\a.ts", "C:\\Users\\me\\b.ts"])
+  })
+
+  it("extracts standard text/uri-list", () => {
+    const dt = {
+      getData: (type: string) => (type === "text/uri-list" ? "file:///home/user/a.ts" : ""),
+    } as unknown as DataTransfer
+    expect(extractDropPaths(dt)).toEqual(["file:///home/user/a.ts"])
   })
 })

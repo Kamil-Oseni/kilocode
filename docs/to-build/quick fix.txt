@@ -1,0 +1,87 @@
+**1. First goal died with almost no work**
+Session `ses_f90eb6a3…` armed the website plan, then blocked: “turn ended without work, verification, or a goal status update.” The user abort shows up as `Aborted`.
+**Solution:** Treat abort vs stall separately. After abort, do not mark the goal blocked as if the model failed. If a turn ends with only a couple of reads and no `update_goal`, auto-continue (you already have retry on error; this needs retry on empty/idle turns too).
+
+**2. DeepSeek stream dropped mid-turn**
+`ProviderShared.stream: Failed to read deepseek-byok/openai-compatible-chat stream` on the main session (~10:41 PM).
+**Solution:** Surface a reconnect/retry on that specific stream-read failure (not only `TurnClose` `error`), and keep the partial assistant message. Fail over to another write-capable model if DeepSeek dies twice in a row.
+
+**3. Kimi disconnects, timeouts, then billing**
+Engineer/`kimi-k3`: socket closed, then `TimeoutError`, then **eight** “account suspended / insufficient balance” errors (~2:11–2:16 AM). Raya kept retrying the dead key.
+**Solution:** Classify billing/auth as non-retryable. Stop the loop, tell the user the provider is out of credit, and offer a model switch. Do not hammer the same key.
+
+**4. Kimi TPM rate limit, retried for hours**
+Dozens of org TPM errors (`current` ~1.5–1.9M vs limit 1.5M) from ~3:32 AM through ~6:06 AM. Payload was already ~1.3–2.4 MB after pruning.
+**Solution:** Exponential backoff with a cap; if still over TPM, compact or switch models instead of retrying every ~60s. Show “rate limited, waiting/switching” in the UI.
+
+**5. Context overflow / compaction failed to shrink enough**
+Hundreds of `payload still large after pruning` warnings, then auto-compaction with `overflow: true`. Switching to `kimi-k2.7-code` then hit **519,485 tokens requested vs 262,144 limit**.
+**Solution:** Compaction must get under the *target model’s* context, not a generic prune. Before a model switch, re-compact to that model’s window. If still over, refuse the call and start a fresh child session with a summary instead of sending 500k tokens.
+
+**6. File picker always empty**
+`find file` / `find directory` on `French Study` repeatedly returned **0 results** (once taking ~11s).
+**Solution:** Fix the workspace file index for this project (gitignore, snapshot `global` path, or empty query). Empty query should still list the workspace root.
+
+**7. Snapshot GC looks for a fake `French Study\global` path**
+`cleanup failed`: git gc then `NotFound: FileSystem.access (...\French Study\global)`.
+**Solution:** Stop treating `global` as a worktree path on Windows; point snapshot GC at the real project root.
+
+**8. Agent-denied `git *` and global-denied bash**
+`git ls-files` denied by **agent** permission; `Test-Path .kilo\plans` denied by **global** bash `*`.
+**Solution:** Allow read-only git (`ls-files`, `status`) for snapshot/context. Don’t use a global bash deny that blocks even `Test-Path`.
+
+**9. Permission replies to unknown requests**
+Multiple `reply/reject for unknown request` (`que_…`). Approvals/rejects after the request expired.
+**Solution:** Drop stale permission IDs instead of warning; if the user still clicks, show “this prompt expired” rather than a silent miss.
+
+**10. SSE `TypeError: terminated`**
+Extension host: `SDK SSE error callback: TypeError: terminated` (~12:56 AM). Chat stream to the webview died.
+**Solution:** Reconnect SSE automatically; don’t leave the UI looking hung. Same family as the earlier DeepSeek mid-stream disconnect.
+
+**11. Browser click used a non-unique locator**
+`button.btn-ghost` matched both **Replay intro** and **Back**. After three failures: “Manual browser takeover required.”
+**Solution:** Prefer `getByRole('button', { name: … })`. If strict mode fails, don’t burn three identical retries; pick a unique locator or ask once.
+
+**12. Browser navigated to a dead `localhost:3000`**
+`ERR_CONNECTION_REFUSED` (~2:07 AM). Dev server wasn’t up (or used another port).
+**Solution:** Before `page.goto`, check `background_process` / health. If the server is down, start it or report the real URL/port instead of failing the browser panel.
+
+**13. Background-jobs poll storm (schema + UI spam)**
+`schema rejection` at `[0]["metadata"]["variant"]` and **~1,500** `Failed to fetch background jobs: Expected JSON value, got undefined` lines. Same bug later around 6:14 AM. Polls every second.
+**Solution:** Make `metadata.variant` optional (or always send it). On schema failure, back off instead of logging every second. That’s the noisy VS Code error flood.
+
+**14. Auto hits `Unknown tool` for glob, write, read, bash (and others)**
+On Auto, the model is only allowed `chief_route`, `task`, `get_goal`, `update_goal`, `ask_options`, and `question`. When Auto tries to do the work itself — or a subagent inherits a stripped tool map — the runtime returns `Unknown tool: glob`, `write`, `read`, `bash`, etc. Seen on the SITE_MAP attempt (`write`/`glob` unknown, designer tools disabled) and during the Etymon build whenever Auto was in the loop. The user asked for a write-capable model and still could not persist the file.
+**Solution:** Auto must never advertise or attempt file/shell tools; if it tries, repair the call into `task`/`chief_route` instead of `Unknown tool`. Subagents must get the real tool map (read/write/glob/bash) for their specialist. If the user says “use any model that has write access,” route to engineer/code, not Auto-with-no-write or designer-without-write. Surface “this agent cannot write files” immediately when the chosen agent truly has no write.
+
+**15. Goal blocked on “no tool calls” even after real work**
+Main session ended **blocked** after B7/B8 completed, then the SITE_MAP continuation: “turn ended without work…” and “automatic continuation suppressed.” B3 in history also stored `blockedReason` the same way. Max-steps (item 20) makes this worse: the agent is forced to stop calling tools, then the goal layer treats that as an idle/failed turn.
+**Solution:** Idle-turn block is too aggressive after a long successful build. If the last user ask is a new deliverable and tools failed (unknown write) or max-steps fired, retry with a write agent / extra steps instead of blocking. Don’t suppress continuation when the previous turn failed to persist a file.
+
+**16. Goal audit mixed in an unrelated iOS case study**
+On the etymon SITE_MAP goal, Raya first blocked with: *“The iOS case annotation work is done…”* Then a completion audit cited `call_e9c6b872…` (not from this session) before eventually passing.
+**Solution:** Scope audit/eval to the current session’s tool IDs only. Never reuse evidence or “done when” text from another project.
+
+**17. Grep / shell mismatches on Windows**
+Ripgrep JSON records **>64KB** failed. Designer/agent used `rg` in PowerShell (`rg` not on PATH) and invalid PowerShell piping.
+**Solution:** Prefer the built-in `grep` tool. If bash is required, use Git Bash or `bunx`/`npx`, not bare `rg` on Windows PowerShell. Raise or chunk the 64KB grep cap for large TSX files.
+
+**18. Next.js overlay error was visible, but Raya never read it**
+The user saw `Encountered a script tag while rendering react component` in `app/providers.tsx` and had to Stop, then paste the error into the goal. Raya was still waiting on a shell/dev-server response that was not coming. The overlay is an etymon/Next bug, but the product failure is that Raya did not notice the terminal/browser error or time out the wait.
+**Solution (Raya):** Intelligent wait for long shell/dev-server work (item 23). Watch stdout/stderr and the browser overlay; if an error appears or output goes idle while the process is “running,” stop waiting and ingest the error. **Solution (etymon, optional):** Theme provider should not inject a raw `<script>` in a way Next 16 rejects; use `next-themes`’s documented App Router pattern.
+
+**19. `npm install` background job exited**
+`background_process` error on `npm install` in `etymon-web` (11 such errors in the session).
+**Solution:** Don’t treat a finished install as a silent error if exit code is 0. If it failed, show stderr in chat instead of only a background-job ID.
+
+**20. Max steps per agent cut the workflow short**
+Each agent has a step cap. When it is hit, tools are disabled and the model is told to summarize only (`MAX_STEPS_PROMPT`). On a multi-hour Etymon build that is fatal: engineer/plan/auto stop mid-phase, the goal looks idle (item 15), and the user has to steer or start a new turn by hand. Auto’s last-step prompt tries to close the goal instead, which can mark work complete or blocked while files are still unfinished.
+**Solution:** Max steps must not kill a live goal. When the cap hits during an armed goal, auto-continue in a fresh step budget (or raise the cap for goal/engineer) instead of forcing a text-only stop. Show “step budget reached, continuing” rather than a hard wall. Do not let Auto’s last step `update_goal` complete/block unless the deliverable actually landed.
+
+**21. Cannot drag a file or folder from the VS Code explorer into chat**
+Composer drop handling only reads internal `application/x-kilo-file-path`, `application/vnd.code.uri-list`, and `text/plain` when every line looks like an absolute path. Explorer drags often use other VS Code MIME (`resourceurls`, `codefiles`) or never reach the webview. Folders are especially likely to fail. The user had to type names instead of dropping `@etymon-web`.
+**Solution:** Accept explorer and folder drops the way VS Code chat does: handle `resourceurls` / `codefiles`, drag-enter on the webview view, and resolve directories to an `@folder` mention. Combined with item 6 (empty file picker), attaching workspace paths should work by drag, picker, *or* typing.
+
+**22. No intelligent wait for shell / dev-server work**
+Shell uses a fixed timeout; background jobs do not re-check whether work is still healthy. During B6 the Next overlay already showed a render error, but Raya kept waiting for a response that would never arrive. The user had to click Stop and paste the error.
+**Solution:** After a wait slice expires, inspect: process still alive, stdout/stderr growing, last log age, and browser/page errors. If output is still progressing, wait another slice. If the process exited, hung (no new output), or emitted a compiler/runtime error (including Next overlay text), stop waiting and feed that into the turn. Never sit forever on a dead `localhost:3000` or a crashed `next dev`.

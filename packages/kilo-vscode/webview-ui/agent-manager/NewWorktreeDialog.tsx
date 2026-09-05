@@ -770,6 +770,7 @@ export const NewWorktreeDialog: Component<{
               class="prompt-input-container am-prompt-input-container"
               classList={{ "prompt-input-container--dragging": imageAttach.dragging() }}
               onDragOver={imageAttach.handleDragOver}
+              onDragEnter={imageAttach.handleDragEnter}
               onDragLeave={imageAttach.handleDragLeave}
               onDrop={imageAttach.handleDrop}
             >

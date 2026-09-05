@@ -104,7 +104,12 @@
         {
           "type": "webview",
           "id": "raya.SidebarProvider",
-          "name": "Raya"
+          "name": "Raya",
+          "dropMimeTypes": [
+            "files",
+            "text/uri-list",
+            "text/plain"
+          ]
         }
       ]
     },

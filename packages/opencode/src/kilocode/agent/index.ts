@@ -529,15 +529,15 @@ export function hardenSystemAgents<T extends { name: string; permission: Permiss
   }
 }
 
-// raya_change start - Raya removes the read-only ceiling entirely. Plan, Ask, Orchestrator,
-// and Explore were the only modes that denied tools like bash, edit, write, and web search by
-// design. Rebuild them with the same full-capability recipe as the default agent so they can
-// run any tool, while the user's own global and per-agent permission config still layers on
-// top (an explicit deny/ask the user authored is honored, and legacy per-agent rules apply
-// through the normal config loop). Runs after the guards so it supersedes their restrictions.
-const readonly = ["plan", "ask", "orchestrator", "explore"]
+// raya_change start - Raya removes every default tool restriction from these agents. Plan, Ask,
+// Orchestrator, and Explore were the read-only modes; Voice denied delegation by design. Rebuild
+// them all with the same full-capability recipe as the default agent so they can run any tool,
+// while the user's own global and per-agent permission config still layers on top (an explicit
+// deny/ask the user authored is honored, and legacy per-agent rules apply through the normal
+// config loop). Runs after the guards so it supersedes their restrictions.
+const fullAccess = ["plan", "ask", "orchestrator", "explore", "voice"]
 
-export function openReadOnly<T extends { name: string; permission: Permission.Ruleset }>(
+export function openFullAccess<T extends { name: string; permission: Permission.Ruleset }>(
   agents: Record<string, T>,
   cfg: Config.Info,
   defaults: Permission.Ruleset,
@@ -554,7 +554,7 @@ export function openReadOnly<T extends { name: string; permission: Permission.Ru
     webfetch: "allow",
     websearch: "allow",
   })
-  for (const key of readonly) {
+  for (const key of fullAccess) {
     const item = agents[key]
     if (!item) continue
     item.permission = Permission.merge(

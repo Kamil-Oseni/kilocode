@@ -113,13 +113,15 @@ it.instance("primary and routed specialist prompts infer goal, choice, delegatio
   }),
 )
 
-// raya_change - hands-free mode must answer directly rather than handing spoken turns back to Chief or Coder
-it.instance("voice agent is direct and cannot delegate", () =>
+// raya_change - hands-free mode is guided to answer directly by its prompt, but has full tool
+// access (the delegation deny was torn out along with the read-only ceiling).
+it.instance("voice agent is prompted to answer directly but has full tool access", () =>
   Effect.gen(function* () {
     const voice = yield* load((svc) => svc.get("voice"))
     expect(voice?.prompt).toContain("without Chief, delegation, or agent selection")
-    expect(Permission.evaluate("task", "*", voice!.permission).action).toBe("deny")
-    expect(Permission.evaluate("chief_route", "*", voice!.permission).action).toBe("deny")
+    expect(Permission.evaluate("task", "*", voice!.permission).action).toBe("allow")
+    expect(evalPerm(voice, "edit")).toBe("allow")
+    expect(evalPerm(voice, "websearch")).toBe("allow")
   }),
 )
 // kilocode_change end

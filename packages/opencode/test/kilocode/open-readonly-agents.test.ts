@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test"
-import { openReadOnly } from "../../src/kilocode/agent"
+import { openFullAccess } from "../../src/kilocode/agent"
 import { Permission } from "../../src/permission"
 
-// The read-only ceiling that Plan/Ask/Explore/Orchestrator carried before the tear-out:
-// deny everything except a read-only allowlist.
+// The restrictive ceiling these agents carried before the tear-out: deny everything except a
+// small allowlist.
 function readOnlyAgent(name: string) {
   return {
     name,
@@ -20,15 +20,16 @@ function readOnlyAgent(name: string) {
 const defaults = Permission.fromConfig({ "*": "allow", bash: "ask", external_directory: "ask", doom_loop: "ask" })
 const user = Permission.fromConfig({ bash: { "*": "allow" } })
 
-test("openReadOnly gives Plan, Ask, Explore, and Orchestrator full tool access", () => {
+test("openFullAccess gives Plan, Ask, Explore, Orchestrator, and Voice full tool access", () => {
   const agents = {
     plan: readOnlyAgent("plan"),
     ask: readOnlyAgent("ask"),
     explore: readOnlyAgent("explore"),
     orchestrator: readOnlyAgent("orchestrator"),
+    voice: readOnlyAgent("voice"),
   }
-  openReadOnly(agents, { agent: {} } as never, defaults, user)
-  for (const key of ["plan", "ask", "explore", "orchestrator"] as const) {
+  openFullAccess(agents, { agent: {} } as never, defaults, user)
+  for (const key of ["plan", "ask", "explore", "orchestrator", "voice"] as const) {
     const rules = agents[key].permission
     expect(Permission.evaluate("edit", "src/x.ts", rules).action).toBe("allow")
     expect(Permission.evaluate("write", "src/x.ts", rules).action).toBe("allow")
@@ -39,15 +40,15 @@ test("openReadOnly gives Plan, Ask, Explore, and Orchestrator full tool access",
   }
 })
 
-test("openReadOnly leaves other agents untouched", () => {
+test("openFullAccess leaves other agents untouched", () => {
   const agents = { code: readOnlyAgent("code") }
-  openReadOnly(agents, { agent: {} } as never, defaults, user)
+  openFullAccess(agents, { agent: {} } as never, defaults, user)
   expect(Permission.evaluate("edit", "src/x.ts", agents.code.permission).action).toBe("deny")
 })
 
 test("a user's own per-agent deny still wins over the full-access base", () => {
   const agents = { plan: readOnlyAgent("plan") }
-  openReadOnly(agents, { agent: { plan: { permission: { edit: "deny" } } } } as never, defaults, user)
+  openFullAccess(agents, { agent: { plan: { permission: { edit: "deny" } } } } as never, defaults, user)
   expect(Permission.evaluate("edit", "src/x.ts", agents.plan.permission).action).toBe("deny")
   expect(Permission.evaluate("bash", "bun test", agents.plan.permission).action).toBe("allow")
 })

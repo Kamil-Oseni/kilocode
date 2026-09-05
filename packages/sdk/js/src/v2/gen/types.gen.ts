@@ -1204,7 +1204,7 @@ export type EventTuiToastShow = {
   properties: {
     title?: string
     message: string
-    variant: "info" | "success" | "warning" | "error"
+    variant?: "info" | "success" | "warning" | "error"
     duration?: number
   }
 }
@@ -2122,7 +2122,7 @@ export type GlobalEvent = {
         properties: {
           title?: string
           message: string
-          variant: "info" | "success" | "warning" | "error"
+          variant?: "info" | "success" | "warning" | "error"
           duration?: number
         }
       }
@@ -4122,7 +4122,7 @@ export type EventTuiToastShow2 = {
   properties: {
     title?: string
     message: string
-    variant: "info" | "success" | "warning" | "error"
+    variant?: "info" | "success" | "warning" | "error"
     duration?: number
   }
 }
@@ -9419,7 +9419,7 @@ export type TuiToastShow = {
   data: {
     title?: string
     message: string
-    variant: "info" | "success" | "warning" | "error"
+    variant?: "info" | "success" | "warning" | "error"
     duration?: number
   }
 }
@@ -10575,7 +10575,7 @@ export type EventTuiToastShow1 = {
   properties: {
     title?: string
     message: string
-    variant: "info" | "success" | "warning" | "error"
+    variant?: "info" | "success" | "warning" | "error"
     duration?: number
   }
 }
@@ -10894,7 +10894,7 @@ export type EventTuiToastShow22 = {
   properties: {
     title?: string
     message: string
-    variant: "info" | "success" | "warning" | "error"
+    variant?: "info" | "success" | "warning" | "error"
     duration?: number
   }
 }
@@ -15122,7 +15122,7 @@ export type TuiShowToastData = {
   body?: {
     title?: string
     message: string
-    variant: "info" | "success" | "warning" | "error"
+    variant?: "info" | "success" | "warning" | "error"
     duration?: number
   }
   path?: never

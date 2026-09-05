@@ -337,33 +337,38 @@ export class BrowserSession {
     }
   }
 
+  private async probe(url: string): Promise<void> {
+    try {
+      await fetch(url, { method: "HEAD", signal: AbortSignal.timeout(3_000) })
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      if (/ECONNREFUSED|fetch failed|Failed to fetch/i.test(detail)) {
+        throw new Error(
+          `Cannot open ${url}: connection refused. Start the app or inspect background_process for the listening port.`,
+        )
+      }
+    }
+  }
+
+  private async press(page: BrowserPage, selector: string): Promise<void> {
+    const named = selector.match(/^button(?:\[name=['"](.+)['"]\]|\.(.+))$/)
+    if (named?.[1] || named?.[2]) {
+      const name = named[1] ?? named[2]!.replace(/-/g, " ")
+      await page.getByRole("button", { name: new RegExp(name, "i") }).click({ timeout: 5_000 })
+      return
+    }
+    await page.locator(selector).click({ timeout: 5_000 })
+  }
+
   private async once(action: BrowserNativeAction): Promise<BrowserResult> {
     const page = this.active()
     if (action.operation === "navigate") {
-      try {
-        const probe = await fetch(action.url, { method: "HEAD", signal: AbortSignal.timeout(3_000) })
-        void probe
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error)
-        if (/ECONNREFUSED|fetch failed|Failed to fetch/i.test(detail)) {
-          throw new Error(
-            `Cannot open ${action.url}: connection refused. Start the app or inspect background_process for the listening port.`,
-          )
-        }
-      }
+      await this.probe(action.url)
       const response = await page.goto(action.url, { timeout: 15_000 })
       const status = response?.status()
       if (status === 403 || status === 429) throw new Error(`Site returned HTTP ${status}`)
     }
-    if (action.operation === "click") {
-      const named = action.selector.match(/^button(?:\[name=['"](.+)['"]\]|\.(.+))$/)
-      if (named?.[1] || named?.[2]) {
-        const name = named[1] ?? named[2]!.replace(/-/g, " ")
-        await page.getByRole("button", { name: new RegExp(name, "i") }).click({ timeout: 5_000 })
-      } else {
-        await page.locator(action.selector).click({ timeout: 5_000 })
-      }
-    }
+    if (action.operation === "click") await this.press(page, action.selector)
     if (action.operation === "type") {
       const locator = page.locator(action.selector)
       await locator.fill(action.text, { timeout: 5_000 })

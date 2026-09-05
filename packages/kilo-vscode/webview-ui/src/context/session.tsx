@@ -1,9 +1,4 @@
-/**
- * Session context
- * Manages session state, messages, and handles SSE events from the extension.
- * Also owns global (extension-lifetime) model selection (provider context is catalog-only).
- */
-
+/** Session state, messages, SSE events, and extension-lifetime model selection. */
 import {
   createContext,
   useContext,
@@ -2858,24 +2853,20 @@ export const SessionProvider: ParentComponent = (props) => {
     vscode.postMessage({ type: "unrevertSession", sessionID: id })
   }
 
-  // Clear local send bookkeeping and request deletion. The message stays visible
-  // until messageRemoved confirms deletion; a false response leaves it in place.
   function deleteQueuedMessage(sessionID: string, messageID: string) {
     if (!server.isConnected()) return
     pendingOptimistic.get(sessionID)?.delete(messageID)
     finishSubmission(messageID)
     vscode.postMessage({ type: "deleteMessage", sessionID, messageID })
   }
-
   function editQueuedMessage(sessionID: string, messageID: string, text: string) {
     if (!server.isConnected()) return
     const current = getParts(messageID)
     const part = current.find((item) => item.type === "text" && !item.synthetic)
-    if (!part || part.type !== "text") return
-    setStore("parts", messageID, current.map((item) => (item.id === part.id && item.type === "text" ? { ...item, text } : item)))
+    if (part?.type !== "text") return
+    setStore("parts", messageID, current.map((item) => (item.id === part.id ? { ...item, text } : item)))
     vscode.postMessage({ type: "updateQueuedMessage", sessionID, messageID, partID: part.id, text })
   }
-
   function syncSession(sessionID: string, parentSessionID = currentSessionID(), scope: "task" | "inspector" = "task") {
     vscode.postMessage({ type: "syncSession", sessionID, parentSessionID, scope })
   }
@@ -3104,8 +3095,6 @@ export const SessionProvider: ParentComponent = (props) => {
 
 export function useSession(): SessionContextValue {
   const context = useContext(SessionContext)
-  if (!context) {
-    throw new Error("useSession must be used within a SessionProvider")
-  }
+  if (!context) throw new Error("useSession must be used within a SessionProvider")
   return context
 }

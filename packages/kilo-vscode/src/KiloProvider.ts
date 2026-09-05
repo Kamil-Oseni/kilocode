@@ -1083,6 +1083,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         return
       }
       if (this.handleEditorOpenMessage(message)) return
+      if (await this.handleSessionControl(message)) return
       if (await this.handleAgentManagerSettingsMessage(message)) return
       if (
         await handleWorkStyleMessage({
@@ -1172,21 +1173,6 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           )
           break
         }
-        case "abort":
-          this.cancelRetry(message.sessionID ?? "")
-          await this.handleAbort(message.sessionID)
-          break
-        case "deleteMessage":
-          await this.handleDeleteMessage(message.sessionID, message.messageID)
-          break
-        case "updateQueuedMessage":
-          await this.handleUpdateQueuedMessage(
-            String(message.sessionID ?? ""),
-            String(message.messageID ?? ""),
-            String((message as { partID?: string }).partID ?? ""),
-            String((message as { text?: string }).text ?? ""),
-          )
-          break
         case "permissionResponse":
           await handlePermissionResponse(
             this.permissionCtx,
@@ -1196,15 +1182,6 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
             message.approvedAlways,
             message.deniedAlways,
           )
-          break
-        case "createSession":
-          await this.handleCreateSession()
-          break
-        case "clearSession":
-          this.stopCurrentSessionProcesses()
-          this.contextSessionID = undefined
-          this.setCurrentSession(null)
-          this.focusSession()
           break
         case "loadMessages":
           // Don't await: allow parallel loads so rapid session switching
@@ -2556,6 +2533,43 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         message: getErrorMessage(error) || "Failed to delete session",
       })
     }
+  }
+
+  private async handleSessionControl(message: {
+    type: string
+    sessionID?: string
+    messageID?: string
+    partID?: string
+    text?: string
+  }): Promise<boolean> {
+    if (message.type === "abort") {
+      this.cancelRetry(message.sessionID ?? "")
+      await this.handleAbort(message.sessionID)
+      return true
+    }
+    if (message.type === "deleteMessage") {
+      await this.handleDeleteMessage(message.sessionID, message.messageID)
+      return true
+    }
+    if (message.type === "updateQueuedMessage") {
+      await this.handleUpdateQueuedMessage(
+        String(message.sessionID ?? ""),
+        String(message.messageID ?? ""),
+        String(message.partID ?? ""),
+        String(message.text ?? ""),
+      )
+      return true
+    }
+    if (message.type === "createSession") {
+      await this.handleCreateSession()
+      return true
+    }
+    if (message.type !== "clearSession") return false
+    this.stopCurrentSessionProcesses()
+    this.contextSessionID = undefined
+    this.setCurrentSession(null)
+    this.focusSession()
+    return true
   }
 
   private async handleDeleteMessage(sessionID: string, messageID: string): Promise<void> {

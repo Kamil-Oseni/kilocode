@@ -201,6 +201,10 @@ describe("pickOutcome", () => {
     expect(pickOutcome({ single: false, multi: false, custom: false })).toEqual({ kind: "advance" })
   })
 
+  it("keeps the last question pending until explicit submit", () => {
+    expect(pickOutcome({ single: false, multi: false, custom: false, last: true })).toEqual({ kind: "stay" })
+  })
+
   it("stays on the current tab for a multi-select pick", () => {
     expect(pickOutcome({ single: true, multi: true, custom: false })).toEqual({ kind: "stay" })
   })

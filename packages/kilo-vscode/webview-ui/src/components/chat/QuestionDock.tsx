@@ -170,7 +170,7 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
       return
     }
 
-    const outcome = pickOutcome({ single: single(), multi: multi(), custom })
+    const outcome = pickOutcome({ single: single(), multi: multi(), custom, last: last() })
     if (outcome.kind === "advance") {
       setStore("tab", store.tab + 1)
     }
@@ -282,7 +282,6 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
 
     pick(value, true)
     close()
-    if (single()) submit()
   }
 
   const toggleCollapse = () => {
@@ -543,16 +542,12 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
                   when={confirm()}
                   fallback={
                     <Button
-                      variant={last() && single() ? "primary" : "secondary"}
+                      variant={last() ? "primary" : "secondary"}
                       size="small"
-                      onClick={last() && single() ? submit : () => selectTab(store.tab + 1)}
+                      onClick={last() ? submit : () => selectTab(store.tab + 1)}
                       disabled={store.sending || (!confirm() && (store.answers[store.tab]?.length ?? 0) === 0)}
                     >
-                      {last() && single()
-                        ? language.t("ui.common.submit")
-                        : last()
-                          ? language.t("common.review")
-                          : language.t("ui.common.next")}
+                      {last() ? language.t("ui.common.submit") : language.t("ui.common.next")}
                     </Button>
                   }
                 >

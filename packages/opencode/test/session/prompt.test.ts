@@ -1034,7 +1034,7 @@ it.instance("ask_options click resolves the tool and the same turn continues on 
       questions.list().pipe(Effect.map((items) => items.find((item) => item.sessionID === session.id))),
       "timed out waiting for ask_options",
     )
-    expect(pending.autoSubmit).toBe(true)
+    expect(pending.autoSubmit).toBe(false)
     expect(pending.questions[0]?.custom).toBe(true)
     yield* questions.reply({ requestID: pending.id, answers: [["raya-option:markdown"]] })
 

@@ -416,7 +416,7 @@ describe("tool.task", () => {
         multiple: false,
         custom: true,
       })
-      expect(pending[0]?.autoSubmit).toBe(true) // raya_change - Milestone C shared option cards
+      expect(pending[0]?.autoSubmit).toBe(false) // last question waits for Submit
       expect(pending[0]?.questions[0]?.options.length).toBeGreaterThanOrEqual(2)
       yield* questions.reply({ requestID: pending[0]!.id, answers: [["designer"]] })
       const result = yield* Fiber.join(fiber)

@@ -54,12 +54,13 @@ export type PickOutcome = { kind: "submit" } | { kind: "advance" } | { kind: "st
  *
  * - Multi-select prompts: the pick only toggles local state; no tab change, no submit.
  * - Single-question single-select prompts: keep the pick local and wait for explicit Submit.
- * - Multi-question single-select, option pick: advance to the next tab.
+ * - Last question of a wizard: stay so Submit is always on the final question.
+ * - Multi-question single-select, earlier option pick: advance to the next tab.
  * - Custom-input path for a single-select is handled separately in handleCustomSubmit.
  */
-export function pickOutcome(input: { single: boolean; multi: boolean; custom: boolean }): PickOutcome {
+export function pickOutcome(input: { single: boolean; multi: boolean; custom: boolean; last?: boolean }): PickOutcome {
   if (input.multi) return { kind: "stay" }
-  if (input.single) return { kind: "stay" }
+  if (input.single || input.last) return { kind: "stay" }
   return { kind: "advance" }
 }
 

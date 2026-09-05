@@ -151,8 +151,13 @@ export const MessageList: Component<MessageListProps> = (props) => {
 
   // Explicit output-producing actions resume auto-scroll before appending.
   const onResumeAutoScroll = () => autoScroll.resume()
+  const onPauseAutoScroll = () => autoScroll.pause()
   window.addEventListener("resumeAutoScroll", onResumeAutoScroll)
-  onCleanup(() => window.removeEventListener("resumeAutoScroll", onResumeAutoScroll))
+  window.addEventListener("pauseAutoScroll", onPauseAutoScroll)
+  onCleanup(() => {
+    window.removeEventListener("resumeAutoScroll", onResumeAutoScroll)
+    window.removeEventListener("pauseAutoScroll", onPauseAutoScroll)
+  })
 
   let loaded = false
   createEffect(() => {

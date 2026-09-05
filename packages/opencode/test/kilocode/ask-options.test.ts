@@ -1,5 +1,5 @@
 // raya_change - Milestone C selectable options runtime tests
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Fiber, Queue, Schema } from "effect"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
@@ -44,6 +44,23 @@ const pending = Effect.fn("AskOptionsTest.pending")(function* (question: Questio
 })
 
 describe("ask_options", () => {
+  test("waits for Submit instead of sending on a single-select click", () => {
+    const item = RayaAskOptions.request({
+      sessionID: ctx.sessionID,
+      questions: [
+        {
+          prompt: "Which format should I use?",
+          options: [
+            { id: "markdown", label: "Markdown" },
+            { id: "json", label: "JSON" },
+          ],
+        },
+      ],
+    })
+    expect(item.autoSubmit).toBe(false)
+    expect(item.questions[0]?.custom).toBe(true)
+  })
+
   it.instance("renders a single-select card, returns its stable id, and always offers Other", () =>
     Effect.gen(function* () {
       const question = yield* Question.Service
@@ -68,7 +85,7 @@ describe("ask_options", () => {
       const item = yield* pending(question)
       const option = item.questions[0]?.options[0]
 
-      expect(item.autoSubmit).toBe(true)
+      expect(item.autoSubmit).toBe(false)
       expect(item.questions[0]?.custom).toBe(true)
       expect(option).toMatchObject({ label: "Markdown" })
       expect(option?.id).toBe("raya-option:markdown")

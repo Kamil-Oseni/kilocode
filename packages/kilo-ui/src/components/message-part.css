@@ -728,9 +728,11 @@ html[data-theme="kilo-vscode"] [data-component="todos"] {
     }
   }
 
-  /* Streaming state: keep the block open while content grows. */
+  /* Streaming state: keep the block open while content grows. Pinning
+     (user opened or scrolled the thoughts) lifts the 120px window so they
+     can read the full stream without the viewport chasing new tokens. */
   &[data-streaming] {
-    &[data-auto-collapse] [data-slot="reasoning-content"] {
+    &[data-auto-collapse]:not([data-pinned]) [data-slot="reasoning-content"] {
       max-height: 120px;
       overflow-y: auto;
       scroll-behavior: smooth;

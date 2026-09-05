@@ -62,7 +62,7 @@ export namespace RayaAskOptions {
         custom: true,
       })),
       blocking: input.blocking ?? true,
-      autoSubmit: input.questions.length === 1 && input.questions[0]?.allow_multiple !== true,
+      autoSubmit: false, // last question waits for Submit instead of sending on the option click
       tool: input.tool,
     }
   }

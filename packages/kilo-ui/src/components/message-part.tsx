@@ -1759,18 +1759,27 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props: MessagePartProp
   // explicitly collapsed this reasoning part.
   const initial = props.reasoningAutoCollapse ? !done() || was || userOpened.has(id) : !userCollapsed.has(id)
   const [open, setOpen] = createSignal(initial)
+  const [held, setHeld] = createSignal(false)
+
+  const hold = () => {
+    if (held()) return
+    setHeld(true)
+    window.dispatchEvent(new Event("pauseAutoScroll"))
+  }
 
   const track = (value: boolean) => {
     if (props.reasoningAutoCollapse) {
       if (value) rememberReasoningState(userOpened, id)
       else userOpened.delete(id)
       setOpen(value)
+      if (value && !done()) hold()
       return
     }
 
     if (value) userCollapsed.delete(id)
     else rememberReasoningState(userCollapsed, id)
     setOpen(value)
+    if (value && !done()) hold()
   }
 
   // Reasoning has no built-in "force open" hook (unlike BasicTool's forceOpen
@@ -1798,28 +1807,31 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props: MessagePartProp
     if (done()) streamed.delete(id)
   })
 
-  // Auto-scroll the content container while streaming.
-  // Use a plain mutable flag rather than checking dist inside the reactive
-  // effect: by the time the effect runs the DOM has already grown, so reading
-  // scrollHeight post-update incorrectly reports the user as scrolled away
-  // whenever a streaming chunk is > 10px tall.
+  // Auto-scroll the content container while streaming, but pin in place once
+  // the user opens or scrolls the thoughts so markdown refreshes cannot yank
+  // them back to the top.
   let ref: HTMLDivElement | undefined
-  let scrolled = false
+  let y = 0
 
   const onScroll = (e: Event) => {
     const el = e.currentTarget as HTMLDivElement
-    if (el.scrollHeight - el.clientHeight - el.scrollTop < 10) scrolled = false
+    y = el.scrollTop
+    if (el.scrollHeight - el.clientHeight - el.scrollTop >= 10) hold()
   }
 
-  const onWheel = (e: WheelEvent) => {
-    if (e.deltaY < 0) scrolled = true
-  }
+  const onWheel = () => hold()
 
   createEffect(() => {
     display()
-    if (!done() && ref && !scrolled) {
+    if (!ref) return
+    if (!done() && !held()) {
       ref.scrollTop = ref.scrollHeight
+      return
     }
+    const top = y
+    requestAnimationFrame(() => {
+      if (ref) ref.scrollTop = top
+    })
   })
 
   return (
@@ -1828,6 +1840,7 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props: MessagePartProp
         data-component="reasoning-part"
         data-streaming={!done() ? "" : undefined}
         data-auto-collapse={props.reasoningAutoCollapse ? "" : undefined}
+        data-pinned={held() ? "" : undefined}
       >
         <Show
           when={view().body}

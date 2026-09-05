@@ -391,6 +391,12 @@ const layer = Layer.effect(
         KiloAgent.sealDesigner(agents)
         // kilocode_change end
 
+        // kilocode_change start // raya_change - tear out the read-only ceiling: Plan, Ask, Explore,
+        // and Orchestrator get the same full tool access as the default agent (runs before the
+        // Truncate.GLOB loop below so their external_directory whitelist is still applied).
+        KiloAgent.openReadOnly(agents, cfg, defaults, user)
+        // kilocode_change end
+
         function referencePrompt(reference: KiloReference.Resolved) {
           if (reference.kind === "local") {
             return [

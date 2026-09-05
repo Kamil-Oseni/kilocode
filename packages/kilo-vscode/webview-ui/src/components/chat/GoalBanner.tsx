@@ -282,49 +282,52 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                       )}
                     </For>
                   </div>
-                  <Show when={props.editing}>
-                    <div class="goal-banner__editor">
-                      <label for="goal-objective-editor">Update the goal</label>
-                      <textarea
-                        id="goal-objective-editor"
-                        ref={editor}
-                        rows="6"
-                        value={draft()}
-                        onInput={(event) => setDraft(event.currentTarget.value)}
-                        aria-describedby="goal-objective-help"
-                      />
-                      <div id="goal-objective-help">
-                        {state().status === "blocked"
-                          ? "Raya will resume from this revision."
-                          : "The current step keeps running. Your revision applies to the next step."}
-                      </div>
-                      <div class="goal-banner__editor-actions">
-                        <Button size="small" variant="secondary" onClick={submit}>
-                          Update goal
-                        </Button>
-                        <Button size="small" variant="ghost" onClick={() => props.onCancelEdit?.()}>
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                  </Show>
-                  <Show when={props.confirmingStop}>
-                    <div class="goal-banner__discard" role="alert">
-                      <span>Stop tracking this goal?</span>
-                      <span class="goal-banner__discard-hint">
-                        Existing edits will remain available from the chat-level Review changes action.
-                      </span>
-                      <div class="goal-banner__editor-actions">
-                        <Button size="small" variant="secondary" onClick={() => props.onStop?.()}>
-                          Stop goal
-                        </Button>
-                        <Button size="small" variant="ghost" onClick={() => props.onCancelStop?.()}>
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                  </Show>
                 </div>
+                {/* raya_change - editor and stop-confirm live outside the scrollable
+                    details region so their controls (Update goal, Stop goal) stay
+                    reachable no matter how long the audit/history content grows. */}
+                <Show when={props.editing}>
+                  <div class="goal-banner__editor">
+                    <label for="goal-objective-editor">Update the goal</label>
+                    <textarea
+                      id="goal-objective-editor"
+                      ref={editor}
+                      rows="6"
+                      value={draft()}
+                      onInput={(event) => setDraft(event.currentTarget.value)}
+                      aria-describedby="goal-objective-help"
+                    />
+                    <div id="goal-objective-help">
+                      {state().status === "blocked"
+                        ? "Raya will resume from this revision."
+                        : "The current step keeps running. Your revision applies to the next step."}
+                    </div>
+                    <div class="goal-banner__editor-actions">
+                      <Button size="small" variant="secondary" onClick={submit}>
+                        Update goal
+                      </Button>
+                      <Button size="small" variant="ghost" onClick={() => props.onCancelEdit?.()}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                </Show>
+                <Show when={props.confirmingStop}>
+                  <div class="goal-banner__discard" role="alert">
+                    <span>Stop tracking this goal?</span>
+                    <span class="goal-banner__discard-hint">
+                      Existing edits will remain available from the chat-level Review changes action.
+                    </span>
+                    <div class="goal-banner__editor-actions">
+                      <Button size="small" variant="secondary" onClick={() => props.onStop?.()}>
+                        Stop goal
+                      </Button>
+                      <Button size="small" variant="ghost" onClick={() => props.onCancelStop?.()}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                </Show>
               </Show>
               {/* raya_change - the banner stays a quiet one-line status until the
                   chevron expands it; Steer and the run controls (Pause/Resume,

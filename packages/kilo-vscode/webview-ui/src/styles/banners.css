@@ -402,6 +402,12 @@
   color: var(--goal-text);
   font-family: var(--font-body);
   animation: goal-banner-enter var(--raya-duration-base) var(--raya-ease-out);
+  /* raya_change - the expanded card is a single bounded scroll container so a long
+     audit/history never pushes the Steer/Stop controls below the fold. The card
+     scrolls as a whole and every control stays reachable. */
+  max-height: min(80vh, 46rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .goal-banner[data-status="paused"] {
@@ -582,14 +588,13 @@
 }
 
 .goal-banner__details {
-  max-height: var(--goal-detail-max);
-  overflow: auto;
+  /* raya_change - no inner scroll: the whole .goal-banner is the single scroll
+     container, so details flows naturally and never traps controls below its fold. */
   display: grid;
   gap: var(--raya-space-10);
   padding: var(--raya-space-8) 0;
   border-top: var(--raya-hairline) solid var(--goal-line);
   border-bottom: var(--raya-hairline) solid var(--goal-line);
-  scrollbar-gutter: stable;
 }
 
 .goal-banner__section-title,

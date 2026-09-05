@@ -149,23 +149,26 @@ it.instance("auto orchestrator permits edit and write so subagents inherit no mu
   }),
 )
 
-it.instance("plan agent denies edits except .opencode/plans/*", () =>
+// raya_change - the read-only ceiling is torn out: Plan has the same full tool access as the
+// default agent (edit, write, interactive terminal, delegation), respecting the user's own config.
+it.instance("plan agent has full tool access", () =>
   Effect.gen(function* () {
     const plan = yield* load((svc) => svc.get("plan"))
     expect(plan).toBeDefined()
-    // Wildcard is denied
-    expect(evalPerm(plan, "edit")).toBe("deny")
-    expect(evalPerm(plan, "interactive_terminal")).toBe("deny") // kilocode_change
-    // But specific path is allowed
+    expect(evalPerm(plan, "edit")).toBe("allow")
+    expect(evalPerm(plan, "write")).toBe("allow")
+    expect(evalPerm(plan, "interactive_terminal")).toBe("allow")
+    expect(evalPerm(plan, "websearch")).toBe("allow")
     expect(Permission.evaluate("edit", ".opencode/plans/foo.md", plan!.permission).action).toBe("allow")
   }),
 )
 
-it.instance("plan agent denies the general subagent by default", () =>
+// raya_change - Plan can delegate to any subagent now that the read-only design is gone.
+it.instance("plan agent allows every subagent by default", () =>
   Effect.gen(function* () {
     const plan = yield* load((svc) => svc.get("plan"))
     expect(plan).toBeDefined()
-    expect(Permission.evaluate("task", "general", plan!.permission).action).toBe("deny")
+    expect(Permission.evaluate("task", "general", plan!.permission).action).toBe("allow")
     expect(Permission.evaluate("task", "explore", plan!.permission).action).toBe("allow")
     expect(Permission.evaluate("task", "custom", plan!.permission).action).toBe("allow")
   }),
@@ -190,15 +193,17 @@ it.instance(
   },
 )
 
-it.instance("explore agent denies edit and write", () =>
+// raya_change - the read-only ceiling is torn out: Explore now has full tool access like the
+// default agent, though it stays a subagent.
+it.instance("explore agent has full tool access", () =>
   Effect.gen(function* () {
     const explore = yield* load((svc) => svc.get("explore"))
     expect(explore).toBeDefined()
     expect(explore?.mode).toBe("subagent")
-    expect(evalPerm(explore, "edit")).toBe("deny")
-    expect(evalPerm(explore, "write")).toBe("deny")
-    expect(evalPerm(explore, "todowrite")).toBe("deny")
-    expect(evalPerm(explore, "interactive_terminal")).toBe("deny") // kilocode_change
+    expect(evalPerm(explore, "edit")).toBe("allow")
+    expect(evalPerm(explore, "write")).toBe("allow")
+    expect(evalPerm(explore, "todowrite")).toBe("allow")
+    expect(evalPerm(explore, "interactive_terminal")).toBe("allow")
   }),
 )
 

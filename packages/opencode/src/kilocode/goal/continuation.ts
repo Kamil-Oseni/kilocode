@@ -152,7 +152,8 @@ export namespace RayaGoalContinuation {
               }
               const messages = yield* input.sessions.messages({ sessionID: sid })
               const last = messages.toReversed().find((row) => row.info.role === "assistant")
-              yield* goals.retried(sid, detail(last?.info.error))
+              const err = last?.info.role === "assistant" ? last.info.error : undefined
+              yield* goals.retried(sid, detail(err))
               const session = yield* input.sessions.get(sid)
               yield* launch({
                 goals,

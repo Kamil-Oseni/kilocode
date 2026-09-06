@@ -249,6 +249,8 @@ import type {
   KilocodeRemoveSkillResponses,
   KilocodeRoutineCreateErrors,
   KilocodeRoutineCreateResponses,
+  KilocodeRoutineEventErrors,
+  KilocodeRoutineEventResponses,
   KilocodeRoutineListErrors,
   KilocodeRoutineListResponses,
   KilocodeRoutineRunErrors,
@@ -8897,6 +8899,49 @@ export class Routine extends HeyApiClient {
       url: "/kilocode/agent-templates",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * Fire event-triggered agents
+   *
+   * Start background runs for assigned agents whose event schedule matches this source.
+   */
+  public event<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      source?: string
+      filter?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "source" },
+            { in: "body", key: "filter" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeRoutineEventResponses,
+      KilocodeRoutineEventErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/agent-event",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 }

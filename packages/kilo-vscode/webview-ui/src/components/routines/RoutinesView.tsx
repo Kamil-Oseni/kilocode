@@ -21,6 +21,7 @@ type Agent = {
   schedule: Schedule
   enabled: boolean
   note?: string
+  nextRun?: number
 }
 
 type Run = {
@@ -45,7 +46,7 @@ type Template = {
 function whenLabel(schedule: Schedule) {
   if (schedule.kind === "manual") return "When you ask"
   if (schedule.kind === "once") return new Date(schedule.at).toLocaleString()
-  if (schedule.kind === "event") return `On ${schedule.source}`
+  if (schedule.kind === "event") return `On ${schedule.source}${schedule.filter ? ` (${schedule.filter})` : ""}`
   if (schedule.expr === "0 18 * * 1-5") return "Weekdays at 6pm"
   if (schedule.expr === "0 9 * * 1-5") return "Weekday mornings"
   if (schedule.expr === "0 9 * * *") return "Every morning"
@@ -247,7 +248,9 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                   </Show>
                 </div>
                 <p class="routines-job">{item.objective}</p>
-                <p class="routines-when">{whenLabel(item.schedule)}</p>
+                <p class="routines-when">
+                  {item.nextRun ? `Next: ${new Date(item.nextRun).toLocaleString()}` : whenLabel(item.schedule)}
+                </p>
                 <Show when={item.note}>
                   <p class="routines-note">{item.note}</p>
                 </Show>

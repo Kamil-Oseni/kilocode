@@ -103,6 +103,10 @@ export const TaskUpdatePayload = Schema.Struct({
   plan: Schema.optional(Schema.String),
   note: Schema.optional(Schema.String),
 })
+export const TaskEventPayload = Schema.Struct({
+  source: Schema.String,
+  filter: Schema.optional(Schema.String),
+})
 export const GoalCreatePayload = RayaGoal.Create // raya_change - Milestone A goal API contracts
 export const GoalUpdatePayload = RayaGoal.Control // raya_change - Milestone A goal API contracts
 export const CheckpointCreatePayload = RayaCheckpoint.CreatePayload // raya_change - named workspace checkpoints
@@ -150,6 +154,7 @@ export const KilocodePaths = {
   agentRun: `${root}/agent/:agentID/run`,
   agentRuns: `${root}/agent/:agentID/runs`,
   agentTemplates: `${root}/agent-templates`,
+  agentEvent: `${root}/agent-event`,
 } as const
 
 export const KilocodeApi = HttpApi.make("kilocode")
@@ -606,6 +611,18 @@ export const KilocodeApi = HttpApi.make("kilocode")
             identifier: "kilocode.routine.templates",
             summary: "List agent templates",
             description: "Starter roles for assigning a useful agent in two clicks.",
+          }),
+        ),
+        HttpApiEndpoint.post("agentEvent", KilocodePaths.agentEvent, {
+          query: WorkspaceRoutingQuery,
+          payload: TaskEventPayload,
+          success: described(Schema.Array(RayaTask.Run), "Started runs"),
+          error: HttpApiError.BadRequest,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.event",
+            summary: "Fire event-triggered agents",
+            description: "Start background runs for assigned agents whose event schedule matches this source.",
           }),
         ),
         // raya_change start - owner design-system lock

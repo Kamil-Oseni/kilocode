@@ -39,6 +39,7 @@ export namespace RayaTaskRunner {
     fire: (id: string) => Effect.Effect<RayaTask.Run, RayaTask.GuardError | RayaTask.NotFoundError>
     settle: (sessionID: SessionID) => Effect.Effect<void>
     revive: () => Effect.Effect<void>
+    announce: (source: string, filter?: string) => Effect.Effect<RayaTask.Run[]>
     tasks: Tasks
   }
 
@@ -142,10 +143,21 @@ export namespace RayaTaskRunner {
       }
     })
 
+    const announce = Effect.fn("RayaTaskRunner.announce")(function* (source: string, filter?: string) {
+      const items = yield* tasks.listenFor(source, filter)
+      const runs: RayaTask.Run[] = []
+      for (const item of items) {
+        const run = yield* fire(item.id).pipe(Effect.catch(() => Effect.succeed(undefined)))
+        if (run) runs.push(run)
+      }
+      return runs
+    })
+
     return {
       fire: fire as Runner["fire"],
       settle: settle as Runner["settle"],
       revive: revive as Runner["revive"],
+      announce: announce as Runner["announce"],
       tasks,
     }
   }

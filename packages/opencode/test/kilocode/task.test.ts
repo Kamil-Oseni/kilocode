@@ -101,6 +101,22 @@ describe("RayaTask store", () => {
     )
     expect(exit._tag).toBe("Failure")
   })
+
+  test("event schedules match a CI signal and skip overlap", async () => {
+    const tasks = RayaTask.make({ storage: memory() })
+    const agent = await Effect.runPromise(
+      tasks.create({
+        name: "CI",
+        role: "reviewer",
+        objective: "Inspect the failed build",
+        schedule: { kind: "event", source: "ci", filter: "main" },
+      }),
+    )
+    expect(RayaTask.listen(agent, "ci", "main")).toBe(true)
+    expect(RayaTask.listen(agent, "ci", "develop")).toBe(false)
+    const hit = await Effect.runPromise(tasks.listenFor("ci", "main"))
+    expect(hit.map((item) => item.id)).toEqual([agent.id])
+  })
 })
 
 describe("cron and plain English schedules", () => {
@@ -113,6 +129,7 @@ describe("cron and plain English schedules", () => {
   test("translates weekday evening English to cron", () => {
     expect(english("every weekday at 6pm")).toEqual({ kind: "cron", expr: "0 18 * * 1-5" })
     expect(english("just when I ask")).toEqual({ kind: "manual" })
+    expect(english("every time CI fails on main")).toEqual({ kind: "event", source: "ci", filter: "main" })
   })
 })
 

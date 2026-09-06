@@ -33,6 +33,7 @@ export namespace RayaTask {
     createdAt: Schema.Number,
     updatedAt: Schema.Number,
     note: Schema.optional(Schema.String),
+    nextRun: Schema.optional(Schema.Number),
   })
   export type Agent = typeof Agent.Type
 
@@ -89,19 +90,32 @@ export namespace RayaTask {
   const agents = Schema.decodeUnknownEffect(Schema.Array(Agent))
   const runs = Schema.decodeUnknownEffect(Schema.Array(Run))
 
-  export function due(agent: Agent, from: number, last?: Run) {
+  export function next(agent: Agent, from: number, last?: Run) {
     if (!agent.enabled) return
     if (agent.schedule.kind === "manual") return
     if (agent.schedule.kind === "event") return
     if (last?.status === "running") return
     if (agent.schedule.kind === "once") {
       if (last) return
-      if (agent.schedule.at <= from) return agent.schedule.at
-      return
+      return agent.schedule.at
     }
     const origin = last?.at ?? agent.createdAt
-    const at = cronNext(agent.schedule.expr, Math.max(origin, from - 60_000))
+    return cronNext(agent.schedule.expr, Math.max(origin, from - 60_000))
+  }
+
+  export function due(agent: Agent, from: number, last?: Run) {
+    const at = next(agent, from, last)
+    if (at === undefined) return
+    if (agent.schedule.kind === "once") return at <= from ? at : undefined
     if (at <= from) return at
+  }
+
+  export function listen(agent: Agent, source: string, filter?: string) {
+    if (!agent.enabled) return false
+    if (agent.schedule.kind !== "event") return false
+    if (agent.schedule.source !== source) return false
+    if (agent.schedule.filter && filter && agent.schedule.filter !== filter) return false
+    return true
   }
 
   export function make(deps: { storage: Store }) {
@@ -231,7 +245,29 @@ export namespace RayaTask {
       return dueAgents
     })
 
-    return { list, get, create, update, runsFor, record, recall, remember, ready }
+    const listenFor = Effect.fn("RayaTask.listenFor")(function* (source: string, filter?: string) {
+      const items = yield* list()
+      const match: Agent[] = []
+      for (const agent of items) {
+        if (!listen(agent, source, filter)) continue
+        const last = (yield* runsFor(agent.id)).at(-1)
+        if (last?.status === "running") continue
+        match.push(agent)
+      }
+      return match
+    })
+
+    const preview = Effect.fn("RayaTask.preview")(function* (from: number) {
+      const items = yield* list()
+      const listed: Agent[] = []
+      for (const agent of items) {
+        const last = (yield* runsFor(agent.id)).at(-1)
+        listed.push({ ...agent, nextRun: next(agent, from, last) })
+      }
+      return listed
+    })
+
+    return { list, get, create, update, runsFor, record, recall, remember, ready, listenFor, preview }
   }
 
   function allowed(role: string, capabilities: readonly string[]) {

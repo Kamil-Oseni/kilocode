@@ -57,6 +57,7 @@ import {
   CheckpointCreatePayload, // raya_change - named workspace checkpoints
   TaskCreatePayload,
   TaskUpdatePayload,
+  TaskEventPayload,
   DesignSystemSetPayload, // raya_change - owner design-system lock
   SelfHealCreatePayload, // raya_change
   SelfHealUpdatePayload, // raya_change
@@ -456,7 +457,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     // raya_change end
 
     const agentList = Effect.fn("KilocodeHttpApi.agentList")(function* () {
-      return yield* runner.tasks.list()
+      return yield* runner.tasks.preview(Date.now())
     })
     const agentCreate = Effect.fn("KilocodeHttpApi.agentCreate")(function* (ctx: {
       payload: typeof TaskCreatePayload.Type
@@ -489,6 +490,11 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     })
     const agentTemplateList = Effect.fn("KilocodeHttpApi.agentTemplates")(function* () {
       return agentTemplates
+    })
+    const agentEvent = Effect.fn("KilocodeHttpApi.agentEvent")(function* (ctx: {
+      payload: typeof TaskEventPayload.Type
+    }) {
+      return yield* runner.announce(ctx.payload.source, ctx.payload.filter)
     })
 
     // raya_change start - owner design-system lock
@@ -576,6 +582,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .handle("agentRun", agentRun)
         .handle("agentRuns", agentRuns)
         .handle("agentTemplates", agentTemplateList)
+        .handle("agentEvent", agentEvent)
         .handle("designSystemGet", designSystemGet)
         .handle("designSystemSet", designSystemSet)
         .handle("selfHealCreate", selfHealCreate)

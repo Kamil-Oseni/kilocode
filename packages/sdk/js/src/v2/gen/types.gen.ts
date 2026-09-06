@@ -18593,6 +18593,7 @@ export type KilocodeRoutineListResponses = {
     createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     note?: string
+    nextRun?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
   }>
 }
 
@@ -18679,6 +18680,7 @@ export type KilocodeRoutineCreateResponses = {
     createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     note?: string
+    nextRun?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
   }
 }
 
@@ -18772,6 +18774,7 @@ export type KilocodeRoutineUpdateResponses = {
     createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     note?: string
+    nextRun?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
   }
 }
 
@@ -18919,6 +18922,50 @@ export type KilocodeRoutineTemplatesResponses = {
 
 export type KilocodeRoutineTemplatesResponse =
   KilocodeRoutineTemplatesResponses[keyof KilocodeRoutineTemplatesResponses]
+
+export type KilocodeRoutineEventData = {
+  body?: {
+    source: string
+    filter?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/agent-event"
+}
+
+export type KilocodeRoutineEventErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type KilocodeRoutineEventError = KilocodeRoutineEventErrors[keyof KilocodeRoutineEventErrors]
+
+export type KilocodeRoutineEventResponses = {
+  /**
+   * Started runs
+   */
+  200: Array<{
+    id: string
+    agentID: string
+    at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    sessionID: string
+    status: "running" | "complete" | "blocked" | "error"
+    outcome?: {
+      kind: "code" | "notify"
+      summary: string
+      evidence?: Array<string>
+      cost: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
+    blockedReason?: string
+  }>
+}
+
+export type KilocodeRoutineEventResponse = KilocodeRoutineEventResponses[keyof KilocodeRoutineEventResponses]
 
 export type KilocodeDesignSystemGetData = {
   body?: never

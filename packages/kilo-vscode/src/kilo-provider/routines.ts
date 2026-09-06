@@ -19,6 +19,10 @@ function english(when: string | undefined) {
     const ms = once[2]!.startsWith("h") ? n * 3_600_000 : n * 60_000
     return { kind: "once" as const, at: Date.now() + ms }
   }
+  if (/ci fail|github action|when ci fails/.test(text)) {
+    const branch = text.match(/on ([a-z0-9._/-]+)/i)?.[1]
+    return { kind: "event" as const, source: "ci", filter: branch === "main" || branch === "master" ? branch : undefined }
+  }
   const hour = text.match(/(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/)
   const weekday = /weekday|monday|tue|wed|thu|fri/.test(text)
   if (hour) {

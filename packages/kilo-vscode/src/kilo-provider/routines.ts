@@ -10,7 +10,7 @@ type Ctx = {
   track?: (sessionID: string) => void
 }
 
-function english(when: string | undefined) {
+export function english(when: string | undefined) {
   const text = (when ?? "").trim().toLowerCase()
   if (!text || /when i ask|manual|just when/i.test(text)) return { kind: "manual" as const }
   const once = text.match(/in (\d+)\s*(minute|min|hour|hr)s?/)

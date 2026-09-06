@@ -9,6 +9,10 @@ export namespace PlanFile {
     return artifact(messages)?.plan
   }
 
+  export function structuredPlan(messages: MessageV2.WithParts[]) {
+    return artifact(messages)?.structured
+  }
+
   export function artifact(messages: MessageV2.WithParts[]) {
     const exit = messages
       .flatMap((m) => m.parts)

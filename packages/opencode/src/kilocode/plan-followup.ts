@@ -17,7 +17,7 @@ import { MessageV2 } from "@/session/message-v2"
 import { SessionStatus } from "@/session/status"
 import { Todo } from "@/session/todo"
 import { makeRuntime } from "@/effect/run-service"
-import { Effect, Schema } from "effect"
+import { Effect } from "effect"
 import * as Log from "@opencode-ai/core/util/log"
 import { KiloSessionPromptQueue } from "@/kilocode/session/prompt-queue"
 import { lazy } from "@/util/lazy"
@@ -419,10 +419,8 @@ export namespace PlanFollowup {
           const file = input.file ?? Session.plan(session, Instance.current)
           const todos = await PlanFollowupRuntime.todo.get(input.sessionID)
           const todoList = formatTodos(todos)
-          const sidecar = PlanArtifact.sidecar(file)
-          const structured = await Bun.file(sidecar)
-            .json()
-            .then((raw) => PlanArtifact.prompt(Schema.decodeUnknownSync(PlanArtifact.Info)(raw)))
+          const structured = await PlanArtifact.load(file)
+            .then((plan) => (plan ? PlanArtifact.prompt(plan) : ""))
             .catch(() => "")
 
           const compose = (handover: string) => {

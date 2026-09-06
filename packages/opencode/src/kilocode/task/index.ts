@@ -118,6 +118,12 @@ export namespace RayaTask {
     return true
   }
 
+  export function deny(agent: Pick<Agent, "role">) {
+    const role = agent.role.toLowerCase()
+    const tools = role === "briefer" || role === "inbox" ? ["edit", "write", "bash"] : []
+    return tools.map((permission) => ({ permission, pattern: "*", action: "deny" as const }))
+  }
+
   export function make(deps: { storage: Store }) {
     const list = Effect.fn("RayaTask.list")(function* () {
       const raw = yield* deps.storage.read<unknown>([...roster]).pipe(

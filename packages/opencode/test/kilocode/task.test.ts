@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { Storage } from "@/storage/storage"
 import { SessionID } from "@/session/schema"
+import { Permission } from "@/permission"
 import { RayaTask } from "@/kilocode/task"
+import { RayaTaskRunner } from "@/kilocode/task/runner"
 import { next } from "@/kilocode/task/cron"
 import { PlanArtifact } from "@/kilocode/plan-artifact"
 import { english } from "@/kilocode/tool/schedule-task"
@@ -21,6 +23,27 @@ function memory() {
       return Effect.sync(() => {
         data.set(key.join("/"), value)
       })
+    },
+    remove(key: string[]) {
+      return Effect.sync(() => {
+        data.delete(key.join("/"))
+      })
+    },
+    update<T>(key: string[], fn: (draft: T) => void) {
+      return Effect.gen(function* () {
+        const found = data.get(key.join("/")) as T
+        fn(found)
+        data.set(key.join("/"), found)
+        return found
+      })
+    },
+    list(prefix: string[]) {
+      const start = prefix.join("/")
+      return Effect.sync(() =>
+        [...data.keys()]
+          .filter((key) => key.startsWith(start))
+          .map((key) => key.split("/")),
+      )
     },
   }
 }
@@ -116,6 +139,49 @@ describe("RayaTask store", () => {
     expect(RayaTask.listen(agent, "ci", "develop")).toBe(false)
     const hit = await Effect.runPromise(tasks.listenFor("ci", "main"))
     expect(hit.map((item) => item.id)).toEqual([agent.id])
+  })
+
+  test("reminder roles deny edit tools at the session permission layer", () => {
+    const rules = RayaTask.deny({ role: "briefer" })
+    expect(Permission.disabled(["edit", "read", "bash"], rules).has("edit")).toBe(true)
+    expect(Permission.disabled(["edit", "read", "bash"], rules).has("bash")).toBe(true)
+    expect(Permission.disabled(["edit", "read"], RayaTask.deny({ role: "coder" })).has("edit")).toBe(false)
+  })
+
+  test("parks a running agent as waiting on you", async () => {
+    const sid = SessionID.make("ses_test")
+    const runner = RayaTaskRunner.make({
+      storage: memory(),
+      sessions: {
+        create: () => Effect.die("unused"),
+        get: () => Effect.die("unused"),
+        messages: () => Effect.succeed([]),
+        children: () => Effect.succeed([]),
+      },
+    })
+    const agent = await Effect.runPromise(
+      runner.tasks.create({
+        name: "Briefer",
+        role: "briefer",
+        objective: "Summarize what changed",
+        schedule: { kind: "manual" },
+      }),
+    )
+    await Effect.runPromise(
+      runner.tasks.record({
+        id: "r1",
+        agentID: agent.id,
+        at: Date.now(),
+        sessionID: sid,
+        status: "running",
+      }),
+    )
+    await Effect.runPromise(runner.park(sid, true))
+    const last = (await Effect.runPromise(runner.tasks.runsFor(agent.id))).at(-1)
+    expect(last?.status).toBe("blocked")
+    expect(last?.blockedReason).toBe("waiting on you")
+    await Effect.runPromise(runner.park(sid, false))
+    expect((await Effect.runPromise(runner.tasks.runsFor(agent.id))).at(-1)?.status).toBe("running")
   })
 })
 

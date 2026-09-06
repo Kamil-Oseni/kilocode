@@ -1,5 +1,6 @@
 import { Cause, Effect, Schema } from "effect"
 import type { Bus } from "@/bus"
+import { GlobalBus } from "@/bus/global"
 import type { Session } from "@/session/session"
 import type { Storage } from "@/storage/storage"
 import { SessionID } from "@/session/schema"
@@ -10,6 +11,8 @@ import { KiloSession } from "@/kilocode/session"
 import { PlanArtifact } from "@/kilocode/plan-artifact"
 import { RayaTask } from "."
 import * as Log from "@opencode-ai/core/util/log"
+
+const WAIT = "waiting on you"
 
 const log = Log.create({ service: "raya-task-runner" })
 
@@ -38,6 +41,7 @@ export namespace RayaTaskRunner {
   type Runner = {
     fire: (id: string) => Effect.Effect<RayaTask.Run, RayaTask.GuardError | RayaTask.NotFoundError>
     settle: (sessionID: SessionID) => Effect.Effect<void>
+    park: (sessionID: SessionID, waiting: boolean) => Effect.Effect<void>
     revive: () => Effect.Effect<void>
     announce: (source: string, filter?: string) => Effect.Effect<RayaTask.Run[]>
     tasks: Tasks
@@ -70,7 +74,12 @@ export namespace RayaTaskRunner {
       if (history.at(-1)?.status === "running") {
         return yield* new RayaTask.GuardError({ message: "This agent is already running." })
       }
-      const created = yield* input.sessions.create({ title: item.name, agent: specialist(item.role) })
+      const rules = RayaTask.deny(item)
+      const created = yield* input.sessions.create({
+        title: item.name,
+        agent: specialist(item.role),
+        permission: rules.length ? rules : undefined,
+      })
       const objective = yield* seed(item)
       yield* goals.create(created.id, objective)
       const run: RayaTask.Run = {
@@ -87,6 +96,22 @@ export namespace RayaTaskRunner {
         sessions: input.sessions,
       }).pipe(Effect.forkDetach)
       return run
+    })
+
+    const park = Effect.fn("RayaTaskRunner.park")(function* (sessionID: SessionID, waiting: boolean) {
+      const items = yield* tasks.list()
+      for (const item of items) {
+        const history = yield* tasks.runsFor(item.id)
+        const run = history.findLast((entry) => entry.sessionID === sessionID)
+        if (!run || run.status === "complete" || run.status === "error") continue
+        if (waiting) {
+          if (run.status === "blocked" && run.blockedReason === WAIT) continue
+          yield* tasks.record({ ...run, status: "blocked", blockedReason: WAIT })
+          continue
+        }
+        if (run.status !== "blocked" || run.blockedReason !== WAIT) continue
+        yield* tasks.record({ ...run, status: "running", blockedReason: undefined })
+      }
     })
 
     const settle = Effect.fn("RayaTaskRunner.settle")(function* (sessionID: SessionID) {
@@ -156,6 +181,7 @@ export namespace RayaTaskRunner {
     return {
       fire: fire as Runner["fire"],
       settle: settle as Runner["settle"],
+      park: park as Runner["park"],
       revive: revive as Runner["revive"],
       announce: announce as Runner["announce"],
       tasks,
@@ -179,6 +205,32 @@ export namespace RayaTaskRunner {
             ),
           ),
         )
+      })
+      yield* Effect.sync(() => {
+        const asked = new Set(["permission.asked", "question.asked"])
+        const replied = new Set(["permission.replied", "question.replied", "question.rejected"])
+        GlobalBus.on("event", (event) => {
+          const type = event.payload?.type
+          const raw = event.payload?.properties?.sessionID
+          if (!type || typeof raw !== "string") return
+          const waiting = asked.has(type)
+          if (!waiting && !replied.has(type)) return
+          const sid = (() => {
+            try {
+              return SessionID.make(raw)
+            } catch {
+              return
+            }
+          })()
+          if (!sid) return
+          bridge.fork(
+            runner.park(sid, waiting).pipe(
+              Effect.catchCause((cause) =>
+                Effect.sync(() => log.error("task park failed", { sessionID: sid, err: Cause.squash(cause) })),
+              ),
+            ),
+          )
+        })
       })
       yield* runner.revive().pipe(
         Effect.catchCause((cause) => Effect.sync(() => log.error("task revive failed", { err: Cause.squash(cause) }))),

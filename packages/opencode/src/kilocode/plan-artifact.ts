@@ -72,4 +72,14 @@ export namespace PlanArtifact {
       steps: plan.steps.map((step) => (step.id === id ? { ...step, status, note: note ?? step.note } : step)),
     }
   }
+
+  export async function save(file: string, plan: Info) {
+    await Bun.write(sidecar(file), JSON.stringify(plan, null, 2))
+  }
+
+  export async function load(file: string) {
+    const raw = await Bun.file(sidecar(file)).json().catch(() => undefined)
+    if (!raw) return
+    return Schema.decodeUnknownSync(Info)(raw)
+  }
 }

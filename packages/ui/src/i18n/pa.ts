@@ -176,6 +176,7 @@ export const dict: Record<string, string> = {
   "ui.message.collapse": "سنیہا سمیٹو",
   "ui.message.copy": "کاپی کرو",
   "ui.message.copyMessage": "پیغام کاپی کرو",
+  "ui.message.editQueued": "قطار وچ پیغام ترمیم کرو",
   "ui.message.forkMessage": "نویں سیشن تے فورک کرو",
   "ui.message.revertMessage": "سنیہا واپس کرو",
   "ui.message.copyResponse": "جواب کاپی کرو",

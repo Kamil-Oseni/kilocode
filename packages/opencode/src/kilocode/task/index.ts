@@ -191,7 +191,7 @@ export namespace RayaTask {
       const capabilities = input.capabilities ?? []
       if (sensitive.has(role.toLowerCase()) && !allowed(role, capabilities)) {
         return yield* new GuardError({
-          message: `${role} jobs need an explicit money or messages capability before they can run.`,
+          message: consent(role),
         })
       }
       const now = Date.now()
@@ -241,7 +241,7 @@ export namespace RayaTask {
       }
       if (sensitive.has(next.role.toLowerCase()) && !allowed(next.role, next.capabilities) && next.enabled) {
         return yield* new GuardError({
-          message: `${next.role} jobs need an explicit money or messages capability before they can run.`,
+          message: consent(next.role),
         })
       }
       const copy = [...items]
@@ -316,5 +316,10 @@ export namespace RayaTask {
     if (role.toLowerCase() === "accountant") return [...set].some((item) => money.has(item))
     if (role.toLowerCase() === "inbox") return [...set].some((item) => messages.has(item))
     return true
+  }
+
+  function consent(role: string) {
+    if (role.toLowerCase() === "accountant") return "Accountant jobs need you to allow money records first."
+    return "Inbox jobs need you to allow messages first."
   }
 }

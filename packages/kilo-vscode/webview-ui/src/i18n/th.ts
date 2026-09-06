@@ -297,6 +297,7 @@ export const dict = {
   "sidebar.topBar.label": "การนำทาง Raya",
   "sidebar.topBar.newTask": "งานใหม่",
   "sidebar.topBar.history": "ประวัติ",
+  "sidebar.topBar.routines": "งานประจำ",
   "sidebar.topBar.agentManager": "ตัวจัดการเอเจนต์",
   "sidebar.topBar.kiloClaw": "KiloClaw",
   "sidebar.topBar.marketplace": "มาร์เก็ตเพลส",

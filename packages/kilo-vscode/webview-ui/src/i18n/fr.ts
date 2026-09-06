@@ -301,6 +301,7 @@ export const dict = {
   "sidebar.topBar.label": "Navigation Raya",
   "sidebar.topBar.newTask": "Nouvelle Tâche",
   "sidebar.topBar.history": "Historique",
+  "sidebar.topBar.routines": "Routines",
   "sidebar.topBar.agentManager": "Agent Manager",
   "sidebar.topBar.kiloClaw": "KiloClaw",
   "sidebar.topBar.marketplace": "Marketplace",

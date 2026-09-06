@@ -178,6 +178,7 @@ export const dict = {
   "ui.message.copy": "Kopier",
   "ui.message.copyMessage": "Kopier besked",
   "ui.message.deleteQueued": "Slet besked i kø", // kilocode_change
+  "ui.message.editQueued": "Rediger besked i kø",
   "ui.message.forkMessage": "Forgren til ny session",
   "ui.message.revertMessage": "Nulstil til dette punkt",
   "ui.message.copyResponse": "Kopier svar",

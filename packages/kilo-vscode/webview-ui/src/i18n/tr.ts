@@ -299,6 +299,7 @@ export const dict = {
   "sidebar.topBar.label": "Raya Gezinme",
   "sidebar.topBar.newTask": "Yeni Görev",
   "sidebar.topBar.history": "Geçmiş",
+  "sidebar.topBar.routines": "Rutinler",
   "sidebar.topBar.agentManager": "Agent Manager",
   "sidebar.topBar.kiloClaw": "KiloClaw",
   "sidebar.topBar.marketplace": "Marketplace",

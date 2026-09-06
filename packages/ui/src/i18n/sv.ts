@@ -175,6 +175,7 @@ export const dict: Record<string, string> = {
   "ui.message.collapse": "Fäll ihop meddelandet",
   "ui.message.copy": "Kopiera",
   "ui.message.copyMessage": "Kopiera meddelandet",
+  "ui.message.editQueued": "Redigera meddelande i kö",
   "ui.message.forkMessage": "Förgrena meddelandet till en ny session",
   "ui.message.revertMessage": "Återställ meddelandet",
   "ui.message.copyResponse": "Kopiera svaret",

@@ -113,7 +113,8 @@ export interface RoutineRunsMessage {
 
 export interface RoutineRemoveMessage {
   type: "routineRemove"
-  agentID: string
+  agentID?: string
+  agentIDs?: string[]
 }
 // raya_change end
 

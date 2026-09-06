@@ -229,6 +229,7 @@ export const dict = {
   "ui.mermaid.renderError": "Mermaid 렌더링 실패: {{message}}",
   "ui.mermaid.rendering": "Mermaid 다이어그램 렌더링 중...",
   "ui.message.deleteQueued": "대기 중인 메시지 삭제",
+  "ui.message.editQueued": "대기 중인 메시지 편집",
   "ui.messagePart.mcp.input": "입력",
   "ui.messagePart.mcp.output": "출력",
   "ui.question.answer.dismissed": "Dismissed",

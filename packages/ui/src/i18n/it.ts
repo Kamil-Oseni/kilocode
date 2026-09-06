@@ -213,6 +213,7 @@ export const dict: Record<string, string> = {
   "ui.mermaid.renderError": "Rendering Mermaid non riuscito: {{message}}",
   "ui.mermaid.rendering": "Rendering del diagramma Mermaid...",
   "ui.message.deleteQueued": "Elimina il messaggio in coda",
+  "ui.message.editQueued": "Modifica il messaggio in coda",
   "ui.messagePart.mcp.input": "Input",
   "ui.messagePart.mcp.output": "Output",
   "ui.question.answer.dismissed": "Dismissed",

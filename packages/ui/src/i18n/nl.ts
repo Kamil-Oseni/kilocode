@@ -208,6 +208,7 @@ export const dict: Record<string, string> = {
   "ui.mermaid.renderError": "Mermaid-rendering mislukt: {{message}}",
   "ui.mermaid.rendering": "Mermaid-diagram renderen...",
   "ui.message.deleteQueued": "Bericht in wachtrij verwijderen",
+  "ui.message.editQueued": "Bericht in wachtrij bewerken",
   "ui.messagePart.mcp.input": "Invoer",
   "ui.messagePart.mcp.output": "Uitvoer",
   "ui.question.answer.dismissed": "Dismissed",

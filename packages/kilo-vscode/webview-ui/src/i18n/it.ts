@@ -603,6 +603,7 @@ export const dict = {
   "sidebar.topBar.label": "Navigazione Raya",
   "sidebar.topBar.newTask": "Nuova Attività",
   "sidebar.topBar.history": "Cronologia",
+  "sidebar.topBar.routines": "Routine",
   "sidebar.topBar.agentManager": "Agent Manager",
   "sidebar.topBar.kiloClaw": "KiloClaw",
   "sidebar.topBar.marketplace": "Marketplace",

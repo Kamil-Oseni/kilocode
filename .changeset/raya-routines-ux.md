@@ -3,4 +3,4 @@
 "@kilocode/cli": patch
 ---
 
-Redesign Routines to match History, add delete and custom role/model/tools, keep presence live, and stop double-starting background plan runs.
+Redesign Routines to match History, with multi-select remove, custom-provider Agent picker, and plain-language money and message consent.

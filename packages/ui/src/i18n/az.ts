@@ -175,6 +175,7 @@ export const dict: Record<string, string> = {
   "ui.message.collapse": "Mesajı yığ",
   "ui.message.copy": "Kopyala",
   "ui.message.copyMessage": "Mesajı kopyala",
+  "ui.message.editQueued": "Növbədəki mesajı redaktə et",
   "ui.message.forkMessage": "Yeni sessiyaya fork et",
   "ui.message.revertMessage": "Mesajı geri al",
   "ui.message.copyResponse": "Cavabı kopyala",

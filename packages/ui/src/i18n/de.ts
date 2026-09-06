@@ -235,6 +235,7 @@ export const dict = {
   "ui.mermaid.downloadSvg": "SVG herunterladen",
   "ui.mermaid.downloadPng": "PNG herunterladen",
   "ui.message.deleteQueued": "Nachricht in Warteschlange löschen",
+  "ui.message.editQueued": "Nachricht in Warteschlange bearbeiten",
   "ui.question.subtitle.dismissed": "{{count}} dismissed",
   "ui.question.answer.dismissed": "Dismissed",
   // kilocode_change end

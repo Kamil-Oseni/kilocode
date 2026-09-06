@@ -300,6 +300,7 @@ export const dict = {
   "sidebar.topBar.label": "Raya 탐색",
   "sidebar.topBar.newTask": "새 작업",
   "sidebar.topBar.history": "기록",
+  "sidebar.topBar.routines": "루틴",
   "sidebar.topBar.agentManager": "에이전트 관리자",
   "sidebar.topBar.kiloClaw": "KiloClaw",
   "sidebar.topBar.marketplace": "마켓플레이스",

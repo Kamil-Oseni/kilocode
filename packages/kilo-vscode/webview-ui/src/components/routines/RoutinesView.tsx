@@ -1,11 +1,16 @@
 import { Component, For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { Button } from "@kilocode/kilo-ui/button"
 import { Checkbox } from "@kilocode/kilo-ui/checkbox"
+import { Dialog } from "@kilocode/kilo-ui/dialog"
+import { IconButton } from "@kilocode/kilo-ui/icon-button"
+import { Select } from "@kilocode/kilo-ui/select"
+import { useDialog } from "@kilocode/kilo-ui/context/dialog"
 import { PresenceBadge } from "../chat/PresenceBadge"
 import { useVSCode } from "../../context/vscode"
 import { useLanguage } from "../../context/language"
 import { useProvider } from "../../context/provider"
 import { runPresence } from "../../utils/run-presence"
+import { KILO_PROVIDER_ID } from "../../../../src/shared/provider-model"
 import type { ExtensionMessage } from "../../types/messages"
 
 type Schedule =
@@ -17,7 +22,6 @@ type Schedule =
 type Agent = {
   id: string
   name: string
-  avatar?: string
   role: string
   objective: string
   capabilities: string[]
@@ -25,7 +29,6 @@ type Agent = {
   enabled: boolean
   note?: string
   nextRun?: number
-  model?: { providerID: string; id: string }
   access?: "full" | "brief"
 }
 
@@ -48,6 +51,8 @@ type Template = {
   schedule: Schedule
 }
 
+type Choice = { key: string; label: string; providerID?: string; modelID?: string }
+
 const roles = [
   { id: "briefer", label: "Briefer" },
   { id: "reviewer", label: "Reviewer" },
@@ -58,6 +63,13 @@ const roles = [
   { id: "generalist", label: "Generalist" },
   { id: "custom", label: "Custom" },
 ] as const
+
+const chat: Choice = { key: "chat", label: "Same as chat" }
+
+const work = [
+  { id: "full" as const, label: "Can edit the workspace" },
+  { id: "brief" as const, label: "Read and notify only" },
+]
 
 function whenLabel(schedule: Schedule) {
   if (schedule.kind === "manual") return "When you ask"
@@ -73,14 +85,11 @@ function latest(item: Agent, book: Record<string, Run[]>) {
   return (book[item.id] ?? []).at(-1)
 }
 
-function cost(run: Run) {
-  if (!run.outcome) return ""
-  return ` · ${run.outcome.summary} · $${run.outcome.cost.toFixed(2)}`
-}
-
-function stamp(run: Run) {
-  if (run.status === "blocked") return run.blockedReason || "waiting on you"
-  return run.status
+function meta(item: Agent) {
+  const when = item.nextRun ? `Next ${new Date(item.nextRun).toLocaleString()}` : whenLabel(item.schedule)
+  const pause = item.enabled ? "" : "Paused · "
+  const brief = item.access === "brief" || (!item.access && item.role === "briefer") ? " · Notify only" : ""
+  return `${pause}${item.role} · ${when}${brief}`
 }
 
 interface RoutinesViewProps {
@@ -92,6 +101,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const vscode = useVSCode()
   const language = useLanguage()
   const provider = useProvider()
+  const dialog = useDialog()
   const [agents, setAgents] = createSignal<Agent[]>([])
   const [templates, setTemplates] = createSignal<Template[]>([])
   const [runs, setRuns] = createSignal<Record<string, Run[]>>({})
@@ -104,11 +114,11 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const [money, setMoney] = createSignal(false)
   const [messages, setMessages] = createSignal(false)
   const [plan, setPlan] = createSignal("")
-  const [model, setModel] = createSignal("")
+  const [agent, setAgent] = createSignal("chat")
   const [access, setAccess] = createSignal<"full" | "brief">("brief")
   const [screen, setScreen] = createSignal<"roster" | "assign">("roster")
   const [busy, setBusy] = createSignal<Record<string, true>>({})
-  const [drop, setDrop] = createSignal("")
+  const [picked, setPicked] = createSignal<Record<string, true>>({})
   const [saving, setSaving] = createSignal(false)
   let hold = false
 
@@ -136,6 +146,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
           hold = false
           setSaving(false)
           setScreen("roster")
+          setPicked({})
         }
       }
       if (msg.templates) setTemplates(msg.templates as Template[])
@@ -152,10 +163,32 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   })
   onCleanup(unsub)
 
+  const picks = createMemo<Choice[]>(() => {
+    const extras: Choice[] = []
+    const defaults = provider.defaults()
+    for (const item of Object.values(provider.providers())) {
+      if (item.source !== "custom" || item.id === KILO_PROVIDER_ID) continue
+      const modelID = defaults[item.id] || Object.keys(item.models ?? {})[0]
+      if (!modelID) continue
+      extras.push({
+        key: item.id,
+        label: item.name,
+        providerID: item.id,
+        modelID,
+      })
+    }
+    extras.sort((a, b) => a.label.localeCompare(b.label))
+    return [chat, ...extras]
+  })
+
+  const current = createMemo(() => picks().find((item) => item.key === agent()) ?? chat)
+
   const pick = (next: string) => {
     setRole(next)
     if (next === "accountant") setMoney(true)
     if (next === "inbox") setMessages(true)
+    if (next !== "accountant") setMoney(false)
+    if (next !== "inbox") setMessages(false)
     setAccess(next === "briefer" ? "brief" : "full")
   }
 
@@ -175,8 +208,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     setSaving(true)
     hold = true
     const capabilities = [money() ? "money" : "", messages() ? "messages" : ""].filter(Boolean)
-    const [providerID, ...rest] = model().split("/")
-    const modelID = rest.join("/")
+    const chosen = current()
     vscode.postMessage({
       type: "routineCreate",
       name: name() || (role() === "custom" ? custom() : role()),
@@ -186,8 +218,8 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
       capabilities,
       plan: plan().trim() || undefined,
       access: access(),
-      providerID: providerID || undefined,
-      modelID: modelID || undefined,
+      providerID: chosen.providerID,
+      modelID: chosen.modelID,
     })
   }
 
@@ -207,9 +239,61 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     if (run?.sessionID) props.onOpenSession?.(run.sessionID)
   }
 
-  const remove = (id: string) => {
-    vscode.postMessage({ type: "routineRemove", agentID: id })
-    setDrop("")
+  const mark = (id: string, on: boolean) => {
+    setPicked((prior) => {
+      const next = { ...prior }
+      if (on) next[id] = true
+      else delete next[id]
+      return next
+    })
+  }
+
+  const selected = createMemo(() => Object.keys(picked()))
+  const allOn = createMemo(() => agents().length > 0 && agents().every((item) => picked()[item.id]))
+  const someOn = createMemo(() => selected().length > 0 && !allOn())
+
+  const markAll = (on: boolean) => {
+    if (!on) {
+      setPicked({})
+      return
+    }
+    const next: Record<string, true> = {}
+    for (const item of agents()) next[item.id] = true
+    setPicked(next)
+  }
+
+  const drop = (ids: string[]) => {
+    vscode.postMessage({ type: "routineRemove", agentIDs: ids })
+    setPicked({})
+  }
+
+  const confirm = (ids: string[]) => {
+    if (!ids.length) return
+    const count = ids.length
+    const title = count === 1 ? "Remove this routine?" : `Remove ${count} routines?`
+    dialog.show(() => (
+      <Dialog title={title} fit>
+        <div class="dialog-confirm-body">
+          <span>Past chats stay in History. This cannot be undone from the roster.</span>
+          <div class="dialog-confirm-actions">
+            <Button variant="secondary" size="large" onClick={() => dialog.close()}>
+              Keep
+            </Button>
+            <Button
+              variant="ghost"
+              size="large"
+              class="dialog-destructive-btn"
+              onClick={() => {
+                drop(ids)
+                dialog.close()
+              }}
+            >
+              Remove
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+    ))
   }
 
   const state = (item: Agent) => {
@@ -223,18 +307,9 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   }
 
   const empty = createMemo(() => agents().length === 0)
-  const hint = createMemo(() => {
-    if (role() === "accountant") return "Accountant jobs need Money tools before they can be assigned."
-    if (role() === "inbox") return "Inbox jobs need Messages tools before they can be assigned."
-    if (access() === "brief") return "This routine can read and notify. It cannot edit files or run the terminal."
-    return "This routine can write files and use every tool."
-  })
-  const models = createMemo(() =>
-    provider
-      .models()
-      .slice()
-      .sort((a, b) => a.name.localeCompare(b.name)),
-  )
+  const extras = createMemo(() => picks().length > 1)
+  const roleOpt = createMemo(() => roles.find((item) => item.id === role()) ?? roles[0])
+  const workOpt = createMemo(() => work.find((item) => item.id === access()) ?? work[0])
 
   return (
     <div class="routines-view history-view">
@@ -244,15 +319,30 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
             {language.t("common.goBack")}
           </Button>
         </Show>
+        <Show when={screen() === "roster" && !empty()}>
+          <Checkbox
+            hideLabel
+            checked={allOn()}
+            indeterminate={someOn()}
+            onChange={markAll}
+          >
+            Select all
+          </Checkbox>
+        </Show>
         <h2 class="routines-title">{screen() === "assign" ? "Assign a routine" : "Routines"}</h2>
-        <Show when={screen() === "roster"}>
+        <Show when={screen() === "roster" && selected().length > 0}>
+          <Button class="routines-header-action" size="small" onClick={() => confirm(selected())}>
+            Remove {selected().length}
+          </Button>
+        </Show>
+        <Show when={screen() === "roster" && selected().length === 0}>
           <Button class="routines-header-action" variant="ghost" size="small" onClick={() => setScreen("assign")}>
             Assign
           </Button>
         </Show>
         <Show when={screen() === "assign"}>
           <Button class="routines-header-action" variant="ghost" size="small" onClick={() => setScreen("roster")}>
-            Roster
+            Done
           </Button>
         </Show>
       </div>
@@ -265,7 +355,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
         <Show when={screen() === "roster"}>
           <Show when={empty()}>
             <div class="routines-empty-block">
-              <p class="routines-empty">No routines yet. Assign a standing job and it will sleep until it is time to work.</p>
+              <p class="routines-empty">No standing jobs yet. Assign one and it will sleep until it is time to work.</p>
               <Button onClick={() => setScreen("assign")}>Assign a routine</Button>
             </div>
           </Show>
@@ -274,82 +364,51 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
               {(item) => {
                 const run = () => latest(item, runs())
                 const presence = () => state(item)
-                const recent = () => (runs()[item.id] ?? []).slice(-2).reverse()
                 const canOpen = () => !!run()?.sessionID
+                const on = () => !!picked()[item.id]
                 return (
-                  <li class="routines-row" data-presence={presence()} data-paused={item.enabled ? undefined : "true"}>
-                    <div class="routines-row-top">
-                      <button
-                        type="button"
-                        class="routines-identity"
-                        disabled={!canOpen()}
-                        onClick={() => open(item)}
-                      >
-                        <span class="routines-name">{item.name}</span>
-                        <span class="routines-role">{item.role}</span>
-                      </button>
+                  <li
+                    class="routines-row"
+                    data-presence={presence()}
+                    data-paused={item.enabled ? undefined : "true"}
+                    data-picked={on() ? "true" : undefined}
+                  >
+                    <Checkbox hideLabel checked={on()} onChange={(value) => mark(item.id, value)}>
+                      Select {item.name}
+                    </Checkbox>
+                    <button
+                      type="button"
+                      class="routines-identity"
+                      disabled={!canOpen()}
+                      onClick={() => open(item)}
+                    >
+                      <span class="routines-name">{item.name}</span>
+                      <span class="routines-meta">{meta(item)}</span>
+                      <span class="routines-job">{item.objective}</span>
+                    </button>
+                    <div class="routines-side">
                       <PresenceBadge state={presence()} onAck={canOpen() ? () => open(item) : undefined} />
+                      <div class="routines-actions">
+                        <Button
+                          size="small"
+                          variant="ghost"
+                          disabled={!!busy()[item.id] || run()?.status === "running"}
+                          onClick={() => fire(item)}
+                        >
+                          {busy()[item.id] || run()?.status === "running" ? "Running" : "Run now"}
+                        </Button>
+                        <Button size="small" variant="ghost" onClick={() => toggle(item)}>
+                          {item.enabled ? "Pause" : "Enable"}
+                        </Button>
+                        <IconButton
+                          icon="trash"
+                          size="small"
+                          variant="ghost"
+                          aria-label={`Remove ${item.name}`}
+                          onClick={() => confirm([item.id])}
+                        />
+                      </div>
                     </div>
-                    <p class="routines-job">{item.objective}</p>
-                    <p class="routines-when">
-                      {item.enabled ? "" : "Paused · "}
-                      {item.nextRun ? `Next ${new Date(item.nextRun).toLocaleString()}` : whenLabel(item.schedule)}
-                      {item.access === "brief" || (!item.access && item.role === "briefer") ? " · Notify only" : ""}
-                    </p>
-                    <Show when={item.note}>
-                      <p class="routines-note">{item.note}</p>
-                    </Show>
-                    <div class="routines-actions">
-                      <Show when={canOpen()}>
-                        <Button size="small" variant="secondary" onClick={() => open(item)}>
-                          Open chat
-                        </Button>
-                      </Show>
-                      <Button size="small" variant="ghost" onClick={() => toggle(item)}>
-                        {item.enabled ? "Pause" : "Enable"}
-                      </Button>
-                      <Button
-                        size="small"
-                        disabled={!!busy()[item.id] || run()?.status === "running"}
-                        onClick={() => fire(item)}
-                      >
-                        {busy()[item.id] || run()?.status === "running" ? "Running" : "Run now"}
-                      </Button>
-                      <Show when={drop() !== item.id}>
-                        <Button size="small" variant="ghost" onClick={() => setDrop(item.id)}>
-                          Remove
-                        </Button>
-                      </Show>
-                    </div>
-                    <Show when={drop() === item.id}>
-                      <p class="routines-confirm">
-                        Remove {item.name}? Past chats stay in History.
-                        <Button size="small" variant="ghost" onClick={() => setDrop("")}>
-                          Keep
-                        </Button>
-                        <Button size="small" onClick={() => remove(item.id)}>
-                          Remove
-                        </Button>
-                      </p>
-                    </Show>
-                    <Show when={recent().length}>
-                      <ul class="routines-runs">
-                        <For each={recent()}>
-                          {(row) => (
-                            <li>
-                              <button
-                                type="button"
-                                class="routines-run"
-                                onClick={() => props.onOpenSession?.(row.sessionID)}
-                              >
-                                {stamp(row)} · {new Date(row.at).toLocaleString()}
-                                {cost(row)}
-                              </button>
-                            </li>
-                          )}
-                        </For>
-                      </ul>
-                    </Show>
                   </li>
                 )
               }}
@@ -357,8 +416,8 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
           </ul>
         </Show>
         <Show when={screen() === "assign"}>
-          <p class="routines-lede">Give someone a standing job in plain language. Start from a role, or write your own.</p>
-          <div class="routines-suggest">
+          <p class="routines-lede">Name the job in a sentence, then say when it should wake.</p>
+          <div class="routines-suggest" role="list">
             <For each={templates()}>
               {(item) => (
                 <button type="button" class="routines-suggest-btn" onClick={() => apply(item)}>
@@ -378,12 +437,18 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
               Name
               <input value={name()} onInput={(e) => setName(e.currentTarget.value)} placeholder="Nightly review" />
             </label>
-            <label class="routines-field">
-              Role
-              <select value={role()} onChange={(e) => pick(e.currentTarget.value)}>
-                <For each={roles}>{(item) => <option value={item.id}>{item.label}</option>}</For>
-              </select>
-            </label>
+            <div class="routines-field">
+              <span>Role</span>
+              <Select
+                options={[...roles]}
+                current={roleOpt()}
+                label={(item) => item.label}
+                value={(item) => item.id}
+                onSelect={(item) => item && pick(item.id)}
+                variant="secondary"
+                size="small"
+              />
+            </div>
             <Show when={role() === "custom"}>
               <label class="routines-field">
                 Custom role
@@ -394,26 +459,6 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                 />
               </label>
             </Show>
-            <label class="routines-field">
-              Model
-              <select value={model()} onChange={(e) => setModel(e.currentTarget.value)}>
-                <option value="">Same as chat</option>
-                <For each={models()}>
-                  {(item) => (
-                    <option value={`${item.providerID}/${item.id}`}>
-                      {item.providerName} · {item.name}
-                    </option>
-                  )}
-                </For>
-              </select>
-            </label>
-            <label class="routines-field">
-              Tools
-              <select value={access()} onChange={(e) => setAccess(e.currentTarget.value as "full" | "brief")}>
-                <option value="full">All tools, including writes</option>
-                <option value="brief">Read and notify only</option>
-              </select>
-            </label>
             <label class="routines-field">
               Standing job
               <textarea
@@ -431,6 +476,58 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                 placeholder="every weekday at 6pm"
               />
             </label>
+            <div class="routines-field">
+              <span>Agent</span>
+              <Select
+                options={picks()}
+                current={current()}
+                label={(item) => item.label}
+                value={(item) => item.key}
+                onSelect={(item) => item && setAgent(item.key)}
+                variant="secondary"
+                size="small"
+              />
+              <p class="routines-hint">
+                {extras()
+                  ? "Same as chat, or a custom provider from Settings."
+                  : "Same as chat uses whatever you already picked. Custom providers you add in Settings appear here."}
+                <button
+                  type="button"
+                  class="routines-inline"
+                  onClick={() => vscode.postMessage({ type: "openSettingsPanel", tab: "providers" })}
+                >
+                  Open Settings
+                </button>
+              </p>
+            </div>
+            <div class="routines-field">
+              <span>How it works</span>
+              <Select
+                options={work}
+                current={workOpt()}
+                label={(item) => item.label}
+                value={(item) => item.id}
+                onSelect={(item) => item && setAccess(item.id)}
+                variant="secondary"
+                size="small"
+              />
+            </div>
+            <Show when={role() === "accountant"}>
+              <div class="routines-consent">
+                <Checkbox checked={money()} onChange={setMoney}>
+                  Allow money records
+                </Checkbox>
+                <p class="routines-hint">Receipts, ledgers, and invoices. It will not send payments.</p>
+              </div>
+            </Show>
+            <Show when={role() === "inbox"}>
+              <div class="routines-consent">
+                <Checkbox checked={messages()} onChange={setMessages}>
+                  Allow messages
+                </Checkbox>
+                <p class="routines-hint">Read the inbox and draft replies. It will not send unless you ask.</p>
+              </div>
+            </Show>
             <label class="routines-field">
               Plan file
               <input
@@ -439,13 +536,6 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                 placeholder="Optional path to a .md plan"
               />
             </label>
-            <Checkbox checked={money()} onChange={setMoney}>
-              Money tools
-            </Checkbox>
-            <Checkbox checked={messages()} onChange={setMessages}>
-              Messages tools
-            </Checkbox>
-            <p class="routines-hint">{hint()}</p>
             <Button type="submit" disabled={!objective().trim() || saving()}>
               {saving() ? "Assigning" : "Assign"}
             </Button>

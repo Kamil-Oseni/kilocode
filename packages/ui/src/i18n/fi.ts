@@ -157,6 +157,7 @@ export const dict: Record<string, string> = {
   "ui.message.collapse": "Kutista viesti",
   "ui.message.copy": "Kopioi",
   "ui.message.copyMessage": "Kopioi viesti",
+  "ui.message.editQueued": "Muokkaa jonossa olevaa viestiä",
   "ui.message.forkMessage": "Haarauta uuteen istuntoon",
   "ui.message.revertMessage": "Palauta viesti",
   "ui.message.copyResponse": "Kopioi vastaus",

@@ -175,6 +175,7 @@ export const dict: Record<string, string> = {
   "ui.message.collapse": "Thu gọn tin nhắn",
   "ui.message.copy": "Sao chép",
   "ui.message.copyMessage": "Sao chép tin nhắn",
+  "ui.message.editQueued": "Chỉnh sửa tin nhắn trong hàng đợi",
   "ui.message.forkMessage": "Tách sang phiên mới",
   "ui.message.revertMessage": "Hoàn nguyên tin nhắn",
   "ui.message.copyResponse": "Sao chép phản hồi",

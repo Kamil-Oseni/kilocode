@@ -232,6 +232,7 @@ export const dict = {
   "ui.mermaid.renderError": "Error al renderizar Mermaid: {{message}}",
   "ui.mermaid.rendering": "Renderizando diagrama Mermaid...",
   "ui.message.deleteQueued": "Eliminar mensaje en cola",
+  "ui.message.editQueued": "Editar mensaje en cola",
   "ui.messagePart.mcp.input": "Entrada",
   "ui.messagePart.mcp.output": "Salida",
   "ui.question.answer.dismissed": "Dismissed",

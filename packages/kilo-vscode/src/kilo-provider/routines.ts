@@ -42,7 +42,7 @@ export function english(when: string | undefined) {
 export function reason(err: unknown) {
   const text = getErrorMessage(err)
   if (text && !/^POST http/i.test(text) && text !== "Bad Request" && text !== "{}") return text
-  return "Could not save that routine. Accountant jobs need Money tools checked. Inbox jobs need Messages tools checked."
+  return "Could not save that routine. Accountant jobs need you to allow money records. Inbox jobs need you to allow messages."
 }
 
 function owned(type: string) {
@@ -144,7 +144,13 @@ async function update(ctx: Ctx) {
 }
 
 async function drop(ctx: Ctx) {
-  await ctx.kilo.remove({ directory: ctx.dir, agentID: String(ctx.message.agentID) }, { throwOnError: true })
+  const ids = Array.isArray(ctx.message.agentIDs)
+    ? ctx.message.agentIDs.filter((item): item is string => typeof item === "string")
+    : [String(ctx.message.agentID)]
+  for (const id of ids) {
+    if (!id || id === "undefined") continue
+    await ctx.kilo.remove({ directory: ctx.dir, agentID: id }, { throwOnError: true })
+  }
   await refresh(ctx)
 }
 

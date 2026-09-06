@@ -305,6 +305,7 @@ export const dict = {
   "sidebar.topBar.label": "Raya-navigasjon",
   "sidebar.topBar.newTask": "Ny Oppgave",
   "sidebar.topBar.history": "Historikk",
+  "sidebar.topBar.routines": "Rutiner",
   "sidebar.topBar.agentManager": "Agent Manager",
   "sidebar.topBar.kiloClaw": "KiloClaw",
   "sidebar.topBar.marketplace": "Markedsplass",

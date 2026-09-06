@@ -298,6 +298,7 @@ export const dict = {
   "sidebar.topBar.label": "Raya ナビゲーション",
   "sidebar.topBar.newTask": "新規タスク",
   "sidebar.topBar.history": "履歴",
+  "sidebar.topBar.routines": "ルーチン",
   "sidebar.topBar.agentManager": "エージェントマネージャー",
   "sidebar.topBar.kiloClaw": "KiloClaw",
   "sidebar.topBar.marketplace": "マーケットプレイス",

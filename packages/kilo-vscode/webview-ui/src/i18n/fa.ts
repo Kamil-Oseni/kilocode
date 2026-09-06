@@ -700,6 +700,7 @@ export const dict = {
   "sidebar.topBar.label": "پیمایش Raya",
   "sidebar.topBar.newTask": "وظیفه جدید",
   "sidebar.topBar.history": "تاریخچه",
+  "sidebar.topBar.routines": "روتین‌ها",
   "sidebar.topBar.agentManager": "مدیر عامل‌ها",
   "sidebar.topBar.kiloClaw": "KiloClaw",
   "sidebar.topBar.marketplace": "بازارچه",

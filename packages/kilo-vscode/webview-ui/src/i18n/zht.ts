@@ -285,6 +285,7 @@ export const dict = {
   "sidebar.topBar.label": "Raya 導覽",
   "sidebar.topBar.newTask": "新建任務",
   "sidebar.topBar.history": "歷史記錄",
+  "sidebar.topBar.routines": "例程",
   "sidebar.topBar.agentManager": "代理管理器",
   "sidebar.topBar.kiloClaw": "KiloClaw",
   "sidebar.topBar.marketplace": "市集",

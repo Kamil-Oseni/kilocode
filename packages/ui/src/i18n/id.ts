@@ -195,6 +195,7 @@ export const dict: Record<string, string> = {
   "ui.message.collapse": "Ciutkan pesan",
   "ui.message.copy": "Salin",
   "ui.message.copyMessage": "Salin pesan",
+  "ui.message.editQueued": "Edit pesan dalam antrean",
   "ui.message.forkMessage": "Cabangkan ke sesi baru",
   "ui.message.revertMessage": "Urungkan pesan",
   "ui.message.copyResponse": "Salin respons",

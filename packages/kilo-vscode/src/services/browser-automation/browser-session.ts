@@ -413,7 +413,7 @@ export class BrowserSession {
     await page.locator(selector).click({ timeout: 5_000 })
   }
 
-  private async apply(action: BrowserNativeAction, page: ReturnType<BrowserSession["active"]>) {
+  private async drive(action: BrowserNativeAction, page: ReturnType<BrowserSession["active"]>) {
     if (action.operation === "navigate") {
       await this.probe(action.url)
       try {
@@ -456,7 +456,7 @@ export class BrowserSession {
 
   private async once(action: BrowserNativeAction): Promise<BrowserResult> {
     const page = this.active()
-    await this.apply(action, page)
+    await this.drive(action, page)
     const snapshot =
       action.operation === "snapshot" ? await page.locator("body").ariaSnapshot({ timeout: 10_000 }) : undefined
     const data =

@@ -4,6 +4,18 @@ This is the single, prioritized source of truth for what to build into Raya next
 
 The order is deliberate. Features are ranked by what is most important to have first, weighing three things at once: how much it changes what Raya can do for you day to day, whether it makes an already-shipped feature actually reliable, and whether other features on the list depend on it. Reliability of things you already touch beats breadth of things you don't, and foundations that unlock several later goals are pulled forward even when they are less glamorous than the ambitious cloud work near the bottom.
 
+## Completed (as of 6 September 2026)
+
+Goals 1, 2, and 4 are in the product. They were built as one pass because the original ranking already said routines needed a glanceable blocked state and a structured plan you can hand to a background run. The work is on `main` and installed as a VS Code snapshot (`7.4.23-snapshot+1b4dc98813`). Goal 3 (canvas) was left untouched on purpose.
+
+**Goal 1 — Routines.** You can assign a named standing job from the Routines panel: role or custom role, a sentence of work, a plain-English schedule, a Settings mode (so Model per Mode applies), a write folder for new files, and either edit-the-workspace or read-and-notify. Accountant and Inbox require an explicit money or messages consent. One-shots, cron, CI events, and Run now all open their own session, drive through the goal loop, and record history with cost. A paused routine does not fire; overlapping runs are skipped; three identical blocks auto-disable with a note. Restart recomputes next run from storage. The roster matches History: presence, multi-select remove, templates for Briefer, Reviewer, Accountant, and Inbox. Proven live: unattended one-shot, two-minute cadence with skip-while-busy, ask-options parking, and role isolation.
+
+**Goal 2 — Presence.** Header, tabs, History, and Routines show working, waiting on you, done, and error without dumping the transcript. A permission wall or `ask_options` parks the run as waiting on you and resumes when you answer. Quiet-hours notify exists. Full collapse of a finished run into a one-line summary is still only partial (tool grouping, not a rewritten recap).
+
+**Goal 4 — Structured plans.** Plan exit writes a sidecar with stable step ids. The plan card can run this plan in the current chat or in the background as a routine. That is the handoff Goal 1 was waiting on.
+
+The next open item in the numbered order is Goal 3, then Goal 5.
+
 ## How to use this doc
 
 Each entry follows the same shape so you never have to guess how to start one:
@@ -28,10 +40,10 @@ These are repeated inside the prompts where they matter, but they hold everywher
 
 | # | Goal | Tier | Source |
 |---|---|---|---|
-| 1 | Assignable role-based agents + user-friendly routines | Hard (flagship) | medium #2 + grok + medium #3 |
-| 2 | Presence as state — a glanceable, non-overwhelming run view | Medium | grok |
+| 1 | Assignable role-based agents + user-friendly routines (done) | Hard (flagship) | medium #2 + grok + medium #3 |
+| 2 | Presence as state — a glanceable, non-overwhelming run view (done) | Medium | grok |
 | 3 | Canvas repair — make the live React canvas reliable | Medium | medium #8 |
-| 4 | Structured plan artifact — executable plans, not just prose | Medium | medium #7 |
+| 4 | Structured plan artifact — executable plans, not just prose (done) | Medium | medium #7 |
 | 5 | Deterministic lifecycle hooks | Medium | medium #4 |
 | 6 | True per-hunk (line-range) undo | Medium | medium #1 |
 | 7 | In-editor inline edit (Cmd/Ctrl+I) | Easy | easy #1 |

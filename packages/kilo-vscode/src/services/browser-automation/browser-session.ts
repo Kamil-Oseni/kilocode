@@ -413,8 +413,7 @@ export class BrowserSession {
     await page.locator(selector).click({ timeout: 5_000 })
   }
 
-  private async once(action: BrowserNativeAction): Promise<BrowserResult> {
-    const page = this.active()
+  private async apply(action: BrowserNativeAction, page: ReturnType<BrowserSession["active"]>) {
     if (action.operation === "navigate") {
       await this.probe(action.url)
       try {
@@ -425,29 +424,39 @@ export class BrowserSession {
         const detail = error instanceof Error ? error.message : String(error)
         if (!(/Timeout \d+ms exceeded/i.test(detail) && this.reached(page, action.url))) throw error
       }
+      return
     }
-    if (action.operation === "click") await this.press(page, action.selector)
+    if (action.operation === "click") {
+      await this.press(page, action.selector)
+      return
+    }
     if (action.operation === "type") {
       const locator = page.locator(action.selector)
       await locator.fill(action.text, { timeout: 5_000 })
       if (action.submit) await locator.press("Enter", { timeout: 5_000 })
+      return
     }
-    if (action.operation === "select")
+    if (action.operation === "select") {
       await page.locator(action.selector).selectOption(action.values, { timeout: 5_000 })
-    if (action.operation === "scroll") {
-      const delta = { x: action.deltaX, y: action.deltaY }
-      if (action.selector) {
-        await page
-          .locator(action.selector)
-          .evaluate((element, next) => element.scrollBy(next.x, next.y), delta)
-          .catch(() => page.evaluate((next) => window.scrollBy(next.x, next.y), delta))
-      }
-      if (!action.selector) {
-        await page.mouse.wheel(action.deltaX, action.deltaY).catch(() =>
-          page.evaluate((next) => window.scrollBy(next.x, next.y), delta),
-        )
-      }
+      return
     }
+    if (action.operation !== "scroll") return
+    const delta = { x: action.deltaX, y: action.deltaY }
+    if (action.selector) {
+      await page
+        .locator(action.selector)
+        .evaluate((element, next) => element.scrollBy(next.x, next.y), delta)
+        .catch(() => page.evaluate((next) => window.scrollBy(next.x, next.y), delta))
+      return
+    }
+    await page.mouse.wheel(action.deltaX, action.deltaY).catch(() =>
+      page.evaluate((next) => window.scrollBy(next.x, next.y), delta),
+    )
+  }
+
+  private async once(action: BrowserNativeAction): Promise<BrowserResult> {
+    const page = this.active()
+    await this.apply(action, page)
     const snapshot =
       action.operation === "snapshot" ? await page.locator("body").ariaSnapshot({ timeout: 10_000 }) : undefined
     const data =

@@ -83,9 +83,9 @@ export namespace RayaTask {
   }) {}
 
   type Store = Pick<Storage.Interface, "read" | "write">
-  const roster = ["raya", "agent"] as const
-  const history = (id: string) => ["raya", "agent-runs", id] as const
-  const memory = (id: string) => ["raya", "agent-memory", id] as const
+  const roster = ["raya", "agent"]
+  const history = (id: string) => ["raya", "agent-runs", id]
+  const memory = (id: string) => ["raya", "agent-memory", id]
   const agents = Schema.decodeUnknownEffect(Schema.Array(Agent))
   const runs = Schema.decodeUnknownEffect(Schema.Array(Run))
 

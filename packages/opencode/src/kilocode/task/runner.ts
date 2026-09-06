@@ -3,14 +3,23 @@ import type { Bus } from "@/bus"
 import type { Session } from "@/session/session"
 import type { Storage } from "@/storage/storage"
 import { SessionID } from "@/session/schema"
+import { EffectBridge } from "@/effect/bridge"
 import { RayaGoal } from "@/kilocode/goal"
 import { RayaGoalContinuation } from "@/kilocode/goal/continuation"
-import { KiloSessionEvent } from "@/kilocode/session/event"
+import { KiloSession } from "@/kilocode/session"
 import { PlanArtifact } from "@/kilocode/plan-artifact"
 import { RayaTask } from "."
 import * as Log from "@opencode-ai/core/util/log"
 
 const log = Log.create({ service: "raya-task-runner" })
+
+function kick(input: {
+  sessionID: SessionID
+  storage: Storage.Interface
+  sessions: Pick<Session.Interface, "create" | "get" | "messages" | "children">
+}): Effect.Effect<void> {
+  return RayaGoalContinuation.resume(input).pipe(Effect.ignore) as Effect.Effect<void>
+}
 const decode = Schema.decodeUnknownEffect(PlanArtifact.Info)
 
 function specialist(role: string) {
@@ -25,10 +34,18 @@ function kind(role: string, objective: string) {
 }
 
 export namespace RayaTaskRunner {
+  type Tasks = ReturnType<typeof RayaTask.make>
+  type Runner = {
+    fire: (id: string) => Effect.Effect<RayaTask.Run, RayaTask.GuardError | RayaTask.NotFoundError>
+    settle: (sessionID: SessionID) => Effect.Effect<void>
+    revive: () => Effect.Effect<void>
+    tasks: Tasks
+  }
+
   export function make(input: {
     storage: Storage.Interface
     sessions: Pick<Session.Interface, "create" | "get" | "messages" | "children">
-  }) {
+  }): Runner {
     const tasks = RayaTask.make(input)
     const goals = RayaGoal.make(input)
 
@@ -63,11 +80,11 @@ export namespace RayaTaskRunner {
         status: "running",
       }
       yield* tasks.record(run)
-      yield* RayaGoalContinuation.resume({
+      yield* kick({
         sessionID: created.id,
         storage: input.storage,
         sessions: input.sessions,
-      }).pipe(Effect.ignore, Effect.forkDetach)
+      }).pipe(Effect.forkDetach)
       return run
     })
 
@@ -117,15 +134,20 @@ export namespace RayaTaskRunner {
         yield* settle(run.sessionID)
         const again = (yield* tasks.runsFor(item.id)).find((entry) => entry.id === run.id)
         if (again?.status !== "running") continue
-        yield* RayaGoalContinuation.resume({
+        yield* kick({
           sessionID: run.sessionID,
           storage: input.storage,
           sessions: input.sessions,
-        }).pipe(Effect.ignore, Effect.forkDetach)
+        }).pipe(Effect.forkDetach)
       }
     })
 
-    return { fire, settle, revive, tasks }
+    return {
+      fire: fire as Runner["fire"],
+      settle: settle as Runner["settle"],
+      revive: revive as Runner["revive"],
+      tasks,
+    }
   }
 
   export function subscribe(input: {
@@ -135,28 +157,29 @@ export namespace RayaTaskRunner {
   }) {
     const runner = make(input)
     return Effect.gen(function* () {
-      yield* input.bus.subscribe(KiloSessionEvent.TurnClose, (event) => {
+      const bridge = yield* EffectBridge.make()
+      yield* input.bus.subscribeCallback(KiloSession.Event.TurnClose, (event) => {
         const sid = event.properties.sessionID
-        return runner.settle(sid).pipe(
-          Effect.catchCause((cause) =>
-            Effect.sync(() => log.error("task settle failed", { sessionID: sid, err: Cause.squash(cause) })),
+        bridge.fork(
+          runner.settle(sid).pipe(
+            Effect.catchCause((cause) =>
+              Effect.sync(() => log.error("task settle failed", { sessionID: sid, err: Cause.squash(cause) })),
+            ),
           ),
         )
       })
       yield* runner.revive().pipe(
         Effect.catchCause((cause) => Effect.sync(() => log.error("task revive failed", { err: Cause.squash(cause) }))),
       )
-      yield* Effect.forkDaemon(loop(runner))
+      const tick = Effect.gen(function* () {
+        const due = yield* runner.tasks.ready(Date.now())
+        for (const item of due) {
+          yield* runner.fire(item.id).pipe(Effect.catch(() => Effect.void))
+        }
+      })
+      yield* tick
+        .pipe(Effect.andThen(Effect.forever(Effect.sleep("60 seconds").pipe(Effect.andThen(tick)))))
+        .pipe(Effect.forkDetach)
     })
   }
-}
-
-function loop(runner: ReturnType<typeof RayaTaskRunner.make>) {
-  const tick = Effect.gen(function* () {
-    const due = yield* runner.tasks.ready(Date.now())
-    for (const item of due) {
-      yield* runner.fire(item.id).pipe(Effect.catch(() => Effect.void))
-    }
-  })
-  return tick.pipe(Effect.andThen(Effect.forever(Effect.sleep("60 seconds").pipe(Effect.andThen(tick)))))
 }

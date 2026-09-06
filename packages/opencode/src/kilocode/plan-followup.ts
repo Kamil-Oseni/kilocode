@@ -411,7 +411,7 @@ export namespace PlanFollowup {
         )
 
         const idle = () =>
-          AppRuntime.runPromise(SessionStatus.Service.use((svc) => svc.set(next.id, { type: "idle" }))).catch((err) => {
+          AppRuntime.runPromise(SessionStatus.Service.use((svc) => svc.set(next.id, { type: "idle" }))).catch((err: unknown) => {
             log.warn("failed to clear follow-up busy status", { sessionID: next.id, err })
           })
 

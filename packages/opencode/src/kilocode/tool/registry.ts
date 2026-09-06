@@ -221,6 +221,7 @@ export namespace KiloToolRegistry {
       const ask = tools.ask ? yield* Tool.init(tools.ask) : undefined // raya_change - Milestone C
       const healRefine = tools.healRefine ? yield* Tool.init(tools.healRefine) : undefined // raya_change - hybrid self-heal
       const browser = tools.browser ? yield* Effect.all(tools.browser.map(Tool.init)) : [] // raya_change - Milestone F
+      const canvas = tools.canvas ? yield* Effect.all(tools.canvas.map(Tool.init)) : [] // raya_change - Milestone E
       const scheduleTask = tools.scheduleTask ? yield* Tool.init(tools.scheduleTask) : undefined
       const terminal = tools.terminal ? yield* Tool.init(tools.terminal) : undefined
       const notebooks =

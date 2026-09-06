@@ -58,7 +58,7 @@ export function scheduleTaskTool(input: {
             name: params.name,
             role: params.role,
             objective: params.objective,
-            capabilities: params.capabilities,
+            capabilities: params.capabilities ? [...params.capabilities] : undefined,
             schedule: params.cron ? { kind: "cron", expr: params.cron } : english(params.when),
             plan: params.plan,
           })
@@ -66,22 +66,22 @@ export function scheduleTaskTool(input: {
             Effect.flatMap((agent) =>
               params.runNow
                 ? runner.fire(agent.id).pipe(Effect.map((run) => ({ agent, run })))
-                : Effect.succeed({ agent, run: undefined }),
+                : Effect.succeed({ agent, run: undefined as RayaTask.Run | undefined }),
             ),
-            Effect.match({
-              onFailure: (err) => ({
+            Effect.map(({ agent, run }) => ({
+              title: "Agent assigned",
+              output: run
+                ? `Assigned ${agent.name} (${agent.role}) and started a background run.`
+                : `Assigned ${agent.name} (${agent.role}). Enable it in Routines or ask to run it now.`,
+              metadata: { agentID: agent.id, runID: run?.id },
+            })),
+            Effect.catch((err) =>
+              Effect.succeed({
                 title: "Agent not created",
                 output: err instanceof Error ? err.message : String(err),
                 metadata: {},
               }),
-              onSuccess: ({ agent, run }) => ({
-                title: "Agent assigned",
-                output: run
-                  ? `Assigned ${agent.name} (${agent.role}) and started a background run.`
-                  : `Assigned ${agent.name} (${agent.role}). Enable it in Routines or ask to run it now.`,
-                metadata: { agentID: agent.id, runID: run?.id },
-              }),
-            }),
+            ),
           ),
     }),
   )

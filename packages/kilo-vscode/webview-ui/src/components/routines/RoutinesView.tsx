@@ -8,10 +8,9 @@ import { useDialog } from "@kilocode/kilo-ui/context/dialog"
 import { PresenceBadge } from "../chat/PresenceBadge"
 import { useVSCode } from "../../context/vscode"
 import { useLanguage } from "../../context/language"
-import { useProvider } from "../../context/provider"
+import { useSession } from "../../context/session"
 import { runPresence } from "../../utils/run-presence"
-import { KILO_PROVIDER_ID } from "../../../../src/shared/provider-model"
-import type { ExtensionMessage } from "../../types/messages"
+import type { AgentInfo, ExtensionMessage } from "../../types/messages"
 
 type Schedule =
   | { kind: "once"; at: number }
@@ -51,7 +50,7 @@ type Template = {
   schedule: Schedule
 }
 
-type Choice = { key: string; label: string; providerID?: string; modelID?: string }
+type Choice = { key: string; label: string }
 
 const roles = [
   { id: "briefer", label: "Briefer" },
@@ -70,6 +69,14 @@ const work = [
   { id: "full" as const, label: "Can edit the workspace" },
   { id: "brief" as const, label: "Read and notify only" },
 ]
+
+function title(agent: AgentInfo) {
+  if (agent.displayName) return agent.displayName
+  return agent.name
+    .split(/[-_]/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ")
+}
 
 function whenLabel(schedule: Schedule) {
   if (schedule.kind === "manual") return "When you ask"
@@ -100,7 +107,7 @@ interface RoutinesViewProps {
 const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const vscode = useVSCode()
   const language = useLanguage()
-  const provider = useProvider()
+  const session = useSession()
   const dialog = useDialog()
   const [agents, setAgents] = createSignal<Agent[]>([])
   const [templates, setTemplates] = createSignal<Template[]>([])
@@ -114,7 +121,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const [money, setMoney] = createSignal(false)
   const [messages, setMessages] = createSignal(false)
   const [plan, setPlan] = createSignal("")
-  const [agent, setAgent] = createSignal("chat")
+  const [mode, setMode] = createSignal("chat")
   const [access, setAccess] = createSignal<"full" | "brief">("brief")
   const [screen, setScreen] = createSignal<"roster" | "assign">("roster")
   const [busy, setBusy] = createSignal<Record<string, true>>({})
@@ -126,6 +133,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
 
   onMount(() => {
     load()
+    if (session.agents().length === 0) vscode.postMessage({ type: "requestAgents" })
     const tick = setInterval(() => {
       if (!hold) load()
     }, 4000)
@@ -164,24 +172,15 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   onCleanup(unsub)
 
   const picks = createMemo<Choice[]>(() => {
-    const extras: Choice[] = []
-    const defaults = provider.defaults()
-    for (const item of Object.values(provider.providers())) {
-      if (item.source !== "custom" || item.id === KILO_PROVIDER_ID) continue
-      const modelID = defaults[item.id] || Object.keys(item.models ?? {})[0]
-      if (!modelID) continue
-      extras.push({
-        key: item.id,
-        label: item.name,
-        providerID: item.id,
-        modelID,
-      })
-    }
+    const extras = session
+      .agents()
+      .filter((item) => !item.hidden)
+      .map((item) => ({ key: item.name, label: title(item) }))
     extras.sort((a, b) => a.label.localeCompare(b.label))
     return [chat, ...extras]
   })
 
-  const current = createMemo(() => picks().find((item) => item.key === agent()) ?? chat)
+  const current = createMemo(() => picks().find((item) => item.key === mode()) ?? chat)
 
   const pick = (next: string) => {
     setRole(next)
@@ -218,8 +217,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
       capabilities,
       plan: plan().trim() || undefined,
       access: access(),
-      providerID: chosen.providerID,
-      modelID: chosen.modelID,
+      mode: chosen.key === "chat" ? undefined : chosen.key,
     })
   }
 
@@ -307,7 +305,6 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   }
 
   const empty = createMemo(() => agents().length === 0)
-  const extras = createMemo(() => picks().length > 1)
   const roleOpt = createMemo(() => roles.find((item) => item.id === role()) ?? roles[0])
   const workOpt = createMemo(() => work.find((item) => item.id === access()) ?? work[0])
 
@@ -483,18 +480,16 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                 current={current()}
                 label={(item) => item.label}
                 value={(item) => item.key}
-                onSelect={(item) => item && setAgent(item.key)}
+                onSelect={(item) => item && setMode(item.key)}
                 variant="secondary"
                 size="small"
               />
               <p class="routines-hint">
-                {extras()
-                  ? "Same as chat, or a custom provider from Settings."
-                  : "Same as chat uses whatever you already picked. Custom providers you add in Settings appear here."}
+                Same as chat, or a mode from Settings. It uses the model you assigned that mode.
                 <button
                   type="button"
                   class="routines-inline"
-                  onClick={() => vscode.postMessage({ type: "openSettingsPanel", tab: "providers" })}
+                  onClick={() => vscode.postMessage({ type: "openSettingsPanel", tab: "agentBehaviour" })}
                 >
                   Open Settings
                 </button>

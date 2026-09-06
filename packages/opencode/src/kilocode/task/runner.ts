@@ -27,9 +27,11 @@ function kick(input: {
 }
 const decode = Schema.decodeUnknownEffect(PlanArtifact.Info)
 
-function specialist(role: string) {
-  if (role === "designer") return "designer"
-  if (role === "coder" || role === "code") return "coder"
+function specialist(item: { role: string; mode?: string }) {
+  const mode = item.mode?.trim()
+  if (mode) return mode
+  if (item.role === "designer") return "designer"
+  if (item.role === "coder" || item.role === "code") return "coder"
   return "generalist"
 }
 
@@ -78,13 +80,14 @@ export namespace RayaTaskRunner {
       }
       const created = yield* input.sessions.create({
         title: item.name,
-        agent: specialist(item.role),
-        model: item.model
-          ? {
-              providerID: ProviderV2.ID.make(item.model.providerID),
-              id: ModelV2.ID.make(item.model.id),
-            }
-          : undefined,
+        agent: specialist(item),
+        model:
+          item.mode || !item.model
+            ? undefined
+            : {
+                providerID: ProviderV2.ID.make(item.model.providerID),
+                id: ModelV2.ID.make(item.model.id),
+              },
         permission: RayaTask.rules(item),
       })
       const objective = yield* seed(item)

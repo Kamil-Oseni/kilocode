@@ -56,11 +56,10 @@ function owned(type: string) {
   )
 }
 
-function model(msg: Msg) {
-  const providerID = typeof msg.providerID === "string" ? msg.providerID : undefined
-  const id = typeof msg.modelID === "string" ? msg.modelID : undefined
-  if (!providerID || !id) return
-  return { providerID, id }
+function mode(msg: Msg) {
+  const name = typeof msg.mode === "string" ? msg.mode.trim() : ""
+  if (!name || name === "chat") return
+  return name
 }
 
 function tools(msg: Msg) {
@@ -104,7 +103,7 @@ async function create(ctx: Ctx) {
       schedule: typeof msg.cron === "string" ? { kind: "cron", expr: msg.cron } : english(when),
       enabled: msg.enabled !== false,
       plan: typeof msg.plan === "string" ? msg.plan : undefined,
-      model: model(msg),
+      mode: mode(msg),
       access: access(msg),
       tools: tools(msg),
     },
@@ -134,7 +133,7 @@ async function update(ctx: Ctx) {
       objective: typeof msg.objective === "string" ? msg.objective : undefined,
       plan: typeof msg.plan === "string" ? msg.plan : undefined,
       note: typeof msg.note === "string" ? msg.note : undefined,
-      model: model(msg),
+      mode: mode(msg),
       access: access(msg),
       tools: tools(msg),
     },

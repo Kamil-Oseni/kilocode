@@ -260,11 +260,13 @@ describe("RayaTask store", () => {
         role: "ops",
         objective: "watch deploys",
         schedule: { kind: "manual" },
+        mode: "code",
         model: { providerID: "anthropic", id: "claude" },
         access: "full",
       }),
     )
     expect(agent.role).toBe("ops")
+    expect(agent.mode).toBe("code")
     expect(agent.model?.id).toBe("claude")
     expect(agent.access).toBe("full")
     expect(RayaTask.brief(agent)).toBe(false)

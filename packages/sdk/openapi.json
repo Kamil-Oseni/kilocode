@@ -19683,6 +19683,9 @@
                         "required": ["providerID", "id"],
                         "additionalProperties": false
                       },
+                      "mode": {
+                        "type": "string"
+                      },
                       "access": {
                         "type": "string",
                         "enum": ["full", "brief"]
@@ -19961,6 +19964,9 @@
                       "required": ["providerID", "id"],
                       "additionalProperties": false
                     },
+                    "mode": {
+                      "type": "string"
+                    },
                     "access": {
                       "type": "string",
                       "enum": ["full", "brief"]
@@ -20212,6 +20218,9 @@
                     "required": ["providerID", "id"],
                     "additionalProperties": false
                   },
+                  "mode": {
+                    "type": "string"
+                  },
                   "access": {
                     "type": "string",
                     "enum": ["full", "brief"]
@@ -20401,6 +20410,9 @@
                       },
                       "required": ["providerID", "id"],
                       "additionalProperties": false
+                    },
+                    "mode": {
+                      "type": "string"
                     },
                     "access": {
                       "type": "string",
@@ -20662,6 +20674,9 @@
                     },
                     "required": ["providerID", "id"],
                     "additionalProperties": false
+                  },
+                  "mode": {
+                    "type": "string"
                   },
                   "access": {
                     "type": "string",

@@ -78,8 +78,7 @@ export interface RoutineCreateMessage {
   plan?: string
   enabled?: boolean
   runNow?: boolean
-  providerID?: string
-  modelID?: string
+  mode?: string
   access?: "full" | "brief"
   tools?: string[]
 }
@@ -95,8 +94,7 @@ export interface RoutineUpdateMessage {
   schedule?: unknown
   plan?: string
   note?: string
-  providerID?: string
-  modelID?: string
+  mode?: string
   access?: "full" | "brief"
   tools?: string[]
 }

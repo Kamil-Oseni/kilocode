@@ -18594,6 +18594,7 @@ export type KilocodeRoutineListResponses = {
       providerID: string
       id: string
     }
+    mode?: string
     access?: "full" | "brief"
     tools?: Array<string>
     createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -18637,6 +18638,7 @@ export type KilocodeRoutineCreateData = {
       providerID: string
       id: string
     }
+    mode?: string
     access?: "full" | "brief"
     tools?: Array<string>
   }
@@ -18693,6 +18695,7 @@ export type KilocodeRoutineCreateResponses = {
       providerID: string
       id: string
     }
+    mode?: string
     access?: "full" | "brief"
     tools?: Array<string>
     createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -18770,6 +18773,7 @@ export type KilocodeRoutineUpdateData = {
       providerID: string
       id: string
     }
+    mode?: string
     access?: "full" | "brief"
     tools?: Array<string>
     note?: string
@@ -18833,6 +18837,7 @@ export type KilocodeRoutineUpdateResponses = {
       providerID: string
       id: string
     }
+    mode?: string
     access?: "full" | "brief"
     tools?: Array<string>
     createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"

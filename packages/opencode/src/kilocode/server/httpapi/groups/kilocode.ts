@@ -103,6 +103,7 @@ export const TaskUpdatePayload = Schema.Struct({
   enabled: Schema.optional(Schema.Boolean),
   plan: Schema.optional(Schema.String),
   model: Schema.optional(Schema.Struct({ providerID: Schema.String, id: Schema.String })),
+  mode: Schema.optional(Schema.String),
   access: Schema.optional(Schema.Literals(["full", "brief"])),
   tools: Schema.optional(Schema.Array(Schema.String)),
   note: Schema.optional(Schema.String),

@@ -18590,6 +18590,12 @@ export type KilocodeRoutineListResponses = {
         }
     enabled: boolean
     plan?: string
+    model?: {
+      providerID: string
+      id: string
+    }
+    access?: "full" | "brief"
+    tools?: Array<string>
     createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     note?: string
@@ -18627,6 +18633,12 @@ export type KilocodeRoutineCreateData = {
     avatar?: string
     enabled?: boolean
     plan?: string
+    model?: {
+      providerID: string
+      id: string
+    }
+    access?: "full" | "brief"
+    tools?: Array<string>
   }
   path?: never
   query?: {
@@ -18638,9 +18650,9 @@ export type KilocodeRoutineCreateData = {
 
 export type KilocodeRoutineCreateErrors = {
   /**
-   * BadRequest | InvalidRequestError
+   * InvalidRequestError
    */
-  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  400: InvalidRequestError
 }
 
 export type KilocodeRoutineCreateError = KilocodeRoutineCreateErrors[keyof KilocodeRoutineCreateErrors]
@@ -18677,6 +18689,12 @@ export type KilocodeRoutineCreateResponses = {
         }
     enabled: boolean
     plan?: string
+    model?: {
+      providerID: string
+      id: string
+    }
+    access?: "full" | "brief"
+    tools?: Array<string>
     createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     note?: string
@@ -18685,6 +18703,40 @@ export type KilocodeRoutineCreateResponses = {
 }
 
 export type KilocodeRoutineCreateResponse = KilocodeRoutineCreateResponses[keyof KilocodeRoutineCreateResponses]
+
+export type KilocodeRoutineRemoveData = {
+  body?: never
+  path: {
+    agentID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/agent/{agentID}"
+}
+
+export type KilocodeRoutineRemoveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeRoutineRemoveError = KilocodeRoutineRemoveErrors[keyof KilocodeRoutineRemoveErrors]
+
+export type KilocodeRoutineRemoveResponses = {
+  /**
+   * Removed
+   */
+  200: boolean
+}
+
+export type KilocodeRoutineRemoveResponse = KilocodeRoutineRemoveResponses[keyof KilocodeRoutineRemoveResponses]
 
 export type KilocodeRoutineUpdateData = {
   body?: {
@@ -18714,6 +18766,12 @@ export type KilocodeRoutineUpdateData = {
     avatar?: string
     enabled?: boolean
     plan?: string
+    model?: {
+      providerID: string
+      id: string
+    }
+    access?: "full" | "brief"
+    tools?: Array<string>
     note?: string
   }
   path: {
@@ -18728,9 +18786,9 @@ export type KilocodeRoutineUpdateData = {
 
 export type KilocodeRoutineUpdateErrors = {
   /**
-   * BadRequest | InvalidRequestError
+   * InvalidRequestError
    */
-  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  400: InvalidRequestError
   /**
    * Not found
    */
@@ -18771,6 +18829,12 @@ export type KilocodeRoutineUpdateResponses = {
         }
     enabled: boolean
     plan?: string
+    model?: {
+      providerID: string
+      id: string
+    }
+    access?: "full" | "brief"
+    tools?: Array<string>
     createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     note?: string
@@ -18794,9 +18858,9 @@ export type KilocodeRoutineRunData = {
 
 export type KilocodeRoutineRunErrors = {
   /**
-   * BadRequest | InvalidRequestError
+   * InvalidRequestError
    */
-  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  400: InvalidRequestError
   /**
    * Not found
    */

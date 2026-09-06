@@ -19670,6 +19670,29 @@
                       "plan": {
                         "type": "string"
                       },
+                      "model": {
+                        "type": "object",
+                        "properties": {
+                          "providerID": {
+                            "type": "string"
+                          },
+                          "id": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["providerID", "id"],
+                        "additionalProperties": false
+                      },
+                      "access": {
+                        "type": "string",
+                        "enum": ["full", "brief"]
+                      },
+                      "tools": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
                       "createdAt": {
                         "anyOf": [
                           {
@@ -19925,6 +19948,29 @@
                     "plan": {
                       "type": "string"
                     },
+                    "model": {
+                      "type": "object",
+                      "properties": {
+                        "providerID": {
+                          "type": "string"
+                        },
+                        "id": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["providerID", "id"],
+                      "additionalProperties": false
+                    },
+                    "access": {
+                      "type": "string",
+                      "enum": ["full", "brief"]
+                    },
+                    "tools": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "createdAt": {
                       "anyOf": [
                         {
@@ -20017,13 +20063,13 @@
             }
           },
           "400": {
-            "description": "BadRequest | InvalidRequestError",
+            "description": "InvalidRequestError",
             "content": {
               "application/json": {
                 "schema": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                      "$ref": "#/components/schemas/InvalidRequestError"
                     },
                     {
                       "$ref": "#/components/schemas/InvalidRequestError"
@@ -20152,6 +20198,29 @@
                   },
                   "plan": {
                     "type": "string"
+                  },
+                  "model": {
+                    "type": "object",
+                    "properties": {
+                      "providerID": {
+                        "type": "string"
+                      },
+                      "id": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["providerID", "id"],
+                    "additionalProperties": false
+                  },
+                  "access": {
+                    "type": "string",
+                    "enum": ["full", "brief"]
+                  },
+                  "tools": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 },
                 "required": ["name", "objective", "schedule"],
@@ -20320,6 +20389,29 @@
                     "plan": {
                       "type": "string"
                     },
+                    "model": {
+                      "type": "object",
+                      "properties": {
+                        "providerID": {
+                          "type": "string"
+                        },
+                        "id": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["providerID", "id"],
+                      "additionalProperties": false
+                    },
+                    "access": {
+                      "type": "string",
+                      "enum": ["full", "brief"]
+                    },
+                    "tools": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "createdAt": {
                       "anyOf": [
                         {
@@ -20412,13 +20504,13 @@
             }
           },
           "400": {
-            "description": "BadRequest | InvalidRequestError",
+            "description": "InvalidRequestError",
             "content": {
               "application/json": {
                 "schema": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                      "$ref": "#/components/schemas/InvalidRequestError"
                     },
                     {
                       "$ref": "#/components/schemas/InvalidRequestError"
@@ -20558,6 +20650,29 @@
                   "plan": {
                     "type": "string"
                   },
+                  "model": {
+                    "type": "object",
+                    "properties": {
+                      "providerID": {
+                        "type": "string"
+                      },
+                      "id": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["providerID", "id"],
+                    "additionalProperties": false
+                  },
+                  "access": {
+                    "type": "string",
+                    "enum": ["full", "brief"]
+                  },
+                  "tools": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
                   "note": {
                     "type": "string"
                   }
@@ -20571,6 +20686,77 @@
           {
             "lang": "js",
             "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.routine.update({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.routine.remove",
+        "parameters": [
+          {
+            "name": "agentID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Removed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Removed"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Delete a routine and its run history. Sessions already in History stay.",
+        "summary": "Remove an assigned agent",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.routine.remove({\n  ...\n})"
           }
         ]
       }
@@ -20705,13 +20891,13 @@
             }
           },
           "400": {
-            "description": "BadRequest | InvalidRequestError",
+            "description": "InvalidRequestError",
             "content": {
               "application/json": {
                 "schema": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                      "$ref": "#/components/schemas/InvalidRequestError"
                     },
                     {
                       "$ref": "#/components/schemas/InvalidRequestError"

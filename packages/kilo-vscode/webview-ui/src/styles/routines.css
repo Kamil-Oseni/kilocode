@@ -1,15 +1,70 @@
+/* Routines share History's header and Eden tokens. The roster is a list, not a
+ * stack of cards. Accent and status color stay reserved for presence and errors. */
+
 .routines-view {
   display: flex;
   flex-direction: column;
-  gap: var(--raya-space-16);
-  padding: var(--raya-space-16);
+  height: 100%;
   min-height: 0;
-  overflow: auto;
 }
 
 .routines-title {
   margin: 0;
-  font-size: var(--kilo-font-size-16);
+  flex: 1;
+  font-family: var(--font-body);
+  font-size: var(--kilo-font-size-13);
+  font-weight: 500;
+  color: var(--text-base, var(--vscode-foreground));
+}
+
+.routines-header-action {
+  margin-left: auto;
+}
+
+.routines-empty-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--raya-space-12);
+  padding-top: var(--raya-space-8);
+}
+
+.routines-confirm {
+  margin: var(--raya-space-8) 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--raya-space-8);
+  color: var(--text-base, var(--vscode-foreground));
+  font-family: var(--font-body);
+  font-size: var(--kilo-font-size-12);
+}
+
+.routines-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--raya-space-8) var(--raya-space-12) var(--raya-space-16);
+  display: flex;
+  flex-direction: column;
+  gap: var(--raya-space-20);
+}
+
+.routines-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--raya-space-8);
+  margin-bottom: var(--raya-space-8);
+}
+
+.routines-kicker {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--kilo-font-size-12);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--text-weak, var(--vscode-descriptionForeground));
 }
 
 .routines-lede,
@@ -17,79 +72,163 @@
 .routines-when,
 .routines-note,
 .routines-empty,
-.routines-error {
+.routines-hint {
   margin: 0;
   color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-family: var(--font-body);
+  font-size: var(--kilo-font-size-12);
+  line-height: 1.45;
+}
+
+.routines-job {
+  color: var(--text-base, var(--vscode-foreground));
+  font-size: var(--kilo-font-size-13);
 }
 
 .routines-error {
+  margin: 0;
+  padding: var(--raya-space-8) 0;
   color: var(--text-danger, var(--vscode-errorForeground));
+  font-family: var(--font-body);
+  font-size: var(--kilo-font-size-13);
 }
 
-.routines-template-row,
+.routines-hint {
+  margin-top: calc(-1 * var(--raya-space-4));
+}
+
+.routines-suggest,
 .routines-actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--raya-space-8);
+  align-items: center;
 }
 
-.routines-chip {
-  border: 1px solid var(--border-base);
+.routines-suggest {
+  margin: var(--raya-space-10) 0 var(--raya-space-12);
+}
+
+.routines-suggest-btn {
+  appearance: none;
+  border: 0;
   background: transparent;
-  color: inherit;
-  border-radius: 999px;
-  padding: 4px 10px;
+  padding: 0;
   cursor: pointer;
+  font-family: var(--font-body);
+  font-size: var(--kilo-font-size-13);
+  color: var(--text-base, var(--vscode-foreground));
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.routines-suggest-btn:hover {
+  color: var(--text-strong, var(--vscode-foreground));
 }
 
 .routines-form {
   display: flex;
   flex-direction: column;
-  gap: var(--raya-space-10);
+  gap: var(--raya-space-12);
 }
 
-.routines-form input,
-.routines-form select,
-.routines-form textarea {
-  width: 100%;
-  margin-top: 4px;
-}
-
-.routines-check {
+.routines-field {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: var(--raya-space-6);
+  font-family: var(--font-body);
+  font-size: var(--kilo-font-size-12);
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+}
+
+.routines-field input,
+.routines-field select,
+.routines-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--raya-space-8) var(--raya-space-10);
+  border-radius: var(--raya-radius-md-plus);
+  border: var(--raya-hairline) solid color-mix(in srgb, var(--border-base) 60%, transparent);
+  background: var(--surface-base, var(--vscode-editor-background));
+  color: var(--text-base, var(--vscode-foreground));
+  font-family: var(--font-body);
+  font-size: var(--kilo-font-size-13);
+}
+
+.routines-field input:focus,
+.routines-field select:focus,
+.routines-field textarea:focus {
+  outline: 1px solid var(--border-focus, var(--vscode-focusBorder));
+  outline-offset: -1px;
+  border-color: transparent;
 }
 
 .routines-list {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--raya-space-12);
 }
 
-.routines-card {
-  border: 1px solid color-mix(in srgb, var(--border-base) 70%, transparent);
-  border-radius: 8px;
-  padding: var(--raya-space-12);
+.routines-row {
+  padding: var(--raya-space-10) 0;
+  border-bottom: var(--raya-hairline) solid color-mix(in srgb, var(--border-base) 55%, transparent);
 }
 
-.routines-card-head {
+.routines-row:last-child {
+  border-bottom: 0;
+}
+
+.routines-row[data-paused="true"] .routines-name {
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+}
+
+.routines-row-top {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--raya-space-8);
+  min-width: 0;
+}
+
+.routines-identity {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--raya-space-8);
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.routines-identity:disabled {
+  cursor: default;
+}
+
+.routines-name {
+  font-family: var(--font-body);
+  font-size: var(--kilo-font-size-14);
+  font-weight: 500;
+  color: var(--text-base, var(--vscode-foreground));
 }
 
 .routines-role {
+  font-family: var(--font-body);
   font-size: var(--kilo-font-size-12);
   color: var(--text-weak, var(--vscode-descriptionForeground));
+  text-transform: lowercase;
+}
+
+.routines-actions {
+  margin-top: var(--raya-space-8);
 }
 
 .routines-runs {
   list-style: none;
-  margin: 8px 0 0;
+  margin: var(--raya-space-8) 0 0;
   padding: 0;
 }
 
@@ -99,16 +238,22 @@
   text-align: left;
   background: none;
   border: 0;
-  color: inherit;
+  color: var(--text-weak, var(--vscode-descriptionForeground));
   cursor: pointer;
-  padding: 4px 0;
+  padding: var(--raya-space-2) 0;
+  font-family: var(--font-body);
   font-size: var(--kilo-font-size-12);
+}
+
+.routines-run:hover {
+  color: var(--text-base, var(--vscode-foreground));
 }
 
 .presence-badge {
   border: 0;
-  border-radius: 999px;
-  padding: 1px 8px;
+  border-radius: var(--raya-radius-sm, 4px);
+  padding: 1px var(--raya-space-8);
+  font-family: var(--font-body);
   font-size: var(--kilo-font-size-11);
   letter-spacing: 0.02em;
   cursor: pointer;
@@ -139,11 +284,17 @@
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .presence-badge[data-presence="working"] {
+    animation: none;
+  }
+}
+
 [data-slot="plan-exit-steps"] {
-  margin: 8px 0 0;
+  margin: var(--raya-space-8) 0 0;
   padding-left: 1.1em;
 }
 
 [data-slot="plan-exit-run"] {
-  margin-top: 8px;
+  margin-top: var(--raya-space-8);
 }

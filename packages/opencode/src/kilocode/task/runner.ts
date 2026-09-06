@@ -9,6 +9,8 @@ import { RayaGoal } from "@/kilocode/goal"
 import { RayaGoalContinuation } from "@/kilocode/goal/continuation"
 import { KiloSession } from "@/kilocode/session"
 import { PlanArtifact } from "@/kilocode/plan-artifact"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 import { RayaTask } from "."
 import * as Log from "@opencode-ai/core/util/log"
 
@@ -74,11 +76,16 @@ export namespace RayaTaskRunner {
       if (history.at(-1)?.status === "running") {
         return yield* new RayaTask.GuardError({ message: "This agent is already running." })
       }
-      const rules = RayaTask.deny(item)
       const created = yield* input.sessions.create({
         title: item.name,
         agent: specialist(item.role),
-        permission: rules.length ? rules : undefined,
+        model: item.model
+          ? {
+              providerID: ProviderV2.ID.make(item.model.providerID),
+              id: ModelV2.ID.make(item.model.id),
+            }
+          : undefined,
+        permission: RayaTask.rules(item),
       })
       const objective = yield* seed(item)
       yield* goals.create(created.id, objective)

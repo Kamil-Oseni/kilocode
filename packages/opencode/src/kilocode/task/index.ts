@@ -1,6 +1,7 @@
 import { Effect, Schema } from "effect"
 import { Storage } from "@/storage/storage"
 import { SessionID } from "@/session/schema"
+import { Permission } from "@/permission"
 import { next as cronNext } from "./cron"
 
 export namespace RayaTask {
@@ -30,6 +31,9 @@ export namespace RayaTask {
     schedule: Schedule,
     enabled: Schema.Boolean,
     plan: Schema.optional(Schema.String),
+    model: Schema.optional(Schema.Struct({ providerID: Schema.String, id: Schema.String })),
+    access: Schema.optional(Schema.Literals(["full", "brief"])),
+    tools: Schema.optional(Schema.Array(Schema.String)),
     createdAt: Schema.Number,
     updatedAt: Schema.Number,
     note: Schema.optional(Schema.String),
@@ -66,6 +70,9 @@ export namespace RayaTask {
     avatar: Schema.optional(Schema.String),
     enabled: Schema.optional(Schema.Boolean),
     plan: Schema.optional(Schema.String),
+    model: Schema.optional(Schema.Struct({ providerID: Schema.String, id: Schema.String })),
+    access: Schema.optional(Schema.Literals(["full", "brief"])),
+    tools: Schema.optional(Schema.Array(Schema.String)),
   })
   export type Create = typeof Create.Type
 
@@ -110,18 +117,30 @@ export namespace RayaTask {
     if (at <= from) return at
   }
 
+  export function brief(agent: Pick<Agent, "role" | "access">) {
+    if (agent.access === "full") return false
+    if (agent.access === "brief") return true
+    return agent.role.toLowerCase() === "briefer"
+  }
+
+  export function rules(agent: Pick<Agent, "role" | "access" | "tools">) {
+    if (agent.tools?.length) {
+      const cfg: Record<string, "allow" | "deny"> = { "*": "deny", question: "allow" }
+      for (const tool of agent.tools) cfg[tool] = "allow"
+      return Permission.fromConfig(cfg)
+    }
+    if (brief(agent)) {
+      return Permission.fromConfig({ edit: "deny", write: "deny", bash: "deny", apply_patch: "deny" })
+    }
+    return Permission.fromConfig({ "*": "allow", edit: "allow", write: "allow", bash: "allow" })
+  }
+
   export function listen(agent: Agent, source: string, filter?: string) {
     if (!agent.enabled) return false
     if (agent.schedule.kind !== "event") return false
     if (agent.schedule.source !== source) return false
     if (agent.schedule.filter && filter && agent.schedule.filter !== filter) return false
     return true
-  }
-
-  export function deny(agent: Pick<Agent, "role">) {
-    const role = agent.role.toLowerCase()
-    const tools = role === "briefer" || role === "inbox" ? ["edit", "write", "bash"] : []
-    return tools.map((permission) => ({ permission, pattern: "*", action: "deny" as const }))
   }
 
   export function make(deps: { storage: Store }) {
@@ -187,6 +206,9 @@ export namespace RayaTask {
         schedule: input.schedule,
         enabled: input.enabled ?? true,
         plan: input.plan,
+        model: input.model,
+        access: input.access ?? (role.toLowerCase() === "briefer" ? "brief" : "full"),
+        tools: input.tools,
         createdAt: now,
         updatedAt: now,
       }
@@ -211,6 +233,9 @@ export namespace RayaTask {
         avatar: patch.avatar ?? prior.avatar,
         enabled: patch.enabled ?? prior.enabled,
         plan: patch.plan ?? prior.plan,
+        model: patch.model ?? prior.model,
+        access: patch.access ?? prior.access,
+        tools: patch.tools ?? prior.tools,
         note: patch.note ?? prior.note,
         updatedAt: Date.now(),
       }
@@ -273,7 +298,17 @@ export namespace RayaTask {
       return listed
     })
 
-    return { list, get, create, update, runsFor, record, recall, remember, ready, listenFor, preview }
+    const remove = Effect.fn("RayaTask.remove")(function* (id: string) {
+      const items = yield* list()
+      const found = items.find((item) => item.id === id)
+      if (!found) return yield* new NotFoundError({ message: "Agent not found" })
+      yield* save(items.filter((item) => item.id !== id))
+      yield* writeRuns(id, [])
+      yield* remember(id, "")
+      return true
+    })
+
+    return { list, get, create, update, remove, runsFor, record, recall, remember, ready, listenFor, preview }
   }
 
   function allowed(role: string, capabilities: readonly string[]) {

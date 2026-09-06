@@ -253,6 +253,8 @@ import type {
   KilocodeRoutineEventResponses,
   KilocodeRoutineListErrors,
   KilocodeRoutineListResponses,
+  KilocodeRoutineRemoveErrors,
+  KilocodeRoutineRemoveResponses,
   KilocodeRoutineRunErrors,
   KilocodeRoutineRunResponses,
   KilocodeRoutineRunsErrors,
@@ -8687,6 +8689,12 @@ export class Routine extends HeyApiClient {
       avatar?: string
       enabled?: boolean
       plan?: string
+      model?: {
+        providerID: string
+        id: string
+      }
+      access?: "full" | "brief"
+      tools?: Array<string>
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -8706,6 +8714,9 @@ export class Routine extends HeyApiClient {
             { in: "body", key: "avatar" },
             { in: "body", key: "enabled" },
             { in: "body", key: "plan" },
+            { in: "body", key: "model" },
+            { in: "body", key: "access" },
+            { in: "body", key: "tools" },
           ],
         },
       ],
@@ -8723,6 +8734,42 @@ export class Routine extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Remove an assigned agent
+   *
+   * Delete a routine and its run history. Sessions already in History stay.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      agentID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "agentID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      KilocodeRoutineRemoveResponses,
+      KilocodeRoutineRemoveErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/agent/{agentID}",
+      ...options,
+      ...params,
     })
   }
 
@@ -8762,6 +8809,12 @@ export class Routine extends HeyApiClient {
       avatar?: string
       enabled?: boolean
       plan?: string
+      model?: {
+        providerID: string
+        id: string
+      }
+      access?: "full" | "brief"
+      tools?: Array<string>
       note?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -8783,6 +8836,9 @@ export class Routine extends HeyApiClient {
             { in: "body", key: "avatar" },
             { in: "body", key: "enabled" },
             { in: "body", key: "plan" },
+            { in: "body", key: "model" },
+            { in: "body", key: "access" },
+            { in: "body", key: "tools" },
             { in: "body", key: "note" },
           ],
         },

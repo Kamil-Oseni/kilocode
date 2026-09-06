@@ -176,7 +176,7 @@
         "command": "raya.routinesButtonClicked",
         "title": "Routines",
         "category": "Raya",
-        "icon": "$(clock)"
+        "icon": "$(sync)"
       },
       {
         "command": "raya.profileButtonClicked",
@@ -218,7 +218,7 @@
       {
         "command": "raya.sidebarTitle.routinesButtonClicked",
         "title": "Routines",
-        "icon": "$(clock)"
+        "icon": "$(sync)"
       },
       {
         "command": "raya.sidebarTitle.profileButtonClicked",

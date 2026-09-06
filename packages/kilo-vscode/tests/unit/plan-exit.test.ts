@@ -92,6 +92,8 @@ describe("plan_exit renderer uses openFile not openDiff (source)", () => {
     const block = end === -1 ? src.slice(start) : src.slice(start, end)
     expect(block).not.toContain("openDiffVirtual")
     expect(block).not.toContain("openDiff")
+    expect(block).toContain("Started in the background")
+    expect(block).toContain('if (!i || exit() === "run" || exit() === "bg") return')
   })
 
   it("plan_exit tool is handled before generic Part renderer", () => {

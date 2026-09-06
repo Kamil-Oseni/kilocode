@@ -164,12 +164,19 @@ export interface RoutineStateMessage {
   templates?: unknown[]
   error?: string
   append?: boolean
+  saved?: boolean
 }
 
 export interface RoutineRunsLoadedMessage {
   type: "routineRuns"
   agentID: string
   runs?: unknown[]
+}
+
+export interface RoutineStartedMessage {
+  type: "routineStarted"
+  sessionID: string
+  agentID?: string
 }
 // raya_change end
 
@@ -1542,6 +1549,7 @@ export type ExtensionMessage =
   | GoalStateMessage // raya_change - Milestone A
   | RoutineStateMessage
   | RoutineRunsLoadedMessage
+  | RoutineStartedMessage
   | PartUpdatedMessage
   | PartsUpdatedMessage
   | PartRemovedMessage

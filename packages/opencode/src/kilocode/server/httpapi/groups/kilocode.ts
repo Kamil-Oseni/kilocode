@@ -8,6 +8,7 @@ import {
   WorkspaceRoutingQueryFields,
 } from "@/server/routes/instance/httpapi/middleware/workspace-routing"
 import { described } from "@/server/routes/instance/httpapi/groups/metadata"
+import { InvalidRequestError } from "@/server/routes/instance/httpapi/errors"
 import { ProviderUsage } from "@opencode-ai/schema/kilocode/provider-usage"
 import { AnacondaDesktopApi } from "./anaconda-desktop"
 import {
@@ -101,6 +102,9 @@ export const TaskUpdatePayload = Schema.Struct({
   avatar: Schema.optional(Schema.String),
   enabled: Schema.optional(Schema.Boolean),
   plan: Schema.optional(Schema.String),
+  model: Schema.optional(Schema.Struct({ providerID: Schema.String, id: Schema.String })),
+  access: Schema.optional(Schema.Literals(["full", "brief"])),
+  tools: Schema.optional(Schema.Array(Schema.String)),
   note: Schema.optional(Schema.String),
 })
 export const TaskEventPayload = Schema.Struct({
@@ -559,7 +563,7 @@ export const KilocodeApi = HttpApi.make("kilocode")
           query: WorkspaceRoutingQuery,
           payload: TaskCreatePayload,
           success: described(RayaTask.Agent, "Created agent"),
-          error: HttpApiError.BadRequest,
+          error: InvalidRequestError,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "kilocode.routine.create",
@@ -572,7 +576,7 @@ export const KilocodeApi = HttpApi.make("kilocode")
           query: WorkspaceRoutingQuery,
           payload: TaskUpdatePayload,
           success: described(RayaTask.Agent, "Updated agent"),
-          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+          error: [InvalidRequestError, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "kilocode.routine.update",
@@ -580,11 +584,23 @@ export const KilocodeApi = HttpApi.make("kilocode")
             description: "Edit a standing job, schedule, or enabled flag.",
           }),
         ),
+        HttpApiEndpoint.delete("agentRemove", KilocodePaths.agentItem, {
+          params: { agentID: Schema.String },
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Boolean, "Removed"),
+          error: HttpApiError.NotFound,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.remove",
+            summary: "Remove an assigned agent",
+            description: "Delete a routine and its run history. Sessions already in History stay.",
+          }),
+        ),
         HttpApiEndpoint.post("agentRun", KilocodePaths.agentRun, {
           params: { agentID: Schema.String },
           query: WorkspaceRoutingQuery,
           success: described(RayaTask.Run, "Started run"),
-          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+          error: [InvalidRequestError, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "kilocode.routine.run",

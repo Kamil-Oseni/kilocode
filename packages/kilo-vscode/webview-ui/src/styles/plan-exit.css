@@ -63,4 +63,11 @@
       outline-offset: 1px;
     }
   }
+
+  [data-slot="plan-exit-status"] {
+    margin: var(--raya-space-4) 0 0;
+    width: 100%;
+    color: var(--text-weak, var(--vscode-descriptionForeground));
+    font-size: var(--kilo-font-size-12);
+  }
 }

@@ -8,7 +8,7 @@
  * Active questions render inline via QuestionDock; permissions are in the bottom dock.
  */
 
-import { Component, For, Show, createMemo, createSignal, type JSX } from "solid-js"
+import { Component, For, Show, createMemo, createSignal, onCleanup, type JSX } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import {
   Part,
@@ -74,6 +74,12 @@ function PlanExitCard(props: { part: ToolPart }) {
     if (!info()) return ""
     return language.t("plan.exit.ready")
   })
+  const [exit, setExit] = createSignal<"idle" | "run" | "bg" | "err">("idle")
+  const unsub = vscode.onMessage((msg) => {
+    if (msg.type === "routineStarted" && exit() === "bg") return
+    if (msg.type === "routineState" && msg.error && exit() === "bg") setExit("err")
+  })
+  onCleanup(unsub)
   const open = (e: MouseEvent) => {
     e.preventDefault()
     const i = info()
@@ -82,7 +88,8 @@ function PlanExitCard(props: { part: ToolPart }) {
   }
   const run = () => {
     const i = info()
-    if (!i) return
+    if (!i || exit() === "run" || exit() === "bg") return
+    setExit("run")
     const rows = i.steps.map((step, index) => `${index + 1}. [${step.id}] ${step.description}`).join("\n")
     vscode.postMessage({
       type: "sendMessage",
@@ -92,7 +99,8 @@ function PlanExitCard(props: { part: ToolPart }) {
   }
   const assign = () => {
     const i = info()
-    if (!i) return
+    if (!i || exit() === "run" || exit() === "bg") return
+    setExit("bg")
     vscode.postMessage({
       type: "routineCreate",
       name: i.title || "Plan run",
@@ -101,6 +109,7 @@ function PlanExitCard(props: { part: ToolPart }) {
       when: "just when I ask",
       plan: i.plan,
       runNow: true,
+      access: "full",
     })
   }
   const marked = createMemo(() => {
@@ -133,12 +142,23 @@ function PlanExitCard(props: { part: ToolPart }) {
           </ol>
         </Show>
         <div data-slot="plan-exit-run">
-          <Button size="small" onClick={run}>
-            Run this plan
-          </Button>
-          <Button size="small" variant="secondary" onClick={assign}>
-            Run in background
-          </Button>
+          <Show when={exit() === "idle" || exit() === "err"}>
+            <Button size="small" disabled={exit() !== "idle" && exit() !== "err"} onClick={run}>
+              Run this plan
+            </Button>
+            <Button size="small" variant="secondary" onClick={assign}>
+              Run in background
+            </Button>
+          </Show>
+          <Show when={exit() === "run"}>
+            <p data-slot="plan-exit-status">Opening the builder in this chat.</p>
+          </Show>
+          <Show when={exit() === "bg"}>
+            <p data-slot="plan-exit-status">Started in the background. Open Routines to follow it.</p>
+          </Show>
+          <Show when={exit() === "err"}>
+            <p data-slot="plan-exit-status">Could not start the background run. Try once more.</p>
+          </Show>
         </div>
       </div>
     </Show>

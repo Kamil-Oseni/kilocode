@@ -31,7 +31,7 @@ type Codicon =
   | "extensions"
   | "account"
   | "settings-gear"
-  | "clock"
+  | "sync"
 
 interface Action {
   key: string
@@ -59,7 +59,7 @@ export const SidebarTopBar: Component<SidebarTopBarProps> = (props) => {
   const actions: Action[] = [
     { key: "newTask", codicon: "add", button: "new_task", run: () => props.onNewTask() },
     { key: "history", codicon: "history", button: "history", run: () => props.onHistory() },
-    { key: "routines", codicon: "clock", button: "routines", run: () => props.onRoutines() },
+    { key: "routines", codicon: "sync", button: "routines", run: () => props.onRoutines() },
     { key: "agentManager", codicon: "organization", button: "agent_manager", run: () => open("openAgentManager") },
     { key: "kiloClaw", codicon: "comment-discussion", button: "kiloclaw", run: () => open("openKiloClaw") },
     { key: "marketplace", codicon: "extensions", button: "marketplace", run: () => open("openMarketplacePanel") },

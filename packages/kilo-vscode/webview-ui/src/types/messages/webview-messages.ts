@@ -78,6 +78,10 @@ export interface RoutineCreateMessage {
   plan?: string
   enabled?: boolean
   runNow?: boolean
+  providerID?: string
+  modelID?: string
+  access?: "full" | "brief"
+  tools?: string[]
 }
 
 export interface RoutineUpdateMessage {
@@ -91,6 +95,10 @@ export interface RoutineUpdateMessage {
   schedule?: unknown
   plan?: string
   note?: string
+  providerID?: string
+  modelID?: string
+  access?: "full" | "brief"
+  tools?: string[]
 }
 
 export interface RoutineRunMessage {
@@ -100,6 +108,11 @@ export interface RoutineRunMessage {
 
 export interface RoutineRunsMessage {
   type: "routineRuns"
+  agentID: string
+}
+
+export interface RoutineRemoveMessage {
+  type: "routineRemove"
   agentID: string
 }
 // raya_change end
@@ -1653,6 +1666,7 @@ export type WebviewMessage =
   | RoutineUpdateMessage
   | RoutineRunMessage
   | RoutineRunsMessage
+  | RoutineRemoveMessage
   | RequestBackgroundJobsMessage
   | CancelBackgroundJobMessage
   | BackgroundSubagentsMessage

@@ -61,7 +61,7 @@ import { retry } from "./services/cli-backend/retry"
 import { removeAgent } from "./services/agent-removal"
 import { normalize, type SSEPayload, type SyncPayload, type WirePayload } from "./services/cli-backend/sdk-sse-adapter"
 import { slimInfo, slimPart, slimParts } from "./kilo-provider/slim-metadata"
-import { handleRoutineMessage as dispatchRoutine } from "./kilo-provider/routines"
+import { handleRoutineMessage as dispatchRoutine, reason } from "./kilo-provider/routines"
 import { shouldNotify } from "./kilo-provider/presence-notify"
 import { parseMessageFiles, type MessageFile } from "./kilo-provider/message-files"
 import { renameSession } from "./kilo-provider/rename-session"
@@ -1653,11 +1653,12 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         message.type !== "routineCreate" &&
         message.type !== "routineUpdate" &&
         message.type !== "routineRun" &&
-        message.type !== "routineRuns"
+        message.type !== "routineRuns" &&
+        message.type !== "routineRemove"
       ) {
         return false
       }
-      this.postMessage({ type: "routineState", error: getErrorMessage(err) || "Could not update routines." })
+      this.postMessage({ type: "routineState", error: reason(err) || "Could not update routines." })
       return true
     }
   }

@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { Storage } from "@/storage/storage"
 import { SessionID } from "@/session/schema"
-import { Permission } from "@/permission"
 import { RayaTask } from "@/kilocode/task"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
 import { next } from "@/kilocode/task/cron"
@@ -141,13 +140,6 @@ describe("RayaTask store", () => {
     expect(hit.map((item) => item.id)).toEqual([agent.id])
   })
 
-  test("reminder roles deny edit tools at the session permission layer", () => {
-    const rules = RayaTask.deny({ role: "briefer" })
-    expect(Permission.disabled(["edit", "read", "bash"], rules).has("edit")).toBe(true)
-    expect(Permission.disabled(["edit", "read", "bash"], rules).has("bash")).toBe(true)
-    expect(Permission.disabled(["edit", "read"], RayaTask.deny({ role: "coder" })).has("edit")).toBe(false)
-  })
-
   test("parks a running agent as waiting on you", async () => {
     const sid = SessionID.make("ses_test")
     const runner = RayaTaskRunner.make({
@@ -182,6 +174,48 @@ describe("RayaTask store", () => {
     expect(last?.blockedReason).toBe("waiting on you")
     await Effect.runPromise(runner.park(sid, false))
     expect((await Effect.runPromise(runner.tasks.runsFor(agent.id))).at(-1)?.status).toBe("running")
+  })
+
+  test("removes a routine from the roster", async () => {
+    const tasks = RayaTask.make({ storage: memory() })
+    const agent = await Effect.runPromise(
+      tasks.create({
+        name: "Temp",
+        role: "coder",
+        objective: "ship",
+        schedule: { kind: "manual" },
+      }),
+    )
+    expect(await Effect.runPromise(tasks.remove(agent.id))).toBe(true)
+    const exit = await Effect.runPromiseExit(tasks.get(agent.id))
+    expect(exit._tag).toBe("Failure")
+  })
+
+  test("stores a custom role, model, and full access", async () => {
+    const tasks = RayaTask.make({ storage: memory() })
+    const agent = await Effect.runPromise(
+      tasks.create({
+        name: "Ops",
+        role: "ops",
+        objective: "watch deploys",
+        schedule: { kind: "manual" },
+        model: { providerID: "anthropic", id: "claude" },
+        access: "full",
+      }),
+    )
+    expect(agent.role).toBe("ops")
+    expect(agent.model?.id).toBe("claude")
+    expect(agent.access).toBe("full")
+    expect(RayaTask.brief(agent)).toBe(false)
+    expect(RayaTask.rules(agent).some((rule) => rule.permission === "edit" && rule.action === "allow")).toBe(true)
+  })
+
+  test("briefer sessions deny file edits unless access is full", () => {
+    expect(RayaTask.brief({ role: "briefer" })).toBe(true)
+    expect(RayaTask.brief({ role: "inbox" })).toBe(false)
+    expect(RayaTask.brief({ role: "briefer", access: "full" })).toBe(false)
+    const denied = RayaTask.rules({ role: "briefer" })
+    expect(denied.some((rule) => rule.permission === "edit" && rule.action === "deny")).toBe(true)
   })
 })
 

@@ -4,7 +4,7 @@ Routines are standing jobs. You assign a named agent a role, a job in plain lang
 
 Open Routines from the sidebar sync icon. History stays on the rewind-clock icon. The roster is the page. Click a name to open that agent's latest chat. Run now starts a session immediately. Pause stops future wakeups. Check one or more rows and use Remove in the header to delete them, or the trash on a single row. Past chats stay in History.
 
-Assign a routine by starting from Briefer, Reviewer, Accountant, or Inbox, or by writing your own role. Agent is which mode it runs as: same as chat, or a mode from Settings such as Auto, Code, Ask, Debug, Designer, or one you added. It uses the model you assigned that mode under Model per Mode. How it works is either can edit the workspace, or read and notify only. Briefer defaults to notify only.
+Assign a routine by starting from Briefer, Reviewer, Accountant, or Inbox, or by writing your own role. Agent is which mode it runs as: same as chat, or a mode from Settings such as Auto, Code, Ask, Debug, Designer, or one you added. It uses the model you assigned that mode under Model per Mode. Write folder is where new files go for that routine. It can still read from anywhere on your machine, an external drive, or the web. How it works is either can edit the workspace, or read and notify only. Briefer defaults to notify only.
 
 Accountant jobs need you to allow money records first (receipts, ledgers, invoices). Inbox jobs need you to allow messages first (read and draft replies). Those consents are a yes at assign time, not a list of tools. The job still will not send payments or send mail unless you ask.
 

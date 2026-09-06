@@ -693,6 +693,12 @@ export interface FilePickerResultMessage {
   requestId: string
 }
 
+export interface FolderPickerResultMessage {
+  type: "folderPickerResult"
+  path: string
+  requestId: string
+}
+
 export interface TerminalContextResultMessage {
   type: "terminalContextResult"
   requestId: string
@@ -1613,6 +1619,7 @@ export type ExtensionMessage =
   | FileSearchResultMessage
   | SessionSearchResultMessage
   | FilePickerResultMessage
+  | FolderPickerResultMessage
   | TerminalContextResultMessage
   | TerminalContextErrorMessage
   | GitChangesContextResultMessage

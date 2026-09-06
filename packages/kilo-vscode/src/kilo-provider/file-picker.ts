@@ -19,6 +19,20 @@ export async function handleFilePicker(input: Input): Promise<void> {
   })
 }
 
+export async function handleFolderPicker(input: Input): Promise<void> {
+  const uri = await vscode.window.showOpenDialog({
+    canSelectFiles: false,
+    canSelectFolders: true,
+    canSelectMany: false,
+    openLabel: "Select folder",
+  })
+  input.post({
+    type: "folderPickerResult",
+    path: uri && uri[0] ? uri[0].fsPath : "",
+    requestId: input.requestId,
+  })
+}
+
 export function mentions(uris: readonly vscode.Uri[]): string {
   return uris.map((uri) => `@${vscode.workspace.asRelativePath(uri, false)}`).join(" ") + " "
 }

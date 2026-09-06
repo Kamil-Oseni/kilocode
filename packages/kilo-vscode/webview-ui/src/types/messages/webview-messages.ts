@@ -79,6 +79,7 @@ export interface RoutineCreateMessage {
   enabled?: boolean
   runNow?: boolean
   mode?: string
+  dir?: string
   access?: "full" | "brief"
   tools?: string[]
 }
@@ -95,6 +96,7 @@ export interface RoutineUpdateMessage {
   plan?: string
   note?: string
   mode?: string
+  dir?: string
   access?: "full" | "brief"
   tools?: string[]
 }
@@ -633,6 +635,11 @@ export interface RequestSessionSearchMessage {
 
 export interface RequestFilePickerMessage {
   type: "requestFilePicker"
+  requestId: string
+}
+
+export interface RequestFolderPickerMessage {
+  type: "requestFolderPicker"
   requestId: string
 }
 
@@ -1750,6 +1757,7 @@ export type WebviewMessage =
   | RequestFileSearchMessage
   | RequestSessionSearchMessage
   | RequestFilePickerMessage
+  | RequestFolderPickerMessage
   | RequestTerminalContextMessage
   | RequestGitChangesContextMessage
   | ChatCompletionAcceptedMessage

@@ -8694,6 +8694,7 @@ export class Routine extends HeyApiClient {
         id: string
       }
       mode?: string
+      dir?: string
       access?: "full" | "brief"
       tools?: Array<string>
     },
@@ -8717,6 +8718,7 @@ export class Routine extends HeyApiClient {
             { in: "body", key: "plan" },
             { in: "body", key: "model" },
             { in: "body", key: "mode" },
+            { in: "body", key: "dir" },
             { in: "body", key: "access" },
             { in: "body", key: "tools" },
           ],
@@ -8816,6 +8818,7 @@ export class Routine extends HeyApiClient {
         id: string
       }
       mode?: string
+      dir?: string
       access?: "full" | "brief"
       tools?: Array<string>
       note?: string
@@ -8841,6 +8844,7 @@ export class Routine extends HeyApiClient {
             { in: "body", key: "plan" },
             { in: "body", key: "model" },
             { in: "body", key: "mode" },
+            { in: "body", key: "dir" },
             { in: "body", key: "access" },
             { in: "body", key: "tools" },
             { in: "body", key: "note" },

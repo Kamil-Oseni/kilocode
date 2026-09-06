@@ -19686,6 +19686,9 @@
                       "mode": {
                         "type": "string"
                       },
+                      "dir": {
+                        "type": "string"
+                      },
                       "access": {
                         "type": "string",
                         "enum": ["full", "brief"]
@@ -19967,6 +19970,9 @@
                     "mode": {
                       "type": "string"
                     },
+                    "dir": {
+                      "type": "string"
+                    },
                     "access": {
                       "type": "string",
                       "enum": ["full", "brief"]
@@ -20221,6 +20227,9 @@
                   "mode": {
                     "type": "string"
                   },
+                  "dir": {
+                    "type": "string"
+                  },
                   "access": {
                     "type": "string",
                     "enum": ["full", "brief"]
@@ -20412,6 +20421,9 @@
                       "additionalProperties": false
                     },
                     "mode": {
+                      "type": "string"
+                    },
+                    "dir": {
                       "type": "string"
                     },
                     "access": {
@@ -20676,6 +20688,9 @@
                     "additionalProperties": false
                   },
                   "mode": {
+                    "type": "string"
+                  },
+                  "dir": {
                     "type": "string"
                   },
                   "access": {

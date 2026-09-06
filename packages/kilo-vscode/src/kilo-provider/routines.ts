@@ -1,4 +1,5 @@
 import type { KiloClient } from "@kilocode/sdk/v2/client"
+import { mkdir } from "node:fs/promises"
 import { getErrorMessage } from "../kilo-provider-utils"
 
 type Msg = { type: string } & Record<string, unknown>
@@ -62,6 +63,11 @@ function mode(msg: Msg) {
   return name
 }
 
+function folder(msg: Msg) {
+  const path = typeof msg.dir === "string" ? msg.dir.trim() : ""
+  if (path) return path
+}
+
 function tools(msg: Msg) {
   if (!Array.isArray(msg.tools)) return
   return msg.tools.filter((item): item is string => typeof item === "string")
@@ -93,6 +99,8 @@ async function create(ctx: Ctx) {
   const capabilities = Array.isArray(msg.capabilities)
     ? msg.capabilities.filter((item): item is string => typeof item === "string")
     : undefined
+  const dir = folder(msg)
+  if (dir) await mkdir(dir, { recursive: true })
   const created = await ctx.kilo.create(
     {
       directory: ctx.dir,
@@ -104,6 +112,7 @@ async function create(ctx: Ctx) {
       enabled: msg.enabled !== false,
       plan: typeof msg.plan === "string" ? msg.plan : undefined,
       mode: mode(msg),
+      dir: folder(msg),
       access: access(msg),
       tools: tools(msg),
     },
@@ -134,6 +143,7 @@ async function update(ctx: Ctx) {
       plan: typeof msg.plan === "string" ? msg.plan : undefined,
       note: typeof msg.note === "string" ? msg.note : undefined,
       mode: mode(msg),
+      dir: folder(msg),
       access: access(msg),
       tools: tools(msg),
     },

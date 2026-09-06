@@ -67,7 +67,7 @@ import { parseMessageFiles, type MessageFile } from "./kilo-provider/message-fil
 import { renameSession } from "./kilo-provider/rename-session"
 import { handleFileSearch } from "./kilo-provider/file-search"
 import { handleSessionSearch } from "./kilo-provider/session-search"
-import { handleFilePicker } from "./kilo-provider/file-picker"
+import { handleFilePicker, handleFolderPicker } from "./kilo-provider/file-picker"
 import { sessionSourceId } from "./diff/sources/session" // raya_change - chat review opens its own snapshot, not unrelated workspace edits
 import { watchFontSizeConfig } from "./kilo-provider/font-size"
 import { getTerminalContents } from "./services/terminal/context"
@@ -327,6 +327,7 @@ type ContextRequestMessage =
   | { type: "requestFileSearch"; query: string; requestId: string; sessionID?: string }
   | { type: "requestSessionSearch"; requestId: string; sessionID?: string }
   | { type: "requestFilePicker"; requestId: string }
+  | { type: "requestFolderPicker"; requestId: string }
   | { type: "requestTerminalContext"; requestId: string; sessionID?: string; agentManagerContext?: string }
 
 export class KiloProvider implements vscode.WebviewViewProvider, TelemetryPropertiesProvider {
@@ -1429,6 +1430,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         case "requestFileSearch":
         case "requestSessionSearch":
         case "requestFilePicker":
+        case "requestFolderPicker":
         case "requestTerminalContext":
           await this.handleContextRequest(message)
           break
@@ -2465,6 +2467,10 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     }
     if (message.type === "requestFilePicker") {
       await handleFilePicker({ requestId: message.requestId, post: (msg) => this.postMessage(msg) })
+      return
+    }
+    if (message.type === "requestFolderPicker") {
+      await handleFolderPicker({ requestId: message.requestId, post: (msg) => this.postMessage(msg) })
       return
     }
     if (message.type === "requestTerminalContext") {

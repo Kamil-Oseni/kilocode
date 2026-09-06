@@ -29,6 +29,7 @@ type Agent = {
   note?: string
   nextRun?: number
   access?: "full" | "brief"
+  dir?: string
 }
 
 type Run = {
@@ -92,11 +93,17 @@ function latest(item: Agent, book: Record<string, Run[]>) {
   return (book[item.id] ?? []).at(-1)
 }
 
+function folder(path: string) {
+  const parts = path.replaceAll("\\", "/").split("/").filter(Boolean)
+  return parts.at(-1) ?? path
+}
+
 function meta(item: Agent) {
   const when = item.nextRun ? `Next ${new Date(item.nextRun).toLocaleString()}` : whenLabel(item.schedule)
   const pause = item.enabled ? "" : "Paused · "
   const brief = item.access === "brief" || (!item.access && item.role === "briefer") ? " · Notify only" : ""
-  return `${pause}${item.role} · ${when}${brief}`
+  const write = item.dir ? ` · ${folder(item.dir)}` : ""
+  return `${pause}${item.role} · ${when}${brief}${write}`
 }
 
 interface RoutinesViewProps {
@@ -122,6 +129,8 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const [messages, setMessages] = createSignal(false)
   const [plan, setPlan] = createSignal("")
   const [mode, setMode] = createSignal("chat")
+  const [dir, setDir] = createSignal("")
+  const [wait, setWait] = createSignal("")
   const [access, setAccess] = createSignal<"full" | "brief">("brief")
   const [screen, setScreen] = createSignal<"roster" | "assign">("roster")
   const [busy, setBusy] = createSignal<Record<string, true>>({})
@@ -158,6 +167,10 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
         }
       }
       if (msg.templates) setTemplates(msg.templates as Template[])
+    }
+    if (msg.type === "folderPickerResult" && msg.requestId === wait() && msg.path) {
+      setDir(msg.path)
+      setWait("")
     }
     if (msg.type === "routineRuns" && msg.agentID) {
       setRuns((prior) => ({ ...prior, [msg.agentID]: msg.runs as Run[] }))
@@ -218,6 +231,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
       plan: plan().trim() || undefined,
       access: access(),
       mode: chosen.key === "chat" ? undefined : chosen.key,
+      dir: dir().trim(),
     })
   }
 
@@ -523,6 +537,29 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                 <p class="routines-hint">Read the inbox and draft replies. It will not send unless you ask.</p>
               </div>
             </Show>
+            <div class="routines-field">
+              <span>Write folder</span>
+              <div class="routines-pick">
+                <input
+                  value={dir()}
+                  onInput={(e) => setDir(e.currentTarget.value)}
+                  placeholder="Choose or type a folder"
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="small"
+                  onClick={() => {
+                    const id = crypto.randomUUID()
+                    setWait(id)
+                    vscode.postMessage({ type: "requestFolderPicker", requestId: id })
+                  }}
+                >
+                  Choose
+                </Button>
+              </div>
+              <p class="routines-hint">It can read from anywhere. New files go in this folder.</p>
+            </div>
             <label class="routines-field">
               Plan file
               <input
@@ -531,7 +568,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                 placeholder="Optional path to a .md plan"
               />
             </label>
-            <Button type="submit" disabled={!objective().trim() || saving()}>
+            <Button type="submit" disabled={!objective().trim() || !dir().trim() || saving()}>
               {saving() ? "Assigning" : "Assign"}
             </Button>
           </form>

@@ -216,6 +216,23 @@
   justify-content: space-between;
 }
 
+.routines-pick {
+  display: flex;
+  gap: var(--raya-space-8);
+  align-items: stretch;
+}
+
+.routines-pick input {
+  flex: 1;
+  min-width: 0;
+}
+
+.routines-pick [data-component="button"] {
+  width: auto;
+  flex-shrink: 0;
+  justify-content: center;
+}
+
 .routines-consent {
   display: flex;
   flex-direction: column;

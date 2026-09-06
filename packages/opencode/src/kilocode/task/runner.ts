@@ -1,3 +1,4 @@
+import { mkdir } from "node:fs/promises"
 import { Cause, Effect, Schema } from "effect"
 import type { Bus } from "@/bus"
 import { GlobalBus } from "@/bus/global"
@@ -40,6 +41,20 @@ function kind(role: string, objective: string) {
   return "code" as const
 }
 
+function open<A, E, R>(dir: string | undefined, effect: Effect.Effect<A, E, R>) {
+  const path = dir?.trim()
+  if (!path) return effect
+  return Effect.gen(function* () {
+    yield* Effect.tryPromise({
+      try: () => mkdir(path, { recursive: true }),
+      catch: () => new RayaTask.GuardError({ message: "Could not create that write folder." }),
+    })
+    const mod = yield* Effect.promise(() => import("@/project/instance-store"))
+    const store = yield* mod.Service
+    return yield* store.provide({ directory: path }, effect)
+  })
+}
+
 export namespace RayaTaskRunner {
   type Tasks = ReturnType<typeof RayaTask.make>
   type Runner = {
@@ -61,6 +76,9 @@ export namespace RayaTaskRunner {
     const seed = Effect.fn("RayaTaskRunner.seed")(function* (item: RayaTask.Agent) {
       const memory = yield* tasks.recall(item.id)
       const chunks = [item.objective]
+      if (item.dir?.trim()) {
+        chunks.push(`Write new files only in ${item.dir.trim()}. You may read from anywhere else.`)
+      }
       if (memory) chunks.push(`Role memory (do not mix with other roles):\n${memory}`)
       if (!item.plan) return chunks.join("\n\n")
       const file = Bun.file(PlanArtifact.sidecar(item.plan))
@@ -78,7 +96,7 @@ export namespace RayaTaskRunner {
       if (history.at(-1)?.status === "running") {
         return yield* new RayaTask.GuardError({ message: "This agent is already running." })
       }
-      const created = yield* input.sessions.create({
+      const created = yield* open(item.dir, input.sessions.create({
         title: item.name,
         agent: specialist(item),
         model:
@@ -89,7 +107,7 @@ export namespace RayaTaskRunner {
                 id: ModelV2.ID.make(item.model.id),
               },
         permission: RayaTask.rules(item),
-      })
+      }))
       const objective = yield* seed(item)
       yield* goals.create(created.id, objective)
       const run: RayaTask.Run = {

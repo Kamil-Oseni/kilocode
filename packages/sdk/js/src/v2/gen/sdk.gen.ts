@@ -247,6 +247,18 @@ import type {
   KilocodeRemoveCommandResponses,
   KilocodeRemoveSkillErrors,
   KilocodeRemoveSkillResponses,
+  KilocodeRoutineCreateErrors,
+  KilocodeRoutineCreateResponses,
+  KilocodeRoutineListErrors,
+  KilocodeRoutineListResponses,
+  KilocodeRoutineRunErrors,
+  KilocodeRoutineRunResponses,
+  KilocodeRoutineRunsErrors,
+  KilocodeRoutineRunsResponses,
+  KilocodeRoutineTemplatesErrors,
+  KilocodeRoutineTemplatesResponses,
+  KilocodeRoutineUpdateErrors,
+  KilocodeRoutineUpdateResponses,
   KilocodeSelfHealCreateErrors,
   KilocodeSelfHealCreateResponses,
   KilocodeSelfHealGetErrors,
@@ -8607,6 +8619,288 @@ export class Checkpoint extends HeyApiClient {
   }
 }
 
+export class Routine extends HeyApiClient {
+  /**
+   * List assigned agents
+   *
+   * List persistent role-based agents and their standing jobs.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<KilocodeRoutineListResponses, KilocodeRoutineListErrors, ThrowOnError>({
+      url: "/kilocode/agent",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Create an assigned agent
+   *
+   * Create a named agent with a role, standing job, and schedule.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      name?: string
+      role?: string
+      objective?: string
+      capabilities?: Array<string>
+      memoryScope?: "role" | "project" | "session"
+      schedule?:
+        | {
+            kind: "once"
+            at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            kind: "cron"
+            expr: string
+            tz?: string
+          }
+        | {
+            kind: "event"
+            source: string
+            filter?: string
+          }
+        | {
+            kind: "manual"
+          }
+      avatar?: string
+      enabled?: boolean
+      plan?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "name" },
+            { in: "body", key: "role" },
+            { in: "body", key: "objective" },
+            { in: "body", key: "capabilities" },
+            { in: "body", key: "memoryScope" },
+            { in: "body", key: "schedule" },
+            { in: "body", key: "avatar" },
+            { in: "body", key: "enabled" },
+            { in: "body", key: "plan" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeRoutineCreateResponses,
+      KilocodeRoutineCreateErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/agent",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Update an assigned agent
+   *
+   * Edit a standing job, schedule, or enabled flag.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      agentID: string
+      directory?: string
+      workspace?: string
+      name?: string
+      role?: string
+      objective?: string
+      capabilities?: Array<string>
+      memoryScope?: "role" | "project" | "session"
+      schedule?:
+        | {
+            kind: "once"
+            at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            kind: "cron"
+            expr: string
+            tz?: string
+          }
+        | {
+            kind: "event"
+            source: string
+            filter?: string
+          }
+        | {
+            kind: "manual"
+          }
+      avatar?: string
+      enabled?: boolean
+      plan?: string
+      note?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "agentID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "name" },
+            { in: "body", key: "role" },
+            { in: "body", key: "objective" },
+            { in: "body", key: "capabilities" },
+            { in: "body", key: "memoryScope" },
+            { in: "body", key: "schedule" },
+            { in: "body", key: "avatar" },
+            { in: "body", key: "enabled" },
+            { in: "body", key: "plan" },
+            { in: "body", key: "note" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<
+      KilocodeRoutineUpdateResponses,
+      KilocodeRoutineUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/agent/{agentID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Run an assigned agent now
+   *
+   * Start one background goal run for the agent without waiting for its schedule.
+   */
+  public run<ThrowOnError extends boolean = false>(
+    parameters: {
+      agentID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "agentID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<KilocodeRoutineRunResponses, KilocodeRoutineRunErrors, ThrowOnError>({
+      url: "/kilocode/agent/{agentID}/run",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List agent runs
+   *
+   * Bounded run history with outcome and cost.
+   */
+  public runs<ThrowOnError extends boolean = false>(
+    parameters: {
+      agentID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "agentID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<KilocodeRoutineRunsResponses, KilocodeRoutineRunsErrors, ThrowOnError>({
+      url: "/kilocode/agent/{agentID}/runs",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List agent templates
+   *
+   * Starter roles for assigning a useful agent in two clicks.
+   */
+  public templates<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      KilocodeRoutineTemplatesResponses,
+      KilocodeRoutineTemplatesErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/agent-templates",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class DesignSystem extends HeyApiClient {
   /**
    * Get design-system lock
@@ -9719,6 +10013,11 @@ export class Kilocode extends HeyApiClient {
   private _checkpoint?: Checkpoint
   get checkpoint(): Checkpoint {
     return (this._checkpoint ??= new Checkpoint({ client: this.client }))
+  }
+
+  private _routine?: Routine
+  get routine(): Routine {
+    return (this._routine ??= new Routine({ client: this.client }))
   }
 
   private _designSystem?: DesignSystem

@@ -12,6 +12,7 @@ import { setTabWidths } from "../../utils/tab-widths"
 import { useVSCode } from "../../context/vscode"
 import { SessionTab } from "./SessionTab"
 import { SessionTabMenu } from "./SessionTabMenu"
+import { runPresence } from "../../utils/run-presence"
 import { SessionTabSwitcher } from "./SessionTabSwitcher"
 import { ConstrainDragYAxis, SortableTabContainer } from "./TabDnd"
 
@@ -34,6 +35,13 @@ export const SessionTabStrip: Component = () => {
     const status = session.allStatusMap()[id]
     return status?.type === "busy" || status?.type === "retry"
   }
+  const presence = (id: string) =>
+    runPresence({
+      busy: working(id),
+      waiting:
+        session.permissions().some((item) => item.sessionID === id) ||
+        session.questions().some((item) => item.sessionID === id),
+    })
   const middle = (id: string, event: MouseEvent) => {
     if (event.button !== 1) return
     event.preventDefault()
@@ -143,6 +151,7 @@ export const SessionTabStrip: Component = () => {
                           title={title(id)}
                           active={tabs.active() === id}
                           busy={working(id)}
+                          presence={presence(id)}
                           closeTitle={language.t("common.closeTab")}
                           closeLabel={language.t("common.closeTab")}
                           role="tab"

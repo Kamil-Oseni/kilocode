@@ -52,6 +52,17 @@ const AgentSchema = Schema.StructWithRest(
     // kilocode_change end
     maxSteps: Schema.optional(PositiveInt).annotate({ description: "@deprecated Use 'steps' field instead." }),
     permission: Schema.optional(ConfigPermissionV1.Info),
+    // kilocode_change start - richer subagent frontmatter for assignable roles
+    disallowedTools: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+      description: "Tool names this agent must not call; folded into permission denies.",
+    }),
+    permissionMode: Schema.optional(Schema.Literals(["ask", "allow", "plan"])).annotate({
+      description: "ask maps onto existing ask guards; plan keeps the agent in plan posture.",
+    }),
+    memory: Schema.optional(Schema.Literals(["role", "project", "session"])),
+    background: Schema.optional(Schema.Boolean),
+    isolation: Schema.optional(Schema.Literals(["none", "worktree"])),
+    // kilocode_change end
   }),
   [Schema.Record(Schema.String, Schema.Any)],
 )
@@ -75,6 +86,11 @@ const KNOWN_KEYS = new Set([
   "permission",
   "disable",
   "tools",
+  "disallowedTools", // kilocode_change
+  "permissionMode", // kilocode_change
+  "memory", // kilocode_change
+  "background", // kilocode_change
+  "isolation", // kilocode_change
   "requirements", // kilocode_change - ignore declarations from removed agent requirements feature
 ])
 
@@ -94,6 +110,7 @@ const normalize = (agent: Schema.Schema.Type<typeof AgentSchema>): Schema.Schema
     permission[tool] = action
   }
   globalThis.Object.assign(permission, agent.permission)
+  for (const tool of agent.disallowedTools ?? []) permission[tool] = "deny" // kilocode_change
 
   // kilocode_change start - preserve null delete sentinel (?? would collapse null to maxSteps)
   const steps = agent.steps !== undefined ? agent.steps : agent.maxSteps

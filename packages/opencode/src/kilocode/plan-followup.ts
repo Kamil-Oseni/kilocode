@@ -17,11 +17,12 @@ import { MessageV2 } from "@/session/message-v2"
 import { SessionStatus } from "@/session/status"
 import { Todo } from "@/session/todo"
 import { makeRuntime } from "@/effect/run-service"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import * as Log from "@opencode-ai/core/util/log"
 import { KiloSessionPromptQueue } from "@/kilocode/session/prompt-queue"
 import { lazy } from "@/util/lazy"
 import { PlanFile } from "@/kilocode/plan-file"
+import { PlanArtifact } from "@/kilocode/plan-artifact"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder" // kilocode_change
 
 const agents = lazy(() => makeRuntime(Agent.Service, AppNodeBuilder.build(Agent.node)))
@@ -418,14 +419,17 @@ export namespace PlanFollowup {
           const file = input.file ?? Session.plan(session, Instance.current)
           const todos = await PlanFollowupRuntime.todo.get(input.sessionID)
           const todoList = formatTodos(todos)
+          const sidecar = PlanArtifact.sidecar(file)
+          const structured = await Bun.file(sidecar)
+            .json()
+            .then((raw) => PlanArtifact.prompt(Schema.decodeUnknownSync(PlanArtifact.Info)(raw)))
+            .catch(() => "")
 
-          // Assemble the user message text with or without a handover section.
-          // The section order is fixed so the initial and final renders stay
-          // aligned; only the handover block grows in between.
           const compose = (handover: string) => {
             const sections = [
               `Plan file: ${file}\nRead this file first and treat it as the source of truth for implementation.`,
             ]
+            if (structured) sections.push(structured)
             if (handover) sections.push(`## Handover from Planning Session\n\n${handover}`)
             if (todoList) sections.push(`## Todo List\n\n${todoList}`)
             return sections.join("\n\n")

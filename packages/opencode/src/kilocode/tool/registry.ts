@@ -28,6 +28,7 @@ import type { Session } from "@/session/session" // raya_change - Milestone A go
 import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal state
 import { RayaSelfHeal } from "@/kilocode/self-heal" // raya_change - hybrid self-heal classification refinement
 import { goalTools } from "./goal" // raya_change - Milestone A model-facing tools
+import { scheduleTaskTool } from "./schedule-task"
 import { selfHealTools } from "./self-heal" // raya_change - repair agent reconciles its own classification
 import { ChiefRouteTool } from "./chief-route" // raya_change - Milestone B intelligent auto-routing
 import { AskOptionsTool } from "./ask-options" // raya_change - Milestone C selectable options
@@ -122,6 +123,7 @@ export namespace KiloToolRegistry {
       const heal = goalState && goalDeps ? selfHealTools(goalState, RayaSelfHeal.make(goalDeps.storage)) : undefined
       const healRefine = heal ? yield* heal.refine : undefined
       const goal = { goalCreate, goalGet, goalUpdate, healRefine }
+      const scheduleTask = goalDeps ? yield* scheduleTaskTool(goalDeps) : undefined
       // raya_change end
       if (!notebook)
         return {
@@ -141,6 +143,7 @@ export namespace KiloToolRegistry {
           browser: browserTools, // raya_change - Milestone F browser tools
           canvas: canvasTools, // raya_change - Milestone E canvas tools
           ...goal,
+          scheduleTask,
         }
       const tools = yield* Effect.all({
         notebookRead: NotebookReadTool,
@@ -164,6 +167,7 @@ export namespace KiloToolRegistry {
         browser: browserTools, // raya_change - Milestone F browser tools
         canvas: canvasTools, // raya_change - Milestone E canvas tools
         ...goal,
+        scheduleTask,
         ...tools,
       }
     })
@@ -195,6 +199,7 @@ export namespace KiloToolRegistry {
       ask?: Tool.Info // raya_change - Milestone C
       browser?: Tool.Info[] // raya_change - Milestone F
       canvas?: Tool.Info[] // raya_change - Milestone E
+      scheduleTask?: Tool.Info
     },
     deps: Deps,
     loaders: Loaders = {},
@@ -216,7 +221,7 @@ export namespace KiloToolRegistry {
       const ask = tools.ask ? yield* Tool.init(tools.ask) : undefined // raya_change - Milestone C
       const healRefine = tools.healRefine ? yield* Tool.init(tools.healRefine) : undefined // raya_change - hybrid self-heal
       const browser = tools.browser ? yield* Effect.all(tools.browser.map(Tool.init)) : [] // raya_change - Milestone F
-      const canvas = tools.canvas ? yield* Effect.all(tools.canvas.map(Tool.init)) : [] // raya_change - Milestone E
+      const scheduleTask = tools.scheduleTask ? yield* Tool.init(tools.scheduleTask) : undefined
       const terminal = tools.terminal ? yield* Tool.init(tools.terminal) : undefined
       const notebooks =
         tools.notebookRead && tools.notebookEdit && tools.notebookExecute
@@ -250,6 +255,7 @@ export namespace KiloToolRegistry {
         ask,
         browser, // raya_change - Milestone F
         canvas, // raya_change - Milestone E
+        scheduleTask,
       }
     })
   }
@@ -294,7 +300,7 @@ export namespace KiloToolRegistry {
   /** Hide human-driven tools from agents that cannot interact with the user directly. */
   export function available(tool: Tool.Def, agent: Agent.Info) {
     if (tool.id === "chief_route") return agent.name === "auto" // raya_change - Milestone B
-    if (tool.id === "ask_options") return agent.mode === "primary" // raya_change - Milestone C
+    if (tool.id === "schedule_task") return agent.mode === "primary"
     if (tool.id === "refine_self_heal") return agent.mode === "primary" // raya_change - hybrid self-heal reconcile
     if (tool.id === "notify_user") return KiloSessions.remoteStatus().enabled
     if (tool.id === "send_file") return KiloSessions.remoteStatus().connected
@@ -328,6 +334,7 @@ export namespace KiloToolRegistry {
       ask?: Tool.Def // raya_change - Milestone C
       browser?: Tool.Def[] // raya_change - Milestone F
       canvas?: Tool.Def[] // raya_change - Milestone E
+      scheduleTask?: Tool.Def
     },
     cfg: { experimental?: { image_generation?: boolean; native_notebook_tools?: boolean } },
   ): Tool.Def[] {
@@ -357,6 +364,7 @@ export namespace KiloToolRegistry {
       ...(tools.ask ? [tools.ask] : []), // raya_change - Milestone C
       ...(Flag.KILO_CLIENT === "vscode" ? (tools.browser ?? []) : []), // raya_change - Milestone F
       ...(Flag.KILO_CLIENT === "vscode" ? (tools.canvas ?? []) : []), // raya_change - Milestone E
+      ...(tools.scheduleTask ? [tools.scheduleTask] : []),
       tools.notify,
       tools.send,
     ]

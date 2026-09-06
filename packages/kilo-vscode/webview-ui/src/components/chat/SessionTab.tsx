@@ -2,11 +2,14 @@ import { IconButton } from "@kilocode/kilo-ui/icon-button"
 import { Spinner } from "@kilocode/kilo-ui/spinner"
 import { TooltipKeybind } from "@kilocode/kilo-ui/tooltip"
 import { Show, type Component, type JSX } from "solid-js"
+import { PresenceBadge } from "./PresenceBadge"
+import type { RunPresence } from "../../utils/run-presence"
 
 export const SessionTab: Component<{
   title: string
   active: boolean
   busy: boolean
+  presence?: RunPresence
   closeTitle: string
   closeLabel: string
   keybind?: string
@@ -46,6 +49,7 @@ export const SessionTab: Component<{
               <Spinner class="am-worktree-spinner" />
             </span>
           </Show>
+          <PresenceBadge state={props.presence ?? (props.busy ? "working" : "idle")} />
           <span class="am-tab-label">{props.title}</span>
         </span>
       </TooltipKeybind>

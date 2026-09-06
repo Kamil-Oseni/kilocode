@@ -26,13 +26,14 @@ registerExpandedTaskTool()
 // Apply VS Code sidebar preferences to other tools (e.g. bash expanded by default).
 registerVscodeToolOverrides()
 import HistoryView from "./components/history/HistoryView"
+import RoutinesView from "./components/routines/RoutinesView"
 import { MigrationWizard } from "./components/migration" // legacy-migration
 import type { Message as SDKMessage, Part as SDKPart } from "@kilocode/sdk/v2"
 import { cycleAgent as cycle } from "./context/session-agent"
 import "./styles/chat.css"
 
-type ViewType = "newTask" | "history" | "profile" | "settings" | "subAgentViewer"
-const VALID_VIEWS = new Set<string>(["newTask", "history", "profile", "settings", "subAgentViewer"])
+type ViewType = "newTask" | "history" | "routines" | "profile" | "settings" | "subAgentViewer"
+const VALID_VIEWS = new Set<string>(["newTask", "history", "routines", "profile", "settings", "subAgentViewer"])
 
 /**
  * Bridge our session store to the DataProvider's expected Data shape.
@@ -244,6 +245,9 @@ const AppContent: Component = () => {
       case "historyButtonClicked":
         setCurrentView("history")
         break
+      case "routinesButtonClicked":
+        setCurrentView("routines")
+        break
       case "profileButtonClicked":
         setCurrentView("profile")
         break
@@ -358,6 +362,7 @@ const AppContent: Component = () => {
         <SidebarTopBar
           onNewTask={() => handleViewAction("plusButtonClicked")}
           onHistory={() => handleViewAction("historyButtonClicked")}
+          onRoutines={() => handleViewAction("routinesButtonClicked")}
           surface={topBarSurface}
         />
       </Show>
@@ -387,6 +392,15 @@ const AppContent: Component = () => {
             </Match>
             <Match when={currentView() === "history"}>
               <HistoryView onSelectSession={handleSelectSession} onBack={() => setCurrentView("newTask")} />
+            </Match>
+            <Match when={currentView() === "routines"}>
+              <RoutinesView
+                onBack={() => setCurrentView("newTask")}
+                onOpenSession={(id) => {
+                  handleSelectSession(id)
+                  setCurrentView("newTask")
+                }}
+              />
             </Match>
             <Match when={currentView() === "profile"}>
               <ProfileView

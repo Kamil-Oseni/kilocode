@@ -3,7 +3,12 @@ import * as Tool from "@/tool/tool"
 import { InstanceState } from "@/effect/instance-state"
 import { Session } from "@/session/session"
 import { PlanFile } from "@/kilocode/plan-file"
+import { PlanArtifact } from "@/kilocode/plan-artifact"
 import EXIT_DESCRIPTION from "@/tool/plan-exit.txt"
+import { writeFileSync } from "fs"
+import * as Log from "@opencode-ai/core/util/log"
+
+const log = Log.create({ service: "plan-exit" })
 
 export const Parameters = Schema.Struct({
   path: Schema.optional(
@@ -48,10 +53,17 @@ export const PlanExitTool = Tool.define(
             )
           }
           const plan = PlanFile.display(file, instance)
+          const markdown = yield* Effect.promise(() => Bun.file(file).text().catch(() => ""))
+          const structured = PlanArtifact.parse(markdown)
+          try {
+            writeFileSync(PlanArtifact.sidecar(file), JSON.stringify(structured, null, 2))
+          } catch (err) {
+            log.warn("structured plan sidecar write failed", { err })
+          }
           return {
             title: "Planning complete",
             output: `Plan is ready at ${plan}. Ending planning turn.`,
-            metadata: { plan },
+            metadata: { plan, structured },
           }
         }).pipe(Effect.orDie),
     }

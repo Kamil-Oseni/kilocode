@@ -435,6 +435,9 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("raya.sidebarTitle.historyButtonClicked", () => {
       track("history", "raya.historyButtonClicked")
     }),
+    vscode.commands.registerCommand("raya.sidebarTitle.routinesButtonClicked", () => {
+      track("routines", "raya.routinesButtonClicked")
+    }),
     vscode.commands.registerCommand("raya.sidebarTitle.agentManagerOpen", () => {
       track("agent_manager", "raya.agentManagerOpen")
     }),
@@ -475,6 +478,11 @@ export function activate(context: vscode.ExtensionContext) {
       const tab = activeTabProvider()
       if (tab) tab.postMessage({ type: "action", action: "historyButtonClicked" })
       else provider.postMessage({ type: "action", action: "historyButtonClicked" })
+    }),
+    vscode.commands.registerCommand("raya.routinesButtonClicked", () => {
+      const tab = activeTabProvider()
+      if (tab) tab.postMessage({ type: "action", action: "routinesButtonClicked" })
+      else provider.postMessage({ type: "action", action: "routinesButtonClicked" })
     }),
     vscode.commands.registerCommand("raya.cycleAgentMode", () => {
       const tab = activeTabProvider()

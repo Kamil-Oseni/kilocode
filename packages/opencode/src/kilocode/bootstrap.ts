@@ -23,6 +23,7 @@ import { KilocodeWatcher } from "@/kilocode/watcher"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder" // kilocode_change
 import { Storage } from "@/storage/storage" // raya_change - Milestone A durable goal storage
 import { RayaGoalContinuation } from "@/kilocode/goal/continuation" // raya_change - Milestone A idle continuation
+import { RayaTaskRunner } from "@/kilocode/task/runner"
 import { Config } from "@/config/config" // raya_change - Milestone I goal continuation setting
 
 const log = Log.create({ service: "kilocode-bootstrap" })
@@ -60,6 +61,7 @@ export namespace KilocodeBootstrap {
             storage,
             enabled: () => config.get().pipe(Effect.map((cfg) => cfg.raya_routing?.goal_continuation !== false)),
           }) // raya_change - Milestones A/I configurable idle continuation
+          yield* RayaTaskRunner.subscribe({ bus, storage, sessions })
         }
         // Invalidate enabled cache on every memory state mutation (properties.directory holds the memory root).
         yield* bus.subscribeCallback(MemoryEvents.Status, (evt) =>

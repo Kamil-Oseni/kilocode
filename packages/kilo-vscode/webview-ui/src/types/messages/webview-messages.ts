@@ -62,6 +62,46 @@ export interface GoalDiscardMessage {
   sessionID: string
   messageID: string
 }
+
+export interface RoutineListMessage {
+  type: "routineList"
+}
+
+export interface RoutineCreateMessage {
+  type: "routineCreate"
+  name: string
+  role?: string
+  objective: string
+  when?: string
+  cron?: string
+  capabilities?: string[]
+  plan?: string
+  enabled?: boolean
+  runNow?: boolean
+}
+
+export interface RoutineUpdateMessage {
+  type: "routineUpdate"
+  agentID: string
+  enabled?: boolean
+  name?: string
+  role?: string
+  objective?: string
+  capabilities?: string[]
+  schedule?: unknown
+  plan?: string
+  note?: string
+}
+
+export interface RoutineRunMessage {
+  type: "routineRun"
+  agentID: string
+}
+
+export interface RoutineRunsMessage {
+  type: "routineRuns"
+  agentID: string
+}
 // raya_change end
 
 export interface RequestBackgroundJobsMessage {
@@ -1608,6 +1648,11 @@ export type WebviewMessage =
   | GoalGetMessage // raya_change - Milestone A
   | GoalControlMessage // raya_change - Milestone A
   | GoalDiscardMessage // raya_change - safe ordered goal rollback
+  | RoutineListMessage
+  | RoutineCreateMessage
+  | RoutineUpdateMessage
+  | RoutineRunMessage
+  | RoutineRunsMessage
   | RequestBackgroundJobsMessage
   | CancelBackgroundJobMessage
   | BackgroundSubagentsMessage

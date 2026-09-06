@@ -38,12 +38,15 @@ import type { Part as TimelinePart } from "../../types/messages"
 import type { TimelineHighlight } from "../../utils/timeline/highlight"
 import { Tooltip } from "@kilocode/kilo-ui/tooltip"
 import { Icon } from "@kilocode/kilo-ui/icon"
+import { Button } from "@kilocode/kilo-ui/button"
 import { QuestionDock } from "./QuestionDock"
 import { SuggestBar } from "./SuggestBar"
 import { toolDefaultOpen } from "./tool-default-open"
+import { useVSCode } from "../../context/vscode"
 
-/** Extract plan path from a completed plan_exit tool part. */
-function planExitInfo(part: SDKPart): { plan: string } | undefined {
+type PlanStep = { id: string; description: string; status?: string }
+
+function planExitInfo(part: SDKPart): { plan: string; steps: PlanStep[]; title?: string; summary?: string } | undefined {
   if (part.type !== "tool") return undefined
   const tp = part as unknown as ToolPart
   if (tp.tool !== "plan_exit") return undefined
@@ -51,13 +54,16 @@ function planExitInfo(part: SDKPart): { plan: string } | undefined {
   const meta = (tp.state as { metadata?: Record<string, unknown> }).metadata ?? {}
   const plan = typeof meta.plan === "string" ? meta.plan : undefined
   if (!plan) return undefined
-  return { plan }
+  const structured = meta.structured && typeof meta.structured === "object" ? (meta.structured as { title?: string; summary?: string; steps?: PlanStep[] }) : undefined
+  return { plan, steps: structured?.steps ?? [], title: structured?.title, summary: structured?.summary }
 }
 
 function PlanExitCard(props: { part: ToolPart }) {
   const language = useLanguage()
   const server = useServer()
   const data = useData()
+  const session = useSession()
+  const vscode = useVSCode()
   const info = createMemo(() => planExitInfo(props.part as unknown as SDKPart))
   const display = createMemo(() => {
     const i = info()
@@ -74,6 +80,39 @@ function PlanExitCard(props: { part: ToolPart }) {
     if (!i || !data.openFile) return
     data.openFile(i.plan)
   }
+  const run = () => {
+    const i = info()
+    if (!i) return
+    const rows = i.steps.map((step, index) => `${index + 1}. [${step.id}] ${step.description}`).join("\n")
+    vscode.postMessage({
+      type: "sendMessage",
+      text: `Implement this structured plan. Markdown source of truth: ${i.plan}\n${i.title ?? ""}\n${i.summary ?? ""}\n${rows}`,
+      agent: "code",
+    })
+  }
+  const assign = () => {
+    const i = info()
+    if (!i) return
+    vscode.postMessage({
+      type: "routineCreate",
+      name: i.title || "Plan run",
+      role: "coder",
+      objective: `Execute the structured plan at ${i.plan}. ${i.summary ?? ""}`.trim(),
+      when: "just when I ask",
+      plan: i.plan,
+      runNow: true,
+    })
+  }
+  const marked = createMemo(() => {
+    const i = info()
+    if (!i) return []
+    const todos = session.todos()
+    return i.steps.map((step) => {
+      const todo = todos.find((item) => item.content.includes(step.description))
+      const status = todo?.status === "completed" ? "done" : todo?.status === "in_progress" ? "in_progress" : step.status
+      return { ...step, status }
+    })
+  })
   return (
     <Show when={info()}>
       <div data-component="plan-exit-card">
@@ -82,6 +121,25 @@ function PlanExitCard(props: { part: ToolPart }) {
         <a data-slot="plan-exit-link" href="#" onClick={open}>
           {display()}
         </a>
+        <Show when={marked().length}>
+          <ol data-slot="plan-exit-steps">
+            <For each={marked()}>
+              {(step) => (
+                <li data-status={step.status ?? "pending"}>
+                  <input type="checkbox" checked={step.status === "done"} readOnly /> {step.description}
+                </li>
+              )}
+            </For>
+          </ol>
+        </Show>
+        <div data-slot="plan-exit-run">
+          <Button size="small" onClick={run}>
+            Run this plan
+          </Button>
+          <Button size="small" variant="secondary" onClick={assign}>
+            Run in background
+          </Button>
+        </div>
       </div>
     </Show>
   )

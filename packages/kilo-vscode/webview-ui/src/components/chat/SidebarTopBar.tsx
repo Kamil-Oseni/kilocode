@@ -17,12 +17,21 @@ import "@vscode/codicons/dist/codicon.css"
 export interface SidebarTopBarProps {
   onNewTask: () => void
   onHistory: () => void
+  onRoutines: () => void
   /** Telemetry surface — distinguishes the sidebar from the "Open in Tab" panel, which shares this component. */
   surface: string
 }
 
 /** Codicon names used below. */
-type Codicon = "add" | "history" | "organization" | "comment-discussion" | "extensions" | "account" | "settings-gear"
+type Codicon =
+  | "add"
+  | "history"
+  | "organization"
+  | "comment-discussion"
+  | "extensions"
+  | "account"
+  | "settings-gear"
+  | "clock"
 
 interface Action {
   key: string
@@ -50,6 +59,7 @@ export const SidebarTopBar: Component<SidebarTopBarProps> = (props) => {
   const actions: Action[] = [
     { key: "newTask", codicon: "add", button: "new_task", run: () => props.onNewTask() },
     { key: "history", codicon: "history", button: "history", run: () => props.onHistory() },
+    { key: "routines", codicon: "clock", button: "routines", run: () => props.onRoutines() },
     { key: "agentManager", codicon: "organization", button: "agent_manager", run: () => open("openAgentManager") },
     { key: "kiloClaw", codicon: "comment-discussion", button: "kiloclaw", run: () => open("openKiloClaw") },
     { key: "marketplace", codicon: "extensions", button: "marketplace", run: () => open("openMarketplacePanel") },

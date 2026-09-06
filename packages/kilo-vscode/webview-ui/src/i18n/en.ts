@@ -707,6 +707,7 @@ export const dict = {
   "sidebar.topBar.label": "Raya navigation",
   "sidebar.topBar.newTask": "New Task",
   "sidebar.topBar.history": "History",
+  "sidebar.topBar.routines": "Routines",
   "sidebar.topBar.agentManager": "Agent Manager",
   "sidebar.topBar.kiloClaw": "KiloClaw",
   "sidebar.topBar.marketplace": "Marketplace",

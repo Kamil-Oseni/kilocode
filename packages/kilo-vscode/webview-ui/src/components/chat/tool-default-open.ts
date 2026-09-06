@@ -27,7 +27,8 @@ export function toolDefaultOpen(part: SDKPart, terminal: boolean, edit: boolean,
   const tool = (part as unknown as ToolPart).tool
   if (TERMINAL_TOOLS.has(tool)) return terminal
   if (EDIT_TOOLS.has(tool)) return edit
-  if (BUILTIN_NON_MCP_TOOLS.has(tool)) return undefined
+  if (tool === "question" || tool === "suggest" || tool === "plan_exit") return true
+  if (BUILTIN_NON_MCP_TOOLS.has(tool)) return false
   if (mcp !== undefined) return mcp
   return undefined
 }

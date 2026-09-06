@@ -61,7 +61,8 @@ import { retry } from "./services/cli-backend/retry"
 import { removeAgent } from "./services/agent-removal"
 import { normalize, type SSEPayload, type SyncPayload, type WirePayload } from "./services/cli-backend/sdk-sse-adapter"
 import { slimInfo, slimPart, slimParts } from "./kilo-provider/slim-metadata"
-import { handleSidebarWorktreeMessage } from "./kilo-provider/sidebar-worktree"
+import { handleRoutineMessage as dispatchRoutine } from "./kilo-provider/routines"
+import { shouldNotify } from "./kilo-provider/presence-notify"
 import { parseMessageFiles, type MessageFile } from "./kilo-provider/message-files"
 import { renameSession } from "./kilo-provider/rename-session"
 import { handleFileSearch } from "./kilo-provider/file-search"
@@ -103,6 +104,7 @@ import {
   isWorkStyleSetting,
   watchWorkStyleConfig,
 } from "./kilo-provider/work-style"
+import { handleSidebarWorktreeMessage } from "./kilo-provider/sidebar-worktree"
 import * as McpOAuth from "./kilo-provider/mcp-oauth"
 import { retryable, backoff, MAX_RETRIES } from "./util/retry"
 import { hasGit } from "./kilo-provider/git-status"
@@ -406,6 +408,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private loadMessagesAbort: AbortController | null = null // Current load request cancellation.
   private lastReconciledAt = new Map<string, number>() // Per-session focus-mode reconcile timestamp.
   private pendingSessionRefresh = false // Refresh requested before the client is ready.
+  private focused = true
+  private noticed = new Set<string>()
   private readonly streams = new SessionStreamScheduler((msg) => this.postMessage(msg))
   private jobsBackoff = 0
   private readonly visibleTaskStreams = new VisibleTaskStreams((id, visible) => this.streams.setVisible(id, visible))
@@ -789,6 +793,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
   private setSidebarVisible(visible: boolean): void {
     this.setStreamVisibility(visible)
+    this.focused = visible
     vscode.commands.executeCommand("setContext", "raya.sidebarVisible", visible)
     if (!visible && this.opts.focusContext) {
       void vscode.commands.executeCommand("setContext", this.opts.focusContext, false)
@@ -811,6 +816,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.setupWebviewMessageHandler(panel.webview)
     this.viewStateDisposable?.dispose()
     this.viewStateDisposable = this.visibleTaskStreams.bindPanel(panel, () => {
+      this.focused = panel.visible
       if (this.opts.disableViewedRegistration) return
       const id = this.contextSessionID
       this.streams.focus(panel.visible ? id : undefined)
@@ -1123,6 +1129,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       if (this.handleChildSyncMessage(message)) return
       if (await this.handleMemoryMessage(message)) return
       if (await this.handleProfileDataMessage(message)) return
+      if (await this.handleRoutineMessage(message)) return
       if (this.handleLegacyMigrationMessage(message)) return
       if (this.handleUsageMessage(message)) return
       if (this.handleCheckpointMessage(message)) return // raya_change - revert/redo/discard routing
@@ -1630,6 +1637,30 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     return true
   }
   // raya_change end
+
+  private async handleRoutineMessage(message: TypedWebviewMessage): Promise<boolean> {
+    try {
+      return await dispatchRoutine({
+        message,
+        client: this.client,
+        directory: this.getWorkspaceDirectory(),
+        post: (msg) => this.postMessage(msg),
+        track: (id) => this.trackSession(id),
+      })
+    } catch (err) {
+      if (
+        message.type !== "routineList" &&
+        message.type !== "routineCreate" &&
+        message.type !== "routineUpdate" &&
+        message.type !== "routineRun" &&
+        message.type !== "routineRuns"
+      ) {
+        return false
+      }
+      this.postMessage({ type: "routineState", error: getErrorMessage(err) || "Could not update routines." })
+      return true
+    }
+  }
 
   private handleUsageMessage(
     message: TypedWebviewMessage & {
@@ -5323,6 +5354,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
   /** Post a message to the webview. Public so toolbar button commands can send messages. */
   public postMessage(message: unknown): void {
+    this.announcePresence(message)
     if (!this.webview) {
       const type =
         typeof message === "object" &&
@@ -5338,6 +5370,40 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     void this.webview.postMessage(message).then(undefined, (error) => {
       console.error("[Kilo New] KiloProvider: ❌ postMessage failed", error)
     })
+  }
+
+  private announcePresence(message: unknown) {
+    const cfg = vscode.workspace.getConfiguration("raya")
+    if (cfg.get("presence.notify") === false) return
+    if (!shouldNotify({ visible: this.focused, hours: String(cfg.get("presence.quietHours") ?? "") })) return
+    if (!message || typeof message !== "object" || !("type" in message)) return
+    const type = (message as { type: unknown }).type
+    if (type === "permissionRequest") {
+      const id = (message as { permission?: { id?: string } }).permission?.id
+      if (id) {
+        if (this.noticed.has(id)) return
+        this.noticed.add(id)
+      }
+      void vscode.window.showInformationMessage("Raya is waiting on you.")
+      return
+    }
+    if (type === "questionRequest") {
+      const id = (message as { question?: { id?: string } }).question?.id
+      if (id) {
+        if (this.noticed.has(id)) return
+        this.noticed.add(id)
+      }
+      void vscode.window.showInformationMessage("Raya is waiting on you.")
+      return
+    }
+    if (type !== "goalState") return
+    const status = (message as { goal?: { status?: string }; sessionID?: string }).goal?.status
+    const sid = (message as { sessionID?: string }).sessionID
+    const key = `${sid}:${status}`
+    if (this.noticed.has(key)) return
+    this.noticed.add(key)
+    if (status === "complete") void vscode.window.showInformationMessage("Raya finished a run.")
+    if (status === "blocked") void vscode.window.showInformationMessage("Raya is waiting on you.")
   }
 
   private flushPendingKiloModel(): void {

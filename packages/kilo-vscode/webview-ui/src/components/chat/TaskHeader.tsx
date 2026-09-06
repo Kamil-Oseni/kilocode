@@ -29,8 +29,11 @@ import { TranscriptSearch } from "./TranscriptSearch"
 import { useTranscriptSearch } from "../../context/transcript-search"
 import { hasModelUsage, tokenSummary } from "../../context/model-usage"
 import { SessionRenameEditor } from "../shared/SessionRenameEditor"
+import { PresenceBadge } from "./PresenceBadge"
+import { runPresence } from "../../utils/run-presence"
 import { target as todoTarget } from "../../context/todo-revert"
 import type { Part, TodoItem, ExtensionMessage } from "../../types/messages"
+import type { GoalState } from "../../../../src/shared/goal"
 
 interface TaskHeaderProps {
   readonly?: boolean
@@ -96,11 +99,32 @@ export const TaskHeader: Component<TaskHeaderProps> = (props) => {
 
   const vscode = useVSCode()
   const [expanded, setExpanded] = createSignal(false) // raya_change - keep transcript space calm by default
+  const [goal, setGoal] = createSignal<GoalState>()
+  const [acked, setAcked] = createSignal(false)
+  const waiting = createMemo(() => {
+    const id = session.currentSessionID()
+    return session.scopedPermissions(id).length > 0 || session.scopedQuestions(id).length > 0
+  })
+  const presence = createMemo(() =>
+    runPresence({
+      waiting: waiting(),
+      busy: busy(),
+      done: goal()?.status === "complete",
+      error: goal()?.status === "blocked",
+      acked: acked(),
+    }),
+  )
+  createEffect(() => {
+    session.currentSessionID()
+    goal()?.status
+    setAcked(false)
+  })
 
   // Read initial value from VS Code settings
   onMount(() => vscode.postMessage({ type: "requestTimelineSetting" }))
   const handler = (e: MessageEvent<ExtensionMessage>) => {
     if (e.data.type === "timelineSettingLoaded") setExpanded(e.data.visible)
+    if (e.data.type === "goalState" && e.data.sessionID === session.currentSessionID()) setGoal(e.data.goal)
   }
   window.addEventListener("message", handler)
   onCleanup(() => window.removeEventListener("message", handler))
@@ -230,6 +254,7 @@ export const TaskHeader: Component<TaskHeaderProps> = (props) => {
               </span>
             </span>
           </Show>
+          <PresenceBadge state={presence()} onAck={() => setAcked(true)} />
         </div>
         <div data-slot="task-header-stats">
           <Show when={cost()}>

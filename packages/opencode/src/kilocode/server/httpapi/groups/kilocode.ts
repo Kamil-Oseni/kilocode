@@ -27,6 +27,8 @@ import { ProjectUsage } from "@/kilocode/session/project-usage" // raya_change -
 import { SessionID } from "@/session/schema"
 import { CommandFiles } from "@/kilocode/command-files"
 import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal API contracts
+import { RayaTask } from "@/kilocode/task"
+import { Template as AgentTemplate } from "@/kilocode/task/templates"
 import { RayaCheckpoint } from "@/kilocode/checkpoint" // raya_change - named workspace checkpoints
 import { RayaDesignSystem } from "@/kilocode/design-system" // raya_change - owner design-system lock
 import { RayaSelfHeal } from "@/kilocode/self-heal" // raya_change - global feedback backlog contracts
@@ -88,6 +90,19 @@ export const NotebookReplyPayload = Schema.Struct({ result: NotebookResult })
 export const NotebookRejectPayload = Schema.Struct({ error: NotebookFailure })
 export const AgentManagerReplyPayload = Schema.Struct({ result: AgentManagerResult })
 export const AgentManagerRejectPayload = Schema.Struct({ error: AgentManagerFailure })
+export const TaskCreatePayload = RayaTask.Create
+export const TaskUpdatePayload = Schema.Struct({
+  name: Schema.optional(Schema.String),
+  role: Schema.optional(Schema.String),
+  objective: Schema.optional(Schema.String),
+  capabilities: Schema.optional(Schema.Array(Schema.String)),
+  memoryScope: Schema.optional(Schema.Literals(["role", "project", "session"])),
+  schedule: Schema.optional(RayaTask.Schedule),
+  avatar: Schema.optional(Schema.String),
+  enabled: Schema.optional(Schema.Boolean),
+  plan: Schema.optional(Schema.String),
+  note: Schema.optional(Schema.String),
+})
 export const GoalCreatePayload = RayaGoal.Create // raya_change - Milestone A goal API contracts
 export const GoalUpdatePayload = RayaGoal.Control // raya_change - Milestone A goal API contracts
 export const CheckpointCreatePayload = RayaCheckpoint.CreatePayload // raya_change - named workspace checkpoints
@@ -130,6 +145,11 @@ export const KilocodePaths = {
   canvasList: `${root}/canvas`, // raya_change - Milestone E canvas host API
   canvasReply: `${root}/canvas/:requestID/reply`, // raya_change - Milestone E canvas host API
   canvasReject: `${root}/canvas/:requestID/reject`, // raya_change - Milestone E canvas host API
+  agents: `${root}/agent`,
+  agentItem: `${root}/agent/:agentID`,
+  agentRun: `${root}/agent/:agentID/run`,
+  agentRuns: `${root}/agent/:agentID/runs`,
+  agentTemplates: `${root}/agent-templates`,
 } as const
 
 export const KilocodeApi = HttpApi.make("kilocode")
@@ -520,6 +540,74 @@ export const KilocodeApi = HttpApi.make("kilocode")
           }),
         ),
         // raya_change end
+        HttpApiEndpoint.get("agentList", KilocodePaths.agents, {
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Array(RayaTask.Agent), "Assigned agents"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.list",
+            summary: "List assigned agents",
+            description: "List persistent role-based agents and their standing jobs.",
+          }),
+        ),
+        HttpApiEndpoint.post("agentCreate", KilocodePaths.agents, {
+          query: WorkspaceRoutingQuery,
+          payload: TaskCreatePayload,
+          success: described(RayaTask.Agent, "Created agent"),
+          error: HttpApiError.BadRequest,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.create",
+            summary: "Create an assigned agent",
+            description: "Create a named agent with a role, standing job, and schedule.",
+          }),
+        ),
+        HttpApiEndpoint.patch("agentUpdate", KilocodePaths.agentItem, {
+          params: { agentID: Schema.String },
+          query: WorkspaceRoutingQuery,
+          payload: TaskUpdatePayload,
+          success: described(RayaTask.Agent, "Updated agent"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.update",
+            summary: "Update an assigned agent",
+            description: "Edit a standing job, schedule, or enabled flag.",
+          }),
+        ),
+        HttpApiEndpoint.post("agentRun", KilocodePaths.agentRun, {
+          params: { agentID: Schema.String },
+          query: WorkspaceRoutingQuery,
+          success: described(RayaTask.Run, "Started run"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.run",
+            summary: "Run an assigned agent now",
+            description: "Start one background goal run for the agent without waiting for its schedule.",
+          }),
+        ),
+        HttpApiEndpoint.get("agentRuns", KilocodePaths.agentRuns, {
+          params: { agentID: Schema.String },
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Array(RayaTask.Run), "Run history"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.runs",
+            summary: "List agent runs",
+            description: "Bounded run history with outcome and cost.",
+          }),
+        ),
+        HttpApiEndpoint.get("agentTemplates", KilocodePaths.agentTemplates, {
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Array(AgentTemplate), "Starter role templates"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.templates",
+            summary: "List agent templates",
+            description: "Starter roles for assigning a useful agent in two clicks.",
+          }),
+        ),
         // raya_change start - owner design-system lock
         HttpApiEndpoint.get("designSystemGet", KilocodePaths.designSystem, {
           query: WorkspaceRoutingQuery,

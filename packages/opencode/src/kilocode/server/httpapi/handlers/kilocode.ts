@@ -30,6 +30,9 @@ import { Session } from "@/session/session" // raya_change - Milestone A goal se
 import { Snapshot } from "@/snapshot" // raya_change - durable goal workspace checkpoints
 import { Storage } from "@/storage/storage" // raya_change - Milestone A durable goal storage
 import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal operations
+import { RayaTask } from "@/kilocode/task"
+import { RayaTaskRunner } from "@/kilocode/task/runner"
+import { templates as agentTemplates } from "@/kilocode/task/templates"
 import { RayaCheckpoint } from "@/kilocode/checkpoint" // raya_change - named workspace checkpoints
 import { RayaDesignSystem } from "@/kilocode/design-system" // raya_change - owner design-system lock
 import { RayaGoalContinuation } from "@/kilocode/goal/continuation" // raya_change - Milestone A resume behavior
@@ -52,6 +55,8 @@ import {
   GoalCreatePayload, // raya_change - Milestone A goal API
   GoalUpdatePayload, // raya_change - Milestone A goal API
   CheckpointCreatePayload, // raya_change - named workspace checkpoints
+  TaskCreatePayload,
+  TaskUpdatePayload,
   DesignSystemSetPayload, // raya_change - owner design-system lock
   SelfHealCreatePayload, // raya_change
   SelfHealUpdatePayload, // raya_change
@@ -79,6 +84,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     const sessions = yield* Session.Service // raya_change - Milestone A goal state and evidence
     const storage = yield* Storage.Service // raya_change - Milestone A durable goal storage
     const goals = RayaGoal.make({ storage, sessions }) // raya_change - Milestone A goal operations
+    const runner = RayaTaskRunner.make({ storage, sessions })
     const checkpoints = RayaCheckpoint.make({ storage, snapshots }) // raya_change - named workspace checkpoints
     const designSystem = RayaDesignSystem.make({ storage }) // raya_change - owner design-system lock
     const healing = RayaSelfHeal.make(storage) // raya_change - one backlog shared across sessions and projects
@@ -449,6 +455,42 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     })
     // raya_change end
 
+    const agentList = Effect.fn("KilocodeHttpApi.agentList")(function* () {
+      return yield* runner.tasks.list()
+    })
+    const agentCreate = Effect.fn("KilocodeHttpApi.agentCreate")(function* (ctx: {
+      payload: typeof TaskCreatePayload.Type
+    }) {
+      return yield* runner.tasks
+        .create(ctx.payload)
+        .pipe(Effect.catchTag("RayaTask.GuardError", () => Effect.fail(new HttpApiError.BadRequest({}))))
+    })
+    const agentUpdate = Effect.fn("KilocodeHttpApi.agentUpdate")(function* (ctx: {
+      params: { agentID: string }
+      payload: typeof TaskUpdatePayload.Type
+    }) {
+      return yield* runner.tasks
+        .update(ctx.params.agentID, ctx.payload)
+        .pipe(
+          Effect.catchTag("RayaTask.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+          Effect.catchTag("RayaTask.GuardError", () => Effect.fail(new HttpApiError.BadRequest({}))),
+        )
+    })
+    const agentRun = Effect.fn("KilocodeHttpApi.agentRun")(function* (ctx: { params: { agentID: string } }) {
+      return yield* runner
+        .fire(ctx.params.agentID)
+        .pipe(
+          Effect.catchTag("RayaTask.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+          Effect.catchTag("RayaTask.GuardError", () => Effect.fail(new HttpApiError.BadRequest({}))),
+        )
+    })
+    const agentRuns = Effect.fn("KilocodeHttpApi.agentRuns")(function* (ctx: { params: { agentID: string } }) {
+      return yield* runner.tasks.runsFor(ctx.params.agentID)
+    })
+    const agentTemplateList = Effect.fn("KilocodeHttpApi.agentTemplates")(function* () {
+      return agentTemplates
+    })
+
     // raya_change start - owner design-system lock
     const designSystemGet = Effect.fn("KilocodeHttpApi.designSystemGet")(function* () {
       return yield* designSystem.get()
@@ -528,6 +570,12 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .handle("checkpointCreate", checkpointCreate)
         .handle("checkpointJump", checkpointJump)
         .handle("checkpointRemove", checkpointRemove)
+        .handle("agentList", agentList)
+        .handle("agentCreate", agentCreate)
+        .handle("agentUpdate", agentUpdate)
+        .handle("agentRun", agentRun)
+        .handle("agentRuns", agentRuns)
+        .handle("agentTemplates", agentTemplateList)
         .handle("designSystemGet", designSystemGet)
         .handle("designSystemSet", designSystemSet)
         .handle("selfHealCreate", selfHealCreate)

@@ -18,6 +18,8 @@ import { displayTitle } from "../../utils/session-title" // raya_change - mask d
 import { formatRelativeDate } from "../../utils/date"
 import type { SessionInfo } from "../../types/messages"
 import { SessionRenameEditor } from "../shared/SessionRenameEditor"
+import { PresenceBadge } from "../chat/PresenceBadge"
+import { runPresence } from "../../utils/run-presence"
 
 const DATE_GROUP_KEYS = ["time.today", "time.yesterday", "time.thisWeek", "time.thisMonth", "time.older"] as const
 
@@ -224,6 +226,15 @@ const SessionList: Component<SessionListProps> = (props) => {
           <>
             <span data-slot="list-item-title" dir="auto">
               {name(s)}
+              <PresenceBadge
+                state={runPresence({
+                  busy:
+                    session.allStatusMap()[s.id]?.type === "busy" || session.allStatusMap()[s.id]?.type === "retry",
+                  waiting:
+                    session.permissions().some((item) => item.sessionID === s.id) ||
+                    session.questions().some((item) => item.sessionID === s.id),
+                })}
+              />
             </span>
             <span data-slot="list-item-description">{formatRelativeDate(s.updatedAt)}</span>
             <Show when={session.currentSessionID() === s.id}>

@@ -173,6 +173,12 @@
         "icon": "$(history)"
       },
       {
+        "command": "raya.routinesButtonClicked",
+        "title": "Routines",
+        "category": "Raya",
+        "icon": "$(clock)"
+      },
+      {
         "command": "raya.profileButtonClicked",
         "title": "Profile",
         "category": "Raya",
@@ -208,6 +214,11 @@
         "command": "raya.sidebarTitle.historyButtonClicked",
         "title": "History",
         "icon": "$(history)"
+      },
+      {
+        "command": "raya.sidebarTitle.routinesButtonClicked",
+        "title": "Routines",
+        "icon": "$(clock)"
       },
       {
         "command": "raya.sidebarTitle.profileButtonClicked",
@@ -533,6 +544,10 @@
           "when": "false"
         },
         {
+          "command": "raya.sidebarTitle.routinesButtonClicked",
+          "when": "false"
+        },
+        {
           "command": "raya.sidebarTitle.agentManagerOpen",
           "when": "false"
         },
@@ -569,28 +584,33 @@
           "when": "view == raya.SidebarProvider && !raya.isCursor"
         },
         {
-          "command": "raya.sidebarTitle.agentManagerOpen",
+          "command": "raya.sidebarTitle.routinesButtonClicked",
           "group": "navigation@2",
           "when": "view == raya.SidebarProvider && !raya.isCursor"
         },
         {
-          "command": "raya.sidebarTitle.kiloClawOpen",
+          "command": "raya.sidebarTitle.agentManagerOpen",
           "group": "navigation@3",
           "when": "view == raya.SidebarProvider && !raya.isCursor"
         },
         {
-          "command": "raya.sidebarTitle.marketplaceButtonClicked",
+          "command": "raya.sidebarTitle.kiloClawOpen",
           "group": "navigation@4",
           "when": "view == raya.SidebarProvider && !raya.isCursor"
         },
         {
-          "command": "raya.sidebarTitle.profileButtonClicked",
+          "command": "raya.sidebarTitle.marketplaceButtonClicked",
           "group": "navigation@5",
           "when": "view == raya.SidebarProvider && !raya.isCursor"
         },
         {
-          "command": "raya.sidebarTitle.settingsButtonClicked",
+          "command": "raya.sidebarTitle.profileButtonClicked",
           "group": "navigation@6",
+          "when": "view == raya.SidebarProvider && !raya.isCursor"
+        },
+        {
+          "command": "raya.sidebarTitle.settingsButtonClicked",
+          "group": "navigation@7",
           "when": "view == raya.SidebarProvider && !raya.isCursor"
         }
       ],
@@ -631,13 +651,18 @@
           "when": "activeWebviewPanelId == raya.TabPanel && !raya.isCursor"
         },
         {
-          "command": "raya.profileButtonClicked",
+          "command": "raya.routinesButtonClicked",
           "group": "navigation@2",
           "when": "activeWebviewPanelId == raya.TabPanel && !raya.isCursor"
         },
         {
-          "command": "raya.settingsButtonClicked",
+          "command": "raya.profileButtonClicked",
           "group": "navigation@3",
+          "when": "activeWebviewPanelId == raya.TabPanel && !raya.isCursor"
+        },
+        {
+          "command": "raya.settingsButtonClicked",
+          "group": "navigation@4",
           "when": "activeWebviewPanelId == raya.TabPanel && !raya.isCursor"
         }
       ],
@@ -955,6 +980,18 @@
     "configuration": {
       "title": "Raya",
       "properties": {
+        "raya.presence.notify": {
+          "type": "boolean",
+          "default": true,
+          "scope": "application",
+          "description": "Show a VS Code notification when a Raya run is waiting on you or finishes while the chat panel is unfocused."
+        },
+        "raya.presence.quietHours": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "description": "Optional quiet hours window (HH:MM-HH:MM, 24-hour) that suppresses presence notifications. Empty means notify at any time."
+        },
         "raya.language": {
           "type": "string",
           "default": "",

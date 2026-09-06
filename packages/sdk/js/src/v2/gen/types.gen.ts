@@ -2479,6 +2479,11 @@ export type AgentConfig = {
   steps?: number
   maxSteps?: number
   permission?: PermissionConfig
+  disallowedTools?: Array<string>
+  permissionMode?: "ask" | "allow" | "plan"
+  memory?: "role" | "project" | "session"
+  background?: boolean
+  isolation?: "none" | "worktree"
   [key: string]:
     | unknown
     | string
@@ -2503,6 +2508,15 @@ export type AgentConfig = {
     | "info"
     | number
     | PermissionConfig
+    | Array<string>
+    | "ask"
+    | "allow"
+    | "plan"
+    | "role"
+    | "project"
+    | "session"
+    | "none"
+    | "worktree"
     | undefined
 }
 
@@ -18524,6 +18538,387 @@ export type KilocodeCheckpointJumpResponses = {
 }
 
 export type KilocodeCheckpointJumpResponse = KilocodeCheckpointJumpResponses[keyof KilocodeCheckpointJumpResponses]
+
+export type KilocodeRoutineListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/agent"
+}
+
+export type KilocodeRoutineListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type KilocodeRoutineListError = KilocodeRoutineListErrors[keyof KilocodeRoutineListErrors]
+
+export type KilocodeRoutineListResponses = {
+  /**
+   * Assigned agents
+   */
+  200: Array<{
+    id: string
+    name: string
+    avatar?: string
+    role: string
+    objective: string
+    capabilities: Array<string>
+    memoryScope: "role" | "project" | "session"
+    schedule:
+      | {
+          kind: "once"
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+      | {
+          kind: "cron"
+          expr: string
+          tz?: string
+        }
+      | {
+          kind: "event"
+          source: string
+          filter?: string
+        }
+      | {
+          kind: "manual"
+        }
+    enabled: boolean
+    plan?: string
+    createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    note?: string
+  }>
+}
+
+export type KilocodeRoutineListResponse = KilocodeRoutineListResponses[keyof KilocodeRoutineListResponses]
+
+export type KilocodeRoutineCreateData = {
+  body?: {
+    name: string
+    role?: string
+    objective: string
+    capabilities?: Array<string>
+    memoryScope?: "role" | "project" | "session"
+    schedule:
+      | {
+          kind: "once"
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+      | {
+          kind: "cron"
+          expr: string
+          tz?: string
+        }
+      | {
+          kind: "event"
+          source: string
+          filter?: string
+        }
+      | {
+          kind: "manual"
+        }
+    avatar?: string
+    enabled?: boolean
+    plan?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/agent"
+}
+
+export type KilocodeRoutineCreateErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type KilocodeRoutineCreateError = KilocodeRoutineCreateErrors[keyof KilocodeRoutineCreateErrors]
+
+export type KilocodeRoutineCreateResponses = {
+  /**
+   * Created agent
+   */
+  200: {
+    id: string
+    name: string
+    avatar?: string
+    role: string
+    objective: string
+    capabilities: Array<string>
+    memoryScope: "role" | "project" | "session"
+    schedule:
+      | {
+          kind: "once"
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+      | {
+          kind: "cron"
+          expr: string
+          tz?: string
+        }
+      | {
+          kind: "event"
+          source: string
+          filter?: string
+        }
+      | {
+          kind: "manual"
+        }
+    enabled: boolean
+    plan?: string
+    createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    note?: string
+  }
+}
+
+export type KilocodeRoutineCreateResponse = KilocodeRoutineCreateResponses[keyof KilocodeRoutineCreateResponses]
+
+export type KilocodeRoutineUpdateData = {
+  body?: {
+    name?: string
+    role?: string
+    objective?: string
+    capabilities?: Array<string>
+    memoryScope?: "role" | "project" | "session"
+    schedule?:
+      | {
+          kind: "once"
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+      | {
+          kind: "cron"
+          expr: string
+          tz?: string
+        }
+      | {
+          kind: "event"
+          source: string
+          filter?: string
+        }
+      | {
+          kind: "manual"
+        }
+    avatar?: string
+    enabled?: boolean
+    plan?: string
+    note?: string
+  }
+  path: {
+    agentID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/agent/{agentID}"
+}
+
+export type KilocodeRoutineUpdateErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeRoutineUpdateError = KilocodeRoutineUpdateErrors[keyof KilocodeRoutineUpdateErrors]
+
+export type KilocodeRoutineUpdateResponses = {
+  /**
+   * Updated agent
+   */
+  200: {
+    id: string
+    name: string
+    avatar?: string
+    role: string
+    objective: string
+    capabilities: Array<string>
+    memoryScope: "role" | "project" | "session"
+    schedule:
+      | {
+          kind: "once"
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+      | {
+          kind: "cron"
+          expr: string
+          tz?: string
+        }
+      | {
+          kind: "event"
+          source: string
+          filter?: string
+        }
+      | {
+          kind: "manual"
+        }
+    enabled: boolean
+    plan?: string
+    createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    note?: string
+  }
+}
+
+export type KilocodeRoutineUpdateResponse = KilocodeRoutineUpdateResponses[keyof KilocodeRoutineUpdateResponses]
+
+export type KilocodeRoutineRunData = {
+  body?: never
+  path: {
+    agentID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/agent/{agentID}/run"
+}
+
+export type KilocodeRoutineRunErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeRoutineRunError = KilocodeRoutineRunErrors[keyof KilocodeRoutineRunErrors]
+
+export type KilocodeRoutineRunResponses = {
+  /**
+   * Started run
+   */
+  200: {
+    id: string
+    agentID: string
+    at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    sessionID: string
+    status: "running" | "complete" | "blocked" | "error"
+    outcome?: {
+      kind: "code" | "notify"
+      summary: string
+      evidence?: Array<string>
+      cost: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
+    blockedReason?: string
+  }
+}
+
+export type KilocodeRoutineRunResponse = KilocodeRoutineRunResponses[keyof KilocodeRoutineRunResponses]
+
+export type KilocodeRoutineRunsData = {
+  body?: never
+  path: {
+    agentID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/agent/{agentID}/runs"
+}
+
+export type KilocodeRoutineRunsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type KilocodeRoutineRunsError = KilocodeRoutineRunsErrors[keyof KilocodeRoutineRunsErrors]
+
+export type KilocodeRoutineRunsResponses = {
+  /**
+   * Run history
+   */
+  200: Array<{
+    id: string
+    agentID: string
+    at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    sessionID: string
+    status: "running" | "complete" | "blocked" | "error"
+    outcome?: {
+      kind: "code" | "notify"
+      summary: string
+      evidence?: Array<string>
+      cost: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
+    blockedReason?: string
+  }>
+}
+
+export type KilocodeRoutineRunsResponse = KilocodeRoutineRunsResponses[keyof KilocodeRoutineRunsResponses]
+
+export type KilocodeRoutineTemplatesData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/agent-templates"
+}
+
+export type KilocodeRoutineTemplatesErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type KilocodeRoutineTemplatesError = KilocodeRoutineTemplatesErrors[keyof KilocodeRoutineTemplatesErrors]
+
+export type KilocodeRoutineTemplatesResponses = {
+  /**
+   * Starter role templates
+   */
+  200: Array<{
+    id: string
+    name: string
+    role: string
+    objective: string
+    capabilities: Array<string>
+    schedule:
+      | {
+          kind: "once"
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+      | {
+          kind: "cron"
+          expr: string
+          tz?: string
+        }
+      | {
+          kind: "event"
+          source: string
+          filter?: string
+        }
+      | {
+          kind: "manual"
+        }
+  }>
+}
+
+export type KilocodeRoutineTemplatesResponse =
+  KilocodeRoutineTemplatesResponses[keyof KilocodeRoutineTemplatesResponses]
 
 export type KilocodeDesignSystemGetData = {
   body?: never

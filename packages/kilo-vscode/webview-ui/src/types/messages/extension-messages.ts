@@ -157,6 +157,20 @@ export interface GoalStateMessage {
   goal?: GoalState
   notice?: string
 }
+
+export interface RoutineStateMessage {
+  type: "routineState"
+  agents?: unknown[]
+  templates?: unknown[]
+  error?: string
+  append?: boolean
+}
+
+export interface RoutineRunsLoadedMessage {
+  type: "routineRuns"
+  agentID: string
+  runs?: unknown[]
+}
 // raya_change end
 
 // Wire shape lives in src/shared/stream-messages.ts; narrow `part` to the
@@ -1526,6 +1540,8 @@ export type ExtensionMessage =
   | SendMessageFailedMessage
   | SessionCommandCompletedMessage
   | GoalStateMessage // raya_change - Milestone A
+  | RoutineStateMessage
+  | RoutineRunsLoadedMessage
   | PartUpdatedMessage
   | PartsUpdatedMessage
   | PartRemovedMessage

@@ -6,13 +6,25 @@ import { Filesystem } from "@/util/filesystem"
 
 export namespace PlanFile {
   export function latest(messages: MessageV2.WithParts[]) {
+    return artifact(messages)?.plan
+  }
+
+  export function artifact(messages: MessageV2.WithParts[]) {
     const exit = messages
       .flatMap((m) => m.parts)
       .findLast((part) => part.type === "tool" && part.tool === "plan_exit" && part.state.status === "completed")
     if (exit?.type !== "tool" || exit.state.status !== "completed") return
     const meta = exit.state.metadata ?? {}
     const input = exit.state.input ?? {}
-    return typeof meta.plan === "string" ? meta.plan : typeof input.path === "string" ? input.path : undefined
+    const plan = typeof meta.plan === "string" ? meta.plan : typeof input.path === "string" ? input.path : undefined
+    if (!plan) return
+    return { plan, structured: structured(meta as Record<string, unknown>) }
+  }
+
+  export function structured(meta: Record<string, unknown> | undefined) {
+    const value = meta?.structured
+    if (!value || typeof value !== "object") return
+    return value as import("./plan-artifact").PlanArtifact.Info
   }
 
   export function resolve(file: string | undefined, ctx: InstanceContext) {

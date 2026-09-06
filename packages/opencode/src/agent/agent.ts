@@ -381,6 +381,13 @@ const layer = Layer.effect(
           // kilocode_change end
           item.options = mergeDeep(item.options, value.options ?? {})
           item.permission = Permission.merge(item.permission, Permission.fromConfig(value.permission ?? {}))
+          // kilocode_change start - fold declarative tool denies into the existing permission engine
+          if (value.disallowedTools?.length) {
+            const deny = Object.fromEntries(value.disallowedTools.map((tool) => [tool, "deny" as const]))
+            item.permission = Permission.merge(item.permission, Permission.fromConfig(deny))
+          }
+          if (value.permissionMode === "plan" && item.mode !== "subagent") item.mode = "primary"
+          // kilocode_change end
           // kilocode_change start
           KiloAgent.processConfigItem(item)
           KiloAgent.hardenPlan(key, item, ctx.worktree, user, Permission.fromConfig(value.permission ?? {}))

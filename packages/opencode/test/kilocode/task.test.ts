@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { Storage } from "@/storage/storage"
+import { SessionID } from "@/session/schema"
 import { RayaTask } from "@/kilocode/task"
 import { next } from "@/kilocode/task/cron"
 import { PlanArtifact } from "@/kilocode/plan-artifact"
@@ -41,7 +42,7 @@ describe("RayaTask store", () => {
         id: "r1",
         agentID: agent.id,
         at: Date.now(),
-        sessionID: "ses_test",
+        sessionID: SessionID.make("ses_test"),
         status: "running",
       }),
     )
@@ -53,7 +54,7 @@ describe("RayaTask store", () => {
           id,
           agentID: agent.id,
           at: Date.now(),
-          sessionID: "ses_test",
+          sessionID: SessionID.make("ses_test"),
           status: "blocked",
           blockedReason: "waiting on you",
         }),

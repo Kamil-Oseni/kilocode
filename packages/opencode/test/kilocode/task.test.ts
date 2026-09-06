@@ -124,6 +124,67 @@ describe("RayaTask store", () => {
     expect(exit._tag).toBe("Failure")
   })
 
+  test("inbox jobs require a messages capability", async () => {
+    const tasks = RayaTask.make({ storage: memory() })
+    const exit = await Effect.runPromiseExit(
+      tasks.create({
+        name: "Mail",
+        role: "inbox",
+        objective: "triage",
+        schedule: { kind: "manual" },
+      }),
+    )
+    expect(exit._tag).toBe("Failure")
+  })
+
+  test("recomputes a one-shot next run from storage after a new process", async () => {
+    const store = memory()
+    const at = Date.parse("2026-09-06T16:00:00Z")
+    const first = RayaTask.make({ storage: store })
+    const agent = await Effect.runPromise(
+      first.create({
+        name: "Briefer",
+        role: "briefer",
+        objective: "Summarize what changed",
+        schedule: { kind: "once", at },
+      }),
+    )
+    const revived = RayaTask.make({ storage: store })
+    const listed = await Effect.runPromise(revived.preview(at - 60_000))
+    expect(listed.find((item) => item.id === agent.id)?.nextRun).toBe(at)
+    expect((await Effect.runPromise(revived.ready(at - 1))).map((item) => item.id)).toEqual([])
+    expect((await Effect.runPromise(revived.ready(at))).map((item) => item.id)).toEqual([agent.id])
+  })
+
+  test("a two-minute cron fires twice and skips while the prior run is still going", async () => {
+    const start = new Date(2026, 8, 6, 12, 0, 0).getTime()
+    const created = {
+      id: "pulse",
+      name: "Pulse",
+      role: "reviewer",
+      objective: "Check the repo",
+      capabilities: [] as string[],
+      memoryScope: "role" as const,
+      schedule: { kind: "cron" as const, expr: "*/2 * * * *" },
+      enabled: true,
+      createdAt: start,
+      updatedAt: start,
+    }
+    const first = start + 2 * 60_000
+    expect(RayaTask.due(created, first)).toBe(first)
+    const running = {
+      id: "r1",
+      agentID: created.id,
+      at: first,
+      sessionID: SessionID.make("ses_test"),
+      status: "running" as const,
+    }
+    expect(RayaTask.due(created, first + 30_000, running)).toBeUndefined()
+    const done = { ...running, status: "complete" as const }
+    const second = start + 4 * 60_000
+    expect(RayaTask.due(created, second, done)).toBe(second)
+  })
+
   test("event schedules match a CI signal and skip overlap", async () => {
     const tasks = RayaTask.make({ storage: memory() })
     const agent = await Effect.runPromise(

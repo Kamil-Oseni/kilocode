@@ -87,9 +87,9 @@ export interface BrowserPage {
   ): Promise<{ status(): number } | null | undefined>
   waitForTimeout(timeout: number): Promise<void>
   addInitScript<A>(script: (arg: A) => void, arg: A): Promise<void>
-  goBack(): Promise<unknown>
-  goForward(): Promise<unknown>
-  reload(): Promise<unknown>
+  goBack(options?: { timeout?: number; waitUntil?: "load" | "domcontentloaded" | "commit" }): Promise<unknown>
+  goForward(options?: { timeout?: number; waitUntil?: "load" | "domcontentloaded" | "commit" }): Promise<unknown>
+  reload(options?: { timeout?: number; waitUntil?: "load" | "domcontentloaded" | "commit" }): Promise<unknown>
   locator(selector: string): {
     click(options?: { timeout?: number }): Promise<void>
     fill(text: string, options?: { timeout?: number }): Promise<void>
@@ -316,12 +316,16 @@ export class BrowserSession {
           : await this.once(action)
       if (revision !== this.revision) throw new Error("Browser action cancelled for manual takeover.")
       return result
-    }     catch (error) {
+    } catch (error) {
       if (this.state.control === "manual") throw error
       const detail = error instanceof Error ? error.message : String(error)
       if (this.stuck(detail)) {
         await this.replace()
         throw new Error(this.explain(action.operation, detail))
+      }
+      if (/TypeError:|SyntaxError:/i.test(detail)) throw new Error(`The ${action.operation} action failed: ${detail}`)
+      if (action.operation === "navigate" && /Timeout \d+ms exceeded/i.test(detail)) {
+        throw new Error(`The navigate action failed: ${detail}`)
       }
       if (/strict mode violation|resolved to \d+ elements/i.test(detail)) {
         throw new Error(`Locator was not unique (${detail}). Use getByRole with a visible name instead of a shared class.`)
@@ -335,7 +339,7 @@ export class BrowserSession {
   }
 
   private stuck(detail: string) {
-    return /ERR_CONNECTION_REFUSED|Timeout \d+ms exceeded|not attached|frame was detached|Target closed|net::ERR_/i.test(
+    return /ERR_CONNECTION_REFUSED|not attached|frame was detached|Target closed|net::ERR_(CONNECTION|ABORTED|FAILED|NAME_NOT_RESOLVED|INTERNET_DISCONNECTED|TIMED_OUT)/i.test(
       detail,
     )
   }
@@ -344,10 +348,34 @@ export class BrowserSession {
     if (/ERR_CONNECTION_REFUSED|ECONNREFUSED/i.test(detail)) {
       return `The page is not reachable (${detail}). Start the dev server or use background_process to confirm the real URL/port before navigating.`
     }
-    if (/Timeout \d+ms exceeded/i.test(detail)) {
-      return `Navigation timed out (${detail}). The host was reset; retry with a reachable URL or waitUntil after the app finishes loading.`
-    }
     return `The ${operation} action failed because the browser host was wedged (${detail}). The page was reset; retry the action.`
+  }
+
+  private wait() {
+    return { timeout: 8_000, waitUntil: "commit" as const }
+  }
+
+  private reached(page: BrowserPage, url: string) {
+    try {
+      return new URL(page.url()).origin === new URL(url).origin
+    } catch {
+      return false
+    }
+  }
+
+  private async travel(run: (page: BrowserPage) => Promise<unknown>): Promise<void> {
+    try {
+      await run(this.active())
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      if (/not attached|Target closed|frame was detached/i.test(detail)) {
+        await this.replace()
+        await run(this.active())
+        return
+      }
+      if (/Timeout \d+ms exceeded|ERR_ABORTED/i.test(detail)) return
+      throw error
+    }
   }
 
   private async replace(): Promise<void> {
@@ -389,9 +417,14 @@ export class BrowserSession {
     const page = this.active()
     if (action.operation === "navigate") {
       await this.probe(action.url)
-      const response = await page.goto(action.url, { timeout: 15_000, waitUntil: "domcontentloaded" })
-      const status = response?.status()
-      if (status === 403 || status === 429) throw new Error(`Site returned HTTP ${status}`)
+      try {
+        const response = await page.goto(action.url, this.wait())
+        const status = response?.status()
+        if (status === 403 || status === 429) throw new Error(`Site returned HTTP ${status}`)
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error)
+        if (!(/Timeout \d+ms exceeded/i.test(detail) && this.reached(page, action.url))) throw error
+      }
     }
     if (action.operation === "click") await this.press(page, action.selector)
     if (action.operation === "type") {
@@ -471,28 +504,38 @@ export class BrowserSession {
       throw new Error("The agent is currently controlling the browser. Wait for the action to finish or take over.")
   }
 
+  private release(): void {
+    this.revision += 1
+    if (this.state.control === "manual") {
+      this.update({ control: "manual", busy: false, reason: this.state.reason })
+      return
+    }
+    this.update({ control: "agent", busy: false })
+  }
+
   async navigate(url: string): Promise<void> {
     await this.ready()
-    this.assertInput()
-    await this.active().goto(url)
+    this.release()
+    await this.probe(url)
+    await this.travel((page) => page.goto(url, this.wait()))
   }
 
   async back(): Promise<void> {
     await this.ready()
-    this.assertInput()
-    await this.active().goBack()
+    this.release()
+    await this.travel((page) => page.goBack(this.wait()))
   }
 
   async forward(): Promise<void> {
     await this.ready()
-    this.assertInput()
-    await this.active().goForward()
+    this.release()
+    await this.travel((page) => page.goForward(this.wait()))
   }
 
   async reload(): Promise<void> {
     await this.ready()
-    this.assertInput()
-    await this.active().reload()
+    this.release()
+    await this.travel((page) => page.reload(this.wait()))
   }
 
   async pointer(input: BrowserPointer): Promise<void> {

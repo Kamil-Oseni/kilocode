@@ -720,6 +720,7 @@ html[data-theme="kilo-vscode"] [data-component="todos"] {
     padding: 8px 10px;
     background: var(--surface-inset-base);
     overflow-anchor: none;
+    overscroll-behavior: contain;
 
     [data-component="markdown"] {
       margin-top: 0;
@@ -753,17 +754,17 @@ html[data-theme="kilo-vscode"] [data-component="todos"] {
     }
   }
 
-  /* Streaming state: keep the block open while content grows. Pinning
-     (user opened or scrolled the thoughts) lifts the 120px window so they
-     can read the full stream without the viewport chasing new tokens. */
+  /* Keep a stable pane while tokens arrive. Do not drop max-height when the
+     user pins — that unwraps the first lines into the chat viewport. */
+  &[data-streaming] [data-slot="reasoning-content"] {
+    max-height: min(40vh, 22rem);
+    overflow-y: auto;
+    scroll-behavior: auto;
+    mask-image: linear-gradient(to bottom, transparent 0%, black 12px, black 85%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 12px, black 85%, transparent 100%);
+  }
+
   &[data-streaming] {
-    &[data-auto-collapse]:not([data-pinned]) [data-slot="reasoning-content"] {
-      max-height: 120px;
-      overflow-y: auto;
-      scroll-behavior: smooth;
-      mask-image: linear-gradient(to bottom, transparent 0%, black 12px, black 85%, transparent 100%);
-      -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 12px, black 85%, transparent 100%);
-    }
 
     /* Pulse the brain icon while streaming */
     [data-slot="reasoning-header"] [data-component="icon"] {

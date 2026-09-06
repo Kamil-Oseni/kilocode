@@ -59,17 +59,28 @@ class FakePage implements BrowserPage {
   refuse = false
   hang = false
 
-  async goto(url: string): Promise<{ status(): number }> {
+  waitUntil = ""
+
+  async goto(url: string, options?: { timeout?: number; waitUntil?: string }): Promise<{ status(): number }> {
     this.gotoAttempts += 1
+    this.waitUntil = options?.waitUntil ?? "load"
     if (this.refuse) throw new Error(`page.goto: net::ERR_CONNECTION_REFUSED at ${url}`)
     if (this.hang) throw new Error("page.goto: Timeout 30000ms exceeded")
     this.current = url
     return { status: () => (this.gotoAttempts <= this.failNavigations ? 429 : 200) }
   }
 
-  async goBack(): Promise<void> {}
-  async goForward(): Promise<void> {}
-  async reload(): Promise<void> {}
+  async goBack(options?: { waitUntil?: string }): Promise<void> {
+    this.waitUntil = options?.waitUntil ?? "load"
+  }
+  async goForward(options?: { waitUntil?: string }): Promise<void> {
+    this.waitUntil = options?.waitUntil ?? "load"
+  }
+  async reload(options?: { waitUntil?: string }): Promise<void> {
+    this.waitUntil = options?.waitUntil ?? "load"
+    if (this.hang) throw new Error("page.reload: Timeout 30000ms exceeded.\nCall log:\n  - waiting for navigation until \"load\"")
+    if (this.refuse) throw new Error("page.reload: Protocol error (Page.reload): Not attached to an active page")
+  }
   async waitForTimeout(): Promise<void> {}
   async addInitScript(): Promise<void> {}
 
@@ -82,7 +93,9 @@ class FakePage implements BrowserPage {
         if (this.pause) await this.pause
         if (this.delay > 0) await new Promise((resolve) => setTimeout(resolve, this.delay))
         this.active -= 1
-        if (this.clickAttempts <= this.failClicks) throw new Error("element is not ready")
+        if (this.clickAttempts <= this.failClicks) {
+          throw new Error(this.hang ? "locator.click: Timeout 5000ms exceeded" : "element is not ready")
+        }
         this.clicks.push(selector)
       },
       fill: async (text: string) => {
@@ -370,7 +383,7 @@ describe("Raya browser session", () => {
     await session.dispose()
   })
 
-  it("resets a hung navigation instead of requiring manual takeover", async () => {
+  it("keeps the page after a hung navigation so a later goto can continue", async () => {
     const fake = harness()
     const session = new BrowserSession("timeout-profile", fake.launch)
     await session.ready()
@@ -378,11 +391,40 @@ describe("Raya browser session", () => {
 
     await expect(
       session.execute({ operation: "navigate", url: "http://example.test/lessons/p0-03-the-sound-system" }),
-    ).rejects.toThrow(/timed out|wedged/i)
+    ).rejects.toThrow(/timed out|navigate action failed/i)
     expect(session.current()).toEqual({ control: "agent", busy: false })
+    expect(fake.pages.length).toBe(1)
     fake.pages[0]!.hang = false
     await session.execute({ operation: "navigate", url: "http://example.test/" })
     expect(fake.pages[0]!.current).toBe("http://example.test/")
+    expect(fake.pages[0]!.waitUntil).toBe("commit")
+    await session.dispose()
+  })
+
+  it("does not reset the host when a click times out", async () => {
+    const fake = harness()
+    const session = new BrowserSession("click-timeout-profile", fake.launch)
+    await session.ready()
+    fake.pages[0]!.hang = true
+    fake.pages[0]!.failClicks = 3
+
+    await expect(session.execute({ operation: "click", selector: "#continue" })).rejects.toThrow(
+      /failed after three attempts/i,
+    )
+    expect(fake.pages.length).toBe(1)
+    expect(session.current()).toEqual({ control: "agent", busy: false })
+    await session.dispose()
+  })
+
+  it("reloads with commit and does not wait for full load", async () => {
+    const fake = harness()
+    const session = new BrowserSession("reload-profile", fake.launch)
+    await session.ready()
+    await session.reload()
+    expect(fake.pages[0]!.waitUntil).toBe("commit")
+    fake.pages[0]!.hang = true
+    await session.reload()
+    expect(session.current().control).toBe("agent")
     await session.dispose()
   })
 

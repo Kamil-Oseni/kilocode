@@ -1770,6 +1770,7 @@ const streamed = new Set<string>()
 const autocollapsed = new Set<string>()
 const userOpened = new Set<string>()
 const heldReasoning = new Set<string>()
+const reasoningScroll = new Map<string, number>()
 const MAX_REASONING_STATE = 1000
 
 function rememberReasoningState(set: Set<string>, id: string) {
@@ -1870,15 +1871,13 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props: MessagePartProp
     if (done()) streamed.delete(id)
   })
 
-  // Auto-scroll the content container while streaming, but pin in place once
-  // the user opens or scrolls the thoughts so markdown refreshes cannot yank
-  // them back to the top.
+  // Follow new tokens at the bottom until the user moves the pane. Persist
+  // scrollTop by part id so markdown remounts cannot restore 0 (first line).
   let ref: HTMLDivElement | undefined
-  let y = 0
 
   const onScroll = (e: Event) => {
     const el = e.currentTarget as HTMLDivElement
-    y = el.scrollTop
+    reasoningScroll.set(id, el.scrollTop)
     if (el.scrollHeight - el.clientHeight - el.scrollTop >= 1) hold()
   }
 
@@ -1886,12 +1885,14 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props: MessagePartProp
 
   createEffect(() => {
     display()
-    if (!ref) return
+    const el = ref
+    if (!el) return
     if (!done() && !held()) {
-      ref.scrollTop = ref.scrollHeight
+      el.scrollTop = el.scrollHeight
       return
     }
-    const top = y
+    const top = reasoningScroll.get(id)
+    if (top === undefined) return
     requestAnimationFrame(() => {
       if (ref) ref.scrollTop = top
     })
@@ -1920,7 +1921,13 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props: MessagePartProp
             </Collapsible.Trigger>
             <Collapsible.Content>
               <div data-slot="reasoning-details">
-                <div data-slot="reasoning-content" ref={ref} onScroll={onScroll} onWheel={onWheel}>
+                <div
+                  data-slot="reasoning-content"
+                  ref={ref}
+                  onScroll={onScroll}
+                  onWheel={onWheel}
+                  onPointerDown={hold}
+                >
                   <Markdown text={view().body} cacheKey={id} streaming={!done()} />
                 </div>
               </div>

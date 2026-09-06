@@ -29,9 +29,16 @@ export const createUserActivity = (options: UserActivityOptions) => {
   const handleWheel = (event: WheelEvent) => {
     if (!isPotentialScrollInput(event)) return
     if (!scroll || scroll.scrollHeight - scroll.clientHeight <= 1) return
-    if (event.deltaY >= 0 || scroll.scrollTop <= 0) return
-    mark(event)
-    options.onWheelUp()
+    const room = scroll.scrollHeight - scroll.clientHeight - scroll.scrollTop
+    if (event.deltaY < 0 && scroll.scrollTop > 0) {
+      mark(event)
+      options.onWheelUp()
+      return
+    }
+    if (event.deltaY > 0 && room > 10) {
+      mark(event)
+      options.onWheelUp()
+    }
   }
 
   const handleKey = (event: KeyboardEvent) => {

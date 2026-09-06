@@ -249,6 +249,23 @@ describe("createAutoScroll non-scrollable layouts", () => {
     ctx.dispose()
   })
 
+  test("pauses when the user wheels down away from the bottom", () => {
+    const ctx = setup({ working: true })
+    ctx.el.scrollHeight = 1000
+    ctx.el.clientHeight = 200
+    ctx.el.scrollTop = 200
+
+    ctx.el.fire("wheel", new FakeWheelEvent(40, ctx.el) as unknown as Event)
+    ctx.el.scrollTop = 240
+    ctx.scroll.handleScroll()
+
+    expect(ctx.scroll.userScrolled()).toBe(true)
+    ctx.el.scrollHeight = 1100
+    ctx.resize(0)
+    expect(ctx.el.scrollTop).toBe(240)
+    ctx.dispose()
+  })
+
   test("continues following streaming growth after a downward wheel at the bottom", () => {
     const ctx = setup({ working: true })
     ctx.el.scrollHeight = 1000

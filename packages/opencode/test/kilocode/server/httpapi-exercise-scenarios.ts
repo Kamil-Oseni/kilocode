@@ -84,6 +84,12 @@ const edit = {
 
 export const kiloScenarios: Scenario[] = [
   ...anacondaDesktopScenarios,
+  http.protected.get("/kilocode/capabilities", "capabilities.get").json(200, (value) => {
+    object(value)
+    check(value.version === 1, "capability manifest should report version 1")
+    object(value.features)
+    check(value.features["goal.commandCheck"] === 1, "capability manifest should advertise command checks")
+  }),
   http.protected.get("/background-process", "backgroundProcess.list").json(200, array),
   http.protected
     .get("/background-process/{processID}", "backgroundProcess.get")
@@ -611,7 +617,10 @@ export const kiloScenarios: Scenario[] = [
       check(item.builtin === false, "command file should not be builtin")
       check(item.model === "anthropic/claude-sonnet-4-6", "command file should include model metadata")
       check(item.variant === "high", "command file should include variant metadata")
-      check(typeof item.content === "string" && item.content.includes("Run command."), "command file should include content")
+      check(
+        typeof item.content === "string" && item.content.includes("Run command."),
+        "command file should include content",
+      )
     }),
   http.protected
     .post("/kilocode/command/remove", "kilocode.removeCommand")
@@ -627,10 +636,7 @@ export const kiloScenarios: Scenario[] = [
       Effect.gen(function* () {
         check(body === true, "command removal should return true")
         const location = path.join(directory(ctx), ".kilo/command/httpapi-remove.md")
-        check(
-          !(yield* Effect.promise(() => Bun.file(location).exists())),
-          "removed command should not remain on disk",
-        )
+        check(!(yield* Effect.promise(() => Bun.file(location).exists())), "removed command should not remain on disk")
       }),
     ),
   http.protected

@@ -225,8 +225,18 @@ function guidance(message: { status?: unknown; accept?: unknown }) {
     : "Review the refreshed goal before trying again."
 }
 
+async function capability(
+  client: KiloClient,
+  criteria: GoalState["criteria"],
+  authorize?: (client: KiloClient) => Promise<() => boolean>,
+) {
+  if (!criteria?.some((criterion) => criterion.check)) return () => true
+  return authorize ? authorize(client) : () => false
+}
+
 export async function editGoal(input: {
   client: KiloClient | null | undefined
+  authorize?: (client: KiloClient) => Promise<() => boolean>
   directory?: string
   message: {
     type: string
@@ -268,6 +278,15 @@ export async function editGoal(input: {
     return
   }
   try {
+    const permit = await capability(input.client, message.criteria, input.authorize)
+    if (!permit()) {
+      input.post({
+        ...reply,
+        error:
+          "This backend could not confirm support for exact-command checks. Update Raya and reconnect before saving. Your draft has been kept; no goal update was sent.",
+      })
+      return
+    }
     const result = await input.client.kilocode.goal.update({
       sessionID: message.sessionID,
       directory: input.directory,

@@ -34,31 +34,50 @@ export interface CloudSessionContext {
 /** Fetch cloud sessions list and send to webview. */
 export async function handleRequestCloudSessions(
   ctx: CloudSessionContext,
-  message: { cursor?: string; limit?: number; gitUrl?: string },
+  message: { requestID: string; cursor?: string; limit?: number; gitUrl?: string },
 ): Promise<void> {
+  const fail = (error: string) => ctx.postMessage({ type: "cloudSessionsFailed", requestID: message.requestID, error })
   if (!ctx.client) {
-    ctx.postMessage({ type: "error", message: "Not connected to CLI backend" })
+    fail("Cloud history is disconnected. Reconnect and retry.")
     return
   }
 
   try {
-    const result = await ctx.client.kilo.cloudSessions({
-      cursor: message.cursor,
-      limit: message.limit,
-      gitUrl: message.gitUrl,
-    })
+    const result = await ctx.client.kilo.cloudSessions(
+      { cursor: message.cursor, limit: message.limit, gitUrl: message.gitUrl },
+      { signal: AbortSignal.timeout(TIMEOUT) },
+    )
+    if (
+      result.error ||
+      !result.data ||
+      !Array.isArray(result.data.cliSessions) ||
+      !result.data.cliSessions.every(
+        (item) =>
+          !!item &&
+          typeof item === "object" &&
+          typeof item.session_id === "string" &&
+          !!item.session_id &&
+          typeof item.updated_at === "string" &&
+          typeof item.created_at === "string" &&
+          (item.title === null || item.title === undefined || typeof item.title === "string"),
+      ) ||
+      (result.data.nextCursor !== null &&
+        result.data.nextCursor !== undefined &&
+        typeof result.data.nextCursor !== "string")
+    ) {
+      fail("Cloud history could not be loaded. Retry when the connection is available.")
+      return
+    }
 
     ctx.postMessage({
       type: "cloudSessionsLoaded",
-      sessions: result.data?.cliSessions ?? [],
-      nextCursor: result.data?.nextCursor ?? null,
+      requestID: message.requestID,
+      sessions: result.data.cliSessions,
+      nextCursor: result.data.nextCursor ?? null,
     })
   } catch (error) {
     console.error("[Kilo New] KiloProvider: Failed to fetch cloud sessions:", error)
-    ctx.postMessage({
-      type: "error",
-      message: error instanceof Error ? error.message : "Failed to fetch cloud sessions",
-    })
+    fail("Cloud history could not be loaded. Retry when the connection is available.")
   }
 }
 

@@ -1623,6 +1623,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       const operation = message.type === "goalStop" ? stopGoal : editGoal
       await operation({
         client: this.client,
+        authorize: (client) => this.connectionService.capabilities.command(client),
         directory: this.getWorkspaceDirectory(typeof message.sessionID === "string" ? message.sessionID : undefined),
         message,
         post: (reply) => this.postMessage(reply),

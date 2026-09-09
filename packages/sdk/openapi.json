@@ -35488,6 +35488,62 @@
         ]
       }
     },
+    "/kilocode/capabilities": {
+      "get": {
+        "tags": ["capabilities"],
+        "operationId": "capabilities.get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "number",
+                      "enum": [1]
+                    },
+                    "features": {
+                      "type": "object",
+                      "properties": {
+                        "goal.commandCheck": {
+                          "type": "number",
+                          "enum": [1]
+                        }
+                      },
+                      "required": ["goal.commandCheck"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["version", "features"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Read explicit semantic contract versions before sending feature-dependent mutations.",
+        "summary": "Get supported Raya capability contracts",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.capabilities.get({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/telemetry/capture": {
       "post": {
         "tags": ["telemetry"],
@@ -83691,6 +83747,9 @@
     {
       "name": "suggestion",
       "description": "Kilo suggestion routes."
+    },
+    {
+      "name": "capabilities"
     },
     {
       "name": "telemetry",

@@ -48,6 +48,8 @@ import type {
   CanvasFailure,
   CanvasRequestId,
   CanvasResult,
+  CapabilitiesGetErrors,
+  CapabilitiesGetResponses,
   CommandListErrors,
   CommandListResponses,
   CommitMessageGenerateErrors,
@@ -11248,6 +11250,20 @@ export class Suggestion extends HeyApiClient {
   }
 }
 
+export class Capabilities2 extends HeyApiClient {
+  /**
+   * Get supported Raya capability contracts
+   *
+   * Read explicit semantic contract versions before sending feature-dependent mutations.
+   */
+  public get<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<CapabilitiesGetResponses, CapabilitiesGetErrors, ThrowOnError>({
+      url: "/kilocode/capabilities",
+      ...options,
+    })
+  }
+}
+
 export class Telemetry extends HeyApiClient {
   /**
    * Capture telemetry event
@@ -13960,6 +13976,11 @@ export class KiloClient extends HeyApiClient {
   private _suggestion?: Suggestion
   get suggestion(): Suggestion {
     return (this._suggestion ??= new Suggestion({ client: this.client }))
+  }
+
+  private _capabilities?: Capabilities2
+  get capabilities(): Capabilities2 {
+    return (this._capabilities ??= new Capabilities2({ client: this.client }))
   }
 
   private _telemetry?: Telemetry

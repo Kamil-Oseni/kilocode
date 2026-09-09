@@ -309,6 +309,7 @@ export interface RequestProjectUsageMessage {
 
 export interface RequestCloudSessionsMessage {
   type: "requestCloudSessions"
+  requestID: string
   cursor?: string
   limit?: number
   gitUrl?: string

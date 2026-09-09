@@ -154,6 +154,11 @@
         "icon": "$(organization)"
       },
       {
+        "command": "raya.openDiagnostics",
+        "title": "Open diagnostic summary",
+        "category": "Raya"
+      },
+      {
         "command": "raya.openBrowser",
         "title": "Open Browser",
         "category": "Raya",

@@ -1,4 +1,5 @@
 import * as vscode from "vscode"
+import { Capabilities } from "./capabilities"
 import { ServerManager } from "./server-manager"
 import { createKiloClient, type KiloClient } from "@kilocode/sdk/v2/client"
 import { SdkSSEAdapter, type SSEPayload } from "./sdk-sse-adapter"
@@ -85,6 +86,9 @@ async function drainNetworkWaits(client: KiloClient, dir: string) {
 export class KiloConnectionService {
   readonly sandboxPreference: SandboxPreference
   private readonly serverManager: ServerManager
+  readonly capabilities = new Capabilities(() =>
+    this.state === "connected" && this.client && this.config ? { client: this.client, config: this.config } : undefined,
+  )
   private client: KiloClient | null = null
   private sseClient: SdkSSEAdapter | null = null
   private info: { port: number } | null = null

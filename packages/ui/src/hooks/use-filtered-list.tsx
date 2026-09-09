@@ -15,6 +15,7 @@ export interface FilteredListProps<T> {
   skipFilter?: (item: T) => boolean
   onSelect?: (value: T | undefined, index: number) => void
   noInitialSelection?: boolean
+  preserveActive?: boolean // kilocode_change - opt-in continuity for refreshed history rows
 }
 
 export function useFilteredList<T>(props: FilteredListProps<T>) {
@@ -77,13 +78,24 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
     loop: true,
   })
 
+  let previous = "" // kilocode_change - distinguish refresh from a changed search
   const reset = () => {
+    // kilocode_change start - preserve only a surviving key for the same search
+    const preserve = props.preserveActive && previous === store.filter
+    previous = store.filter
+    // kilocode_change end
     if (props.noInitialSelection) {
       list.setActive("")
       return
     }
     const all = flat()
-    if (all.length === 0) return
+    // kilocode_change start - an empty opted-in list has no actionable active key
+    if (all.length === 0) {
+      if (props.preserveActive) list.setActive("")
+      return
+    }
+    // kilocode_change end
+    if (preserve && all.some((item) => props.key(item) === list.active())) return // kilocode_change
     list.setActive(props.key(all[0]))
   }
 

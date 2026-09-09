@@ -23,12 +23,14 @@ The contract regression imports the exact launch arguments used by `ServerManage
 | Media frontend to backend | Voice events carry the supplied backend authorization and directory | Callback destination and redirect policy need explicit validation. |
 | LiveKit and voice engine | WebRTC/audio and provider connection are separate from CLI control | Tokens, provider keys, remote rooms and cleanup require their own lifecycle guarantees. |
 
-The Go HTTP server currently limits header reading to five seconds. That does not bound JSON body size, body reading, session admission or every handler lifetime. The extension broker bounds its requests and retains uncertain cleanup ownership; that does not establish server-side request limits.
+The Go control server limits request headers to 32 KiB, header reading to five seconds, total request reading to fifteen seconds, response writes to thirty seconds and idle connections to sixty seconds. Session-start and context-injection JSON bodies are limited to 1 MiB, including chunked bodies without a declared content length. The complete body is read within the limit and parsed before session side effects; trailing JSON is rejected. Audio travels through WebRTC and is not subject to this JSON body limit.
+
+These are HTTP transport limits, not a claim that every provider operation or cleanup routine terminates by the response deadline. The extension broker separately bounds its requests and retains uncertain cleanup ownership. The media companion must be rebuilt to apply these service changes; installing a VS Code snapshot alone does not replace a running companion container.
 
 ## Remaining acceptance work
 
 - Define and enforce the allowed media control deployment, including local native and container paths, service authentication and browser-origin handling.
-- Bound control request bodies and handler lifetimes without applying short HTTP timeouts to long-lived audio sessions.
+- Complete handler/provider lifecycle limits and observe cancellation and cleanup after HTTP transport deadlines, without applying short HTTP timeouts to long-lived audio sessions.
 - Validate callback and configured media destinations before sending credentials; test redirect handling with synthetic credentials.
 - Exercise authenticated and unauthenticated requests on actual managed sockets, abrupt parent exit and cross-window ownership.
 - Test cross-directory data and execution ownership separately from authentication.
@@ -41,3 +43,4 @@ The Go HTTP server currently limits header reading to five seconds. That does no
 - [Backend authentication](../packages/server/src/auth.ts)
 - [Voice broker](../packages/kilo-vscode/src/speech/realtime-broker.ts)
 - [Media HTTP server](../services/raya-mf/cmd/raya-mf/main.go), [Compose publication](../services/raya-mf/docker-compose.yml) and [callback transport](../services/raya-mf/internal/app/backend.go)
+- [Control transport limits](../services/raya-mf/internal/control/http.go) and [real HTTP boundary/deadline tests](../services/raya-mf/internal/control/http_test.go)

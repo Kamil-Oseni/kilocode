@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Kilo-Org/kilocode/services/raya-mf/internal/app"
+	"github.com/Kilo-Org/kilocode/services/raya-mf/internal/control" // kilocode_change
 	lkroom "github.com/Kilo-Org/kilocode/services/raya-mf/internal/room/livekit"
 	"github.com/Kilo-Org/kilocode/services/raya-mf/internal/wire"
 )
@@ -24,8 +25,14 @@ func main() {
 		write(writer, http.StatusOK, map[string]any{"ok": true, "service": "raya-mf"})
 	})
 	mux.HandleFunc("POST /v1/sessions", func(writer http.ResponseWriter, request *http.Request) {
+		// kilocode_change start - bound the complete control body before opening a session
+		body, ok := control.Read(writer, request)
+		if !ok {
+			return
+		}
+		// kilocode_change end
 		var input wire.Start
-		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+		if err := json.Unmarshal(body, &input); err != nil { // kilocode_change - reject trailing JSON before side effects
 			write(writer, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
@@ -46,8 +53,14 @@ func main() {
 	})
 
 	mux.HandleFunc("POST /v1/sessions/{id}/inject", func(writer http.ResponseWriter, request *http.Request) {
+		// kilocode_change start - audio is separate; injected JSON has a finite control-body limit
+		body, ok := control.Read(writer, request)
+		if !ok {
+			return
+		}
+		// kilocode_change end
 		var input wire.Inject
-		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+		if err := json.Unmarshal(body, &input); err != nil { // kilocode_change
 			write(writer, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
@@ -73,10 +86,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	server := &http.Server{
-		Handler:           mux,
-		ReadHeaderTimeout: 5 * time.Second,
-	}
+	server := control.Server(mux) // kilocode_change - bounded HTTP control transport
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	go func() {

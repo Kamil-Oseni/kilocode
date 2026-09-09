@@ -404,8 +404,15 @@ export interface SessionsLoadedMessage {
 
 export interface CloudSessionsLoadedMessage {
   type: "cloudSessionsLoaded"
+  requestID: string
   sessions: CloudSessionInfo[]
   nextCursor: string | null
+}
+
+export interface CloudSessionsFailedMessage {
+  type: "cloudSessionsFailed"
+  requestID: string
+  error: string
 }
 
 export interface GitRemoteUrlLoadedMessage {
@@ -1699,6 +1706,7 @@ export type ExtensionMessage =
   | MessageCreatedMessage
   | SessionsLoadedMessage
   | CloudSessionsLoadedMessage
+  | CloudSessionsFailedMessage
   | GitRemoteUrlLoadedMessage
   | ActionMessage
   | ProfileDataMessage

@@ -100,7 +100,7 @@ test("goal criteria edits validate drafts and require matching saved criteria", 
     expectedIntent: "original",
     criteria,
   }
-  const context = { client, message, post: (value: unknown) => messages.push(value) }
+  const context = { client, authorize: async () => () => true, message, post: (value: unknown) => messages.push(value) }
   await editGoal(context)
   expect(await sent[0].json()).toMatchObject({ criteria, expectedIntent: "original" })
   expect(messages.at(-1)).toMatchObject({ goal: { criteria } })

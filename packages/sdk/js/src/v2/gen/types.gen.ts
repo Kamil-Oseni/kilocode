@@ -23740,6 +23740,36 @@ export type SuggestionDismissResponses = {
 
 export type SuggestionDismissResponse = SuggestionDismissResponses[keyof SuggestionDismissResponses]
 
+export type CapabilitiesGetData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/kilocode/capabilities"
+}
+
+export type CapabilitiesGetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type CapabilitiesGetError = CapabilitiesGetErrors[keyof CapabilitiesGetErrors]
+
+export type CapabilitiesGetResponses = {
+  /**
+   * Success
+   */
+  200: {
+    version: 1
+    features: {
+      "goal.commandCheck": 1
+    }
+  }
+}
+
+export type CapabilitiesGetResponse = CapabilitiesGetResponses[keyof CapabilitiesGetResponses]
+
 export type TelemetryCaptureData = {
   body?: {
     /**

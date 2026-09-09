@@ -30,6 +30,7 @@ import { registerCommitMessageService } from "./services/commit-message"
 import { registerCodeActions, registerTerminalActions, KiloCodeActionProvider } from "./services/code-actions"
 import { registerToggleAutoApprove } from "./commands/toggle-auto-approve"
 import { registerHeapSnapshot } from "./commands/heap-snapshot"
+import { registerDiagnostics } from "./commands/diagnostics"
 import { RemoteStatusService } from "./services/RemoteStatusService"
 import { markWorkspace } from "./util/spotlight"
 import { createNotebookBridge } from "./services/notebook"
@@ -66,6 +67,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Create shared connection service (one server for all webviews)
   const connectionService = new KiloConnectionService(context)
+  context.subscriptions.push(registerDiagnostics(context, connectionService))
   context.subscriptions.push(registerGrantAllPermissions(connectionService)) // raya_change - global all-tools toggle
   context.subscriptions.push(registerDesignSystemLock(connectionService)) // raya_change - owner design-system lock
   context.subscriptions.push(registerUpdateChecker(context)) // raya_change - poll GitHub Releases for newer Raya builds

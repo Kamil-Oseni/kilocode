@@ -29,6 +29,7 @@ import { remoteHandlers } from "./handlers/remote"
 import { sandboxHandlers } from "./handlers/sandbox"
 import { sessionImportHandlers } from "./handlers/session-import"
 import { suggestionHandlers } from "./handlers/suggestion"
+import { capabilitiesHandlers } from "./handlers/capabilities"
 import { telemetryHandlers } from "./handlers/telemetry"
 import { voiceHandlers } from "./handlers/voice" // raya_change - realtime voice async plane
 
@@ -51,6 +52,7 @@ export const provide = Layer.provide([
   sandboxHandlers,
   sessionImportHandlers,
   suggestionHandlers,
+  capabilitiesHandlers,
   telemetryHandlers,
   voiceHandlers, // raya_change - realtime voice async plane
 ])

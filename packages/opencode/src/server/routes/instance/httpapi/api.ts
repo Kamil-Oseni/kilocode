@@ -43,6 +43,7 @@ import { RemoteApi } from "@/kilocode/server/httpapi/groups/remote"
 import { SandboxApi } from "@/kilocode/server/httpapi/groups/sandbox"
 import { SessionImportApi } from "@/kilocode/server/httpapi/groups/session-import"
 import { SuggestionApi } from "@/kilocode/server/httpapi/groups/suggestion"
+import { CapabilitiesApi } from "@/kilocode/server/httpapi/groups/capabilities"
 import { TelemetryApi } from "@/kilocode/server/httpapi/groups/telemetry"
 import { MemoryApi } from "@/kilocode/server/httpapi/groups/memory" // kilocode_change
 import { VoiceApi } from "@/kilocode/server/httpapi/groups/voice" // kilocode_change // raya_change - realtime voice async plane
@@ -114,6 +115,7 @@ export const InstanceHttpApi = HttpApi.make("opencode-instance")
   .addHttpApi(SandboxApi)
   .addHttpApi(SessionImportApi)
   .addHttpApi(SuggestionApi)
+  .addHttpApi(CapabilitiesApi)
   .addHttpApi(TelemetryApi)
   .addHttpApi(MemoryApi)
   .addHttpApi(VoiceApi) // kilocode_change // raya_change - realtime voice async plane

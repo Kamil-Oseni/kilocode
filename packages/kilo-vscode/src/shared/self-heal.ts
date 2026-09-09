@@ -24,7 +24,7 @@ export function selfHealPrompt(input: {
   approach: string
 }) {
   return `<system-reminder>
-This is an isolated Raya self-healing session for feedback item ${input.id}.
+This is a Raya source-repair session for feedback item ${input.id}.
 
 Title: ${input.title}
 Category: ${input.category}${input.severity ? `\nSeverity: ${input.severity}` : ""}

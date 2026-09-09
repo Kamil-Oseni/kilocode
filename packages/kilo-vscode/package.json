@@ -1184,7 +1184,7 @@
           "type": "string",
           "default": "",
           "scope": "application",
-          "description": "Absolute path to Raya's own source checkout. /self-heal repair sessions run against this folder so Raya can fix her own code, regardless of which project you have open. Leave empty to repair the current workspace instead."
+          "description": "Absolute root of a committed Raya Git source checkout. /self-heal saves reports globally and starts repair only after verifying this repository. When empty, only a verified development-extension checkout can be used; an unrelated open workspace is never a repair fallback."
         },
         "raya.update.enabled": {
           "type": "boolean",

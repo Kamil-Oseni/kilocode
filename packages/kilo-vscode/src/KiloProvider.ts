@@ -187,7 +187,8 @@ import { SPEECH_TO_TEXT_MODELS } from "./speech-to-text/models"
 import { stopSessionProcesses } from "./kilo-provider/background-process"
 import { sandboxDefault, sandboxSessionMetadata } from "./shared/sandbox-session"
 import { goalPrompt, parseGoalCommand, type GoalState } from "./shared/goal" // raya_change - Milestone A native goal mode
-import { parseSelfHealCommand, selfHealPrompt } from "./shared/self-heal" // raya_change - global autonomous feedback repair
+import { parseSelfHealCommand } from "./shared/self-heal"
+import { capture as captureSelfHeal } from "./self-heal/intake" // raya_change - global autonomous feedback repair
 import { SpeechService } from "./speech/service" // raya_change - Milestone H voice orchestration
 import {
   buildIndexingSettingsMessage,
@@ -1628,7 +1629,12 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       return true
     }
     if (message.type === "goalEvidence") {
-      await goalEvidence({ client: this.client, directory: this.getWorkspaceDirectory(typeof message.sessionID === "string" ? message.sessionID : undefined), message, post: (reply) => this.postMessage(reply) })
+      await goalEvidence({
+        client: this.client,
+        directory: this.getWorkspaceDirectory(typeof message.sessionID === "string" ? message.sessionID : undefined),
+        message,
+        post: (reply) => this.postMessage(reply),
+      })
       return true
     }
     if (message.type === "goalGet") {
@@ -4349,26 +4355,10 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.costs.removeMessageCost(id)
   }
 
-  // raya_change start - resolve Raya's own source checkout so /self-heal repairs
-  // her own code no matter which project is open. Prefer the configured path;
-  // otherwise derive the repo root from the (dev-loaded) extension location.
-  private rayaSourceDir(fallback: string): string {
-    const configured = vscode.workspace.getConfiguration("raya.selfHeal").get<string>("sourcePath", "").trim()
-    const root = (() => {
-      if (configured) return configured
-      const ext = this.extensionUri.fsPath
-      const marker = path.join("packages", "kilo-vscode")
-      if (ext.endsWith(marker)) return path.resolve(ext, "..", "..")
-      return fallback
-    })()
-    return existsSync(path.join(root, "packages", "opencode")) ? root : fallback
-  }
-
-  // raya_change start - capture feedback globally and start its repair in an isolated goal session
+  // Feedback is global; repair admission separately verifies Raya's configured source.
   private async startSelfHeal(
     text: string,
     reporter: string,
-    workspace: string,
     providerID?: string,
     modelID?: string,
   ): Promise<{ handled: boolean; context?: string }> {
@@ -4378,9 +4368,10 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       this.postMessage({ type: "goalState", sessionID: reporter, notice: command.notice })
       return { handled: true }
     }
-    const dir = this.rayaSourceDir(workspace)
+    const store = path.join(this.extensionContext?.globalStorageUri.fsPath ?? this.extensionUri.fsPath, "self-heal")
     if (command.kind === "list") {
-      const { data: items } = await this.client!.kilocode.selfHeal.list({ directory: dir }, { throwOnError: true })
+      await vscode.workspace.fs.createDirectory(vscode.Uri.file(store))
+      const { data: items } = await this.client!.kilocode.selfHeal.list({ directory: store }, { throwOnError: true })
       const summary = items.length
         ? items
             .map(
@@ -4394,52 +4385,26 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         context: `Present this global Raya self-heal backlog clearly. Do not start or duplicate work:\n${summary}`,
       }
     }
-    const { data: item } = await this.client!.kilocode.selfHeal.create(
-      { directory: dir, description: command.description, reporterSessionID: reporter },
-      { throwOnError: true },
-    )
-    const metadata = await sandboxSessionMetadata(this.connectionService.sandboxPreference, this.client!, dir)
-    const { data: session } = await this.client!.session.create(
-      { directory: dir, platform: this.opts.platform, metadata },
-      { throwOnError: true },
-    )
-    const objective = `Repair Raya self-heal item ${item.id}: ${item.title}. Done when the report is reproduced, the root cause is fixed, and authoritative tests plus relevant runtime or visual evidence pass.`
-    await this.client!.kilocode.goal.create(
-      { sessionID: session.id, directory: dir, objective, selfHealID: item.id },
-      { throwOnError: true },
-    )
-    await this.client!.kilocode.selfHeal.update(
-      {
-        itemID: item.id,
-        directory: dir,
-        status: "in_progress",
-        workSessionID: session.id,
-      },
-      { throwOnError: true },
-    )
-    await this.client!.session.promptAsync({
-      sessionID: session.id,
-      directory: dir,
-      parts: [{ type: "text", text: selfHealPrompt(item), synthetic: true }],
+    const result = await captureSelfHeal({
+      client: this.client!,
+      store,
+      configured: vscode.workspace.getConfiguration("raya.selfHeal").get<string>("sourcePath", ""),
+      extension: this.extensionUri.fsPath,
+      description: command.description,
+      reporter,
+      platform: this.opts.platform,
       model: providerID && modelID ? { providerID, modelID } : undefined,
-      agent: "chief",
       snapshotInitialization: this.opts.snapshotInitialization,
+      metadata: (directory) =>
+        sandboxSessionMetadata(this.connectionService.sandboxPreference, this.client!, directory),
     })
-    const targetNote =
-      dir === workspace
-        ? " Repairing the current workspace — set raya.selfHeal.sourcePath to point Raya at her own checkout."
-        : ` Repairing Raya's own source at ${dir}.`
-    this.postMessage({
-      type: "goalState",
-      sessionID: reporter,
-      notice: `Captured ${item.id} as ${item.category}/${item.severity}. Raya started an isolated repair session: ${session.id}.${targetNote}`,
-    })
+    this.postMessage({ type: "goalState", sessionID: reporter, notice: result.notice })
+    if (!result.session) return { handled: true }
     return {
       handled: false,
-      context: `Feedback ${item.id} was categorized as ${item.category} (${item.severity}) and started in isolated session ${session.id}. Explain the categorization and repair approach briefly. Do not duplicate the repair in this chat.`,
+      context: `Feedback ${result.item.id} was categorized as ${result.item.category} (${result.item.severity}) and started in repair session ${result.session} at ${result.source.root}. Explain the categorization and repair approach briefly. Do not duplicate the repair in this chat.`,
     }
   }
-  // raya_change end
 
   private async handleSendMessage(
     text: string,
@@ -4479,7 +4444,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       if (sandbox) await sandbox
       const sid = resolved.sid
       const dir = resolved.dir
-      const heal = await this.startSelfHeal(text, sid, dir, providerID, modelID)
+      const heal = await this.startSelfHeal(text, sid, providerID, modelID)
       if (heal.handled) return
       // raya_change start - Milestone A arm /goal before the first model turn
       const command = parseGoalCommand(text)

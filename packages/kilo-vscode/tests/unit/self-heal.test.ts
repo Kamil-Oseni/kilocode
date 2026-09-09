@@ -16,14 +16,16 @@ describe("Raya self-heal", () => {
     })
   })
 
-  test("starts feedback in a linked isolated goal session", async () => {
+  test("wires feedback through verified source admission to a linked repair session", async () => {
     const provider = await Bun.file(path.join(root, "src/KiloProvider.ts")).text()
+    const intake = await Bun.file(path.join(root, "src/self-heal/intake.ts")).text()
     const slash = await Bun.file(path.join(root, "webview-ui/src/hooks/useSlashCommand.ts")).text()
 
     expect(slash).toContain('name: "self-heal"')
-    expect(provider).toContain("selfHeal.create")
-    expect(provider).toContain("selfHealID: item.id")
-    expect(provider).toContain('agent: "chief"')
-    expect(provider).toContain('status: "in_progress"')
+    expect(provider).toContain("captureSelfHeal")
+    expect(intake).toContain("selfHeal.create")
+    expect(intake).toContain("selfHealID: item.id")
+    expect(intake).toContain('agent: "chief"')
+    expect(intake).toContain('status: "in_progress"')
   })
 })

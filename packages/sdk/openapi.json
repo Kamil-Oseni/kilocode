@@ -30555,312 +30555,7 @@
                       "additionalProperties": false
                     },
                     "completion": {
-                      "type": "object",
-                      "properties": {
-                        "version": {
-                          "type": "number",
-                          "enum": [1]
-                        },
-                        "itemID": {
-                          "type": "string"
-                        },
-                        "attemptID": {
-                          "type": "string"
-                        },
-                        "sessionID": {
-                          "type": "string",
-                          "pattern": "^ses"
-                        },
-                        "source": {
-                          "type": "object",
-                          "properties": {
-                            "root": {
-                              "type": "string"
-                            },
-                            "commit": {
-                              "type": "string"
-                            }
-                          },
-                          "required": ["root", "commit"],
-                          "additionalProperties": false
-                        },
-                        "worktree": {
-                          "type": "object",
-                          "properties": {
-                            "root": {
-                              "type": "string"
-                            },
-                            "directory": {
-                              "type": "string"
-                            },
-                            "branch": {
-                              "type": "string"
-                            },
-                            "common": {
-                              "type": "string"
-                            },
-                            "commit": {
-                              "type": "string"
-                            }
-                          },
-                          "required": ["root", "directory", "branch", "common", "commit"],
-                          "additionalProperties": false
-                        },
-                        "goal": {
-                          "type": "object",
-                          "properties": {
-                            "intent": {
-                              "type": "string"
-                            },
-                            "revision": {
-                              "type": "string"
-                            },
-                            "completedRevision": {
-                              "type": "string"
-                            },
-                            "createdAt": {
-                              "anyOf": [
-                                {
-                                  "type": "number"
-                                },
-                                {
-                                  "type": "string",
-                                  "enum": ["NaN"]
-                                },
-                                {
-                                  "type": "string",
-                                  "enum": ["Infinity"]
-                                },
-                                {
-                                  "type": "string",
-                                  "enum": ["-Infinity"]
-                                },
-                                {
-                                  "type": "string",
-                                  "enum": ["Infinity", "-Infinity", "NaN"]
-                                }
-                              ]
-                            },
-                            "objective": {
-                              "type": "string"
-                            },
-                            "audit": {
-                              "type": "object",
-                              "properties": {
-                                "summary": {
-                                  "type": "string"
-                                },
-                                "verifiedAt": {
-                                  "anyOf": [
-                                    {
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["NaN"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["-Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity", "-Infinity", "NaN"]
-                                    }
-                                  ]
-                                },
-                                "requirements": {
-                                  "type": "array",
-                                  "items": {
-                                    "type": "object",
-                                    "properties": {
-                                      "criterionID": {
-                                        "type": "string"
-                                      },
-                                      "requirement": {
-                                        "type": "string"
-                                      },
-                                      "passed": {
-                                        "type": "boolean"
-                                      },
-                                      "evidence": {
-                                        "type": "array",
-                                        "items": {
-                                          "type": "object",
-                                          "properties": {
-                                            "sessionID": {
-                                              "type": "string",
-                                              "pattern": "^ses"
-                                            },
-                                            "messageID": {
-                                              "type": "string",
-                                              "pattern": "^msg"
-                                            },
-                                            "partID": {
-                                              "type": "string",
-                                              "pattern": "^prt"
-                                            },
-                                            "callID": {
-                                              "type": "string"
-                                            },
-                                            "summary": {
-                                              "type": "string"
-                                            },
-                                            "record": {
-                                              "type": "object",
-                                              "properties": {
-                                                "version": {
-                                                  "type": "number",
-                                                  "enum": [1]
-                                                },
-                                                "digest": {
-                                                  "type": "string"
-                                                },
-                                                "at": {
-                                                  "anyOf": [
-                                                    {
-                                                      "type": "number"
-                                                    },
-                                                    {
-                                                      "type": "string",
-                                                      "enum": ["NaN"]
-                                                    },
-                                                    {
-                                                      "type": "string",
-                                                      "enum": ["Infinity"]
-                                                    },
-                                                    {
-                                                      "type": "string",
-                                                      "enum": ["-Infinity"]
-                                                    },
-                                                    {
-                                                      "type": "string",
-                                                      "enum": ["Infinity", "-Infinity", "NaN"]
-                                                    }
-                                                  ]
-                                                }
-                                              },
-                                              "required": ["version", "digest", "at"],
-                                              "additionalProperties": false
-                                            }
-                                          },
-                                          "required": [
-                                            "sessionID",
-                                            "messageID",
-                                            "partID",
-                                            "callID",
-                                            "summary",
-                                            "record"
-                                          ],
-                                          "additionalProperties": false
-                                        }
-                                      }
-                                    },
-                                    "required": ["requirement", "passed", "evidence"],
-                                    "additionalProperties": false
-                                  }
-                                }
-                              },
-                              "required": ["summary", "verifiedAt", "requirements"],
-                              "additionalProperties": false
-                            },
-                            "review": {
-                              "type": "object",
-                              "properties": {
-                                "status": {
-                                  "type": "string",
-                                  "enum": ["accepted"]
-                                },
-                                "at": {
-                                  "anyOf": [
-                                    {
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["NaN"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["-Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity", "-Infinity", "NaN"]
-                                    }
-                                  ]
-                                },
-                                "criteria": {
-                                  "type": "array",
-                                  "items": {
-                                    "type": "string"
-                                  }
-                                },
-                                "acceptedAt": {
-                                  "anyOf": [
-                                    {
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["NaN"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["-Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity", "-Infinity", "NaN"]
-                                    }
-                                  ]
-                                }
-                              },
-                              "required": ["status", "at", "criteria", "acceptedAt"],
-                              "additionalProperties": false
-                            }
-                          },
-                          "required": ["intent", "revision", "completedRevision", "createdAt", "objective", "audit"],
-                          "additionalProperties": false
-                        },
-                        "at": {
-                          "anyOf": [
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["NaN"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["-Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity", "-Infinity", "NaN"]
-                            }
-                          ]
-                        }
-                      },
-                      "required": ["version", "itemID", "attemptID", "sessionID", "source", "worktree", "goal", "at"],
-                      "additionalProperties": false
+                      "$ref": "#/components/schemas/RayaSelfHealCompletion"
                     },
                     "legacyVerification": {
                       "type": "boolean"
@@ -31271,312 +30966,7 @@
                         "additionalProperties": false
                       },
                       "completion": {
-                        "type": "object",
-                        "properties": {
-                          "version": {
-                            "type": "number",
-                            "enum": [1]
-                          },
-                          "itemID": {
-                            "type": "string"
-                          },
-                          "attemptID": {
-                            "type": "string"
-                          },
-                          "sessionID": {
-                            "type": "string",
-                            "pattern": "^ses"
-                          },
-                          "source": {
-                            "type": "object",
-                            "properties": {
-                              "root": {
-                                "type": "string"
-                              },
-                              "commit": {
-                                "type": "string"
-                              }
-                            },
-                            "required": ["root", "commit"],
-                            "additionalProperties": false
-                          },
-                          "worktree": {
-                            "type": "object",
-                            "properties": {
-                              "root": {
-                                "type": "string"
-                              },
-                              "directory": {
-                                "type": "string"
-                              },
-                              "branch": {
-                                "type": "string"
-                              },
-                              "common": {
-                                "type": "string"
-                              },
-                              "commit": {
-                                "type": "string"
-                              }
-                            },
-                            "required": ["root", "directory", "branch", "common", "commit"],
-                            "additionalProperties": false
-                          },
-                          "goal": {
-                            "type": "object",
-                            "properties": {
-                              "intent": {
-                                "type": "string"
-                              },
-                              "revision": {
-                                "type": "string"
-                              },
-                              "completedRevision": {
-                                "type": "string"
-                              },
-                              "createdAt": {
-                                "anyOf": [
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["NaN"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["Infinity"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["-Infinity"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["Infinity", "-Infinity", "NaN"]
-                                  }
-                                ]
-                              },
-                              "objective": {
-                                "type": "string"
-                              },
-                              "audit": {
-                                "type": "object",
-                                "properties": {
-                                  "summary": {
-                                    "type": "string"
-                                  },
-                                  "verifiedAt": {
-                                    "anyOf": [
-                                      {
-                                        "type": "number"
-                                      },
-                                      {
-                                        "type": "string",
-                                        "enum": ["NaN"]
-                                      },
-                                      {
-                                        "type": "string",
-                                        "enum": ["Infinity"]
-                                      },
-                                      {
-                                        "type": "string",
-                                        "enum": ["-Infinity"]
-                                      },
-                                      {
-                                        "type": "string",
-                                        "enum": ["Infinity", "-Infinity", "NaN"]
-                                      }
-                                    ]
-                                  },
-                                  "requirements": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "object",
-                                      "properties": {
-                                        "criterionID": {
-                                          "type": "string"
-                                        },
-                                        "requirement": {
-                                          "type": "string"
-                                        },
-                                        "passed": {
-                                          "type": "boolean"
-                                        },
-                                        "evidence": {
-                                          "type": "array",
-                                          "items": {
-                                            "type": "object",
-                                            "properties": {
-                                              "sessionID": {
-                                                "type": "string",
-                                                "pattern": "^ses"
-                                              },
-                                              "messageID": {
-                                                "type": "string",
-                                                "pattern": "^msg"
-                                              },
-                                              "partID": {
-                                                "type": "string",
-                                                "pattern": "^prt"
-                                              },
-                                              "callID": {
-                                                "type": "string"
-                                              },
-                                              "summary": {
-                                                "type": "string"
-                                              },
-                                              "record": {
-                                                "type": "object",
-                                                "properties": {
-                                                  "version": {
-                                                    "type": "number",
-                                                    "enum": [1]
-                                                  },
-                                                  "digest": {
-                                                    "type": "string"
-                                                  },
-                                                  "at": {
-                                                    "anyOf": [
-                                                      {
-                                                        "type": "number"
-                                                      },
-                                                      {
-                                                        "type": "string",
-                                                        "enum": ["NaN"]
-                                                      },
-                                                      {
-                                                        "type": "string",
-                                                        "enum": ["Infinity"]
-                                                      },
-                                                      {
-                                                        "type": "string",
-                                                        "enum": ["-Infinity"]
-                                                      },
-                                                      {
-                                                        "type": "string",
-                                                        "enum": ["Infinity", "-Infinity", "NaN"]
-                                                      }
-                                                    ]
-                                                  }
-                                                },
-                                                "required": ["version", "digest", "at"],
-                                                "additionalProperties": false
-                                              }
-                                            },
-                                            "required": [
-                                              "sessionID",
-                                              "messageID",
-                                              "partID",
-                                              "callID",
-                                              "summary",
-                                              "record"
-                                            ],
-                                            "additionalProperties": false
-                                          }
-                                        }
-                                      },
-                                      "required": ["requirement", "passed", "evidence"],
-                                      "additionalProperties": false
-                                    }
-                                  }
-                                },
-                                "required": ["summary", "verifiedAt", "requirements"],
-                                "additionalProperties": false
-                              },
-                              "review": {
-                                "type": "object",
-                                "properties": {
-                                  "status": {
-                                    "type": "string",
-                                    "enum": ["accepted"]
-                                  },
-                                  "at": {
-                                    "anyOf": [
-                                      {
-                                        "type": "number"
-                                      },
-                                      {
-                                        "type": "string",
-                                        "enum": ["NaN"]
-                                      },
-                                      {
-                                        "type": "string",
-                                        "enum": ["Infinity"]
-                                      },
-                                      {
-                                        "type": "string",
-                                        "enum": ["-Infinity"]
-                                      },
-                                      {
-                                        "type": "string",
-                                        "enum": ["Infinity", "-Infinity", "NaN"]
-                                      }
-                                    ]
-                                  },
-                                  "criteria": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "acceptedAt": {
-                                    "anyOf": [
-                                      {
-                                        "type": "number"
-                                      },
-                                      {
-                                        "type": "string",
-                                        "enum": ["NaN"]
-                                      },
-                                      {
-                                        "type": "string",
-                                        "enum": ["Infinity"]
-                                      },
-                                      {
-                                        "type": "string",
-                                        "enum": ["-Infinity"]
-                                      },
-                                      {
-                                        "type": "string",
-                                        "enum": ["Infinity", "-Infinity", "NaN"]
-                                      }
-                                    ]
-                                  }
-                                },
-                                "required": ["status", "at", "criteria", "acceptedAt"],
-                                "additionalProperties": false
-                              }
-                            },
-                            "required": ["intent", "revision", "completedRevision", "createdAt", "objective", "audit"],
-                            "additionalProperties": false
-                          },
-                          "at": {
-                            "anyOf": [
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "string",
-                                "enum": ["NaN"]
-                              },
-                              {
-                                "type": "string",
-                                "enum": ["Infinity"]
-                              },
-                              {
-                                "type": "string",
-                                "enum": ["-Infinity"]
-                              },
-                              {
-                                "type": "string",
-                                "enum": ["Infinity", "-Infinity", "NaN"]
-                              }
-                            ]
-                          }
-                        },
-                        "required": ["version", "itemID", "attemptID", "sessionID", "source", "worktree", "goal", "at"],
-                        "additionalProperties": false
+                        "$ref": "#/components/schemas/RayaSelfHealCompletion"
                       },
                       "legacyVerification": {
                         "type": "boolean"
@@ -31973,312 +31363,7 @@
                       ]
                     },
                     "completion": {
-                      "type": "object",
-                      "properties": {
-                        "version": {
-                          "type": "number",
-                          "enum": [1]
-                        },
-                        "itemID": {
-                          "type": "string"
-                        },
-                        "attemptID": {
-                          "type": "string"
-                        },
-                        "sessionID": {
-                          "type": "string",
-                          "pattern": "^ses"
-                        },
-                        "source": {
-                          "type": "object",
-                          "properties": {
-                            "root": {
-                              "type": "string"
-                            },
-                            "commit": {
-                              "type": "string"
-                            }
-                          },
-                          "required": ["root", "commit"],
-                          "additionalProperties": false
-                        },
-                        "worktree": {
-                          "type": "object",
-                          "properties": {
-                            "root": {
-                              "type": "string"
-                            },
-                            "directory": {
-                              "type": "string"
-                            },
-                            "branch": {
-                              "type": "string"
-                            },
-                            "common": {
-                              "type": "string"
-                            },
-                            "commit": {
-                              "type": "string"
-                            }
-                          },
-                          "required": ["root", "directory", "branch", "common", "commit"],
-                          "additionalProperties": false
-                        },
-                        "goal": {
-                          "type": "object",
-                          "properties": {
-                            "intent": {
-                              "type": "string"
-                            },
-                            "revision": {
-                              "type": "string"
-                            },
-                            "completedRevision": {
-                              "type": "string"
-                            },
-                            "createdAt": {
-                              "anyOf": [
-                                {
-                                  "type": "number"
-                                },
-                                {
-                                  "type": "string",
-                                  "enum": ["NaN"]
-                                },
-                                {
-                                  "type": "string",
-                                  "enum": ["Infinity"]
-                                },
-                                {
-                                  "type": "string",
-                                  "enum": ["-Infinity"]
-                                },
-                                {
-                                  "type": "string",
-                                  "enum": ["Infinity", "-Infinity", "NaN"]
-                                }
-                              ]
-                            },
-                            "objective": {
-                              "type": "string"
-                            },
-                            "audit": {
-                              "type": "object",
-                              "properties": {
-                                "summary": {
-                                  "type": "string"
-                                },
-                                "verifiedAt": {
-                                  "anyOf": [
-                                    {
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["NaN"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["-Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity", "-Infinity", "NaN"]
-                                    }
-                                  ]
-                                },
-                                "requirements": {
-                                  "type": "array",
-                                  "items": {
-                                    "type": "object",
-                                    "properties": {
-                                      "criterionID": {
-                                        "type": "string"
-                                      },
-                                      "requirement": {
-                                        "type": "string"
-                                      },
-                                      "passed": {
-                                        "type": "boolean"
-                                      },
-                                      "evidence": {
-                                        "type": "array",
-                                        "items": {
-                                          "type": "object",
-                                          "properties": {
-                                            "sessionID": {
-                                              "type": "string",
-                                              "pattern": "^ses"
-                                            },
-                                            "messageID": {
-                                              "type": "string",
-                                              "pattern": "^msg"
-                                            },
-                                            "partID": {
-                                              "type": "string",
-                                              "pattern": "^prt"
-                                            },
-                                            "callID": {
-                                              "type": "string"
-                                            },
-                                            "summary": {
-                                              "type": "string"
-                                            },
-                                            "record": {
-                                              "type": "object",
-                                              "properties": {
-                                                "version": {
-                                                  "type": "number",
-                                                  "enum": [1]
-                                                },
-                                                "digest": {
-                                                  "type": "string"
-                                                },
-                                                "at": {
-                                                  "anyOf": [
-                                                    {
-                                                      "type": "number"
-                                                    },
-                                                    {
-                                                      "type": "string",
-                                                      "enum": ["NaN"]
-                                                    },
-                                                    {
-                                                      "type": "string",
-                                                      "enum": ["Infinity"]
-                                                    },
-                                                    {
-                                                      "type": "string",
-                                                      "enum": ["-Infinity"]
-                                                    },
-                                                    {
-                                                      "type": "string",
-                                                      "enum": ["Infinity", "-Infinity", "NaN"]
-                                                    }
-                                                  ]
-                                                }
-                                              },
-                                              "required": ["version", "digest", "at"],
-                                              "additionalProperties": false
-                                            }
-                                          },
-                                          "required": [
-                                            "sessionID",
-                                            "messageID",
-                                            "partID",
-                                            "callID",
-                                            "summary",
-                                            "record"
-                                          ],
-                                          "additionalProperties": false
-                                        }
-                                      }
-                                    },
-                                    "required": ["requirement", "passed", "evidence"],
-                                    "additionalProperties": false
-                                  }
-                                }
-                              },
-                              "required": ["summary", "verifiedAt", "requirements"],
-                              "additionalProperties": false
-                            },
-                            "review": {
-                              "type": "object",
-                              "properties": {
-                                "status": {
-                                  "type": "string",
-                                  "enum": ["accepted"]
-                                },
-                                "at": {
-                                  "anyOf": [
-                                    {
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["NaN"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["-Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity", "-Infinity", "NaN"]
-                                    }
-                                  ]
-                                },
-                                "criteria": {
-                                  "type": "array",
-                                  "items": {
-                                    "type": "string"
-                                  }
-                                },
-                                "acceptedAt": {
-                                  "anyOf": [
-                                    {
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["NaN"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["-Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity", "-Infinity", "NaN"]
-                                    }
-                                  ]
-                                }
-                              },
-                              "required": ["status", "at", "criteria", "acceptedAt"],
-                              "additionalProperties": false
-                            }
-                          },
-                          "required": ["intent", "revision", "completedRevision", "createdAt", "objective", "audit"],
-                          "additionalProperties": false
-                        },
-                        "at": {
-                          "anyOf": [
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["NaN"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["-Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity", "-Infinity", "NaN"]
-                            }
-                          ]
-                        }
-                      },
-                      "required": ["version", "itemID", "attemptID", "sessionID", "source", "worktree", "goal", "at"],
-                      "additionalProperties": false
+                      "$ref": "#/components/schemas/RayaSelfHealCompletion"
                     }
                   },
                   "required": ["id", "itemID", "source", "phase", "revision", "at"],
@@ -32694,312 +31779,7 @@
                       ]
                     },
                     "completion": {
-                      "type": "object",
-                      "properties": {
-                        "version": {
-                          "type": "number",
-                          "enum": [1]
-                        },
-                        "itemID": {
-                          "type": "string"
-                        },
-                        "attemptID": {
-                          "type": "string"
-                        },
-                        "sessionID": {
-                          "type": "string",
-                          "pattern": "^ses"
-                        },
-                        "source": {
-                          "type": "object",
-                          "properties": {
-                            "root": {
-                              "type": "string"
-                            },
-                            "commit": {
-                              "type": "string"
-                            }
-                          },
-                          "required": ["root", "commit"],
-                          "additionalProperties": false
-                        },
-                        "worktree": {
-                          "type": "object",
-                          "properties": {
-                            "root": {
-                              "type": "string"
-                            },
-                            "directory": {
-                              "type": "string"
-                            },
-                            "branch": {
-                              "type": "string"
-                            },
-                            "common": {
-                              "type": "string"
-                            },
-                            "commit": {
-                              "type": "string"
-                            }
-                          },
-                          "required": ["root", "directory", "branch", "common", "commit"],
-                          "additionalProperties": false
-                        },
-                        "goal": {
-                          "type": "object",
-                          "properties": {
-                            "intent": {
-                              "type": "string"
-                            },
-                            "revision": {
-                              "type": "string"
-                            },
-                            "completedRevision": {
-                              "type": "string"
-                            },
-                            "createdAt": {
-                              "anyOf": [
-                                {
-                                  "type": "number"
-                                },
-                                {
-                                  "type": "string",
-                                  "enum": ["NaN"]
-                                },
-                                {
-                                  "type": "string",
-                                  "enum": ["Infinity"]
-                                },
-                                {
-                                  "type": "string",
-                                  "enum": ["-Infinity"]
-                                },
-                                {
-                                  "type": "string",
-                                  "enum": ["Infinity", "-Infinity", "NaN"]
-                                }
-                              ]
-                            },
-                            "objective": {
-                              "type": "string"
-                            },
-                            "audit": {
-                              "type": "object",
-                              "properties": {
-                                "summary": {
-                                  "type": "string"
-                                },
-                                "verifiedAt": {
-                                  "anyOf": [
-                                    {
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["NaN"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["-Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity", "-Infinity", "NaN"]
-                                    }
-                                  ]
-                                },
-                                "requirements": {
-                                  "type": "array",
-                                  "items": {
-                                    "type": "object",
-                                    "properties": {
-                                      "criterionID": {
-                                        "type": "string"
-                                      },
-                                      "requirement": {
-                                        "type": "string"
-                                      },
-                                      "passed": {
-                                        "type": "boolean"
-                                      },
-                                      "evidence": {
-                                        "type": "array",
-                                        "items": {
-                                          "type": "object",
-                                          "properties": {
-                                            "sessionID": {
-                                              "type": "string",
-                                              "pattern": "^ses"
-                                            },
-                                            "messageID": {
-                                              "type": "string",
-                                              "pattern": "^msg"
-                                            },
-                                            "partID": {
-                                              "type": "string",
-                                              "pattern": "^prt"
-                                            },
-                                            "callID": {
-                                              "type": "string"
-                                            },
-                                            "summary": {
-                                              "type": "string"
-                                            },
-                                            "record": {
-                                              "type": "object",
-                                              "properties": {
-                                                "version": {
-                                                  "type": "number",
-                                                  "enum": [1]
-                                                },
-                                                "digest": {
-                                                  "type": "string"
-                                                },
-                                                "at": {
-                                                  "anyOf": [
-                                                    {
-                                                      "type": "number"
-                                                    },
-                                                    {
-                                                      "type": "string",
-                                                      "enum": ["NaN"]
-                                                    },
-                                                    {
-                                                      "type": "string",
-                                                      "enum": ["Infinity"]
-                                                    },
-                                                    {
-                                                      "type": "string",
-                                                      "enum": ["-Infinity"]
-                                                    },
-                                                    {
-                                                      "type": "string",
-                                                      "enum": ["Infinity", "-Infinity", "NaN"]
-                                                    }
-                                                  ]
-                                                }
-                                              },
-                                              "required": ["version", "digest", "at"],
-                                              "additionalProperties": false
-                                            }
-                                          },
-                                          "required": [
-                                            "sessionID",
-                                            "messageID",
-                                            "partID",
-                                            "callID",
-                                            "summary",
-                                            "record"
-                                          ],
-                                          "additionalProperties": false
-                                        }
-                                      }
-                                    },
-                                    "required": ["requirement", "passed", "evidence"],
-                                    "additionalProperties": false
-                                  }
-                                }
-                              },
-                              "required": ["summary", "verifiedAt", "requirements"],
-                              "additionalProperties": false
-                            },
-                            "review": {
-                              "type": "object",
-                              "properties": {
-                                "status": {
-                                  "type": "string",
-                                  "enum": ["accepted"]
-                                },
-                                "at": {
-                                  "anyOf": [
-                                    {
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["NaN"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["-Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity", "-Infinity", "NaN"]
-                                    }
-                                  ]
-                                },
-                                "criteria": {
-                                  "type": "array",
-                                  "items": {
-                                    "type": "string"
-                                  }
-                                },
-                                "acceptedAt": {
-                                  "anyOf": [
-                                    {
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["NaN"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["-Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity", "-Infinity", "NaN"]
-                                    }
-                                  ]
-                                }
-                              },
-                              "required": ["status", "at", "criteria", "acceptedAt"],
-                              "additionalProperties": false
-                            }
-                          },
-                          "required": ["intent", "revision", "completedRevision", "createdAt", "objective", "audit"],
-                          "additionalProperties": false
-                        },
-                        "at": {
-                          "anyOf": [
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["NaN"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["-Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity", "-Infinity", "NaN"]
-                            }
-                          ]
-                        }
-                      },
-                      "required": ["version", "itemID", "attemptID", "sessionID", "source", "worktree", "goal", "at"],
-                      "additionalProperties": false
+                      "$ref": "#/components/schemas/RayaSelfHealCompletion"
                     }
                   },
                   "required": ["id", "itemID", "source", "phase", "revision", "at"],
@@ -33229,312 +32009,7 @@
                       ]
                     },
                     "completion": {
-                      "type": "object",
-                      "properties": {
-                        "version": {
-                          "type": "number",
-                          "enum": [1]
-                        },
-                        "itemID": {
-                          "type": "string"
-                        },
-                        "attemptID": {
-                          "type": "string"
-                        },
-                        "sessionID": {
-                          "type": "string",
-                          "pattern": "^ses"
-                        },
-                        "source": {
-                          "type": "object",
-                          "properties": {
-                            "root": {
-                              "type": "string"
-                            },
-                            "commit": {
-                              "type": "string"
-                            }
-                          },
-                          "required": ["root", "commit"],
-                          "additionalProperties": false
-                        },
-                        "worktree": {
-                          "type": "object",
-                          "properties": {
-                            "root": {
-                              "type": "string"
-                            },
-                            "directory": {
-                              "type": "string"
-                            },
-                            "branch": {
-                              "type": "string"
-                            },
-                            "common": {
-                              "type": "string"
-                            },
-                            "commit": {
-                              "type": "string"
-                            }
-                          },
-                          "required": ["root", "directory", "branch", "common", "commit"],
-                          "additionalProperties": false
-                        },
-                        "goal": {
-                          "type": "object",
-                          "properties": {
-                            "intent": {
-                              "type": "string"
-                            },
-                            "revision": {
-                              "type": "string"
-                            },
-                            "completedRevision": {
-                              "type": "string"
-                            },
-                            "createdAt": {
-                              "anyOf": [
-                                {
-                                  "type": "number"
-                                },
-                                {
-                                  "type": "string",
-                                  "enum": ["NaN"]
-                                },
-                                {
-                                  "type": "string",
-                                  "enum": ["Infinity"]
-                                },
-                                {
-                                  "type": "string",
-                                  "enum": ["-Infinity"]
-                                },
-                                {
-                                  "type": "string",
-                                  "enum": ["Infinity", "-Infinity", "NaN"]
-                                }
-                              ]
-                            },
-                            "objective": {
-                              "type": "string"
-                            },
-                            "audit": {
-                              "type": "object",
-                              "properties": {
-                                "summary": {
-                                  "type": "string"
-                                },
-                                "verifiedAt": {
-                                  "anyOf": [
-                                    {
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["NaN"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["-Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity", "-Infinity", "NaN"]
-                                    }
-                                  ]
-                                },
-                                "requirements": {
-                                  "type": "array",
-                                  "items": {
-                                    "type": "object",
-                                    "properties": {
-                                      "criterionID": {
-                                        "type": "string"
-                                      },
-                                      "requirement": {
-                                        "type": "string"
-                                      },
-                                      "passed": {
-                                        "type": "boolean"
-                                      },
-                                      "evidence": {
-                                        "type": "array",
-                                        "items": {
-                                          "type": "object",
-                                          "properties": {
-                                            "sessionID": {
-                                              "type": "string",
-                                              "pattern": "^ses"
-                                            },
-                                            "messageID": {
-                                              "type": "string",
-                                              "pattern": "^msg"
-                                            },
-                                            "partID": {
-                                              "type": "string",
-                                              "pattern": "^prt"
-                                            },
-                                            "callID": {
-                                              "type": "string"
-                                            },
-                                            "summary": {
-                                              "type": "string"
-                                            },
-                                            "record": {
-                                              "type": "object",
-                                              "properties": {
-                                                "version": {
-                                                  "type": "number",
-                                                  "enum": [1]
-                                                },
-                                                "digest": {
-                                                  "type": "string"
-                                                },
-                                                "at": {
-                                                  "anyOf": [
-                                                    {
-                                                      "type": "number"
-                                                    },
-                                                    {
-                                                      "type": "string",
-                                                      "enum": ["NaN"]
-                                                    },
-                                                    {
-                                                      "type": "string",
-                                                      "enum": ["Infinity"]
-                                                    },
-                                                    {
-                                                      "type": "string",
-                                                      "enum": ["-Infinity"]
-                                                    },
-                                                    {
-                                                      "type": "string",
-                                                      "enum": ["Infinity", "-Infinity", "NaN"]
-                                                    }
-                                                  ]
-                                                }
-                                              },
-                                              "required": ["version", "digest", "at"],
-                                              "additionalProperties": false
-                                            }
-                                          },
-                                          "required": [
-                                            "sessionID",
-                                            "messageID",
-                                            "partID",
-                                            "callID",
-                                            "summary",
-                                            "record"
-                                          ],
-                                          "additionalProperties": false
-                                        }
-                                      }
-                                    },
-                                    "required": ["requirement", "passed", "evidence"],
-                                    "additionalProperties": false
-                                  }
-                                }
-                              },
-                              "required": ["summary", "verifiedAt", "requirements"],
-                              "additionalProperties": false
-                            },
-                            "review": {
-                              "type": "object",
-                              "properties": {
-                                "status": {
-                                  "type": "string",
-                                  "enum": ["accepted"]
-                                },
-                                "at": {
-                                  "anyOf": [
-                                    {
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["NaN"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["-Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity", "-Infinity", "NaN"]
-                                    }
-                                  ]
-                                },
-                                "criteria": {
-                                  "type": "array",
-                                  "items": {
-                                    "type": "string"
-                                  }
-                                },
-                                "acceptedAt": {
-                                  "anyOf": [
-                                    {
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["NaN"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["-Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity", "-Infinity", "NaN"]
-                                    }
-                                  ]
-                                }
-                              },
-                              "required": ["status", "at", "criteria", "acceptedAt"],
-                              "additionalProperties": false
-                            }
-                          },
-                          "required": ["intent", "revision", "completedRevision", "createdAt", "objective", "audit"],
-                          "additionalProperties": false
-                        },
-                        "at": {
-                          "anyOf": [
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["NaN"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["-Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity", "-Infinity", "NaN"]
-                            }
-                          ]
-                        }
-                      },
-                      "required": ["version", "itemID", "attemptID", "sessionID", "source", "worktree", "goal", "at"],
-                      "additionalProperties": false
+                      "$ref": "#/components/schemas/RayaSelfHealCompletion"
                     }
                   },
                   "required": ["id", "itemID", "source", "phase", "revision", "at"],
@@ -33793,312 +32268,7 @@
                       "additionalProperties": false
                     },
                     "completion": {
-                      "type": "object",
-                      "properties": {
-                        "version": {
-                          "type": "number",
-                          "enum": [1]
-                        },
-                        "itemID": {
-                          "type": "string"
-                        },
-                        "attemptID": {
-                          "type": "string"
-                        },
-                        "sessionID": {
-                          "type": "string",
-                          "pattern": "^ses"
-                        },
-                        "source": {
-                          "type": "object",
-                          "properties": {
-                            "root": {
-                              "type": "string"
-                            },
-                            "commit": {
-                              "type": "string"
-                            }
-                          },
-                          "required": ["root", "commit"],
-                          "additionalProperties": false
-                        },
-                        "worktree": {
-                          "type": "object",
-                          "properties": {
-                            "root": {
-                              "type": "string"
-                            },
-                            "directory": {
-                              "type": "string"
-                            },
-                            "branch": {
-                              "type": "string"
-                            },
-                            "common": {
-                              "type": "string"
-                            },
-                            "commit": {
-                              "type": "string"
-                            }
-                          },
-                          "required": ["root", "directory", "branch", "common", "commit"],
-                          "additionalProperties": false
-                        },
-                        "goal": {
-                          "type": "object",
-                          "properties": {
-                            "intent": {
-                              "type": "string"
-                            },
-                            "revision": {
-                              "type": "string"
-                            },
-                            "completedRevision": {
-                              "type": "string"
-                            },
-                            "createdAt": {
-                              "anyOf": [
-                                {
-                                  "type": "number"
-                                },
-                                {
-                                  "type": "string",
-                                  "enum": ["NaN"]
-                                },
-                                {
-                                  "type": "string",
-                                  "enum": ["Infinity"]
-                                },
-                                {
-                                  "type": "string",
-                                  "enum": ["-Infinity"]
-                                },
-                                {
-                                  "type": "string",
-                                  "enum": ["Infinity", "-Infinity", "NaN"]
-                                }
-                              ]
-                            },
-                            "objective": {
-                              "type": "string"
-                            },
-                            "audit": {
-                              "type": "object",
-                              "properties": {
-                                "summary": {
-                                  "type": "string"
-                                },
-                                "verifiedAt": {
-                                  "anyOf": [
-                                    {
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["NaN"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["-Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity", "-Infinity", "NaN"]
-                                    }
-                                  ]
-                                },
-                                "requirements": {
-                                  "type": "array",
-                                  "items": {
-                                    "type": "object",
-                                    "properties": {
-                                      "criterionID": {
-                                        "type": "string"
-                                      },
-                                      "requirement": {
-                                        "type": "string"
-                                      },
-                                      "passed": {
-                                        "type": "boolean"
-                                      },
-                                      "evidence": {
-                                        "type": "array",
-                                        "items": {
-                                          "type": "object",
-                                          "properties": {
-                                            "sessionID": {
-                                              "type": "string",
-                                              "pattern": "^ses"
-                                            },
-                                            "messageID": {
-                                              "type": "string",
-                                              "pattern": "^msg"
-                                            },
-                                            "partID": {
-                                              "type": "string",
-                                              "pattern": "^prt"
-                                            },
-                                            "callID": {
-                                              "type": "string"
-                                            },
-                                            "summary": {
-                                              "type": "string"
-                                            },
-                                            "record": {
-                                              "type": "object",
-                                              "properties": {
-                                                "version": {
-                                                  "type": "number",
-                                                  "enum": [1]
-                                                },
-                                                "digest": {
-                                                  "type": "string"
-                                                },
-                                                "at": {
-                                                  "anyOf": [
-                                                    {
-                                                      "type": "number"
-                                                    },
-                                                    {
-                                                      "type": "string",
-                                                      "enum": ["NaN"]
-                                                    },
-                                                    {
-                                                      "type": "string",
-                                                      "enum": ["Infinity"]
-                                                    },
-                                                    {
-                                                      "type": "string",
-                                                      "enum": ["-Infinity"]
-                                                    },
-                                                    {
-                                                      "type": "string",
-                                                      "enum": ["Infinity", "-Infinity", "NaN"]
-                                                    }
-                                                  ]
-                                                }
-                                              },
-                                              "required": ["version", "digest", "at"],
-                                              "additionalProperties": false
-                                            }
-                                          },
-                                          "required": [
-                                            "sessionID",
-                                            "messageID",
-                                            "partID",
-                                            "callID",
-                                            "summary",
-                                            "record"
-                                          ],
-                                          "additionalProperties": false
-                                        }
-                                      }
-                                    },
-                                    "required": ["requirement", "passed", "evidence"],
-                                    "additionalProperties": false
-                                  }
-                                }
-                              },
-                              "required": ["summary", "verifiedAt", "requirements"],
-                              "additionalProperties": false
-                            },
-                            "review": {
-                              "type": "object",
-                              "properties": {
-                                "status": {
-                                  "type": "string",
-                                  "enum": ["accepted"]
-                                },
-                                "at": {
-                                  "anyOf": [
-                                    {
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["NaN"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["-Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity", "-Infinity", "NaN"]
-                                    }
-                                  ]
-                                },
-                                "criteria": {
-                                  "type": "array",
-                                  "items": {
-                                    "type": "string"
-                                  }
-                                },
-                                "acceptedAt": {
-                                  "anyOf": [
-                                    {
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["NaN"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["-Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity", "-Infinity", "NaN"]
-                                    }
-                                  ]
-                                }
-                              },
-                              "required": ["status", "at", "criteria", "acceptedAt"],
-                              "additionalProperties": false
-                            }
-                          },
-                          "required": ["intent", "revision", "completedRevision", "createdAt", "objective", "audit"],
-                          "additionalProperties": false
-                        },
-                        "at": {
-                          "anyOf": [
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["NaN"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["-Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity", "-Infinity", "NaN"]
-                            }
-                          ]
-                        }
-                      },
-                      "required": ["version", "itemID", "attemptID", "sessionID", "source", "worktree", "goal", "at"],
-                      "additionalProperties": false
+                      "$ref": "#/components/schemas/RayaSelfHealCompletion"
                     },
                     "legacyVerification": {
                       "type": "boolean"
@@ -34498,312 +32668,7 @@
                       "additionalProperties": false
                     },
                     "completion": {
-                      "type": "object",
-                      "properties": {
-                        "version": {
-                          "type": "number",
-                          "enum": [1]
-                        },
-                        "itemID": {
-                          "type": "string"
-                        },
-                        "attemptID": {
-                          "type": "string"
-                        },
-                        "sessionID": {
-                          "type": "string",
-                          "pattern": "^ses"
-                        },
-                        "source": {
-                          "type": "object",
-                          "properties": {
-                            "root": {
-                              "type": "string"
-                            },
-                            "commit": {
-                              "type": "string"
-                            }
-                          },
-                          "required": ["root", "commit"],
-                          "additionalProperties": false
-                        },
-                        "worktree": {
-                          "type": "object",
-                          "properties": {
-                            "root": {
-                              "type": "string"
-                            },
-                            "directory": {
-                              "type": "string"
-                            },
-                            "branch": {
-                              "type": "string"
-                            },
-                            "common": {
-                              "type": "string"
-                            },
-                            "commit": {
-                              "type": "string"
-                            }
-                          },
-                          "required": ["root", "directory", "branch", "common", "commit"],
-                          "additionalProperties": false
-                        },
-                        "goal": {
-                          "type": "object",
-                          "properties": {
-                            "intent": {
-                              "type": "string"
-                            },
-                            "revision": {
-                              "type": "string"
-                            },
-                            "completedRevision": {
-                              "type": "string"
-                            },
-                            "createdAt": {
-                              "anyOf": [
-                                {
-                                  "type": "number"
-                                },
-                                {
-                                  "type": "string",
-                                  "enum": ["NaN"]
-                                },
-                                {
-                                  "type": "string",
-                                  "enum": ["Infinity"]
-                                },
-                                {
-                                  "type": "string",
-                                  "enum": ["-Infinity"]
-                                },
-                                {
-                                  "type": "string",
-                                  "enum": ["Infinity", "-Infinity", "NaN"]
-                                }
-                              ]
-                            },
-                            "objective": {
-                              "type": "string"
-                            },
-                            "audit": {
-                              "type": "object",
-                              "properties": {
-                                "summary": {
-                                  "type": "string"
-                                },
-                                "verifiedAt": {
-                                  "anyOf": [
-                                    {
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["NaN"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["-Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity", "-Infinity", "NaN"]
-                                    }
-                                  ]
-                                },
-                                "requirements": {
-                                  "type": "array",
-                                  "items": {
-                                    "type": "object",
-                                    "properties": {
-                                      "criterionID": {
-                                        "type": "string"
-                                      },
-                                      "requirement": {
-                                        "type": "string"
-                                      },
-                                      "passed": {
-                                        "type": "boolean"
-                                      },
-                                      "evidence": {
-                                        "type": "array",
-                                        "items": {
-                                          "type": "object",
-                                          "properties": {
-                                            "sessionID": {
-                                              "type": "string",
-                                              "pattern": "^ses"
-                                            },
-                                            "messageID": {
-                                              "type": "string",
-                                              "pattern": "^msg"
-                                            },
-                                            "partID": {
-                                              "type": "string",
-                                              "pattern": "^prt"
-                                            },
-                                            "callID": {
-                                              "type": "string"
-                                            },
-                                            "summary": {
-                                              "type": "string"
-                                            },
-                                            "record": {
-                                              "type": "object",
-                                              "properties": {
-                                                "version": {
-                                                  "type": "number",
-                                                  "enum": [1]
-                                                },
-                                                "digest": {
-                                                  "type": "string"
-                                                },
-                                                "at": {
-                                                  "anyOf": [
-                                                    {
-                                                      "type": "number"
-                                                    },
-                                                    {
-                                                      "type": "string",
-                                                      "enum": ["NaN"]
-                                                    },
-                                                    {
-                                                      "type": "string",
-                                                      "enum": ["Infinity"]
-                                                    },
-                                                    {
-                                                      "type": "string",
-                                                      "enum": ["-Infinity"]
-                                                    },
-                                                    {
-                                                      "type": "string",
-                                                      "enum": ["Infinity", "-Infinity", "NaN"]
-                                                    }
-                                                  ]
-                                                }
-                                              },
-                                              "required": ["version", "digest", "at"],
-                                              "additionalProperties": false
-                                            }
-                                          },
-                                          "required": [
-                                            "sessionID",
-                                            "messageID",
-                                            "partID",
-                                            "callID",
-                                            "summary",
-                                            "record"
-                                          ],
-                                          "additionalProperties": false
-                                        }
-                                      }
-                                    },
-                                    "required": ["requirement", "passed", "evidence"],
-                                    "additionalProperties": false
-                                  }
-                                }
-                              },
-                              "required": ["summary", "verifiedAt", "requirements"],
-                              "additionalProperties": false
-                            },
-                            "review": {
-                              "type": "object",
-                              "properties": {
-                                "status": {
-                                  "type": "string",
-                                  "enum": ["accepted"]
-                                },
-                                "at": {
-                                  "anyOf": [
-                                    {
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["NaN"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["-Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity", "-Infinity", "NaN"]
-                                    }
-                                  ]
-                                },
-                                "criteria": {
-                                  "type": "array",
-                                  "items": {
-                                    "type": "string"
-                                  }
-                                },
-                                "acceptedAt": {
-                                  "anyOf": [
-                                    {
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["NaN"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["-Infinity"]
-                                    },
-                                    {
-                                      "type": "string",
-                                      "enum": ["Infinity", "-Infinity", "NaN"]
-                                    }
-                                  ]
-                                }
-                              },
-                              "required": ["status", "at", "criteria", "acceptedAt"],
-                              "additionalProperties": false
-                            }
-                          },
-                          "required": ["intent", "revision", "completedRevision", "createdAt", "objective", "audit"],
-                          "additionalProperties": false
-                        },
-                        "at": {
-                          "anyOf": [
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["NaN"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["-Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity", "-Infinity", "NaN"]
-                            }
-                          ]
-                        }
-                      },
-                      "required": ["version", "itemID", "attemptID", "sessionID", "source", "worktree", "goal", "at"],
-                      "additionalProperties": false
+                      "$ref": "#/components/schemas/RayaSelfHealCompletion"
                     },
                     "legacyVerification": {
                       "type": "boolean"
@@ -72449,6 +70314,193 @@
           }
         },
         "required": ["workspaceID", "status"],
+        "additionalProperties": false
+      },
+      "RayaSelfHealCompletion": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "number",
+            "enum": [1]
+          },
+          "itemID": {
+            "type": "string"
+          },
+          "attemptID": {
+            "type": "string"
+          },
+          "sessionID": {
+            "type": "string",
+            "pattern": "^ses"
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "root": {
+                "type": "string"
+              },
+              "commit": {
+                "type": "string"
+              }
+            },
+            "required": ["root", "commit"],
+            "additionalProperties": false
+          },
+          "worktree": {
+            "type": "object",
+            "properties": {
+              "root": {
+                "type": "string"
+              },
+              "directory": {
+                "type": "string"
+              },
+              "branch": {
+                "type": "string"
+              },
+              "common": {
+                "type": "string"
+              },
+              "commit": {
+                "type": "string"
+              }
+            },
+            "required": ["root", "directory", "branch", "common", "commit"],
+            "additionalProperties": false
+          },
+          "goal": {
+            "type": "object",
+            "properties": {
+              "intent": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              },
+              "completedRevision": {
+                "type": "string"
+              },
+              "createdAt": {
+                "type": "number",
+                "minimum": 0
+              },
+              "objective": {
+                "type": "string"
+              },
+              "audit": {
+                "type": "object",
+                "properties": {
+                  "summary": {
+                    "type": "string"
+                  },
+                  "verifiedAt": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "requirements": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "criterionID": {
+                          "type": "string"
+                        },
+                        "requirement": {
+                          "type": "string"
+                        },
+                        "passed": {
+                          "type": "boolean"
+                        },
+                        "evidence": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "sessionID": {
+                                "type": "string",
+                                "pattern": "^ses"
+                              },
+                              "messageID": {
+                                "type": "string",
+                                "pattern": "^msg"
+                              },
+                              "partID": {
+                                "type": "string",
+                                "pattern": "^prt"
+                              },
+                              "callID": {
+                                "type": "string"
+                              },
+                              "summary": {
+                                "type": "string"
+                              },
+                              "record": {
+                                "type": "object",
+                                "properties": {
+                                  "version": {
+                                    "type": "number",
+                                    "enum": [1]
+                                  },
+                                  "digest": {
+                                    "type": "string"
+                                  },
+                                  "at": {
+                                    "type": "number",
+                                    "minimum": 0
+                                  }
+                                },
+                                "required": ["version", "digest", "at"],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": ["sessionID", "messageID", "partID", "callID", "summary", "record"],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": ["requirement", "passed", "evidence"],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": ["summary", "verifiedAt", "requirements"],
+                "additionalProperties": false
+              },
+              "review": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": ["accepted"]
+                  },
+                  "at": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "criteria": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "acceptedAt": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "required": ["status", "at", "criteria", "acceptedAt"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["intent", "revision", "completedRevision", "createdAt", "objective", "audit"],
+            "additionalProperties": false
+          },
+          "at": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": ["version", "itemID", "attemptID", "sessionID", "source", "worktree", "goal", "at"],
         "additionalProperties": false
       },
       "LocationInfo": {

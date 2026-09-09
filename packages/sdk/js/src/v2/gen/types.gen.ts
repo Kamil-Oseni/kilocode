@@ -8381,6 +8381,59 @@ export type WorkspaceEventConnectionStatus = {
   status: "connected" | "connecting" | "disconnected" | "error"
 }
 
+export type RayaSelfHealCompletion = {
+  version: 1
+  itemID: string
+  attemptID: string
+  sessionID: string
+  source: {
+    root: string
+    commit: string
+  }
+  worktree: {
+    root: string
+    directory: string
+    branch: string
+    common: string
+    commit: string
+  }
+  goal: {
+    intent: string
+    revision: string
+    completedRevision: string
+    createdAt: number
+    objective: string
+    audit: {
+      summary: string
+      verifiedAt: number
+      requirements: Array<{
+        criterionID?: string
+        requirement: string
+        passed: boolean
+        evidence: Array<{
+          sessionID: string
+          messageID: string
+          partID: string
+          callID: string
+          summary: string
+          record: {
+            version: 1
+            digest: string
+            at: number
+          }
+        }>
+      }>
+    }
+    review?: {
+      status: "accepted"
+      at: number
+      criteria: Array<string>
+      acceptedAt: number
+    }
+  }
+  at: number
+}
+
 export type LocationInfo = {
   directory: string
   workspaceID?: string
@@ -21634,58 +21687,7 @@ export type KilocodeSelfHealListResponses = {
       reason?: string
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     }
-    completion?: {
-      version: 1
-      itemID: string
-      attemptID: string
-      sessionID: string
-      source: {
-        root: string
-        commit: string
-      }
-      worktree: {
-        root: string
-        directory: string
-        branch: string
-        common: string
-        commit: string
-      }
-      goal: {
-        intent: string
-        revision: string
-        completedRevision: string
-        createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        objective: string
-        audit: {
-          summary: string
-          verifiedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-          requirements: Array<{
-            criterionID?: string
-            requirement: string
-            passed: boolean
-            evidence: Array<{
-              sessionID: string
-              messageID: string
-              partID: string
-              callID: string
-              summary: string
-              record: {
-                version: 1
-                digest: string
-                at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-              }
-            }>
-          }>
-        }
-        review?: {
-          status: "accepted"
-          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-          criteria: Array<string>
-          acceptedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        }
-      }
-      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    }
+    completion?: RayaSelfHealCompletion
     legacyVerification?: boolean
     id: string
     fingerprint: string
@@ -21777,58 +21779,7 @@ export type KilocodeSelfHealCreateResponses = {
       reason?: string
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     }
-    completion?: {
-      version: 1
-      itemID: string
-      attemptID: string
-      sessionID: string
-      source: {
-        root: string
-        commit: string
-      }
-      worktree: {
-        root: string
-        directory: string
-        branch: string
-        common: string
-        commit: string
-      }
-      goal: {
-        intent: string
-        revision: string
-        completedRevision: string
-        createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        objective: string
-        audit: {
-          summary: string
-          verifiedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-          requirements: Array<{
-            criterionID?: string
-            requirement: string
-            passed: boolean
-            evidence: Array<{
-              sessionID: string
-              messageID: string
-              partID: string
-              callID: string
-              summary: string
-              record: {
-                version: 1
-                digest: string
-                at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-              }
-            }>
-          }>
-        }
-        review?: {
-          status: "accepted"
-          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-          criteria: Array<string>
-          acceptedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        }
-      }
-      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    }
+    completion?: RayaSelfHealCompletion
     legacyVerification?: boolean
     id: string
     fingerprint: string
@@ -21921,58 +21872,7 @@ export type KilocodeSelfHealOutcomeResponses = {
     sessionID?: string
     reason?: string
     at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    completion?: {
-      version: 1
-      itemID: string
-      attemptID: string
-      sessionID: string
-      source: {
-        root: string
-        commit: string
-      }
-      worktree: {
-        root: string
-        directory: string
-        branch: string
-        common: string
-        commit: string
-      }
-      goal: {
-        intent: string
-        revision: string
-        completedRevision: string
-        createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        objective: string
-        audit: {
-          summary: string
-          verifiedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-          requirements: Array<{
-            criterionID?: string
-            requirement: string
-            passed: boolean
-            evidence: Array<{
-              sessionID: string
-              messageID: string
-              partID: string
-              callID: string
-              summary: string
-              record: {
-                version: 1
-                digest: string
-                at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-              }
-            }>
-          }>
-        }
-        review?: {
-          status: "accepted"
-          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-          criteria: Array<string>
-          acceptedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        }
-      }
-      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    }
+    completion?: RayaSelfHealCompletion
   }
 }
 
@@ -22117,58 +22017,7 @@ export type KilocodeSelfHealPrepareResponses = {
     sessionID?: string
     reason?: string
     at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    completion?: {
-      version: 1
-      itemID: string
-      attemptID: string
-      sessionID: string
-      source: {
-        root: string
-        commit: string
-      }
-      worktree: {
-        root: string
-        directory: string
-        branch: string
-        common: string
-        commit: string
-      }
-      goal: {
-        intent: string
-        revision: string
-        completedRevision: string
-        createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        objective: string
-        audit: {
-          summary: string
-          verifiedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-          requirements: Array<{
-            criterionID?: string
-            requirement: string
-            passed: boolean
-            evidence: Array<{
-              sessionID: string
-              messageID: string
-              partID: string
-              callID: string
-              summary: string
-              record: {
-                version: 1
-                digest: string
-                at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-              }
-            }>
-          }>
-        }
-        review?: {
-          status: "accepted"
-          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-          criteria: Array<string>
-          acceptedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        }
-      }
-      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    }
+    completion?: RayaSelfHealCompletion
   }
 }
 
@@ -22253,58 +22102,7 @@ export type KilocodeSelfHealAdvanceResponses = {
     sessionID?: string
     reason?: string
     at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    completion?: {
-      version: 1
-      itemID: string
-      attemptID: string
-      sessionID: string
-      source: {
-        root: string
-        commit: string
-      }
-      worktree: {
-        root: string
-        directory: string
-        branch: string
-        common: string
-        commit: string
-      }
-      goal: {
-        intent: string
-        revision: string
-        completedRevision: string
-        createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        objective: string
-        audit: {
-          summary: string
-          verifiedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-          requirements: Array<{
-            criterionID?: string
-            requirement: string
-            passed: boolean
-            evidence: Array<{
-              sessionID: string
-              messageID: string
-              partID: string
-              callID: string
-              summary: string
-              record: {
-                version: 1
-                digest: string
-                at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-              }
-            }>
-          }>
-        }
-        review?: {
-          status: "accepted"
-          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-          criteria: Array<string>
-          acceptedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        }
-      }
-      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    }
+    completion?: RayaSelfHealCompletion
   }
 }
 
@@ -22373,58 +22171,7 @@ export type KilocodeSelfHealGetResponses = {
       reason?: string
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     }
-    completion?: {
-      version: 1
-      itemID: string
-      attemptID: string
-      sessionID: string
-      source: {
-        root: string
-        commit: string
-      }
-      worktree: {
-        root: string
-        directory: string
-        branch: string
-        common: string
-        commit: string
-      }
-      goal: {
-        intent: string
-        revision: string
-        completedRevision: string
-        createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        objective: string
-        audit: {
-          summary: string
-          verifiedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-          requirements: Array<{
-            criterionID?: string
-            requirement: string
-            passed: boolean
-            evidence: Array<{
-              sessionID: string
-              messageID: string
-              partID: string
-              callID: string
-              summary: string
-              record: {
-                version: 1
-                digest: string
-                at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-              }
-            }>
-          }>
-        }
-        review?: {
-          status: "accepted"
-          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-          criteria: Array<string>
-          acceptedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        }
-      }
-      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    }
+    completion?: RayaSelfHealCompletion
     legacyVerification?: boolean
     id: string
     fingerprint: string
@@ -22542,58 +22289,7 @@ export type KilocodeSelfHealUpdateResponses = {
       reason?: string
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     }
-    completion?: {
-      version: 1
-      itemID: string
-      attemptID: string
-      sessionID: string
-      source: {
-        root: string
-        commit: string
-      }
-      worktree: {
-        root: string
-        directory: string
-        branch: string
-        common: string
-        commit: string
-      }
-      goal: {
-        intent: string
-        revision: string
-        completedRevision: string
-        createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        objective: string
-        audit: {
-          summary: string
-          verifiedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-          requirements: Array<{
-            criterionID?: string
-            requirement: string
-            passed: boolean
-            evidence: Array<{
-              sessionID: string
-              messageID: string
-              partID: string
-              callID: string
-              summary: string
-              record: {
-                version: 1
-                digest: string
-                at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-              }
-            }>
-          }>
-        }
-        review?: {
-          status: "accepted"
-          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-          criteria: Array<string>
-          acceptedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        }
-      }
-      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    }
+    completion?: RayaSelfHealCompletion
     legacyVerification?: boolean
     id: string
     fingerprint: string

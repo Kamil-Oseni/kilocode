@@ -6,6 +6,7 @@ node_modules/**
 test-results/**
 storybook-static/**
 tmp/**
+.tmp/**
 coverage/**
 .kilo-dev/**
 # raya_change end

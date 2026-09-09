@@ -7,7 +7,7 @@ import * as path from "path"
 import * as vscode from "vscode"
 import { resolveLocalBwrapEnv, resolveTreeSitterEnv } from "./cli-resources"
 import { t } from "./i18n"
-import { parseServerPort } from "./server-utils"
+import { launch, parseServerPort } from "./server-utils"
 
 export interface ServerInstance {
   port: number
@@ -91,7 +91,7 @@ export class ServerManager {
     console.log("[Kilo New] ServerManager: 📄 CLI mode (octal):", (stat.mode & 0o777).toString(8))
 
     return new Promise((resolve, reject) => {
-      console.log("[Kilo New] ServerManager: 🎬 Spawning CLI process:", cliPath, ["serve", "--port", "0"])
+      console.log("[Kilo New] ServerManager: 🎬 Spawning CLI process:", cliPath, launch)
       const cfg = vscode.workspace.getConfiguration("raya") // raya_change - declared settings namespace
       const claudeCompat = cfg.get<boolean>("claudeCodeCompat", false)
       // Pin cwd so the CLI doesn't inherit the extension host's cwd ("/" under F5 debug)
@@ -116,7 +116,7 @@ export class ServerManager {
       // All three are overridable by the user's environment.
       const extraCaCerts = cfg.get<string>("extraCaCerts", "").trim()
       const proxyStrictSSL = vscode.workspace.getConfiguration("http").get<boolean>("proxyStrictSSL", true)
-      const serverProcess = spawn(cliPath, ["serve", "--port", "0"], {
+      const serverProcess = spawn(cliPath, launch, {
         cwd: spawnCwd,
         env: {
           NODE_USE_SYSTEM_CA: "1",

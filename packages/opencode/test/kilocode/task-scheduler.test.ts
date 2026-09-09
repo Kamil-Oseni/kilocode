@@ -1540,3 +1540,62 @@ it.live("interruption after history publication retains one linked occurrence an
     }).pipe(Effect.provide(state(directory)))
   }),
 )
+
+it.live("legacy unzoned calendars retain queued evidence but require review before automatic admission", () =>
+  Effect.gen(function* () {
+    const directory = yield* tmpdirScoped()
+    const saved = yield* Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const database = yield* Database.Service
+      const tasks = RayaTask.make({ storage, database })
+      const clock = scheduler({ storage, database })
+      const agent = yield* tasks.create({
+        name: "Legacy calendar",
+        objective: "Work",
+        schedule: { kind: "cron", expr: "* * * * *", tz: "UTC" },
+      })
+      const at = Math.floor(Date.now() / 60_000) * 60_000 + 60_000
+      const queued = yield* clock.prepare(agent.id, at)
+      expect(queued).toBeDefined()
+      const legacy = { ...agent, schedule: { kind: "cron" as const, expr: "* * * * *" }, note: "Preserved note" }
+      yield* storage.replace(["raya", "agent"], [legacy])
+      return { legacy, queued: queued!, at }
+    }).pipe(Effect.provide(state(directory)))
+    yield* Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const database = yield* Database.Service
+      const tasks = RayaTask.make({ storage, database })
+      const clock = scheduler({ storage, database })
+      const queue = RayaTaskQueue.make(database)
+      expect(yield* tasks.get(saved.legacy.id)).toEqual(saved.legacy)
+      expect(RayaTask.next(saved.legacy, saved.at)).toBeUndefined()
+      expect(yield* tasks.ready(saved.at)).toEqual([])
+      const preview = (yield* tasks.preview(saved.at))[0]
+      expect(preview.nextRun).toBeUndefined()
+      expect(preview.note).toContain("timezone review")
+      expect(preview.note).toContain("Preserved note")
+      const runner = RayaTaskRunner.make({ storage, database, sessions })
+      const shown = (yield* runner.preview(saved.at))[0]
+      expect(shown.nextRun).toBeUndefined()
+      expect(shown.note).toContain("timezone review")
+      expect(yield* clock.prepare(saved.legacy.id, saved.at)).toBeUndefined()
+      expect(yield* clock.check(saved.legacy, saved.queued).pipe(Effect.flip)).toMatchObject({
+        kind: "schedule",
+        field: "timezone",
+      })
+      expect((yield* queue.get(saved.queued.id).pipe(Effect.orDie))?.state).toBe("queued")
+      expect((yield* queue.get(saved.queued.id).pipe(Effect.orDie))?.timezone).toBe("UTC")
+      expect((yield* tasks.launchable(saved.legacy.id)).id).toBe(saved.legacy.id)
+      expect(yield* tasks.list()).toEqual([saved.legacy])
+      const changed = yield* tasks.update(saved.legacy.id, {
+        schedule: { ...saved.legacy.schedule, tz: "America/Toronto" },
+        expectedSchedule: saved.legacy.schedule,
+        expectedScheduleVersion: saved.legacy.scheduleVersion ?? 1,
+      })
+      expect(changed.scheduleVersion).toBe((saved.legacy.scheduleVersion ?? 1) + 1)
+      expect(yield* clock.check(changed, saved.queued).pipe(Effect.exit)).toMatchObject({ _tag: "Failure" })
+      expect((yield* clock.prepare(changed.id, saved.at + 60_000))?.tz).toBe("America/Toronto")
+      expect((yield* queue.get(saved.queued.id).pipe(Effect.orDie))?.scheduled_at).toBe(saved.at)
+    }).pipe(Effect.provide(state(directory)))
+  }),
+)

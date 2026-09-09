@@ -526,6 +526,39 @@ try {
   assert.equal(button("Confirm schedule change").disabled, true)
   button("Back to routines to reload").click()
   assert.ok(sent.findLast((msg) => msg.type === "routineList"))
+  const legacy = { ...agent, enabled: true, schedule: { kind: "cron", expr: "0 9 * * *" } }
+  emit({ type: "routineState", agents: [legacy] })
+  assert.match(root.textContent, /Automatic runs need timezone review/)
+  button("Edit schedule").click()
+  assert.match(root.textContent, /Automatic runs are held until/)
+  const zone = [...root.querySelectorAll("label")]
+    .find((label) => label.textContent.includes("Calendar timezone"))
+    .querySelector("input")
+  assert.equal(zone.value, "")
+  const before = sent.filter((msg) => msg.type === "routineForecast").length
+  button("Preview schedule").click()
+  assert.equal(sent.filter((msg) => msg.type === "routineForecast").length, before)
+  assert.match(root.textContent, /Choose a timezone/)
+  assert.equal(button("Confirm schedule change").disabled, true)
+  zone.value = "America/Toronto"
+  zone.dispatchEvent(new window.Event("input", { bubbles: true }))
+  button("Preview schedule").click()
+  const reviewed = sent.findLast((msg) => msg.type === "routineForecast")
+  assert.equal(reviewed.schedule.tz, "America/Toronto")
+  assert.deepEqual(reviewed.edit.expectedSchedule, legacy.schedule)
+  emit({
+    type: "routineForecast",
+    requestID: reviewed.requestID,
+    forecastID: "zone-reviewed",
+    schedule: reviewed.schedule,
+    occurrences: [Date.now() + 3600_000],
+  })
+  assert.match(root.textContent, /Recurring work not already queued is skipped once it is a minute late/)
+  assert.match(root.textContent, /repeated local times can produce two occurrences/)
+  button("Confirm schedule change").click()
+  const zoned = sent.findLast((msg) => msg.type === "routineScheduleUpdate")
+  assert.equal(zoned.forecastID, "zone-reviewed")
+  emit({ type: "routineScheduleUpdated", requestID: zoned.requestID, agentID: legacy.id })
   const fresh = { ...agent, scheduleVersion: 5, schedule: { kind: "once", at: Date.now() + 60_000 } }
   emit({ type: "routineState", agents: [fresh] })
   button("Edit schedule").click()

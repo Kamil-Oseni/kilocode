@@ -465,7 +465,7 @@ export namespace RayaTaskRunner {
               }
             if (!schedule) return item
             const history = yield* tasks.runsFor(item.id)
-            if (!item.enabled || history.some(RayaTask.pending)) return item
+            if (!item.enabled || RayaTask.unzoned(item.schedule) || history.some(RayaTask.pending)) return item
             const pending = yield* schedule.queued(item.id, item.scheduleVersion ?? 1)
             const queued = pending.find((row) => !RayaTask.recorded(item, history, row.scheduled_at))
             return queued

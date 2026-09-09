@@ -278,6 +278,7 @@ export namespace RayaTask {
 
   export function next(agent: Agent, from: number, last?: Run) {
     if (!agent.enabled) return
+    if (unzoned(agent.schedule)) return
     if (agent.schedule.kind === "manual") return
     if (agent.schedule.kind === "event") return
     if (pending(last)) return
@@ -344,14 +345,26 @@ export namespace RayaTask {
     return true
   }
 
+  export function unzoned(schedule: Schedule) {
+    return schedule.kind === "cron" && !schedule.tz?.trim()
+  }
+
   function scheduled(input: Schedule) {
     if (input.kind !== "cron") return Effect.succeed(input)
+    if (unzoned(input))
+      return Effect.fail(
+        new GuardError({
+          kind: "schedule",
+          field: "timezone",
+          message: "Choose the intended timezone and preview this calendar schedule before saving it.",
+        }),
+      )
     return Effect.try({
       try: () => {
         cronParse(input.expr)
         return {
           ...input,
-          tz: new Intl.DateTimeFormat("en-US", { timeZone: input.tz }).resolvedOptions().timeZone,
+          tz: new Intl.DateTimeFormat("en-US", { timeZone: input.tz?.trim() }).resolvedOptions().timeZone,
         }
       },
       catch: (err) =>
@@ -734,14 +747,25 @@ export namespace RayaTask {
       return true
     })
 
-    const evaluate = (agent: Agent, from: number, last?: Run) =>
-      (agent.enabled && agent.schedule.kind === "cron" && !pending(last)
-        ? upcoming(
-            agent.schedule.expr,
-            Math.max(cursor(last) ?? agent.scheduleUpdatedAt ?? agent.createdAt, from - 60_000),
-            agent.schedule.tz,
-          )
-        : Effect.try({ try: () => next(agent, from, last), catch: (err) => err })
+    const evaluate = (agent: Agent, from: number, last?: Run) => {
+      if (unzoned(agent.schedule))
+        return Effect.succeed({
+          nextRun: undefined,
+          note: [
+            "Automatic runs need timezone review. Edit the schedule, choose the intended timezone, and preview before saving. Existing run history is retained.",
+            agent.note,
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        })
+      return (
+        agent.enabled && agent.schedule.kind === "cron" && !pending(last)
+          ? upcoming(
+              agent.schedule.expr,
+              Math.max(cursor(last) ?? agent.scheduleUpdatedAt ?? agent.createdAt, from - 60_000),
+              agent.schedule.tz,
+            )
+          : Effect.try({ try: () => next(agent, from, last), catch: (err) => err })
       ).pipe(
         Effect.match({
           onSuccess: (at) => ({ nextRun: at, note: agent.note }),
@@ -755,6 +779,7 @@ export namespace RayaTask {
           },
         }),
       )
+    }
 
     const occurrence = Effect.fn("RayaTask.occurrence")(function* (agent: Agent, from: number) {
       const history = yield* runsFor(agent.id)

@@ -878,15 +878,42 @@ describe("RayaTask store", () => {
     }
   })
 
-  test("persists calendar timezones and rejects invalid zones without changing the roster", async () => {
+  test("calendar mutations and forecast require an explicit timezone without changing existing records", async () => {
     const tasks = RayaTask.make({ storage: memory() })
     const agent = await Effect.runPromise(
-      tasks.create({ name: "Morning", objective: "Summarize", schedule: { kind: "cron", expr: "0 9 * * *" } }),
+      tasks.create({ name: "Manual", objective: "Work", schedule: { kind: "manual" } }),
+    )
+    const prior = await Effect.runPromise(tasks.list())
+    for (const tz of [undefined, "", "   "]) {
+      const schedule = { kind: "cron" as const, expr: "0 9 * * *", tz }
+      for (const effect of [
+        tasks.create({ name: "Missing", objective: "Work", schedule }).pipe(Effect.asVoid),
+        tasks.update(agent.id, { schedule }).pipe(Effect.asVoid),
+        RayaTask.forecast(schedule).pipe(Effect.asVoid),
+      ]) {
+        expect(await Effect.runPromise(effect.pipe(Effect.flip))).toMatchObject({
+          _tag: "RayaTask.GuardError",
+          kind: "schedule",
+          field: "timezone",
+        })
+      }
+      expect(await Effect.runPromise(tasks.list())).toEqual(prior)
+    }
+  })
+
+  test("persists explicitly chosen calendar timezones and rejects invalid zones without changing the roster", async () => {
+    const tasks = RayaTask.make({ storage: memory() })
+    const agent = await Effect.runPromise(
+      tasks.create({
+        name: "Morning",
+        objective: "Summarize",
+        schedule: { kind: "cron", expr: "0 9 * * *", tz: "UTC" },
+      }),
     )
     expect(agent.schedule).toEqual({
       kind: "cron",
       expr: "0 9 * * *",
-      tz: new Intl.DateTimeFormat().resolvedOptions().timeZone,
+      tz: "UTC",
     })
     const prior = await Effect.runPromise(tasks.list())
     expect(
@@ -1221,7 +1248,7 @@ describe("RayaTask store", () => {
       objective: "Check the repo",
       capabilities: [] as string[],
       memoryScope: "role" as const,
-      schedule: { kind: "cron" as const, expr: "*/2 * * * *" },
+      schedule: { kind: "cron" as const, expr: "*/2 * * * *", tz: "UTC" },
       enabled: true,
       createdAt: start,
       updatedAt: start,
@@ -1356,7 +1383,7 @@ describe("RayaTask store", () => {
       message: "This agent is already running or waiting on you.",
     })
     const scheduled = await Effect.runPromise(
-      runner.tasks.update(agent.id, { schedule: { kind: "cron", expr: "* * * * *" } }),
+      runner.tasks.update(agent.id, { schedule: { kind: "cron", expr: "* * * * *", tz: "UTC" } }),
     )
     expect(RayaTask.next(scheduled, Date.now(), last)).toBeUndefined()
     const from = Date.now() + 120_000

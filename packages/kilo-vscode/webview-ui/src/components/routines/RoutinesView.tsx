@@ -390,7 +390,14 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
 
   const edit = (item: Agent) => {
     setEditing(item)
-    setDraft(populate(item.schedule, Intl.DateTimeFormat().resolvedOptions().timeZone))
+    setDraft(
+      populate(
+        item.schedule,
+        item.schedule.kind === "cron" && !item.schedule.tz?.trim()
+          ? ""
+          : Intl.DateTimeFormat().resolvedOptions().timeZone,
+      ),
+    )
     setPreview(undefined)
     setRequest(undefined)
     setNotice("")
@@ -585,6 +592,12 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                       <Show when={item.note}>
                         <span class="routines-note">{item.note}</span>
                       </Show>
+                      <Show when={item.schedule.kind === "cron" && !item.schedule.tz?.trim()}>
+                        <span class="routines-note">
+                          Automatic runs need timezone review. Choose Edit schedule; manual runs remain available when
+                          otherwise permitted.
+                        </span>
+                      </Show>
                     </button>
                     <div class="routines-side">
                       <PresenceBadge state={presence()} onAck={canOpen() ? () => open(item) : undefined} />
@@ -688,10 +701,10 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                     ? "Existing runs continue. The new schedule applies after unfinished work settles."
                     : "This routine is paused. Saving keeps it paused."}
                 </span>
-                <Show when={item().schedule.kind === "cron" && !timezone(item().schedule)}>
+                <Show when={item().schedule.kind === "cron" && !timezone(item().schedule)?.trim()}>
                   <p role="note">
-                    This routine has no saved timezone. Choose the intended timezone and check the preview before
-                    saving.
+                    This routine has no saved timezone. Automatic runs are held until you choose the intended timezone
+                    and check the preview before saving. Earlier run records are preserved.
                   </p>
                 </Show>
               </div>
@@ -814,6 +827,13 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                   </Show>
                   <Show when={schedule().kind === "cron"}>
                     <span>Next three scheduled times:</span>
+                    <span class="routines-hint">
+                      Recurring work not already queued is skipped once it is a minute late. Queued runs remain
+                      available for recovery; one-time schedules stay due until resolved.
+                    </span>
+                    <span class="routines-hint">
+                      Skipped local times do not run; repeated local times can produce two occurrences.
+                    </span>
                   </Show>
                   <For each={preview()?.occurrences ?? []}>
                     {(at) => (

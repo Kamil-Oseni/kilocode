@@ -8,3 +8,6 @@ export function parseServerPort(output: string): number | null {
   if (!match) return null
   return parseInt(match[1]!, 10)
 }
+
+/** Managed extension backends stay local even when standalone CLI settings expose a server. */
+export const launch = ["serve", "--port", "0", "--hostname", "127.0.0.1", "--no-mdns"]

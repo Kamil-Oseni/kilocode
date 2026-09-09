@@ -48,6 +48,7 @@ export function scheduler(input: { database: Database.Interface; storage: Storag
     )
   const prepare = Effect.fn("RayaTaskScheduler.prepare")(function* (id: string, from: number) {
     const item = yield* tasks.get(id)
+    if (RayaTask.unzoned(item.schedule)) return undefined
     if (!item.enabled || (item.schedule.kind !== "once" && item.schedule.kind !== "cron")) return undefined
     const existing = yield* queue.pending(id, item.scheduleVersion ?? 1).pipe(Effect.orDie)
     const at = existing.length ? undefined : yield* tasks.occurrence(item, from)
@@ -55,6 +56,7 @@ export function scheduler(input: { database: Database.Interface; storage: Storag
       input.storage,
       Effect.gen(function* () {
         const fresh = yield* tasks.get(id)
+        if (RayaTask.unzoned(fresh.schedule)) return undefined
         if (!fresh.enabled || (fresh.scheduleVersion ?? 1) !== (item.scheduleVersion ?? 1)) return undefined
         const history = yield* tasks.runsFor(id)
         if (history.some(RayaTask.pending) || (yield* queue.active(id).pipe(Effect.orDie)).length) return undefined
@@ -87,6 +89,13 @@ export function scheduler(input: { database: Database.Interface; storage: Storag
     )
   })
   const check = Effect.fn("RayaTaskScheduler.check")(function* (item: RayaTask.Agent, trigger: Timer) {
+    if (RayaTask.unzoned(item.schedule))
+      return yield* new RayaTask.GuardError({
+        kind: "schedule",
+        field: "timezone",
+        message:
+          "Automatic runs need timezone review. Edit this routine's schedule and choose its intended timezone before starting queued work.",
+      })
     const row = yield* queue.get(trigger.id).pipe(Effect.orDie)
     const history = yield* tasks.runsFor(item.id)
     if (

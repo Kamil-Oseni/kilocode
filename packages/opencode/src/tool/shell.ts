@@ -656,44 +656,13 @@ export const ShellTool = Tool.define(
             return Effect.sync(() => ctx.abort.removeEventListener("abort", handler))
           })
 
-          const timeout = Effect.sleep(`${CommandTimeout.duration(Math.min(15_000, input.timeout))} millis`) // kilocode_change
+          const timeout = Effect.sleep(`${CommandTimeout.duration(input.timeout)} millis`) // kilocode_change - silence and diagnostic text are not process termination signals
 
-          let remain = input.timeout
-          let grown = used
-          let hung = 0
-          let exit: { kind: "exit" | "abort" | "timeout"; code: number | null } = yield* Effect.raceAll([
+          const exit = yield* Effect.raceAll([ // kilocode_change - race the actual deadline once
             handle.exitCode.pipe(Effect.map((code) => ({ kind: "exit" as const, code }))),
             abort.pipe(Effect.map(() => ({ kind: "abort" as const, code: null }))),
             timeout.pipe(Effect.map(() => ({ kind: "timeout" as const, code: null }))),
           ])
-          while (exit.kind === "timeout") {
-            remain -= 15_000
-            const err =
-              /error TS|Failed to compile|ERR_CONNECTION_REFUSED|Encountered a script tag|EADDRINUSE/i.test(last)
-            if (err || remain <= 0) {
-              expired = true
-              yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
-              break
-            }
-            if (used <= grown) {
-              hung++
-              if (hung >= 2) {
-                expired = true
-                yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
-                break
-              }
-            } else {
-              hung = 0
-              grown = used
-            }
-            exit = yield* Effect.raceAll([
-              handle.exitCode.pipe(Effect.map((code) => ({ kind: "exit" as const, code }))),
-              abort.pipe(Effect.map(() => ({ kind: "abort" as const, code: null }))),
-              Effect.sleep(`${CommandTimeout.duration(Math.min(15_000, remain))} millis`).pipe(
-                Effect.map(() => ({ kind: "timeout" as const, code: null })),
-              ),
-            ])
-          }
 
           if (exit.kind === "abort") {
             aborted = true

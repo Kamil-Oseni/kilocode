@@ -90,7 +90,7 @@ Calendar schedules use the stored `schedule.tz` to interpret their minute, hour,
 
 New calendar schedules persist a timezone. When the caller omits it, the backend captures its current timezone at creation. An explicit timezone is validated and normalized by the runtime's timezone database. Invalid values reject creation or a schedule edit before the roster is published. An ordinary edit that does not replace the schedule preserves its existing timezone.
 
-Legacy schedules without a timezone continue to use the backend's local timezone. Their original intended timezone cannot be recovered reliably from the existing record. The creation form now exposes a timezone; existing records still need a migration review, particularly when the backend is remote from the user.
+Legacy cron schedules with a missing or blank timezone require review before further automatic admission. Raya preserves their stored definitions, history and selected queue entries without guessing a zone. Manual Run now remains subject to the existing overlap and recovery guards. The editor starts with an empty timezone; choosing and previewing the intended zone creates a version-checked schedule edit, so an old selected occurrence cannot run under the new zone. New cron creation, mutation and forecast requests must supply an explicit nonblank zone. The original intended timezone cannot be recovered reliably from the old record.
 
 ## Clock changes
 
@@ -191,3 +191,25 @@ The catalog includes five workflow starters alongside the existing Accountant an
 | Research digest | Monday at 10:00 | Findings, source links, available publication dates, disagreements and questions; request a missing topic instead of inventing one. |
 
 Calendar proposals use the creation screen's chosen timezone and require schedule preview. The folder starter does not install a watcher or claim automatic event delivery; users must configure a supported trigger separately. Select the source folder and edit topic/source requirements before assigning. Results are requested in the run conversation; external delivery and write actions are not granted by a template. These instructions provide editable output/check guidance, not structured output schemas or enforcement of arbitrary external effects. Dedicated output/acceptance fields, watcher integration, richer template previews and representative live-workflow validation remain unfinished.
+
+## Current scheduling policy (EN-03)
+
+Recurring schedules use their saved timezone. New cron schedules and edits must make that timezone explicit. Legacy cron definitions without one require timezone review before automatic admission; history and already-recorded execution evidence are preserved. Choosing a timezone does not retroactively establish what the user intended on another host.
+
+### Sleep and missed occurrences
+
+For recurring work that has not yet been selected into the execution queue, Raya admits only an occurrence less than one minute old. At exactly one minute late it skips that occurrence and looks forward. Waking after several days does not create a backlog of every missed recurrence. For example, a daily 09:00 routine can be selected at 09:00:59, but a first scheduler observation at 09:01:00 skips that day's run.
+
+One-time schedules remain due after their specified time until their occurrence is consumed, the schedule changes, or the routine is paused/removed. Existing overlap and recovery guards still apply; an overdue timestamp is not permission to create a duplicate run.
+
+A run already recorded as queued is a different case from an unselected missed occurrence. It retains its selected timestamp and can be admitted later after restart, subject to the current schedule version, enabled state, timezone review and ownership checks. Starting or uncertain runs require the existing recovery flow. This policy does not discard their evidence or automatically replay uncertain work.
+
+These rules apply when Raya's scheduler runs; they do not promise execution while the application is closed, at an exact wall-clock instant, or after every missed recurrence.
+
+### Daylight-saving changes
+
+A local time that does not exist during the spring clock change produces no occurrence that day. A repeated local minute during the autumn clock change represents two distinct increasing instants; a matching recurring schedule can therefore run twice, subject to overlap and lateness guards. The occurrence preview shows the resolved instants. One-time local-time entry separately rejects nonexistent times and requires disambiguation where applicable. These calendar rules are distinct from skipping work because Raya was offline.
+
+### Verification
+
+`test/kilocode/task-catchup.test.ts` exercises the actual next/due functions at the minute boundary, after multi-day gaps, in a saved non-UTC zone, and for consumed/paused one-time work. Existing `task-cron.test.ts` checks nonexistent and repeated local minutes, non-hour clock changes, and explicit zones across host environments. The existing scheduler test `a selected calendar occurrence survives reopening and is reserved before an uncertain session attempt` covers durable queued selection separately. Pending and completed validation outcomes are recorded in the implementation progress document; this file is not a claim that every deployed scheduler/migration scenario has been accepted.

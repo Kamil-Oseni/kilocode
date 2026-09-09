@@ -4,7 +4,12 @@ export namespace MemoryMarkerMeta {
 
   export type Type = "recall" | "startup"
 
-  export type Info = {
+  type Provenance = {
+    captured?: number
+    scope?: { directory: string; project: string }
+  }
+
+  export type Info = Provenance & {
     type: Type
     bytes: number
     tokens: number
@@ -20,7 +25,7 @@ export namespace MemoryMarkerMeta {
     }
   }
 
-  export type Decoded = {
+  export type Decoded = Provenance & {
     type: Type
     tokens: number
     count: number
@@ -36,6 +41,8 @@ export namespace MemoryMarkerMeta {
         tokens: marker.tokens,
         count: marker.count,
         files: marker.files,
+        ...(marker.captured !== undefined ? { captured: marker.captured } : {}),
+        ...(marker.scope ? { scope: marker.scope } : {}),
         ...(verbose && marker.type === "recall" ? { items: marker.items } : {}),
       },
     }
@@ -70,7 +77,12 @@ export namespace MemoryMarkerMeta {
   }
 
   function items(input: string) {
-    return list(input.split("\n").map(item).filter((value) => value !== undefined))
+    return list(
+      input
+        .split("\n")
+        .map(item)
+        .filter((value) => value !== undefined),
+    )
   }
 
   export function snippets(input: Decoded | undefined, verbose: boolean) {
@@ -125,6 +137,8 @@ export namespace MemoryMarkerMeta {
         files?: unknown
         sources?: unknown
         items?: unknown
+        captured?: unknown
+        scope?: unknown
       }
       const type = value.type === "startup" ? "startup" : "recall"
       const tokens = typeof value.tokens === "number" ? value.tokens : 0
@@ -138,7 +152,36 @@ export namespace MemoryMarkerMeta {
       const items = Array.isArray(value.items)
         ? list(value.items.filter((item): item is string => typeof item === "string"))
         : []
-      return { type, tokens, count, files, items }
+      const captured =
+        typeof value.captured === "number" &&
+        Number.isSafeInteger(value.captured) &&
+        value.captured >= 0 &&
+        value.captured <= 8_640_000_000_000_000
+          ? value.captured
+          : undefined
+      const scope = value.scope
+      const valid =
+        scope &&
+        typeof scope === "object" &&
+        "directory" in scope &&
+        typeof scope.directory === "string" &&
+        scope.directory.trim().length > 0 &&
+        scope.directory.length <= 4096 &&
+        "project" in scope &&
+        typeof scope.project === "string" &&
+        scope.project.trim().length > 0 &&
+        scope.project.length <= 4096
+          ? { directory: scope.directory, project: scope.project }
+          : undefined
+      return {
+        type,
+        tokens,
+        count,
+        files,
+        items,
+        ...(captured !== undefined ? { captured } : {}),
+        ...(valid ? { scope: valid } : {}),
+      }
     }
     return undefined
   }

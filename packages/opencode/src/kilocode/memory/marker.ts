@@ -14,8 +14,12 @@ export namespace MemoryMarker {
     verbose?: boolean
   }
 
-  export function fromBlocks(blocks: KiloMemory.Block[]): Info | undefined {
-    return MemoryMarkerMeta.fromBlocks(blocks)
+  export function fromBlocks(
+    blocks: KiloMemory.Block[],
+    provenance?: Pick<Info, "captured" | "scope">,
+  ): Info | undefined {
+    const marker = MemoryMarkerMeta.fromBlocks(blocks)
+    return marker ? { ...marker, ...provenance } : undefined
   }
 
   export function startup(input: { marker?: Info; cache: Cache; verbose: boolean }) {
@@ -32,7 +36,7 @@ export namespace MemoryMarker {
       tokens: Token.estimate(input.result.output ?? ""),
     })
     if (!marker) return
-    input.cache.marker = marker
+    input.cache.marker = { ...marker, captured: Date.now() }
     input.cache.marked = false
   }
 

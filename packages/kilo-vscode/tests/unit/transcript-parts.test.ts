@@ -5,6 +5,8 @@ const WEBVIEW = path.resolve(import.meta.dir, "../../webview-ui")
 const WORKER_URL = path.resolve(import.meta.dir, "../setup/worker-url.ts")
 const PASS = "TRANSCRIPT_PARTS_PASS"
 const FAIL = "TRANSCRIPT_PARTS_FAIL:"
+// Cold browser-module imports can exceed Bun's five-second default on Windows.
+const timeout = 30_000
 
 const SCRIPT = `
   import { Window } from "happy-dom"
@@ -122,6 +124,7 @@ describe("transcript parts", () => {
       cwd: WEBVIEW,
       stdout: "pipe",
       stderr: "pipe",
+      windowsHide: true,
     })
     const output = result.stdout.toString() + result.stderr.toString()
 
@@ -136,13 +139,14 @@ describe("transcript parts", () => {
       )
     }
     expect.unreachable(`transcript parts test exited ${result.exitCode}: ${output.trim()}`)
-  })
+  }, timeout)
 
   it("collapses a run of tool-only messages and leaves prominent parts inline", () => {
     const result = Bun.spawnSync(["bun", "--preload", WORKER_URL, "--conditions=browser", "-e", COALESCE_SCRIPT], {
       cwd: WEBVIEW,
       stdout: "pipe",
       stderr: "pipe",
+      windowsHide: true,
     })
     const output = result.stdout.toString() + result.stderr.toString()
 
@@ -157,6 +161,6 @@ describe("transcript parts", () => {
       )
     }
     expect.unreachable(`coalesce test exited ${result.exitCode}: ${output.trim()}`)
-  })
+  }, timeout)
 })
 // raya_change end

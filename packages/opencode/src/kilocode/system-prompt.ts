@@ -4,7 +4,8 @@ import { Global } from "@opencode-ai/core/global"
 import { Effect } from "effect"
 import { staticEnvLines, type EditorContext } from "@/kilocode/editor-context"
 import { KiloMemory } from "@kilocode/kilo-memory/effect"
-import type { MemoryPaths } from "@kilocode/kilo-memory/effect/paths"
+import { MemoryPaths } from "@kilocode/kilo-memory/effect/paths"
+import path from "node:path"
 import { MemoryMarker } from "@/kilocode/memory/marker"
 import type { Provider } from "@/provider/provider"
 import type { InstanceContext } from "@/project/instance-context"
@@ -44,13 +45,15 @@ export namespace KilocodeSystemPrompt {
       const project =
         input.enabled === false
           ? undefined
-          : yield* Effect.tryPromise(() =>
-              KiloMemory.context({
+          : yield* Effect.tryPromise(async () => {
+              const identity = MemoryPaths.identity({ ctx: input.ctx })
+              const result = await KiloMemory.context({
                 ctx: input.ctx,
                 sessionID: input.sessionID,
                 record: input.record,
-              }),
-            ).pipe(
+              })
+              return { ...result, identity }
+            }).pipe(
               Effect.catch((err) =>
                 Effect.sync(() => {
                   log.warn("memory context unavailable", { error: String(err) })
@@ -78,10 +81,15 @@ export namespace KilocodeSystemPrompt {
         "Do not recall memory for current memory status, sidebar token accounting, or implementation debugging unless the user asks what prior memory says.",
       ].join("\n")
       return {
-        blocks: blocks.length
-          ? [guidance, ...blocks.map((block) => block.text.trim())]
-          : [],
-        marker: MemoryMarker.fromBlocks(blocks),
+        blocks: blocks.length ? [guidance, ...blocks.map((block) => block.text.trim())] : [],
+        // Capture when this block was prepared, not each time its pinned copy is reused.
+        // Only record a project identity that matches the store actually read.
+        marker: MemoryMarker.fromBlocks(blocks, {
+          captured: Date.now(),
+          ...(project && path.basename(project.root) === project.identity.folder
+            ? { scope: { directory: input.ctx.directory, project: project.identity.canonical } }
+            : {}),
+        }),
       }
     })
   }

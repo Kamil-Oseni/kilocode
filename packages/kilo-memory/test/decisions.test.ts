@@ -149,6 +149,55 @@ describe("memory autosave status", () => {
 })
 
 describe("memory marker metadata", () => {
+  test("retains preparation provenance without persisting private snippets", () => {
+    const marker: MemoryMarkerMeta.Info = {
+      type: "startup",
+      bytes: 10,
+      tokens: 4,
+      count: 1,
+      files: ["project.md"],
+      items: ["private context"],
+      captured: Date.UTC(2026, 8, 9),
+      scope: { directory: "/repo/worktree", project: "/repo/main" },
+    }
+    const metadata = MemoryMarkerMeta.metadata(marker)
+    expect(metadata.kiloMemory).not.toHaveProperty("items")
+    expect(MemoryMarkerMeta.fromParts([{ type: "text", metadata }])).toMatchObject({
+      captured: marker.captured,
+      scope: marker.scope,
+      items: [],
+    })
+  })
+
+  test("omits malformed provenance instead of inventing a time or project", () => {
+    for (const captured of [-1, NaN, Infinity, 0.5, 8_640_000_000_000_001, "today"]) {
+      const decoded = MemoryMarkerMeta.fromParts([
+        {
+          type: "text",
+          metadata: {
+            kiloMemory: {
+              type: "startup",
+              files: ["project.md"],
+              captured,
+              scope: { directory: "", project: "/repo" },
+            },
+          },
+        },
+      ])
+      expect(decoded).not.toHaveProperty("captured")
+      expect(decoded).not.toHaveProperty("scope")
+    }
+    const decoded = MemoryMarkerMeta.fromParts([
+      {
+        type: "text",
+        metadata: {
+          kiloMemory: { type: "recall", scope: { directory: "/repo", project: "x".repeat(4097) } },
+        },
+      },
+    ])
+    expect(decoded).not.toHaveProperty("scope")
+  })
+
   test("decodes encoded marker metadata", () => {
     const marker: MemoryMarkerMeta.Info = {
       type: "recall",

@@ -43,6 +43,8 @@ import { QuestionDock } from "./QuestionDock"
 import { SuggestBar } from "./SuggestBar"
 import { toolDefaultOpen } from "./tool-default-open"
 import { useVSCode } from "../../context/vscode"
+import { provenance } from "../../../../src/shared/memory-provenance"
+import { MemoryProvenance } from "./MemoryProvenance"
 
 type PlanStep = { id: string; description: string; status?: string }
 
@@ -377,7 +379,7 @@ export const AssistantMessage: Component<AssistantMessageProps> = (props) => {
 
   const toolName = (part: SDKPart) => (part.type === "tool" ? (part as unknown as ToolPart).tool : part.type)
 
-  const PartRow: Component<{ part: SDKPart }> = (rp) => {
+  const ContentRow: Component<{ part: SDKPart }> = (rp) => {
     const part = rp.part
     {
           // Upstream PART_MAPPING["tool"] returns null for todowrite/todoread,
@@ -503,6 +505,15 @@ export const AssistantMessage: Component<AssistantMessageProps> = (props) => {
             </Show>
           )
     }
+  }
+
+  const PartRow: Component<{ part: SDKPart }> = (rp) => {
+    const receipt = createMemo(() => provenance(rp.part))
+    return (
+      <Show when={receipt()} fallback={<ContentRow part={rp.part} />}>
+        {(value) => <MemoryProvenance receipt={value()} partID={rp.part.id} />}
+      </Show>
+    )
   }
 
   // Inline collapsible for a run of bundled tool calls. Collapsed by default so

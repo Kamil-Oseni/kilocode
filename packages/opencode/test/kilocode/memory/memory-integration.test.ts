@@ -155,6 +155,21 @@ describe("KiloMemory integration", () => {
       expect(status.state.autoConsolidate).toBe(false)
       expect(await Filesystem.exists(path.join(main, ".kilo", "memory", "state.json"))).toBe(false)
       expect(await Filesystem.exists(path.join(work, ".kilo", "memory", "state.json"))).toBe(false)
+
+      await KiloMemory.apply({
+        root: status.root,
+        ops: [{ action: "add", key: "shared_fact", text: "Memory is shared by these linked worktrees." }],
+      })
+      const prepared = await Effect.runPromise(
+        KilocodeSystemPrompt.memoryBlocks({ ctx: { directory: work, worktree: work } }),
+      )
+      expect(prepared.marker?.scope).toEqual({
+        directory: work,
+        project: MemoryPaths.identity({ ctx: { directory: work, worktree: work } }).canonical,
+      })
+      expect(prepared.marker?.scope?.project).toBe(
+        MemoryPaths.identity({ ctx: { directory: main, worktree: main } }).canonical,
+      )
       expect(await Filesystem.exists(path.join(next, ".kilo", "memory", "state.json"))).toBe(false)
     })
   })
@@ -178,6 +193,7 @@ describe("KiloMemory integration", () => {
   })
 
   test("targeted recall metadata replaces startup memory badge marker", () => {
+    const before = Date.now()
     const cache: MemoryMarker.Cache = {
       marker: { type: "startup", bytes: 20, tokens: 5, count: 1, files: ["project.md"], items: [] },
       marked: true,
@@ -197,6 +213,9 @@ describe("KiloMemory integration", () => {
       count: 2,
       files: ["project.md", "environment.md"],
     })
+    expect(cache.marker?.captured).toBeGreaterThanOrEqual(before)
+    expect(cache.marker?.captured).toBeLessThanOrEqual(Date.now())
+    expect(cache.marker).not.toHaveProperty("scope")
   })
 
   test("missing or disabled state does not enable the memory recall tool", async () => {
@@ -496,18 +515,21 @@ describe("KiloMemory integration", () => {
       })
 
       KiloSessionPrompt.clearPinnedMemory()
-      const build = (sessionID: string, record: boolean) =>
+      const build = (sessionID: string, record: boolean, cache = KiloSessionPrompt.memoryCache()) =>
         Effect.runPromise(
           KiloSessionPrompt.memoryInject({
             ctx: context,
             sessionID: SessionID.make(sessionID),
             record,
-            cache: KiloSessionPrompt.memoryCache(),
+            cache,
           }),
         )
 
-      const first = await build("ses_pin_a", true)
+      const initial = KiloSessionPrompt.memoryCache()
+      const first = await build("ses_pin_a", true, initial)
       expect(first.join("\n")).toContain("repo_fact")
+      expect(initial.marker?.captured).toBeGreaterThan(0)
+      expect(initial.marker?.scope?.directory).toBe(context.directory)
 
       // Simulate the live index changing mid-session (a later save + this session's own digest).
       await KiloMemory.apply({
@@ -522,9 +544,11 @@ describe("KiloMemory integration", () => {
         time: Date.UTC(2026, 0, 3, 0, 0),
       })
 
-      const second = await build("ses_pin_a", false)
+      const retained = KiloSessionPrompt.memoryCache()
+      const second = await build("ses_pin_a", false, retained)
       // Same session -> byte-identical pinned block, excludes later writes and its own digest.
       expect(second).toEqual(first)
+      expect(retained.marker).toBe(initial.marker)
       expect(second.join("\n")).not.toContain("later_fact")
       expect(second.join("\n")).not.toContain("own digest")
 

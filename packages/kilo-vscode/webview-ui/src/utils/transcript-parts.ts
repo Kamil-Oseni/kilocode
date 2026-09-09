@@ -1,6 +1,7 @@
 import { PART_MAPPING, ToolRegistry } from "@kilocode/kilo-ui/message-part"
 import type { AssistantMessage, Part } from "@kilocode/sdk/v2"
 import { snapshotProgress } from "../context/session-utils"
+import { provenance } from "../../../src/shared/memory-provenance"
 
 export const UPSTREAM_SUPPRESSED_TOOLS = new Set(["todowrite", "todoread"])
 
@@ -80,6 +81,7 @@ export function isRenderable(part: Part, message: AssistantMessage): boolean {
     return true
   }
   if (part.type === "text") {
+    if (provenance(part)) return true
     return !snapshotProgress(part) && !!part.text?.trim() && !(part.synthetic && message?.time.completed)
   }
   if (part.type === "reasoning") return !!part.text?.replace("[REDACTED]", "").trim()

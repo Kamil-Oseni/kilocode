@@ -1079,18 +1079,23 @@ export namespace RayaGoal {
         state,
         !pending && state.selfHealID
           ? (completed) => {
-              if (!state.selfHealAttempt || !state.intent || !state.revision)
+              const id = state.selfHealID
+              const attempt = state.selfHealAttempt
+              const r = state.revision
+              const i = state.intent
+              if (completed === undefined || !id || !attempt || !i || !r) {
                 return Effect.fail(
                   new AuditError({
                     message: "Legacy self-heal linkage requires reconciliation before tested completion.",
                   }),
                 )
-              return ownership(sessionID, state.selfHealID!, state.selfHealAttempt).pipe(
+              }
+              return ownership(sessionID, id, attempt).pipe(
                 Effect.flatMap(() =>
-                  healing.complete(state.selfHealID!, sessionID, state.selfHealAttempt, {
-                    intent: state.intent,
-                    revision: state.revision,
-                    completedRevision: completed.revision,
+                  healing.complete(id, sessionID, attempt, {
+                    intent: i,
+                    revision: r,
+                    completedRevision: completed,
                     createdAt: state.createdAt,
                     objective: state.objective,
                     audit,

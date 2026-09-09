@@ -45,6 +45,15 @@ opencode-dev
 UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
+# Runtime/cache artifacts (generated in workspace and should not be committed)
+.tmp/
+**/.tmp/
+**/*.tmp
+*.log
+*.pile
+*.db
+*.db-wal
+*.db-shm
 
 # Telemetry ID
 telemetry-id

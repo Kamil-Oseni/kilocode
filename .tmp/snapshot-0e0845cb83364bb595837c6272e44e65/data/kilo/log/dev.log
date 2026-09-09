@@ -1,3 +1,0 @@
-INFO  2026-09-09T05:18:42 +401ms service=json-migration storage directory does not exist, skipping migration
-INFO  2026-09-09T05:18:45 +2853ms service=default version=local command=generate process_role=main run_id=10849a05-980d-4511-88bf-129378de5e0f opencode
-WARN  2026-09-09T05:19:00 +15223ms service=kilocode.cli err=Timeout while shutting down PostHog. Some events may not have been sent. telemetry shutdown failed

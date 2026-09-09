@@ -1,2 +1,0 @@
-INFO  2026-09-09T06:37:54 +794ms service=json-migration storage directory does not exist, skipping migration
-INFO  2026-09-09T06:37:56 +2578ms service=default version=local command=generate process_role=main run_id=481918e5-1847-4e8d-89f5-81a9d843a340 opencode

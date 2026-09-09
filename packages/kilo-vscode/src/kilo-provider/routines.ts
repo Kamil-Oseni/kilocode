@@ -16,6 +16,7 @@ type Ctx = {
   dir: string
   post: (msg: unknown) => void
   track?: (sessionID: string) => void
+  refresh?: (requestID?: string, viewID?: string) => Promise<void>
 }
 
 type Listed = { id: string }
@@ -164,6 +165,11 @@ async function history(kilo: Kilo, dir: string, post: (msg: unknown) => void, it
 }
 
 async function list(ctx: Ctx) {
+  if (ctx.refresh)
+    return ctx.refresh(
+      typeof ctx.message.requestID === "string" ? ctx.message.requestID : undefined,
+      typeof ctx.message.viewID === "string" ? ctx.message.viewID : undefined,
+    )
   const [agents, templates] = await Promise.all([
     ctx.kilo.list({ directory: ctx.dir }, { throwOnError: true }),
     ctx.kilo.templates({ directory: ctx.dir }, { throwOnError: true }),
@@ -378,9 +384,17 @@ export async function handleRoutineMessage(input: {
   directory: string
   post: (msg: unknown) => void
   track?: (sessionID: string) => void
+  refresh?: (requestID?: string, viewID?: string) => Promise<void>
 }): Promise<boolean> {
   const type = input.message.type
   if (!owned(type)) return false
+  if (type === "routineList" && input.refresh) {
+    await input.refresh(
+      typeof input.message.requestID === "string" ? input.message.requestID : undefined,
+      typeof input.message.viewID === "string" ? input.message.viewID : undefined,
+    )
+    return true
+  }
   if (!input.client) {
     input.post({
       type: reply(type),
@@ -397,6 +411,7 @@ export async function handleRoutineMessage(input: {
     dir: input.directory,
     post: input.post,
     track: input.track,
+    refresh: input.refresh,
   }
   try {
     if (type === "routineOutputUpdate") {
@@ -459,6 +474,11 @@ export async function handleRoutineMessage(input: {
 }
 
 async function refresh(ctx: Ctx) {
+  if (ctx.refresh) {
+    ctx.post({ type: "routineState", saved: true })
+    await ctx.refresh()
+    return
+  }
   const agents = await ctx.kilo.list({ directory: ctx.dir }, { throwOnError: true })
   ctx.post({ type: "routineState", agents: agents.data, saved: true })
   await history(ctx.kilo, ctx.dir, ctx.post, (agents.data ?? []) as Listed[])

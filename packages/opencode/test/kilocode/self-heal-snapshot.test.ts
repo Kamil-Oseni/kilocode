@@ -59,6 +59,38 @@ test(
 )
 
 test(
+  "refuses damaged retained content during recapture and before materialization",
+  () =>
+    fixture(async (root, source) => {
+      const store = path.join(root, "store")
+      const snapshot = await capture(source.root, store)
+      const file = snapshot.files[0]
+      const blob = path.join(store, "blobs", file.digest)
+      const original = await fs.readFile(blob)
+      await fs.writeFile(blob, "corrupt")
+      await expect(capture(source.root, store)).rejects.toThrow("corrupt")
+      await expect(materialize(store, snapshot)).rejects.toThrow("does not match")
+      await fs.unlink(blob)
+      await expect(materialize(store, snapshot)).rejects.toThrow("ENOENT")
+      await fs.writeFile(blob, original, { flag: "wx" })
+      const retained = path.join(store, "blobs")
+      const moved = path.join(store, "retained")
+      expect(await fs.realpath(retained)).toBe(retained)
+      expect(path.dirname(moved)).toBe(store)
+      await fs.rename(retained, moved)
+      await fs.symlink(moved, retained, "junction")
+      try {
+        await expect(materialize(store, snapshot)).rejects.toThrow("redirected")
+      } finally {
+        expect((await fs.lstat(retained)).isSymbolicLink()).toBe(true)
+        if (process.platform === "win32") await fs.rmdir(retained)
+        if (process.platform !== "win32") await fs.unlink(retained)
+      }
+    }),
+  30_000,
+)
+
+test(
   "uses materialized LFS bytes without invoking configured filters and rejects unresolved pointers",
   () =>
     fixture(async (root, source) => {

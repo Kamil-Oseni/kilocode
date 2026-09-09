@@ -183,13 +183,20 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const [busy, setBusy] = createSignal<Record<string, true>>({})
   const [picked, setPicked] = createSignal<Record<string, true>>({})
   const [saving, setSaving] = createSignal(false)
+  const [loaded, setLoaded] = createSignal(false)
+  const [refreshing, setRefreshing] = createSignal(false)
+  const [freshness, setFreshness] = createSignal("Waiting to refresh routines.")
+  const [stale, setStale] = createSignal<Record<string, string>>({})
+  let correlation = crypto.randomUUID()
+  let revision = 0
+  let dirty = false
   let hold = false
 
   const dismiss = () => {
     const id = reviewed()?.id
     const attribute = section() === "output" ? "data-routine-output" : "data-routine-access"
     setReviewed(undefined)
-    vscode.postMessage({ type: "routineList" })
+    load()
     queueMicrotask(() => {
       if (reviewed() || inspection() || !root?.isConnected) return
       const button = [...(root?.querySelectorAll<HTMLButtonElement>(`[${attribute}]`) ?? [])].find(
@@ -225,6 +232,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     setReviewed(item)
   }
   const roster = (items: Agent[]) => {
+    setLoaded(true)
     setAgents(items)
     if (reviewed() && section() !== "output" && !items.some((item) => item.id === reviewed()?.id)) dismiss()
     if (items.some((item) => inspected(item.id))) return
@@ -232,7 +240,15 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     setInspection(undefined)
   }
 
-  const load = () => vscode.postMessage({ type: "routineList" })
+  const load = () => {
+    if (refreshing()) {
+      dirty = true
+      return
+    }
+    setRefreshing(true)
+    setFreshness("Refreshing routines and recorded history...")
+    vscode.postMessage({ type: "routineList", requestID: correlation, viewID: correlation })
+  }
 
   onMount(() => {
     load()
@@ -265,41 +281,94 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     load()
   }
 
-  const unsub = vscode.onMessage((msg: ExtensionMessage) => {
-    if (msg.type === "routineForecast") receive(msg)
-    if (msg.type === "routineScheduleUpdated") updated(msg)
-    if (msg.type === "routineState") {
-      if (msg.error) {
-        setError([msg.error, msg.recovery?.next].filter(Boolean).join(" "))
-        if (!editing()) {
-          hold = false
-          setSaving(false)
-        }
-      }
-      if (msg.agents) {
-        roster(msg.agents as Agent[])
-        if (msg.saved && !msg.error && !editing()) {
-          setError("")
-          hold = false
-          setSaving(false)
-          setScreen("roster")
-          setPicked({})
-        }
-      }
-      if (msg.templates) setTemplates(msg.templates as Template[])
+  const refresh = (msg: ExtensionMessage) => {
+    if (msg.type === "connectionState") {
+      correlation = crypto.randomUUID()
+      revision = 0
+      dirty = false
+      setRefreshing(false)
+      if (msg.state === "connected") load()
+      else setFreshness("Disconnected. Previously loaded routine information may be stale.")
     }
-    if (msg.type === "folderPickerResult" && msg.requestId === wait() && msg.path) {
-      setDir(msg.path)
-      setWait("")
+    if (msg.type === "workspaceDirectoryChanged") {
+      correlation = crypto.randomUUID()
+      revision = 0
+      dirty = false
+      setRefreshing(false)
+      setLoaded(false)
+      setAgents([])
+      setRuns({})
+      setStale({})
+      load()
     }
-    if (msg.type === "routineRuns" && msg.agentID) {
+    if ((msg.type === "routineState" || msg.type === "routineRuns") && msg.refreshID !== undefined) {
+      if (msg.viewID !== correlation || msg.requestID !== correlation || msg.refreshID < revision) return false
+      revision = msg.refreshID
+    }
+    if (msg.type === "routineState" && msg.refresh) {
+      setRefreshing(msg.refresh === "loading")
+      if (msg.refresh === "loading") setFreshness("Refreshing routines and recorded history...")
+      if (msg.refresh === "complete") setFreshness("Routines and recorded history refreshed.")
+      if (msg.refresh === "partial")
+        setFreshness("Some history could not be refreshed. Previous history remains visible.")
+      if (msg.refresh === "error") setFreshness("Refresh failed. Previously loaded information may be stale.")
+      if (msg.refresh !== "loading" && dirty && !hold) {
+        dirty = false
+        load()
+      }
+    }
+    return true
+  }
+
+  const history = (msg: Extract<ExtensionMessage, { type: "routineRuns" }>) => {
+    if (msg.error) setStale((prior) => ({ ...prior, [msg.agentID]: msg.error! }))
+    if (Array.isArray(msg.runs)) {
       setRuns((prior) => ({ ...prior, [msg.agentID]: msg.runs as Run[] }))
-      setBusy((prior) => {
+      setStale((prior) => {
         const next = { ...prior }
         delete next[msg.agentID]
         return next
       })
     }
+    setBusy((prior) => {
+      const next = { ...prior }
+      delete next[msg.agentID]
+      return next
+    })
+  }
+
+  const received = (msg: Extract<ExtensionMessage, { type: "routineState" }>) => {
+    if (msg.error) {
+      if (msg.requestID === correlation) setRefreshing(false)
+      setError([msg.error, msg.recovery?.next].filter(Boolean).join(" "))
+      if (!editing()) {
+        hold = false
+        setSaving(false)
+      }
+    }
+    if (msg.saved && !msg.error && !editing()) {
+      setError("")
+      hold = false
+      setSaving(false)
+      setScreen("roster")
+      setPicked({})
+    }
+    if (msg.agents) {
+      roster(msg.agents as Agent[])
+    }
+    if (msg.templates) setTemplates(msg.templates as Template[])
+  }
+
+  const unsub = vscode.onMessage((msg: ExtensionMessage) => {
+    if (!refresh(msg)) return
+    if (msg.type === "routineForecast") receive(msg)
+    if (msg.type === "routineScheduleUpdated") updated(msg)
+    if (msg.type === "routineState") received(msg)
+    if (msg.type === "folderPickerResult" && msg.requestId === wait() && msg.path) {
+      setDir(msg.path)
+      setWait("")
+    }
+    if (msg.type === "routineRuns") history(msg)
     if ((msg.type === "sessionStatus" || msg.type === "sessionTurnClosed") && !hold) load()
   })
   onCleanup(unsub)
@@ -497,6 +566,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   }
 
   const empty = createMemo(() => agents().length === 0)
+  const vacant = createMemo(() => empty() && loaded())
   const roleOpt = createMemo(() => roles.find((item) => item.id === role()) ?? roles[0])
   const workOpt = createMemo(() => work.find((item) => item.id === access()) ?? work[0])
 
@@ -542,8 +612,14 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
           </p>
         </Show>
         <Show when={screen() === "roster"}>
+          <div role="status" aria-live="polite" aria-busy={refreshing()}>
+            {freshness()}
+            <Button variant="ghost" size="small" disabled={refreshing()} onClick={load}>
+              Refresh routines
+            </Button>
+          </div>
           <Archive onOpenSession={props.onOpenSession} />
-          <Show when={empty()}>
+          <Show when={vacant()}>
             <div class="routines-empty-block">
               <p class="routines-empty">No standing jobs yet. Assign one and it will sleep until it is time to work.</p>
               <Button onClick={() => setScreen("assign")}>Assign a routine</Button>
@@ -579,6 +655,11 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                       <span class="routines-name">{item.name}</span>
                       <span class="routines-meta">{meta(item)}</span>
                       <span class="routines-job">{item.objective}</span>
+                      <Show when={stale()[item.id]}>
+                        <span class="routines-note" role="status">
+                          History may be stale: {stale()[item.id]}
+                        </span>
+                      </Show>
                       <Show when={summary()}>
                         <span class="routines-note routines-result-summary">Recorded result: {summary()}</span>
                       </Show>

@@ -172,7 +172,7 @@ export async function capture(
     if (!same(common, owner.common)) return fail("Git ownership changed")
     await git(root, ["merge-base", "--is-ancestor", owner.commit, "HEAD"])
   }
-  const read = async () => {
+  const read = async (retain: boolean) => {
     const head = (await git(root, ["rev-parse", "--verify", "HEAD^{commit}"])).trim()
     const index = await git(root, ["ls-files", "--stage", "-z"])
     if (index.split("\0").some((row) => row.startsWith("160000 ") || (row && !/^[0-9]+ [a-f0-9]+ 0\t/.test(row))))
@@ -217,12 +217,13 @@ export async function capture(
         mode: process.platform === "win32" ? (modes.get(file) ?? input.mode) : input.mode,
         size: input.data.length,
       })
-      if (store) await publish(path.join(store, "blobs"), digest, input.data)
+      if (store && retain) await publish(path.join(store, "blobs"), digest, input.data)
     }
     return { head, files }
   }
-  const first = await read()
-  const second = await read()
+  const first = await read(true)
+  // Observe the complete source again; retained bytes are checked again during materialization before execution.
+  const second = await read(false)
   if (JSON.stringify(first) !== JSON.stringify(second)) return fail("source changed across capture")
   const snapshot: Snapshot = { version: 1, digest: hash(JSON.stringify(first)), ...first }
   if (store)

@@ -29,6 +29,7 @@ export function OutputReview(props: { item: { id: string; name: string; output?:
   let timer: ReturnType<typeof setTimeout> | undefined
   onMount(() => root?.focus())
   const receive = (msg: { error?: string; agents?: unknown[] }) => {
+    if (!msg.error && !Array.isArray(msg.agents)) return
     clearTimeout(timer)
     setLoading("")
     if (msg.error) return setError(msg.error)

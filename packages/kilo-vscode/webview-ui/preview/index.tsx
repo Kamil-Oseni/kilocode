@@ -11,6 +11,7 @@ import "../src/styles/prompt-input.css" // raya_change - preview the composer ch
 import "../src/styles/history.css" // raya_change - preview the history + session-list surfaces
 import "../src/styles/tool-overrides.css" // raya_change - preview the bundled tool-call group (#8)
 import "../src/styles/chat-layout.css" // raya_change - preview conversation lane + turn rhythm (#12)
+import "../src/styles/memory-provenance.css"
 import "./preview.css"
 import { render } from "solid-js/web"
 import { For, Show, type Component } from "solid-js"
@@ -19,6 +20,8 @@ import { GoalBannerView } from "../src/components/chat/GoalBanner"
 import type { GoalBannerProps } from "../src/components/chat/GoalBanner"
 import type { GoalState, GoalStatus } from "../../src/shared/goal"
 import { UsageHistoryView } from "../src/components/chat/UsageHistory"
+import { MemoryProvenance } from "../src/components/chat/MemoryProvenance"
+import { provenance } from "../../src/shared/memory-provenance"
 import type { ProjectUsage } from "../src/types/messages"
 
 installMockVsCode()
@@ -34,6 +37,8 @@ type PvState =
   | "discard"
   | "discard-busy"
   | "usage"
+  | "memory"
+  | "memory-legacy"
   | "paused"
   | "complete"
   | "blocked"
@@ -61,6 +66,8 @@ const states: PvState[] = [
   "discard",
   "discard-busy",
   "usage",
+  "memory",
+  "memory-legacy",
   "paused",
   "complete",
   "blocked",
@@ -77,6 +84,32 @@ const states: PvState[] = [
   "conversation",
 ]
 const themes: Theme[] = ["light", "dark"]
+
+function receipt(legacy: boolean) {
+  const value = provenance({
+    type: "text",
+    text: "",
+    synthetic: true,
+    ignored: true,
+    metadata: {
+      kiloMemory: legacy
+        ? { type: "recall", sources: ["project-notes.md"] }
+        : {
+            type: "startup",
+            count: 6,
+            tokens: 720,
+            files: ["team-preferences.md", `${"long-project-name-".repeat(12)}.md`],
+            captured: 1_788_998_400_000,
+            scope: { directory: "C:/Projects/example/worktrees/review", project: "example-project" },
+          },
+    },
+  })
+  if (!value) throw new Error("Invalid memory preview receipt")
+  return value
+}
+
+const memory = receipt(false)
+const legacy = receipt(true)
 
 const now = Date.now()
 const usage: ProjectUsage = {
@@ -578,14 +611,15 @@ const Fixture: Component<{ id: string; theme: Theme; state: PvState }> = (props)
     <figcaption class="pv-fixture__label">
       {props.theme} · {props.state}
       <span>
-        {chrome.has(props.state)
-          ? " · Illustrative markup; not production UI"
-          : " · Production view with sample data"}
+        {chrome.has(props.state) ? " · Illustrative markup; not production UI" : " · Production view with sample data"}
       </span>
     </figcaption>
     <div class={`pv-panel pv-theme--${props.theme}`}>
       <Show when={props.state === "usage"}>
         <UsageHistoryView range="7d" usage={usage} locale="en" providers={{}} />
+      </Show>
+      <Show when={props.state === "memory" || props.state === "memory-legacy"}>
+        <MemoryProvenance receipt={props.state === "memory" ? memory : legacy} partID={props.id} />
       </Show>
       <Show when={props.state === "slash"}>
         <SlashBubble />
@@ -621,7 +655,7 @@ const Fixture: Component<{ id: string; theme: Theme; state: PvState }> = (props)
       <Show when={props.state === "conversation"}>
         <Conversation />
       </Show>
-      <Show when={props.state !== "usage" && !chrome.has(props.state)}>
+      <Show when={props.state !== "usage" && !props.state.startsWith("memory") && !chrome.has(props.state)}>
         <GoalBannerView {...propsFor(props.state)} />
       </Show>
     </div>
@@ -640,7 +674,7 @@ render(
       <header class="pv-page__header">
         <h1 class="pv-page__title">Raya · component preview</h1>
         <p class="pv-page__sub">
-          Goal and usage fixtures render production views with sample data. Composer, history, review and other
+          Goal, usage and memory fixtures render production views with sample data. Composer, history, review and other
           illustrative fixtures are labeled and cannot establish production interaction or accessibility results.
         </p>
       </header>

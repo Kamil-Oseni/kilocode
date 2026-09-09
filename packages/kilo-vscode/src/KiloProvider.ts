@@ -66,6 +66,7 @@ import { removeAgent } from "./services/agent-removal"
 import { normalize, type SSEPayload, type SyncPayload, type WirePayload } from "./services/cli-backend/sdk-sse-adapter"
 import { slimInfo, slimPart, slimParts } from "./kilo-provider/slim-metadata"
 import { handleRoutineMessage as dispatchRoutine, reason } from "./kilo-provider/routines"
+import { RoutineRefresh } from "./kilo-provider/routine-refresh"
 import { editGoal, stopGoal, stopResult } from "./kilo-provider/goal"
 import { evidence as goalEvidence } from "./kilo-provider/goal-evidence"
 import { shouldNotify } from "./kilo-provider/presence-notify"
@@ -348,6 +349,10 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private contextSessionID: string | undefined
   private connectionState: "connecting" | "connected" | "disconnected" | "error" = "connecting"
   private connectionGeneration = 0
+  private readonly routineRefresh = new RoutineRefresh(
+    () => ({ client: this.client, directory: this.getWorkspaceDirectory(), generation: this.connectionGeneration }),
+    (message) => this.postMessage(message),
+  )
   private loginAttempt = 0
   private isWebviewReady = false
   private readonly extensionVersion = vscode.extensions.getExtension("eden.raya")?.packageJSON?.version ?? "unknown"
@@ -594,6 +599,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
   public setProjectDirectory(directory: string | null): void {
     if (this.projectDirectory === directory) return
+    this.routineRefresh.invalidate()
     this.projectDirectory = directory
     this.providerUsageGeneration++
     this.cachedProviderUsageMessage = null
@@ -1685,13 +1691,24 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private async handleRoutineMessage(
     message: TypedWebviewMessage & { requestID?: unknown; agentID?: unknown; runID?: unknown },
   ): Promise<boolean> {
+    const client = this.client
+    const directory = this.getWorkspaceDirectory()
+    const generation = this.connectionGeneration
+    const current = () =>
+      this.client === client && this.getWorkspaceDirectory() === directory && this.connectionGeneration === generation
     try {
       return await dispatchRoutine({
         message,
-        client: this.client,
-        directory: this.getWorkspaceDirectory(),
-        post: (msg) => this.postMessage(msg),
-        track: (id) => this.trackSession(id),
+        client,
+        directory,
+        post: (msg) => {
+          if (current()) this.postMessage(msg)
+        },
+        track: (id) => {
+          if (current()) this.trackSession(id)
+        },
+        refresh: (requestID, viewID) =>
+          current() ? this.routineRefresh.request(requestID, viewID) : Promise.resolve(),
       })
     } catch (err) {
       if (message.type === "routineSnapshot") {
@@ -2065,6 +2082,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     console.log("[Kilo New] KiloProvider: 🔧 Starting initializeConnection...")
 
     this.connectionState = "connecting"
+    this.routineRefresh.invalidate()
     this.connectionGeneration++
     this.configBindings.clear()
     this.postMessage({ type: "connectionState", state: "connecting" })
@@ -2136,6 +2154,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       // Subscribe to connection state changes
       this.unsubscribeState = this.connectionService.onStateChange(async (state, error) => {
         if (this.connectionState !== state) {
+          this.routineRefresh.invalidate()
           this.connectionGeneration++
           this.configBindings.clear()
         }
@@ -6135,6 +6154,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
    * Does NOT kill the server — that's the connection service's job.
    */
   dispose(): void {
+    this.routineRefresh.dispose()
     this.deliveries.clear()
     if (this.opts.focusContext) {
       void vscode.commands.executeCommand("setContext", this.opts.focusContext, false)

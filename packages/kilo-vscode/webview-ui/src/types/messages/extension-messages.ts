@@ -192,6 +192,10 @@ export interface GoalEditedMessage {
 
 export interface RoutineStateMessage {
   type: "routineState"
+  viewID?: string
+  refreshID?: number
+  refresh?: "loading" | "complete" | "partial" | "error"
+  failed?: string[]
   requestID?: string
   agents?: unknown[]
   templates?: unknown[]
@@ -222,6 +226,10 @@ export interface RoutineScheduleUpdatedMessage {
 
 export interface RoutineRunsLoadedMessage {
   type: "routineRuns"
+  requestID?: string
+  viewID?: string
+  refreshID?: number
+  error?: string
   agentID: string
   runs?: unknown[]
 }

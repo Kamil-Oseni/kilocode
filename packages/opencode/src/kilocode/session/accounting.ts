@@ -4,14 +4,51 @@ import type { Accounting } from "@opencode-ai/schema/kilocode/accounting"
 import type { Provider } from "@/provider/provider"
 import type { Usage } from "@opencode-ai/llm"
 
-export function reported(amount: number, source: string): Types.DeepMutable<Accounting> {
-  return { version: 1, status: "reported", source, currency: "USD", amount, buckets: [], issues: [] }
+type Tokens = { input: number; output: number; reasoning: number; cache: { read: number; write: number } }
+
+export function count(value: unknown) {
+  const amount =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && /^\d+$/.test(value.trim())
+        ? Number(value)
+        : undefined
+  return typeof amount === "number" && Number.isSafeInteger(amount) && amount >= 0 ? amount : undefined
+}
+
+export function validate(input: { usage: Usage; tokens: Tokens; write: unknown }) {
+  const raw = [
+    input.usage.inputTokens,
+    input.usage.outputTokens,
+    input.usage.reasoningTokens,
+    input.usage.cacheReadInputTokens,
+    input.usage.cacheWriteInputTokens,
+    input.usage.nonCachedInputTokens,
+    input.usage.totalTokens,
+  ]
+  const invalid =
+    raw.some((value) => value !== undefined && (typeof value !== "number" || count(value) === undefined)) ||
+    (input.usage.inputTokens !== undefined &&
+      input.tokens.cache.read + input.tokens.cache.write > input.usage.inputTokens) ||
+    (input.usage.outputTokens !== undefined && input.tokens.reasoning > input.usage.outputTokens) ||
+    (input.usage.inputTokens !== undefined &&
+      input.usage.nonCachedInputTokens !== undefined &&
+      input.usage.nonCachedInputTokens !== input.tokens.input)
+  return [
+    ...(count(input.write) === undefined ? ["cache_write_usage_invalid"] : []),
+    ...(invalid ? ["contradictory_usage"] : []),
+  ]
+}
+
+export function reported(amount: number, source: string, issues: string[]): Types.DeepMutable<Accounting> {
+  return { version: 1, status: "reported", source, currency: "USD", amount, buckets: [], issues }
 }
 
 export function estimate(input: {
   model: Pick<Provider.Model, "id" | "providerID">
   usage: Usage
-  tokens: { input: number; output: number; reasoning: number; cache: { read: number; write: number } }
+  tokens: Tokens
+  issues: string[]
   rates: Pick<Provider.Model["cost"], "input" | "output" | "cache" | "evidence"> | undefined
   nano: unknown
 }): Types.DeepMutable<Accounting> {
@@ -30,7 +67,7 @@ export function estimate(input: {
       source: "copilot.totalNanoAiu",
       unit: "nano_aiu",
       quantity: input.nano,
-      issues: ["currency_conversion_unverified"],
+      issues: [...input.issues, "currency_conversion_unverified"],
     }
   }
   const buckets = [
@@ -50,19 +87,7 @@ export function estimate(input: {
       ...(priced ? { rate: item.rate, source: known ? origin.source : "legacy-model-rate" } : {}),
     }
   })
-  const raw = [
-    input.usage.inputTokens,
-    input.usage.outputTokens,
-    input.usage.reasoningTokens,
-    input.usage.cacheReadInputTokens,
-    input.usage.cacheWriteInputTokens,
-  ]
-  const invalid =
-    raw.some((value) => value !== undefined && (!Number.isFinite(value) || value < 0)) ||
-    (input.usage.inputTokens !== undefined &&
-      input.tokens.cache.read + input.tokens.cache.write > input.usage.inputTokens) ||
-    (input.usage.outputTokens !== undefined && input.tokens.reasoning > input.usage.outputTokens)
-  if (invalid) return { ...base, buckets, status: "unknown", issues: ["contradictory_usage"] }
+  if (input.issues.length) return { ...base, buckets, status: "unknown", issues: input.issues }
   const issues = [
     ...(input.usage.inputTokens === undefined ? ["input_usage_missing"] : []),
     ...(input.usage.outputTokens === undefined ? ["output_usage_missing"] : []),
@@ -75,6 +100,13 @@ export function estimate(input: {
     .reduce((sum, item) => sum.add(new Decimal(item.tokens).mul(item.rate!).div(1_000_000)), new Decimal(0))
     .toNumber()
   if (!Number.isFinite(amount)) return { ...base, buckets, status: "unknown", issues: [...issues, "amount_overflow"] }
-  if (!priced.length) return { ...base, buckets, status: "unknown", issues: [...issues, "no_verified_priced_usage"] }
+  const empty =
+    input.usage.inputTokens === 0 &&
+    input.usage.outputTokens === 0 &&
+    buckets.every((item) => item.tokens === 0) &&
+    buckets[0].rate !== undefined &&
+    buckets[1].rate !== undefined
+  if (!priced.length && !empty)
+    return { ...base, buckets, status: "unknown", issues: [...issues, "no_verified_priced_usage"] }
   return { ...base, currency: "USD", amount, buckets, issues, status: issues.length ? "partial" : "estimated" }
 }

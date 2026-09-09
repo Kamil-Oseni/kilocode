@@ -6,10 +6,18 @@ import { Script } from "node:vm"
 import { chromium } from "playwright-core"
 import { locate, TargetError, type BrowserTarget, type TargetPage } from "./browser-target"
 import { FrameRegistry, type FrameOwner, type FrameInfo, type DocumentFrame } from "./browser-frame"
+import { pending, BrowserDialogs, type DialogPage, type DialogInfo, type DialogOperation } from "./browser-dialog"
 import { BrowserSmoke } from "./browser-smoke"
 import type { SmokeConsole, SmokeCookie, SmokeInput, SmokeOrigin, SmokeResponse, SmokeResult } from "./browser-smoke"
 
 export type BrowserAction = { tabID?: string; frameID?: string } & (
+  | {
+      operation: "dialog"
+      action: "list" | "accept" | "dismiss"
+      dialogID?: string
+      operationID?: string
+      text?: string
+    }
   | { operation: "navigate"; url: string }
   | { operation: "snapshot" }
   | { operation: "click"; selector: BrowserTarget }
@@ -23,14 +31,18 @@ export type BrowserAction = { tabID?: string; frameID?: string } & (
   | { operation: "frames"; action: "list" | "resolve"; parentID?: string; selector?: string }
   | { operation: "tabs"; action: "list" | "open" | "select" | "close"; url?: string }
 )
-type BrowserNativeAction = Exclude<BrowserAction, { operation: "auth_capture" | "smoke" | "tabs" | "frames" }>
+type BrowserNativeAction = Exclude<
+  BrowserAction,
+  { operation: "auth_capture" | "smoke" | "tabs" | "frames" | "dialog" }
+>
 export type BrowserTab = { id: string; url: string; title: string; selected: boolean; openerID?: string }
 
 export type BrowserResult = { tabID?: string; frameID?: string; frameURL?: string } & (
+  | { operation: "dialog"; dialogs: DialogInfo[]; operations: DialogOperation[]; url?: string; title?: string }
   | { operation: "frames"; frames: FrameInfo[]; url?: string; title?: string }
   | { operation: "tabs"; tabs: BrowserTab[]; url?: string; title?: string }
   | {
-      operation: Exclude<BrowserAction["operation"], "auth_capture" | "smoke" | "tabs" | "frames">
+      operation: Exclude<BrowserAction["operation"], "auth_capture" | "smoke" | "tabs" | "frames" | "dialog">
       url: string
       title: string
       snapshot?: string
@@ -94,7 +106,7 @@ export interface BrowserPage extends TargetPage {
   frames?(): DocumentFrame[]
   mainFrame?(): DocumentFrame
   isClosed?(): boolean
-  close?(): Promise<void>
+  close?(options?: { runBeforeUnload?: boolean }): Promise<void>
   opener?(): Promise<BrowserPage | null>
   url(): string
   title(): Promise<string>
@@ -204,6 +216,7 @@ const launch: BrowserLaunch = async (profile) =>
 
 export class BrowserSession {
   private context: BrowserContextLike | undefined
+  private dialogs = new BrowserDialogs()
   private readonly documents = new Map<BrowserPage, FrameRegistry>()
   private readonly tabs = new Map<string, BrowserPage>()
   private readonly identities = new Map<BrowserPage, string>()
@@ -309,6 +322,7 @@ export class BrowserSession {
       const id = randomUUID()
       this.identities.set(page, id)
       this.tabs.set(id, page)
+      if (page.isClosed) this.dialogs.attach(page as unknown as DialogPage, id)
       if (page.frames && page.mainFrame) this.documents.set(page, new FrameRegistry(page as unknown as FrameOwner, id))
       const context = this.context
       if (page.opener)
@@ -404,7 +418,22 @@ export class BrowserSession {
       const page = this.resolve(action.tabID)
       if (!page.close) throw new TargetError("Browser host cannot close tabs")
       dispatch()
-      await page.close()
+      if (page.isClosed) {
+        const signal = pending<void>()
+        const native = page as unknown as DialogPage
+        const closed = () => signal.resolve()
+        native.on("close", closed)
+        try {
+          await this.dialogs.unload(
+            action.tabID,
+            () => page.close!({ runBeforeUnload: true }),
+            signal.promise,
+            () => page.isClosed!(),
+          )
+        } finally {
+          native.off("close", closed)
+        }
+      } else await page.close()
       if (page === this.page) {
         this.frame = undefined
         this.page = undefined
@@ -439,6 +468,8 @@ export class BrowserSession {
   }
 
   resume(): void {
+    const blocked = this.dialogs.blocked()
+    if (blocked) throw blocked
     this.revision += 1
     this.update({ control: "agent", busy: false })
   }
@@ -449,6 +480,9 @@ export class BrowserSession {
 
   async execute(action: BrowserAction): Promise<BrowserResult> {
     await this.ready()
+    if (action.operation === "dialog") return this.dialog(action)
+    const blocked = this.dialogs.blocked()
+    if (blocked) throw blocked
     if (action.operation !== "tabs") action = { ...action, tabID: this.identity(this.resolve(action.tabID)) }
     if (["snapshot", "click", "type", "select", "scroll", "evaluate"].includes(action.operation)) {
       const registry = this.documents.get(this.resolve(action.tabID))
@@ -456,15 +490,48 @@ export class BrowserSession {
       if (registry) action = { ...action, frameID: registry.lease(action.frameID).id }
     } else if (action.frameID)
       throw new TargetError("This operation is tab-scoped and does not accept a frame identity")
-    const result = this.queue.then(() => this.perform(action))
-    this.queue = result.then(
+    const result = pending<BrowserResult>()
+    const revision = this.revision
+    const settled = this.queue.then(() => {
+      if (this.revision !== revision)
+        throw new TargetError("Queued browser action cancelled by manual control; no action dispatched")
+      const job = this.dialogs.start(action.operation, action.tabID ?? "", () => this.perform(action))
+      void job.result.then(result.resolve, result.reject)
+      return job.settled
+    })
+    this.queue = settled.then(
       () => undefined,
-      () => undefined,
+      (error: unknown) => {
+        result.reject(error)
+      },
     )
-    return result
+    return result.promise
   }
 
-  private async perform(action: BrowserAction): Promise<BrowserResult> {
+  dialogsState() {
+    return this.dialogs.list()
+  }
+  onDialogs(listener: () => void): () => void {
+    return this.dialogs.onChange(listener)
+  }
+
+  async respond(tabID: string, dialogID: string, action: "accept" | "dismiss", text?: string): Promise<void> {
+    this.takeControl("You are responding to the browser dialog.")
+    await this.dialogs.answer(tabID, dialogID, action, text)
+  }
+
+  private async dialog(action: Extract<BrowserAction, { operation: "dialog" }>): Promise<BrowserResult> {
+    if (!action.tabID) throw new TargetError("Observed tab identity is required for dialogs")
+    if (action.action !== "list") {
+      if (this.state.control === "manual")
+        throw new TargetError("Manual browser control is active; use the visible dialog controls")
+      if (!action.dialogID) throw new TargetError("Observed dialog identity is required")
+      await this.dialogs.answer(action.tabID, action.dialogID, action.action, action.text)
+    }
+    return { operation: "dialog", tabID: action.tabID, ...this.dialogs.list(action.tabID, action.operationID) }
+  }
+
+  private async perform(action: Exclude<BrowserAction, { operation: "dialog" }>): Promise<BrowserResult> {
     await this.ready()
     // A new tool call is an explicit instruction to return control to the agent.
     if (this.state.control === "manual") this.resume()
@@ -478,7 +545,11 @@ export class BrowserSession {
     })
   }
 
-  private async attempt(action: BrowserAction, number: number, revision: number): Promise<BrowserResult> {
+  private async attempt(
+    action: Exclude<BrowserAction, { operation: "dialog" }>,
+    number: number,
+    revision: number,
+  ): Promise<BrowserResult> {
     if (revision !== this.revision) throw new Error("Browser action cancelled for manual takeover.")
     await this.pace(number)
     const state = { dispatched: false }
@@ -783,6 +854,8 @@ export class BrowserSession {
   }
 
   private assertInput(): void {
+    const blocked = this.dialogs.blocked()
+    if (blocked) throw blocked
     if (this.state.control === "agent" && this.state.busy)
       throw new Error("The agent is currently controlling the browser. Wait for the action to finish or take over.")
   }
@@ -798,6 +871,8 @@ export class BrowserSession {
 
   async navigate(url: string, id?: string): Promise<void> {
     await this.ready()
+    const blocked = this.dialogs.blocked()
+    if (blocked) throw blocked
     this.release()
     const tab = this.identity(this.resolve(id))
     await this.probe(url)
@@ -807,6 +882,8 @@ export class BrowserSession {
 
   async back(id?: string): Promise<void> {
     await this.ready()
+    const blocked = this.dialogs.blocked()
+    if (blocked) throw blocked
     this.release()
     this.input(id)
     await this.travel((page) => page.goBack(this.wait()), id)
@@ -814,6 +891,8 @@ export class BrowserSession {
 
   async forward(id?: string): Promise<void> {
     await this.ready()
+    const blocked = this.dialogs.blocked()
+    if (blocked) throw blocked
     this.release()
     this.input(id)
     await this.travel((page) => page.goForward(this.wait()), id)
@@ -821,6 +900,8 @@ export class BrowserSession {
 
   async reload(id?: string): Promise<void> {
     await this.ready()
+    const blocked = this.dialogs.blocked()
+    if (blocked) throw blocked
     this.release()
     this.input(id)
     await this.travel((page) => page.reload(this.wait()), id)
@@ -917,6 +998,7 @@ export class BrowserSession {
   // raya_change end
 
   async dispose(): Promise<void> {
+    this.revision += 1
     const context = this.context
     const cdp = this.cdp
     this.context = undefined
@@ -932,6 +1014,8 @@ export class BrowserSession {
     this.inventories.clear()
     this.tabs.clear()
     this.identities.clear()
+    this.dialogs.dispose()
+    this.dialogs = new BrowserDialogs()
     for (const registry of this.documents.values()) registry.dispose()
     this.documents.clear()
     this.openers.clear()
@@ -962,6 +1046,7 @@ export class BrowserSession {
   }
 
   private async pump(): Promise<void> {
+    if (this.dialogs.blocked()) return
     if (this.inventories.size) {
       const tabs = await this.inventory().catch(() => [])
       for (const listener of this.inventories) listener(tabs)

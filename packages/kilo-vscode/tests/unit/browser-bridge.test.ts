@@ -3,9 +3,65 @@ import { describe, expect, it } from "bun:test"
 import type { BrowserRequest, KiloClient } from "@kilocode/sdk/v2/client"
 import type { SSEPayload } from "../../src/services/cli-backend/sdk-sse-adapter"
 import type { BrowserConnection, BrowserHost } from "../../src/services/browser-automation/browser-bridge"
+import { DialogPendingError } from "../../src/services/browser-automation/browser-dialog"
 import { BrowserBridge } from "../../src/services/browser-automation/browser-bridge"
 
 describe("Raya browser bridge", () => {
+  it("retains dialog-pending failures across lost delivery without replaying the initiating action", async () => {
+    const first = Promise.withResolvers<void>()
+    const second = Promise.withResolvers<void>()
+    const failures: unknown[] = []
+    let calls = 0
+    const client = {
+      kilocode: {
+        browser: {
+          list: async () => ({ data: [] }),
+          reply: async () => {
+            throw new Error("Pending action must not be reported complete")
+          },
+          reject: async (value: unknown) => {
+            failures.push(value)
+            if (failures.length === 1) {
+              first.resolve()
+              throw new Error("pending acknowledgement lost")
+            }
+            second.resolve()
+            return {}
+          },
+        },
+      },
+    } as unknown as KiloClient
+    const connection = harness(client)
+    const bridge = new BrowserBridge(connection.value, {
+      show: async () => undefined,
+      execute: async () => {
+        calls++
+        throw new DialogPendingError(
+          { id: "op_seen", tabID: "tab_seen", operation: "click", status: "pending" },
+          "dialog_seen",
+        )
+      },
+    })
+    const event = {
+      type: "kilocode.browser.requested",
+      properties: { id: "brr_dialog", sessionID: "ses_test", tabID: "tab_seen", operation: "click", selector: "#save" },
+    }
+    try {
+      connection.event(event)
+      await first.promise
+      await new Promise<void>((resolve) => setTimeout(resolve, 0))
+      connection.event(event)
+      await second.promise
+      expect(calls).toBe(1)
+      expect(failures[0]).toMatchObject({
+        error: { code: "dialog_pending", message: expect.stringContaining("must not be retried") },
+      })
+      expect(failures[1]).toEqual(failures[0])
+    } finally {
+      bridge.dispose()
+    }
+  })
+
   it("does not execute recovered work without a local receipt", async () => {
     const done = Promise.withResolvers<void>()
     let calls = 0

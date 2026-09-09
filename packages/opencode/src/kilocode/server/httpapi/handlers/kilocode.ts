@@ -606,7 +606,9 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       params: { itemID: string }
       payload: typeof SelfHealUpdatePayload.Type
     }) {
-      const item = yield* healing.update(ctx.params.itemID, ctx.payload)
+      const item = yield* healing
+        .update(ctx.params.itemID, ctx.payload)
+        .pipe(Effect.catchTag("RayaSelfHeal.InputError", () => Effect.fail(new HttpApiError.Conflict({}))))
       if (!item) return yield* new HttpApiError.NotFound({})
       return item
     })

@@ -1,0 +1,135 @@
+$ oxlint packages/opencode/src/kilocode/self-heal/worktree.ts packages/opencode/src/kilocode/self-heal/repair.ts packages/opencode/src/kilocode/self-heal/index.ts packages/opencode/test/kilocode/self-heal-worktree.test.ts packages/opencode/test/kilocode/self-heal-ownership.test.ts packages/opencode/test/kilocode/fixtures/self-heal-worktree.ts
+
+  ! typescript-eslint(unbound-method): Avoid referencing unbound methods which may cause unintentional scoping of `this`.
+    ,-[packages/opencode/src/kilocode/self-heal/repair.ts:74:22]
+ 73 |       Effect.flatMap(decode),
+ 74 |       Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(undefined)),
+    :                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^|
+    :                                      |               `-- This reference may be unbound and lose `this` context
+ 75 |       Effect.orDie,
+    `----
+  help: If your function does not access `this`, you can annotate it with `this: void`, or consider using an arrow function instead.
+
+  ! typescript-eslint(unbound-method): Avoid referencing unbound methods which may cause unintentional scoping of `this`.
+    ,-[packages/opencode/src/kilocode/self-heal/repair.ts:82:24]
+ 81 |         Effect.flatMap(decode),
+ 82 |         Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(undefined)),
+    :                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^|
+    :                                        |               `-- This reference may be unbound and lose `this` context
+ 83 |         Effect.orDie,
+    `----
+  help: If your function does not access `this`, you can annotate it with `this: void`, or consider using an arrow function instead.
+
+  ! typescript-eslint(consistent-return): Function expected no return value.
+    ,-[packages/opencode/src/kilocode/self-heal/repair.ts:85:18]
+ 84 |       )
+ 85 |       if (!next) return claim
+    :                  ^^^^^^^^^^^^
+ 86 |       claim = next
+    `----
+
+  ! typescript-eslint(consistent-return): Function expected no return value.
+    ,-[packages/opencode/src/kilocode/self-heal/repair.ts:88:5]
+ 87 |     }
+ 88 |     return claim
+    :     ^^^^^^^^^^^^
+ 89 |   })
+    `----
+
+  ! typescript-eslint(unbound-method): Avoid referencing unbound methods which may cause unintentional scoping of `this`.
+     ,-[packages/opencode/src/kilocode/self-heal/index.ts:190:24]
+ 189 |       const baseline = yield* storage.read<number>(["raya", "self-heal", "reports", item.id, "base"]).pipe(
+ 190 |         Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(item.reports)),
+     :                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^|
+     :                                        |               `-- This reference may be unbound and lose `this` context
+ 191 |         Effect.orDie,
+     `----
+  help: If your function does not access `this`, you can annotate it with `this: void`, or consider using an arrow function instead.
+
+  ! typescript-eslint(unbound-method): Avoid referencing unbound methods which may cause unintentional scoping of `this`.
+     ,-[packages/opencode/src/kilocode/self-heal/index.ts:215:28]
+ 214 |             Effect.map((item) => ({ path, item })),
+ 215 |             Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(undefined)),
+     :                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^|
+     :                                            |               `-- This reference may be unbound and lose `this` context
+ 216 |             Effect.orDie,
+     `----
+  help: If your function does not access `this`, you can annotate it with `this: void`, or consider using an arrow function instead.
+
+  ! typescript-eslint(unbound-method): Avoid referencing unbound methods which may cause unintentional scoping of `this`.
+     ,-[packages/opencode/src/kilocode/self-heal/index.ts:243:24]
+ 242 |         Effect.flatMap(decode),
+ 243 |         Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(undefined)),
+     :                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^|
+     :                                        |               `-- This reference may be unbound and lose `this` context
+ 244 |         Effect.orDie,
+     `----
+  help: If your function does not access `this`, you can annotate it with `this: void`, or consider using an arrow function instead.
+
+  ! typescript-eslint(consistent-return): Function expected no return value.
+     ,-[packages/opencode/src/kilocode/self-heal/index.ts:247:54]
+ 246 |       if (!item) return
+ 247 |       if (!expired(item) || (yield* repair.get(id))) return yield* decorate(item)
+     :                                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 248 |       yield* storage.create(["raya", "self-heal", "closed", id], true).pipe(Effect.orDie)
+     `----
+
+  ! typescript-eslint(consistent-return): Function expected no return value.
+     ,-[packages/opencode/src/kilocode/self-heal/index.ts:250:7]
+ 249 |       yield* storage.remove(key(id)).pipe(Effect.orDie)
+ 250 |       return undefined // raya_change - lazy cleanup keeps persistence bounded without timers
+     :       ^^^^^^^^^^^^^^^^
+ 251 |     })
+     `----
+
+  ! typescript-eslint(unbound-method): Avoid referencing unbound methods which may cause unintentional scoping of `this`.
+     ,-[packages/opencode/src/kilocode/self-heal/index.ts:292:26]
+ 291 |         const existing = yield* storage.read<Item>(key(claim.id)).pipe(
+ 292 |           Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(undefined)),
+     :                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^|
+     :                                          |               `-- This reference may be unbound and lose `this` context
+ 293 |           Effect.orDie,
+     `----
+  help: If your function does not access `this`, you can annotate it with `this: void`, or consider using an arrow function instead.
+
+  ! typescript-eslint(unbound-method): Avoid referencing unbound methods which may cause unintentional scoping of `this`.
+     ,-[packages/opencode/src/kilocode/self-heal/index.ts:296:26]
+ 295 |         const closed = yield* storage.read<boolean>(["raya", "self-heal", "closed", claim.id]).pipe(
+ 296 |           Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(false)),
+     :                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^|
+     :                                          |               `-- This reference may be unbound and lose `this` context
+ 297 |           Effect.orDie,
+     `----
+  help: If your function does not access `this`, you can annotate it with `this: void`, or consider using an arrow function instead.
+
+  ! typescript-eslint(unbound-method): Avoid referencing unbound methods which may cause unintentional scoping of `this`.
+     ,-[packages/opencode/src/kilocode/self-heal/index.ts:310:28]
+ 309 |           (yield* storage.read<Item>(["raya", "self-heal", "seed", claim.id]).pipe(
+ 310 |             Effect.catchIf(Storage.NotFoundError.isInstance, () => storage.read<Item>(key(claim.id))),
+     :                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^|
+     :                                            |               `-- This reference may be unbound and lose `this` context
+ 311 |             Effect.orDie,
+     `----
+  help: If your function does not access `this`, you can annotate it with `this: void`, or consider using an arrow function instead.
+
+  ! typescript-eslint(consistent-return): Function expected no return value.
+     ,-[packages/opencode/src/kilocode/self-heal/index.ts:338:7]
+ 337 |       yield* storage.replace(key(id), next).pipe(Effect.orDie)
+ 338 |       return next
+     :       ^^^^^^^^^^^
+ 339 |     })
+     `----
+
+  ! typescript-eslint(consistent-return): Function expected no return value.
+     ,-[packages/opencode/src/kilocode/self-heal/index.ts:345:7]
+ 344 |           const matches = (yield* list()).filter((row) => row.fingerprint === item.fingerprint && !terminal.has(row.status))
+ 345 | ,->       return yield* repair.admit(
+ 346 | |           id,
+ 347 | |           input.source,
+ 348 | |           terminal.has(item.status) || !!item.workSessionID || matches.length > 1,
+ 349 | `->       )
+ 350 |         })
+     `----
+
+Found 14 warnings and 0 errors.
+Finished in 4.5s on 6 files with 130 rules using 8 threads.

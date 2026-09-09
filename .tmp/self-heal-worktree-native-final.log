@@ -1,0 +1,66 @@
+bun test v1.3.14 (0d9b296a)
+
+test\kilocode\self-heal-worktree.test.ts:
+(pass) independent owners create one exact-commit checkout without changing dirty source or running hooks/setup [6887.30ms]
+(pass) an existing partial checkout stays reserved and is never overwritten or retried [2672.84ms]
+(pass) linked-worktree source retains canonical common Git identity [5355.28ms]
+(pass) active checkout filters fail closed without invoking their external program [1658.78ms]
+(pass) checkout modification before dispatch blocks the dependent prompt and retains session identity [9281.33ms]
+killed 1 dangling process
+(fail) offline LFS materialization verifies local bytes and never invokes clean/smudge/process helpers [30005.13ms]
+  ^ this test timed out after 30000ms.
+[07:23:07.583] ERROR (#13671): 254 |         )
+255 |         const claim = (yield* instance(directory, (backlog) => backlog.admit(item.id, { source })))!
+256 |         const ready = yield* instance(directory, (backlog) =>
+257 |           backlog.prepare(item.id, { token: claim.token!, revision: 0 }),
+258 |         )
+259 |         expect(ready.phase).toBe("worktree_ready")
+      ^
+error: expect(received).toBe(expected)
+
+Expected: "worktree_ready"
+Received: "worktree_unknown"
+
+      at toBe (unknown:1:1)
+      at C:\Users\User\Desktop\raya\packages\opencode\test\kilocode\self-heal-worktree.test.ts:259:29
+
+
+# Unhandled error between tests
+-------------------------------
+254 |         )
+255 |         const claim = (yield* instance(directory, (backlog) => backlog.admit(item.id, { source })))!
+256 |         const ready = yield* instance(directory, (backlog) =>
+257 |           backlog.prepare(item.id, { token: claim.token!, revision: 0 }),
+258 |         )
+259 |         expect(ready.phase).toBe("worktree_ready")
+      ^
+error: expect(received).toBe(expected)
+
+Expected: "worktree_ready"
+Received: "worktree_unknown"
+
+      at toBe (unknown:1:1)
+      at C:\Users\User\Desktop\raya\packages\opencode\test\kilocode\self-heal-worktree.test.ts:259:29
+      at ~effect/Effect/successCont (C:\Users\User\Desktop\raya\node_modules\.bun\effect@4.0.0-beta.83\node_modules\effect\dist\internal\effect.js:910:23)
+      at runLoop (C:\Users\User\Desktop\raya\node_modules\.bun\effect@4.0.0-beta.83\node_modules\effect\dist\internal\effect.js:420:66)
+      at evaluate (C:\Users\User\Desktop\raya\node_modules\.bun\effect@4.0.0-beta.83\node_modules\effect\dist\internal\effect.js:380:20)
+      at C:\Users\User\Desktop\raya\node_modules\.bun\effect@4.0.0-beta.83\node_modules\effect\dist\internal\effect.js:734:14
+      at C:\Users\User\Desktop\raya\node_modules\.bun\effect@4.0.0-beta.83\node_modules\effect\dist\Effect.js:8151:9
+      at processTicksAndRejections (unknown:7:39)
+-------------------------------
+
+(pass) missing or corrupt local LFS content blocks before worktree mutation without fetching [11455.18ms]
+(pass) managed paths cannot overlap source or follow a junction into unrelated files [2831.62ms]
+(pass) source revision change after preparation blocks session creation [8107.08ms]
+
+test\kilocode\self-heal.test.ts:
+(pass) RayaSelfHeal > classifies, persists, deduplicates, and updates feedback [489.84ms]
+(pass) RayaSelfHeal > prunes month-old terminal feedback but preserves unresolved work [376.36ms]
+(pass) RayaSelfHeal > lets the repair agent refine classification and flag duplicates via update [391.05ms]
+(pass) RayaSelfHeal > keeps only the newest fifty evidence records [172.91ms]
+
+ 12 pass
+ 1 fail
+ 1 error
+ 74 expect() calls
+Ran 13 tests across 2 files. [85.13s]

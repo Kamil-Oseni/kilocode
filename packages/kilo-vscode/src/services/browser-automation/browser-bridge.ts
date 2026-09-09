@@ -1,4 +1,5 @@
 // raya_change - Milestone F testable CLI-to-Playwright browser bridge
+import { DialogPendingError } from "./browser-dialog"
 import { createHash } from "node:crypto"
 import type {
   BrowserFailure,
@@ -204,11 +205,13 @@ export class BrowserBridge {
         : detail
       receipt.failure = {
         code:
-          request.operation === "navigate"
-            ? "navigation_failed"
-            : request.operation === "evaluate"
-              ? "evaluation_failed"
-              : "invalid_request",
+          error instanceof DialogPendingError
+            ? "dialog_pending"
+            : request.operation === "navigate"
+              ? "navigation_failed"
+              : request.operation === "evaluate"
+                ? "evaluation_failed"
+                : "invalid_request",
         message: message.slice(0, 10_000),
       }
       await this.deliver(request.id, directory, receipt)

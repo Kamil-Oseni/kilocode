@@ -1,7 +1,7 @@
 import { Schema } from "effect"
 import { Accounting } from "@opencode-ai/schema/kilocode/accounting"
 import { describe, expect, test } from "bun:test"
-import { Usage } from "@opencode-ai/llm"
+import { Usage, type ProviderMetadata } from "@opencode-ai/llm"
 import { Session as SessionNs } from "@/session/session"
 import type { Provider } from "@/provider/provider"
 
@@ -139,6 +139,106 @@ describe("KiloSession.providerCost — fallback", () => {
 })
 
 describe("persistable cost evidence", () => {
+  test("validates the selected raw cache-write metadata without coercing objects or booleans", () => {
+    const sources: ((value: unknown) => ProviderMetadata)[] = [
+      (value) => ({ anthropic: { cacheCreationInputTokens: value } }),
+      (value) => ({ vertex: { cacheCreationInputTokens: value } }),
+      (value) => ({ bedrock: { usage: { cacheWriteInputTokens: value } } }),
+      (value) => ({ venice: { usage: { cacheCreationInputTokens: value } } }),
+    ]
+    for (const metadata of sources) {
+      const result = SessionNs.getUsage({
+        model: model(),
+        usage: new Usage({ inputTokens: 100, outputTokens: 10 }),
+        metadata: metadata(" 20 "),
+      })
+      expect(result.tokens.cache.write).toBe(20)
+      expect(result.accounting).toMatchObject({ status: "estimated", amount: 0.000465, issues: [] })
+      for (const value of [
+        true,
+        false,
+        "",
+        " ",
+        [],
+        [20],
+        {},
+        -1,
+        0.5,
+        Infinity,
+        Number.MAX_SAFE_INTEGER + 1,
+        "0x14",
+        "NaN",
+        Symbol("invalid"),
+      ]) {
+        const invalid = SessionNs.getUsage({
+          model: model(),
+          usage: new Usage({ inputTokens: 100, outputTokens: 10 }),
+          metadata: metadata(value),
+        })
+        expect(invalid.tokens.cache.write).toBe(0)
+        expect(invalid.accounting).toMatchObject({ status: "unknown", issues: ["cache_write_usage_invalid"] })
+        expect(invalid.accounting.amount).toBeUndefined()
+        expect(() => Schema.encodeSync(Accounting)(invalid.accounting)).not.toThrow()
+      }
+    }
+  })
+
+  test("honors normalized cache-write precedence and reports usage defects without discarding provider amounts", () => {
+    const result = SessionNs.getUsage({
+      model: model(),
+      usage: new Usage({ inputTokens: 100, outputTokens: 10, cacheWriteInputTokens: 0 }),
+      metadata: { anthropic: { cacheCreationInputTokens: false } },
+    })
+    expect(result.accounting).toMatchObject({ status: "estimated", amount: 0.00045, issues: [] })
+    expect(
+      SessionNs.getUsage({
+        model: model(),
+        usage: new Usage({ inputTokens: 100, outputTokens: 10 }),
+        metadata: { anthropic: { cacheCreationInputTokens: 0 }, vertex: { cacheCreationInputTokens: 20 } },
+      }).accounting,
+    ).toMatchObject({ status: "estimated", amount: 0.00045, issues: [] })
+    const reported = SessionNs.getUsage({
+      model: model(),
+      usage: new Usage({ inputTokens: 100, outputTokens: 10 }),
+      metadata: { gateway: { marketCost: "0.12" }, anthropic: { cacheCreationInputTokens: false } },
+    })
+    expect(reported.accounting).toMatchObject({
+      status: "reported",
+      amount: 0.12,
+      issues: ["cache_write_usage_invalid"],
+    })
+  })
+
+  test("quarantines fractional or unsafe counts and contradictory noncached input", () => {
+    for (const value of [-1, 0.5, Number.MAX_SAFE_INTEGER + 1]) {
+      const result = SessionNs.getUsage({ model: model(), usage: new Usage({ inputTokens: value, outputTokens: 10 }) })
+      expect(result.accounting.status).toBe("unknown")
+      expect(result.accounting.issues).toContain("contradictory_usage")
+      expect(result.accounting.amount).toBeUndefined()
+    }
+    expect(
+      SessionNs.getUsage({
+        model: model(),
+        usage: new Usage({ inputTokens: 100, nonCachedInputTokens: 100, cacheReadInputTokens: 20, outputTokens: 10 }),
+      }).accounting,
+    ).toMatchObject({ status: "unknown", issues: ["contradictory_usage"] })
+  })
+
+  test("distinguishes complete measured zero usage from missing usage or unverified rates", () => {
+    const usage = new Usage({ inputTokens: 0, outputTokens: 0 })
+    expect(SessionNs.getUsage({ model: model(), usage }).accounting).toMatchObject({
+      status: "estimated",
+      amount: 0,
+      issues: [],
+    })
+    expect(SessionNs.getUsage({ model: model(), usage: new Usage({ outputTokens: 0 }) }).accounting.status).toBe(
+      "unknown",
+    )
+    expect(SessionNs.getUsage({ model: createModel({ context: 1000, output: 100 }), usage }).accounting.status).toBe(
+      "unknown",
+    )
+  })
+
   test("preserves rate snapshots and disjoint cache/reasoning buckets", () => {
     const result = SessionNs.getUsage({
       model: model(),
@@ -165,7 +265,7 @@ describe("persistable cost evidence", () => {
 
   test("retains provider zero and rejects malformed monetary evidence", () => {
     const run = (cost: unknown) =>
-      SessionNs.getUsage({ model: model(), usage: baseUsage, metadata: { gateway: { marketCost: cost } } as never })
+      SessionNs.getUsage({ model: model(), usage: baseUsage, metadata: { gateway: { marketCost: cost } } })
     expect(run("0").accounting).toMatchObject({ status: "reported", amount: 0, source: "gateway.marketCost" })
     for (const value of [-1, "", "  ", false, null, "NaN", Infinity]) {
       expect(run(value).accounting.status).toBe("estimated")

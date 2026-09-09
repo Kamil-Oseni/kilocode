@@ -474,6 +474,40 @@ export type BrowserRequest =
       /**
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
+      tabID: string
+      operation: "dialog"
+      action: "list"
+      operationID?: string
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID: string
+      operation: "dialog"
+      action: "accept"
+      dialogID: string
+      text?: string
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID: string
+      operation: "dialog"
+      action: "dismiss"
+      dialogID: string
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
       tabID?: string
       operation: "tabs"
       action: "list"
@@ -4932,6 +4966,40 @@ export type NotebookFailure = {
 
 export type BrowserResult =
   | {
+      operation: "dialog"
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID: string
+      dialogs: Array<{
+        id: string
+        /**
+         * Opaque observed browser tab identity; never infer from a tab index or URL.
+         */
+        tabID: string
+        operationID?: string
+        type: "alert" | "confirm" | "prompt" | "beforeunload"
+        message: string
+        defaultValue: string
+        status: "open" | "resolving" | "accepted" | "dismissed" | "unknown" | "closed"
+        truncated: boolean
+      }>
+      operations: Array<{
+        id: string
+        /**
+         * Opaque observed browser tab identity; never infer from a tab index or URL.
+         */
+        tabID: string
+        operation: string
+        status: "pending" | "completed" | "failed"
+        output?: string
+        error?: string
+        truncated?: boolean
+      }>
+      url?: string
+      title?: string
+    }
+  | {
       operation: "tabs"
       tabs: Array<{
         /**
@@ -5175,6 +5243,7 @@ export type BrowserResult =
 
 export type BrowserFailure = {
   code:
+    | "dialog_pending"
     | "cancelled"
     | "closed"
     | "disconnected"
@@ -5696,6 +5765,40 @@ export type InteractiveTerminalInfo1 = {
 }
 
 export type BrowserRequest1 =
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID: string
+      operation: "dialog"
+      action: "list"
+      operationID?: string
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID: string
+      operation: "dialog"
+      action: "accept"
+      dialogID: string
+      text?: string
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID: string
+      operation: "dialog"
+      action: "dismiss"
+      dialogID: string
+    }
   | {
       id: BrowserRequestId
       sessionID: string
@@ -19107,6 +19210,7 @@ export type KilocodeGoalGetResponses = {
     }>
     startMessageID?: string
     startSnapshot?: string
+    selfHealAttempt?: string
     selfHealID?: string
     status: "active" | "paused" | "complete" | "blocked"
     createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -19511,6 +19615,7 @@ export type KilocodeGoalUpdateResponses = {
     }>
     startMessageID?: string
     startSnapshot?: string
+    selfHealAttempt?: string
     selfHealID?: string
     status: "active" | "paused" | "complete" | "blocked"
     createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -19903,6 +20008,7 @@ export type KilocodeGoalCreateResponses = {
     }>
     startMessageID?: string
     startSnapshot?: string
+    selfHealAttempt?: string
     selfHealID?: string
     status: "active" | "paused" | "complete" | "blocked"
     createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -21528,6 +21634,59 @@ export type KilocodeSelfHealListResponses = {
       reason?: string
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     }
+    completion?: {
+      version: 1
+      itemID: string
+      attemptID: string
+      sessionID: string
+      source: {
+        root: string
+        commit: string
+      }
+      worktree: {
+        root: string
+        directory: string
+        branch: string
+        common: string
+        commit: string
+      }
+      goal: {
+        intent: string
+        revision: string
+        completedRevision: string
+        createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        objective: string
+        audit: {
+          summary: string
+          verifiedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          requirements: Array<{
+            criterionID?: string
+            requirement: string
+            passed: boolean
+            evidence: Array<{
+              sessionID: string
+              messageID: string
+              partID: string
+              callID: string
+              summary: string
+              record: {
+                version: 1
+                digest: string
+                at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+              }
+            }>
+          }>
+        }
+        review?: {
+          status: "accepted"
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          criteria: Array<string>
+          acceptedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+      }
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
+    legacyVerification?: boolean
     id: string
     fingerprint: string
     title: string
@@ -21618,6 +21777,59 @@ export type KilocodeSelfHealCreateResponses = {
       reason?: string
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     }
+    completion?: {
+      version: 1
+      itemID: string
+      attemptID: string
+      sessionID: string
+      source: {
+        root: string
+        commit: string
+      }
+      worktree: {
+        root: string
+        directory: string
+        branch: string
+        common: string
+        commit: string
+      }
+      goal: {
+        intent: string
+        revision: string
+        completedRevision: string
+        createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        objective: string
+        audit: {
+          summary: string
+          verifiedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          requirements: Array<{
+            criterionID?: string
+            requirement: string
+            passed: boolean
+            evidence: Array<{
+              sessionID: string
+              messageID: string
+              partID: string
+              callID: string
+              summary: string
+              record: {
+                version: 1
+                digest: string
+                at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+              }
+            }>
+          }>
+        }
+        review?: {
+          status: "accepted"
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          criteria: Array<string>
+          acceptedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+      }
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
+    legacyVerification?: boolean
     id: string
     fingerprint: string
     title: string
@@ -21709,6 +21921,58 @@ export type KilocodeSelfHealOutcomeResponses = {
     sessionID?: string
     reason?: string
     at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    completion?: {
+      version: 1
+      itemID: string
+      attemptID: string
+      sessionID: string
+      source: {
+        root: string
+        commit: string
+      }
+      worktree: {
+        root: string
+        directory: string
+        branch: string
+        common: string
+        commit: string
+      }
+      goal: {
+        intent: string
+        revision: string
+        completedRevision: string
+        createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        objective: string
+        audit: {
+          summary: string
+          verifiedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          requirements: Array<{
+            criterionID?: string
+            requirement: string
+            passed: boolean
+            evidence: Array<{
+              sessionID: string
+              messageID: string
+              partID: string
+              callID: string
+              summary: string
+              record: {
+                version: 1
+                digest: string
+                at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+              }
+            }>
+          }>
+        }
+        review?: {
+          status: "accepted"
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          criteria: Array<string>
+          acceptedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+      }
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
   }
 }
 
@@ -21853,6 +22117,58 @@ export type KilocodeSelfHealPrepareResponses = {
     sessionID?: string
     reason?: string
     at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    completion?: {
+      version: 1
+      itemID: string
+      attemptID: string
+      sessionID: string
+      source: {
+        root: string
+        commit: string
+      }
+      worktree: {
+        root: string
+        directory: string
+        branch: string
+        common: string
+        commit: string
+      }
+      goal: {
+        intent: string
+        revision: string
+        completedRevision: string
+        createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        objective: string
+        audit: {
+          summary: string
+          verifiedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          requirements: Array<{
+            criterionID?: string
+            requirement: string
+            passed: boolean
+            evidence: Array<{
+              sessionID: string
+              messageID: string
+              partID: string
+              callID: string
+              summary: string
+              record: {
+                version: 1
+                digest: string
+                at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+              }
+            }>
+          }>
+        }
+        review?: {
+          status: "accepted"
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          criteria: Array<string>
+          acceptedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+      }
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
   }
 }
 
@@ -21937,6 +22253,58 @@ export type KilocodeSelfHealAdvanceResponses = {
     sessionID?: string
     reason?: string
     at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    completion?: {
+      version: 1
+      itemID: string
+      attemptID: string
+      sessionID: string
+      source: {
+        root: string
+        commit: string
+      }
+      worktree: {
+        root: string
+        directory: string
+        branch: string
+        common: string
+        commit: string
+      }
+      goal: {
+        intent: string
+        revision: string
+        completedRevision: string
+        createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        objective: string
+        audit: {
+          summary: string
+          verifiedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          requirements: Array<{
+            criterionID?: string
+            requirement: string
+            passed: boolean
+            evidence: Array<{
+              sessionID: string
+              messageID: string
+              partID: string
+              callID: string
+              summary: string
+              record: {
+                version: 1
+                digest: string
+                at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+              }
+            }>
+          }>
+        }
+        review?: {
+          status: "accepted"
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          criteria: Array<string>
+          acceptedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+      }
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
   }
 }
 
@@ -22005,6 +22373,59 @@ export type KilocodeSelfHealGetResponses = {
       reason?: string
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     }
+    completion?: {
+      version: 1
+      itemID: string
+      attemptID: string
+      sessionID: string
+      source: {
+        root: string
+        commit: string
+      }
+      worktree: {
+        root: string
+        directory: string
+        branch: string
+        common: string
+        commit: string
+      }
+      goal: {
+        intent: string
+        revision: string
+        completedRevision: string
+        createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        objective: string
+        audit: {
+          summary: string
+          verifiedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          requirements: Array<{
+            criterionID?: string
+            requirement: string
+            passed: boolean
+            evidence: Array<{
+              sessionID: string
+              messageID: string
+              partID: string
+              callID: string
+              summary: string
+              record: {
+                version: 1
+                digest: string
+                at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+              }
+            }>
+          }>
+        }
+        review?: {
+          status: "accepted"
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          criteria: Array<string>
+          acceptedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+      }
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
+    legacyVerification?: boolean
     id: string
     fingerprint: string
     title: string
@@ -22075,6 +22496,10 @@ export type KilocodeSelfHealUpdateErrors = {
    * Not found
    */
   404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
 }
 
 export type KilocodeSelfHealUpdateError = KilocodeSelfHealUpdateErrors[keyof KilocodeSelfHealUpdateErrors]
@@ -22117,6 +22542,59 @@ export type KilocodeSelfHealUpdateResponses = {
       reason?: string
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     }
+    completion?: {
+      version: 1
+      itemID: string
+      attemptID: string
+      sessionID: string
+      source: {
+        root: string
+        commit: string
+      }
+      worktree: {
+        root: string
+        directory: string
+        branch: string
+        common: string
+        commit: string
+      }
+      goal: {
+        intent: string
+        revision: string
+        completedRevision: string
+        createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        objective: string
+        audit: {
+          summary: string
+          verifiedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          requirements: Array<{
+            criterionID?: string
+            requirement: string
+            passed: boolean
+            evidence: Array<{
+              sessionID: string
+              messageID: string
+              partID: string
+              callID: string
+              summary: string
+              record: {
+                version: 1
+                digest: string
+                at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+              }
+            }>
+          }>
+        }
+        review?: {
+          status: "accepted"
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          criteria: Array<string>
+          acceptedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+      }
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
+    legacyVerification?: boolean
     id: string
     fingerprint: string
     title: string

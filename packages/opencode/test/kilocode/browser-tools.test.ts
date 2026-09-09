@@ -4,9 +4,10 @@ import { describe, expect, test } from "bun:test"
 import { Agent } from "@/agent/agent"
 import * as KiloAgent from "@/kilocode/agent"
 import { Selector, SmokeStep, type Result } from "@/kilocode/browser/protocol"
-import { Browser } from "@/kilocode/browser/service"
+import { Browser, HostError } from "@/kilocode/browser/service"
 import { Permission } from "@/permission"
 import {
+  BrowserDialogTool,
   BrowserFramesTool,
   BrowserTabsTool,
   BrowserAuthCaptureTool,
@@ -28,6 +29,7 @@ import { testEffect } from "../lib/effect"
 
 const calls: Browser.Input[] = []
 function result(input: Browser.Input): Result {
+  if (input.operation === "dialog") return { operation: "dialog", tabID: input.tabID, dialogs: [], operations: [] }
   if (input.operation === "frames") return { operation: "frames", tabID: input.tabID, frames: [] }
   if (input.operation === "tabs") return { operation: "tabs", tabs: [] }
   if (input.operation === "snapshot")
@@ -95,6 +97,7 @@ test("auto-approves every native browser action in VS Code", () => {
   try {
     const rules = KiloAgent.prepare({}).defaultsPatch
     for (const permission of [
+      "browser_dialog",
       "browser_frames",
       "browser_tabs",
       "browser_navigate",
@@ -142,6 +145,54 @@ describe("browser host tools", () => {
     } as const
     expect(Schema.decodeUnknownSync(SmokeStep)(step)).toEqual(step)
   })
+
+  it.instance(
+    "preserves pending dialog failures and forwards observed responses without replay",
+    () =>
+      Effect.gen(function* () {
+        let count = 0
+        const waiting: Browser.Interface = {
+          ...host,
+          request: () => {
+            count++
+            return Effect.fail(
+              new HostError({
+                code: "dialog_pending",
+                detail: "Browser operation remains pending and must not be retried. operation_id=op_observed",
+              }),
+            )
+          },
+        }
+        const click = yield* BrowserClickTool.pipe(
+          Effect.provideService(Browser.Service, waiting),
+          Effect.flatMap(Tool.init),
+        )
+        const failed = yield* click.execute({ tab_id: "tab_seen", selector: "#save" }, context([])).pipe(Effect.exit)
+        expect(failed._tag).toBe("Failure")
+        expect(JSON.stringify(failed)).toContain("dialog_pending")
+        expect(JSON.stringify(failed)).toContain("must not be retried")
+        expect(count).toBe(1)
+        calls.length = 0
+        const dialog = yield* BrowserDialogTool.pipe(
+          Effect.provideService(Browser.Service, host),
+          Effect.flatMap(Tool.init),
+        )
+        yield* dialog.execute(
+          { action: "accept", tab_id: "tab_seen", dialog_id: "dialog_seen", text: "Ada" },
+          context([]),
+        )
+        yield* dialog.execute({ action: "list", tab_id: "tab_seen", operation_id: "op_seen" }, context([]))
+        expect(calls[0]).toMatchObject({
+          operation: "dialog",
+          action: "accept",
+          tabID: "tab_seen",
+          dialogID: "dialog_seen",
+          text: "Ada",
+        })
+        expect(calls[1]).toMatchObject({ operation: "dialog", action: "list", operationID: "op_seen" })
+      }),
+    60_000,
+  )
 
   it.instance(
     "forwards frame document identity without changing tab targeting",

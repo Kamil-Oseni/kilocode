@@ -1,0 +1,20 @@
+bun test v1.3.14 (0d9b296a)
+
+test\kilocode\server\httpapi-self-heal-completion.test.ts:
+INFO  2026-09-09T07:47:46 +8703ms service=bus type=session.turn.open subscribing
+INFO  2026-09-09T07:47:46 +1ms service=bus type=session.turn.close subscribing
+INFO  2026-09-09T07:47:46 +1ms service=bus type=session.turn.close subscribing
+INFO  2026-09-09T07:47:46 +3ms service=bus type=session.turn.close subscribing
+INFO  2026-09-09T07:47:46 +101ms service=bus type=memory.status subscribing
+INFO  2026-09-09T07:47:46 +0ms service=bus type=memory.updated subscribing
+INFO  2026-09-09T07:47:48 +1674ms service=kilo-sessions sessionId=ses_f7adcd96fffeSNL1bcSenA2BoM session bootstrap skipped: no client
+INFO  2026-09-09T07:47:49 +1022ms service=kilocode-indexing workspacePath=C:\Users\User\AppData\Local\Temp\opencode-test-p6fbheq2dem initializing project indexing
+INFO  2026-09-09T07:47:49 +46ms service=bus type=indexing.status publishing
+INFO  2026-09-09T07:47:49 +1ms service=bus type=indexing.status publishing
+INFO  2026-09-09T07:47:50 +681ms service=snapshot.seed paths=0 dropped=0 duration=1123 snapshot seed complete
+(pass) HTTP updates cannot assert tested or installed completion or reassign repair ownership [7905.50ms]
+
+ 1 pass
+ 0 fail
+ 6 expect() calls
+Ran 1 test across 1 file. [16.39s]

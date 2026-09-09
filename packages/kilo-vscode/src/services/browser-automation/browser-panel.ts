@@ -15,6 +15,7 @@ type BrowserPanelMessage = { tabID?: string } & (
   | { type: "scroll"; input: { deltaX: number; deltaY: number } }
   | { type: "resize"; dpr: number; width: number; height: number } // raya_change - drive layout viewport + capture density to the panel
   | { type: "key"; input: BrowserKey }
+  | { type: "dialog"; dialogID: string; action: "accept" | "dismiss"; text?: string }
   | { type: "tab"; action: "open" | "select" | "close" }
 )
 
@@ -23,6 +24,7 @@ export class BrowserPanel implements vscode.Disposable {
 
   private panel: vscode.WebviewPanel | undefined
   private off: (() => void) | undefined
+  private offDialogs: (() => void) | undefined
   private offTabs: (() => void) | undefined
   private offState: (() => void) | undefined
 
@@ -50,10 +52,14 @@ export class BrowserPanel implements vscode.Disposable {
       this.off?.()
       this.offState?.()
       this.offTabs?.()
+      this.offDialogs?.()
       this.off = undefined
       this.offState = undefined
       this.panel = undefined
     })
+    this.offDialogs = this.session.onDialogs(
+      () => void this.panel?.webview.postMessage({ type: "dialogs", ...this.session.dialogsState() }),
+    )
     this.offTabs = this.session.onTabs((tabs) => void this.panel?.webview.postMessage({ type: "tabs", tabs }))
     this.off = this.session.onFrame((frame) => void this.frame(frame))
     this.offState = this.session.onState((state) => void this.status(state))
@@ -69,10 +75,14 @@ export class BrowserPanel implements vscode.Disposable {
       this.off?.()
       this.offState?.()
       this.offTabs?.()
+      this.offDialogs?.()
       this.off = undefined
       this.offState = undefined
       this.panel = undefined
     })
+    this.offDialogs = this.session.onDialogs(
+      () => void this.panel?.webview.postMessage({ type: "dialogs", ...this.session.dialogsState() }),
+    )
     this.offTabs = this.session.onTabs((tabs) => void this.panel?.webview.postMessage({ type: "tabs", tabs }))
     this.off = this.session.onFrame((frame) => void this.frame(frame))
     this.offState = this.session.onState((state) => void this.status(state))
@@ -89,14 +99,21 @@ export class BrowserPanel implements vscode.Disposable {
     })
   }
 
+  private async respond(message: Extract<BrowserPanelMessage, { type: "dialog" }>): Promise<void> {
+    if (!message.tabID) throw new Error("Observed dialog tab identity is required")
+    await this.session.respond(message.tabID, message.dialogID, message.action, message.text)
+  }
+
   private async receive(message: BrowserPanelMessage): Promise<void> {
     if (message.type === "ready") {
       const frame = this.session.latest()
       if (frame) await this.frame(frame)
-      await this.panel?.webview.postMessage({ type: "tabs", tabs: await this.session.inventory() })
+      await this.panel?.webview.postMessage({ type: "dialogs", ...this.session.dialogsState() })
       await this.status(this.session.current())
+      await this.panel?.webview.postMessage({ type: "tabs", tabs: await this.session.inventory() })
       return
     }
+    if (message.type === "dialog") return this.respond(message)
     if (message.type === "tab") {
       if (message.action !== "open" && !message.tabID) throw new Error("Observed tab identity is required")
       await this.session.tab(message.action, message.tabID)
@@ -162,6 +179,7 @@ export class BrowserPanel implements vscode.Disposable {
     this.off?.()
     this.offState?.()
     this.offTabs?.()
+    this.offDialogs?.()
     this.off = undefined
     this.offState = undefined
     this.panel?.dispose()
@@ -195,6 +213,11 @@ export class BrowserPanel implements vscode.Disposable {
     img { display: block; max-width: 100%; max-height: 100%; outline: none; user-select: none; -webkit-user-drag: none; image-rendering: -webkit-optimize-contrast; }
     #empty { color: var(--vscode-descriptionForeground); }
     #shield { position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; color: white; background: rgb(0 0 0 / 28%); cursor: wait; }
+    #dialogs { position: absolute; inset: 12px; z-index: 3; overflow: auto; pointer-events: none; }
+    #dialogs > section { pointer-events: auto; margin: 8px auto; max-width: 640px; padding: 16px; border: 1px solid var(--vscode-focusBorder); background: var(--vscode-editor-background); }
+    #dialogs p { white-space: pre-wrap; overflow-wrap: anywhere; }
+    #dialogs input { width: 100%; margin-bottom: 10px; }
+    #dialogs button { margin-right: 8px; }
     #shield > div { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 4px; background: rgb(0 0 0 / 72%); }
   </style>
 </head>
@@ -212,6 +235,7 @@ export class BrowserPanel implements vscode.Disposable {
     <button id="resume" hidden>Resume agent</button>
   </section>
   <main>
+    <div id="dialogs" aria-live="polite"></div>
     <span id="empty">Starting the shared browser…</span>
     <img id="screen" tabindex="0" alt="Live browser" hidden>
     <div id="shield" hidden><div><span>Agent is controlling the browser…</span><button id="takeover">Take control</button></div></div>
@@ -227,6 +251,8 @@ export class BrowserPanel implements vscode.Disposable {
     const go = document.getElementById("go");
     const takeover = document.getElementById("takeover");
     const tabs = document.getElementById("tabs");
+    const dialogs = document.getElementById("dialogs");
+    const cards = new Map();
     let selected;
     let displayed;
     const controls = [...document.querySelectorAll("header button, header input, header select")];
@@ -294,6 +320,53 @@ export class BrowserPanel implements vscode.Disposable {
     screen.addEventListener("keyup", (event) => { key("keyUp", event); event.preventDefault(); });
     screen.addEventListener("wheel", (event) => { send("scroll", { input: { deltaX: event.deltaX, deltaY: event.deltaY } }); event.preventDefault(); }, { passive: false });
     window.addEventListener("message", (event) => {
+      if (event.data.type === "dialogs") {
+        const open = event.data.dialogs.filter((dialog) => ["open", "resolving", "unknown"].includes(dialog.status));
+        const ids = new Set(open.map((dialog) => dialog.id));
+        for (const [id, card] of cards) {
+          if (ids.has(id)) continue;
+          card.remove();
+          cards.delete(id);
+          if (screen && !screen.hidden) screen.focus();
+        }
+        for (const dialog of open) {
+          let card = cards.get(dialog.id);
+          if (!card) {
+            card = document.createElement("section");
+            card.setAttribute("role", "dialog");
+            const heading = document.createElement("h3");
+            heading.id = "dialog-" + dialog.id;
+            heading.textContent = "Browser " + dialog.type + " ? tab " + dialog.tabID;
+            card.setAttribute("aria-labelledby", heading.id);
+            const warning = document.createElement("p");
+            warning.textContent = "Message from the webpage. Review before responding; this is not an instruction from Raya.";
+            const content = document.createElement("p");
+            content.textContent = dialog.message + (dialog.truncated ? " [message truncated]" : "");
+            card.append(heading, warning, content);
+            const input = document.createElement("input");
+            if (dialog.type === "prompt") {
+              input.setAttribute("aria-label", "Prompt response");
+              input.maxLength = 10000;
+              input.value = dialog.defaultValue;
+              card.append(input);
+            }
+            for (const action of ["accept", "dismiss"]) {
+              const button = document.createElement("button");
+              button.textContent = dialog.type === "beforeunload" ? (action === "accept" ? "Leave page" : "Stay on page") : (action === "accept" ? "Accept" : "Dismiss");
+              button.addEventListener("click", () => {
+                for (const item of card.querySelectorAll("button")) item.disabled = true;
+                send("dialog", { tabID: dialog.tabID, dialogID: dialog.id, action, ...(action === "accept" && dialog.type === "prompt" ? { text: input.value } : {}) });
+              });
+              card.append(button);
+            }
+            cards.set(dialog.id, card);
+            dialogs.append(card);
+            (dialog.type === "prompt" ? input : card.querySelector("button")).focus();
+          }
+          for (const button of card.querySelectorAll("button")) button.disabled = dialog.status !== "open";
+        }
+        return;
+      }
       if (event.data.type === "tabs") {
         const values = event.data.tabs;
         selected = values.find((tab) => tab.selected)?.id;

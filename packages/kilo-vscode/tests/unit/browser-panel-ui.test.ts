@@ -71,6 +71,40 @@ it("binds panel input to displayed tab identity and hides stale frames", () => {
     expect(sent.at(-1)).toMatchObject({ type: "tab", action: "close", tabID: "second" })
     window.document.getElementById("newtab")!.click()
     expect(sent.at(-1)).toMatchObject({ type: "tab", action: "open" })
+    message({ type: "state", state: { control: "agent", busy: true } })
+    message({
+      type: "dialogs",
+      dialogs: [
+        {
+          id: "observed",
+          tabID: "first",
+          type: "prompt",
+          status: "open",
+          message: "<script>bad()</script>",
+          defaultValue: "Default",
+          truncated: false,
+        },
+      ],
+      operations: [],
+    })
+    const card = window.document.querySelector('[role="dialog"]')!
+    expect(card.textContent).toContain("<script>bad()</script>")
+    expect(card.querySelector("script")).toBeNull()
+    const prompt = card.querySelector("input")!
+    prompt.value = "Edited"
+    const accept = card.querySelector("button")!
+    expect(accept.disabled).toBe(false)
+    accept.click()
+    expect(sent.at(-1)).toMatchObject({
+      type: "dialog",
+      tabID: "first",
+      dialogID: "observed",
+      action: "accept",
+      text: "Edited",
+    })
+    expect(accept.disabled).toBe(true)
+    message({ type: "dialogs", dialogs: [], operations: [] })
+    expect(window.document.querySelector('[role="dialog"]')).toBeNull()
   } finally {
     void window.happyDOM.close()
   }

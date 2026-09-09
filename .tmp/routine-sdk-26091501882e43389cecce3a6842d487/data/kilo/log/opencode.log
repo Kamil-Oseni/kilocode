@@ -1,0 +1,12 @@
+timestamp=2026-09-08T12:17:39.567Z level=INFO run=470fd738 message=loading path="C:\\Users\\User\\Desktop\\raya\\.tmp\\routine-sdk-26091501882e43389cecce3a6842d487\\config\\kilo\\config.json"
+timestamp=2026-09-08T12:17:39.568Z level=INFO run=470fd738 message=loading path="C:\\Users\\User\\Desktop\\raya\\.tmp\\routine-sdk-26091501882e43389cecce3a6842d487\\config\\kilo\\kilo.json"
+timestamp=2026-09-08T12:17:39.569Z level=INFO run=470fd738 message=loading path="C:\\Users\\User\\Desktop\\raya\\.tmp\\routine-sdk-26091501882e43389cecce3a6842d487\\config\\kilo\\kilo.jsonc"
+timestamp=2026-09-08T12:17:39.573Z level=INFO run=470fd738 message=loading path="C:\\Users\\User\\Desktop\\raya\\.tmp\\routine-sdk-26091501882e43389cecce3a6842d487\\config\\kilo\\opencode.json"
+timestamp=2026-09-08T12:17:39.576Z level=INFO run=470fd738 message=loading path="C:\\Users\\User\\Desktop\\raya\\.tmp\\routine-sdk-26091501882e43389cecce3a6842d487\\config\\kilo\\opencode.jsonc"
+timestamp=2026-09-08T12:17:52.637Z level=ERROR run=470fd738 message="Failed to fetch models.dev" cause=Cause([Fail(TimeoutError)])
+timestamp=2026-09-08T12:18:15.541Z level=INFO run=c8082cfe message=loading path="C:\\Users\\User\\Desktop\\raya\\.tmp\\routine-sdk-26091501882e43389cecce3a6842d487\\config\\kilo\\config.json"
+timestamp=2026-09-08T12:18:15.543Z level=INFO run=c8082cfe message=loading path="C:\\Users\\User\\Desktop\\raya\\.tmp\\routine-sdk-26091501882e43389cecce3a6842d487\\config\\kilo\\kilo.json"
+timestamp=2026-09-08T12:18:15.544Z level=INFO run=c8082cfe message=loading path="C:\\Users\\User\\Desktop\\raya\\.tmp\\routine-sdk-26091501882e43389cecce3a6842d487\\config\\kilo\\kilo.jsonc"
+timestamp=2026-09-08T12:18:15.550Z level=INFO run=c8082cfe message=loading path="C:\\Users\\User\\Desktop\\raya\\.tmp\\routine-sdk-26091501882e43389cecce3a6842d487\\config\\kilo\\opencode.json"
+timestamp=2026-09-08T12:18:15.561Z level=INFO run=c8082cfe message=loading path="C:\\Users\\User\\Desktop\\raya\\.tmp\\routine-sdk-26091501882e43389cecce3a6842d487\\config\\kilo\\opencode.jsonc"
+timestamp=2026-09-08T12:18:27.688Z level=ERROR run=c8082cfe message="Failed to fetch models.dev" cause=Cause([Fail(TimeoutError)])

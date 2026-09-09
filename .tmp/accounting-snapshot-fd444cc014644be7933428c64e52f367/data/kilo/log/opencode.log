@@ -1,0 +1,5 @@
+timestamp=2026-09-09T06:37:56.892Z level=INFO run=b9bc4d79 message=loading path="C:\\Users\\User\\Desktop\\raya\\.tmp\\accounting-snapshot-fd444cc014644be7933428c64e52f367\\config\\kilo\\config.json"
+timestamp=2026-09-09T06:37:56.894Z level=INFO run=b9bc4d79 message=loading path="C:\\Users\\User\\Desktop\\raya\\.tmp\\accounting-snapshot-fd444cc014644be7933428c64e52f367\\config\\kilo\\kilo.json"
+timestamp=2026-09-09T06:37:56.895Z level=INFO run=b9bc4d79 message=loading path="C:\\Users\\User\\Desktop\\raya\\.tmp\\accounting-snapshot-fd444cc014644be7933428c64e52f367\\config\\kilo\\kilo.jsonc"
+timestamp=2026-09-09T06:37:56.906Z level=INFO run=b9bc4d79 message=loading path="C:\\Users\\User\\Desktop\\raya\\.tmp\\accounting-snapshot-fd444cc014644be7933428c64e52f367\\config\\kilo\\opencode.json"
+timestamp=2026-09-09T06:37:56.918Z level=INFO run=b9bc4d79 message=loading path="C:\\Users\\User\\Desktop\\raya\\.tmp\\accounting-snapshot-fd444cc014644be7933428c64e52f367\\config\\kilo\\opencode.jsonc"

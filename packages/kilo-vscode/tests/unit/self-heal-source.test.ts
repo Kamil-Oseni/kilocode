@@ -472,3 +472,12 @@ test("backend checkout denial prevents its dependent session or prompt request",
     expect(api.calls.filter((call) => new URL(call.url).pathname.endsWith(suffix))).toHaveLength(0)
   }
 }, 30_000)
+
+test("self-heal summary distinguishes tested evidence, legacy claims and delivery", () => {
+  const item = { id: "heal_tested", status: "verified", category: "ui", severity: "low", title: "Issue" }
+  expect(summary(item)).toContain("Legacy verification claim; evidence needs review")
+  expect(summary({ ...item, status: "blocked", legacyVerification: true })).toContain("Legacy verification claim")
+  expect(summary({ ...item, completion: { attemptID: "attempt", at: 1 } })).toContain(
+    "Fix tested; not released or installed",
+  )
+})

@@ -3,10 +3,12 @@ import { Effect, Schema } from "effect"
 import { Storage } from "@/storage/storage"
 import { createHash } from "node:crypto"
 import { repairs, Outcome, Admission, Granted, Advance, Prepare } from "./repair"
+import { Completion, completions } from "./completion"
 import { SessionID } from "@/session/schema"
 
 export namespace RayaSelfHeal {
-  export const Repair = Outcome
+  export const CompletionReceipt = Completion
+  export const Repair = Schema.Struct({ ...Outcome.fields, completion: Schema.optional(Completion) })
   export const RepairAdmission = Admission
   export const RepairGranted = Granted
   export const RepairAdvance = Advance
@@ -49,6 +51,8 @@ export namespace RayaSelfHeal {
 
   export const Item = Schema.Struct({
     repair: Schema.optional(Outcome),
+    completion: Schema.optional(Completion),
+    legacyVerification: Schema.optional(Schema.Boolean),
     id: Schema.String,
     fingerprint: Schema.String,
     title: Schema.String,
@@ -104,7 +108,7 @@ export namespace RayaSelfHeal {
   const key = (id: string) => [...prefix, id]
   const decode = Schema.decodeUnknownEffect(Item)
   const retention = 30 * 24 * 60 * 60 * 1000 // raya_change - terminal feedback expires after one month
-  const terminal = new Set<Status>(["verified", "duplicate", "cancelled"])
+  const terminal = new Set<Status>(["duplicate", "cancelled"])
   const expired = (item: Item) => terminal.has(item.status) && item.updatedAt < Date.now() - retention
   const clean = (value: string) => value.trim().replace(/\s+/g, " ")
   const normalized = (value: string) =>
@@ -184,6 +188,7 @@ export namespace RayaSelfHeal {
     root?: string,
   ) {
     const repair = repairs(storage, root)
+    const completion = completions(storage, repair)
     const decorate = Effect.fn(function* (item: Item) {
       const receipts = yield* storage.list(["raya", "self-heal", "reports", item.id]).pipe(Effect.orDie)
       const baseline = yield* storage.read<number>(["raya", "self-heal", "reports", item.id, "base"]).pipe(
@@ -197,8 +202,13 @@ export namespace RayaSelfHeal {
           Effect.orDie,
         ),
       )
+      const tested = yield* completion.get(item.id)
       return {
         ...item,
+        status: tested ? ("verified" as const) : item.status === "verified" ? ("blocked" as const) : item.status,
+        legacyVerification: (!tested && (item.status === "verified" || item.legacyVerification)) || undefined,
+        completion: tested,
+        reloadRequired: false,
         reports: Math.max(item.reports, baseline + reports.length),
         updatedAt: times.reduce((latest, at) => Math.max(latest, at), item.updatedAt),
         repair: yield* repair.get(item.id),
@@ -324,8 +334,15 @@ export namespace RayaSelfHeal {
     })
 
     const update = Effect.fn("RayaSelfHeal.update")(function* (id: string, input: typeof Update.Type) {
+      if (input.status === "verified" || input.reloadRequired === true)
+        return yield* new InputError({
+          message:
+            "Verified completion requires an authoritative goal receipt; release and installation are not established by an update.",
+        })
       const item = yield* get(id)
       if (!item) return
+      if (input.workSessionID !== undefined && input.workSessionID !== (yield* repair.get(id))?.sessionID)
+        return yield* new InputError({ message: "The repair session is assigned only by the durable repair journal." })
       const next: Item = {
         ...item,
         ...input,
@@ -335,7 +352,7 @@ export namespace RayaSelfHeal {
         evidence: (input.evidence ?? item.evidence).slice(-50),
       } // raya_change - bound repeated verification evidence without losing the newest records
       yield* storage.replace(key(id), next).pipe(Effect.orDie)
-      return next
+      return yield* decorate(next)
     })
 
     const admit = Effect.fn(function* (id: string, input: typeof Admission.Type) {
@@ -345,9 +362,29 @@ export namespace RayaSelfHeal {
       return yield* repair.admit(
         id,
         input.source,
-        terminal.has(item.status) || !!item.workSessionID || matches.length > 1,
+        terminal.has(item.status) ||
+          !!item.legacyVerification ||
+          !!item.completion ||
+          !!item.workSessionID ||
+          matches.length > 1,
       )
     })
-    return { create, get, list, update, admit, advance: repair.advance, prepare: repair.prepare, outcome: repair.get }
+    const outcome = Effect.fn(function* (id: string) {
+      const retained = yield* repair.get(id)
+      if (!retained) return
+      return { ...retained, completion: yield* completion.get(id) }
+    })
+    return {
+      create,
+      get,
+      list,
+      update,
+      admit,
+      advance: repair.advance,
+      prepare: repair.prepare,
+      outcome,
+      link: completion.link,
+      complete: completion.record,
+    }
   }
 }

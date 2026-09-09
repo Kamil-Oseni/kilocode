@@ -83,6 +83,60 @@ export const TabsResult = Schema.Struct({
   title: Schema.optional(Schema.String),
 })
 
+const DialogID = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100))
+const DialogText = Schema.String.check(Schema.isMaxLength(10_000))
+export const DialogInfo = Schema.Struct({
+  id: DialogID,
+  tabID: TabID,
+  operationID: Schema.optional(DialogID),
+  type: Schema.Literals(["alert", "confirm", "prompt", "beforeunload"]),
+  message: DialogText,
+  defaultValue: DialogText,
+  status: Schema.Literals(["open", "resolving", "accepted", "dismissed", "unknown", "closed"]),
+  truncated: Schema.Boolean,
+})
+export const DialogOperation = Schema.Struct({
+  id: DialogID,
+  tabID: TabID,
+  operation: Schema.String,
+  status: Schema.Literals(["pending", "completed", "failed"]),
+  output: Schema.optional(Schema.String.check(Schema.isMaxLength(32_000))),
+  error: Schema.optional(DialogText),
+  truncated: Schema.optional(Schema.Boolean),
+})
+export const DialogRequest = Schema.Union([
+  Schema.Struct({
+    ...Base,
+    tabID: TabID,
+    operation: Schema.Literal("dialog"),
+    action: Schema.Literal("list"),
+    operationID: Schema.optional(DialogID),
+  }),
+  Schema.Struct({
+    ...Base,
+    tabID: TabID,
+    operation: Schema.Literal("dialog"),
+    action: Schema.Literal("accept"),
+    dialogID: DialogID,
+    text: Schema.optional(DialogText),
+  }),
+  Schema.Struct({
+    ...Base,
+    tabID: TabID,
+    operation: Schema.Literal("dialog"),
+    action: Schema.Literal("dismiss"),
+    dialogID: DialogID,
+  }),
+])
+export const DialogResult = Schema.Struct({
+  operation: Schema.Literal("dialog"),
+  tabID: TabID,
+  dialogs: Schema.Array(DialogInfo),
+  operations: Schema.Array(DialogOperation),
+  url: Schema.optional(Url),
+  title: Schema.optional(Schema.String),
+})
+
 export const NavigateRequest = Schema.Struct({
   ...Base,
   operation: Schema.Literal("navigate"),
@@ -191,6 +245,7 @@ export const SmokeRequest = Schema.Struct({
 // raya_change end
 
 export const Request = Schema.Union([
+  DialogRequest,
   TabsRequest,
   FramesRequest,
   NavigateRequest,
@@ -292,6 +347,7 @@ export const SmokeResult = Schema.Struct({
 // raya_change end
 
 export const Result = Schema.Union([
+  DialogResult,
   TabsResult,
   FramesResult,
   NavigateResult,
@@ -308,6 +364,7 @@ export const Result = Schema.Union([
 export type Result = Schema.Schema.Type<typeof Result>
 
 export const ErrorCode = Schema.Literals([
+  "dialog_pending",
   "cancelled",
   "closed",
   "disconnected",

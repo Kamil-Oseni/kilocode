@@ -17,6 +17,10 @@ Rate presence and origin are now captured before catalog normalization substitut
 
 Model modes inherit omitted cache prices from their base. Supplied context tiers and over-200k pricing replace their evidence together, preventing deep merges from attaching an older tier's zero-rate evidence to an omitted price. Configured overrides preserve the origin of unchanged inherited buckets.
 
+The selected cache-write count is now preserved before normalization. Nonnegative safe integers and decimal digit strings are accepted; booleans, blank strings, objects, arrays, fractional counts and unsafe integers cannot become billable usage through JavaScript coercion. The existing normalized-usage/Anthropic/Vertex/Bedrock/Venice fallback order is retained. An explicit normalized zero takes precedence over fallback metadata. Invalid selected counts and contradictory noncached input produce an unknown estimate with a stored issue. Valid provider-reported amounts still take precedence and retain those usage issues for inspection.
+
+An explicitly measured zero-input/zero-output step can produce a zero estimate when its input and output rates are known. Missing usage and unverified rates remain distinct from that measured zero; this does not label the model itself free or include separately billed charges.
+
 ## Aggregation and display
 
 Session and project usage keep their existing numeric cost for compatibility and add an accounting summary. New summary amounts include evidenced USD amounts only. Status counts distinguish reported, estimated, partial, unknown and legacy steps. Aggregation reads each session's own step records, so propagated parent message costs do not double-charge child work.
@@ -33,7 +37,7 @@ The task usage disclosure shows stored per-step amounts, pricing model, token bu
 - Complete raw event identity and reconciliation, including retries, duplicate events, provisional usage and partial-stream termination.
 - Provider-specific modality normalization, separately billed tools, realtime voice and transcription, plus independently priced reasoning where applicable.
 - Full current-runtime and legacy-runtime coverage beyond this processor, and propagation of provenance into every CLI/TUI, budget, alert and export consumer. The compatibility numeric field retains its previous semantics.
-- Validate raw metadata fallback buckets before normalization; this increment detects contradictions retained in normalized Usage and bucket totals, not every malformed adapter payload.
+- Complete raw adapter-payload validation beyond the selected cache-write fallback and normalized usage fields; modality-specific payloads and adapter reconciliation remain open.
 - Reconciliation between routed-model pricing, configured pricing, provider totals and invoice data. A source snapshot is evidence of the applied calculation, not proof that a rate applies to a contract.
 - Paginated server-ledger inspection across every related conversation and rate correction workflows.
 
@@ -42,5 +46,7 @@ The task usage disclosure shows stored per-step amounts, pricing model, token bu
 Focused tests exercise provider precedence and explicit zero, malformed provider amounts, missing rates, cache/reasoning partitioning, contradictory counts and non-currency provider units. Storage tests read persisted evidence back through the real session service and aggregate parent/child steps without message-cost duplication. The rendered usage view tests unavailable, reported zero, mixed reported/estimated, incomplete and tiny-amount states.
 
 Provider-service tests use the checked-in catalog to verify configured zero overrides retain omitted catalog cache prices and their origins. Mode tests exercise actual accounting above 200,000 input tokens for both inherited and replaced context pricing. The disclosure fixture checks rate origins, missing cache pricing and expansion beyond twenty loaded steps.
+
+Raw-usage tests exercise all four cache metadata paths, invalid coercions, normalized-zero precedence, provider amounts with invalid usage, fractional/unsafe counts, contradictory noncached counts, and measured zero versus missing usage/rates through the actual session accounting function.
 
 The DOM harness required normal-user execution because sandboxed esbuild directory traversal was denied twice. The same test passed outside the sandbox; no production code workaround was introduced for that restriction. The implementation progress log records final typecheck, lint, packaging and checkpoint outcomes.

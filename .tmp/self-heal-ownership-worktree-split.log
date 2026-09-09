@@ -1,0 +1,18 @@
+bun test v1.3.14 (0d9b296a)
+
+test\kilocode\self-heal-ownership.test.ts:
+(pass) independent Storage instances converge intake and reserve one repair across restart [10936.89ms]
+(pass) retains session identity and unknown dispatch without replay [9355.14ms]
+(pass) preserves legacy conflicts and permits a new intake generation after closure [635.53ms]
+(pass) pre-dispatch crash at session_creating retains ownership and its last session across reopening [9942.46ms]
+(pass) pre-dispatch crash at session_created retains ownership and its last session across reopening [12768.06ms]
+(pass) pre-dispatch crash at goal_creating retains ownership and its last session across reopening [6718.90ms]
+(pass) pre-dispatch crash at goal_created retains ownership and its last session across reopening [6753.47ms]
+(pass) direct repair observation survives missing intake storage without exposing ownership [6936.79ms]
+(pass) listing tolerates an item removed by another Storage instance after enumeration [153.49ms]
+(pass) report receipts preserve count and determine newest-first backlog ordering [681.78ms]
+
+ 10 pass
+ 0 fail
+ 56 expect() calls
+Ran 10 tests across 1 file. [70.40s]

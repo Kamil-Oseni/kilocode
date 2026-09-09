@@ -36,6 +36,13 @@ export function selfHealTools(goals: Goals, healing: Healing) {
               metadata: {},
               output: "No self-heal item is linked to this session; there is nothing to reconcile.",
             }
+          if (!goal.selfHealAttempt)
+            return {
+              title: "Repair linkage needs review",
+              metadata: {},
+              output: "Legacy repair linkage has no authoritative attempt; do not refine or close this item.",
+            }
+          yield* goals.repair(ctx.sessionID).pipe(Effect.orDie)
           const item = yield* healing.get(goal.selfHealID)
           if (!item)
             return {
@@ -68,7 +75,7 @@ export function selfHealTools(goals: Goals, healing: Healing) {
                 }
               : {}),
           }
-          const next = yield* healing.update(item.id, update)
+          const next = yield* healing.update(item.id, update).pipe(Effect.orDie)
           if (!next)
             return {
               title: "Self-heal item missing",
@@ -80,9 +87,7 @@ export function selfHealTools(goals: Goals, healing: Healing) {
             (row) => row.id !== next.id && !["verified", "duplicate", "cancelled"].includes(row.status),
           )
           const backlog = open.length
-            ? open
-                .map((row) => `${row.id} | ${row.status} | ${row.category}/${row.severity} | ${row.title}`)
-                .join("\n")
+            ? open.map((row) => `${row.id} | ${row.status} | ${row.category}/${row.severity} | ${row.title}`).join("\n")
             : "No other open self-heal items."
           const head = canonical
             ? `Marked ${next.id} as a duplicate of ${canonical.id}. Stop repair work on this item; the canonical item owns the fix.`

@@ -431,20 +431,20 @@ export const getUsage = (input: {
   const reasoningTokens = safe(input.usage.reasoningTokens ?? 0)
 
   const cacheReadInputTokens = safe(input.usage.cacheReadInputTokens ?? 0)
-  const cacheWriteInputTokens = safe(
-    Number(
-      input.usage.cacheWriteInputTokens ??
-        input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
-        // google-vertex-anthropic returns metadata under "vertex" key
-        // (AnthropicMessagesLanguageModel custom provider key from 'vertex.anthropic.messages')
-        input.metadata?.["vertex"]?.["cacheCreationInputTokens"] ??
-        // @ts-expect-error
-        input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
-        // @ts-expect-error
-        input.metadata?.["venice"]?.["usage"]?.["cacheCreationInputTokens"] ??
-        0,
-    ),
-  )
+  // kilocode_change start - retain selected raw cache usage before normalization
+  const write =
+    input.usage.cacheWriteInputTokens ??
+    input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
+    // google-vertex-anthropic returns metadata under "vertex" key
+    // (AnthropicMessagesLanguageModel custom provider key from 'vertex.anthropic.messages')
+    input.metadata?.["vertex"]?.["cacheCreationInputTokens"] ??
+    // @ts-expect-error
+    input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
+    // @ts-expect-error
+    input.metadata?.["venice"]?.["usage"]?.["cacheCreationInputTokens"] ??
+    0
+  const cacheWriteInputTokens = Accounting.count(write) ?? 0
+  // kilocode_change end
 
   // AI SDK v6 normalized inputTokens to include cached tokens across all providers
   // (including Anthropic/Bedrock which previously excluded them). Always subtract cache
@@ -465,6 +465,7 @@ export const getUsage = (input: {
   }
 
   // kilocode_change start - Use provider-reported cost when available for OpenRouter/Kilo
+  const issues = Accounting.validate({ usage: input.usage, tokens, write })
   const reported = KiloSession.providerCost({
     metadata: input.metadata,
     usage: input.usage,
@@ -472,7 +473,7 @@ export const getUsage = (input: {
     providerID: input.model.providerID,
   })
   if (reported !== undefined)
-    return { cost: reported.amount, tokens, accounting: Accounting.reported(reported.amount, reported.source) }
+    return { cost: reported.amount, tokens, accounting: Accounting.reported(reported.amount, reported.source, issues) }
   // kilocode_change end
 
   const contextTokens = inputTokens
@@ -490,6 +491,7 @@ export const getUsage = (input: {
       model: input.model,
       usage: input.usage,
       tokens,
+      issues,
       rates: costInfo,
       nano: totalNanoAiu,
     }),

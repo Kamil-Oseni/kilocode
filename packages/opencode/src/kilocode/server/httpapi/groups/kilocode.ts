@@ -849,12 +849,13 @@ export const KilocodeApi = HttpApi.make("kilocode")
           query: WorkspaceRoutingQuery,
           payload: SelfHealUpdatePayload,
           success: described(RayaSelfHeal.Item, "Updated self-heal feedback"),
-          error: HttpApiError.NotFound,
+          error: [HttpApiError.NotFound, HttpApiError.Conflict],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "kilocode.selfHeal.update",
             summary: "Update self-heal feedback",
-            description: "Move an item through queued, active, blocked, and verified states with evidence.",
+            description:
+              "Update triage and diagnostic evidence. Tested completion is derived only from an authoritative linked-goal receipt; delivery claims are rejected.",
           }),
         ),
         // raya_change end

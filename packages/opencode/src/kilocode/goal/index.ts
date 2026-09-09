@@ -9,6 +9,7 @@ import { MessageID, PartID, SessionID } from "@/session/schema"
 import { references } from "./references"
 import { GoalCriteria as Criteria } from "./criteria"
 import * as Planning from "./plan"
+import path from "node:path"
 import { isDeepStrictEqual } from "node:util"
 import { mutation } from "./mutation"
 import { gate } from "@/kilocode/session/input-gate"
@@ -155,6 +156,7 @@ export namespace RayaGoal {
     criteria: Schema.optional(Criteria),
     startMessageID: Schema.optional(MessageID), // raya_change - restore the pre-goal checkpoint on discard
     startSnapshot: Schema.optional(Schema.String), // raya_change - restore edits made by child sessions and missing patch parts
+    selfHealAttempt: Schema.optional(Schema.String), // server-derived durable repair owner
     selfHealID: Schema.optional(Schema.String), // raya_change - link an isolated repair session to the global backlog
     status: Status,
     createdAt: Schema.Number,
@@ -256,6 +258,34 @@ export namespace RayaGoal {
 
   export function make(deps: Deps) {
     const healing = RayaSelfHeal.make(deps.storage) // raya_change - linked repairs close or block their global item
+    const ownership = Effect.fn(function* (sessionID: SessionID, id: string, attempt?: string) {
+      const owned = yield* healing
+        .link(id, sessionID, attempt)
+        .pipe(Effect.mapError((err) => new AuditError({ message: err.message })))
+      const session = deps.sessions.get
+        ? yield* deps.sessions.get(sessionID).pipe(Effect.catch(() => Effect.succeed(undefined)))
+        : undefined
+      const normalize = (value: string) =>
+        process.platform === "win32" ? path.resolve(value).toLowerCase() : path.resolve(value)
+      if (
+        !session ||
+        normalize(session.directory) !== normalize(owned.worktree!.directory) ||
+        session.metadata?.rayaSelfHealAttempt !== owned.id ||
+        !isDeepStrictEqual(session.metadata?.rayaSelfHealSource, owned.source) ||
+        !isDeepStrictEqual(session.metadata?.rayaSelfHealWorktree, owned.worktree)
+      )
+        return yield* new AuditError({
+          message: "The persisted repair session does not match its owned checkout and attempt provenance.",
+        })
+      return owned
+    })
+    const repair = Effect.fn(function* (sessionID: SessionID) {
+      const state = yield* requireGoal(sessionID)
+      if (!state.selfHealID || !state.selfHealAttempt)
+        return yield* new AuditError({ message: "Legacy or missing repair linkage requires reconciliation." })
+      return yield* ownership(sessionID, state.selfHealID, state.selfHealAttempt)
+    })
+
     const prune = Effect.fn("RayaGoal.prune")(function* () {
       const keys = yield* deps.storage.list(["raya", "goal"]).pipe(Effect.orDie)
       const rows = yield* Effect.forEach(keys, (path) =>
@@ -322,7 +352,12 @@ export namespace RayaGoal {
       return state
     })
 
-    const save = (sessionID: SessionID, state: State, expected: State | null = state) =>
+    const save = (
+      sessionID: SessionID,
+      state: State,
+      expected: State | null = state,
+      before?: (next: State) => Effect.Effect<string, AuditError>,
+    ) =>
       mutation(
         deps.storage,
         sessionID,
@@ -345,7 +380,8 @@ export namespace RayaGoal {
               message:
                 "This goal changed while the operation was running. Read get_goal and review the current objective before retrying.",
             })
-          const next = { ...state, revision: crypto.randomUUID() }
+          const candidate = { ...state, revision: crypto.randomUUID() }
+          const next = { ...candidate, revision: before ? yield* before(candidate) : candidate.revision }
           yield* deps.storage.replace(key(sessionID), next).pipe(Effect.orDie)
           if (deps.sessions.get && deps.sessions.setMetadata) {
             const session = yield* deps.sessions.get(sessionID).pipe(Effect.catch(() => Effect.succeed(undefined)))
@@ -370,6 +406,7 @@ export namespace RayaGoal {
       selfHealID?: string,
       criteria?: Criteria,
     ) {
+      const linked = selfHealID ? yield* ownership(sessionID, selfHealID) : undefined
       const text = clean(objective)
       if (!text) return yield* new AuditError({ message: "A goal objective is required." })
       const required =
@@ -386,6 +423,8 @@ export namespace RayaGoal {
       if (required && new Set(required.map((item) => item.id)).size !== required.length)
         return yield* new AuditError({ message: "Goal criterion IDs must be unique." })
       const existing = yield* get(sessionID)
+      if (existing && existing.status !== "complete" && existing.selfHealID !== selfHealID)
+        return yield* new AuditError({ message: "An existing goal cannot be linked to a different self-heal item." })
       if (
         existing?.objective === text &&
         existing.status === "active" &&
@@ -427,6 +466,7 @@ export namespace RayaGoal {
           startMessageID,
           startSnapshot,
           selfHealID,
+          selfHealAttempt: linked?.id,
           status: "active",
           createdAt: now,
           updatedAt: now,
@@ -882,6 +922,7 @@ export namespace RayaGoal {
         })
         // raya_change end
         if (state.selfHealID) {
+          yield* repair(sessionID)
           yield* healing
             .update(state.selfHealID, { status: "blocked", blockedReason: reason, reloadRequired: false })
             .pipe(Effect.orDie)
@@ -1013,45 +1054,57 @@ export namespace RayaGoal {
         : accepted
           ? { ...state.review!, status: "accepted" as const, acceptedAt: now }
           : undefined
-      const next = yield* save(sessionID, {
-        ...state,
-        status: pending ? "paused" : "complete",
-        intent: pending || accepted ? crypto.randomUUID() : state.intent,
-        review,
-        audit,
-        auditAttempt: { at: now, accepted: true, requirements: audit.requirements },
-        updatedAt: now,
-        activeMs: elapsed(state, now),
-        activeAt: undefined,
-        progress: progress(state, {
-          at: now,
-          kind: "status",
-          message: pending
-            ? "Evidence is ready for your review. Goal completion awaits your acceptance."
-            : accepted
-              ? "Reviewed goal accepted."
-              : "Completion audit passed.",
-        }),
-      })
-      // raya_change end
-      if (pending) return next
-      if (state.selfHealID) {
-        const evidence = audit.requirements.flatMap((requirement) =>
-          requirement.evidence.map((item) => ({
-            summary: `${requirement.requirement}: ${item.summary}`,
-            artifact: item.callID,
+      const next = yield* save(
+        sessionID,
+        {
+          ...state,
+          status: pending ? "paused" : "complete",
+          intent: pending || accepted ? crypto.randomUUID() : state.intent,
+          review,
+          audit,
+          auditAttempt: { at: now, accepted: true, requirements: audit.requirements },
+          updatedAt: now,
+          activeMs: elapsed(state, now),
+          activeAt: undefined,
+          progress: progress(state, {
             at: now,
-          })),
-        )
-        yield* healing
-          .update(state.selfHealID, {
-            status: "verified",
-            evidence,
-            blockedReason: undefined,
-            reloadRequired: true,
-          })
-          .pipe(Effect.orDie)
-      }
+            kind: "status",
+            message: pending
+              ? "Evidence is ready for your review. Goal completion awaits your acceptance."
+              : accepted
+                ? "Reviewed goal accepted."
+                : "Completion audit passed.",
+          }),
+        },
+        state,
+        !pending && state.selfHealID
+          ? (completed) => {
+              if (!state.selfHealAttempt || !state.intent || !state.revision)
+                return Effect.fail(
+                  new AuditError({
+                    message: "Legacy self-heal linkage requires reconciliation before tested completion.",
+                  }),
+                )
+              return ownership(sessionID, state.selfHealID!, state.selfHealAttempt).pipe(
+                Effect.flatMap(() =>
+                  healing.complete(state.selfHealID!, sessionID, state.selfHealAttempt, {
+                    intent: state.intent,
+                    revision: state.revision,
+                    completedRevision: completed.revision,
+                    createdAt: state.createdAt,
+                    objective: state.objective,
+                    audit,
+                    review,
+                  }),
+                ),
+                Effect.map((receipt) => receipt.goal.completedRevision),
+                Effect.mapError((err) => new AuditError({ message: err.message })),
+              )
+            }
+          : undefined,
+      )
+      // Receipt publication happens under the same goal mutation lock after its revision check.
+      // A failed goal write leaves the immutable tested evidence readable without claiming save acknowledgement.
       return next
     })
 
@@ -1517,6 +1570,7 @@ export namespace RayaGoal {
         }),
       })
       if (stopped && state.selfHealID) {
+        yield* repair(sessionID)
         yield* healing
           .update(state.selfHealID, { status: "blocked", blockedReason: reason, reloadRequired: false })
           .pipe(Effect.orDie)
@@ -1526,6 +1580,7 @@ export namespace RayaGoal {
 
     return {
       get,
+      repair,
       create,
       control,
       revise,

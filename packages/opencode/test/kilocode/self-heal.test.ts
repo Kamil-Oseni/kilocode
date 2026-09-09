@@ -49,7 +49,7 @@ describe("RayaSelfHeal", () => {
           Effect.asVoid,
         ),
       )
-      yield* storage.write(doneKey, { ...done, status: "verified", updatedAt: old }).pipe(Effect.orDie)
+      yield* storage.write(doneKey, { ...done, status: "cancelled", updatedAt: old }).pipe(Effect.orDie)
       yield* storage.write(blockedKey, { ...blocked, status: "blocked", updatedAt: old }).pipe(Effect.orDie)
 
       expect(yield* backlog.get(done.id)).toBeUndefined()

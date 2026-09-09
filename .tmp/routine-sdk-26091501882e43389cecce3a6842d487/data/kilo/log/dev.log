@@ -1,0 +1,2 @@
+INFO  2026-09-08T12:18:15 +1808ms service=default version=local command=generate process_role=main run_id=f468e8e0-e123-4fda-a8e0-389e0c0bce59 opencode
+WARN  2026-09-08T12:18:29 +14079ms service=kilocode.cli err=Timeout while shutting down PostHog. Some events may not have been sent. telemetry shutdown failed

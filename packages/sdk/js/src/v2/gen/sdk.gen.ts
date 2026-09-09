@@ -9705,7 +9705,7 @@ export class SelfHeal extends HeyApiClient {
   /**
    * Update self-heal feedback
    *
-   * Move an item through queued, active, blocked, and verified states with evidence.
+   * Update triage and diagnostic evidence. Tested completion is derived only from an authoritative linked-goal receipt; delivery claims are rejected.
    */
   public update<ThrowOnError extends boolean = false>(
     parameters: {

@@ -45106,6 +45106,131 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "operation": {
+                "type": "string",
+                "enum": ["profile"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["info", "retry"]
+              }
+            },
+            "required": ["id", "sessionID", "operation", "action"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["profile"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["reset"]
+              },
+              "profileID": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            },
+            "required": ["id", "sessionID", "operation", "action", "profileID"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["auth"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["list"]
+              }
+            },
+            "required": ["id", "sessionID", "operation", "action"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["auth"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["inspect", "restore", "delete"]
+              },
+              "profileID": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "captureID": {
+                "type": "string",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                "format": "uuid"
+              }
+            },
+            "required": ["id", "sessionID", "operation", "action", "profileID", "captureID"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
               "frameID": {
                 "type": "string",
                 "minLength": 1,
@@ -59442,66 +59567,61 @@
         "required": ["data", "offset", "next"],
         "additionalProperties": false
       },
-      "BrowserUploadInfo": {
+      "BrowserAuthSource": {
         "type": "object",
         "properties": {
-          "id": {
+          "source": {
+            "type": "string",
+            "enum": ["live", "capture"]
+          },
+          "profileID": {
+            "type": "string"
+          },
+          "captureID": {
             "type": "string",
             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
             "format": "uuid"
           },
-          "tabID": {
+          "captureName": {
             "type": "string"
           },
-          "frameID": {
-            "type": "string"
+          "capturedAt": {
+            "type": "integer",
+            "minimum": 0
           },
-          "sessionID": {
+          "expiresAt": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "login": {
+            "type": "string",
+            "enum": ["unverified"]
+          }
+        },
+        "required": ["source", "profileID", "login"],
+        "additionalProperties": false
+      },
+      "BrowserProfileInfo": {
+        "type": "object",
+        "properties": {
+          "profileID": {
             "type": "string"
           },
           "directory": {
             "type": "string"
           },
-          "requestID": {
-            "type": "string"
-          },
-          "destination": {
-            "type": "string"
-          },
-          "files": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/BrowserUploadFile"
-            }
-          },
           "status": {
             "type": "string",
-            "enum": ["staging", "selecting", "selected", "failed", "cancelled", "unknown"]
+            "enum": ["ready", "closed", "unavailable", "locked", "error", "auth_expired"]
           },
-          "createdAt": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "updatedAt": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "error": {
+          "message": {
             "type": "string"
+          },
+          "authentication": {
+            "$ref": "#/components/schemas/BrowserAuthSource"
           }
         },
-        "required": [
-          "id",
-          "tabID",
-          "sessionID",
-          "directory",
-          "requestID",
-          "destination",
-          "files",
-          "status",
-          "createdAt",
-          "updatedAt"
-        ],
+        "required": ["profileID", "directory", "status", "authentication"],
         "additionalProperties": false
       },
       "BrowserTransfer": {
@@ -59573,8 +59693,241 @@
         "required": ["version", "id", "tabID", "profile", "status", "filename", "url", "createdAt", "updatedAt"],
         "additionalProperties": false
       },
+      "BrowserCaptureInfo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+            "format": "uuid"
+          },
+          "profileID": {
+            "type": "string"
+          },
+          "directory": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "expiresAt": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "origins": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "domains": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "cookies": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["available", "expired", "missing", "invalid"]
+          }
+        },
+        "required": [
+          "id",
+          "profileID",
+          "directory",
+          "name",
+          "createdAt",
+          "expiresAt",
+          "origins",
+          "domains",
+          "cookies",
+          "bytes",
+          "sha256",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "BrowserUploadInfo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+            "format": "uuid"
+          },
+          "tabID": {
+            "type": "string"
+          },
+          "frameID": {
+            "type": "string"
+          },
+          "sessionID": {
+            "type": "string"
+          },
+          "directory": {
+            "type": "string"
+          },
+          "requestID": {
+            "type": "string"
+          },
+          "destination": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BrowserUploadFile"
+            }
+          },
+          "status": {
+            "type": "string",
+            "enum": ["staging", "selecting", "selected", "failed", "cancelled", "unknown"]
+          },
+          "createdAt": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "updatedAt": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tabID",
+          "sessionID",
+          "directory",
+          "requestID",
+          "destination",
+          "files",
+          "status",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
       "BrowserResult": {
         "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "profile": {
+                "$ref": "#/components/schemas/BrowserProfileInfo"
+              },
+              "navigation": {
+                "type": "string",
+                "enum": ["download"]
+              },
+              "transfers": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/BrowserTransfer"
+                }
+              },
+              "frameID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
+              "frameURL": {
+                "type": "string"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000
+              },
+              "title": {
+                "type": "string",
+                "maxLength": 10000
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["profile"]
+              }
+            },
+            "required": ["profile", "operation"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "profile": {
+                "$ref": "#/components/schemas/BrowserProfileInfo"
+              },
+              "navigation": {
+                "type": "string",
+                "enum": ["download"]
+              },
+              "transfers": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/BrowserTransfer"
+                }
+              },
+              "frameID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
+              "frameURL": {
+                "type": "string"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000
+              },
+              "title": {
+                "type": "string",
+                "maxLength": 10000
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["auth"]
+              },
+              "captures": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/BrowserCaptureInfo"
+                }
+              }
+            },
+            "required": ["profile", "operation", "captures"],
+            "additionalProperties": false
+          },
           {
             "type": "object",
             "properties": {
@@ -59867,6 +60220,9 @@
           {
             "type": "object",
             "properties": {
+              "profile": {
+                "$ref": "#/components/schemas/BrowserProfileInfo"
+              },
               "navigation": {
                 "type": "string",
                 "enum": ["download"]
@@ -59916,6 +60272,9 @@
           {
             "type": "object",
             "properties": {
+              "profile": {
+                "$ref": "#/components/schemas/BrowserProfileInfo"
+              },
               "navigation": {
                 "type": "string",
                 "enum": ["download"]
@@ -59965,6 +60324,9 @@
           {
             "type": "object",
             "properties": {
+              "profile": {
+                "$ref": "#/components/schemas/BrowserProfileInfo"
+              },
               "navigation": {
                 "type": "string",
                 "enum": ["download"]
@@ -60014,6 +60376,9 @@
           {
             "type": "object",
             "properties": {
+              "profile": {
+                "$ref": "#/components/schemas/BrowserProfileInfo"
+              },
               "navigation": {
                 "type": "string",
                 "enum": ["download"]
@@ -60063,6 +60428,9 @@
           {
             "type": "object",
             "properties": {
+              "profile": {
+                "$ref": "#/components/schemas/BrowserProfileInfo"
+              },
               "navigation": {
                 "type": "string",
                 "enum": ["download"]
@@ -60112,6 +60480,9 @@
           {
             "type": "object",
             "properties": {
+              "profile": {
+                "$ref": "#/components/schemas/BrowserProfileInfo"
+              },
               "navigation": {
                 "type": "string",
                 "enum": ["download"]
@@ -60161,6 +60532,9 @@
           {
             "type": "object",
             "properties": {
+              "profile": {
+                "$ref": "#/components/schemas/BrowserProfileInfo"
+              },
               "navigation": {
                 "type": "string",
                 "enum": ["download"]
@@ -60214,6 +60588,9 @@
           {
             "type": "object",
             "properties": {
+              "profile": {
+                "$ref": "#/components/schemas/BrowserProfileInfo"
+              },
               "navigation": {
                 "type": "string",
                 "enum": ["download"]
@@ -60263,6 +60640,9 @@
           {
             "type": "object",
             "properties": {
+              "profile": {
+                "$ref": "#/components/schemas/BrowserProfileInfo"
+              },
               "navigation": {
                 "type": "string",
                 "enum": ["download"]
@@ -60306,8 +60686,8 @@
                 "minLength": 1,
                 "maxLength": 200
               },
-              "path": {
-                "type": "string"
+              "capture": {
+                "$ref": "#/components/schemas/BrowserCaptureInfo"
               },
               "cookies": {
                 "anyOf": [
@@ -60356,12 +60736,15 @@
                 ]
               }
             },
-            "required": ["operation", "name", "path", "cookies", "origins"],
+            "required": ["operation", "name", "capture", "cookies", "origins"],
             "additionalProperties": false
           },
           {
             "type": "object",
             "properties": {
+              "profile": {
+                "$ref": "#/components/schemas/BrowserProfileInfo"
+              },
               "navigation": {
                 "type": "string",
                 "enum": ["download"]
@@ -60466,6 +60849,9 @@
               },
               "authState": {
                 "type": "string"
+              },
+              "authentication": {
+                "$ref": "#/components/schemas/BrowserAuthSource"
               },
               "failingStep": {
                 "type": "string",
@@ -60640,6 +61026,7 @@
               "finishedAt",
               "artifact",
               "authState",
+              "authentication",
               "steps",
               "network",
               "console"
@@ -62298,6 +62685,131 @@
       },
       "BrowserRequest1": {
         "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["profile"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["info", "retry"]
+              }
+            },
+            "required": ["id", "sessionID", "operation", "action"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["profile"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["reset"]
+              },
+              "profileID": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            },
+            "required": ["id", "sessionID", "operation", "action", "profileID"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["auth"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["list"]
+              }
+            },
+            "required": ["id", "sessionID", "operation", "action"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["auth"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["inspect", "restore", "delete"]
+              },
+              "profileID": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "captureID": {
+                "type": "string",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                "format": "uuid"
+              }
+            },
+            "required": ["id", "sessionID", "operation", "action", "profileID", "captureID"],
+            "additionalProperties": false
+          },
           {
             "type": "object",
             "properties": {

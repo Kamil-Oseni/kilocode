@@ -1,8 +1,9 @@
 // raya_change - Milestone G authenticated smoke walkthrough runner and evidence artifacts
-import { mkdir, readFile, writeFile } from "node:fs/promises"
+import { mkdir, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import type { FrameRegistry } from "./browser-frame"
 import { describe, locate, TargetError, type BrowserTarget, type TargetPage } from "./browser-target"
+import type { AuthSource } from "./browser-auth"
 
 export type SmokeAction =
   | { kind: "navigate"; url: string }
@@ -65,6 +66,7 @@ export type SmokeResult = {
   finishedAt: number
   artifact: string
   authState: string
+  authentication: AuthSource
   failingStep?: string
   steps: SmokeStepResult[]
   network: SmokeFinding[]
@@ -136,49 +138,17 @@ export class BrowserSmoke {
   constructor(
     private readonly root: string,
     private readonly page: SmokePage,
-    private readonly context: SmokeContext,
+    _context: SmokeContext,
     private readonly frames?: (id: string) => ReturnType<FrameRegistry["lease"]>,
     private readonly tabID?: string,
+    private readonly authentication: AuthSource = { source: "live", profileID: root, login: "unverified" },
   ) {}
-
-  async capture(name: string) {
-    const dir = join(this.root, "auth")
-    const path = join(dir, `${safe(name)}.json`)
-    await mkdir(dir, { recursive: true })
-    const state = await this.context.storageState({ path, indexedDB: true })
-    return {
-      operation: "auth_capture" as const,
-      name,
-      path,
-      cookies: state.cookies.length,
-      origins: state.origins.length,
-    }
-  }
 
   async run(input: SmokeInput): Promise<SmokeResult> {
     const kinds = input.steps.flatMap((step) => step.assertions.map((assertion) => assertion.kind))
     if (!kinds.includes("visible")) throw new Error("Smoke flows require at least one visible-state assertion.")
     if (!kinds.includes("network") && !kinds.includes("console"))
       throw new Error("Smoke flows require at least one network or console assertion.")
-
-    const authState = join(this.root, "auth", `${safe(input.name)}.json`)
-    // Plain-English walkthroughs should not require the user to remember a separate auth-capture tool.
-    const state = await readFile(authState, "utf8").catch(async (error: unknown) => {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
-      await this.capture(input.name)
-      return readFile(authState, "utf8")
-    })
-    const saved = JSON.parse(state) as {
-      cookies?: SmokeCookie[]
-      origins?: SmokeOrigin[]
-    }
-    if (!Array.isArray(saved.cookies) || !Array.isArray(saved.origins))
-      throw new Error(`Authenticated storage state for "${input.name}" is invalid.`)
-    await this.context.addCookies(saved.cookies)
-    await this.page.addInitScript((origins) => {
-      const saved = origins.find((item) => item.origin === location.origin)
-      for (const item of saved?.localStorage ?? []) localStorage.setItem(item.name, item.value)
-    }, saved.origins)
 
     const runID = `${Date.now()}-${crypto.randomUUID()}`
     const dir = join(this.root, "runs", safe(input.name), runID)
@@ -231,7 +201,8 @@ export class BrowserSmoke {
       startedAt,
       finishedAt: Date.now(),
       artifact,
-      authState,
+      authState: this.authentication.captureID ?? "live",
+      authentication: this.authentication,
       failingStep: failing?.id,
       steps,
       network,

@@ -5,6 +5,7 @@ import { FrameID, TabID, TransferID, Selector, SmokeStep, type Result } from "@/
 import * as Tool from "@/tool/tool"
 import { Effect, Schema } from "effect"
 import { BrowserUploadTool } from "./browser-upload"
+import { CaptureID, ProfileID } from "@/kilocode/browser/profile-schema"
 
 const Text = Schema.String.check(Schema.isMaxLength(200_000))
 const Identity = { tab_id: TabID }
@@ -352,12 +353,13 @@ export const BrowserEvaluateTool = Tool.define<
 const AuthCaptureParams = Schema.Struct({
   ...Identity,
   name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)).annotate({
-    description: "Stable target-app name used to save and later reuse authenticated Playwright storage state.",
+    description:
+      "Display label for a new workspace-owned authentication capture. Labels never select or overwrite an older capture.",
   }),
 })
 export const BrowserAuthCaptureTool = Tool.define<
   typeof AuthCaptureParams,
-  { path?: string; cookies?: number; origins?: number },
+  { captureID?: string; cookies?: number; origins?: number },
   Browser.Service,
   "browser_auth_capture"
 >(
@@ -366,7 +368,7 @@ export const BrowserAuthCaptureTool = Tool.define<
     const browser = yield* Browser.Service
     return {
       description:
-        "Capture the current logged-in browser session as Playwright storageState for authenticated smoke runs.",
+        "Save a new authentication capture from this workspace browser profile. It includes all profile origins, expires after seven days, and does not prove the account is currently logged in. Return metadata only; cookies and tokens are never tool output. Use browser_auth to inspect, restore or delete the observed capture ID.",
       parameters: AuthCaptureParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
@@ -386,7 +388,7 @@ export const BrowserAuthCaptureTool = Tool.define<
           return {
             title: `Captured authenticated browser state for ${params.name}`,
             output: render(result),
-            metadata: { path: result.path, cookies: result.cookies, origins: result.origins },
+            metadata: { captureID: result.capture.id, cookies: result.cookies, origins: result.origins },
           }
         }),
     }
@@ -412,7 +414,7 @@ export const BrowserSmokeTestTool = Tool.define<
     const browser = yield* Browser.Service
     return {
       description:
-        "Run an authenticated browser walkthrough with per-step screenshots and visible-state plus network or console assertions. Use this automatically for plain-English requests to test like a real user, run a walkthrough, UX test, smoke test, or end-to-end browser check. Derive exploratory steps from the user intent and live page instead of asking the user to name tools. The first run captures current authentication automatically when no saved state exists. A failed assertion returns passed=false and the exact failing step.",
+        "Run a browser walkthrough with per-step screenshots and visible-state plus network or console assertions. Derive steps from the user's plain-English intent and live page. This uses the current workspace browser state and reports whether saved authentication was explicitly restored; it never silently captures or merges authentication. To use a capture, restore its observed ID first, then observe fresh tabs/frames and verify the account before building the run. A failed assertion returns passed=false and the exact failing step.",
       parameters: SmokeParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
@@ -663,7 +665,84 @@ export const BrowserDownloadTool = Tool.define<
   }),
 )
 
+const ProfileParams = Schema.Union([
+  Schema.Struct({ action: Schema.Literals(["info", "retry"]) }),
+  Schema.Struct({ action: Schema.Literal("reset"), profile_id: ProfileID }),
+])
+export const BrowserProfileTool = Tool.define<typeof ProfileParams, {}, Browser.Service, "browser_profile">(
+  "browser_profile",
+  Effect.gen(function* () {
+    const browser = yield* Browser.Service
+    return {
+      description:
+        "Inspect this workspace's browser identity, startup status and authentication provenance, or retry startup. Reset requires the observed profile ID and deletes this workspace's persisted browser sign-in state and captures while preserving downloaded artifacts. Reset closes its browser tabs and invalidates queued work; use only when authorized to sign out and discard browser drafts. Login remains unverified until you inspect the destination.",
+      parameters: ProfileParams,
+      execute: (params, ctx) =>
+        Effect.gen(function* () {
+          yield* ctx.ask({
+            permission: "browser_profile",
+            patterns: [params.action],
+            always: [params.action],
+            metadata: {},
+          })
+          const result = yield* run(
+            browser,
+            params.action === "reset"
+              ? { operation: "profile", action: "reset", profileID: params.profile_id, sessionID: ctx.sessionID }
+              : { operation: "profile", action: params.action, sessionID: ctx.sessionID },
+            ctx.abort,
+          )
+          return { title: "Workspace browser profile", output: render(result), metadata: {} }
+        }),
+    }
+  }),
+)
+const AuthParams = Schema.Union([
+  Schema.Struct({ action: Schema.Literal("list") }),
+  Schema.Struct({
+    action: Schema.Literals(["inspect", "restore", "delete"]),
+    profile_id: ProfileID,
+    capture_id: CaptureID,
+  }),
+])
+export const BrowserAuthTool = Tool.define<typeof AuthParams, {}, Browser.Service, "browser_auth">(
+  "browser_auth",
+  Effect.gen(function* () {
+    const browser = yield* Browser.Service
+    return {
+      description:
+        "List or inspect this workspace profile's authentication capture metadata without reading secrets. Explicit restore replaces its browser session, closes old tabs, and invalidates their frame IDs; inspect fresh tabs and confirm the intended account afterward. Delete removes the owned capture; deleting the active capture also clears its restored browser session. Expired or deleted captures cannot be restored and no operation silently substitutes a new capture.",
+      parameters: AuthParams,
+      execute: (params, ctx) =>
+        Effect.gen(function* () {
+          yield* ctx.ask({
+            permission: "browser_auth",
+            patterns: [params.action],
+            always: [params.action],
+            metadata: {},
+          })
+          const result = yield* run(
+            browser,
+            params.action === "list"
+              ? { operation: "auth", action: "list", sessionID: ctx.sessionID }
+              : {
+                  operation: "auth",
+                  action: params.action,
+                  profileID: params.profile_id,
+                  captureID: params.capture_id,
+                  sessionID: ctx.sessionID,
+                },
+            ctx.abort,
+          )
+          return { title: "Workspace authentication captures", output: render(result), metadata: {} }
+        }),
+    }
+  }),
+)
+
 export const BrowserTools = [
+  BrowserProfileTool,
+  BrowserAuthTool,
   BrowserUploadTool,
   BrowserDownloadTool,
   BrowserDialogTool,

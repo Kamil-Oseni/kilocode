@@ -1,13 +1,15 @@
 // raya_change - Milestone F shared persistent Playwright browser session
-import { mkdir } from "node:fs/promises"
-import { join } from "node:path"
-import { randomUUID } from "node:crypto"
+import { lstat, mkdir, open, readFile, realpath, rename, rm, unlink } from "node:fs/promises"
+import { join, resolve } from "node:path"
+import { createHash, randomUUID } from "node:crypto"
 import { Script } from "node:vm"
 import { chromium } from "playwright-core"
+import { Flock } from "@opencode-ai/core/util/flock"
 import { locate, TargetError, type BrowserTarget, type TargetPage } from "./browser-target"
 import { FrameRegistry, type FrameOwner, type FrameInfo, type DocumentFrame } from "./browser-frame"
 import { pending, BrowserDialogs, type DialogPage, type DialogInfo, type DialogOperation } from "./browser-dialog"
 import { BrowserSmoke } from "./browser-smoke"
+import { BrowserAuth, type AuthSource, type BrowserIdentity, type CaptureInfo, type ProfileInfo } from "./browser-auth"
 import { BrowserUploads, type UploadFile, type UploadInfo, type UploadTransport } from "./browser-upload"
 import { filename, save } from "./browser-save"
 import { BrowserTransfers, type TransferInfo, type TransferOrigin, type TransferPage } from "./browser-transfer"
@@ -19,6 +21,10 @@ export type BrowserAction = {
   origin?: TransferOrigin
   uploader?: UploadTransport
 } & (
+  | { operation: "profile"; action: "info" | "retry" }
+  | { operation: "profile"; action: "reset"; profileID: string }
+  | { operation: "auth"; action: "list" }
+  | { operation: "auth"; action: "inspect" | "restore" | "delete"; profileID: string; captureID: string }
   | {
       operation: "upload"
       action: "start"
@@ -54,17 +60,20 @@ export type BrowserAction = {
 )
 type BrowserNativeAction = Exclude<
   BrowserAction,
-  { operation: "auth_capture" | "smoke" | "tabs" | "frames" | "dialog" | "download" | "upload" }
+  { operation: "profile" | "auth" | "auth_capture" | "smoke" | "tabs" | "frames" | "dialog" | "download" | "upload" }
 >
 export type BrowserTab = { id: string; url: string; title: string; selected: boolean; openerID?: string }
 
 export type BrowserResult = {
+  profile?: ProfileInfo
   tabID?: string
   frameID?: string
   frameURL?: string
   transfers?: TransferInfo[]
   navigation?: "download"
 } & (
+  | { operation: "profile"; profile: ProfileInfo; url?: string }
+  | { operation: "auth"; captures: CaptureInfo[]; profile: ProfileInfo; url?: string }
   | { operation: "upload"; uploads: UploadInfo[]; url?: string }
   | { operation: "download"; transfers: TransferInfo[]; next?: number; artifact?: string; error?: string; url?: string }
   | { operation: "dialog"; dialogs: DialogInfo[]; operations: DialogOperation[]; url?: string; title?: string }
@@ -73,7 +82,7 @@ export type BrowserResult = {
   | {
       operation: Exclude<
         BrowserAction["operation"],
-        "auth_capture" | "smoke" | "tabs" | "frames" | "dialog" | "download" | "upload"
+        "profile" | "auth" | "auth_capture" | "smoke" | "tabs" | "frames" | "dialog" | "download" | "upload"
       >
       url: string
       title: string
@@ -85,7 +94,7 @@ export type BrowserResult = {
   | {
       operation: "auth_capture"
       name: string
-      path: string
+      capture: CaptureInfo
       cookies: number
       origins: number
     }
@@ -179,15 +188,17 @@ export interface BrowserCDP {
 }
 
 export interface BrowserContextLike {
+  browser?(): { isConnected(): boolean } | null
   on?(event: "page", listener: (page: BrowserPage) => void): void
   pages(): BrowserPage[]
   newPage(): Promise<BrowserPage>
   newCDPSession(page: BrowserPage): Promise<BrowserCDP>
-  storageState(options: { path: string; indexedDB?: boolean }): Promise<{
+  storageState(options: { path?: string; indexedDB?: boolean }): Promise<{
     cookies: SmokeCookie[]
     origins: SmokeOrigin[]
   }>
   addCookies(cookies: SmokeCookie[]): Promise<void>
+  setStorageState?(state: { cookies: SmokeCookie[]; origins: SmokeOrigin[] }): Promise<void>
   close(): Promise<void>
 }
 
@@ -231,7 +242,7 @@ class OutcomeError extends Error {
 // raya_change end
 
 const launch: BrowserLaunch = async (profile) =>
-  (await chromium.launchPersistentContext(profile, {
+  (await chromium.launchPersistentContext(join(profile, "chromium"), {
     channel: "chrome",
     headless: true,
     viewport: { width: 1280, height: 720 },
@@ -251,6 +262,14 @@ export class BrowserSession {
   private dialogs = new BrowserDialogs()
   private transfers: BrowserTransfers
   private uploads: BrowserUploads
+  private readonly auth: BrowserAuth
+  private stopAuth?: () => void
+  private authentication: AuthSource
+  private failure?: { status: "unavailable" | "locked" | "error" | "auth_expired"; message: string }
+  private uncertain = false
+  private lease?: Flock.Lease
+  private changing?: Promise<void>
+  private readonly resets = new Set<() => void>()
   private readonly documents = new Map<BrowserPage, FrameRegistry>()
   private readonly tabs = new Map<string, BrowserPage>()
   private readonly identities = new Map<BrowserPage, string>()
@@ -279,9 +298,18 @@ export class BrowserSession {
     readonly profile: string,
     private readonly launcher: BrowserLaunch = launch,
     private readonly artifacts = join(profile, "raya-smoke"),
+    readonly workspace: BrowserIdentity = {
+      profileID: createHash("sha256").update(profile).digest("hex"),
+      directory: profile,
+    },
   ) {
     this.transfers = new BrowserTransfers(join(profile, "raya-downloads"), profile)
     this.uploads = new BrowserUploads(join(profile, "raya-uploads"))
+    this.auth = new BrowserAuth(join(profile, "auth"), workspace)
+    this.stopAuth = this.auth.watch(() => {
+      for (const listener of this.resets) listener()
+    })
+    this.authentication = { source: "live", profileID: workspace.profileID, login: "unverified" }
   }
 
   async ready(): Promise<void> {
@@ -289,14 +317,59 @@ export class BrowserSession {
     if (this.start) return this.start
     this.start = this.open()
     await this.start.catch(async (error: unknown) => {
-      await this.dispose()
+      await this.dispose(true)
+      await this.unlock()
+      const message = error instanceof Error ? error.message : String(error)
+      this.failure = /Authentication capture expired/i.test(message)
+        ? {
+            status: "auth_expired",
+            message: "Saved authentication expired. Reset this workspace browser or restore a fresh capture.",
+          }
+        : /Singleton|profile.*in use|user data directory.*in use/i.test(message)
+          ? {
+              status: "locked",
+              message:
+                "This workspace browser profile is in use. Close its browser in the other Raya window, then retry. Reset will not break another process's lock.",
+            }
+          : /executable.*exist|chrome.*not found|distribution.*not found/i.test(message)
+            ? {
+                status: "unavailable",
+                message: "Google Chrome is unavailable. Install Chrome for this user, then retry the Raya browser.",
+              }
+            : {
+                status: "error",
+                message:
+                  "The workspace browser could not start. Retry; if it still fails, close other Raya browser windows before resetting this workspace's browser session.",
+              }
+      for (const listener of this.resets) listener()
       throw error
     })
   }
 
   private async open(): Promise<void> {
+    this.stopAuth ??= this.auth.watch(() => {
+      for (const listener of this.resets) listener()
+    })
+    this.failure = undefined
     await this.transfers.load()
     await mkdir(this.profile, { recursive: true })
+    await this.lock()
+    this.authentication = { source: "live", profileID: this.workspace.profileID, login: "unverified" }
+    const saved = await this.saved()
+    if (saved) {
+      if (!saved.captureID || saved.status !== "restored")
+        throw new Error("Saved authentication replacement was not confirmed; reset this workspace browser")
+      const capture = await this.auth.read(saved.captureID)
+      this.authentication = {
+        source: "capture",
+        profileID: this.workspace.profileID,
+        captureID: capture.info.id,
+        captureName: capture.info.name,
+        capturedAt: capture.info.createdAt,
+        expiresAt: capture.info.expiresAt,
+        login: "unverified",
+      }
+    }
     const context = await this.launcher(this.profile)
     const page = context.pages()[0] ?? (await context.newPage())
     this.context = context
@@ -304,6 +377,23 @@ export class BrowserSession {
     this.register()
     await this.bind(page)
     this.timer = setInterval(() => void this.pump(), 250)
+  }
+
+  private async saved() {
+    const receipt = join(this.profile, "active-auth.json")
+    const stat = await lstat(receipt).catch((error: unknown) => {
+      if (error instanceof Error && "code" in error && error.code === "ENOENT") return
+      throw error
+    })
+    if (stat && (!stat.isFile() || stat.isSymbolicLink() || stat.size > 1000))
+      throw new Error("Saved authentication provenance is invalid; reset this workspace browser")
+    const active = stat ? await readFile(receipt, "utf8") : undefined
+    if (!active) return
+    try {
+      return JSON.parse(active) as { captureID?: string; status?: string }
+    } catch {
+      throw new Error("Saved authentication provenance is invalid; reset this workspace browser")
+    }
   }
 
   private async bind(page: BrowserPage): Promise<void> {
@@ -322,7 +412,12 @@ export class BrowserSession {
     const ua = version?.userAgent?.replace(/HeadlessChrome/i, "Chrome")
     if (ua)
       await cdp
-        .send("Emulation.setUserAgentOverride", { userAgent: ua, acceptLanguage: "en-US,en;q=0.9", platform: "Win32" })
+        .send("Emulation.setUserAgentOverride", {
+          userAgent: ua,
+          acceptLanguage: "en-US,en;q=0.9",
+          platform:
+            process.platform === "win32" ? "Win32" : process.platform === "darwin" ? "MacIntel" : "Linux x86_64",
+        })
         .catch(() => undefined)
     await cdp
       .send("Page.addScriptToEvaluateOnNewDocument", {
@@ -527,7 +622,188 @@ export class BrowserSession {
     this.handover(reason, undefined, this.running > 0)
   }
 
+  profileState(): ProfileInfo {
+    return {
+      ...this.workspace,
+      status: this.uncertain
+        ? "error"
+        : this.authentication.expiresAt !== undefined && this.authentication.expiresAt <= Date.now()
+          ? "auth_expired"
+          : (this.failure?.status ??
+            (this.context && this.context.browser?.()?.isConnected() !== false ? "ready" : "closed")),
+      message: this.uncertain
+        ? "Authentication replacement was not confirmed. Reset this workspace browser before continuing."
+        : this.failure?.message,
+      authentication: { ...this.authentication },
+    }
+  }
+
+  private async lock() {
+    if (this.lease) return
+    await mkdir(this.profile, { recursive: true, mode: 0o700 })
+    if ((await realpath(this.profile)) !== resolve(this.profile))
+      throw new Error("Browser profile storage identity changed")
+    const dir = join(this.profile, ".locks")
+    await mkdir(dir, { recursive: true, mode: 0o700 })
+    if ((await realpath(dir)) !== resolve(dir)) throw new Error("Browser profile lock identity changed")
+    this.lease = await Flock.acquire("browser-profile", { dir, timeoutMs: 1000 }).catch(() => {
+      throw new Error(
+        "Browser profile is in use. Close its other Raya browser window, then retry. An abandoned lock recovers after one minute.",
+      )
+    })
+  }
+
+  private async unlock() {
+    const lease = this.lease
+    this.lease = undefined
+    await lease?.release()
+  }
+
+  private async provenance(captureID: string, status: "restoring" | "restored") {
+    const path = join(this.profile, `${randomUUID()}.auth-tmp`)
+    const file = await open(path, "wx", 0o600)
+    try {
+      await file.writeFile(JSON.stringify({ captureID, status }))
+      await file.sync()
+    } finally {
+      await file.close()
+    }
+    await rename(path, join(this.profile, "active-auth.json"))
+  }
+
+  onReset(listener: () => void) {
+    this.resets.add(listener)
+    return () => this.resets.delete(listener)
+  }
+
+  private async eraseProfile() {
+    const root = await realpath(this.profile)
+    if (root !== resolve(this.profile)) throw new Error("Browser profile storage identity changed; reset refused")
+    const path = join(root, "chromium")
+    const canonical = await realpath(path).catch((error: unknown) => {
+      if (error instanceof Error && "code" in error && error.code === "ENOENT") return
+      throw error
+    })
+    if (canonical && canonical !== path) throw new Error("Browser profile identity changed; reset refused")
+    if (canonical) await rm(path, { recursive: true })
+    await unlink(join(root, "active-auth.json")).catch((error: unknown) => {
+      if (error instanceof Error && "code" in error && error.code === "ENOENT") return
+      throw error
+    })
+    this.authentication = { source: "live", profileID: this.workspace.profileID, login: "unverified" }
+    this.uncertain = false
+    this.failure = undefined
+  }
+
+  private async retry() {
+    if ((this.profileState().status === "closed" || this.failure) && this.context) await this.dispose(true)
+    await this.ready()
+  }
+
+  private async restore(restored: Awaited<ReturnType<BrowserAuth["read"]>>) {
+    await this.ready()
+    const context = this.browser()
+    if (!context.setStorageState) throw new Error("Browser runtime cannot replace authentication storage")
+    this.uncertain = true
+    await this.provenance(restored.info.id, "restoring")
+    if (restored.info.expiresAt <= Date.now())
+      throw new TargetError(
+        "Authentication capture expired before restoration could start. Reset or restore a fresh capture; no saved bytes were dispatched.",
+      )
+    await context.setStorageState(restored.state).catch(() => {
+      throw new Error(
+        "Authentication replacement was not confirmed. Its secret contents were not disclosed; reset before continuing.",
+      )
+    })
+    this.authentication = {
+      source: "capture",
+      profileID: this.workspace.profileID,
+      captureID: restored.info.id,
+      captureName: restored.info.name,
+      capturedAt: restored.info.createdAt,
+      expiresAt: restored.info.expiresAt,
+      login: "unverified",
+    }
+    await this.provenance(restored.info.id, "restored")
+    this.uncertain = false
+  }
+
+  private async lifecycle(action: Extract<BrowserAction, { operation: "profile" | "auth" }>): Promise<BrowserResult> {
+    if ("profileID" in action && action.profileID !== this.workspace.profileID)
+      throw new TargetError("Observed workspace browser profile does not match this request")
+    if (action.operation === "profile" && action.action === "info")
+      return { operation: "profile", profile: this.profileState() }
+    if (action.operation === "auth" && (action.action === "list" || action.action === "inspect")) {
+      const captures = await this.auth.list()
+      const selected = action.action === "inspect" ? captures.filter((info) => info.id === action.captureID) : captures
+      if (action.action === "inspect" && !selected.length)
+        throw new TargetError("Capture is unknown in this workspace profile")
+      return { operation: "auth", captures: selected, profile: this.profileState() }
+    }
+    if (this.changing)
+      throw new TargetError(
+        "A browser profile change is already in progress; inspect its outcome before another change",
+      )
+    this.changing = (async () => {
+      if (action.operation === "profile" && action.action === "retry") {
+        await this.retry()
+        return
+      }
+      await this.lock()
+      const saved = action.operation === "auth" && action.action === "delete" ? await this.saved() : undefined
+      const restored =
+        action.operation === "auth" && action.action === "restore" ? await this.auth.read(action.captureID) : undefined
+      const closes =
+        action.operation === "profile" ||
+        action.action === "restore" ||
+        action.captureID === this.authentication.captureID ||
+        action.captureID === saved?.captureID
+      if (closes) {
+        // Native Chromium ownership is checked as well: never delete a profile held by an external browser.
+        if (!this.context) this.context = await this.launcher(this.profile)
+        this.takeControl("The workspace browser session is being replaced. Old tabs and queued actions are invalid.")
+        await this.dispose(true)
+        await this.eraseProfile()
+      }
+      if (action.operation === "profile") await this.auth.clear()
+      if (action.operation === "auth" && action.action === "delete") await this.auth.delete(action.captureID)
+      if (restored) {
+        await this.restore(restored)
+      }
+      if (closes)
+        this.takeControl("Browser identity changed. Inspect the profile and sign-in state, then resume agent control.")
+    })()
+    try {
+      await this.changing
+    } finally {
+      this.changing = undefined
+      if (!this.context) await this.unlock()
+      for (const listener of this.resets) listener()
+    }
+    return action.operation === "profile"
+      ? { operation: "profile", profile: this.profileState() }
+      : { operation: "auth", captures: await this.auth.list(), profile: this.profileState() }
+  }
+
   async execute(action: BrowserAction): Promise<BrowserResult> {
+    if (action.operation === "profile" || action.operation === "auth") return this.lifecycle(action)
+    if (this.changing) throw new TargetError("Browser profile replacement is in progress; no action was dispatched")
+    if (this.uncertain)
+      throw new TargetError(
+        "Authentication replacement was not confirmed. Reset this workspace browser before continuing.",
+      )
+    if (this.failure && this.context) throw new TargetError(this.failure.message)
+    if (this.profileState().status === "auth_expired")
+      throw new TargetError(
+        "Saved authentication expired. Reset this workspace browser or explicitly restore a fresh capture before continuing.",
+      )
+    const result = await this.executeAction(action)
+    return { ...result, profile: this.profileState() }
+  }
+
+  private async executeAction(
+    action: Exclude<BrowserAction, { operation: "profile" | "auth" }>,
+  ): Promise<BrowserResult> {
     if (action.operation === "upload") return this.upload(action)
     if (action.operation === "download" && action.action !== "start") return this.download(action)
     await this.ready()
@@ -800,7 +1076,7 @@ export class BrowserSession {
   }
 
   private async perform(
-    action: Exclude<BrowserAction, { operation: "dialog" | "download" | "upload" }>,
+    action: Exclude<BrowserAction, { operation: "profile" | "auth" | "dialog" | "download" | "upload" }>,
   ): Promise<BrowserResult> {
     await this.ready()
     // A new tool call is an explicit instruction to return control to the agent.
@@ -816,7 +1092,7 @@ export class BrowserSession {
   }
 
   private async attempt(
-    action: Exclude<BrowserAction, { operation: "dialog" | "download" | "upload" }>,
+    action: Exclude<BrowserAction, { operation: "profile" | "auth" | "dialog" | "download" | "upload" }>,
     number: number,
     revision: number,
   ): Promise<BrowserResult> {
@@ -1073,14 +1349,25 @@ export class BrowserSession {
     dispatch: () => void,
   ): Promise<BrowserResult> {
     dispatch()
-    if (action.operation === "auth_capture")
-      return new BrowserSmoke(this.artifacts, this.resolve(action.tabID), this.browser()).capture(action.name)
+    if (action.operation === "auth_capture") {
+      const state = await this.browser().storageState({ indexedDB: true })
+      const capture = await this.auth.capture(action.name, state)
+      for (const listener of this.resets) listener()
+      return {
+        operation: "auth_capture",
+        name: capture.name,
+        capture,
+        cookies: capture.cookies,
+        origins: capture.origins.length,
+      }
+    }
     return new BrowserSmoke(
       this.artifacts,
       this.resolve(action.tabID),
       this.browser(),
       (id) => this.document(action.tabID, id),
       action.tabID,
+      this.authentication,
     ).run({
       name: action.name,
       mode: action.mode,
@@ -1111,6 +1398,10 @@ export class BrowserSession {
   }
 
   private assertInput(): void {
+    if (this.changing || this.uncertain)
+      throw new Error("Browser identity replacement is not settled; inspect its status before interacting")
+    if (this.profileState().status === "auth_expired")
+      throw new Error("Saved authentication expired. Reset or restore a fresh capture before interacting.")
     const blocked = this.dialogs.blocked()
     if (blocked) throw blocked
     if (this.state.control === "agent" && this.state.busy)
@@ -1253,7 +1544,11 @@ export class BrowserSession {
   }
   // raya_change end
 
-  async dispose(): Promise<void> {
+  async dispose(preserve = false): Promise<void> {
+    if (!preserve) {
+      this.stopAuth?.()
+      this.stopAuth = undefined
+    }
     this.revision += 1
     const context = this.context
     const cdp = this.cdp
@@ -1267,9 +1562,11 @@ export class BrowserSession {
     this.timer = undefined
     if (this.hold) clearTimeout(this.hold)
     this.hold = undefined
-    this.listeners.clear()
-    this.states.clear()
-    this.inventories.clear()
+    if (!preserve) {
+      this.listeners.clear()
+      this.states.clear()
+      this.inventories.clear()
+    }
     this.tabs.clear()
     this.identities.clear()
     this.dialogs.dispose()
@@ -1279,10 +1576,20 @@ export class BrowserSession {
     for (const registry of this.documents.values()) registry.dispose()
     this.documents.clear()
     this.openers.clear()
-    if (context) await context.close().catch(() => undefined)
+    if (context)
+      await context.close().catch(() => {
+        this.context = context
+        this.failure = {
+          status: "error",
+          message:
+            "Browser closure was not confirmed. Retry or reset this workspace browser; its profile was not deleted.",
+        }
+        throw new Error(this.failure.message)
+      })
     await uploads.close()
     this.uploads = new BrowserUploads(join(this.profile, "raya-uploads"))
     if (cdp) await cdp.detach().catch(() => undefined)
+    if (!preserve) await this.unlock()
   }
 
   private active(): BrowserPage {

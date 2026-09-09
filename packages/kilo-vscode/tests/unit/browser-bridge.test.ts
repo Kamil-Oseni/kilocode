@@ -601,6 +601,7 @@ describe("Raya browser bridge", () => {
           finishedAt: 2,
           artifact: "report.json",
           authState: "auth.json",
+          authentication: { source: "live", profileID: "a".repeat(64), login: "unverified" },
           steps: [
             {
               id: "dashboard",

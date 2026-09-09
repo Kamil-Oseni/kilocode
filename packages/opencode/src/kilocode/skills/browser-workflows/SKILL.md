@@ -2,10 +2,10 @@
 name: browser-workflows
 description: Task-specific playbooks for the Raya browser skill.
 metadata:
-  version: "7"
+  version: "8"
 ---
 
-# Browser playbooks, version 7
+# Browser playbooks, version 8
 
 Apply the relevant playbook under the `browser` operating loop and `browser-runtime` contract. Do not execute unrelated playbooks.
 
@@ -19,7 +19,7 @@ Inspect the active account/project, field labels, existing values and validation
 
 ## Authentication
 
-Check a visible account label and project before acting. If login, MFA, CAPTCHA or account selection needs the user, explain the precise step and wait for their explicit completion; there is no automated handover operation in version 7. Reinspect the account and page afterward. Do not ask for passwords, capture cookies in transcript, or treat waiting time as successful login. Use authentication capture only when required for authorized smoke reuse, with a target-specific name; its storage file is sensitive and is not a deliverable. Current account UI does not prove the identity of an old named capture. There is no capture-inspection tool: if its provenance cannot be established without reading secrets, capture the visibly confirmed account/target under a fresh unique name and use that name for the authorized smoke run.
+Inspect `browser_profile info` and a visible account label/project before acting. If login, MFA, CAPTCHA or account selection needs the user, explain the precise step and wait for explicit completion; there is no automated challenge handover operation in version 8. Reinspect afterward. Do not ask for passwords, expose capture files, or treat elapsed time as successful login. Save authentication only for authorized reuse, under a meaningful label. List/inspect captures by opaque ID, confirm workspace and expiry, then explicitly restore when authorized to replace the browser session and discard its drafts. Observe fresh tabs and frames after restoration, and confirm the account again. Smoke reports capture provenance separately from successful assertions; it never silently restores an old named state.
 
 ## Downloads and uploads
 

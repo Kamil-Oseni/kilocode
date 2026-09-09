@@ -7,6 +7,8 @@ import type { BrowserFrame, BrowserKey, BrowserPointer, BrowserState } from "./b
 import { BrowserSession } from "./browser-session"
 
 type BrowserPanelMessage = { tabID?: string } & (
+  | { type: "profile"; action: "select" | "retry" | "reset"; profileID?: string }
+  | { type: "auth"; action: "capture" | "restore" | "delete"; profileID?: string; captureID?: string }
   | { type: "ready" }
   | { type: "navigate"; url: string }
   | { type: "back" }
@@ -35,18 +37,21 @@ export class BrowserPanel implements vscode.Disposable {
   private offUploads: (() => void) | undefined
   private offTabs: (() => void) | undefined
   private offState: (() => void) | undefined
+  private offReset: (() => void) | undefined
 
-  constructor(private readonly session: BrowserSession) {}
+  constructor(
+    private readonly session: BrowserSession,
+    private readonly options?: { select: () => Promise<void>; close: () => void },
+  ) {}
 
   async show(preserveFocus = true): Promise<void> {
-    await this.session.ready()
     if (this.panel) {
       this.panel.reveal(vscode.ViewColumn.Beside, preserveFocus)
       return
     }
     const panel = vscode.window.createWebviewPanel(
       BrowserPanel.viewType,
-      "Raya Browser",
+      `Raya Browser — ${this.session.workspace.directory.split(/[\\/]/).at(-1)}`,
       { viewColumn: vscode.ViewColumn.Beside, preserveFocus },
       {
         enableScripts: true,
@@ -57,6 +62,7 @@ export class BrowserPanel implements vscode.Disposable {
     panel.webview.html = this.html()
     panel.webview.onDidReceiveMessage((message: BrowserPanelMessage) => this.handle(message))
     panel.onDidDispose(() => {
+      this.offReset?.()
       this.offUploads?.()
       this.offDownloads?.()
       this.off?.()
@@ -66,6 +72,7 @@ export class BrowserPanel implements vscode.Disposable {
       this.off = undefined
       this.offState = undefined
       this.panel = undefined
+      this.options?.close()
     })
     this.offDialogs = this.session.onDialogs(
       () => void this.panel?.webview.postMessage({ type: "dialogs", ...this.session.dialogsState() }),
@@ -75,6 +82,12 @@ export class BrowserPanel implements vscode.Disposable {
     this.offTabs = this.session.onTabs((tabs) => void this.panel?.webview.postMessage({ type: "tabs", tabs }))
     this.off = this.session.onFrame((frame) => void this.frame(frame))
     this.offState = this.session.onState((state) => void this.status(state))
+    this.offReset = this.session.onReset(() => this.reconnect())
+    try {
+      await this.session.ready()
+    } finally {
+      await this.identity()
+    }
   }
 
   restore(panel: vscode.WebviewPanel): void {
@@ -84,6 +97,7 @@ export class BrowserPanel implements vscode.Disposable {
     panel.webview.html = this.html()
     panel.webview.onDidReceiveMessage((message: BrowserPanelMessage) => this.handle(message))
     panel.onDidDispose(() => {
+      this.offReset?.()
       this.offUploads?.()
       this.offDownloads?.()
       this.off?.()
@@ -93,6 +107,7 @@ export class BrowserPanel implements vscode.Disposable {
       this.off = undefined
       this.offState = undefined
       this.panel = undefined
+      this.options?.close()
     })
     this.offDialogs = this.session.onDialogs(
       () => void this.panel?.webview.postMessage({ type: "dialogs", ...this.session.dialogsState() }),
@@ -102,9 +117,80 @@ export class BrowserPanel implements vscode.Disposable {
     this.offTabs = this.session.onTabs((tabs) => void this.panel?.webview.postMessage({ type: "tabs", tabs }))
     this.off = this.session.onFrame((frame) => void this.frame(frame))
     this.offState = this.session.onState((state) => void this.status(state))
-    void this.session
-      .ready()
-      .catch((error: unknown) => console.error("[Kilo New] BrowserPanel: browser restore failed:", error))
+    this.offReset = this.session.onReset(() => this.reconnect())
+    void this.session.ready().catch(() => this.identity())
+  }
+
+  private reconnect() {
+    this.offDownloads?.()
+    this.offUploads?.()
+    this.offDialogs?.()
+    this.offDownloads = this.session.onDownloads(() => void this.downloads())
+    this.offUploads = this.session.onUploads(() => void this.uploads())
+    this.offDialogs = this.session.onDialogs(
+      () => void this.panel?.webview.postMessage({ type: "dialogs", ...this.session.dialogsState() }),
+    )
+    void this.identity().catch(() => console.error("[Raya] Browser identity metadata could not be refreshed."))
+  }
+
+  private async identity() {
+    const result = await this.session.execute({ operation: "auth", action: "list" })
+    if (result.operation !== "auth") return
+    await this.panel?.webview.postMessage({ type: "profile", profile: result.profile, captures: result.captures })
+  }
+
+  private async lifecycle(message: Extract<BrowserPanelMessage, { type: "profile" | "auth" }>) {
+    if (message.type === "profile" && message.action === "select") return this.options?.select()
+    if (message.type === "profile" && message.action === "retry") {
+      try {
+        await this.session.execute({ operation: "profile", action: "retry" })
+      } finally {
+        await this.identity()
+      }
+      return
+    }
+    if (message.profileID !== this.session.workspace.profileID) throw new Error("Observed workspace profile changed")
+    if (message.type === "profile") {
+      const answer = await vscode.window.showWarningMessage(
+        `Reset the browser for ${this.session.workspace.directory}? This closes tabs, discards browser drafts, signs out and deletes saved authentication captures. Downloaded artifacts are preserved.`,
+        { modal: true },
+        "Reset workspace browser",
+      )
+      if (answer !== "Reset workspace browser") return
+      await this.session.execute({ operation: "profile", action: "reset", profileID: message.profileID })
+    }
+    if (message.type === "auth" && message.action === "capture") {
+      if (!message.tabID) throw new Error("Observe a browser tab before saving authentication")
+      const name = await vscode.window.showInputBox({
+        title: "Save workspace authentication",
+        prompt:
+          "Capture all origins in this workspace profile for seven days. A capture does not verify the signed-in account.",
+        validateInput: (value) =>
+          value.trim() && value.length <= 200 ? undefined : "Enter a label of 1–200 characters",
+      })
+      if (!name) return
+      await this.session.execute({ operation: "auth_capture", tabID: message.tabID, name })
+    }
+    if (message.type === "auth" && message.action !== "capture") {
+      if (!message.captureID) throw new Error("Observe an authentication capture before changing it")
+      {
+        const answer = await vscode.window.showWarningMessage(
+          message.action === "restore"
+            ? "This replaces the workspace browser session and closes its tabs. Inspect the intended account again afterward."
+            : "Delete this local authentication capture? If it is active or an unfinished restoration used it, this also signs out the workspace browser and closes its tabs. It does not revoke the website session on other devices.",
+          { modal: true },
+          message.action === "restore" ? "Restore capture" : "Delete capture",
+        )
+        if (!answer) return
+      }
+      await this.session.execute({
+        operation: "auth",
+        action: message.action,
+        profileID: message.profileID,
+        captureID: message.captureID,
+      })
+    }
+    await this.identity()
   }
 
   private handle(message: BrowserPanelMessage): void {
@@ -169,21 +255,33 @@ export class BrowserPanel implements vscode.Disposable {
   }
 
   private async initialize() {
+    await this.identity()
     await this.uploads()
     await this.downloads()
     const frame = this.session.latest()
     if (frame) await this.frame(frame)
     await this.panel?.webview.postMessage({ type: "dialogs", ...this.session.dialogsState() })
     await this.status(this.session.current())
-    await this.panel?.webview.postMessage({ type: "tabs", tabs: await this.session.inventory() })
+    if (this.session.profileState().status === "ready")
+      await this.panel?.webview.postMessage({ type: "tabs", tabs: await this.session.inventory() })
   }
 
   private async receive(message: BrowserPanelMessage): Promise<void> {
+    if (message.type === "profile" || message.type === "auth") return this.lifecycle(message)
     if (message.type === "ready") return this.initialize()
     if (message.type === "dialog") return this.respond(message)
     if (message.type === "download") return this.transfer(message)
     if (message.type === "upload") return this.cancelUpload(message.uploadID)
     if (message.type === "downloads") return this.downloads(message.offset)
+    return this.input(message)
+  }
+
+  private async input(
+    message: Exclude<
+      BrowserPanelMessage,
+      { type: "profile" | "auth" | "ready" | "dialog" | "download" | "upload" | "downloads" }
+    >,
+  ): Promise<void> {
     if (message.type === "tab") {
       if (message.action !== "open" && !message.tabID) throw new Error("Observed tab identity is required")
       await this.session.tab(message.action, message.tabID)
@@ -246,6 +344,7 @@ export class BrowserPanel implements vscode.Disposable {
   }
 
   dispose(): void {
+    this.offReset?.()
     this.offUploads?.()
     this.offDownloads?.()
     this.off?.()
@@ -293,11 +392,22 @@ export class BrowserPanel implements vscode.Disposable {
     #dialogs > section { pointer-events: auto; margin: 8px auto; max-width: 640px; padding: 16px; border: 1px solid var(--vscode-focusBorder); background: var(--vscode-editor-background); }
     #dialogs p { white-space: pre-wrap; overflow-wrap: anywhere; }
     #dialogs input { width: 100%; margin-bottom: 10px; }
+    #identity { padding: 8px; border-bottom: 1px solid var(--vscode-panel-border); overflow-wrap: anywhere; }
+    #identity summary { cursor: pointer; }
+    #identity button { margin: 4px 6px 4px 0; }
+    #captures { max-height: 180px; overflow: auto; }
+    #identity p { margin: 6px 0; }
     #dialogs button { margin-right: 8px; }
     #shield > div { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 4px; background: rgb(0 0 0 / 72%); }
   </style>
 </head>
 <body>
+  <details id="identity"><summary id="profile-label">Workspace browser identity</summary>
+    <p id="profile-state" role="status">Reading browser profile…</p>
+    <button id="workspace">Choose workspace</button><button id="retry-browser">Retry browser</button><button id="reset-browser">Reset workspace browser</button><button id="capture-auth">Save authentication</button>
+    <p>Authentication captures include this workspace profile's origins and expire after seven days. Login is unverified until you inspect the website.</p>
+    <div id="captures" aria-label="Saved authentication captures"></div>
+  </details>
   <header><select id="tabs" aria-label="Browser tab"></select><button id="newtab" aria-label="New tab">New tab</button><button id="closetab" aria-label="Close selected tab">Close tab</button></header>
   <header>
     <button id="back" title="Back" aria-label="Back">←</button>
@@ -332,11 +442,17 @@ export class BrowserPanel implements vscode.Disposable {
     const dialogs = document.getElementById("dialogs");
     const downloads = document.getElementById("downloads");
     const uploads = document.getElementById("uploads");
+    const captures = document.getElementById("captures");
+    let profile;
     const cards = new Map();
     let selected;
     let displayed;
     const controls = [...document.querySelectorAll("header button, header input, header select")];
     const send = (type, data = {}) => vscode.postMessage({ type, tabID: displayed, ...data });
+    document.getElementById("workspace").addEventListener("click", () => send("profile", { action: "select" }));
+    document.getElementById("retry-browser").addEventListener("click", () => send("profile", { action: "retry" }));
+    document.getElementById("reset-browser").addEventListener("click", () => send("profile", { action: "reset", profileID: profile?.profileID }));
+    document.getElementById("capture-auth").addEventListener("click", () => send("auth", { action: "capture", profileID: profile?.profileID }));
     document.getElementById("newtab").addEventListener("click", () => send("tab", { action: "open" }));
     document.getElementById("closetab").addEventListener("click", () => send("tab", { action: "close", tabID: selected }));
     tabs.addEventListener("change", () => send("tab", { action: "select", tabID: tabs.value }));
@@ -400,6 +516,36 @@ export class BrowserPanel implements vscode.Disposable {
     screen.addEventListener("keyup", (event) => { key("keyUp", event); event.preventDefault(); });
     screen.addEventListener("wheel", (event) => { send("scroll", { input: { deltaX: event.deltaX, deltaY: event.deltaY } }); event.preventDefault(); }, { passive: false });
     window.addEventListener("message", (event) => {
+      if (event.data.type === "profile") {
+        const previous = profile;
+        profile = event.data.profile;
+        document.getElementById("profile-label").textContent = "Workspace: " + profile.directory;
+        document.getElementById("profile-state").textContent = "Profile " + profile.profileID.slice(0, 12) + " · " + profile.status + ". " + (profile.message || "") + " Authentication: " + (profile.authentication.source === "capture" ? "restored capture " + (profile.authentication.captureName || profile.authentication.captureID) + "; login unverified" : "live workspace state; login unverified");
+        document.getElementById("capture-auth").disabled = profile.status !== "ready";
+        if (profile.status !== "ready" || previous && previous.authentication.captureID !== profile.authentication.captureID) {
+          displayed = undefined;
+          screen.hidden = true;
+          empty.hidden = false;
+          empty.textContent = profile.message || (profile.status === "closed" ? "Browser closed. Retry to open a clean workspace session." : "Waiting for a fresh browser frame…");
+        }
+        if (profile.status !== "ready") document.getElementById("identity").open = true;
+        captures.replaceChildren();
+        for (const capture of event.data.captures) {
+          const row = document.createElement("div");
+          const label = document.createElement("p");
+          label.textContent = capture.name + " · " + capture.status + " · expires " + new Date(capture.expiresAt).toISOString() + " · " + capture.origins.join(", ") + " · Cookie domains: " + capture.domains.join(", ");
+          row.append(label);
+          for (const action of ["restore", "delete"]) {
+            const button = document.createElement("button");
+            button.textContent = action === "restore" ? "Restore capture" : "Delete capture";
+            button.disabled = action === "restore" && capture.status !== "available";
+            button.addEventListener("click", () => send("auth", { action, profileID: profile.profileID, captureID: capture.id }));
+            row.append(button);
+          }
+          captures.append(row);
+        }
+        return;
+      }
       if (event.data.type === "uploads") {
         uploads.replaceChildren();
         for (const item of event.data.uploads) {

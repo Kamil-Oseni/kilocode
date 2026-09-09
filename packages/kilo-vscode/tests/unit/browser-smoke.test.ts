@@ -78,19 +78,14 @@ describe("Raya authenticated smoke runner", () => {
   it("returns green evidence and identifies the deliberately broken step", async () => {
     const page = new SamplePage()
     const smoke = new BrowserSmoke(paths.artifacts, page, {
-      storageState: async ({ path }) => {
-        const state = { cookies: page.signedIn ? [{ name: "raya_auth", value: "eden" }] : [], origins: [] }
-        await writeFile(path, JSON.stringify(state))
-        return state
+      storageState: async () => {
+        throw new Error("Smoke must not capture authentication implicitly")
       },
-      addCookies: async (cookies) => {
-        page.signedIn = cookies.some((cookie) => cookie.name === "raya_auth" && cookie.value === "eden")
+      addCookies: async () => {
+        throw new Error("Smoke must not merge authentication implicitly")
       },
     })
     await page.locator("#login").click()
-    const auth = await smoke.capture("sample-app")
-    expect(auth.cookies).toBe(1)
-    expect(await Bun.file(auth.path).exists()).toBe(true)
     page.signedIn = false
 
     const flow = {
@@ -120,9 +115,15 @@ describe("Raya authenticated smoke runner", () => {
     page.signedIn = true
     const automatic = await smoke.run({ ...flow, name: "automatic-app", mode: "exploratory" })
     expect(automatic.passed).toBe(true)
-    expect(await Bun.file(join(paths.artifacts, "auth", "automatic-app.json")).exists()).toBe(true)
+    expect(await Bun.file(join(paths.artifacts, "auth", "automatic-app.json")).exists()).toBe(false)
+    expect(automatic.authentication.source).toBe("live")
+    expect(automatic.authentication.login).toBe("unverified")
 
     page.signedIn = false
+    const expired = await smoke.run(flow)
+    expect(expired.passed).toBe(false)
+    expect(page.signedIn).toBe(false)
+    page.signedIn = true
     const passing = await smoke.run(flow)
     expect(passing.passed).toBe(true)
     expect(page.signedIn).toBe(true)

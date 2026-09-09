@@ -482,6 +482,49 @@ export type BrowserRequest =
       /**
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
+      tabID?: string
+      operation: "profile"
+      action: "info" | "retry"
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
+      operation: "profile"
+      action: "reset"
+      profileID: string
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
+      operation: "auth"
+      action: "list"
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
+      operation: "auth"
+      action: "inspect" | "restore" | "delete"
+      profileID: string
+      captureID: string
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
       tabID: string
       /**
        * Observed frame document identity; invalid after navigation or detachment.
@@ -5078,19 +5121,22 @@ export type BrowserUploadChunk = {
   next: number
 }
 
-export type BrowserUploadInfo = {
-  id: string
-  tabID: string
-  frameID?: string
-  sessionID: string
+export type BrowserAuthSource = {
+  source: "live" | "capture"
+  profileID: string
+  captureID?: string
+  captureName?: string
+  capturedAt?: number
+  expiresAt?: number
+  login: "unverified"
+}
+
+export type BrowserProfileInfo = {
+  profileID: string
   directory: string
-  requestID: string
-  destination: string
-  files: Array<BrowserUploadFile>
-  status: "staging" | "selecting" | "selected" | "failed" | "cancelled" | "unknown"
-  createdAt: number
-  updatedAt: number
-  error?: string
+  status: "ready" | "closed" | "unavailable" | "locked" | "error" | "auth_expired"
+  message?: string
+  authentication: BrowserAuthSource
 }
 
 export type BrowserTransfer = {
@@ -5116,7 +5162,72 @@ export type BrowserTransfer = {
   error?: string
 }
 
+export type BrowserCaptureInfo = {
+  id: string
+  profileID: string
+  directory: string
+  name: string
+  createdAt: number
+  expiresAt: number
+  origins: Array<string>
+  domains: Array<string>
+  cookies: number
+  bytes: number
+  sha256: string
+  status: "available" | "expired" | "missing" | "invalid"
+}
+
+export type BrowserUploadInfo = {
+  id: string
+  tabID: string
+  frameID?: string
+  sessionID: string
+  directory: string
+  requestID: string
+  destination: string
+  files: Array<BrowserUploadFile>
+  status: "staging" | "selecting" | "selected" | "failed" | "cancelled" | "unknown"
+  createdAt: number
+  updatedAt: number
+  error?: string
+}
+
 export type BrowserResult =
+  | {
+      profile: BrowserProfileInfo
+      navigation?: "download"
+      transfers?: Array<BrowserTransfer>
+      /**
+       * Observed frame document identity; invalid after navigation or detachment.
+       */
+      frameID?: string
+      frameURL?: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
+      url?: string
+      title?: string
+      operation: "profile"
+    }
+  | {
+      profile: BrowserProfileInfo
+      navigation?: "download"
+      transfers?: Array<BrowserTransfer>
+      /**
+       * Observed frame document identity; invalid after navigation or detachment.
+       */
+      frameID?: string
+      frameURL?: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
+      url?: string
+      title?: string
+      operation: "auth"
+      captures: Array<BrowserCaptureInfo>
+    }
   | {
       operation: "upload"
       uploads: Array<BrowserUploadInfo>
@@ -5214,6 +5325,7 @@ export type BrowserResult =
       title?: string
     }
   | {
+      profile?: BrowserProfileInfo
       navigation?: "download"
       transfers?: Array<BrowserTransfer>
       /**
@@ -5231,6 +5343,7 @@ export type BrowserResult =
       snapshot?: string
     }
   | {
+      profile?: BrowserProfileInfo
       navigation?: "download"
       transfers?: Array<BrowserTransfer>
       /**
@@ -5248,6 +5361,7 @@ export type BrowserResult =
       snapshot: string
     }
   | {
+      profile?: BrowserProfileInfo
       navigation?: "download"
       transfers?: Array<BrowserTransfer>
       /**
@@ -5265,6 +5379,7 @@ export type BrowserResult =
       snapshot?: string
     }
   | {
+      profile?: BrowserProfileInfo
       navigation?: "download"
       transfers?: Array<BrowserTransfer>
       /**
@@ -5282,6 +5397,7 @@ export type BrowserResult =
       snapshot?: string
     }
   | {
+      profile?: BrowserProfileInfo
       navigation?: "download"
       transfers?: Array<BrowserTransfer>
       /**
@@ -5299,6 +5415,7 @@ export type BrowserResult =
       snapshot?: string
     }
   | {
+      profile?: BrowserProfileInfo
       navigation?: "download"
       transfers?: Array<BrowserTransfer>
       /**
@@ -5316,6 +5433,7 @@ export type BrowserResult =
       snapshot?: string
     }
   | {
+      profile?: BrowserProfileInfo
       navigation?: "download"
       transfers?: Array<BrowserTransfer>
       /**
@@ -5334,6 +5452,7 @@ export type BrowserResult =
       data: string
     }
   | {
+      profile?: BrowserProfileInfo
       navigation?: "download"
       transfers?: Array<BrowserTransfer>
       /**
@@ -5351,6 +5470,7 @@ export type BrowserResult =
       output: string
     }
   | {
+      profile?: BrowserProfileInfo
       navigation?: "download"
       transfers?: Array<BrowserTransfer>
       /**
@@ -5366,11 +5486,12 @@ export type BrowserResult =
       title?: string
       operation: "auth_capture"
       name: string
-      path: string
+      capture: BrowserCaptureInfo
       cookies: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       origins: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     }
   | {
+      profile?: BrowserProfileInfo
       navigation?: "download"
       transfers?: Array<BrowserTransfer>
       /**
@@ -5393,6 +5514,7 @@ export type BrowserResult =
       finishedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       artifact: string
       authState: string
+      authentication: BrowserAuthSource
       failingStep?: string
       steps: Array<{
         screenshotScope?: "tab"
@@ -5951,6 +6073,49 @@ export type InteractiveTerminalInfo1 = {
 }
 
 export type BrowserRequest1 =
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
+      operation: "profile"
+      action: "info" | "retry"
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
+      operation: "profile"
+      action: "reset"
+      profileID: string
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
+      operation: "auth"
+      action: "list"
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
+      operation: "auth"
+      action: "inspect" | "restore" | "delete"
+      profileID: string
+      captureID: string
+    }
   | {
       id: BrowserRequestId
       sessionID: string

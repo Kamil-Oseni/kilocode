@@ -3,6 +3,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { SessionID } from "@/session/schema"
 import { Schema } from "effect"
 import { UploadFile, UploadInfo } from "./upload-schema"
+import { AuthSource, CaptureID, CaptureInfo, ProfileID, ProfileInfo } from "./profile-schema"
 
 export const RequestID = Schema.String.pipe(Schema.brand("BrowserRequestID")).annotate({
   identifier: "BrowserRequestID",
@@ -147,6 +148,25 @@ export const FramesResult = Schema.Struct({
   title: Schema.optional(Schema.String),
 })
 const Base = { id: RequestID, sessionID: SessionID, tabID: Schema.optional(TabID) }
+export const ProfileRequest = Schema.Union([
+  Schema.Struct({ ...Base, operation: Schema.Literal("profile"), action: Schema.Literals(["info", "retry"]) }),
+  Schema.Struct({
+    ...Base,
+    operation: Schema.Literal("profile"),
+    action: Schema.Literal("reset"),
+    profileID: ProfileID,
+  }),
+])
+export const AuthRequest = Schema.Union([
+  Schema.Struct({ ...Base, operation: Schema.Literal("auth"), action: Schema.Literal("list") }),
+  Schema.Struct({
+    ...Base,
+    operation: Schema.Literal("auth"),
+    action: Schema.Literals(["inspect", "restore", "delete"]),
+    profileID: ProfileID,
+    captureID: CaptureID,
+  }),
+])
 export const TabsRequest = Schema.Union([
   Schema.Struct({ ...Base, operation: Schema.Literal("tabs"), action: Schema.Literal("list") }),
   Schema.Struct({ ...Base, operation: Schema.Literal("tabs"), action: Schema.Literal("open"), url: Url }),
@@ -331,6 +351,8 @@ export const SmokeRequest = Schema.Struct({
 // raya_change end
 
 export const Request = Schema.Union([
+  ProfileRequest,
+  AuthRequest,
   UploadRequest,
   DownloadRequest,
   DialogRequest,
@@ -350,6 +372,7 @@ export const Request = Schema.Union([
 export type Request = Schema.Schema.Type<typeof Request>
 
 const ResultBase = {
+  profile: Schema.optional(ProfileInfo),
   navigation: Schema.optional(Schema.Literal("download")),
   ...Transfers,
   ...Framed,
@@ -391,7 +414,7 @@ export const AuthCaptureResult = Schema.Struct({
   ...ResultBase,
   operation: Schema.Literal("auth_capture"),
   name: Name,
-  path: Schema.String,
+  capture: CaptureInfo,
   cookies: Schema.Number,
   origins: Schema.Number,
 })
@@ -429,6 +452,7 @@ export const SmokeResult = Schema.Struct({
   finishedAt: Schema.Number,
   artifact: Schema.String,
   authState: Schema.String,
+  authentication: AuthSource,
   failingStep: Schema.optional(Name),
   steps: Schema.Array(SmokeStepResult),
   network: Schema.Array(SmokeFinding),
@@ -437,6 +461,13 @@ export const SmokeResult = Schema.Struct({
 // raya_change end
 
 export const Result = Schema.Union([
+  Schema.Struct({ ...ResultBase, operation: Schema.Literal("profile"), profile: ProfileInfo }),
+  Schema.Struct({
+    ...ResultBase,
+    operation: Schema.Literal("auth"),
+    profile: ProfileInfo,
+    captures: Schema.Array(CaptureInfo),
+  }),
   UploadResult,
   DownloadResult,
   DialogResult,

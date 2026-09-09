@@ -22,7 +22,7 @@ export interface BrowserConnection {
 }
 
 export interface BrowserHost {
-  show(): Promise<void>
+  show(directory?: string): Promise<void>
   execute(action: BrowserAction): Promise<BrowserResult>
   cancel?(): void
 }
@@ -122,9 +122,10 @@ export class BrowserBridge {
     }
   }
 
-  private show(request: BrowserRequest) {
+  private show(request: BrowserRequest, directory: string) {
+    if (request.operation === "profile" || request.operation === "auth") return Promise.resolve()
     if (request.operation === "upload" && request.action !== "start") return Promise.resolve()
-    if (request.operation !== "download" || request.action === "start") return this.host.show()
+    if (request.operation !== "download" || request.action === "start") return this.host.show(directory)
     return Promise.resolve()
   }
 
@@ -208,7 +209,7 @@ export class BrowserBridge {
     this.active.set(request.id, controller)
     const state = { completed: false }
     try {
-      await this.show(request)
+      await this.show(request, directory)
       if (controller.signal.aborted) return
       const result = (await this.host.execute({
         ...action(request),

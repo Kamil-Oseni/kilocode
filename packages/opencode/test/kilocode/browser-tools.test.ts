@@ -7,6 +7,8 @@ import { Selector, SmokeStep, type Result } from "@/kilocode/browser/protocol"
 import { Browser, HostError } from "@/kilocode/browser/service"
 import { Permission } from "@/permission"
 import {
+  BrowserProfileTool,
+  BrowserAuthTool,
   BrowserDialogTool,
   BrowserDownloadTool,
   BrowserFramesTool,
@@ -35,6 +37,14 @@ import { testEffect } from "../lib/effect"
 
 const calls: Browser.Input[] = []
 function result(input: Browser.Input): Result {
+  const profile = {
+    profileID: "a".repeat(64),
+    directory: "workspace",
+    status: "ready" as const,
+    authentication: { source: "live" as const, profileID: "a".repeat(64), login: "unverified" as const },
+  }
+  if (input.operation === "profile") return { operation: "profile", profile }
+  if (input.operation === "auth") return { operation: "auth", profile, captures: [] }
   if (input.operation === "upload") return { operation: "upload", uploads: [] }
   if (input.operation === "download") return { operation: "download", transfers: [] }
   if (input.operation === "dialog") return { operation: "dialog", tabID: input.tabID, dialogs: [], operations: [] }
@@ -47,7 +57,26 @@ function result(input: Browser.Input): Result {
   if (input.operation === "evaluate")
     return { operation: "evaluate", url: "https://example.com", output: '{"ok":true}' }
   if (input.operation === "auth_capture")
-    return { operation: "auth_capture", name: input.name, path: "auth.json", cookies: 1, origins: 1 }
+    return {
+      operation: "auth_capture",
+      name: input.name,
+      cookies: 1,
+      origins: 1,
+      capture: {
+        id: "00000000-0000-4000-8000-000000000001",
+        profileID: "a".repeat(64),
+        directory: "workspace",
+        name: input.name,
+        createdAt: 1,
+        expiresAt: 2,
+        origins: ["https://example.com"],
+        domains: ["example.com"],
+        cookies: 1,
+        bytes: 10,
+        sha256: "0".repeat(64),
+        status: "available",
+      },
+    }
   if (input.operation === "smoke")
     return {
       operation: "smoke",
@@ -59,6 +88,7 @@ function result(input: Browser.Input): Result {
       finishedAt: 2,
       artifact: "report.json",
       authState: "auth.json",
+      authentication: { source: "live", profileID: "a".repeat(64), login: "unverified" },
       steps: [
         {
           id: "dashboard",
@@ -114,6 +144,8 @@ test("auto-approves every native browser action in VS Code", () => {
       "browser_dialog",
       "browser_download",
       "browser_upload",
+      "browser_auth",
+      "browser_profile",
       "browser_frames",
       "browser_tabs",
       "browser_navigate",
@@ -317,6 +349,42 @@ describe("browser host tools", () => {
         yield* click.execute({ tab_id: "tab_seen", frame_id: "frame_child", selector: "button" }, ctx)
         expect(calls[1]).toMatchObject({ operation: "frames", parentID: "frame_parent", selector: "#form" })
         expect(calls[2]).toMatchObject({ operation: "click", tabID: "tab_seen", frameID: "frame_child" })
+      }),
+    60_000,
+  )
+
+  it.instance(
+    "forwards profile recovery and observed capture identities through explicit permissions",
+    () =>
+      Effect.gen(function* () {
+        calls.length = 0
+        const asks: Parameters<Tool.Context["ask"]>[0][] = []
+        const ctx = context(asks)
+        const profile = yield* BrowserProfileTool.pipe(
+          Effect.provideService(Browser.Service, host),
+          Effect.flatMap(Tool.init),
+        )
+        const auth = yield* BrowserAuthTool.pipe(
+          Effect.provideService(Browser.Service, host),
+          Effect.flatMap(Tool.init),
+        )
+        const id = "a".repeat(64)
+        const capture = "11111111-1111-4111-8111-111111111111"
+        yield* profile.execute({ action: "info" }, ctx)
+        yield* profile.execute({ action: "reset", profile_id: id }, ctx)
+        yield* auth.execute({ action: "list" }, ctx)
+        yield* auth.execute({ action: "restore", profile_id: id, capture_id: capture }, ctx)
+        yield* auth.execute({ action: "delete", profile_id: id, capture_id: capture }, ctx)
+        expect(calls[1]).toMatchObject({ operation: "profile", action: "reset", profileID: id })
+        expect(calls[3]).toMatchObject({ operation: "auth", action: "restore", profileID: id, captureID: capture })
+        expect(calls[4]).toMatchObject({ operation: "auth", action: "delete", captureID: capture })
+        expect(asks.map((ask) => ask.permission)).toEqual([
+          "browser_profile",
+          "browser_profile",
+          "browser_auth",
+          "browser_auth",
+          "browser_auth",
+        ])
       }),
     60_000,
   )

@@ -46,6 +46,43 @@ it("binds panel input to displayed tab identity and hides stale frames", () => {
       window.requestAnimationFrame.bind(window),
     )
     const message = (data: unknown) => window.dispatchEvent(new window.MessageEvent("message", { data }))
+    const profile = {
+      profileID: "profile_seen",
+      directory: "<img src=x onerror=bad()>",
+      status: "locked",
+      message: "Close the other browser and retry.",
+      authentication: { source: "live", login: "unverified" },
+    }
+    message({
+      type: "profile",
+      profile,
+      captures: [
+        {
+          id: "capture_seen",
+          name: "<img src=x onerror=bad()>",
+          status: "expired",
+          expiresAt: 0,
+          origins: [],
+          domains: ["example.test"],
+        },
+      ],
+    })
+    const captures = window.document.getElementById("captures")!
+    expect(captures.textContent).toContain("<img src=x onerror=bad()>")
+    expect(captures.querySelector("img")).toBeNull()
+    expect(captures.querySelector("button")!.disabled).toBe(true)
+    expect(window.document.getElementById("profile-state")!.textContent).toContain("login unverified")
+    expect(window.document.getElementById("identity")!.hasAttribute("open")).toBe(true)
+    captures.querySelectorAll("button")[1].click()
+    expect(sent.at(-1)).toMatchObject({
+      type: "auth",
+      action: "delete",
+      profileID: "profile_seen",
+      captureID: "capture_seen",
+    })
+    window.document.getElementById("retry-browser")!.click()
+    expect(sent.at(-1)).toMatchObject({ type: "profile", action: "retry" })
+    message({ type: "profile", profile: { ...profile, status: "ready" }, captures: [] })
     message({
       type: "uploads",
       uploads: [

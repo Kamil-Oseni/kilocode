@@ -152,11 +152,11 @@ describe("persistable cost evidence", () => {
       issues: [],
     })
     expect(result.accounting.buckets).toEqual([
-      { name: "input", tokens: 10000, rate: 3 },
-      { name: "output", tokens: 2000, rate: 15 },
-      { name: "reasoning", tokens: 1000, rate: 15 },
-      { name: "cache_read", tokens: 5000, rate: 0.3 },
-      { name: "cache_write", tokens: 0, rate: 3.75 },
+      { name: "input", tokens: 10000, rate: 3, source: "legacy-model-rate" },
+      { name: "output", tokens: 2000, rate: 15, source: "legacy-model-rate" },
+      { name: "reasoning", tokens: 1000, rate: 15, source: "legacy-model-rate" },
+      { name: "cache_read", tokens: 5000, rate: 0.3, source: "legacy-model-rate" },
+      { name: "cache_write", tokens: 0, rate: 3.75, source: "legacy-model-rate" },
     ])
     const updated = model()
     updated.cost.input = 30

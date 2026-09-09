@@ -30,7 +30,7 @@ export async function capture(input: {
       notice: `Report ${item.id} saved to the global backlog. Repair was not started because the verified Raya source changed or became unavailable. Check raya.selfHeal.sourcePath and retry.`,
     }
   }
-  const directory = source.source.root
+  let directory = source.source.root
   const admission = await input.client.kilocode.selfHeal
     .admit({ itemID: item.id, directory: input.store, source: source.source }, { throwOnError: true })
     .then(
@@ -63,16 +63,31 @@ export async function capture(input: {
       { throwOnError: true },
     )
     outcome = result.data
+    if (outcome.phase !== phase) throw new Error("Repair transition was not authorized")
   }
   try {
     if (!(await current(source.source, { configured: input.configured, extension: input.extension })))
       throw new Error("Source changed before repair creation")
+    const prepared = await input.client.kilocode.selfHeal.prepare(
+      { itemID: item.id, directory: input.store, token: claim.token!, revision: outcome.revision },
+      { throwOnError: true },
+    )
+    outcome = prepared.data
+    if (outcome.phase !== "worktree_ready" || !outcome.worktree) throw new Error("Repair checkout is not ready")
+    directory = outcome.worktree.directory
+    if (!(await current(source.source, { configured: input.configured, extension: input.extension })))
+      throw new Error("Source changed before session creation")
     await step("session_creating")
     const result = await input.client.session.create(
       {
         directory,
         platform: input.platform,
-        metadata: { ...metadata, rayaSelfHealSource: source.source, rayaSelfHealAttempt: claim.outcome.id },
+        metadata: {
+          ...metadata,
+          rayaSelfHealSource: source.source,
+          rayaSelfHealAttempt: claim.outcome.id,
+          rayaSelfHealWorktree: outcome.worktree,
+        },
       },
       { throwOnError: true },
     )
@@ -89,6 +104,8 @@ export async function capture(input: {
       { itemID: item.id, directory: input.store, status: "in_progress", workSessionID: session },
       { throwOnError: true },
     )
+    if (!(await current(source.source, { configured: input.configured, extension: input.extension })))
+      throw new Error("Source changed before dispatch")
     await step("dispatching")
     await input.client.session.promptAsync(
       {
@@ -99,7 +116,7 @@ export async function capture(input: {
             type: "text",
             text:
               selfHealPrompt(item) +
-              `\nVerified Raya source: ${directory}\nSource commit at admission: ${source.source.commit}`,
+              `\nVerified Raya source: ${source.source.root}\nSource commit at admission: ${source.source.commit}\nRepair checkout: ${directory}\nRepair branch: ${outcome.worktree?.branch}\nThis separate checkout is not an execution-confinement guarantee.`,
             synthetic: true,
           },
         ],
@@ -119,13 +136,14 @@ export async function capture(input: {
     )
     return {
       item,
-      notice: `Report ${item.id} saved to the global backlog. Repair startup needs review${session ? ` in session ${session}` : ""}. ${recorded ? (outcome.reason ?? "Inspect the retained repair attempt before recovery.") : "The last durable phase remains readable in the backlog; a startup operation may have completed without acknowledgement."} Use /self-heal inspect ${item.id} to read its retained outcome. No automatic retry was attempted.`,
+      notice: `Report ${item.id} saved to the global backlog. Repair startup needs review${session ? ` in session ${session}` : ""}${outcome.worktree ? `; checkout ${outcome.worktree.directory} (${outcome.worktree.branch})` : ""}. ${outcome.reason ?? (recorded ? "Inspect the retained repair attempt before recovery." : "The last durable phase remains readable in the backlog; a startup operation may have completed without acknowledgement.")} Use /self-heal inspect ${item.id} to read its retained outcome. No automatic retry was attempted.`,
     }
   }
   return {
     item,
     session,
     source: source.source,
-    notice: `Captured ${item.id} as ${item.category}/${item.severity}. Repair session ${session} submitted in the verified Raya source checkout at ${directory}.`,
+    directory,
+    notice: `Captured ${item.id} as ${item.category}/${item.severity}. Repair session ${session} submitted in its separate Raya repair checkout at ${directory}.`,
   }
 }

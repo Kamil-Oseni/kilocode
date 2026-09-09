@@ -43,7 +43,16 @@ async function fixture() {
     },
   }
 }
-function client(opts: { failure?: string; reporting?: boolean; owned?: boolean; acknowledgement?: string } = {}) {
+function client(
+  opts: {
+    failure?: string
+    reporting?: boolean
+    owned?: boolean
+    acknowledgement?: string
+    blocked?: string
+    unknown?: boolean
+  } = {},
+) {
   const calls: Request[] = []
   const item = {
     id: "heal_fixture",
@@ -58,39 +67,68 @@ function client(opts: { failure?: string; reporting?: boolean; owned?: boolean; 
     id: "attempt",
     itemID: item.id,
     source: { root: "", commit: "" },
+    worktree: undefined as
+      | { root: string; directory: string; branch: string; common: string; commit: string }
+      | undefined,
+    reason: undefined as string | undefined,
     phase: "reserved",
     revision: 0,
     at: 1,
   }
+  const fails = (pathname: string) => opts.failure && pathname.endsWith(opts.failure)
   const sdk = createKiloClient({
     baseUrl: "http://unused.invalid",
     fetch: async (input, init) => {
       const request = new Request(input, init)
       calls.push(request)
       const url = new URL(request.url)
-      if (opts.failure && url.pathname.endsWith(opts.failure))
-        return Response.json({ error: "private raw backend failure" }, { status: 500 })
+      if (fails(url.pathname)) return Response.json({ error: "private raw backend failure" }, { status: 500 })
       if (url.pathname === "/kilocode/self-heal") return Response.json(item)
+      if (url.pathname.endsWith("/repair/worktree")) {
+        const root = path.dirname(outcome.source.root)
+        outcome = {
+          ...outcome,
+          phase: opts.unknown ? "worktree_unknown" : "worktree_ready",
+          revision: 2,
+          worktree: {
+            root,
+            directory: path.join(root, "repair"),
+            branch: "raya/repair/attempt",
+            common: path.join(outcome.source.root, ".git"),
+            commit: outcome.source.commit,
+          },
+          ...(opts.unknown ? { reason: "Checkout creation is uncertain; inspect the retained directory." } : {}),
+        }
+        if (opts.acknowledgement === "worktree_ready") return Response.json({}, { status: 500 })
+        return Response.json(outcome)
+      }
       if (url.pathname.endsWith("/repair/step")) {
         const body = await request.clone().json()
+        if (["blocked", "worktree_unknown", "submitted"].includes(outcome.phase))
+          return Response.json({}, { status: 409 })
         if (body.revision !== outcome.revision) return Response.json({}, { status: 409 })
         if (opts.reporting === false && ["blocked", "dispatch_unknown"].includes(body.phase))
           return Response.json({}, { status: 500 })
         outcome = {
           ...outcome,
-          phase: body.phase,
+          phase: opts.blocked === body.phase ? "blocked" : body.phase,
+          ...(opts.blocked === body.phase
+            ? { reason: "Checkout verification failed before the dependent operation." }
+            : {}),
           revision: outcome.revision + 1,
           ...(body.sessionID ? { sessionID: body.sessionID } : {}),
         }
         if (opts.acknowledgement === body.phase) return Response.json({}, { status: 500 })
         return Response.json(outcome)
       }
-      if (url.pathname.endsWith("/repair"))
+      if (url.pathname.endsWith("/repair")) {
+        outcome.source = (await request.clone().json()).source
         return Response.json({
           owned: opts.owned !== false,
           ...(opts.owned === false ? {} : { token: "owner" }),
           outcome,
         })
+      }
       if (url.pathname === "/session") return Response.json({ id: "repair-session" })
       if (url.pathname.endsWith("/prompt_async")) return new Response(null, { status: 204 })
       return Response.json({})
@@ -174,14 +212,16 @@ test("valid source admission binds all repair requests and records the observed 
   expect(result.session).toBe("repair-session")
   expect(result.source).toEqual({ root, commit })
   expect(result.notice).not.toContain("isolated")
-  expect(api.calls).toHaveLength(12)
+  expect(api.calls).toHaveLength(13)
+  const directory = path.join(run.dir, "repair")
+  expect(result.directory).toBe(directory)
   const effects = api.calls.filter((call) => !new URL(call.url).pathname.includes("/self-heal/heal_fixture/repair"))
   const session = effects[1]!
-  expect(new URL(session.url).searchParams.get("directory")).toBe(root)
+  expect(new URL(session.url).searchParams.get("directory")).toBe(directory)
   expect(await session.json()).toMatchObject({ metadata: { sandbox: true, rayaSelfHealSource: { root, commit } } })
-  expect(new URL(effects[2]!.url).searchParams.get("directory")).toBe(root)
+  expect(new URL(effects[2]!.url).searchParams.get("directory")).toBe(directory)
   expect(new URL(effects[3]!.url).searchParams.get("directory")).toBe(run.store)
-  expect(new URL(effects[4]!.url).searchParams.get("directory")).toBe(root)
+  expect(new URL(effects[4]!.url).searchParams.get("directory")).toBe(directory)
   expect(JSON.stringify(await effects[4]!.json())).toContain(commit)
   expect(await fs.readFile(path.join(run.workspace, "keep.txt"), "utf8")).toBe("unrelated user work")
 }, 30_000)
@@ -371,6 +411,7 @@ test("lost phase acknowledgements never authorize their dependent side effects",
 
 test("inspect reads the journal directly and handles missing outcomes without assuming release", async () => {
   const calls: Request[] = []
+  const fails = (pathname: string) => opts.failure && pathname.endsWith(opts.failure)
   const sdk = createKiloClient({
     baseUrl: "http://unused.invalid",
     fetch: async (input, init) => {
@@ -392,3 +433,42 @@ test("inspect reads the journal directly and handles missing outcomes without as
   expect(calls[0].method).toBe("GET")
   expect(await inspect(sdk, "heal_missing", "global")).toContain("do not infer that its ownership was released")
 })
+
+test("unknown worktree creation is inspectable and never starts a session or retries preparation", async () => {
+  await using run = await fixture()
+  const api = client({ unknown: true })
+  const result = await capture({
+    client: api.sdk,
+    store: run.store,
+    configured: run.root,
+    extension: "",
+    description: "Worktree creation is uncertain",
+    reporter: "reporter",
+    metadata: async () => undefined,
+  })
+  expect(result.session).toBeUndefined()
+  expect(result.notice).toContain(path.join(run.dir, "repair"))
+  expect(result.notice).toContain("creation is uncertain")
+  expect(api.calls.filter((call) => new URL(call.url).pathname === "/session")).toHaveLength(0)
+  expect(api.calls.filter((call) => new URL(call.url).pathname.endsWith("/repair/worktree"))).toHaveLength(1)
+}, 30_000)
+
+test("backend checkout denial prevents its dependent session or prompt request", async () => {
+  await using run = await fixture()
+  for (const blocked of ["session_creating", "dispatching"]) {
+    const api = client({ blocked })
+    const result = await capture({
+      client: api.sdk,
+      store: run.store,
+      configured: run.root,
+      extension: "",
+      description: "Checkout changed before work",
+      reporter: "reporter",
+      metadata: async () => undefined,
+    })
+    expect(result.session).toBeUndefined()
+    expect(result.notice).toContain("Checkout verification failed")
+    const suffix = blocked === "session_creating" ? "/session" : "/prompt_async"
+    expect(api.calls.filter((call) => new URL(call.url).pathname.endsWith(suffix))).toHaveLength(0)
+  }
+}, 30_000)

@@ -1,16 +1,17 @@
 // raya_change - Milestone G authenticated smoke walkthrough runner and evidence artifacts
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
-import { describe, locate, type BrowserTarget, type TargetPage } from "./browser-target"
+import type { FrameRegistry } from "./browser-frame"
+import { describe, locate, TargetError, type BrowserTarget, type TargetPage } from "./browser-target"
 
 export type SmokeAction =
   | { kind: "navigate"; url: string }
-  | { kind: "click"; selector: BrowserTarget }
-  | { kind: "type"; selector: BrowserTarget; text: string; submit?: boolean }
-  | { kind: "select"; selector: BrowserTarget; values: string[] }
+  | { frameID?: string; kind: "click"; selector: BrowserTarget }
+  | { frameID?: string; kind: "type"; selector: BrowserTarget; text: string; submit?: boolean }
+  | { frameID?: string; kind: "select"; selector: BrowserTarget; values: string[] }
 
 export type SmokeAssertion =
-  | { kind: "visible"; selector: BrowserTarget; text?: string }
+  | { frameID?: string; kind: "visible"; selector: BrowserTarget; text?: string }
   | { kind: "network"; url: string; status?: number }
   | { kind: "console"; level?: "error" | "warning" | "log" | "info"; message?: string; max: number }
 
@@ -35,6 +36,8 @@ export type SmokeFinding = {
 }
 
 export type SmokeAssertionResult = {
+  frameID?: string
+  scope?: "frame" | "tab"
   kind: SmokeAssertion["kind"]
   passed: boolean
   expected: string
@@ -42,6 +45,7 @@ export type SmokeAssertionResult = {
 }
 
 export type SmokeStepResult = {
+  screenshotScope?: "tab"
   id: string
   title: string
   passed: boolean
@@ -51,6 +55,7 @@ export type SmokeStepResult = {
 }
 
 export type SmokeResult = {
+  tabID?: string
   operation: "smoke"
   runID: string
   name: string
@@ -132,6 +137,8 @@ export class BrowserSmoke {
     private readonly root: string,
     private readonly page: SmokePage,
     private readonly context: SmokeContext,
+    private readonly frames?: (id: string) => ReturnType<FrameRegistry["lease"]>,
+    private readonly tabID?: string,
   ) {}
 
   async capture(name: string) {
@@ -199,6 +206,7 @@ export class BrowserSmoke {
               title: step.title,
               passed: false,
               screenshot,
+              screenshotScope: "tab",
               assertions: [],
               error: text(error),
             } satisfies SmokeStepResult
@@ -215,6 +223,7 @@ export class BrowserSmoke {
     const failing = steps.find((step) => !step.passed)
     const report: SmokeResult = {
       operation: "smoke",
+      tabID: this.tabID,
       runID,
       name: input.name,
       mode: input.mode,
@@ -250,6 +259,7 @@ export class BrowserSmoke {
       title: step.title,
       passed: assertions.every((assertion) => assertion.passed),
       screenshot,
+      screenshotScope: "tab",
       assertions,
     }
   }
@@ -261,17 +271,46 @@ export class BrowserSmoke {
       await this.page.waitForTimeout(250)
       return
     }
-    const locator = await locate(this.page, action.selector)
-    if (action.kind === "click") {
-      await locator.click({ timeout: 5_000 })
-      return
+    const lease = action.frameID !== undefined ? this.frames?.(action.frameID) : undefined
+    if (action.frameID !== undefined && !lease) throw new TargetError("Smoke frame identity is unavailable")
+    const locator = lease ? await lease.element(action.selector) : await locate(this.page, action.selector)
+    try {
+      lease?.check()
+      if (action.kind === "click") await locator.click({ timeout: 5_000 })
+      if (action.kind === "type") {
+        await locator.fill(action.text, { timeout: 5_000 })
+        lease?.check()
+        if (action.submit === true) await locator.press("Enter", { timeout: 5_000 })
+      }
+      if (action.kind === "select") await locator.selectOption(action.values, { timeout: 5_000 })
+      lease?.check()
+    } finally {
+      if (lease && "dispose" in locator && typeof locator.dispose === "function") await locator.dispose()
     }
-    if (action.kind === "type") {
-      await locator.fill(action.text, { timeout: 5_000 })
-      if (action.submit === true) await locator.press("Enter", { timeout: 5_000 })
-      return
+  }
+
+  private async visible(assertion: Extract<SmokeAssertion, { kind: "visible" }>): Promise<SmokeAssertionResult> {
+    const lease = assertion.frameID !== undefined ? this.frames?.(assertion.frameID) : undefined
+    if (assertion.frameID !== undefined && !lease) throw new TargetError("Smoke frame identity is unavailable")
+    const locator = lease ? await lease.element(assertion.selector) : await locate(this.page, assertion.selector)
+    try {
+      const visible = await locator.isVisible({ timeout: 5_000 })
+      const content = visible ? await locator.textContent({ timeout: 5_000 }) : null
+      lease?.check()
+      const passed = visible && (assertion.text === undefined || content?.includes(assertion.text) === true)
+      return {
+        kind: assertion.kind,
+        frameID: lease?.id,
+        scope: lease ? "frame" : "tab",
+        passed,
+        expected: assertion.text
+          ? `${describe(assertion.selector)} contains "${assertion.text}"`
+          : `${describe(assertion.selector)} is visible`,
+        actual: visible ? `visible: ${content ?? ""}` : "not visible",
+      }
+    } finally {
+      if (lease && "dispose" in locator && typeof locator.dispose === "function") await locator.dispose()
     }
-    await locator.selectOption(action.values, { timeout: 5_000 })
   }
 
   private async assert(
@@ -279,20 +318,7 @@ export class BrowserSmoke {
     network: SmokeFinding[],
     console: SmokeFinding[],
   ): Promise<SmokeAssertionResult> {
-    if (assertion.kind === "visible") {
-      const locator = await locate(this.page, assertion.selector)
-      const visible = await locator.isVisible({ timeout: 5_000 })
-      const content = visible ? await locator.textContent({ timeout: 5_000 }) : null
-      const passed = visible && (assertion.text === undefined || content?.includes(assertion.text) === true)
-      return {
-        kind: assertion.kind,
-        passed,
-        expected: assertion.text
-          ? `${describe(assertion.selector)} contains "${assertion.text}"`
-          : `${describe(assertion.selector)} is visible`,
-        actual: visible ? `visible: ${content ?? ""}` : "not visible",
-      }
-    }
+    if (assertion.kind === "visible") return this.visible(assertion)
     if (assertion.kind === "network") {
       const matches = network.filter(
         (item) =>
@@ -300,6 +326,7 @@ export class BrowserSmoke {
       )
       return {
         kind: assertion.kind,
+        scope: "tab",
         passed: matches.length > 0,
         expected: `${assertion.url}${assertion.status === undefined ? "" : ` status ${assertion.status}`}`,
         actual: matches.length > 0 ? JSON.stringify(matches) : "no matching response",
@@ -312,6 +339,7 @@ export class BrowserSmoke {
     )
     return {
       kind: assertion.kind,
+      scope: "tab",
       passed: matches.length <= assertion.max,
       expected: `at most ${assertion.max} matching console message(s)`,
       actual: `${matches.length}: ${JSON.stringify(matches)}`,

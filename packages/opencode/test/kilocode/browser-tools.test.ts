@@ -7,6 +7,7 @@ import { Selector, SmokeStep, type Result } from "@/kilocode/browser/protocol"
 import { Browser } from "@/kilocode/browser/service"
 import { Permission } from "@/permission"
 import {
+  BrowserFramesTool,
   BrowserTabsTool,
   BrowserAuthCaptureTool,
   BrowserClickTool,
@@ -27,6 +28,7 @@ import { testEffect } from "../lib/effect"
 
 const calls: Browser.Input[] = []
 function result(input: Browser.Input): Result {
+  if (input.operation === "frames") return { operation: "frames", tabID: input.tabID, frames: [] }
   if (input.operation === "tabs") return { operation: "tabs", tabs: [] }
   if (input.operation === "snapshot")
     return { operation: "snapshot", url: "https://example.com", snapshot: 'button "Continue" [ref=e1]' }
@@ -93,6 +95,7 @@ test("auto-approves every native browser action in VS Code", () => {
   try {
     const rules = KiloAgent.prepare({}).defaultsPatch
     for (const permission of [
+      "browser_frames",
       "browser_tabs",
       "browser_navigate",
       "browser_snapshot",
@@ -139,6 +142,32 @@ describe("browser host tools", () => {
     } as const
     expect(Schema.decodeUnknownSync(SmokeStep)(step)).toEqual(step)
   })
+
+  it.instance(
+    "forwards frame document identity without changing tab targeting",
+    () =>
+      Effect.gen(function* () {
+        calls.length = 0
+        const ctx = context([])
+        const frames = yield* BrowserFramesTool.pipe(
+          Effect.provideService(Browser.Service, host),
+          Effect.flatMap(Tool.init),
+        )
+        yield* frames.execute({ action: "list", tab_id: "tab_seen" }, ctx)
+        yield* frames.execute(
+          { action: "resolve", tab_id: "tab_seen", parent_frame_id: "frame_parent", selector: "#form" },
+          ctx,
+        )
+        const click = yield* BrowserClickTool.pipe(
+          Effect.provideService(Browser.Service, host),
+          Effect.flatMap(Tool.init),
+        )
+        yield* click.execute({ tab_id: "tab_seen", frame_id: "frame_child", selector: "button" }, ctx)
+        expect(calls[1]).toMatchObject({ operation: "frames", parentID: "frame_parent", selector: "#form" })
+        expect(calls[2]).toMatchObject({ operation: "click", tabID: "tab_seen", frameID: "frame_child" })
+      }),
+    60_000,
+  )
 
   it.instance(
     "forwards stable tab commands and refuses missing mutation identity",

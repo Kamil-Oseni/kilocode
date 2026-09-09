@@ -5,10 +5,11 @@ import { randomUUID } from "node:crypto"
 import { Script } from "node:vm"
 import { chromium } from "playwright-core"
 import { locate, TargetError, type BrowserTarget, type TargetPage } from "./browser-target"
+import { FrameRegistry, type FrameOwner, type FrameInfo, type DocumentFrame } from "./browser-frame"
 import { BrowserSmoke } from "./browser-smoke"
 import type { SmokeConsole, SmokeCookie, SmokeInput, SmokeOrigin, SmokeResponse, SmokeResult } from "./browser-smoke"
 
-export type BrowserAction = { tabID?: string } & (
+export type BrowserAction = { tabID?: string; frameID?: string } & (
   | { operation: "navigate"; url: string }
   | { operation: "snapshot" }
   | { operation: "click"; selector: BrowserTarget }
@@ -19,15 +20,17 @@ export type BrowserAction = { tabID?: string } & (
   | { operation: "evaluate"; expression: string }
   | { operation: "auth_capture"; name: string }
   | ({ operation: "smoke" } & SmokeInput)
+  | { operation: "frames"; action: "list" | "resolve"; parentID?: string; selector?: string }
   | { operation: "tabs"; action: "list" | "open" | "select" | "close"; url?: string }
 )
-type BrowserNativeAction = Exclude<BrowserAction, { operation: "auth_capture" | "smoke" | "tabs" }>
+type BrowserNativeAction = Exclude<BrowserAction, { operation: "auth_capture" | "smoke" | "tabs" | "frames" }>
 export type BrowserTab = { id: string; url: string; title: string; selected: boolean; openerID?: string }
 
-export type BrowserResult = { tabID?: string } & (
+export type BrowserResult = { tabID?: string; frameID?: string; frameURL?: string } & (
+  | { operation: "frames"; frames: FrameInfo[]; url?: string; title?: string }
   | { operation: "tabs"; tabs: BrowserTab[]; url?: string; title?: string }
   | {
-      operation: Exclude<BrowserAction["operation"], "auth_capture" | "smoke" | "tabs">
+      operation: Exclude<BrowserAction["operation"], "auth_capture" | "smoke" | "tabs" | "frames">
       url: string
       title: string
       snapshot?: string
@@ -88,6 +91,8 @@ type FrameEvent = {
 }
 
 export interface BrowserPage extends TargetPage {
+  frames?(): DocumentFrame[]
+  mainFrame?(): DocumentFrame
   isClosed?(): boolean
   close?(): Promise<void>
   opener?(): Promise<BrowserPage | null>
@@ -161,8 +166,8 @@ function prepare(source: string): string {
   throw last
 }
 
-function execute(source: string): unknown {
-  const value: unknown = globalThis.eval(source)
+function execute(source: string | HTMLElement, expression?: string): unknown {
+  const value: unknown = globalThis.eval(typeof source === "string" ? source : expression!)
   return typeof value === "function" ? value() : value
 }
 
@@ -199,6 +204,7 @@ const launch: BrowserLaunch = async (profile) =>
 
 export class BrowserSession {
   private context: BrowserContextLike | undefined
+  private readonly documents = new Map<BrowserPage, FrameRegistry>()
   private readonly tabs = new Map<string, BrowserPage>()
   private readonly identities = new Map<BrowserPage, string>()
   private readonly openers = new Map<BrowserPage, Promise<string | undefined>>()
@@ -303,6 +309,7 @@ export class BrowserSession {
       const id = randomUUID()
       this.identities.set(page, id)
       this.tabs.set(id, page)
+      if (page.frames && page.mainFrame) this.documents.set(page, new FrameRegistry(page as unknown as FrameOwner, id))
       const context = this.context
       if (page.opener)
         this.openers.set(
@@ -443,6 +450,12 @@ export class BrowserSession {
   async execute(action: BrowserAction): Promise<BrowserResult> {
     await this.ready()
     if (action.operation !== "tabs") action = { ...action, tabID: this.identity(this.resolve(action.tabID)) }
+    if (["snapshot", "click", "type", "select", "scroll", "evaluate"].includes(action.operation)) {
+      const registry = this.documents.get(this.resolve(action.tabID))
+      if (action.frameID && !registry) throw new TargetError("Browser host does not support frame identity")
+      if (registry) action = { ...action, frameID: registry.lease(action.frameID).id }
+    } else if (action.frameID)
+      throw new TargetError("This operation is tab-scoped and does not accept a frame identity")
     const result = this.queue.then(() => this.perform(action))
     this.queue = result.then(
       () => undefined,
@@ -472,15 +485,18 @@ export class BrowserSession {
     const dispatch = () => {
       if (revision !== this.revision) throw new TargetError("Browser action cancelled before dispatch.")
       if (action.operation !== "tabs") this.resolve(action.tabID)
+      if (action.frameID) this.document(action.tabID, action.frameID).check()
       state.dispatched = true
     }
     try {
       const result =
         action.operation === "tabs"
           ? await this.manage(action, dispatch)
-          : action.operation === "auth_capture" || action.operation === "smoke"
-            ? await this.smoke(action, dispatch)
-            : await this.once(action, dispatch)
+          : action.operation === "frames"
+            ? await this.frames(action)
+            : action.operation === "auth_capture" || action.operation === "smoke"
+              ? await this.smoke(action, dispatch)
+              : await this.once(action, dispatch)
       if (revision !== this.revision) throw new Error("Browser action cancelled for manual takeover.")
       return {
         ...result,
@@ -614,8 +630,84 @@ export class BrowserSession {
     await page.mouse.wheel(action.deltaX, action.deltaY)
   }
 
+  private document(tabID?: string, frameID?: string) {
+    const registry = this.documents.get(this.resolve(tabID))
+    if (!registry) throw new TargetError("Browser host does not support frame identity")
+    return registry.lease(frameID)
+  }
+
+  private async frames(action: Extract<BrowserAction, { operation: "frames" }>): Promise<BrowserResult> {
+    const registry = this.documents.get(this.resolve(action.tabID))
+    if (!registry) throw new TargetError("Browser host does not support frame discovery")
+    const frames =
+      action.action === "list"
+        ? registry.list()
+        : [await registry.resolve(action.parentID ?? "", action.selector ?? "")]
+    this.resolve(action.tabID)
+    for (const frame of frames) registry.lease(frame.id).check()
+    return { operation: "frames", frames }
+  }
+
+  private async framed(action: BrowserNativeAction, dispatch: () => void): Promise<BrowserResult> {
+    const lease = this.document(action.tabID, action.frameID)
+    const state: { snapshot?: string; output?: string } = {}
+    if (action.operation === "snapshot") {
+      const locator = lease.frame.locator("body")
+      if (!locator.ariaSnapshot) throw new TargetError("Browser host cannot snapshot this frame")
+      state.snapshot = await locator.ariaSnapshot({ timeout: 10_000 })
+    } else {
+      if (action.operation === "navigate" || action.operation === "screenshot")
+        throw new TargetError("This operation is tab-scoped")
+      const target = "selector" in action && action.selector ? action.selector : "html"
+      const element = await lease.element(target)
+      try {
+        const source = action.operation === "evaluate" ? prepare(action.expression) : undefined
+        dispatch()
+        if (action.operation === "click") await element.click({ timeout: 5_000 })
+        if (action.operation === "type") {
+          await element.fill(action.text, { timeout: 5_000 })
+          if (action.submit) {
+            dispatch()
+            await element.press("Enter", { timeout: 5_000 })
+          }
+        }
+        if (action.operation === "select") await element.selectOption(action.values, { timeout: 5_000 })
+        if (action.operation === "scroll") {
+          if (!element.evaluate) throw new TargetError("Browser host cannot scroll this frame")
+          await element.evaluate(
+            (element, delta) => {
+              if (delta.container) element.scrollBy(delta.x, delta.y)
+              else element.ownerDocument.defaultView?.scrollBy(delta.x, delta.y)
+            },
+            { x: action.deltaX, y: action.deltaY, container: !!action.selector },
+          )
+        }
+        if (action.operation === "evaluate") {
+          if (!element.evaluate) throw new TargetError("Browser host cannot evaluate this frame")
+          const value = await element.evaluate(execute, source!)
+          state.output = typeof value === "string" ? value : (JSON.stringify(value) ?? String(value))
+        }
+      } finally {
+        await element.dispose?.()
+      }
+    }
+    lease.check()
+    const page = this.resolve(action.tabID)
+    const title = await page.title()
+    lease.check()
+    return {
+      operation: action.operation,
+      url: page.url(),
+      title,
+      frameID: lease.id,
+      frameURL: lease.frame.url(),
+      ...state,
+    }
+  }
+
   private async once(action: BrowserNativeAction, dispatch: () => void): Promise<BrowserResult> {
     const page = this.resolve(action.tabID)
+    if (action.frameID) return this.framed(action, dispatch)
     await this.drive(action, page, dispatch)
     const snapshot =
       action.operation === "snapshot" ? await page.locator("body").ariaSnapshot({ timeout: 10_000 }) : undefined
@@ -655,7 +747,13 @@ export class BrowserSession {
     dispatch()
     if (action.operation === "auth_capture")
       return new BrowserSmoke(this.artifacts, this.resolve(action.tabID), this.browser()).capture(action.name)
-    return new BrowserSmoke(this.artifacts, this.resolve(action.tabID), this.browser()).run({
+    return new BrowserSmoke(
+      this.artifacts,
+      this.resolve(action.tabID),
+      this.browser(),
+      (id) => this.document(action.tabID, id),
+      action.tabID,
+    ).run({
       name: action.name,
       mode: action.mode,
       steps: action.steps,
@@ -834,6 +932,8 @@ export class BrowserSession {
     this.inventories.clear()
     this.tabs.clear()
     this.identities.clear()
+    for (const registry of this.documents.values()) registry.dispose()
+    this.documents.clear()
     this.openers.clear()
     if (cdp) await cdp.send("Page.stopScreencast").catch(() => undefined)
     if (cdp) await cdp.detach().catch(() => undefined)

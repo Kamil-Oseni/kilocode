@@ -515,11 +515,40 @@ export type BrowserRequest =
       /**
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
+      tabID: string
+      operation: "frames"
+      action: "list"
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID: string
+      operation: "frames"
+      action: "resolve"
+      /**
+       * Observed frame document identity; invalid after navigation or detachment.
+       */
+      parentID: string
+      selector: string
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
       tabID?: string
       operation: "navigate"
       url: string
     }
   | {
+      /**
+       * Observed frame document identity; invalid after navigation or detachment.
+       */
+      frameID?: string
       id: BrowserRequestId
       sessionID: string
       /**
@@ -529,6 +558,10 @@ export type BrowserRequest =
       operation: "snapshot"
     }
   | {
+      /**
+       * Observed frame document identity; invalid after navigation or detachment.
+       */
+      frameID?: string
       id: BrowserRequestId
       sessionID: string
       /**
@@ -559,6 +592,10 @@ export type BrowserRequest =
           }
     }
   | {
+      /**
+       * Observed frame document identity; invalid after navigation or detachment.
+       */
+      frameID?: string
       id: BrowserRequestId
       sessionID: string
       /**
@@ -591,6 +628,10 @@ export type BrowserRequest =
       submit: boolean
     }
   | {
+      /**
+       * Observed frame document identity; invalid after navigation or detachment.
+       */
+      frameID?: string
       id: BrowserRequestId
       sessionID: string
       /**
@@ -622,6 +663,10 @@ export type BrowserRequest =
       values: Array<string>
     }
   | {
+      /**
+       * Observed frame document identity; invalid after navigation or detachment.
+       */
+      frameID?: string
       id: BrowserRequestId
       sessionID: string
       /**
@@ -661,6 +706,10 @@ export type BrowserRequest =
       fullPage: boolean
     }
   | {
+      /**
+       * Observed frame document identity; invalid after navigation or detachment.
+       */
+      frameID?: string
       id: BrowserRequestId
       sessionID: string
       /**
@@ -699,6 +748,10 @@ export type BrowserRequest =
               url: string
             }
           | {
+              /**
+               * Observed frame document identity; invalid after navigation or detachment.
+               */
+              frameID?: string
               kind: "click"
               /**
                * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
@@ -723,6 +776,10 @@ export type BrowserRequest =
                   }
             }
           | {
+              /**
+               * Observed frame document identity; invalid after navigation or detachment.
+               */
+              frameID?: string
               kind: "type"
               /**
                * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
@@ -749,6 +806,10 @@ export type BrowserRequest =
               submit?: boolean
             }
           | {
+              /**
+               * Observed frame document identity; invalid after navigation or detachment.
+               */
+              frameID?: string
               kind: "select"
               /**
                * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
@@ -775,6 +836,10 @@ export type BrowserRequest =
             }
         assertions: Array<
           | {
+              /**
+               * Observed frame document identity; invalid after navigation or detachment.
+               */
+              frameID?: string
               kind: "visible"
               /**
                * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
@@ -3154,6 +3219,12 @@ export type Model = {
         }
   }
   cost: {
+    evidence?: {
+      [key: string]: {
+        rate: number
+        source: "catalog" | "configuration"
+      }
+    }
     input: number
     output: number
     cache: {
@@ -3161,6 +3232,12 @@ export type Model = {
       write: number
     }
     tiers?: Array<{
+      evidence?: {
+        [key: string]: {
+          rate: number
+          source: "catalog" | "configuration"
+        }
+      }
       input: number
       output: number
       cache: {
@@ -3173,6 +3250,12 @@ export type Model = {
       }
     }>
     experimentalOver200K?: {
+      evidence?: {
+        [key: string]: {
+          rate: number
+          source: "catalog" | "configuration"
+        }
+      }
       input: number
       output: number
       cache: {
@@ -4871,6 +4954,37 @@ export type BrowserResult =
       title?: string
     }
   | {
+      operation: "frames"
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID: string
+      frames: Array<{
+        /**
+         * Observed frame document identity; invalid after navigation or detachment.
+         */
+        id: string
+        /**
+         * Opaque observed browser tab identity; never infer from a tab index or URL.
+         */
+        tabID: string
+        /**
+         * Observed frame document identity; invalid after navigation or detachment.
+         */
+        parentID?: string
+        url: string
+        name: string
+        main: boolean
+      }>
+      url?: string
+      title?: string
+    }
+  | {
+      /**
+       * Observed frame document identity; invalid after navigation or detachment.
+       */
+      frameID?: string
+      frameURL?: string
       /**
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
@@ -4882,6 +4996,11 @@ export type BrowserResult =
     }
   | {
       /**
+       * Observed frame document identity; invalid after navigation or detachment.
+       */
+      frameID?: string
+      frameURL?: string
+      /**
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
@@ -4891,6 +5010,11 @@ export type BrowserResult =
       snapshot: string
     }
   | {
+      /**
+       * Observed frame document identity; invalid after navigation or detachment.
+       */
+      frameID?: string
+      frameURL?: string
       /**
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
@@ -4902,6 +5026,11 @@ export type BrowserResult =
     }
   | {
       /**
+       * Observed frame document identity; invalid after navigation or detachment.
+       */
+      frameID?: string
+      frameURL?: string
+      /**
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
@@ -4911,6 +5040,11 @@ export type BrowserResult =
       snapshot?: string
     }
   | {
+      /**
+       * Observed frame document identity; invalid after navigation or detachment.
+       */
+      frameID?: string
+      frameURL?: string
       /**
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
@@ -4922,6 +5056,11 @@ export type BrowserResult =
     }
   | {
       /**
+       * Observed frame document identity; invalid after navigation or detachment.
+       */
+      frameID?: string
+      frameURL?: string
+      /**
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
@@ -4931,6 +5070,11 @@ export type BrowserResult =
       snapshot?: string
     }
   | {
+      /**
+       * Observed frame document identity; invalid after navigation or detachment.
+       */
+      frameID?: string
+      frameURL?: string
       /**
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
@@ -4943,6 +5087,11 @@ export type BrowserResult =
     }
   | {
       /**
+       * Observed frame document identity; invalid after navigation or detachment.
+       */
+      frameID?: string
+      frameURL?: string
+      /**
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
@@ -4952,6 +5101,11 @@ export type BrowserResult =
       output: string
     }
   | {
+      /**
+       * Observed frame document identity; invalid after navigation or detachment.
+       */
+      frameID?: string
+      frameURL?: string
       /**
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
@@ -4965,6 +5119,11 @@ export type BrowserResult =
       origins: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     }
   | {
+      /**
+       * Observed frame document identity; invalid after navigation or detachment.
+       */
+      frameID?: string
+      frameURL?: string
       /**
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
@@ -4982,11 +5141,17 @@ export type BrowserResult =
       authState: string
       failingStep?: string
       steps: Array<{
+        screenshotScope?: "tab"
         id: string
         title: string
         passed: boolean
         screenshot: string
         assertions: Array<{
+          /**
+           * Observed frame document identity; invalid after navigation or detachment.
+           */
+          frameID?: string
+          scope?: "frame" | "tab"
           kind: "visible" | "network" | "console"
           passed: boolean
           expected: string
@@ -5578,11 +5743,40 @@ export type BrowserRequest1 =
       /**
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
+      tabID: string
+      operation: "frames"
+      action: "list"
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID: string
+      operation: "frames"
+      action: "resolve"
+      /**
+       * Observed frame document identity; invalid after navigation or detachment.
+       */
+      parentID: string
+      selector: string
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
       tabID?: string
       operation: "navigate"
       url: string
     }
   | {
+      /**
+       * Observed frame document identity; invalid after navigation or detachment.
+       */
+      frameID?: string
       id: BrowserRequestId
       sessionID: string
       /**
@@ -5592,6 +5786,10 @@ export type BrowserRequest1 =
       operation: "snapshot"
     }
   | {
+      /**
+       * Observed frame document identity; invalid after navigation or detachment.
+       */
+      frameID?: string
       id: BrowserRequestId
       sessionID: string
       /**
@@ -5622,6 +5820,10 @@ export type BrowserRequest1 =
           }
     }
   | {
+      /**
+       * Observed frame document identity; invalid after navigation or detachment.
+       */
+      frameID?: string
       id: BrowserRequestId
       sessionID: string
       /**
@@ -5654,6 +5856,10 @@ export type BrowserRequest1 =
       submit: boolean
     }
   | {
+      /**
+       * Observed frame document identity; invalid after navigation or detachment.
+       */
+      frameID?: string
       id: BrowserRequestId
       sessionID: string
       /**
@@ -5685,6 +5891,10 @@ export type BrowserRequest1 =
       values: Array<string>
     }
   | {
+      /**
+       * Observed frame document identity; invalid after navigation or detachment.
+       */
+      frameID?: string
       id: BrowserRequestId
       sessionID: string
       /**
@@ -5724,6 +5934,10 @@ export type BrowserRequest1 =
       fullPage: boolean
     }
   | {
+      /**
+       * Observed frame document identity; invalid after navigation or detachment.
+       */
+      frameID?: string
       id: BrowserRequestId
       sessionID: string
       /**
@@ -5762,6 +5976,10 @@ export type BrowserRequest1 =
               url: string
             }
           | {
+              /**
+               * Observed frame document identity; invalid after navigation or detachment.
+               */
+              frameID?: string
               kind: "click"
               /**
                * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
@@ -5786,6 +6004,10 @@ export type BrowserRequest1 =
                   }
             }
           | {
+              /**
+               * Observed frame document identity; invalid after navigation or detachment.
+               */
+              frameID?: string
               kind: "type"
               /**
                * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
@@ -5812,6 +6034,10 @@ export type BrowserRequest1 =
               submit?: boolean
             }
           | {
+              /**
+               * Observed frame document identity; invalid after navigation or detachment.
+               */
+              frameID?: string
               kind: "select"
               /**
                * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
@@ -5838,6 +6064,10 @@ export type BrowserRequest1 =
             }
         assertions: Array<
           | {
+              /**
+               * Observed frame document identity; invalid after navigation or detachment.
+               */
+              frameID?: string
               kind: "visible"
               /**
                * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
@@ -6379,6 +6609,7 @@ export type RayaAccounting = {
   quantity?: number
   buckets: Array<{
     name: string
+    source?: string
     tokens: number
     rate?: number
   }>
@@ -21271,8 +21502,18 @@ export type KilocodeSelfHealListResponses = {
         root: string
         commit: string
       }
+      worktree?: {
+        root: string
+        directory: string
+        branch: string
+        common: string
+        commit: string
+      }
       phase:
         | "reserved"
+        | "worktree_creating"
+        | "worktree_ready"
+        | "worktree_unknown"
         | "session_creating"
         | "session_created"
         | "goal_creating"
@@ -21351,8 +21592,18 @@ export type KilocodeSelfHealCreateResponses = {
         root: string
         commit: string
       }
+      worktree?: {
+        root: string
+        directory: string
+        branch: string
+        common: string
+        commit: string
+      }
       phase:
         | "reserved"
+        | "worktree_creating"
+        | "worktree_ready"
+        | "worktree_unknown"
         | "session_creating"
         | "session_created"
         | "goal_creating"
@@ -21433,8 +21684,18 @@ export type KilocodeSelfHealOutcomeResponses = {
       root: string
       commit: string
     }
+    worktree?: {
+      root: string
+      directory: string
+      branch: string
+      common: string
+      commit: string
+    }
     phase:
       | "reserved"
+      | "worktree_creating"
+      | "worktree_ready"
+      | "worktree_unknown"
       | "session_creating"
       | "session_created"
       | "goal_creating"
@@ -21496,8 +21757,18 @@ export type KilocodeSelfHealAdmitResponses = {
         root: string
         commit: string
       }
+      worktree?: {
+        root: string
+        directory: string
+        branch: string
+        common: string
+        commit: string
+      }
       phase:
         | "reserved"
+        | "worktree_creating"
+        | "worktree_ready"
+        | "worktree_unknown"
         | "session_creating"
         | "session_created"
         | "goal_creating"
@@ -21518,12 +21789,84 @@ export type KilocodeSelfHealAdmitResponses = {
 
 export type KilocodeSelfHealAdmitResponse = KilocodeSelfHealAdmitResponses[keyof KilocodeSelfHealAdmitResponses]
 
+export type KilocodeSelfHealPrepareData = {
+  body?: {
+    token: string
+    revision: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  path: {
+    itemID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/self-heal/{itemID}/repair/worktree"
+}
+
+export type KilocodeSelfHealPrepareErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeSelfHealPrepareError = KilocodeSelfHealPrepareErrors[keyof KilocodeSelfHealPrepareErrors]
+
+export type KilocodeSelfHealPrepareResponses = {
+  /**
+   * Success
+   */
+  200: {
+    id: string
+    itemID: string
+    source: {
+      root: string
+      commit: string
+    }
+    worktree?: {
+      root: string
+      directory: string
+      branch: string
+      common: string
+      commit: string
+    }
+    phase:
+      | "reserved"
+      | "worktree_creating"
+      | "worktree_ready"
+      | "worktree_unknown"
+      | "session_creating"
+      | "session_created"
+      | "goal_creating"
+      | "goal_created"
+      | "dispatching"
+      | "submitted"
+      | "blocked"
+      | "dispatch_unknown"
+      | "legacy_conflict"
+    revision: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    sessionID?: string
+    reason?: string
+    at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+}
+
+export type KilocodeSelfHealPrepareResponse = KilocodeSelfHealPrepareResponses[keyof KilocodeSelfHealPrepareResponses]
+
 export type KilocodeSelfHealAdvanceData = {
   body?: {
     token: string
     revision: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     phase:
       | "reserved"
+      | "worktree_creating"
+      | "worktree_ready"
+      | "worktree_unknown"
       | "session_creating"
       | "session_created"
       | "goal_creating"
@@ -21569,8 +21912,18 @@ export type KilocodeSelfHealAdvanceResponses = {
       root: string
       commit: string
     }
+    worktree?: {
+      root: string
+      directory: string
+      branch: string
+      common: string
+      commit: string
+    }
     phase:
       | "reserved"
+      | "worktree_creating"
+      | "worktree_ready"
+      | "worktree_unknown"
       | "session_creating"
       | "session_created"
       | "goal_creating"
@@ -21626,8 +21979,18 @@ export type KilocodeSelfHealGetResponses = {
         root: string
         commit: string
       }
+      worktree?: {
+        root: string
+        directory: string
+        branch: string
+        common: string
+        commit: string
+      }
       phase:
         | "reserved"
+        | "worktree_creating"
+        | "worktree_ready"
+        | "worktree_unknown"
         | "session_creating"
         | "session_created"
         | "goal_creating"
@@ -21728,8 +22091,18 @@ export type KilocodeSelfHealUpdateResponses = {
         root: string
         commit: string
       }
+      worktree?: {
+        root: string
+        directory: string
+        branch: string
+        common: string
+        commit: string
+      }
       phase:
         | "reserved"
+        | "worktree_creating"
+        | "worktree_ready"
+        | "worktree_unknown"
         | "session_creating"
         | "session_created"
         | "goal_creating"

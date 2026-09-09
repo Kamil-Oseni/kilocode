@@ -4402,7 +4402,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     if (!result.session) return { handled: true }
     return {
       handled: false,
-      context: `Feedback ${result.item.id} was categorized as ${result.item.category} (${result.item.severity}) and started in repair session ${result.session} at ${result.source.root}. Explain the categorization and repair approach briefly. Do not duplicate the repair in this chat.`,
+      context: `Feedback ${result.item.id} was categorized as ${result.item.category} (${result.item.severity}) and started in repair session ${result.session} at ${result.directory}. Explain the categorization and repair approach briefly. Do not duplicate the repair in this chat.`,
     }
   }
 

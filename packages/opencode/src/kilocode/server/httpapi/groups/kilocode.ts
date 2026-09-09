@@ -794,6 +794,20 @@ export const KilocodeApi = HttpApi.make("kilocode")
               "Retain exclusive repair ownership and report existing or conflicting attempts without replay.",
           }),
         ),
+        HttpApiEndpoint.post("selfHealPrepare", `${KilocodePaths.selfHealItem}/repair/worktree`, {
+          params: { itemID: Schema.String },
+          query: WorkspaceRoutingQuery,
+          payload: RayaSelfHeal.RepairPrepare,
+          success: RayaSelfHeal.Repair,
+          error: HttpApiError.Conflict,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.selfHeal.prepare",
+            summary: "Prepare the owned repair checkout",
+            description:
+              "Reserve and create one exact-commit worktree, retaining its identity when creation is uncertain.",
+          }),
+        ),
         HttpApiEndpoint.post("selfHealAdvance", `${KilocodePaths.selfHealItem}/repair/step`, {
           params: { itemID: Schema.String },
           query: WorkspaceRoutingQuery,

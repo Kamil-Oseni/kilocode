@@ -109,6 +109,10 @@ export namespace ProjectUsage {
               cast(json_extract(part.data, '$.time.end') AS INTEGER),
               part.time_created
             ) >= ${since})
+            AND coalesce(
+              cast(json_extract(part.data, '$.time.end') AS INTEGER),
+              part.time_created
+            ) <= ${until}
         )
         SELECT
           providerID,

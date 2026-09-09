@@ -12,7 +12,7 @@ export function estimate(input: {
   model: Pick<Provider.Model, "id" | "providerID">
   usage: Usage
   tokens: { input: number; output: number; reasoning: number; cache: { read: number; write: number } }
-  rates: Pick<Provider.Model["cost"], "input" | "output" | "cache"> | undefined
+  rates: Pick<Provider.Model["cost"], "input" | "output" | "cache" | "evidence"> | undefined
   nano: unknown
 }): Types.DeepMutable<Accounting> {
   const base = {
@@ -39,13 +39,17 @@ export function estimate(input: {
     { name: "reasoning", tokens: input.tokens.reasoning, rate: input.rates?.output },
     { name: "cache_read", tokens: input.tokens.cache.read, rate: input.rates?.cache?.read },
     { name: "cache_write", tokens: input.tokens.cache.write, rate: input.rates?.cache?.write },
-  ].map((item) => ({
-    name: item.name,
-    tokens: item.tokens,
-    // Provider catalog normalization fills absent prices with zero. Without
-    // an explicit rate origin, zero is not evidence that a bucket is free.
-    ...(typeof item.rate === "number" && Number.isFinite(item.rate) && item.rate > 0 ? { rate: item.rate } : {}),
-  }))
+  ].map((item) => {
+    const origin = input.rates?.evidence?.[item.name === "reasoning" ? "output" : item.name]
+    const known = origin && origin.rate === item.rate
+    const priced =
+      typeof item.rate === "number" && Number.isFinite(item.rate) && item.rate >= 0 && (item.rate > 0 || known)
+    return {
+      name: item.name,
+      tokens: item.tokens,
+      ...(priced ? { rate: item.rate, source: known ? origin.source : "legacy-model-rate" } : {}),
+    }
+  })
   const raw = [
     input.usage.inputTokens,
     input.usage.outputTokens,

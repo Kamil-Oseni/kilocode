@@ -24,6 +24,43 @@ const Text = Schema.String.check(Schema.isMaxLength(200_000))
 export const TabID = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100)).annotate({
   description: "Opaque observed browser tab identity; never infer from a tab index or URL.",
 })
+export const FrameID = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100)).annotate({
+  description: "Observed frame document identity; invalid after navigation or detachment.",
+})
+const Framed = { frameID: Schema.optional(FrameID) }
+export const FrameInfo = Schema.Struct({
+  id: FrameID,
+  tabID: TabID,
+  parentID: Schema.optional(FrameID),
+  url: Schema.String,
+  name: Schema.String,
+  main: Schema.Boolean,
+})
+export const FramesRequest = Schema.Union([
+  Schema.Struct({
+    id: RequestID,
+    sessionID: SessionID,
+    tabID: TabID,
+    operation: Schema.Literal("frames"),
+    action: Schema.Literal("list"),
+  }),
+  Schema.Struct({
+    id: RequestID,
+    sessionID: SessionID,
+    tabID: TabID,
+    operation: Schema.Literal("frames"),
+    action: Schema.Literal("resolve"),
+    parentID: FrameID,
+    selector: Match,
+  }),
+])
+export const FramesResult = Schema.Struct({
+  operation: Schema.Literal("frames"),
+  tabID: TabID,
+  frames: Schema.Array(FrameInfo),
+  url: Schema.optional(Url),
+  title: Schema.optional(Schema.String),
+})
 const Base = { id: RequestID, sessionID: SessionID, tabID: Schema.optional(TabID) }
 export const TabsRequest = Schema.Union([
   Schema.Struct({ ...Base, operation: Schema.Literal("tabs"), action: Schema.Literal("list") }),
@@ -52,15 +89,18 @@ export const NavigateRequest = Schema.Struct({
   url: Url,
 })
 export const SnapshotRequest = Schema.Struct({
+  ...Framed,
   ...Base,
   operation: Schema.Literal("snapshot"),
 })
 export const ClickRequest = Schema.Struct({
+  ...Framed,
   ...Base,
   operation: Schema.Literal("click"),
   selector: Selector,
 })
 export const TypeRequest = Schema.Struct({
+  ...Framed,
   ...Base,
   operation: Schema.Literal("type"),
   selector: Selector,
@@ -68,12 +108,14 @@ export const TypeRequest = Schema.Struct({
   submit: Schema.Boolean,
 })
 export const SelectRequest = Schema.Struct({
+  ...Framed,
   ...Base,
   operation: Schema.Literal("select"),
   selector: Selector,
   values: Schema.Array(Text).check(Schema.isMinLength(1), Schema.isMaxLength(100)),
 })
 export const ScrollRequest = Schema.Struct({
+  ...Framed,
   ...Base,
   operation: Schema.Literal("scroll"),
   deltaX: Schema.Number,
@@ -86,6 +128,7 @@ export const ScreenshotRequest = Schema.Struct({
   fullPage: Schema.Boolean,
 })
 export const EvaluateRequest = Schema.Struct({
+  ...Framed,
   ...Base,
   operation: Schema.Literal("evaluate"),
   expression: Text,
@@ -93,14 +136,16 @@ export const EvaluateRequest = Schema.Struct({
 // raya_change start - Milestone G authenticated smoke walkthrough protocol
 const Name = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200))
 const NavigateAction = Schema.Struct({ kind: Schema.Literal("navigate"), url: Url })
-const ClickAction = Schema.Struct({ kind: Schema.Literal("click"), selector: Selector })
+const ClickAction = Schema.Struct({ ...Framed, kind: Schema.Literal("click"), selector: Selector })
 const TypeAction = Schema.Struct({
+  ...Framed,
   kind: Schema.Literal("type"),
   selector: Selector,
   text: Text,
   submit: Schema.optional(Schema.Boolean),
 })
 const SelectAction = Schema.Struct({
+  ...Framed,
   kind: Schema.Literal("select"),
   selector: Selector,
   values: Schema.Array(Text).check(Schema.isMinLength(1), Schema.isMaxLength(100)),
@@ -108,6 +153,7 @@ const SelectAction = Schema.Struct({
 export const SmokeAction = Schema.Union([NavigateAction, ClickAction, TypeAction, SelectAction])
 export const SmokeAssertion = Schema.Union([
   Schema.Struct({
+    ...Framed,
     kind: Schema.Literal("visible"),
     selector: Selector,
     text: Schema.optional(Text),
@@ -146,6 +192,7 @@ export const SmokeRequest = Schema.Struct({
 
 export const Request = Schema.Union([
   TabsRequest,
+  FramesRequest,
   NavigateRequest,
   SnapshotRequest,
   ClickRequest,
@@ -160,6 +207,8 @@ export const Request = Schema.Union([
 export type Request = Schema.Schema.Type<typeof Request>
 
 const ResultBase = {
+  ...Framed,
+  frameURL: Schema.optional(Schema.String),
   tabID: Schema.optional(TabID),
   url: Schema.optional(Url),
   title: Schema.optional(Schema.String.check(Schema.isMaxLength(10_000))),
@@ -202,12 +251,15 @@ export const AuthCaptureResult = Schema.Struct({
   origins: Schema.Number,
 })
 export const SmokeAssertionResult = Schema.Struct({
+  ...Framed,
+  scope: Schema.optional(Schema.Literals(["frame", "tab"])),
   kind: Schema.Literals(["visible", "network", "console"]),
   passed: Schema.Boolean,
   expected: Text,
   actual: Text,
 })
 export const SmokeStepResult = Schema.Struct({
+  screenshotScope: Schema.optional(Schema.Literal("tab")),
   id: Name,
   title: Name,
   passed: Schema.Boolean,
@@ -241,6 +293,7 @@ export const SmokeResult = Schema.Struct({
 
 export const Result = Schema.Union([
   TabsResult,
+  FramesResult,
   NavigateResult,
   SnapshotResult,
   ClickResult,

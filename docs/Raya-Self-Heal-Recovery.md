@@ -1,6 +1,6 @@
 # Raya self-heal source admission and recovery
 
-This records the source admission boundary and the subsequent durable repair-start ownership increment in OVR-09. A self-heal report is captured even when Raya source is unavailable, while repair requires an identified Raya Git checkout. It does not complete OVR-09.
+This records the source admission boundary and the subsequent durable repair-start ownership increment in OVR-09. A self-heal report is captured even when Raya source is unavailable, while repair requires an identified Raya Git checkout. The worktree increment below extends these foundations; OVR-09 remains open.
 
 ## User behavior
 
@@ -43,7 +43,7 @@ Combined extension typechecking and repository guards are coordinated by the int
 ## Remaining recovery and authority work
 
 - The durable repair-start increment below now prevents duplicate starts through this admission flow. Automatic takeover, resumable execution, and reconciliation with older clients remain unimplemented.
-- Admitted repair uses the configured checkout. Dedicated worktree or branch isolation and cleanup are not implemented here.
+- The original admission increment used the configured checkout. The worktree increment below now creates a separately owned checkout and branch. Execution fencing and safe cleanup/reconciliation remain open.
 - External changes after the final admission check remain possible. Admission does not hold a filesystem or repository lock for subsequent repair execution.
 - Session creation, goal creation, intake update, and prompt dispatch remain separate operations. Startup phases and uncertainty are now retained; automated recovery and the complete repair/completion state machine require a further increment.
 - Independent verification, evidence-backed completion, and release or installation authority are not established by source admission.
@@ -68,7 +68,7 @@ The extension lists the retained repair phase, session, and recovery reason in t
 - This is durable admission and observation, not a renewable execution lease. A lost owner token or stopped client leaves a reservation requiring explicit future reconciliation; restarting does not reclaim it.
 - Existing old clients that bypass the new admission endpoints are not fenced from calling ordinary session/goal APIs. Conflicting legacy linkage is detected when present in the backlog; this is not a global repair-process supervisor.
 - Generic backlog status/evidence updates retain their existing authority model. This does not implement independent verification, guarded final completion, or proof that a cancelled repair stopped.
-- No isolated worktree, source lock, session cleanup transaction, dispatch idempotency, or automatic resume is provided. The existing source admission constraints still apply.
+- The subsequent worktree increment below adds a separate checkout. It does not add a source lock, execution fencing, session cleanup transaction, dispatch idempotency, or automatic resume. Existing source admission constraints still apply.
 - Claim journals, canonical pointers, report receipts, and closure tombstones remain on disk for reconciliation. They need a future ownership-aware compaction policy. Full reports with retained repair attempts remain readable beyond ordinary terminal retention.
 - The publication primitive syncs complete files and uses exclusive links/atomic replacement. Restart visibility and independent-instance contention are tested; machine power-loss durability and every filesystem implementation are not certified.
 
@@ -92,3 +92,43 @@ The backend tests create independent Storage layers pointing at actual temporary
 Client tests use the generated SDK and real temporary Git checkouts. They verify successful ordered startup, duplicate refusal, each failing side effect, unavailable failure reporting, lost phase acknowledgements, source identity and revalidation, journal inspection, and safe not-found handling. No startup error text exposes raw backend payloads, and no uncertain side effect is replayed.
 
 A concurrent full-check run exceeded existing test deadlines and subsequent cleanup raced list reads. The production list path now tolerates a concurrently removed row. The final backend run passed in a quiet slot using unchanged deadlines; deadlines were not inflated. Combined CLI/extension types and guards are owned by the integration checkpoint, including the final small list fix. SDK generation includes the direct journal endpoint. No build, installation, deployment, or repair execution against a real user project was performed.
+
+
+## Attempt-owned exact-commit worktrees
+
+Repair startup now prepares a separate checkout before creating its session. The backend derives one managed directory and branch from the durable attempt ID. The journal records its managed root, directory, branch, canonical common Git directory, and exact source commit before `git worktree add` is invoked. Paths must remain within the canonical managed root and outside the source checkout/common Git administration; a redirected managed-root junction is refused. A linked-worktree source is supported by resolving its actual common Git directory.
+
+The startup sequence adds `worktree_creating -> worktree_ready` between reservation and session creation. The bounded journal reader accommodates the additional revisions. Only the exclusive owner can prepare the checkout. Existing paths/branches or failed/lost creation do not cause selection of another path, forced removal, branch deletion, setup execution, environment-file copying, or automatic retry. Uncertain creation retains `worktree_unknown` and its predetermined path/branch. `/self-heal inspect <itemID>` displays this evidence even when intake storage is missing.
+
+Preparation uses the admitted full commit ID, disables checkout hooks, fsmonitor commands, and submodule recursion, and performs no install or network fetch. Source identity is revalidated around creation. After population, independent inspection verifies canonical directory containment, registered worktree path, branch, HEAD, common Git directory, index equality to the admitted commit, ordinary working-file cleanliness, untracked files, and materialized LFS content. The backend repeats inspection before granting `session_creating` and `dispatching`. The extension checks that the returned phase actually authorizes its next side effect; a retained blocked outcome cannot accidentally start a session or prompt. It also revalidates the original configured source before both boundaries.
+
+Session, goal, and prompt requests use the repair checkout. Session metadata retains the admitted source identity, attempt ID, and worktree identity. The existing source-resolved `kilocode.sandbox` enabled/version preference is preserved; that metadata contains no directory-specific writable-path list. The backend resolves its ordinary effective profile using the actual session directory. Windows repair is not disabled merely because a native sandbox backend is unavailable.
+
+### Offline LFS support
+
+The actual Raya checkout contains active LFS attributes, so refusing every filtered path would block the intended product. At the reviewed commit `2946dfe4330362153f1c67145c9c8afaf68aa0cf`, the bounded read-only inventory found 10,235 tracked paths and 426 active LFS paths. Independent inspection found 394 unique local LFS objects and verified every object's declared size and SHA-256. The path-summed asset size was approximately 46.8 MB. Metadata evidence is in `.tmp/self-heal-active-filter-metadata.log`.
+
+Every Git command in preparation/inspection explicitly disables LFS process, smudge, clean, and required behavior. `GIT_LFS_SKIP_SMUDGE` alone is insufficient because it can still launch a helper. Effective attributes are read at the admitted commit, and canonical pointer blobs are read in batches. Pointer size and SHA-256 determine acceptable content. The preparer uses verified local common-directory LFS objects or matching canonical source-file bytes, checks containment and regular-file identity, copies only into the owned checkout, and verifies destination bytes again. A corrupt cache cannot authorize content; a source fallback must independently match the same committed pointer.
+
+No configured filter program or remote helper is invoked to obtain missing content. Unknown filters, noncanonical pointers, missing/corrupt content without a verified local fallback, and partial-clone/promisor configurations produce a readable blocked outcome. A failure after creation begins retains the uncertain checkout rather than removing it.
+
+Git status/stat-cache results alone do not establish LFS correctness. Inspection independently hashes every materialized destination on each verification, checks the index against the admitted commit, and checks other modified/untracked paths separately. This allows the expected pointer-versus-materialized-file difference without ignoring LFS paths blindly.
+
+### Boundaries still open
+
+This is checkout separation, not execution confinement. The source/branch/path checks are admission snapshots, not an ongoing repository or filesystem lock. The general sandbox policy, explicit writable paths, escalation behavior, shared Git administration, and old clients that bypass self-heal admission are not comprehensively fenced by this increment. No execution lease takeover, automated replay, worktree cleanup, merge/publication authority, installation authority, or independent completion verifier is added. Retained unknown checkouts require inspection and future explicit reconciliation.
+
+Local Git configuration and filesystem paths can change between checks; no claim of protection against arbitrary concurrent local mutation is made. Unknown filters remain unsupported. Managed worktrees, branches, and attempt evidence remain retained rather than automatically garbage-collected. Tests create and remove only their own temporary fixture repositories; no real Raya worktree is created by the verification workflow.
+
+### Worktree increment verification
+
+Read-only `Checkout.plan` against the actual Raya checkout passed under normal user ownership at commit `2946dfe4330362153f1c67145c9c8afaf68aa0cf`, including local LFS availability and content verification. The probe created no directory, branch, worktree, or configuration changes. Evidence: `.tmp/self-heal-worktree-current-checkout.log`. This resolves the earlier active-LFS preflight blocker without filter execution or fetching.
+
+- CLI ownership: `bun test ./test/kilocode/self-heal-ownership.test.ts` passed 10 tests / 56 assertions (`.tmp/self-heal-ownership-worktree-split.log`). Each crash boundary now has an independent real-Git fixture and bounded 30-second deadline. The two older tests that gained checkout creation also use that bounded fixture deadline; lightweight retention tests retain their existing deadline.
+- Extension: `bun test ./tests/unit/self-heal-source.test.ts` passed 16 tests / 106 assertions after the final notice simplification (`.tmp/self-heal-worktree-client-final-lintfix.log`).
+- Scoped extension ESLint passed without warnings (`.tmp/self-heal-worktree-lint.log`). Root Oxlint on the six backend implementation/test files passed with 14 warnings and zero errors (`.tmp/self-heal-worktree-backend-oxlint.log`). An earlier attempt to apply the extension ESLint configuration to backend files ignored those paths; it is not counted as backend validation.
+- Parent integration checks passed CLI, extension host/webview, schema/SDK types, Knip, and source-link extraction before the final test-only restructuring and notice simplification; parent subsequently confirmed final CLI and host types pass after the notice simplification. Parent owns the checkpoint/build outcome.
+
+The first fixture run exposed inherited Windows checkout line-ending conversion; the fixture now sets its own `core.autocrlf=false`. Production checkout policy is unchanged. Earlier mixed-suite failures also exposed obsolete five-second deadlines and monolithic multi-checkout crash/LFS tests; isolated, scoped tests now cover the same assertions with independent cleanup. No real Raya repair was dispatched, installed, or built by this increment's focused verification. Earlier checkpoint build notes above describe those earlier checkpoints, not a current packaging result.
+
+- Final worktree plus existing intake regression: `bun test ./test/kilocode/self-heal-worktree.test.ts ./test/kilocode/self-heal.test.ts` passed 14 tests / 79 assertions, native exit 0 (`.tmp/self-heal-worktree-split-final.log`). Separate cache/source LFS cases each retain a 30-second deadline. Together with ownership and extension coverage, the final focused runs passed 40 tests / 241 assertions. All verification processes are closed.

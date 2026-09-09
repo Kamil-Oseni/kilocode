@@ -1,12 +1,13 @@
 // raya_change - Milestone F model-facing browser tools
 import { Browser, HostError } from "@/kilocode/browser/service"
 import type { Input } from "@/kilocode/browser/service"
-import { TabID, Selector, SmokeStep, type Result } from "@/kilocode/browser/protocol"
+import { FrameID, TabID, Selector, SmokeStep, type Result } from "@/kilocode/browser/protocol"
 import * as Tool from "@/tool/tool"
 import { Effect, Schema } from "effect"
 
 const Text = Schema.String.check(Schema.isMaxLength(200_000))
 const Identity = { tab_id: TabID }
+const Framed = { frame_id: Schema.optional(FrameID) }
 const Bootstrap = { tab_id: Schema.optional(TabID) }
 const LIMIT = 100_000
 
@@ -29,7 +30,7 @@ function render(result: Result) {
     return `Tab ${result.tabID ?? "unknown"}: captured ${result.mime} screenshot for ${result.url ?? "the current page"}.`
   const text =
     result.operation === "evaluate"
-      ? `Tab ${result.tabID ?? "unknown"}:\n${result.output}`
+      ? `Tab ${result.tabID ?? "unknown"}, frame ${result.frameID ?? "main"} (${result.frameURL ?? result.url ?? ""}):\n${result.output}`
       : JSON.stringify(result, (key, value) => (key === "data" ? undefined : value), 2)
   if (text.length <= LIMIT) return text
   return `${text.slice(0, LIMIT)}\n\n[Browser result truncated by ${text.length - LIMIT} characters]`
@@ -76,7 +77,7 @@ export const BrowserNavigateTool = Tool.define<
   }),
 )
 
-const SnapshotParams = Schema.Struct({ ...Bootstrap })
+const SnapshotParams = Schema.Struct({ ...Framed, ...Bootstrap })
 export const BrowserSnapshotTool = Tool.define<
   typeof SnapshotParams,
   { url?: string },
@@ -95,7 +96,7 @@ export const BrowserSnapshotTool = Tool.define<
           yield* ctx.ask({ permission: "browser_snapshot", patterns: ["*"], always: ["*"], metadata: {} })
           const result = yield* run(
             browser,
-            { operation: "snapshot", tabID: params.tab_id, sessionID: ctx.sessionID },
+            { operation: "snapshot", frameID: params.frame_id, tabID: params.tab_id, sessionID: ctx.sessionID },
             ctx.abort,
           )
           return { title: "Browser snapshot", output: render(result), metadata: { url: result.url } }
@@ -104,7 +105,7 @@ export const BrowserSnapshotTool = Tool.define<
   }),
 )
 
-const ClickParams = Schema.Struct({ ...Identity, selector: Selector })
+const ClickParams = Schema.Struct({ ...Framed, ...Identity, selector: Selector })
 export const BrowserClickTool = Tool.define<typeof ClickParams, { url?: string }, Browser.Service, "browser_click">(
   "browser_click",
   Effect.gen(function* () {
@@ -123,7 +124,13 @@ export const BrowserClickTool = Tool.define<typeof ClickParams, { url?: string }
           })
           const result = yield* run(
             browser,
-            { operation: "click", tabID: params.tab_id, sessionID: ctx.sessionID, selector: params.selector },
+            {
+              operation: "click",
+              frameID: params.frame_id,
+              tabID: params.tab_id,
+              sessionID: ctx.sessionID,
+              selector: params.selector,
+            },
             ctx.abort,
           )
           return { title: `Clicked ${target(params.selector)}`, output: render(result), metadata: { url: result.url } }
@@ -133,6 +140,7 @@ export const BrowserClickTool = Tool.define<typeof ClickParams, { url?: string }
 )
 
 const TypeParams = Schema.Struct({
+  ...Framed,
   ...Identity,
   selector: Selector,
   text: Text,
@@ -157,6 +165,7 @@ export const BrowserTypeTool = Tool.define<typeof TypeParams, { url?: string }, 
             browser,
             {
               operation: "type",
+              frameID: params.frame_id,
               tabID: params.tab_id,
               sessionID: ctx.sessionID,
               selector: params.selector,
@@ -176,6 +185,7 @@ export const BrowserTypeTool = Tool.define<typeof TypeParams, { url?: string }, 
 )
 
 const SelectParams = Schema.Struct({
+  ...Framed,
   ...Identity,
   selector: Selector,
   values: Schema.Array(Text).check(Schema.isMinLength(1), Schema.isMaxLength(100)),
@@ -199,6 +209,7 @@ export const BrowserSelectTool = Tool.define<typeof SelectParams, { url?: string
             browser,
             {
               operation: "select",
+              frameID: params.frame_id,
               tabID: params.tab_id,
               sessionID: ctx.sessionID,
               selector: params.selector,
@@ -213,6 +224,7 @@ export const BrowserSelectTool = Tool.define<typeof SelectParams, { url?: string
 )
 
 const ScrollParams = Schema.Struct({
+  ...Framed,
   ...Identity,
   delta_x: Schema.optional(Schema.Number).annotate({ description: "Horizontal pixels. Defaults to 0." }),
   delta_y: Schema.Number.annotate({ description: "Vertical pixels; positive scrolls down." }),
@@ -233,6 +245,7 @@ export const BrowserScrollTool = Tool.define<typeof ScrollParams, { url?: string
             browser,
             {
               operation: "scroll",
+              frameID: params.frame_id,
               tabID: params.tab_id,
               sessionID: ctx.sessionID,
               deltaX: params.delta_x ?? 0,
@@ -297,6 +310,7 @@ export const BrowserScreenshotTool = Tool.define<
 )
 
 const EvaluateParams = Schema.Struct({
+  ...Framed,
   ...Identity,
   expression: Text.annotate({ description: "JavaScript expression or function body to evaluate in the current page." }),
 })
@@ -318,7 +332,13 @@ export const BrowserEvaluateTool = Tool.define<
           yield* ctx.ask({ permission: "browser_evaluate", patterns: ["*"], always: ["*"], metadata: {} })
           const result = yield* run(
             browser,
-            { operation: "evaluate", tabID: params.tab_id, sessionID: ctx.sessionID, expression: params.expression },
+            {
+              operation: "evaluate",
+              frameID: params.frame_id,
+              tabID: params.tab_id,
+              sessionID: ctx.sessionID,
+              expression: params.expression,
+            },
             ctx.abort,
           )
           return { title: "Browser evaluation", output: render(result), metadata: { url: result.url } }
@@ -472,7 +492,51 @@ export const BrowserTabsTool = Tool.define<typeof TabsParams, { url?: string }, 
   }),
 )
 
+const FramesParams = Schema.Union([
+  Schema.Struct({ action: Schema.Literal("list"), ...Identity }),
+  Schema.Struct({
+    action: Schema.Literal("resolve"),
+    ...Identity,
+    parent_frame_id: FrameID,
+    selector: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(10_000)),
+  }),
+])
+export const BrowserFramesTool = Tool.define<typeof FramesParams, { url?: string }, Browser.Service, "browser_frames">(
+  "browser_frames",
+  Effect.gen(function* () {
+    const browser = yield* Browser.Service
+    return {
+      description:
+        "List frame document identities in an observed tab, or resolve exactly one observed iframe selector within a parent frame. Use frame_id for DOM interactions; identities expire on navigation, detachment, or replacement. Screenshots remain tab-scoped.",
+      parameters: FramesParams,
+      execute: (params, ctx) =>
+        Effect.gen(function* () {
+          yield* ctx.ask({
+            permission: "browser_frames",
+            patterns: [params.tab_id],
+            always: [params.tab_id],
+            metadata: {},
+          })
+          const input =
+            params.action === "list"
+              ? { operation: "frames" as const, action: params.action, tabID: params.tab_id, sessionID: ctx.sessionID }
+              : {
+                  operation: "frames" as const,
+                  action: params.action,
+                  tabID: params.tab_id,
+                  sessionID: ctx.sessionID,
+                  parentID: params.parent_frame_id,
+                  selector: params.selector,
+                }
+          const result = yield* run(browser, input, ctx.abort)
+          return { title: "Browser frames", output: render(result), metadata: { url: result.url } }
+        }),
+    }
+  }),
+)
+
 export const BrowserTools = [
+  BrowserFramesTool,
   BrowserTabsTool,
   BrowserNavigateTool,
   BrowserSnapshotTool,

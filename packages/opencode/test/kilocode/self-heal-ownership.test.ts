@@ -9,6 +9,7 @@ import { Storage } from "@/storage/storage"
 import { SessionID } from "@/session/schema"
 import { RayaSelfHeal } from "@/kilocode/self-heal"
 import { tmpdirScoped } from "../fixture/fixture"
+import { checkout } from "./fixtures/self-heal-worktree"
 import { testEffect } from "../lib/effect"
 const it = testEffect(LayerNode.compile(LayerNode.group([FSUtil.node, Git.node, CrossSpawnSpawner.node])))
 const source = { root: "/verified/raya", commit: "a".repeat(40) }
@@ -18,7 +19,7 @@ function instance<A, E>(
 ) {
   return Effect.gen(function* () {
     const storage = yield* Storage.Service
-    return yield* run(RayaSelfHeal.make(storage), storage)
+    return yield* run(RayaSelfHeal.make(storage, path.join(path.dirname(directory), "managed")), storage)
   }).pipe(Effect.provide(Storage.layerFromDir(directory)))
 }
 it.live(
@@ -26,6 +27,7 @@ it.live(
   () =>
     Effect.gen(function* () {
       const directory = path.join(yield* tmpdirScoped(), "storage")
+      const source = yield* Effect.tryPromise(() => checkout(directory))
       const rows = yield* Effect.all(
         Array.from({ length: 8 }, () =>
           instance(directory, (backlog) => backlog.create({ description: "Concurrent repair report" })),
@@ -42,10 +44,13 @@ it.live(
       expect(claims.filter((claim) => claim?.owned)).toHaveLength(1)
       expect(claims.filter((claim) => claim?.token)).toHaveLength(1)
       const owner = claims.find((claim) => claim?.owned)!
+      expect(
+        (yield* instance(directory, (backlog) => backlog.prepare(id, { token: owner.token!, revision: 0 }))).phase,
+      ).toBe("worktree_ready")
       const steps = yield* Effect.all(
         Array.from({ length: 8 }, () =>
           instance(directory, (backlog) =>
-            backlog.advance(id, { token: owner.token!, revision: 0, phase: "session_creating" }).pipe(Effect.exit),
+            backlog.advance(id, { token: owner.token!, revision: 2, phase: "session_creating" }).pipe(Effect.exit),
           ),
         ),
         { concurrency: 8 },
@@ -59,7 +64,7 @@ it.live(
             backlog
               .advance(id, {
                 token: "wrong",
-                revision: 1,
+                revision: 3,
                 phase: "session_created",
                 sessionID: SessionID.make("ses_wrong"),
               })
@@ -70,44 +75,49 @@ it.live(
     }),
   30_000,
 )
-it.live("retains session identity and unknown dispatch without replay", () =>
-  Effect.gen(function* () {
-    const directory = path.join(yield* tmpdirScoped(), "storage")
-    const item = yield* instance(directory, (backlog) =>
-      backlog.create({ description: "Dispatch may have reached backend" }),
-    )
-    const claim = (yield* instance(directory, (backlog) => backlog.admit(item.id, { source })))!
-    const phases = [
-      "session_creating",
-      "session_created",
-      "goal_creating",
-      "goal_created",
-      "dispatching",
-      "dispatch_unknown",
-    ] as const
-    for (const [revision, phase] of phases.entries())
-      yield* instance(directory, (backlog) =>
-        backlog.advance(item.id, {
-          token: claim.token!,
-          revision,
-          phase,
-          ...(phase === "session_created" ? { sessionID: SessionID.make("ses_retained") } : {}),
-        }),
+it.live(
+  "retains session identity and unknown dispatch without replay",
+  () =>
+    Effect.gen(function* () {
+      const directory = path.join(yield* tmpdirScoped(), "storage")
+      const source = yield* Effect.tryPromise(() => checkout(directory))
+      const item = yield* instance(directory, (backlog) =>
+        backlog.create({ description: "Dispatch may have reached backend" }),
       )
-    const reopened = (yield* instance(directory, (backlog) => backlog.get(item.id)))!
-    expect(reopened.repair?.phase).toBe("dispatch_unknown")
-    expect(reopened.repair?.sessionID).toBe(SessionID.make("ses_retained"))
-    expect(reopened.repair?.reason).toContain("do not replay")
-    expect(JSON.stringify(reopened)).not.toContain(claim.token!)
-    expect((yield* instance(directory, (backlog) => backlog.admit(item.id, { source })))?.owned).toBe(false)
-    expect(
-      Exit.isFailure(
+      const claim = (yield* instance(directory, (backlog) => backlog.admit(item.id, { source })))!
+      yield* instance(directory, (backlog) => backlog.prepare(item.id, { token: claim.token!, revision: 0 }))
+      const phases = [
+        "session_creating",
+        "session_created",
+        "goal_creating",
+        "goal_created",
+        "dispatching",
+        "dispatch_unknown",
+      ] as const
+      for (const [revision, phase] of phases.entries())
         yield* instance(directory, (backlog) =>
-          backlog.advance(item.id, { token: claim.token!, revision: 6, phase: "dispatching" }).pipe(Effect.exit),
+          backlog.advance(item.id, {
+            token: claim.token!,
+            revision: revision + 2,
+            phase,
+            ...(phase === "session_created" ? { sessionID: SessionID.make("ses_retained") } : {}),
+          }),
+        )
+      const reopened = (yield* instance(directory, (backlog) => backlog.get(item.id)))!
+      expect(reopened.repair?.phase).toBe("dispatch_unknown")
+      expect(reopened.repair?.sessionID).toBe(SessionID.make("ses_retained"))
+      expect(reopened.repair?.reason).toContain("do not replay")
+      expect(JSON.stringify(reopened)).not.toContain(claim.token!)
+      expect((yield* instance(directory, (backlog) => backlog.admit(item.id, { source })))?.owned).toBe(false)
+      expect(
+        Exit.isFailure(
+          yield* instance(directory, (backlog) =>
+            backlog.advance(item.id, { token: claim.token!, revision: 8, phase: "dispatching" }).pipe(Effect.exit),
+          ),
         ),
-      ),
-    ).toBe(true)
-  }),
+      ).toBe(true)
+    }),
+  30_000,
 )
 it.live("preserves legacy conflicts and permits a new intake generation after closure", () =>
   Effect.gen(function* () {
@@ -133,22 +143,26 @@ it.live("preserves legacy conflicts and permits a new intake generation after cl
   }),
 )
 
-it.live(
-  "every pre-dispatch crash boundary retains ownership and its last session across reopening",
-  () =>
-    Effect.gen(function* () {
-      const directory = path.join(yield* tmpdirScoped(), "storage")
-      const phases = ["session_creating", "session_created", "goal_creating", "goal_created"] as const
-      for (const [boundary, stopped] of phases.entries()) {
+for (const [boundary, stopped] of (
+  ["session_creating", "session_created", "goal_creating", "goal_created"] as const
+).entries())
+  it.live(
+    `pre-dispatch crash at ${stopped} retains ownership and its last session across reopening`,
+    () =>
+      Effect.gen(function* () {
+        const directory = path.join(yield* tmpdirScoped(), "storage")
+        const source = yield* Effect.tryPromise(() => checkout(directory))
+        const phases = ["session_creating", "session_created", "goal_creating", "goal_created"] as const
         const item = yield* instance(directory, (backlog) =>
           backlog.create({ description: `Crash during ${stopped} boundary` }),
         )
         const claim = (yield* instance(directory, (backlog) => backlog.admit(item.id, { source })))!
+        yield* instance(directory, (backlog) => backlog.prepare(item.id, { token: claim.token!, revision: 0 }))
         for (const [revision, phase] of phases.slice(0, boundary + 1).entries())
           yield* instance(directory, (backlog) =>
             backlog.advance(item.id, {
               token: claim.token!,
-              revision,
+              revision: revision + 2,
               phase,
               ...(phase === "session_created" ? { sessionID: SessionID.make("ses_partial") } : {}),
             }),
@@ -158,7 +172,7 @@ it.live(
         expect(retained.sessionID).toBe(boundary === 0 ? undefined : SessionID.make("ses_partial"))
         expect((yield* instance(directory, (backlog) => backlog.admit(item.id, { source })))?.owned).toBe(false)
         const failure = yield* instance(directory, (backlog) =>
-          backlog.advance(item.id, { token: claim.token!, revision: boundary + 1, phase: "blocked" }),
+          backlog.advance(item.id, { token: claim.token!, revision: boundary + 3, phase: "blocked" }),
         )
         expect(failure.reason).toContain(stopped)
         yield* instance(directory, (backlog) => backlog.update(item.id, { status: "cancelled" }))
@@ -168,29 +182,33 @@ it.live(
         expect(duplicate.id).toBe(item.id)
         expect(duplicate.repair?.phase).toBe("blocked")
         expect((yield* instance(directory, (backlog) => backlog.admit(item.id, { source })))?.owned).toBe(false)
-      }
+      }),
+    30_000,
+  )
+
+it.live(
+  "direct repair observation survives missing intake storage without exposing ownership",
+  () =>
+    Effect.gen(function* () {
+      const directory = path.join(yield* tmpdirScoped(), "storage")
+      const source = yield* Effect.tryPromise(() => checkout(directory))
+      const item = yield* instance(directory, (backlog) =>
+        backlog.create({ description: "Intake disappears during retention race" }),
+      )
+      const claim = (yield* instance(directory, (backlog) => backlog.admit(item.id, { source })))!
+      yield* instance(directory, (backlog) => backlog.prepare(item.id, { token: claim.token!, revision: 0 }))
+      yield* instance(directory, (backlog) =>
+        backlog.advance(item.id, { token: claim.token!, revision: 2, phase: "session_creating" }),
+      )
+      yield* instance(directory, (_, storage) => storage.remove(["raya", "self-heal", "item", item.id]))
+      expect(yield* instance(directory, (backlog) => backlog.get(item.id))).toBeUndefined()
+      const retained = yield* instance(directory, (backlog) => backlog.outcome(item.id))
+      expect(retained?.id).toBe(claim.outcome.id)
+      expect(retained?.itemID).toBe(item.id)
+      expect(retained?.phase).toBe("session_creating")
+      expect(JSON.stringify(retained)).not.toContain(claim.token!)
     }),
   30_000,
-)
-
-it.live("direct repair observation survives missing intake storage without exposing ownership", () =>
-  Effect.gen(function* () {
-    const directory = path.join(yield* tmpdirScoped(), "storage")
-    const item = yield* instance(directory, (backlog) =>
-      backlog.create({ description: "Intake disappears during retention race" }),
-    )
-    const claim = (yield* instance(directory, (backlog) => backlog.admit(item.id, { source })))!
-    yield* instance(directory, (backlog) =>
-      backlog.advance(item.id, { token: claim.token!, revision: 0, phase: "session_creating" }),
-    )
-    yield* instance(directory, (_, storage) => storage.remove(["raya", "self-heal", "item", item.id]))
-    expect(yield* instance(directory, (backlog) => backlog.get(item.id))).toBeUndefined()
-    const retained = yield* instance(directory, (backlog) => backlog.outcome(item.id))
-    expect(retained?.id).toBe(claim.outcome.id)
-    expect(retained?.itemID).toBe(item.id)
-    expect(retained?.phase).toBe("session_creating")
-    expect(JSON.stringify(retained)).not.toContain(claim.token!)
-  }),
 )
 
 it.live("listing tolerates an item removed by another Storage instance after enumeration", () =>

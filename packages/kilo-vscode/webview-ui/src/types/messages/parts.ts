@@ -1,3 +1,5 @@
+import type { RayaAccounting } from "@kilocode/sdk/v2"
+
 // Tool state for tool parts
 export type ToolState =
   | { status: "pending"; input: Record<string, unknown> }
@@ -101,6 +103,7 @@ export interface StepFinishPart extends BasePart {
   generationID?: string
   vercelID?: string
   cost?: number
+  accounting?: RayaAccounting
   tokens?: {
     input: number
     output: number

@@ -46,6 +46,7 @@ import {
   wrapFirstByte,
 } from "@/kilocode/provider/provider"
 import * as ModelsRefresh from "@/kilocode/provider/models-refresh"
+import * as Pricing from "@/kilocode/provider/pricing"
 import { bedrockAuth, providerKey, vertexAuth, vertexCredentials, vertexOptions } from "@/kilocode/provider/cloud-auth"
 // kilocode_change end
 import { ProviderError } from "./error"
@@ -1045,6 +1046,7 @@ const ProviderCacheCost = Schema.Struct({
 })
 
 const ProviderCostTier = Schema.Struct({
+  ...Pricing.fields, // kilocode_change
   input: Schema.Finite,
   output: Schema.Finite,
   cache: ProviderCacheCost,
@@ -1055,12 +1057,14 @@ const ProviderCostTier = Schema.Struct({
 })
 
 const ProviderCost = Schema.Struct({
+  ...Pricing.fields, // kilocode_change
   input: Schema.Finite,
   output: Schema.Finite,
   cache: ProviderCacheCost,
   tiers: optional(Schema.Array(ProviderCostTier)),
   experimentalOver200K: optional(
     Schema.Struct({
+      ...Pricing.fields, // kilocode_change
       input: Schema.Finite,
       output: Schema.Finite,
       cache: ProviderCacheCost,
@@ -1232,6 +1236,7 @@ export const use = serviceUse(Service)
 
 function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
   const result: Model["cost"] = {
+    evidence: Pricing.evidence(c, "catalog"), // kilocode_change
     input: c?.input ?? 0,
     output: c?.output ?? 0,
     cache: {
@@ -1241,6 +1246,7 @@ function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
   }
   if (c?.tiers) {
     result.tiers = c.tiers.map((item) => ({
+      evidence: Pricing.evidence(item, "catalog"), // kilocode_change
       input: item.input,
       output: item.output,
       cache: {
@@ -1252,6 +1258,7 @@ function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
   }
   if (c?.context_over_200k) {
     result.experimentalOver200K = {
+      evidence: Pricing.evidence(c.context_over_200k, "catalog"), // kilocode_change
       cache: {
         read: c.context_over_200k.cache_read ?? 0,
         write: c.context_over_200k.cache_write ?? 0,
@@ -1327,7 +1334,7 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
         ...base,
         id: ModelV2.ID.make(id),
         name: `${model.name} ${mode[0].toUpperCase()}${mode.slice(1)}`,
-        cost: opts.cost ? mergeDeep(base.cost, cost(opts.cost)) : base.cost,
+        cost: opts.cost ? { ...base.cost, ...cost(opts.cost), ...Pricing.mode(base.cost, opts.cost) } : base.cost, // kilocode_change
         options: modeOptions(base, opts.provider?.body),
         headers: opts.provider?.headers ?? base.headers,
       }
@@ -1544,6 +1551,7 @@ const layer = Layer.effect(
                     : false),
               },
               cost: {
+                evidence: Pricing.evidence(model.cost, "configuration", existingModel?.cost), // kilocode_change
                 input: model?.cost?.input ?? existingModel?.cost?.input ?? 0,
                 output: model?.cost?.output ?? existingModel?.cost?.output ?? 0,
                 cache: {

@@ -2,7 +2,7 @@
 import { Effect, Schema } from "effect"
 import { Storage } from "@/storage/storage"
 import { createHash } from "node:crypto"
-import { repairs, Outcome, Admission, Granted, Advance } from "./repair"
+import { repairs, Outcome, Admission, Granted, Advance, Prepare } from "./repair"
 import { SessionID } from "@/session/schema"
 
 export namespace RayaSelfHeal {
@@ -10,6 +10,7 @@ export namespace RayaSelfHeal {
   export const RepairAdmission = Admission
   export const RepairGranted = Granted
   export const RepairAdvance = Advance
+  export const RepairPrepare = Prepare
 
   export const Category = Schema.Literals([
     "ui",
@@ -178,8 +179,11 @@ export namespace RayaSelfHeal {
     return first.length <= 100 ? first : `${first.slice(0, 97)}...`
   }
 
-  export function make(storage: Pick<Storage.Interface, "list" | "read" | "write" | "remove" | "create" | "replace">) {
-    const repair = repairs(storage)
+  export function make(
+    storage: Pick<Storage.Interface, "list" | "read" | "write" | "remove" | "create" | "replace">,
+    root?: string,
+  ) {
+    const repair = repairs(storage, root)
     const decorate = Effect.fn(function* (item: Item) {
       const receipts = yield* storage.list(["raya", "self-heal", "reports", item.id]).pipe(Effect.orDie)
       const baseline = yield* storage.read<number>(["raya", "self-heal", "reports", item.id, "base"]).pipe(
@@ -344,6 +348,6 @@ export namespace RayaSelfHeal {
         terminal.has(item.status) || !!item.workSessionID || matches.length > 1,
       )
     })
-    return { create, get, list, update, admit, advance: repair.advance, outcome: repair.get }
+    return { create, get, list, update, admit, advance: repair.advance, prepare: repair.prepare, outcome: repair.get }
   }
 }

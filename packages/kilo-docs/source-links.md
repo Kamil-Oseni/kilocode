@@ -68,6 +68,8 @@
   <!-- packages/opencode/src/provider/transform.ts -->
 - <https://docs.x.ai/docs/guides/reasoning#control-how-hard-the-model-thinks>
   <!-- packages/opencode/src/provider/transform.ts -->
+- <https://git-lfs.github.com/spec/v1>
+  <!-- packages/opencode/src/kilocode/self-heal/worktree.ts -->
 - <https://git-scm.com>
   <!-- packages/kilo-vscode/src/agent-manager/WorktreeManager.ts -->
 - <https://github.com>

@@ -1,11 +1,11 @@
 ---
 name: browser-runtime
-description: Capability reference for Raya browser skill version 3.
+description: Capability reference for Raya browser skill version 4.
 metadata:
-  version: "3"
+  version: "4"
 ---
 
-# Browser runtime contract, version 3
+# Browser runtime contract, version 4
 
 ## Execution and recovery
 
@@ -17,6 +17,7 @@ This reference describes the model-facing BrowserTools in `kilocode/tool/browser
 
 | Tool | Parameters | Evidence and limits |
 |---|---|---|
+| `browser_frames` | `action: "list", tab_id`; or `action: "resolve", tab_id, parent_frame_id, selector` | Frame document IDs, parent relation, URL/name and main-frame flag. Resolve exactly one observed iframe element. |
 | `browser_tabs` | `action: "list"`; `action: "open", url`; `action: "select"` or `"close", tab_id` | Stable IDs, URL/title, selected flag and popup opener ID. Opening selects the new tab; popups do not. |
 | `browser_navigate` | optional `tab_id`, `url` (absolute URL) | Resulting shared page URL/title; inspect a fresh snapshot for controls. |
 | `browser_snapshot` | optional `tab_id` | Accessibility-oriented current page snapshot; it may omit visual or off-frame content. |
@@ -31,7 +32,13 @@ This reference describes the model-facing BrowserTools in `kilocode/tool/browser
 
 Every page result identifies its tab; evaluation text and screenshot descriptions include that identity. Pass the observed `tab_id` for mutations, authentication capture and smoke work. Navigation/snapshot/screenshot may omit it only for the single original tab before another tab has ever existed. After opening a tab or popup, list tabs and use explicit IDs even if only one tab remains. IDs are opaque, never reused in a host lifetime, and invalid after restart; closed/unknown IDs fail without opening a replacement. Selecting a tab changes the viewer, not the page identity bound to already queued work. The panel binds input to the displayed frame and rejects stale selection. Closing the selected/last tab leaves no selected page until you select or open one.
 
-Smoke work uses the identified shared page. Authentication storage and cookie restoration belong to the shared browser context, not exclusively to a tab; tab IDs do not isolate accounts. Frame selection remains unsupported.
+Smoke work uses the identified shared page. Authentication storage and cookie restoration belong to the shared browser context, not exclusively to a tab; tab IDs do not isolate accounts. Use explicit frame identity for supported DOM operations; there is no implicit frame selection.
+
+Frame discovery returns document-scoped identities, not tab indices, names or URLs. Supply optional `frame_id` with snapshot, click, type, select, DOM scroll or evaluation. Omission targets the main document. Every supported DOM observation identifies its tab and frame document. Navigation, detachment, replacement and ancestor navigation invalidate old frame IDs, even when the URL/selector remains identical. After a stale-frame refusal, list/resolve frames and observe again. Never replay an uncertain mutation or substitute the main document. Locator waits pin the observed element; they do not choose a replacement document.
+
+`browser_frames` resolution uses an observed selector inside `parent_frame_id`; it must identify exactly one live direct child iframe. Nested frames require resolving each parent/child boundary. Cross-origin frames use the same explicit identity contract. Snapshot/evaluation results identify frame URL separately from the owning page URL/title. Screenshot images, panel coordinates, navigation and authentication remain tab/context-scoped; do not describe a whole-tab screenshot as an iframe-only capture.
+
+Smoke DOM action and visible assertion objects accept optional `frameID` (camel case inside `steps`, unlike top-level `frame_id`). Resolve these document IDs before constructing the run. Frame navigation makes later references stale and produces a failed report requiring fresh observation. Visible assertions identify their frame; screenshot, network and console evidence remains tab-scoped. Authentication is still shared context state.
 
 The `selector` field accepts a legacy selector string or one of these typed targets:
 
@@ -51,4 +58,4 @@ Smoke `steps` is an array of 1-100 entries. Each entry has `id`, `title`, option
 
 Use `mode: "exploratory"` for steps derived from current intent and observations; otherwise the default is `scripted`. The first smoke run captures current authentication when no saved state exists. Capture names identify reusable state: confirm the account and intended target before reuse; do not assume current page login changed an existing saved capture. Scope network assertions to the intended endpoint and status, and console assertions to the relevant messages. Attach a visible-state assertion to user-visible outcomes.
 
-Version 3 has no frame selection, coordinate click, upload, download completion tracking, viewport resize, or automated login/challenge handover operation. Do not invent tool names or emulate missing transfer/identity controls through evaluation or shell commands. A relevant connector or explicitly authorized manual user step can supply missing work; inspect the destination afterward and identify which evidence the browser could not obtain. These limits are unfinished runtime capabilities, not completed acceptance coverage.
+Version 4 has no implicit frame selection, coordinate click, upload, download completion tracking, viewport resize, or automated login/challenge handover operation. Do not invent tool names or emulate missing transfer/identity controls through evaluation or shell commands. A relevant connector or explicitly authorized manual user step can supply missing work; inspect the destination afterward and identify which evidence the browser could not obtain. These limits are unfinished runtime capabilities, not completed acceptance coverage.

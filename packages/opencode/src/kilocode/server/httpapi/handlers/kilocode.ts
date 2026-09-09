@@ -576,6 +576,14 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       if (!result) return yield* new HttpApiError.NotFound({})
       return result
     })
+    const selfHealPrepare = Effect.fn(function* (ctx: {
+      params: { itemID: string }
+      payload: typeof RayaSelfHeal.RepairPrepare.Type
+    }) {
+      return yield* healing
+        .prepare(ctx.params.itemID, ctx.payload)
+        .pipe(Effect.catchTag("SelfHeal.RepairConflict", () => Effect.fail(new HttpApiError.Conflict({}))))
+    })
     const selfHealAdvance = Effect.fn(function* (ctx: {
       params: { itemID: string }
       payload: typeof RayaSelfHeal.RepairAdvance.Type
@@ -670,6 +678,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .handle("selfHealAdmit", selfHealAdmit)
         .handle("selfHealOutcome", selfHealOutcome)
         .handle("selfHealAdvance", selfHealAdvance)
+        .handle("selfHealPrepare", selfHealPrepare)
         .handle("selfHealList", selfHealList)
         .handle("selfHealGet", selfHealGet)
         .handle("selfHealUpdate", selfHealUpdate)

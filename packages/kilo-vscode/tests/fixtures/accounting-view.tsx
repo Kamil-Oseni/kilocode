@@ -51,5 +51,84 @@ assert.equal(costLabel({ cost: 0.0385, accounting: accounting() }, "en-US", true
 set({ amount: 0.00000001, reported: 1, estimated: 0, partial: 0, unknown: 0, legacy: 0 })
 assert.match(root.textContent!, /< \$0\.000001/)
 dispose()
+const { CostDetails } = await import("../../webview-ui/src/components/chat/CostDetails")
+const close = render(
+  () => (
+    <CostDetails
+      locale="en-US"
+      parts={[
+        {
+          id: "step-1",
+          sessionID: "session",
+          messageID: "message",
+          type: "step-finish",
+          reason: "stop",
+          cost: 0,
+          tokens,
+          accounting: {
+            version: 1,
+            status: "estimated",
+            source: "model-rate-snapshot:private/priced",
+            currency: "USD",
+            amount: 0,
+            buckets: [{ name: "input", tokens: 100, rate: 0, source: "configuration" }],
+            issues: [],
+          },
+        },
+        {
+          id: "step-2",
+          sessionID: "session",
+          messageID: "message",
+          type: "step-finish",
+          reason: "stop",
+          cost: 0,
+          tokens,
+          accounting: {
+            version: 1,
+            status: "partial",
+            source: "model-rate-snapshot:test/priced",
+            currency: "USD",
+            amount: 0,
+            buckets: [{ name: "cache_read", tokens: 50 }],
+            issues: ["cache_read_rate_unverified"],
+          },
+        },
+      ]}
+    />
+  ),
+  root,
+)
+assert.equal(root.querySelector("details > summary")?.textContent, "How model costs were calculated")
+assert.match(root.textContent!, /Pricing model: private\/priced/)
+assert.match(root.textContent!, /Configured rate/)
+assert.match(root.textContent!, /100 tokens.*\$0\.00 per million tokens/)
+assert.match(root.textContent!, /Cached input: 50 tokens; rate unavailable/)
+assert.match(root.textContent!, /cache read rate unverified/)
+close()
+const older = render(
+  () => (
+    <CostDetails
+      locale="en-US"
+      parts={Array.from({ length: 21 }, (_, index) => ({
+        id: `step-${index}`,
+        sessionID: "session",
+        messageID: "message",
+        type: "step-finish" as const,
+        reason: "stop",
+        cost: 0,
+        tokens,
+      }))}
+    />
+  ),
+  root,
+)
+assert.equal(root.querySelectorAll("h4").length, 20)
+assert.equal(root.querySelector("h4")?.textContent, "Step 2")
+const button = root.querySelector("button")
+assert.equal(button?.textContent, "Show earlier calculations")
+button!.click()
+assert.equal(root.querySelectorAll("h4").length, 21)
+assert.equal(root.querySelector("h4")?.textContent, "Step 1")
+older()
 await window.happyDOM.close()
 console.log("Accounting usage view passed unknown, zero, mixed, incomplete and tiny amount states")

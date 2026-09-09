@@ -12,6 +12,7 @@ export const Accounting = Schema.Struct({
   buckets: Schema.Array(
     Schema.Struct({
       name: Schema.String,
+      source: optional(Schema.String),
       tokens: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
       rate: optional(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))),
     }),

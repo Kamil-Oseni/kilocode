@@ -30,7 +30,14 @@ function action(request: BrowserRequest): BrowserAction {
     const x = Number(request.deltaX)
     const y = Number(request.deltaY)
     if (!Number.isFinite(x) || !Number.isFinite(y)) throw new Error("Browser scroll deltas must be finite numbers")
-    return { operation: "scroll", tabID: request.tabID, deltaX: x, deltaY: y, selector: request.selector }
+    return {
+      operation: "scroll",
+      tabID: request.tabID,
+      frameID: request.frameID,
+      deltaX: x,
+      deltaY: y,
+      selector: request.selector,
+    }
   }
   // raya_change start - Milestone G validates generated special-number unions at the host boundary
   if (request.operation === "smoke")

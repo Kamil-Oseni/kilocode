@@ -69,6 +69,8 @@ describe("project usage", () => {
         issues: [],
       })
 
+      yield* add(now + 1, 999, 99999)
+
       const { db } = yield* Database.Service
       const anchor = yield* db
         .get<{ projectID: ProjectV2.ID }>(sql`SELECT project_id AS projectID FROM session WHERE id = ${session.id}`)
@@ -95,6 +97,14 @@ describe("project usage", () => {
           accounting: { amount: 1, reported: 1, estimated: 0, partial: 0, unknown: 0, legacy: 1 },
           tokens: { input: 300, output: 40, reasoning: 10, cache: { read: 60, write: 4 } },
         },
+      })
+      yield* add(now, 0.5, 50)
+      yield* add(now - 24 * 60 * 60 * 1_000, 0.25, 25)
+      expect((yield* ProjectUsage.get(anchor!.projectID, "24h", now)).totals).toMatchObject({ steps: 3, cost: 1.75 })
+      expect((yield* ProjectUsage.get(anchor!.projectID, "all", now)).totals).toMatchObject({ steps: 4, cost: 3.75 })
+      expect((yield* ProjectUsage.get(anchor!.projectID, "24h", now - 1)).totals).toMatchObject({
+        steps: 2,
+        cost: 1.25,
       })
     }),
   )

@@ -331,7 +331,15 @@ export const TaskHeader: Component<TaskHeaderProps> = (props) => {
           <div data-slot="task-header-graph-row">
             <ContextProgress />
           </div>
-          <Show when={tokens()}>{(tk) => <TaskUsage tokens={tk()} usage={session.modelUsage()} />}</Show>
+          <Show when={tokens()}>
+            {(tk) => (
+              <TaskUsage
+                tokens={tk()}
+                usage={session.modelUsage()}
+                parts={session.messages().flatMap((message) => session.getParts(message.id))}
+              />
+            )}
+          </Show>
           <UsageHistory />
         </div>
       </Show>

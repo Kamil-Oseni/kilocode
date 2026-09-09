@@ -8,7 +8,9 @@ export class TargetError extends Error {
   readonly name = "BrowserTargetError"
 }
 
-interface TargetLocator {
+export interface TargetLocator {
+  elementHandle?(): Promise<TargetElement | null>
+  ariaSnapshot?(options?: { timeout?: number }): Promise<string>
   count?(): Promise<number>
   getByRole?(role: string, options?: { name?: string | RegExp; exact?: boolean }): TargetLocator
   getByLabel?(text: string, options?: { exact?: boolean }): TargetLocator
@@ -69,4 +71,9 @@ export async function locate(page: TargetPage, target: BrowserTarget): Promise<T
 
 export function describe(target: BrowserTarget): string {
   return typeof target === "string" ? target : JSON.stringify(target)
+}
+
+export interface TargetElement extends TargetLocator {
+  contentFrame?(): Promise<import("./browser-frame").DocumentFrame | null>
+  dispose?(): Promise<void>
 }

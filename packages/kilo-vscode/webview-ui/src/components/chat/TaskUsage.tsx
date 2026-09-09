@@ -1,3 +1,4 @@
+import { CostDetails } from "./CostDetails"
 import { costLabel } from "../../context/accounting"
 import type { Component } from "solid-js"
 import { For, Show, createMemo } from "solid-js"
@@ -5,7 +6,7 @@ import { Collapsible } from "@kilocode/kilo-ui/collapsible"
 import { Icon } from "@kilocode/kilo-ui/icon"
 import { useLanguage } from "../../context/language"
 import { useProvider } from "../../context/provider"
-import type { SessionModelUsage } from "../../types/messages"
+import type { Part, SessionModelUsage } from "../../types/messages"
 import { cacheRate, groupModelUsage, modelUsageName, type TokenSummary } from "../../context/model-usage"
 import { formatCompactCount } from "../../utils/format"
 
@@ -13,6 +14,7 @@ interface TaskUsageProps {
   tokens: TokenSummary
   usage?: SessionModelUsage
   defaultOpen?: boolean
+  parts?: readonly Part[]
 }
 
 export const TaskUsage: Component<TaskUsageProps> = (props) => {
@@ -46,7 +48,10 @@ export const TaskUsage: Component<TaskUsageProps> = (props) => {
   )
 
   return (
-    <Show when={props.usage?.models.length} fallback={<div class="task-header-tokens">{renderSummary()}</div>}>
+    <Show
+      when={props.usage?.models.length || props.parts?.some((part) => part.type === "step-finish")}
+      fallback={<div class="task-header-tokens">{renderSummary()}</div>}
+    >
       <Collapsible variant="ghost" class="task-header-usage tool-collapsible" defaultOpen={props.defaultOpen}>
         <Collapsible.Trigger class="task-header-usage-trigger">
           <span class="task-header-tokens">{renderSummary()}</span>
@@ -82,6 +87,7 @@ export const TaskUsage: Component<TaskUsageProps> = (props) => {
               )}
             </For>
           </div>
+          <CostDetails parts={props.parts ?? []} locale={language.locale()} />
         </Collapsible.Content>
       </Collapsible>
     </Show>

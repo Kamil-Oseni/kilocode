@@ -285,6 +285,8 @@ import type {
   KilocodeSelfHealListResponses,
   KilocodeSelfHealOutcomeErrors,
   KilocodeSelfHealOutcomeResponses,
+  KilocodeSelfHealPrepareErrors,
+  KilocodeSelfHealPrepareResponses,
   KilocodeSelfHealUpdateErrors,
   KilocodeSelfHealUpdateResponses,
   KilocodeSessionImportMessageErrors,
@@ -9562,6 +9564,51 @@ export class SelfHeal extends HeyApiClient {
   }
 
   /**
+   * Prepare the owned repair checkout
+   *
+   * Reserve and create one exact-commit worktree, retaining its identity when creation is uncertain.
+   */
+  public prepare<ThrowOnError extends boolean = false>(
+    parameters: {
+      itemID: string
+      directory?: string
+      workspace?: string
+      token?: string
+      revision?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "itemID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "token" },
+            { in: "body", key: "revision" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeSelfHealPrepareResponses,
+      KilocodeSelfHealPrepareErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/self-heal/{itemID}/repair/worktree",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
    * Advance the owned repair startup
    *
    * Record each startup boundary once; retain unknown dispatch outcomes without automatic replay.
@@ -9575,6 +9622,9 @@ export class SelfHeal extends HeyApiClient {
       revision?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       phase?:
         | "reserved"
+        | "worktree_creating"
+        | "worktree_ready"
+        | "worktree_unknown"
         | "session_creating"
         | "session_created"
         | "goal_creating"

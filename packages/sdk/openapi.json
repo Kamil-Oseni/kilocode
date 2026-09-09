@@ -30448,10 +30448,35 @@
                           "required": ["root", "commit"],
                           "additionalProperties": false
                         },
+                        "worktree": {
+                          "type": "object",
+                          "properties": {
+                            "root": {
+                              "type": "string"
+                            },
+                            "directory": {
+                              "type": "string"
+                            },
+                            "branch": {
+                              "type": "string"
+                            },
+                            "common": {
+                              "type": "string"
+                            },
+                            "commit": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["root", "directory", "branch", "common", "commit"],
+                          "additionalProperties": false
+                        },
                         "phase": {
                           "type": "string",
                           "enum": [
                             "reserved",
+                            "worktree_creating",
+                            "worktree_ready",
+                            "worktree_unknown",
                             "session_creating",
                             "session_created",
                             "goal_creating",
@@ -30828,10 +30853,35 @@
                             "required": ["root", "commit"],
                             "additionalProperties": false
                           },
+                          "worktree": {
+                            "type": "object",
+                            "properties": {
+                              "root": {
+                                "type": "string"
+                              },
+                              "directory": {
+                                "type": "string"
+                              },
+                              "branch": {
+                                "type": "string"
+                              },
+                              "common": {
+                                "type": "string"
+                              },
+                              "commit": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["root", "directory", "branch", "common", "commit"],
+                            "additionalProperties": false
+                          },
                           "phase": {
                             "type": "string",
                             "enum": [
                               "reserved",
+                              "worktree_creating",
+                              "worktree_ready",
+                              "worktree_unknown",
                               "session_creating",
                               "session_created",
                               "goal_creating",
@@ -31198,10 +31248,35 @@
                       "required": ["root", "commit"],
                       "additionalProperties": false
                     },
+                    "worktree": {
+                      "type": "object",
+                      "properties": {
+                        "root": {
+                          "type": "string"
+                        },
+                        "directory": {
+                          "type": "string"
+                        },
+                        "branch": {
+                          "type": "string"
+                        },
+                        "common": {
+                          "type": "string"
+                        },
+                        "commit": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["root", "directory", "branch", "common", "commit"],
+                      "additionalProperties": false
+                    },
                     "phase": {
                       "type": "string",
                       "enum": [
                         "reserved",
+                        "worktree_creating",
+                        "worktree_ready",
+                        "worktree_unknown",
                         "session_creating",
                         "session_created",
                         "goal_creating",
@@ -31365,10 +31440,35 @@
                           "required": ["root", "commit"],
                           "additionalProperties": false
                         },
+                        "worktree": {
+                          "type": "object",
+                          "properties": {
+                            "root": {
+                              "type": "string"
+                            },
+                            "directory": {
+                              "type": "string"
+                            },
+                            "branch": {
+                              "type": "string"
+                            },
+                            "common": {
+                              "type": "string"
+                            },
+                            "commit": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["root", "directory", "branch", "common", "commit"],
+                          "additionalProperties": false
+                        },
                         "phase": {
                           "type": "string",
                           "enum": [
                             "reserved",
+                            "worktree_creating",
+                            "worktree_ready",
+                            "worktree_unknown",
                             "session_creating",
                             "session_created",
                             "goal_creating",
@@ -31504,6 +31604,233 @@
         ]
       }
     },
+    "/kilocode/self-heal/{itemID}/repair/worktree": {
+      "post": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.selfHeal.prepare",
+        "parameters": [
+          {
+            "name": "itemID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "itemID": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "object",
+                      "properties": {
+                        "root": {
+                          "type": "string"
+                        },
+                        "commit": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["root", "commit"],
+                      "additionalProperties": false
+                    },
+                    "worktree": {
+                      "type": "object",
+                      "properties": {
+                        "root": {
+                          "type": "string"
+                        },
+                        "directory": {
+                          "type": "string"
+                        },
+                        "branch": {
+                          "type": "string"
+                        },
+                        "common": {
+                          "type": "string"
+                        },
+                        "commit": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["root", "directory", "branch", "common", "commit"],
+                      "additionalProperties": false
+                    },
+                    "phase": {
+                      "type": "string",
+                      "enum": [
+                        "reserved",
+                        "worktree_creating",
+                        "worktree_ready",
+                        "worktree_unknown",
+                        "session_creating",
+                        "session_created",
+                        "goal_creating",
+                        "goal_created",
+                        "dispatching",
+                        "submitted",
+                        "blocked",
+                        "dispatch_unknown",
+                        "legacy_conflict"
+                      ]
+                    },
+                    "revision": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["NaN"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["Infinity"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["-Infinity"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["Infinity", "-Infinity", "NaN"]
+                        }
+                      ]
+                    },
+                    "sessionID": {
+                      "type": "string",
+                      "pattern": "^ses"
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "at": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["NaN"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["Infinity"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["-Infinity"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["Infinity", "-Infinity", "NaN"]
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["id", "itemID", "source", "phase", "revision", "at"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_Conflict"
+                }
+              }
+            }
+          }
+        },
+        "description": "Reserve and create one exact-commit worktree, retaining its identity when creation is uncertain.",
+        "summary": "Prepare the owned repair checkout",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string"
+                  },
+                  "revision": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  }
+                },
+                "required": ["token", "revision"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.selfHeal.prepare({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/kilocode/self-heal/{itemID}/repair/step": {
       "post": {
         "tags": ["kilocode"],
@@ -31561,10 +31888,35 @@
                       "required": ["root", "commit"],
                       "additionalProperties": false
                     },
+                    "worktree": {
+                      "type": "object",
+                      "properties": {
+                        "root": {
+                          "type": "string"
+                        },
+                        "directory": {
+                          "type": "string"
+                        },
+                        "branch": {
+                          "type": "string"
+                        },
+                        "common": {
+                          "type": "string"
+                        },
+                        "commit": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["root", "directory", "branch", "common", "commit"],
+                      "additionalProperties": false
+                    },
                     "phase": {
                       "type": "string",
                       "enum": [
                         "reserved",
+                        "worktree_creating",
+                        "worktree_ready",
+                        "worktree_unknown",
                         "session_creating",
                         "session_created",
                         "goal_creating",
@@ -31695,6 +32047,9 @@
                     "type": "string",
                     "enum": [
                       "reserved",
+                      "worktree_creating",
+                      "worktree_ready",
+                      "worktree_unknown",
                       "session_creating",
                       "session_created",
                       "goal_creating",
@@ -31785,10 +32140,35 @@
                           "required": ["root", "commit"],
                           "additionalProperties": false
                         },
+                        "worktree": {
+                          "type": "object",
+                          "properties": {
+                            "root": {
+                              "type": "string"
+                            },
+                            "directory": {
+                              "type": "string"
+                            },
+                            "branch": {
+                              "type": "string"
+                            },
+                            "common": {
+                              "type": "string"
+                            },
+                            "commit": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["root", "directory", "branch", "common", "commit"],
+                          "additionalProperties": false
+                        },
                         "phase": {
                           "type": "string",
                           "enum": [
                             "reserved",
+                            "worktree_creating",
+                            "worktree_ready",
+                            "worktree_unknown",
                             "session_creating",
                             "session_created",
                             "goal_creating",
@@ -32154,10 +32534,35 @@
                           "required": ["root", "commit"],
                           "additionalProperties": false
                         },
+                        "worktree": {
+                          "type": "object",
+                          "properties": {
+                            "root": {
+                              "type": "string"
+                            },
+                            "directory": {
+                              "type": "string"
+                            },
+                            "branch": {
+                              "type": "string"
+                            },
+                            "common": {
+                              "type": "string"
+                            },
+                            "commit": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["root", "directory", "branch", "common", "commit"],
+                          "additionalProperties": false
+                        },
                         "phase": {
                           "type": "string",
                           "enum": [
                             "reserved",
+                            "worktree_creating",
+                            "worktree_ready",
+                            "worktree_unknown",
                             "session_creating",
                             "session_created",
                             "goal_creating",
@@ -44543,6 +44948,73 @@
               },
               "operation": {
                 "type": "string",
+                "enum": ["frames"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["list"]
+              }
+            },
+            "required": ["id", "sessionID", "tabID", "operation", "action"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["frames"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["resolve"]
+              },
+              "parentID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
+              "selector": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 10000
+              }
+            },
+            "required": ["id", "sessionID", "tabID", "operation", "action", "parentID", "selector"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "operation": {
+                "type": "string",
                 "enum": ["navigate"]
               },
               "url": {
@@ -44557,6 +45029,12 @@
           {
             "type": "object",
             "properties": {
+              "frameID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
               "id": {
                 "$ref": "#/components/schemas/BrowserRequestID"
               },
@@ -44581,6 +45059,12 @@
           {
             "type": "object",
             "properties": {
+              "frameID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
               "id": {
                 "$ref": "#/components/schemas/BrowserRequestID"
               },
@@ -44683,6 +45167,12 @@
           {
             "type": "object",
             "properties": {
+              "frameID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
               "id": {
                 "$ref": "#/components/schemas/BrowserRequestID"
               },
@@ -44792,6 +45282,12 @@
           {
             "type": "object",
             "properties": {
+              "frameID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
               "id": {
                 "$ref": "#/components/schemas/BrowserRequestID"
               },
@@ -44903,6 +45399,12 @@
           {
             "type": "object",
             "properties": {
+              "frameID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
               "id": {
                 "$ref": "#/components/schemas/BrowserRequestID"
               },
@@ -45077,6 +45579,12 @@
           {
             "type": "object",
             "properties": {
+              "frameID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
               "id": {
                 "$ref": "#/components/schemas/BrowserRequestID"
               },
@@ -45196,6 +45704,12 @@
                         {
                           "type": "object",
                           "properties": {
+                            "frameID": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 100,
+                              "description": "Observed frame document identity; invalid after navigation or detachment."
+                            },
                             "kind": {
                               "type": "string",
                               "enum": ["click"]
@@ -45285,6 +45799,12 @@
                         {
                           "type": "object",
                           "properties": {
+                            "frameID": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 100,
+                              "description": "Observed frame document identity; invalid after navigation or detachment."
+                            },
                             "kind": {
                               "type": "string",
                               "enum": ["type"]
@@ -45381,6 +45901,12 @@
                         {
                           "type": "object",
                           "properties": {
+                            "frameID": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 100,
+                              "description": "Observed frame document identity; invalid after navigation or detachment."
+                            },
                             "kind": {
                               "type": "string",
                               "enum": ["select"]
@@ -45485,6 +46011,12 @@
                           {
                             "type": "object",
                             "properties": {
+                              "frameID": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 100,
+                                "description": "Observed frame document identity; invalid after navigation or detachment."
+                              },
                               "kind": {
                                 "type": "string",
                                 "enum": ["visible"]
@@ -52934,6 +53466,24 @@
           "cost": {
             "type": "object",
             "properties": {
+              "evidence": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "rate": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": ["catalog", "configuration"]
+                    }
+                  },
+                  "required": ["rate", "source"],
+                  "additionalProperties": false
+                }
+              },
               "input": {
                 "type": "number"
               },
@@ -52958,6 +53508,24 @@
                 "items": {
                   "type": "object",
                   "properties": {
+                    "evidence": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "rate": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": ["catalog", "configuration"]
+                          }
+                        },
+                        "required": ["rate", "source"],
+                        "additionalProperties": false
+                      }
+                    },
                     "input": {
                       "type": "number"
                     },
@@ -52999,6 +53567,24 @@
               "experimentalOver200K": {
                 "type": "object",
                 "properties": {
+                  "evidence": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "object",
+                      "properties": {
+                        "rate": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": ["catalog", "configuration"]
+                        }
+                      },
+                      "required": ["rate", "source"],
+                      "additionalProperties": false
+                    }
+                  },
                   "input": {
                     "type": "number"
                   },
@@ -58167,6 +58753,77 @@
           {
             "type": "object",
             "properties": {
+              "operation": {
+                "type": "string",
+                "enum": ["frames"]
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "frames": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100,
+                      "description": "Observed frame document identity; invalid after navigation or detachment."
+                    },
+                    "tabID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100,
+                      "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+                    },
+                    "parentID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100,
+                      "description": "Observed frame document identity; invalid after navigation or detachment."
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "main": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["id", "tabID", "url", "name", "main"],
+                  "additionalProperties": false
+                }
+              },
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": ["operation", "tabID", "frames"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "frameID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
+              "frameURL": {
+                "type": "string"
+              },
               "tabID": {
                 "type": "string",
                 "minLength": 1,
@@ -58197,6 +58854,15 @@
           {
             "type": "object",
             "properties": {
+              "frameID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
+              "frameURL": {
+                "type": "string"
+              },
               "tabID": {
                 "type": "string",
                 "minLength": 1,
@@ -58227,6 +58893,15 @@
           {
             "type": "object",
             "properties": {
+              "frameID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
+              "frameURL": {
+                "type": "string"
+              },
               "tabID": {
                 "type": "string",
                 "minLength": 1,
@@ -58257,6 +58932,15 @@
           {
             "type": "object",
             "properties": {
+              "frameID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
+              "frameURL": {
+                "type": "string"
+              },
               "tabID": {
                 "type": "string",
                 "minLength": 1,
@@ -58287,6 +58971,15 @@
           {
             "type": "object",
             "properties": {
+              "frameID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
+              "frameURL": {
+                "type": "string"
+              },
               "tabID": {
                 "type": "string",
                 "minLength": 1,
@@ -58317,6 +59010,15 @@
           {
             "type": "object",
             "properties": {
+              "frameID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
+              "frameURL": {
+                "type": "string"
+              },
               "tabID": {
                 "type": "string",
                 "minLength": 1,
@@ -58347,6 +59049,15 @@
           {
             "type": "object",
             "properties": {
+              "frameID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
+              "frameURL": {
+                "type": "string"
+              },
               "tabID": {
                 "type": "string",
                 "minLength": 1,
@@ -58381,6 +59092,15 @@
           {
             "type": "object",
             "properties": {
+              "frameID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
+              "frameURL": {
+                "type": "string"
+              },
               "tabID": {
                 "type": "string",
                 "minLength": 1,
@@ -58411,6 +59131,15 @@
           {
             "type": "object",
             "properties": {
+              "frameID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
+              "frameURL": {
+                "type": "string"
+              },
               "tabID": {
                 "type": "string",
                 "minLength": 1,
@@ -58491,6 +59220,15 @@
           {
             "type": "object",
             "properties": {
+              "frameID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
+              "frameURL": {
+                "type": "string"
+              },
               "tabID": {
                 "type": "string",
                 "minLength": 1,
@@ -58587,6 +59325,10 @@
                 "items": {
                   "type": "object",
                   "properties": {
+                    "screenshotScope": {
+                      "type": "string",
+                      "enum": ["tab"]
+                    },
                     "id": {
                       "type": "string",
                       "minLength": 1,
@@ -58608,6 +59350,16 @@
                       "items": {
                         "type": "object",
                         "properties": {
+                          "frameID": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 100,
+                            "description": "Observed frame document identity; invalid after navigation or detachment."
+                          },
+                          "scope": {
+                            "type": "string",
+                            "enum": ["frame", "tab"]
+                          },
                           "kind": {
                             "type": "string",
                             "enum": ["visible", "network", "console"]
@@ -60528,6 +61280,73 @@
               },
               "operation": {
                 "type": "string",
+                "enum": ["frames"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["list"]
+              }
+            },
+            "required": ["id", "sessionID", "tabID", "operation", "action"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["frames"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["resolve"]
+              },
+              "parentID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
+              "selector": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 10000
+              }
+            },
+            "required": ["id", "sessionID", "tabID", "operation", "action", "parentID", "selector"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "operation": {
+                "type": "string",
                 "enum": ["navigate"]
               },
               "url": {
@@ -60542,6 +61361,12 @@
           {
             "type": "object",
             "properties": {
+              "frameID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
               "id": {
                 "$ref": "#/components/schemas/BrowserRequestID"
               },
@@ -60566,6 +61391,12 @@
           {
             "type": "object",
             "properties": {
+              "frameID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
               "id": {
                 "$ref": "#/components/schemas/BrowserRequestID"
               },
@@ -60668,6 +61499,12 @@
           {
             "type": "object",
             "properties": {
+              "frameID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
               "id": {
                 "$ref": "#/components/schemas/BrowserRequestID"
               },
@@ -60777,6 +61614,12 @@
           {
             "type": "object",
             "properties": {
+              "frameID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
               "id": {
                 "$ref": "#/components/schemas/BrowserRequestID"
               },
@@ -60888,6 +61731,12 @@
           {
             "type": "object",
             "properties": {
+              "frameID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
               "id": {
                 "$ref": "#/components/schemas/BrowserRequestID"
               },
@@ -61054,6 +61903,12 @@
           {
             "type": "object",
             "properties": {
+              "frameID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
               "id": {
                 "$ref": "#/components/schemas/BrowserRequestID"
               },
@@ -61173,6 +62028,12 @@
                         {
                           "type": "object",
                           "properties": {
+                            "frameID": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 100,
+                              "description": "Observed frame document identity; invalid after navigation or detachment."
+                            },
                             "kind": {
                               "type": "string",
                               "enum": ["click"]
@@ -61262,6 +62123,12 @@
                         {
                           "type": "object",
                           "properties": {
+                            "frameID": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 100,
+                              "description": "Observed frame document identity; invalid after navigation or detachment."
+                            },
                             "kind": {
                               "type": "string",
                               "enum": ["type"]
@@ -61358,6 +62225,12 @@
                         {
                           "type": "object",
                           "properties": {
+                            "frameID": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 100,
+                              "description": "Observed frame document identity; invalid after navigation or detachment."
+                            },
                             "kind": {
                               "type": "string",
                               "enum": ["select"]
@@ -61462,6 +62335,12 @@
                           {
                             "type": "object",
                             "properties": {
+                              "frameID": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 100,
+                                "description": "Observed frame document identity; invalid after navigation or detachment."
+                              },
                               "kind": {
                                 "type": "string",
                                 "enum": ["visible"]
@@ -63864,6 +64743,9 @@
               "type": "object",
               "properties": {
                 "name": {
+                  "type": "string"
+                },
+                "source": {
                   "type": "string"
                 },
                 "tokens": {

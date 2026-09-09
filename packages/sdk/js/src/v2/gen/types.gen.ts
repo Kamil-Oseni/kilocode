@@ -19694,6 +19694,11 @@ export type KilocodeGoalGetResponses = {
         verification: string
         required?: boolean
         review?: boolean
+        check?: {
+          kind: "command"
+          command: string
+          directory: string
+        }
       }>
       plan?: {
         review?: boolean
@@ -19796,6 +19801,11 @@ export type KilocodeGoalGetResponses = {
       verification: string
       required?: boolean
       review?: boolean
+      check?: {
+        kind: "command"
+        command: string
+        directory: string
+      }
     }>
     startMessageID?: string
     startSnapshot?: string
@@ -19886,6 +19896,11 @@ export type KilocodeGoalGetResponses = {
           verification: string
           required?: boolean
           review?: boolean
+          check?: {
+            kind: "command"
+            command: string
+            directory: string
+          }
         }>
         plan?: {
           review?: boolean
@@ -19975,6 +19990,11 @@ export type KilocodeGoalGetResponses = {
         verification: string
         required?: boolean
         review?: boolean
+        check?: {
+          kind: "command"
+          command: string
+          directory: string
+        }
       }>
       status: "active" | "paused" | "complete" | "blocked"
       createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -20038,6 +20058,11 @@ export type KilocodeGoalUpdateData = {
       verification: string
       required?: boolean
       review?: boolean
+      check?: {
+        kind: "command"
+        command: string
+        directory: string
+      }
     }>
     status?: "active" | "paused"
     objective?: string
@@ -20099,6 +20124,11 @@ export type KilocodeGoalUpdateResponses = {
         verification: string
         required?: boolean
         review?: boolean
+        check?: {
+          kind: "command"
+          command: string
+          directory: string
+        }
       }>
       plan?: {
         review?: boolean
@@ -20201,6 +20231,11 @@ export type KilocodeGoalUpdateResponses = {
       verification: string
       required?: boolean
       review?: boolean
+      check?: {
+        kind: "command"
+        command: string
+        directory: string
+      }
     }>
     startMessageID?: string
     startSnapshot?: string
@@ -20291,6 +20326,11 @@ export type KilocodeGoalUpdateResponses = {
           verification: string
           required?: boolean
           review?: boolean
+          check?: {
+            kind: "command"
+            command: string
+            directory: string
+          }
         }>
         plan?: {
           review?: boolean
@@ -20380,6 +20420,11 @@ export type KilocodeGoalUpdateResponses = {
         verification: string
         required?: boolean
         review?: boolean
+        check?: {
+          kind: "command"
+          command: string
+          directory: string
+        }
       }>
       status: "active" | "paused" | "complete" | "blocked"
       createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -20492,6 +20537,11 @@ export type KilocodeGoalCreateResponses = {
         verification: string
         required?: boolean
         review?: boolean
+        check?: {
+          kind: "command"
+          command: string
+          directory: string
+        }
       }>
       plan?: {
         review?: boolean
@@ -20594,6 +20644,11 @@ export type KilocodeGoalCreateResponses = {
       verification: string
       required?: boolean
       review?: boolean
+      check?: {
+        kind: "command"
+        command: string
+        directory: string
+      }
     }>
     startMessageID?: string
     startSnapshot?: string
@@ -20684,6 +20739,11 @@ export type KilocodeGoalCreateResponses = {
           verification: string
           required?: boolean
           review?: boolean
+          check?: {
+            kind: "command"
+            command: string
+            directory: string
+          }
         }>
         plan?: {
           review?: boolean
@@ -20773,6 +20833,11 @@ export type KilocodeGoalCreateResponses = {
         verification: string
         required?: boolean
         review?: boolean
+        check?: {
+          kind: "command"
+          command: string
+          directory: string
+        }
       }>
       status: "active" | "paused" | "complete" | "blocked"
       createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"

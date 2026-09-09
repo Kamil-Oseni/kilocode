@@ -14,6 +14,13 @@ export const GoalCriteria = Schema.Array(
     ...Criterion.fields,
     required: Schema.optional(Schema.Boolean),
     review: Schema.optional(Schema.Boolean),
+    check: Schema.optional(
+      Schema.Struct({
+        kind: Schema.Literal("command"),
+        command: Text,
+        directory: Text.check(Schema.isPattern(/^(?:[a-zA-Z]:[\\/]|\/|\\\\)/)),
+      }),
+    ),
   }),
 ).check(Schema.isMinLength(1), Schema.isMaxLength(20))
 export type GoalCriteria = typeof GoalCriteria.Type

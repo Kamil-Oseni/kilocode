@@ -64,7 +64,15 @@ test("goal edits send the reviewed revision and correlate success, conflict, inv
 })
 
 test("goal criteria edits validate drafts and require matching saved criteria", async () => {
-  const criteria = [{ id: "result", description: "Working result", verification: "Run checks", required: false }]
+  const criteria = [
+    {
+      id: "result",
+      description: "Working result",
+      verification: "Run checks",
+      required: false,
+      check: { kind: "command" as const, command: "bun test", directory: "C:/workspace" },
+    },
+  ]
   const sent: Request[] = []
   const messages: unknown[] = []
   let returned: typeof criteria | undefined = criteria
@@ -96,11 +104,20 @@ test("goal criteria edits validate drafts and require matching saved criteria", 
   await editGoal(context)
   expect(await sent[0].json()).toMatchObject({ criteria, expectedIntent: "original" })
   expect(messages.at(-1)).toMatchObject({ goal: { criteria } })
+  returned = [{ ...criteria[0], check: { ...criteria[0].check, command: "echo passed" } }]
+  await editGoal(context)
+  expect(messages.at(-1)).toMatchObject({ error: expect.stringContaining("did not match") })
   returned = undefined
   await editGoal(context)
   expect(messages.at(-1)).toMatchObject({ error: expect.stringContaining("did not match") })
   await editGoal({ ...context, message: { ...message, criteria: [] } })
-  expect(sent).toHaveLength(2)
+  expect(sent).toHaveLength(3)
+  expect(messages.at(-1)).toMatchObject({ error: expect.stringContaining("criteria") })
+  await editGoal({
+    ...context,
+    message: { ...message, criteria: [{ ...criteria[0], check: { ...criteria[0].check, directory: "relative" } }] },
+  })
+  expect(sent).toHaveLength(3)
   expect(messages.at(-1)).toMatchObject({ error: expect.stringContaining("criteria") })
 })
 

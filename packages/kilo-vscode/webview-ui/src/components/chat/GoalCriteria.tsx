@@ -16,6 +16,18 @@ export function GoalCriteria(props: { criteria: GoalState["criteria"] }) {
                 <p>Requires your review before completion.</p>
               </Show>
               <p>Verification: {criterion.verification}</p>
+              <Show when={criterion.check}>
+                {(check) => (
+                  <div aria-label="Saved command binding">
+                    <p>
+                      Required command: <code>{check().command}</code>
+                    </p>
+                    <p>
+                      Working directory: <code>{check().directory}</code>
+                    </p>
+                  </div>
+                )}
+              </Show>
             </div>
           )}
         </For>

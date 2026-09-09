@@ -78,7 +78,7 @@ function planning(goal: Pick<Goal, "objective" | "plan">) {
 }
 
 function review(value: Goal["review"]) {
-  if (!value) return []
+  if (!value) return ["", "User review: no separate acceptance was recorded."]
   const lines: string[] = []
   lines.push(
     "",
@@ -108,6 +108,9 @@ function contract(goal: Pick<Goal, "criteria" | "audit" | "auditAttempt" | "revi
       "",
       "Verification:",
       quote(item.verification),
+      ...(item.check
+        ? ["", "Required command:", quote(item.check.command), "Working directory:", quote(item.check.directory)]
+        : []),
       "",
     )
   lines.push(...review(goal.review))
@@ -118,7 +121,9 @@ function contract(goal: Pick<Goal, "criteria" | "audit" | "auditAttempt" | "revi
   if (!audit) lines.push("No completion audit was retained.")
   if (audit) {
     lines.push(
-      audit.accepted ? "Evidence accepted at submission." : "Completion rejected; submitted claims are unverified.",
+      audit.accepted
+        ? "Evidence references accepted at submission."
+        : "Completion rejected; submitted claims are unverified.",
     )
     if (audit.accepted && goal.audit)
       lines.push("", quote(goal.audit.summary), `Verified: ${date(goal.audit.verifiedAt)}`)
@@ -181,6 +186,7 @@ export function report(goal: Goal, sessionID?: string) {
     "This report copies saved goal records. It does not rerun checks, verify current files, include the original tool output, or independently identify a reviewer. Goal-control acceptance is included only when saved. Cost and deliverable inventories are not included in this report.",
     "",
     "Review each criterion and open its cited source in Raya before relying on the result. Missing source records or criteria require further verification.",
+    "Accepted references do not establish complete business-outcome coverage or user acceptance. A saved command binding checks the cited command and working directory; prose-only verification has no such binding.",
     "",
   )
   return lines.join("\n")

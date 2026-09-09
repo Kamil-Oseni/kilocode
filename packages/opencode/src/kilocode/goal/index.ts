@@ -1268,6 +1268,24 @@ export namespace RayaGoal {
           })
         }
         // raya_change end
+        const check = criteria?.find((item) => item.id === requirement.criterionID)?.check
+        if (
+          check &&
+          !cited.some((part) => {
+            if (part.tool !== "bash" || part.state.status !== "completed" || part.state.metadata["exit"] !== 0)
+              return false
+            const command = part.state.input["command"]
+            const directory = part.state.input["workdir"]
+            if (typeof command !== "string" || typeof directory !== "string" || !path.isAbsolute(directory))
+              return false
+            const normalize = (value: string) =>
+              process.platform === "win32" ? path.normalize(value).toLowerCase() : path.normalize(value)
+              return command === check.command && normalize(directory) === normalize(check.directory)
+          })
+        )
+          return yield* new AuditError({
+            message: `Criterion ${requirement.criterionID} requires successful evidence for the saved command in its explicit working directory. Run ${check.command} with workdir ${check.directory}, then cite that result.`,
+          })
         verified.push({ ...requirement, evidence: proof })
       }
       if (!verified.some((item) => item.passed))

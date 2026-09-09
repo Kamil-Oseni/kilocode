@@ -17923,6 +17923,27 @@
                                 },
                                 "review": {
                                   "type": "boolean"
+                                },
+                                "check": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": ["command"]
+                                    },
+                                    "command": {
+                                      "type": "string",
+                                      "pattern": "\\S",
+                                      "maxLength": 4000
+                                    },
+                                    "directory": {
+                                      "type": "string",
+                                      "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                      "maxLength": 4000
+                                    }
+                                  },
+                                  "required": ["kind", "command", "directory"],
+                                  "additionalProperties": false
                                 }
                               },
                               "required": ["id", "description", "verification"],
@@ -18528,6 +18549,27 @@
                           },
                           "review": {
                             "type": "boolean"
+                          },
+                          "check": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["command"]
+                              },
+                              "command": {
+                                "type": "string",
+                                "pattern": "\\S",
+                                "maxLength": 4000
+                              },
+                              "directory": {
+                                "type": "string",
+                                "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                "maxLength": 4000
+                              }
+                            },
+                            "required": ["kind", "command", "directory"],
+                            "additionalProperties": false
                           }
                         },
                         "required": ["id", "description", "verification"],
@@ -19220,6 +19262,27 @@
                                       },
                                       "review": {
                                         "type": "boolean"
+                                      },
+                                      "check": {
+                                        "type": "object",
+                                        "properties": {
+                                          "kind": {
+                                            "type": "string",
+                                            "enum": ["command"]
+                                          },
+                                          "command": {
+                                            "type": "string",
+                                            "pattern": "\\S",
+                                            "maxLength": 4000
+                                          },
+                                          "directory": {
+                                            "type": "string",
+                                            "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                            "maxLength": 4000
+                                          }
+                                        },
+                                        "required": ["kind", "command", "directory"],
+                                        "additionalProperties": false
                                       }
                                     },
                                     "required": ["id", "description", "verification"],
@@ -19809,6 +19872,27 @@
                                 },
                                 "review": {
                                   "type": "boolean"
+                                },
+                                "check": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": ["command"]
+                                    },
+                                    "command": {
+                                      "type": "string",
+                                      "pattern": "\\S",
+                                      "maxLength": 4000
+                                    },
+                                    "directory": {
+                                      "type": "string",
+                                      "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                      "maxLength": 4000
+                                    }
+                                  },
+                                  "required": ["kind", "command", "directory"],
+                                  "additionalProperties": false
                                 }
                               },
                               "required": ["id", "description", "verification"],
@@ -20409,6 +20493,27 @@
                                 },
                                 "review": {
                                   "type": "boolean"
+                                },
+                                "check": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": ["command"]
+                                    },
+                                    "command": {
+                                      "type": "string",
+                                      "pattern": "\\S",
+                                      "maxLength": 4000
+                                    },
+                                    "directory": {
+                                      "type": "string",
+                                      "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                      "maxLength": 4000
+                                    }
+                                  },
+                                  "required": ["kind", "command", "directory"],
+                                  "additionalProperties": false
                                 }
                               },
                               "required": ["id", "description", "verification"],
@@ -21014,6 +21119,27 @@
                           },
                           "review": {
                             "type": "boolean"
+                          },
+                          "check": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["command"]
+                              },
+                              "command": {
+                                "type": "string",
+                                "pattern": "\\S",
+                                "maxLength": 4000
+                              },
+                              "directory": {
+                                "type": "string",
+                                "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                "maxLength": 4000
+                              }
+                            },
+                            "required": ["kind", "command", "directory"],
+                            "additionalProperties": false
                           }
                         },
                         "required": ["id", "description", "verification"],
@@ -21706,6 +21832,27 @@
                                       },
                                       "review": {
                                         "type": "boolean"
+                                      },
+                                      "check": {
+                                        "type": "object",
+                                        "properties": {
+                                          "kind": {
+                                            "type": "string",
+                                            "enum": ["command"]
+                                          },
+                                          "command": {
+                                            "type": "string",
+                                            "pattern": "\\S",
+                                            "maxLength": 4000
+                                          },
+                                          "directory": {
+                                            "type": "string",
+                                            "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                            "maxLength": 4000
+                                          }
+                                        },
+                                        "required": ["kind", "command", "directory"],
+                                        "additionalProperties": false
                                       }
                                     },
                                     "required": ["id", "description", "verification"],
@@ -22295,6 +22442,27 @@
                                 },
                                 "review": {
                                   "type": "boolean"
+                                },
+                                "check": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": ["command"]
+                                    },
+                                    "command": {
+                                      "type": "string",
+                                      "pattern": "\\S",
+                                      "maxLength": 4000
+                                    },
+                                    "directory": {
+                                      "type": "string",
+                                      "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                      "maxLength": 4000
+                                    }
+                                  },
+                                  "required": ["kind", "command", "directory"],
+                                  "additionalProperties": false
                                 }
                               },
                               "required": ["id", "description", "verification"],
@@ -22865,6 +23033,27 @@
                                 },
                                 "review": {
                                   "type": "boolean"
+                                },
+                                "check": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": ["command"]
+                                    },
+                                    "command": {
+                                      "type": "string",
+                                      "pattern": "\\S",
+                                      "maxLength": 4000
+                                    },
+                                    "directory": {
+                                      "type": "string",
+                                      "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                      "maxLength": 4000
+                                    }
+                                  },
+                                  "required": ["kind", "command", "directory"],
+                                  "additionalProperties": false
                                 }
                               },
                               "required": ["id", "description", "verification"],
@@ -23470,6 +23659,27 @@
                           },
                           "review": {
                             "type": "boolean"
+                          },
+                          "check": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["command"]
+                              },
+                              "command": {
+                                "type": "string",
+                                "pattern": "\\S",
+                                "maxLength": 4000
+                              },
+                              "directory": {
+                                "type": "string",
+                                "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                "maxLength": 4000
+                              }
+                            },
+                            "required": ["kind", "command", "directory"],
+                            "additionalProperties": false
                           }
                         },
                         "required": ["id", "description", "verification"],
@@ -24162,6 +24372,27 @@
                                       },
                                       "review": {
                                         "type": "boolean"
+                                      },
+                                      "check": {
+                                        "type": "object",
+                                        "properties": {
+                                          "kind": {
+                                            "type": "string",
+                                            "enum": ["command"]
+                                          },
+                                          "command": {
+                                            "type": "string",
+                                            "pattern": "\\S",
+                                            "maxLength": 4000
+                                          },
+                                          "directory": {
+                                            "type": "string",
+                                            "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                            "maxLength": 4000
+                                          }
+                                        },
+                                        "required": ["kind", "command", "directory"],
+                                        "additionalProperties": false
                                       }
                                     },
                                     "required": ["id", "description", "verification"],
@@ -24751,6 +24982,27 @@
                                 },
                                 "review": {
                                   "type": "boolean"
+                                },
+                                "check": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": ["command"]
+                                    },
+                                    "command": {
+                                      "type": "string",
+                                      "pattern": "\\S",
+                                      "maxLength": 4000
+                                    },
+                                    "directory": {
+                                      "type": "string",
+                                      "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                      "maxLength": 4000
+                                    }
+                                  },
+                                  "required": ["kind", "command", "directory"],
+                                  "additionalProperties": false
                                 }
                               },
                               "required": ["id", "description", "verification"],
@@ -25136,6 +25388,27 @@
                         },
                         "review": {
                           "type": "boolean"
+                        },
+                        "check": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["command"]
+                            },
+                            "command": {
+                              "type": "string",
+                              "pattern": "\\S",
+                              "maxLength": 4000
+                            },
+                            "directory": {
+                              "type": "string",
+                              "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                              "maxLength": 4000
+                            }
+                          },
+                          "required": ["kind", "command", "directory"],
+                          "additionalProperties": false
                         }
                       },
                       "required": ["id", "description", "verification"],

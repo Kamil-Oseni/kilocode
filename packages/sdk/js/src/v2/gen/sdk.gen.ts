@@ -8492,6 +8492,11 @@ export class Goal extends HeyApiClient {
         verification: string
         required?: boolean
         review?: boolean
+        check?: {
+          kind: "command"
+          command: string
+          directory: string
+        }
       }>
       status?: "active" | "paused"
       objective?: string

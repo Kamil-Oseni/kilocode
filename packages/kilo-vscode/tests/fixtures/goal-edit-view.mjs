@@ -473,6 +473,78 @@ try {
   button("Steer").click()
   assert.equal(root.querySelector('.goal-banner__criteria-editor input[type="checkbox"]').checked, true)
   assert.equal(root.querySelector("[data-criterion]").getAttribute("data-criterion"), criteria.criteria[0].id)
+  const binding = () =>
+    [...root.querySelectorAll(".goal-banner__criteria-editor label")]
+      .find((item) => item.textContent.includes("Require an exact command result"))
+      .querySelector("input")
+  const command = () =>
+    [...root.querySelectorAll(".goal-banner__criteria-editor label")]
+      .find((item) => item.textContent.includes("Command for criterion"))
+      .querySelector("textarea")
+  const directory = () =>
+    [...root.querySelectorAll(".goal-banner__criteria-editor label")]
+      .find((item) => item.textContent.includes("Absolute working directory"))
+      .querySelector("input")
+  const fill = (field, value) => {
+    field.value = value
+    field.dispatchEvent(new window.Event("input", { bubbles: true }))
+  }
+  assert.equal(binding().checked, false)
+  binding().click()
+  assert.ok(button("Update goal").disabled)
+  assert.ok(root.textContent.includes("This does not run it or grant permission"))
+  fill(command(), "bun run check")
+  assert.ok(button("Update goal").disabled)
+  fill(directory(), "relative/workspace")
+  assert.ok(button("Update goal").disabled)
+  fill(directory(), "C:/workspace/report")
+  assert.equal(button("Update goal").disabled, false)
+  button("Update goal").click()
+  const bound = sent.findLast((msg) => msg.type === "goalEdit")
+  assert.deepEqual(bound.criteria[0].check, {
+    kind: "command",
+    command: "bun run check",
+    directory: "C:/workspace/report",
+  })
+  emit({
+    type: "goalEdited",
+    sessionID: "session",
+    requestID: bound.requestID,
+    goal: {
+      ...goal,
+      intent: "wrong-binding",
+      criteria: bound.criteria.map((item) => ({ ...item, check: { ...item.check, command: "echo unrelated" } })),
+    },
+  })
+  assert.ok(root.textContent.includes("Could not confirm"))
+  assert.equal(command().value, "bun run check")
+  assert.equal(directory().value, "C:/workspace/report")
+  button("Cancel").click()
+  emit({
+    type: "goalState",
+    sessionID: "session",
+    goal: { ...goal, intent: "binding-reviewed", criteria: required.criteria },
+  })
+  button("Steer").click()
+  binding().click()
+  fill(command(), "bun run check")
+  fill(directory(), "C:/workspace/report")
+  button("Update goal").click()
+  const confirmed = sent.findLast((msg) => msg.type === "goalEdit")
+  assert.equal(confirmed.expectedIntent, "binding-reviewed")
+  emit({
+    type: "goalEdited",
+    sessionID: "session",
+    requestID: confirmed.requestID,
+    goal: { ...goal, intent: "binding-confirmed", criteria: confirmed.criteria },
+  })
+  assert.equal(root.querySelector("[data-criterion]"), null)
+  assert.ok(root.textContent.includes("Required command: bun run check"))
+  assert.ok(root.textContent.includes("Working directory: C:/workspace/report"))
+  button("Steer").click()
+  assert.equal(binding().checked, true)
+  assert.equal(command().value, "bun run check")
+  assert.equal(directory().value, "C:/workspace/report")
   button("Remove criterion").click()
   assert.ok(button("Update goal").disabled)
   button("Cancel").click()

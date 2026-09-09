@@ -52,7 +52,14 @@ export interface GoalState {
       dependencies: string[]
     }>
   }
-  criteria?: Array<{ id: string; description: string; verification: string; required?: boolean; review?: boolean }>
+  criteria?: Array<{
+    id: string
+    description: string
+    verification: string
+    required?: boolean
+    review?: boolean
+    check?: { kind: "command"; command: string; directory: string }
+  }>
   intent?: string
   inputs?: string[]
   dispatch?: {

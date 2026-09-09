@@ -125,6 +125,53 @@ function setup(
 }
 
 describe("RayaGoal", () => {
+  it.live("required command binding rejects unrelated successful evidence and wrong directories", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const sessionID = SessionID.make(`ses_command_${crypto.randomUUID()}`)
+      const rows: MessageV2.WithParts[] = []
+      const goals = setup(storage, () => rows)
+      yield* Effect.addFinalizer(() => goals.clear(sessionID))
+      const check = {
+        kind: "command" as const,
+        command: "bun test ./test/acceptance.test.ts",
+        directory: process.cwd(),
+      }
+      yield* goals.create(sessionID, "Check the result", undefined, undefined, undefined, [
+        { id: "result", description: "Result", verification: "Run the acceptance suite", check },
+      ])
+      const result = transcript({ sessionID, tool: "bash", exit: 0 })
+      rows.push(...result.rows)
+      const part = result.part!
+      const audit = {
+        summary: "Result checked",
+        requirements: [
+          {
+            criterionID: "result",
+            requirement: "Result",
+            passed: true,
+            evidence: [{ callID: part.callID, summary: "Acceptance command completed" }],
+          },
+        ],
+      }
+      for (const input of [
+        { command: "echo passed", workdir: check.directory },
+        { command: `${check.command}\n`, workdir: check.directory },
+        { command: check.command, workdir: path.join(check.directory, "other") },
+        { command: check.command },
+      ]) {
+        part.state.input = input
+        expect((yield* goals.update(sessionID, { status: "complete", audit }).pipe(Effect.flip)).message).toContain(
+          "saved command",
+        )
+        expect((yield* goals.get(sessionID))?.status).toBe("active")
+      }
+      part.state.input = { command: check.command, workdir: check.directory }
+      expect((yield* goals.update(sessionID, { status: "complete", audit })).status).toBe("complete")
+      expect((yield* goals.get(sessionID))?.criteria?.[0].check).toEqual(check)
+    }),
+  )
+
   it.live("human review requires current acceptance and revalidates evidence", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service

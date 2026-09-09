@@ -45,7 +45,7 @@ describe("project usage", () => {
         time: { created: Date.now() },
       } satisfies MessageV2.Assistant)
       const now = Date.now()
-      const add = (end: number, cost: number, input: number) =>
+      const add = (end: number, cost: number, input: number, accounting?: MessageV2.StepFinishPart["accounting"]) =>
         sessions.updatePart({
           id: PartID.ascending(),
           messageID: assistant.id,
@@ -54,11 +54,20 @@ describe("project usage", () => {
           reason: "stop",
           model,
           cost,
+          accounting,
           tokens: { input, output: 20, reasoning: 5, cache: { read: 30, write: 2 } },
           time: { start: end - 1_000, end, elapsed: 1_000 },
         })
       yield* add(now - 2 * 24 * 60 * 60 * 1_000, 2, 200)
-      yield* add(now - 60 * 60 * 1_000, 1, 100)
+      yield* add(now - 60 * 60 * 1_000, 1, 100, {
+        version: 1,
+        status: "reported",
+        source: "gateway.marketCost",
+        currency: "USD",
+        amount: 1,
+        buckets: [],
+        issues: [],
+      })
 
       const { db } = yield* Database.Service
       const anchor = yield* db
@@ -75,6 +84,7 @@ describe("project usage", () => {
         totals: {
           steps: 1,
           cost: 1,
+          accounting: { amount: 1, reported: 1, estimated: 0, partial: 0, unknown: 0, legacy: 0 },
           tokens: { input: 100, output: 20, reasoning: 5, cache: { read: 30, write: 2 } },
         },
       })
@@ -82,6 +92,7 @@ describe("project usage", () => {
         totals: {
           steps: 2,
           cost: 3,
+          accounting: { amount: 1, reported: 1, estimated: 0, partial: 0, unknown: 0, legacy: 1 },
           tokens: { input: 300, output: 40, reasoning: 10, cache: { read: 60, write: 4 } },
         },
       })

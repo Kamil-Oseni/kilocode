@@ -15883,6 +15883,36 @@
                         "cost": {
                           "type": "number"
                         },
+                        "accounting": {
+                          "type": "object",
+                          "properties": {
+                            "amount": {
+                              "type": "number"
+                            },
+                            "reported": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "estimated": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "partial": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "unknown": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "legacy": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": ["amount", "reported", "estimated", "partial", "unknown", "legacy"],
+                          "additionalProperties": false
+                        },
                         "tokens": {
                           "type": "object",
                           "properties": {
@@ -15938,6 +15968,36 @@
                           },
                           "cost": {
                             "type": "number"
+                          },
+                          "accounting": {
+                            "type": "object",
+                            "properties": {
+                              "amount": {
+                                "type": "number"
+                              },
+                              "reported": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "estimated": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "partial": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "unknown": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "legacy": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "required": ["amount", "reported", "estimated", "partial", "unknown", "legacy"],
+                            "additionalProperties": false
                           },
                           "tokens": {
                             "type": "object",
@@ -17035,6 +17095,36 @@
                         "cost": {
                           "type": "number"
                         },
+                        "accounting": {
+                          "type": "object",
+                          "properties": {
+                            "amount": {
+                              "type": "number"
+                            },
+                            "reported": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "estimated": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "partial": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "unknown": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "legacy": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": ["amount", "reported", "estimated", "partial", "unknown", "legacy"],
+                          "additionalProperties": false
+                        },
                         "tokens": {
                           "type": "object",
                           "properties": {
@@ -17090,6 +17180,36 @@
                           },
                           "cost": {
                             "type": "number"
+                          },
+                          "accounting": {
+                            "type": "object",
+                            "properties": {
+                              "amount": {
+                                "type": "number"
+                              },
+                              "reported": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "estimated": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "partial": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "unknown": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "legacy": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "required": ["amount", "reported", "estimated", "partial", "unknown", "legacy"],
+                            "additionalProperties": false
                           },
                           "tokens": {
                             "type": "object",
@@ -30306,6 +30426,100 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "repair": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "itemID": {
+                          "type": "string"
+                        },
+                        "source": {
+                          "type": "object",
+                          "properties": {
+                            "root": {
+                              "type": "string"
+                            },
+                            "commit": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["root", "commit"],
+                          "additionalProperties": false
+                        },
+                        "phase": {
+                          "type": "string",
+                          "enum": [
+                            "reserved",
+                            "session_creating",
+                            "session_created",
+                            "goal_creating",
+                            "goal_created",
+                            "dispatching",
+                            "submitted",
+                            "blocked",
+                            "dispatch_unknown",
+                            "legacy_conflict"
+                          ]
+                        },
+                        "revision": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["NaN"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["-Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity", "-Infinity", "NaN"]
+                            }
+                          ]
+                        },
+                        "sessionID": {
+                          "type": "string",
+                          "pattern": "^ses"
+                        },
+                        "reason": {
+                          "type": "string"
+                        },
+                        "at": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["NaN"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["-Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity", "-Infinity", "NaN"]
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["id", "itemID", "source", "phase", "revision", "at"],
+                      "additionalProperties": false
+                    },
                     "id": {
                       "type": "string"
                     },
@@ -30592,6 +30806,100 @@
                   "items": {
                     "type": "object",
                     "properties": {
+                      "repair": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "itemID": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "object",
+                            "properties": {
+                              "root": {
+                                "type": "string"
+                              },
+                              "commit": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["root", "commit"],
+                            "additionalProperties": false
+                          },
+                          "phase": {
+                            "type": "string",
+                            "enum": [
+                              "reserved",
+                              "session_creating",
+                              "session_created",
+                              "goal_creating",
+                              "goal_created",
+                              "dispatching",
+                              "submitted",
+                              "blocked",
+                              "dispatch_unknown",
+                              "legacy_conflict"
+                            ]
+                          },
+                          "revision": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["NaN"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["-Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity", "-Infinity", "NaN"]
+                              }
+                            ]
+                          },
+                          "sessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "reason": {
+                            "type": "string"
+                          },
+                          "at": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["NaN"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["-Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity", "-Infinity", "NaN"]
+                              }
+                            ]
+                          }
+                        },
+                        "required": ["id", "itemID", "source", "phase", "revision", "at"],
+                        "additionalProperties": false
+                      },
                       "id": {
                         "type": "string"
                       },
@@ -30833,6 +31141,590 @@
         ]
       }
     },
+    "/kilocode/self-heal/{itemID}/repair": {
+      "get": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.selfHeal.outcome",
+        "parameters": [
+          {
+            "name": "itemID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "itemID": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "object",
+                      "properties": {
+                        "root": {
+                          "type": "string"
+                        },
+                        "commit": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["root", "commit"],
+                      "additionalProperties": false
+                    },
+                    "phase": {
+                      "type": "string",
+                      "enum": [
+                        "reserved",
+                        "session_creating",
+                        "session_created",
+                        "goal_creating",
+                        "goal_created",
+                        "dispatching",
+                        "submitted",
+                        "blocked",
+                        "dispatch_unknown",
+                        "legacy_conflict"
+                      ]
+                    },
+                    "revision": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["NaN"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["Infinity"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["-Infinity"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["Infinity", "-Infinity", "NaN"]
+                        }
+                      ]
+                    },
+                    "sessionID": {
+                      "type": "string",
+                      "pattern": "^ses"
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "at": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["NaN"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["Infinity"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["-Infinity"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["Infinity", "-Infinity", "NaN"]
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["id", "itemID", "source", "phase", "revision", "at"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Read the durable repair journal even when its original backlog item is unavailable.",
+        "summary": "Read a retained repair attempt",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.selfHeal.outcome({\n  ...\n})"
+          }
+        ]
+      },
+      "post": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.selfHeal.admit",
+        "parameters": [
+          {
+            "name": "itemID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "owned": {
+                      "type": "boolean"
+                    },
+                    "outcome": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "itemID": {
+                          "type": "string"
+                        },
+                        "source": {
+                          "type": "object",
+                          "properties": {
+                            "root": {
+                              "type": "string"
+                            },
+                            "commit": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["root", "commit"],
+                          "additionalProperties": false
+                        },
+                        "phase": {
+                          "type": "string",
+                          "enum": [
+                            "reserved",
+                            "session_creating",
+                            "session_created",
+                            "goal_creating",
+                            "goal_created",
+                            "dispatching",
+                            "submitted",
+                            "blocked",
+                            "dispatch_unknown",
+                            "legacy_conflict"
+                          ]
+                        },
+                        "revision": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["NaN"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["-Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity", "-Infinity", "NaN"]
+                            }
+                          ]
+                        },
+                        "sessionID": {
+                          "type": "string",
+                          "pattern": "^ses"
+                        },
+                        "reason": {
+                          "type": "string"
+                        },
+                        "at": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["NaN"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["-Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity", "-Infinity", "NaN"]
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["id", "itemID", "source", "phase", "revision", "at"],
+                      "additionalProperties": false
+                    },
+                    "token": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["owned", "outcome"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Retain exclusive repair ownership and report existing or conflicting attempts without replay.",
+        "summary": "Reserve one repair attempt",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "type": "object",
+                    "properties": {
+                      "root": {
+                        "type": "string"
+                      },
+                      "commit": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["root", "commit"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["source"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.selfHeal.admit({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/self-heal/{itemID}/repair/step": {
+      "post": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.selfHeal.advance",
+        "parameters": [
+          {
+            "name": "itemID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "itemID": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "object",
+                      "properties": {
+                        "root": {
+                          "type": "string"
+                        },
+                        "commit": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["root", "commit"],
+                      "additionalProperties": false
+                    },
+                    "phase": {
+                      "type": "string",
+                      "enum": [
+                        "reserved",
+                        "session_creating",
+                        "session_created",
+                        "goal_creating",
+                        "goal_created",
+                        "dispatching",
+                        "submitted",
+                        "blocked",
+                        "dispatch_unknown",
+                        "legacy_conflict"
+                      ]
+                    },
+                    "revision": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["NaN"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["Infinity"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["-Infinity"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["Infinity", "-Infinity", "NaN"]
+                        }
+                      ]
+                    },
+                    "sessionID": {
+                      "type": "string",
+                      "pattern": "^ses"
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "at": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["NaN"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["Infinity"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["-Infinity"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["Infinity", "-Infinity", "NaN"]
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["id", "itemID", "source", "phase", "revision", "at"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_Conflict"
+                }
+              }
+            }
+          }
+        },
+        "description": "Record each startup boundary once; retain unknown dispatch outcomes without automatic replay.",
+        "summary": "Advance the owned repair startup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string"
+                  },
+                  "revision": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  },
+                  "phase": {
+                    "type": "string",
+                    "enum": [
+                      "reserved",
+                      "session_creating",
+                      "session_created",
+                      "goal_creating",
+                      "goal_created",
+                      "dispatching",
+                      "submitted",
+                      "blocked",
+                      "dispatch_unknown",
+                      "legacy_conflict"
+                    ]
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  }
+                },
+                "required": ["token", "revision", "phase"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.selfHeal.advance({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/kilocode/self-heal/{itemID}": {
       "get": {
         "tags": ["kilocode"],
@@ -30871,6 +31763,100 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "repair": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "itemID": {
+                          "type": "string"
+                        },
+                        "source": {
+                          "type": "object",
+                          "properties": {
+                            "root": {
+                              "type": "string"
+                            },
+                            "commit": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["root", "commit"],
+                          "additionalProperties": false
+                        },
+                        "phase": {
+                          "type": "string",
+                          "enum": [
+                            "reserved",
+                            "session_creating",
+                            "session_created",
+                            "goal_creating",
+                            "goal_created",
+                            "dispatching",
+                            "submitted",
+                            "blocked",
+                            "dispatch_unknown",
+                            "legacy_conflict"
+                          ]
+                        },
+                        "revision": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["NaN"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["-Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity", "-Infinity", "NaN"]
+                            }
+                          ]
+                        },
+                        "sessionID": {
+                          "type": "string",
+                          "pattern": "^ses"
+                        },
+                        "reason": {
+                          "type": "string"
+                        },
+                        "at": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["NaN"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["-Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity", "-Infinity", "NaN"]
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["id", "itemID", "source", "phase", "revision", "at"],
+                      "additionalProperties": false
+                    },
                     "id": {
                       "type": "string"
                     },
@@ -31146,6 +32132,100 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "repair": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "itemID": {
+                          "type": "string"
+                        },
+                        "source": {
+                          "type": "object",
+                          "properties": {
+                            "root": {
+                              "type": "string"
+                            },
+                            "commit": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["root", "commit"],
+                          "additionalProperties": false
+                        },
+                        "phase": {
+                          "type": "string",
+                          "enum": [
+                            "reserved",
+                            "session_creating",
+                            "session_created",
+                            "goal_creating",
+                            "goal_created",
+                            "dispatching",
+                            "submitted",
+                            "blocked",
+                            "dispatch_unknown",
+                            "legacy_conflict"
+                          ]
+                        },
+                        "revision": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["NaN"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["-Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity", "-Infinity", "NaN"]
+                            }
+                          ]
+                        },
+                        "sessionID": {
+                          "type": "string",
+                          "pattern": "^ses"
+                        },
+                        "reason": {
+                          "type": "string"
+                        },
+                        "at": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["NaN"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["-Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity", "-Infinity", "NaN"]
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["id", "itemID", "source", "phase", "revision", "at"],
+                      "additionalProperties": false
+                    },
                     "id": {
                       "type": "string"
                     },
@@ -43338,6 +44418,129 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["tabs"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["list"]
+              }
+            },
+            "required": ["id", "sessionID", "operation", "action"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["tabs"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["open"]
+              },
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000
+              }
+            },
+            "required": ["id", "sessionID", "operation", "action", "url"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["tabs"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["select"]
+              }
+            },
+            "required": ["id", "sessionID", "tabID", "operation", "action"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["tabs"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["close"]
+              }
+            },
+            "required": ["id", "sessionID", "tabID", "operation", "action"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
               "operation": {
                 "type": "string",
                 "enum": ["navigate"]
@@ -43361,6 +44564,12 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
               "operation": {
                 "type": "string",
                 "enum": ["snapshot"]
@@ -43378,6 +44587,12 @@
               "sessionID": {
                 "type": "string",
                 "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
               "operation": {
                 "type": "string",
@@ -43474,6 +44689,12 @@
               "sessionID": {
                 "type": "string",
                 "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
               "operation": {
                 "type": "string",
@@ -43577,6 +44798,12 @@
               "sessionID": {
                 "type": "string",
                 "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
               "operation": {
                 "type": "string",
@@ -43682,6 +44909,12 @@
               "sessionID": {
                 "type": "string",
                 "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
               "operation": {
                 "type": "string",
@@ -43824,6 +45057,12 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
               "operation": {
                 "type": "string",
                 "enum": ["screenshot"]
@@ -43844,6 +45083,12 @@
               "sessionID": {
                 "type": "string",
                 "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
               "operation": {
                 "type": "string",
@@ -43867,6 +45112,12 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
               "operation": {
                 "type": "string",
                 "enum": ["auth_capture"]
@@ -43889,6 +45140,12 @@
               "sessionID": {
                 "type": "string",
                 "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
               "operation": {
                 "type": "string",
@@ -45820,6 +47077,9 @@
             },
             "required": ["providerID", "modelID"],
             "additionalProperties": false
+          },
+          "accounting": {
+            "$ref": "#/components/schemas/RayaAccounting"
           },
           "generationID": {
             "type": "string"
@@ -56849,6 +58109,70 @@
           {
             "type": "object",
             "properties": {
+              "operation": {
+                "type": "string",
+                "enum": ["tabs"]
+              },
+              "tabs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100,
+                      "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+                    },
+                    "url": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 20000
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "selected": {
+                      "type": "boolean"
+                    },
+                    "openerID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100,
+                      "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+                    }
+                  },
+                  "required": ["id", "url", "title", "selected"],
+                  "additionalProperties": false
+                }
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": ["operation", "tabs"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
               "url": {
                 "type": "string",
                 "minLength": 1,
@@ -56873,6 +58197,12 @@
           {
             "type": "object",
             "properties": {
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
               "url": {
                 "type": "string",
                 "minLength": 1,
@@ -56897,6 +58227,12 @@
           {
             "type": "object",
             "properties": {
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
               "url": {
                 "type": "string",
                 "minLength": 1,
@@ -56921,6 +58257,12 @@
           {
             "type": "object",
             "properties": {
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
               "url": {
                 "type": "string",
                 "minLength": 1,
@@ -56945,6 +58287,12 @@
           {
             "type": "object",
             "properties": {
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
               "url": {
                 "type": "string",
                 "minLength": 1,
@@ -56969,6 +58317,12 @@
           {
             "type": "object",
             "properties": {
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
               "url": {
                 "type": "string",
                 "minLength": 1,
@@ -56993,6 +58347,12 @@
           {
             "type": "object",
             "properties": {
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
               "url": {
                 "type": "string",
                 "minLength": 1,
@@ -57021,6 +58381,12 @@
           {
             "type": "object",
             "properties": {
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
               "url": {
                 "type": "string",
                 "minLength": 1,
@@ -57045,6 +58411,12 @@
           {
             "type": "object",
             "properties": {
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
               "url": {
                 "type": "string",
                 "minLength": 1,
@@ -57119,6 +58491,12 @@
           {
             "type": "object",
             "properties": {
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
               "url": {
                 "type": "string",
                 "minLength": 1,
@@ -59025,6 +60403,129 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["tabs"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["list"]
+              }
+            },
+            "required": ["id", "sessionID", "operation", "action"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["tabs"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["open"]
+              },
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000
+              }
+            },
+            "required": ["id", "sessionID", "operation", "action", "url"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["tabs"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["select"]
+              }
+            },
+            "required": ["id", "sessionID", "tabID", "operation", "action"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["tabs"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["close"]
+              }
+            },
+            "required": ["id", "sessionID", "tabID", "operation", "action"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
               "operation": {
                 "type": "string",
                 "enum": ["navigate"]
@@ -59048,6 +60549,12 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
               "operation": {
                 "type": "string",
                 "enum": ["snapshot"]
@@ -59065,6 +60572,12 @@
               "sessionID": {
                 "type": "string",
                 "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
               "operation": {
                 "type": "string",
@@ -59161,6 +60674,12 @@
               "sessionID": {
                 "type": "string",
                 "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
               "operation": {
                 "type": "string",
@@ -59264,6 +60783,12 @@
               "sessionID": {
                 "type": "string",
                 "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
               "operation": {
                 "type": "string",
@@ -59369,6 +60894,12 @@
               "sessionID": {
                 "type": "string",
                 "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
               "operation": {
                 "type": "string",
@@ -59503,6 +61034,12 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
               "operation": {
                 "type": "string",
                 "enum": ["screenshot"]
@@ -59523,6 +61060,12 @@
               "sessionID": {
                 "type": "string",
                 "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
               "operation": {
                 "type": "string",
@@ -59546,6 +61089,12 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
               "operation": {
                 "type": "string",
                 "enum": ["auth_capture"]
@@ -59568,6 +61117,12 @@
               "sessionID": {
                 "type": "string",
                 "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
               "operation": {
                 "type": "string",
@@ -62273,6 +63828,65 @@
           }
         },
         "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "RayaAccounting": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "number",
+            "enum": [1]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["reported", "estimated", "partial", "unknown"]
+          },
+          "source": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string",
+            "enum": ["USD"]
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0
+          },
+          "unit": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "buckets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "tokens": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "rate": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "required": ["name", "tokens"],
+              "additionalProperties": false
+            }
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["version", "status", "source", "buckets", "issues"],
         "additionalProperties": false
       },
       "EventMessagePartUpdated": {

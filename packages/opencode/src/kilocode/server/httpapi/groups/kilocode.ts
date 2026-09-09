@@ -768,6 +768,46 @@ export const KilocodeApi = HttpApi.make("kilocode")
             description: "Classify, deduplicate, and persist one globally visible Raya feedback item.",
           }),
         ),
+        HttpApiEndpoint.get("selfHealOutcome", `${KilocodePaths.selfHealItem}/repair`, {
+          params: { itemID: Schema.String },
+          query: WorkspaceRoutingQuery,
+          success: RayaSelfHeal.Repair,
+          error: HttpApiError.NotFound,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.selfHeal.outcome",
+            summary: "Read a retained repair attempt",
+            description: "Read the durable repair journal even when its original backlog item is unavailable.",
+          }),
+        ),
+        HttpApiEndpoint.post("selfHealAdmit", `${KilocodePaths.selfHealItem}/repair`, {
+          params: { itemID: Schema.String },
+          query: WorkspaceRoutingQuery,
+          payload: RayaSelfHeal.RepairAdmission,
+          success: RayaSelfHeal.RepairGranted,
+          error: HttpApiError.NotFound,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.selfHeal.admit",
+            summary: "Reserve one repair attempt",
+            description:
+              "Retain exclusive repair ownership and report existing or conflicting attempts without replay.",
+          }),
+        ),
+        HttpApiEndpoint.post("selfHealAdvance", `${KilocodePaths.selfHealItem}/repair/step`, {
+          params: { itemID: Schema.String },
+          query: WorkspaceRoutingQuery,
+          payload: RayaSelfHeal.RepairAdvance,
+          success: RayaSelfHeal.Repair,
+          error: HttpApiError.Conflict,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.selfHeal.advance",
+            summary: "Advance the owned repair startup",
+            description:
+              "Record each startup boundary once; retain unknown dispatch outcomes without automatic replay.",
+          }),
+        ),
         HttpApiEndpoint.get("selfHealList", KilocodePaths.selfHeal, {
           query: WorkspaceRoutingQuery,
           success: described(Schema.Array(RayaSelfHeal.Item), "Global self-heal backlog"),

@@ -1,11 +1,11 @@
 ---
 name: browser-runtime
-description: Capability reference for Raya browser skill version 2.
+description: Capability reference for Raya browser skill version 3.
 metadata:
-  version: "2"
+  version: "3"
 ---
 
-# Browser runtime contract, version 2
+# Browser runtime contract, version 3
 
 ## Execution and recovery
 
@@ -17,16 +17,21 @@ This reference describes the model-facing BrowserTools in `kilocode/tool/browser
 
 | Tool | Parameters | Evidence and limits |
 |---|---|---|
-| `browser_navigate` | `url` (absolute URL) | Resulting shared page URL/title; inspect a fresh snapshot for controls. |
-| `browser_snapshot` | `{}` | Accessibility-oriented current page snapshot; it may omit visual or off-frame content. |
-| `browser_click` | `selector` | Action result, not a saved-record guarantee. |
-| `browser_type` | `selector`, `text`, optional `submit` | Replaces editable text; `submit: true` presses Enter and may mutate external state. Defaults false. |
-| `browser_select` | `selector`, `values` (array) | Select element values; verify the resulting selection. |
-| `browser_scroll` | `delta_y`, optional `delta_x`, optional `selector` | Scroll page or observed container by pixels. |
-| `browser_screenshot` | optional `full_page` | Image attachment for the current rendered page; full_page defaults false. |
-| `browser_evaluate` | `expression` | Bounded serialized page evaluation. Prefer ordinary interaction tools; use narrowly scoped DOM inspection when necessary. |
-| `browser_auth_capture` | `name` | Captures authenticated storage state for smoke reuse; output contains path/counts, not permission to read or publish secrets. |
-| `browser_smoke_test` | `name`, optional `mode`, `steps` | Structured pass/fail, run ID, artifact and failing step; inspect assertions, not only tool completion. |
+| `browser_tabs` | `action: "list"`; `action: "open", url`; `action: "select"` or `"close", tab_id` | Stable IDs, URL/title, selected flag and popup opener ID. Opening selects the new tab; popups do not. |
+| `browser_navigate` | optional `tab_id`, `url` (absolute URL) | Resulting shared page URL/title; inspect a fresh snapshot for controls. |
+| `browser_snapshot` | optional `tab_id` | Accessibility-oriented current page snapshot; it may omit visual or off-frame content. |
+| `browser_click` | `tab_id`, `selector` | Action result, not a saved-record guarantee. |
+| `browser_type` | `tab_id`, `selector`, `text`, optional `submit` | Replaces editable text; `submit: true` presses Enter and may mutate external state. Defaults false. |
+| `browser_select` | `tab_id`, `selector`, `values` (array) | Select element values; verify the resulting selection. |
+| `browser_scroll` | `tab_id`, `delta_y`, optional `delta_x`, optional `selector` | Scroll page or observed container by pixels. |
+| `browser_screenshot` | optional `tab_id`, optional `full_page` | Image attachment for the current rendered page; full_page defaults false. |
+| `browser_evaluate` | `tab_id`, `expression` | Bounded serialized page evaluation. Prefer ordinary interaction tools; use narrowly scoped DOM inspection when necessary. |
+| `browser_auth_capture` | `tab_id`, `name` | Captures authenticated storage state for smoke reuse; output contains path/counts, not permission to read or publish secrets. |
+| `browser_smoke_test` | `tab_id`, `name`, optional `mode`, `steps` | Structured pass/fail, run ID, artifact and failing step; inspect assertions, not only tool completion. |
+
+Every page result identifies its tab; evaluation text and screenshot descriptions include that identity. Pass the observed `tab_id` for mutations, authentication capture and smoke work. Navigation/snapshot/screenshot may omit it only for the single original tab before another tab has ever existed. After opening a tab or popup, list tabs and use explicit IDs even if only one tab remains. IDs are opaque, never reused in a host lifetime, and invalid after restart; closed/unknown IDs fail without opening a replacement. Selecting a tab changes the viewer, not the page identity bound to already queued work. The panel binds input to the displayed frame and rejects stale selection. Closing the selected/last tab leaves no selected page until you select or open one.
+
+Smoke work uses the identified shared page. Authentication storage and cookie restoration belong to the shared browser context, not exclusively to a tab; tab IDs do not isolate accounts. Frame selection remains unsupported.
 
 The `selector` field accepts a legacy selector string or one of these typed targets:
 
@@ -46,4 +51,4 @@ Smoke `steps` is an array of 1-100 entries. Each entry has `id`, `title`, option
 
 Use `mode: "exploratory"` for steps derived from current intent and observations; otherwise the default is `scripted`. The first smoke run captures current authentication when no saved state exists. Capture names identify reusable state: confirm the account and intended target before reuse; do not assume current page login changed an existing saved capture. Scope network assertions to the intended endpoint and status, and console assertions to the relevant messages. Attach a visible-state assertion to user-visible outcomes.
 
-Version 2 has no model-facing tab inventory/switch, popup selection, frame selection, coordinate click, upload, download completion tracking, viewport resize, or automated login/challenge handover operation. Do not invent tool names or emulate missing transfer/identity controls through evaluation or shell commands. A relevant connector or explicitly authorized manual user step can supply missing work; inspect the destination afterward and identify which evidence the browser could not obtain. These limits are unfinished runtime capabilities, not completed acceptance coverage.
+Version 3 has no frame selection, coordinate click, upload, download completion tracking, viewport resize, or automated login/challenge handover operation. Do not invent tool names or emulate missing transfer/identity controls through evaluation or shell commands. A relevant connector or explicitly authorized manual user step can supply missing work; inspect the destination afterward and identify which evidence the browser could not obtain. These limits are unfinished runtime capabilities, not completed acceptance coverage.

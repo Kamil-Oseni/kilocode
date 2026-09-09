@@ -11,6 +11,7 @@ import { ascending } from "../identifier"
 import { SessionID } from "../session-id"
 import { WorkspaceID } from "../workspace-id"
 import { PermissionV1 } from "./permission"
+import { Accounting } from "../kilocode/accounting" // kilocode_change
 
 const Timestamp = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))
 
@@ -250,6 +251,7 @@ export const StepFinishPart = Schema.Struct({
       modelID: Model.ID,
     }),
   ),
+  accounting: optional(Accounting),
   generationID: Schema.optional(Schema.String),
   vercelID: Schema.optional(Schema.String),
   metrics: Schema.optional(

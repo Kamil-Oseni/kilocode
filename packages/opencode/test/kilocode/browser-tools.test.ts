@@ -7,6 +7,7 @@ import { Selector, SmokeStep, type Result } from "@/kilocode/browser/protocol"
 import { Browser } from "@/kilocode/browser/service"
 import { Permission } from "@/permission"
 import {
+  BrowserTabsTool,
   BrowserAuthCaptureTool,
   BrowserClickTool,
   BrowserEvaluateTool,
@@ -26,6 +27,7 @@ import { testEffect } from "../lib/effect"
 
 const calls: Browser.Input[] = []
 function result(input: Browser.Input): Result {
+  if (input.operation === "tabs") return { operation: "tabs", tabs: [] }
   if (input.operation === "snapshot")
     return { operation: "snapshot", url: "https://example.com", snapshot: 'button "Continue" [ref=e1]' }
   if (input.operation === "screenshot")
@@ -91,6 +93,7 @@ test("auto-approves every native browser action in VS Code", () => {
   try {
     const rules = KiloAgent.prepare({}).defaultsPatch
     for (const permission of [
+      "browser_tabs",
       "browser_navigate",
       "browser_snapshot",
       "browser_click",
@@ -138,6 +141,40 @@ describe("browser host tools", () => {
   })
 
   it.instance(
+    "forwards stable tab commands and refuses missing mutation identity",
+    () =>
+      Effect.gen(function* () {
+        calls.length = 0
+        const ctx = context([])
+        const tabs = yield* BrowserTabsTool.pipe(
+          Effect.provideService(Browser.Service, host),
+          Effect.flatMap(Tool.init),
+        )
+        yield* tabs.execute({ action: "list" }, ctx)
+        yield* tabs.execute({ action: "open", url: "https://example.com" }, ctx)
+        yield* tabs.execute({ action: "select", tab_id: "tab_seen" }, ctx)
+        yield* tabs.execute({ action: "close", tab_id: "tab_seen" }, ctx)
+        expect(calls.map((call) => (call.operation === "tabs" ? call.action : call.operation))).toEqual([
+          "list",
+          "open",
+          "select",
+          "close",
+        ])
+        expect(calls[2]).toMatchObject({ tabID: "tab_seen" })
+        const click = yield* BrowserClickTool.pipe(
+          Effect.provideService(Browser.Service, host),
+          Effect.flatMap(Tool.init),
+        )
+        const failed = yield* click
+          .execute({ selector: "#save" } as { selector: string; tab_id: string }, ctx)
+          .pipe(Effect.exit)
+        expect(failed._tag).toBe("Failure")
+        expect(calls).toHaveLength(4)
+      }),
+    60_000,
+  )
+
+  it.instance(
     "semantic targets reach the host with stable permission patterns",
     () =>
       Effect.gen(function* () {
@@ -148,13 +185,16 @@ describe("browser host tools", () => {
           Effect.flatMap(Tool.init),
         )
         const selector = { kind: "role" as const, role: "button", name: "Save", scope: "#form" }
-        yield* tool.execute({ selector }, context(asks))
+        yield* tool.execute({ tab_id: "tab_test", selector }, context(asks))
         expect(calls[0]).toMatchObject({ operation: "click", selector })
         expect(asks[0].patterns).toEqual([JSON.stringify(selector)])
         expect(asks[0].always).toEqual([JSON.stringify(selector)])
         const count = calls.length
         const failed = yield* tool
-          .execute({ selector: { kind: "role", role: "button" } as typeof Selector.Type }, context(asks))
+          .execute(
+            { tab_id: "tab_test", selector: { kind: "role", role: "button" } as typeof Selector.Type },
+            context(asks),
+          )
           .pipe(Effect.exit)
         expect(failed._tag).toBe("Failure")
         expect(calls).toHaveLength(count)
@@ -212,15 +252,16 @@ describe("browser host tools", () => {
 
         yield* navigate.execute({ url: "https://example.com" }, ctx)
         const tree = yield* snapshot.execute({}, ctx)
-        yield* click.execute({ selector: "e1" }, ctx)
-        yield* type.execute({ selector: "#name", text: "Raya", submit: true }, ctx)
-        yield* select.execute({ selector: "#role", values: ["admin"] }, ctx)
-        yield* scroll.execute({ delta_x: 4, delta_y: 500, selector: "#main" }, ctx)
+        yield* click.execute({ tab_id: "tab_test", selector: "e1" }, ctx)
+        yield* type.execute({ tab_id: "tab_test", selector: "#name", text: "Raya", submit: true }, ctx)
+        yield* select.execute({ tab_id: "tab_test", selector: "#role", values: ["admin"] }, ctx)
+        yield* scroll.execute({ tab_id: "tab_test", delta_x: 4, delta_y: 500, selector: "#main" }, ctx)
         const image = yield* screenshot.execute({ full_page: true }, ctx)
-        const value = yield* evaluate.execute({ expression: "() => ({ ok: true })" }, ctx)
-        yield* auth.execute({ name: "sample-app" }, ctx)
+        const value = yield* evaluate.execute({ tab_id: "tab_test", expression: "() => ({ ok: true })" }, ctx)
+        yield* auth.execute({ tab_id: "tab_test", name: "sample-app" }, ctx)
         const report = yield* smoke.execute(
           {
+            tab_id: "tab_test",
             name: "sample-app",
             mode: "scripted",
             steps: [
@@ -265,7 +306,7 @@ describe("browser host tools", () => {
           "browser_smoke_test",
         ])
         expect(tree.output).toContain("Continue")
-        expect(value.output).toBe('{"ok":true}')
+        expect(value.output).toContain('{"ok":true}')
         expect(navigate.description).toContain("browse") // raya_change - plain-English Milestone F activation
         expect(snapshot.description).toContain("inspect a website")
         expect(smoke.description).toContain("plain-English")

@@ -2,9 +2,10 @@
 export type SelfHealCommand =
   | { kind: "usage"; notice: string }
   | { kind: "list" }
+  | { kind: "inspect"; id: string }
   | { kind: "capture"; description: string }
 
-const usage = "Usage: /self-heal <describe the issue you noticed> or /self-heal list"
+const usage = "Usage: /self-heal <describe the issue you noticed> or /self-heal list or /self-heal inspect <itemID>"
 
 export function parseSelfHealCommand(text: string): SelfHealCommand | undefined {
   const match = text.trim().match(/^\/self-heal(?:\s+([\s\S]*))?$/i)
@@ -12,6 +13,10 @@ export function parseSelfHealCommand(text: string): SelfHealCommand | undefined 
   const description = match[1]?.trim()
   if (!description) return { kind: "usage", notice: usage }
   if (description.toLowerCase() === "list") return { kind: "list" }
+  if (/^inspect(?:\s|$)/i.test(description)) {
+    const id = description.match(/^inspect\s+(heal_[a-z0-9_-]+)$/i)?.[1]
+    return id ? { kind: "inspect", id } : { kind: "usage", notice: usage }
+  }
   return { kind: "capture", description }
 }
 

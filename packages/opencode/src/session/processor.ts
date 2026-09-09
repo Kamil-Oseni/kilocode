@@ -662,6 +662,7 @@ const layer = Layer.effect(
               ...(metrics ? { metrics } : {}), // kilocode_change
               tokens: usage.tokens,
               cost: usage.cost,
+              accounting: usage.accounting, // kilocode_change
             })
             // kilocode_change start - surface output limit stops, with a stronger message for reasoning-only stops
             const warn = KiloSessionProcessor.lengthWarning({ msg: ctx.assistantMessage, step: ctx.step })

@@ -188,6 +188,7 @@ import { stopSessionProcesses } from "./kilo-provider/background-process"
 import { sandboxDefault, sandboxSessionMetadata } from "./shared/sandbox-session"
 import { goalPrompt, parseGoalCommand, type GoalState } from "./shared/goal" // raya_change - Milestone A native goal mode
 import { parseSelfHealCommand } from "./shared/self-heal"
+import { summary as selfHealSummary, inspect as inspectSelfHeal } from "./self-heal/summary"
 import { capture as captureSelfHeal } from "./self-heal/intake" // raya_change - global autonomous feedback repair
 import { SpeechService } from "./speech/service" // raya_change - Milestone H voice orchestration
 import {
@@ -4369,17 +4370,16 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       return { handled: true }
     }
     const store = path.join(this.extensionContext?.globalStorageUri.fsPath ?? this.extensionUri.fsPath, "self-heal")
+    if (command.kind === "inspect") {
+      await vscode.workspace.fs.createDirectory(vscode.Uri.file(store))
+      const notice = await inspectSelfHeal(this.client!, command.id, store)
+      this.postMessage({ type: "goalState", sessionID: reporter, notice })
+      return { handled: true }
+    }
     if (command.kind === "list") {
       await vscode.workspace.fs.createDirectory(vscode.Uri.file(store))
       const { data: items } = await this.client!.kilocode.selfHeal.list({ directory: store }, { throwOnError: true })
-      const summary = items.length
-        ? items
-            .map(
-              (item) =>
-                `${item.id} | ${item.status} | ${item.category}/${item.severity} | ${item.title}${item.workSessionID ? ` | session ${item.workSessionID}` : ""}`,
-            )
-            .join("\n")
-        : "No self-heal feedback has been recorded."
+      const summary = items.length ? items.map(selfHealSummary).join("\n") : "No self-heal feedback has been recorded."
       return {
         handled: false,
         context: `Present this global Raya self-heal backlog clearly. Do not start or duplicate work:\n${summary}`,

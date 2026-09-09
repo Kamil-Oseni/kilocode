@@ -1,3 +1,4 @@
+import { costLabel } from "../../context/accounting"
 import type { Component } from "solid-js"
 import { For, Show, createMemo } from "solid-js"
 import { Collapsible } from "@kilocode/kilo-ui/collapsible"
@@ -18,23 +19,8 @@ export const TaskUsage: Component<TaskUsageProps> = (props) => {
   const language = useLanguage()
   const provider = useProvider()
   const groups = createMemo(() => groupModelUsage(props.usage?.models ?? [], provider.providers()))
-  const money = createMemo(
-    () =>
-      new Intl.NumberFormat(language.locale(), {
-        style: "currency",
-        currency: "USD",
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 6,
-      }),
-  )
-
   const number = formatCompactCount
   const count = (value: number) => value.toLocaleString(language.locale())
-  const cost = (input: number) => {
-    const value = Math.max(0, Number.isFinite(input) ? input : 0)
-    if (value > 0 && value < 0.000001) return "<$0.000001"
-    return money().format(value)
-  }
   const renderSummary = () => (
     <>
       <span class="task-header-tokens-label">Tokens</span>
@@ -79,7 +65,7 @@ export const TaskUsage: Component<TaskUsageProps> = (props) => {
                           {modelUsageName(model, provider.providers())}
                         </div>
                         <div class="task-header-usage-meta">
-                          {model.steps} {model.steps === 1 ? "step" : "steps"} · {cost(model.cost)}
+                          {model.steps} {model.steps === 1 ? "step" : "steps"} · {costLabel(model, language.locale())}
                         </div>
                         <div class="task-header-usage-meta">
                           In {count(model.tokens.input)} · Out {count(model.tokens.output)} · Reason{" "}

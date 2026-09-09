@@ -471,17 +471,70 @@ export type BrowserRequest =
   | {
       id: BrowserRequestId
       sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
+      operation: "tabs"
+      action: "list"
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
+      operation: "tabs"
+      action: "open"
+      url: string
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID: string
+      operation: "tabs"
+      action: "select"
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID: string
+      operation: "tabs"
+      action: "close"
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
       operation: "navigate"
       url: string
     }
   | {
       id: BrowserRequestId
       sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
       operation: "snapshot"
     }
   | {
       id: BrowserRequestId
       sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
       operation: "click"
       /**
        * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
@@ -508,6 +561,10 @@ export type BrowserRequest =
   | {
       id: BrowserRequestId
       sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
       operation: "type"
       /**
        * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
@@ -536,6 +593,10 @@ export type BrowserRequest =
   | {
       id: BrowserRequestId
       sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
       operation: "select"
       /**
        * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
@@ -563,6 +624,10 @@ export type BrowserRequest =
   | {
       id: BrowserRequestId
       sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
       operation: "scroll"
       deltaX: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       deltaY: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -588,24 +653,40 @@ export type BrowserRequest =
   | {
       id: BrowserRequestId
       sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
       operation: "screenshot"
       fullPage: boolean
     }
   | {
       id: BrowserRequestId
       sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
       operation: "evaluate"
       expression: string
     }
   | {
       id: BrowserRequestId
       sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
       operation: "auth_capture"
       name: string
     }
   | {
       id: BrowserRequestId
       sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
       operation: "smoke"
       name: string
       mode: "scripted" | "exploratory"
@@ -1198,6 +1279,7 @@ export type StepFinishPart = {
     providerID: string
     modelID: string
   }
+  accounting?: RayaAccounting
   generationID?: string
   vercelID?: string
   metrics?: {
@@ -4767,42 +4849,92 @@ export type NotebookFailure = {
 
 export type BrowserResult =
   | {
+      operation: "tabs"
+      tabs: Array<{
+        /**
+         * Opaque observed browser tab identity; never infer from a tab index or URL.
+         */
+        id: string
+        url: string
+        title: string
+        selected: boolean
+        /**
+         * Opaque observed browser tab identity; never infer from a tab index or URL.
+         */
+        openerID?: string
+      }>
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
+      url?: string
+      title?: string
+    }
+  | {
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
       url?: string
       title?: string
       operation: "navigate"
       snapshot?: string
     }
   | {
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
       url?: string
       title?: string
       operation: "snapshot"
       snapshot: string
     }
   | {
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
       url?: string
       title?: string
       operation: "click"
       snapshot?: string
     }
   | {
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
       url?: string
       title?: string
       operation: "type"
       snapshot?: string
     }
   | {
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
       url?: string
       title?: string
       operation: "select"
       snapshot?: string
     }
   | {
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
       url?: string
       title?: string
       operation: "scroll"
       snapshot?: string
     }
   | {
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
       url?: string
       title?: string
       operation: "screenshot"
@@ -4810,12 +4942,20 @@ export type BrowserResult =
       data: string
     }
   | {
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
       url?: string
       title?: string
       operation: "evaluate"
       output: string
     }
   | {
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
       url?: string
       title?: string
       operation: "auth_capture"
@@ -4825,6 +4965,10 @@ export type BrowserResult =
       origins: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     }
   | {
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
       url?: string
       title?: string
       operation: "smoke"
@@ -5390,17 +5534,70 @@ export type BrowserRequest1 =
   | {
       id: BrowserRequestId
       sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
+      operation: "tabs"
+      action: "list"
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
+      operation: "tabs"
+      action: "open"
+      url: string
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID: string
+      operation: "tabs"
+      action: "select"
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID: string
+      operation: "tabs"
+      action: "close"
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
       operation: "navigate"
       url: string
     }
   | {
       id: BrowserRequestId
       sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
       operation: "snapshot"
     }
   | {
       id: BrowserRequestId
       sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
       operation: "click"
       /**
        * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
@@ -5427,6 +5624,10 @@ export type BrowserRequest1 =
   | {
       id: BrowserRequestId
       sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
       operation: "type"
       /**
        * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
@@ -5455,6 +5656,10 @@ export type BrowserRequest1 =
   | {
       id: BrowserRequestId
       sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
       operation: "select"
       /**
        * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
@@ -5482,6 +5687,10 @@ export type BrowserRequest1 =
   | {
       id: BrowserRequestId
       sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
       operation: "scroll"
       deltaX: number | "NaN" | "Infinity" | "-Infinity"
       deltaY: number | "NaN" | "Infinity" | "-Infinity"
@@ -5507,24 +5716,40 @@ export type BrowserRequest1 =
   | {
       id: BrowserRequestId
       sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
       operation: "screenshot"
       fullPage: boolean
     }
   | {
       id: BrowserRequestId
       sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
       operation: "evaluate"
       expression: string
     }
   | {
       id: BrowserRequestId
       sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
       operation: "auth_capture"
       name: string
     }
   | {
       id: BrowserRequestId
       sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID?: string
       operation: "smoke"
       name: string
       mode: "scripted" | "exploratory"
@@ -6142,6 +6367,22 @@ export type EventMessageRemoved = {
     sessionID: string
     messageID: string
   }
+}
+
+export type RayaAccounting = {
+  version: 1
+  status: "reported" | "estimated" | "partial" | "unknown"
+  source: string
+  currency?: "USD"
+  amount?: number
+  unit?: string
+  quantity?: number
+  buckets: Array<{
+    name: string
+    tokens: number
+    rate?: number
+  }>
+  issues: Array<string>
 }
 
 export type EventMessagePartUpdated = {
@@ -17835,6 +18076,14 @@ export type KilocodeProjectUsageResponses = {
     totals: {
       steps: number
       cost: number
+      accounting?: {
+        amount: number
+        reported: number
+        estimated: number
+        partial: number
+        unknown: number
+        legacy: number
+      }
       tokens: {
         input: number
         output: number
@@ -17850,6 +18099,14 @@ export type KilocodeProjectUsageResponses = {
       modelID: string
       steps: number
       cost: number
+      accounting?: {
+        amount: number
+        reported: number
+        estimated: number
+        partial: number
+        unknown: number
+        legacy: number
+      }
       tokens: {
         input: number
         output: number
@@ -18302,6 +18559,14 @@ export type KilocodeSessionModelUsageResponses = {
     totals: {
       steps: number
       cost: number
+      accounting?: {
+        amount: number
+        reported: number
+        estimated: number
+        partial: number
+        unknown: number
+        legacy: number
+      }
       tokens: {
         input: number
         output: number
@@ -18317,6 +18582,14 @@ export type KilocodeSessionModelUsageResponses = {
       modelID: string
       steps: number
       cost: number
+      accounting?: {
+        amount: number
+        reported: number
+        estimated: number
+        partial: number
+        unknown: number
+        legacy: number
+      }
       tokens: {
         input: number
         output: number
@@ -20991,6 +21264,29 @@ export type KilocodeSelfHealListResponses = {
    * Global self-heal backlog
    */
   200: Array<{
+    repair?: {
+      id: string
+      itemID: string
+      source: {
+        root: string
+        commit: string
+      }
+      phase:
+        | "reserved"
+        | "session_creating"
+        | "session_created"
+        | "goal_creating"
+        | "goal_created"
+        | "dispatching"
+        | "submitted"
+        | "blocked"
+        | "dispatch_unknown"
+        | "legacy_conflict"
+      revision: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      sessionID?: string
+      reason?: string
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
     id: string
     fingerprint: string
     title: string
@@ -21048,6 +21344,29 @@ export type KilocodeSelfHealCreateResponses = {
    * Triaged self-heal feedback
    */
   200: {
+    repair?: {
+      id: string
+      itemID: string
+      source: {
+        root: string
+        commit: string
+      }
+      phase:
+        | "reserved"
+        | "session_creating"
+        | "session_created"
+        | "goal_creating"
+        | "goal_created"
+        | "dispatching"
+        | "submitted"
+        | "blocked"
+        | "dispatch_unknown"
+        | "legacy_conflict"
+      revision: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      sessionID?: string
+      reason?: string
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
     id: string
     fingerprint: string
     title: string
@@ -21077,6 +21396,198 @@ export type KilocodeSelfHealCreateResponses = {
 }
 
 export type KilocodeSelfHealCreateResponse = KilocodeSelfHealCreateResponses[keyof KilocodeSelfHealCreateResponses]
+
+export type KilocodeSelfHealOutcomeData = {
+  body?: never
+  path: {
+    itemID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/self-heal/{itemID}/repair"
+}
+
+export type KilocodeSelfHealOutcomeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeSelfHealOutcomeError = KilocodeSelfHealOutcomeErrors[keyof KilocodeSelfHealOutcomeErrors]
+
+export type KilocodeSelfHealOutcomeResponses = {
+  /**
+   * Success
+   */
+  200: {
+    id: string
+    itemID: string
+    source: {
+      root: string
+      commit: string
+    }
+    phase:
+      | "reserved"
+      | "session_creating"
+      | "session_created"
+      | "goal_creating"
+      | "goal_created"
+      | "dispatching"
+      | "submitted"
+      | "blocked"
+      | "dispatch_unknown"
+      | "legacy_conflict"
+    revision: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    sessionID?: string
+    reason?: string
+    at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+}
+
+export type KilocodeSelfHealOutcomeResponse = KilocodeSelfHealOutcomeResponses[keyof KilocodeSelfHealOutcomeResponses]
+
+export type KilocodeSelfHealAdmitData = {
+  body?: {
+    source: {
+      root: string
+      commit: string
+    }
+  }
+  path: {
+    itemID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/self-heal/{itemID}/repair"
+}
+
+export type KilocodeSelfHealAdmitErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeSelfHealAdmitError = KilocodeSelfHealAdmitErrors[keyof KilocodeSelfHealAdmitErrors]
+
+export type KilocodeSelfHealAdmitResponses = {
+  /**
+   * Success
+   */
+  200: {
+    owned: boolean
+    outcome: {
+      id: string
+      itemID: string
+      source: {
+        root: string
+        commit: string
+      }
+      phase:
+        | "reserved"
+        | "session_creating"
+        | "session_created"
+        | "goal_creating"
+        | "goal_created"
+        | "dispatching"
+        | "submitted"
+        | "blocked"
+        | "dispatch_unknown"
+        | "legacy_conflict"
+      revision: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      sessionID?: string
+      reason?: string
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
+    token?: string
+  }
+}
+
+export type KilocodeSelfHealAdmitResponse = KilocodeSelfHealAdmitResponses[keyof KilocodeSelfHealAdmitResponses]
+
+export type KilocodeSelfHealAdvanceData = {
+  body?: {
+    token: string
+    revision: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    phase:
+      | "reserved"
+      | "session_creating"
+      | "session_created"
+      | "goal_creating"
+      | "goal_created"
+      | "dispatching"
+      | "submitted"
+      | "blocked"
+      | "dispatch_unknown"
+      | "legacy_conflict"
+    sessionID?: string
+  }
+  path: {
+    itemID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/self-heal/{itemID}/repair/step"
+}
+
+export type KilocodeSelfHealAdvanceErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeSelfHealAdvanceError = KilocodeSelfHealAdvanceErrors[keyof KilocodeSelfHealAdvanceErrors]
+
+export type KilocodeSelfHealAdvanceResponses = {
+  /**
+   * Success
+   */
+  200: {
+    id: string
+    itemID: string
+    source: {
+      root: string
+      commit: string
+    }
+    phase:
+      | "reserved"
+      | "session_creating"
+      | "session_created"
+      | "goal_creating"
+      | "goal_created"
+      | "dispatching"
+      | "submitted"
+      | "blocked"
+      | "dispatch_unknown"
+      | "legacy_conflict"
+    revision: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    sessionID?: string
+    reason?: string
+    at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+}
+
+export type KilocodeSelfHealAdvanceResponse = KilocodeSelfHealAdvanceResponses[keyof KilocodeSelfHealAdvanceResponses]
 
 export type KilocodeSelfHealGetData = {
   body?: never
@@ -21108,6 +21619,29 @@ export type KilocodeSelfHealGetResponses = {
    * Self-heal feedback item
    */
   200: {
+    repair?: {
+      id: string
+      itemID: string
+      source: {
+        root: string
+        commit: string
+      }
+      phase:
+        | "reserved"
+        | "session_creating"
+        | "session_created"
+        | "goal_creating"
+        | "goal_created"
+        | "dispatching"
+        | "submitted"
+        | "blocked"
+        | "dispatch_unknown"
+        | "legacy_conflict"
+      revision: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      sessionID?: string
+      reason?: string
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
     id: string
     fingerprint: string
     title: string
@@ -21187,6 +21721,29 @@ export type KilocodeSelfHealUpdateResponses = {
    * Updated self-heal feedback
    */
   200: {
+    repair?: {
+      id: string
+      itemID: string
+      source: {
+        root: string
+        commit: string
+      }
+      phase:
+        | "reserved"
+        | "session_creating"
+        | "session_created"
+        | "goal_creating"
+        | "goal_created"
+        | "dispatching"
+        | "submitted"
+        | "blocked"
+        | "dispatch_unknown"
+        | "legacy_conflict"
+      revision: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      sessionID?: string
+      reason?: string
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
     id: string
     fingerprint: string
     title: string

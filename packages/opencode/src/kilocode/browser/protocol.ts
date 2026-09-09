@@ -21,7 +21,30 @@ export const Selector = Schema.Union([
 })
 const Url = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(20_000))
 const Text = Schema.String.check(Schema.isMaxLength(200_000))
-const Base = { id: RequestID, sessionID: SessionID }
+export const TabID = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100)).annotate({
+  description: "Opaque observed browser tab identity; never infer from a tab index or URL.",
+})
+const Base = { id: RequestID, sessionID: SessionID, tabID: Schema.optional(TabID) }
+export const TabsRequest = Schema.Union([
+  Schema.Struct({ ...Base, operation: Schema.Literal("tabs"), action: Schema.Literal("list") }),
+  Schema.Struct({ ...Base, operation: Schema.Literal("tabs"), action: Schema.Literal("open"), url: Url }),
+  Schema.Struct({ ...Base, operation: Schema.Literal("tabs"), action: Schema.Literal("select"), tabID: TabID }),
+  Schema.Struct({ ...Base, operation: Schema.Literal("tabs"), action: Schema.Literal("close"), tabID: TabID }),
+])
+export const Tab = Schema.Struct({
+  id: TabID,
+  url: Url,
+  title: Schema.String,
+  selected: Schema.Boolean,
+  openerID: Schema.optional(TabID),
+})
+export const TabsResult = Schema.Struct({
+  operation: Schema.Literal("tabs"),
+  tabs: Schema.Array(Tab),
+  tabID: Schema.optional(TabID),
+  url: Schema.optional(Url),
+  title: Schema.optional(Schema.String),
+})
 
 export const NavigateRequest = Schema.Struct({
   ...Base,
@@ -122,6 +145,7 @@ export const SmokeRequest = Schema.Struct({
 // raya_change end
 
 export const Request = Schema.Union([
+  TabsRequest,
   NavigateRequest,
   SnapshotRequest,
   ClickRequest,
@@ -136,6 +160,7 @@ export const Request = Schema.Union([
 export type Request = Schema.Schema.Type<typeof Request>
 
 const ResultBase = {
+  tabID: Schema.optional(TabID),
   url: Schema.optional(Url),
   title: Schema.optional(Schema.String.check(Schema.isMaxLength(10_000))),
 }
@@ -215,6 +240,7 @@ export const SmokeResult = Schema.Struct({
 // raya_change end
 
 export const Result = Schema.Union([
+  TabsResult,
   NavigateResult,
   SnapshotResult,
   ClickResult,

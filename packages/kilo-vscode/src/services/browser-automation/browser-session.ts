@@ -1,13 +1,14 @@
 // raya_change - Milestone F shared persistent Playwright browser session
 import { mkdir } from "node:fs/promises"
 import { join } from "node:path"
+import { randomUUID } from "node:crypto"
 import { Script } from "node:vm"
 import { chromium } from "playwright-core"
 import { locate, TargetError, type BrowserTarget, type TargetPage } from "./browser-target"
 import { BrowserSmoke } from "./browser-smoke"
 import type { SmokeConsole, SmokeCookie, SmokeInput, SmokeOrigin, SmokeResponse, SmokeResult } from "./browser-smoke"
 
-export type BrowserAction =
+export type BrowserAction = { tabID?: string } & (
   | { operation: "navigate"; url: string }
   | { operation: "snapshot" }
   | { operation: "click"; selector: BrowserTarget }
@@ -18,11 +19,15 @@ export type BrowserAction =
   | { operation: "evaluate"; expression: string }
   | { operation: "auth_capture"; name: string }
   | ({ operation: "smoke" } & SmokeInput)
-type BrowserNativeAction = Exclude<BrowserAction, { operation: "auth_capture" | "smoke" }>
+  | { operation: "tabs"; action: "list" | "open" | "select" | "close"; url?: string }
+)
+type BrowserNativeAction = Exclude<BrowserAction, { operation: "auth_capture" | "smoke" | "tabs" }>
+export type BrowserTab = { id: string; url: string; title: string; selected: boolean; openerID?: string }
 
-export type BrowserResult =
+export type BrowserResult = { tabID?: string } & (
+  | { operation: "tabs"; tabs: BrowserTab[]; url?: string; title?: string }
   | {
-      operation: Exclude<BrowserAction["operation"], "auth_capture" | "smoke">
+      operation: Exclude<BrowserAction["operation"], "auth_capture" | "smoke" | "tabs">
       url: string
       title: string
       snapshot?: string
@@ -38,8 +43,10 @@ export type BrowserResult =
       origins: number
     }
   | SmokeResult
+)
 
 export type BrowserFrame = {
+  tabID: string
   data: string
   width: number
   height: number
@@ -81,6 +88,9 @@ type FrameEvent = {
 }
 
 export interface BrowserPage extends TargetPage {
+  isClosed?(): boolean
+  close?(): Promise<void>
+  opener?(): Promise<BrowserPage | null>
   url(): string
   title(): Promise<string>
   goto(
@@ -120,6 +130,7 @@ export interface BrowserCDP {
 }
 
 export interface BrowserContextLike {
+  on?(event: "page", listener: (page: BrowserPage) => void): void
   pages(): BrowserPage[]
   newPage(): Promise<BrowserPage>
   newCDPSession(page: BrowserPage): Promise<BrowserCDP>
@@ -188,6 +199,10 @@ const launch: BrowserLaunch = async (profile) =>
 
 export class BrowserSession {
   private context: BrowserContextLike | undefined
+  private readonly tabs = new Map<string, BrowserPage>()
+  private readonly identities = new Map<BrowserPage, string>()
+  private readonly openers = new Map<BrowserPage, Promise<string | undefined>>()
+  private readonly inventories = new Set<(tabs: BrowserTab[]) => void>()
   private page: BrowserPage | undefined
   private cdp: BrowserCDP | undefined
   private start: Promise<void> | undefined
@@ -214,7 +229,7 @@ export class BrowserSession {
   ) {}
 
   async ready(): Promise<void> {
-    if (this.context && this.page && this.cdp) return
+    if (this.context) return
     if (this.start) return this.start
     this.start = this.open()
     await this.start.catch(async (error: unknown) => {
@@ -228,8 +243,19 @@ export class BrowserSession {
     const context = await this.launcher(this.profile)
     const page = context.pages()[0] ?? (await context.newPage())
     this.context = context
+    context.on?.("page", (page) => this.register(page))
+    this.register()
+    await this.bind(page)
+    this.timer = setInterval(() => void this.pump(), 250)
+  }
+
+  private async bind(page: BrowserPage): Promise<void> {
+    const previous = this.cdp
     this.page = page
-    const cdp = await context.newCDPSession(page)
+    this.cdp = undefined
+    this.frame = undefined
+    if (previous) await previous.detach().catch((error: unknown) => console.error("Browser tab detach failed:", error))
+    const cdp = await this.browser().newCDPSession(page)
     this.cdp = cdp
     await cdp.send("Page.enable")
     // raya_change - hide the remaining headless/automation fingerprint before any page loads:
@@ -250,7 +276,9 @@ export class BrowserSession {
       void cdp.send("Page.screencastFrameAck", { sessionId: event.sessionId }).catch(() => undefined)
       // raya_change - publish the layout viewport, not the screencast's physical metadata, so the
       // panel never swaps between two aspect ratios (the source of the agent-control flicker).
+      if (this.page !== page || this.cdp !== cdp) return
       this.publish({
+        tabID: this.identity(page),
         data: event.data,
         width: this.width,
         height: this.height,
@@ -267,7 +295,120 @@ export class BrowserSession {
     // raya_change - screencast is the only live producer. capture() is a stall fallback: if no
     // screencast frame arrives for ~1s (headless Chromium treating the surface as hidden), take a
     // still. Running both at once published two JPEG streams at different sizes and flickered.
-    this.timer = setInterval(() => void this.pump(), 250)
+  }
+
+  private register(observed?: BrowserPage): void {
+    for (const page of observed ? [observed] : this.browser().pages()) {
+      if (this.identities.has(page)) continue
+      const id = randomUUID()
+      this.identities.set(page, id)
+      this.tabs.set(id, page)
+      const context = this.context
+      if (page.opener)
+        this.openers.set(
+          page,
+          page
+            .opener()
+            .then((opener) => {
+              if (!opener || this.context !== context) return undefined
+              this.register(opener)
+              return this.identities.get(opener)
+            })
+            .catch((error: unknown) => {
+              console.error("Browser popup ownership could not be established:", error)
+              return undefined
+            }),
+        )
+    }
+  }
+
+  private identity(page: BrowserPage): string {
+    const id = this.identities.get(page)
+    if (!id) throw new TargetError("Browser tab identity is unknown; list tabs again.")
+    return id
+  }
+
+  private resolve(id?: string): BrowserPage {
+    this.register()
+    if (!id && this.identities.size !== 1)
+      throw new TargetError("An observed tab ID is required after multiple tabs have existed. List tabs before acting.")
+    const page = id ? this.tabs.get(id) : this.page
+    if (!page || page.isClosed?.() || !this.browser().pages().includes(page))
+      throw new TargetError("Browser tab is closed or unknown. No action was dispatched; list tabs again.")
+    return page
+  }
+
+  async inventory(): Promise<BrowserTab[]> {
+    await this.ready()
+    this.register()
+    const result: BrowserTab[] = []
+    for (const [id, page] of this.tabs) {
+      if (page.isClosed?.() || !this.browser().pages().includes(page)) continue
+      const openerID = await this.openers.get(page)
+      const title = await page.title().catch(() => "")
+      if (page.isClosed?.()) continue
+      result.push({
+        id,
+        url: page.url(),
+        title,
+        selected: this.page === page,
+        openerID,
+      })
+    }
+    return result
+  }
+
+  onTabs(listener: (tabs: BrowserTab[]) => void): () => void {
+    this.inventories.add(listener)
+    return () => this.inventories.delete(listener)
+  }
+
+  async tab(action: "open" | "select" | "close", id?: string, url = "about:blank"): Promise<void> {
+    await this.ready()
+    this.assertInput()
+    this.release()
+    const result = this.queue.then(() => this.manage({ operation: "tabs", action, tabID: id, url }, () => undefined))
+    this.queue = result.then(
+      () => undefined,
+      () => undefined,
+    )
+    await result
+  }
+
+  private async manage(
+    action: Extract<BrowserAction, { operation: "tabs" }>,
+    dispatch: () => void,
+  ): Promise<BrowserResult> {
+    if (action.action === "open") {
+      dispatch()
+      const page = await this.browser().newPage()
+      this.register()
+      await this.bind(page)
+      await page.goto(action.url ?? "about:blank", this.wait())
+    }
+    if (action.action === "select") {
+      if (!action.tabID) throw new TargetError("Observed tab ID is required to select a tab")
+      const page = this.resolve(action.tabID)
+      dispatch()
+      await this.bind(page)
+    }
+    if (action.action === "close") {
+      if (!action.tabID) throw new TargetError("Observed tab ID is required to close a tab")
+      const page = this.resolve(action.tabID)
+      if (!page.close) throw new TargetError("Browser host cannot close tabs")
+      dispatch()
+      await page.close()
+      if (page === this.page) {
+        this.frame = undefined
+        this.page = undefined
+        const cdp = this.cdp
+        this.cdp = undefined
+        await cdp?.detach().catch((error: unknown) => console.error("Closed browser tab detach failed:", error))
+      }
+    }
+    const tabs = await this.inventory()
+    for (const listener of this.inventories) listener(tabs)
+    return { operation: "tabs", tabs, tabID: this.page ? this.identity(this.page) : undefined }
   }
 
   latest(): BrowserFrame | undefined {
@@ -300,6 +441,8 @@ export class BrowserSession {
   }
 
   async execute(action: BrowserAction): Promise<BrowserResult> {
+    await this.ready()
+    if (action.operation !== "tabs") action = { ...action, tabID: this.identity(this.resolve(action.tabID)) }
     const result = this.queue.then(() => this.perform(action))
     this.queue = result.then(
       () => undefined,
@@ -327,15 +470,22 @@ export class BrowserSession {
     await this.pace(number)
     const state = { dispatched: false }
     const dispatch = () => {
+      if (revision !== this.revision) throw new TargetError("Browser action cancelled before dispatch.")
+      if (action.operation !== "tabs") this.resolve(action.tabID)
       state.dispatched = true
     }
     try {
       const result =
-        action.operation === "auth_capture" || action.operation === "smoke"
-          ? await this.smoke(action, dispatch)
-          : await this.once(action, dispatch)
+        action.operation === "tabs"
+          ? await this.manage(action, dispatch)
+          : action.operation === "auth_capture" || action.operation === "smoke"
+            ? await this.smoke(action, dispatch)
+            : await this.once(action, dispatch)
       if (revision !== this.revision) throw new Error("Browser action cancelled for manual takeover.")
-      return result
+      return {
+        ...result,
+        ...(action.operation !== "tabs" ? { tabID: action.tabID } : {}),
+      }
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error)
       if (state.dispatched) throw new OutcomeError(action.operation, detail)
@@ -343,10 +493,7 @@ export class BrowserSession {
       if (this.state.control === "manual") throw error
       if (action.operation !== "snapshot" && action.operation !== "screenshot")
         throw new Error(`The ${action.operation} action was not dispatched: ${detail}`)
-      if (this.stuck(detail)) {
-        await this.replace()
-        throw new Error(this.explain(action.operation, detail))
-      }
+      if (this.stuck(detail)) throw new TargetError(`Browser tab observation failed; the tab was preserved. ${detail}`)
       if (/TypeError:|SyntaxError:/i.test(detail)) throw new Error(`The ${action.operation} action failed: ${detail}`)
       if (/strict mode violation|resolved to \d+ elements/i.test(detail)) {
         throw new Error(
@@ -367,13 +514,6 @@ export class BrowserSession {
     )
   }
 
-  private explain(operation: string, detail: string) {
-    if (/ERR_CONNECTION_REFUSED|ECONNREFUSED/i.test(detail)) {
-      return `The page is not reachable (${detail}). Start the dev server or use background_process to confirm the real URL/port before navigating.`
-    }
-    return `The ${operation} action failed because the browser host was wedged (${detail}). The page was reset; retry the action.`
-  }
-
   private wait() {
     return { timeout: 8_000, waitUntil: "commit" as const }
   }
@@ -386,25 +526,14 @@ export class BrowserSession {
     }
   }
 
-  private async travel(run: (page: BrowserPage) => Promise<unknown>): Promise<void> {
-    const page = this.active()
+  private async travel(run: (page: BrowserPage) => Promise<unknown>, id?: string): Promise<void> {
+    const page = this.resolve(id)
     try {
       await run(page)
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error)
       throw new OutcomeError("navigation", detail)
     }
-  }
-
-  private async replace(): Promise<void> {
-    if (!this.context) return
-    const page = await this.context.newPage()
-    this.page = page
-    const cdp = await this.context.newCDPSession(page)
-    this.cdp = cdp
-    await cdp.send("Page.enable").catch(() => undefined)
-    await this.metrics().catch(() => undefined)
-    await this.screencast().catch(() => undefined)
   }
 
   private async probe(url: string): Promise<void> {
@@ -486,7 +615,7 @@ export class BrowserSession {
   }
 
   private async once(action: BrowserNativeAction, dispatch: () => void): Promise<BrowserResult> {
-    const page = this.active()
+    const page = this.resolve(action.tabID)
     await this.drive(action, page, dispatch)
     const snapshot =
       action.operation === "snapshot" ? await page.locator("body").ariaSnapshot({ timeout: 10_000 }) : undefined
@@ -525,8 +654,8 @@ export class BrowserSession {
   ): Promise<BrowserResult> {
     dispatch()
     if (action.operation === "auth_capture")
-      return new BrowserSmoke(this.artifacts, this.active(), this.browser()).capture(action.name)
-    return new BrowserSmoke(this.artifacts, this.active(), this.browser()).run({
+      return new BrowserSmoke(this.artifacts, this.resolve(action.tabID), this.browser()).capture(action.name)
+    return new BrowserSmoke(this.artifacts, this.resolve(action.tabID), this.browser()).run({
       name: action.name,
       mode: action.mode,
       steps: action.steps,
@@ -550,6 +679,11 @@ export class BrowserSession {
     for (const listener of this.states) listener(state)
   }
 
+  private input(id?: string): void {
+    if (this.resolve(id) !== this.page)
+      throw new TargetError("The displayed browser tab changed. Refresh the view before sending input.")
+  }
+
   private assertInput(): void {
     if (this.state.control === "agent" && this.state.busy)
       throw new Error("The agent is currently controlling the browser. Wait for the action to finish or take over.")
@@ -564,34 +698,40 @@ export class BrowserSession {
     this.update({ control: "agent", busy: false })
   }
 
-  async navigate(url: string): Promise<void> {
+  async navigate(url: string, id?: string): Promise<void> {
     await this.ready()
     this.release()
+    const tab = this.identity(this.resolve(id))
     await this.probe(url)
-    await this.travel((page) => page.goto(url, this.wait()))
+    this.input(tab)
+    await this.travel((page) => page.goto(url, this.wait()), tab)
   }
 
-  async back(): Promise<void> {
+  async back(id?: string): Promise<void> {
     await this.ready()
     this.release()
-    await this.travel((page) => page.goBack(this.wait()))
+    this.input(id)
+    await this.travel((page) => page.goBack(this.wait()), id)
   }
 
-  async forward(): Promise<void> {
+  async forward(id?: string): Promise<void> {
     await this.ready()
     this.release()
-    await this.travel((page) => page.goForward(this.wait()))
+    this.input(id)
+    await this.travel((page) => page.goForward(this.wait()), id)
   }
 
-  async reload(): Promise<void> {
+  async reload(id?: string): Promise<void> {
     await this.ready()
     this.release()
-    await this.travel((page) => page.reload(this.wait()))
+    this.input(id)
+    await this.travel((page) => page.reload(this.wait()), id)
   }
 
-  async pointer(input: BrowserPointer): Promise<void> {
+  async pointer(input: BrowserPointer, id?: string): Promise<void> {
     await this.ready()
     this.assertInput()
+    this.input(id)
     // raya_change - map normalized coords against the live layout viewport (which now tracks the
     // panel), not Playwright's fixed launch viewport, so clicks land correctly after a resize.
     await this.channel().send("Input.dispatchMouseEvent", {
@@ -603,18 +743,20 @@ export class BrowserSession {
     })
   }
 
-  async key(input: BrowserKey): Promise<void> {
+  async key(input: BrowserKey, id?: string): Promise<void> {
     await this.ready()
     this.assertInput()
+    this.input(id)
     await this.channel().send("Input.dispatchKeyEvent", {
       ...input,
       text: input.type === "keyDown" ? input.text : undefined,
     })
   }
 
-  async scroll(deltaX: number, deltaY: number): Promise<void> {
+  async scroll(deltaX: number, deltaY: number, id?: string): Promise<void> {
     await this.ready()
     this.assertInput()
+    this.input(id)
     await this.active().mouse.wheel(deltaX, deltaY)
   }
 
@@ -689,6 +831,10 @@ export class BrowserSession {
     this.hold = undefined
     this.listeners.clear()
     this.states.clear()
+    this.inventories.clear()
+    this.tabs.clear()
+    this.identities.clear()
+    this.openers.clear()
     if (cdp) await cdp.send("Page.stopScreencast").catch(() => undefined)
     if (cdp) await cdp.detach().catch(() => undefined)
     if (context) await context.close().catch(() => undefined)
@@ -716,6 +862,10 @@ export class BrowserSession {
   }
 
   private async pump(): Promise<void> {
+    if (this.inventories.size) {
+      const tabs = await this.inventory().catch(() => [])
+      for (const listener of this.inventories) listener(tabs)
+    }
     if (this.seen && Date.now() - this.seen < 1000) return
     await this.capture()
   }
@@ -729,9 +879,15 @@ export class BrowserSession {
       .send("Page.captureScreenshot", { format: "jpeg", quality: 80, fromSurface: true })
       .catch(() => undefined)) as { data?: string } | undefined
     this.capturing = false
-    if (!result?.data) return
+    if (!result?.data || this.page !== page || this.cdp !== cdp) return
     // raya_change - report the live layout size (not Playwright's fixed launch viewport) so the
     // panel keeps the correct aspect ratio after a responsive resize.
-    this.publish({ data: result.data, width: this.width, height: this.height, url: page.url() })
+    this.publish({
+      tabID: this.identity(page),
+      data: result.data,
+      width: this.width,
+      height: this.height,
+      url: page.url(),
+    })
   }
 }

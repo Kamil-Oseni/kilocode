@@ -1,3 +1,5 @@
+import { Schema } from "effect"
+import { Accounting } from "@opencode-ai/schema/kilocode/accounting"
 import { describe, expect, test } from "bun:test"
 import { Usage } from "@opencode-ai/llm"
 import { Session as SessionNs } from "@/session/session"
@@ -133,5 +135,89 @@ describe("KiloSession.providerCost — fallback", () => {
     })
 
     expect(result.cost).toBe(fallback)
+  })
+})
+
+describe("persistable cost evidence", () => {
+  test("preserves rate snapshots and disjoint cache/reasoning buckets", () => {
+    const result = SessionNs.getUsage({
+      model: model(),
+      usage: new Usage({ inputTokens: 15000, outputTokens: 3000, reasoningTokens: 1000, cacheReadInputTokens: 5000 }),
+    })
+    expect(result.accounting).toMatchObject({
+      status: "estimated",
+      currency: "USD",
+      amount: 0.0765,
+      source: "model-rate-snapshot:test/test-model",
+      issues: [],
+    })
+    expect(result.accounting.buckets).toEqual([
+      { name: "input", tokens: 10000, rate: 3 },
+      { name: "output", tokens: 2000, rate: 15 },
+      { name: "reasoning", tokens: 1000, rate: 15 },
+      { name: "cache_read", tokens: 5000, rate: 0.3 },
+      { name: "cache_write", tokens: 0, rate: 3.75 },
+    ])
+    const updated = model()
+    updated.cost.input = 30
+    expect(result.accounting.buckets[0].rate).toBe(3)
+  })
+
+  test("retains provider zero and rejects malformed monetary evidence", () => {
+    const run = (cost: unknown) =>
+      SessionNs.getUsage({ model: model(), usage: baseUsage, metadata: { gateway: { marketCost: cost } } as never })
+    expect(run("0").accounting).toMatchObject({ status: "reported", amount: 0, source: "gateway.marketCost" })
+    for (const value of [-1, "", "  ", false, null, "NaN", Infinity]) {
+      expect(run(value).accounting.status).toBe("estimated")
+      expect(run(value).cost).toBe(fallback)
+    }
+  })
+
+  test("distinguishes incomplete rates, absent usage and contradictory normalization", () => {
+    const missing = model()
+    missing.cost.cache.read = 0
+    expect(
+      SessionNs.getUsage({
+        model: missing,
+        usage: new Usage({ inputTokens: 20, outputTokens: 10, cacheReadInputTokens: 10 }),
+      }).accounting,
+    ).toMatchObject({ status: "partial", amount: 0.00018, issues: ["cache_read_rate_unverified"] })
+    expect(SessionNs.getUsage({ model: model(), usage: new Usage({}) }).accounting).toMatchObject({ status: "unknown" })
+    expect(
+      SessionNs.getUsage({
+        model: model(),
+        usage: new Usage({ inputTokens: 10, cacheReadInputTokens: 20, outputTokens: 1 }),
+      }).accounting,
+    ).toMatchObject({ status: "unknown", issues: ["contradictory_usage"] })
+    expect(
+      SessionNs.getUsage({ model: model(), usage: new Usage({ inputTokens: 10, outputTokens: 1, reasoningTokens: 2 }) })
+        .accounting.amount,
+    ).toBeUndefined()
+  })
+
+  test("optional accounting fields are omitted from wire encoding", () => {
+    const value = Schema.encodeSync(Accounting)({
+      version: 1,
+      status: "unknown",
+      source: "test",
+      buckets: [],
+      issues: [],
+      amount: undefined,
+      currency: undefined,
+    })
+    expect(Object.keys(value)).not.toContain("amount")
+    expect(Object.keys(value)).not.toContain("currency")
+  })
+
+  test("does not label provider credits as dollars", () => {
+    expect(
+      SessionNs.getUsage({ model: model(), usage: baseUsage, metadata: { copilot: { totalNanoAiu: 12345 } } })
+        .accounting,
+    ).toMatchObject({
+      status: "unknown",
+      unit: "nano_aiu",
+      quantity: 12345,
+      issues: ["currency_conversion_unverified"],
+    })
   })
 })

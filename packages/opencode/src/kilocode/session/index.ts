@@ -63,7 +63,7 @@ export namespace KiloSession {
       }
     })
     if (!ctx) return
-    Bus.publish(ctx, Event.QueueChanged, input).catch(err => log.warn("queue changed publish failed", { err }))
+    Bus.publish(ctx, Event.QueueChanged, input).catch((err) => log.warn("queue changed publish failed", { err }))
   }
 
   // ---------------------------------------------------------------------------
@@ -195,13 +195,14 @@ export namespace KiloSession {
     usage?: Usage
     provider?: Provider.Info
     providerID: string
-  }): number | undefined {
+  }): { amount: number; source: string } | undefined {
     const isKilo = (input.provider?.id ?? input.providerID) === "kilo"
 
     const num = (value: unknown): number | undefined => {
-      if (value === undefined || value === null) return undefined
-      const n = typeof value === "string" ? Number(value) : (value as number)
-      return Number.isFinite(n) ? n : undefined
+      if (typeof value !== "number" && typeof value !== "string") return undefined
+      if (typeof value === "string" && !value.trim()) return undefined
+      const n = Number(value)
+      return Number.isFinite(n) && n >= 0 ? n : undefined
     }
 
     // 1. OpenRouter chat completions
@@ -215,7 +216,14 @@ export namespace KiloSession {
       // prefer the upstream cost (the user's true spend). For the OpenRouter provider
       // itself, the regular `cost` field is what the user is billed.
       const cost = isKilo && upstream !== undefined ? upstream : regular
-      if (cost !== undefined) return cost
+      if (cost !== undefined)
+        return {
+          amount: cost,
+          source:
+            isKilo && upstream !== undefined
+              ? "openrouter.usage.costDetails.upstreamInferenceCost"
+              : "openrouter.usage.cost",
+        }
     }
 
     // 2. Anthropic Messages or OpenAI Responses via OpenRouter. The Kilo Gateway wrapper
@@ -224,7 +232,7 @@ export namespace KiloSession {
     const usage = input.usage?.providerMetadata
     const aiSdk = usage?.["aiSdk"]?.["cost_details"] as { upstream_inference_cost?: number } | undefined
     const upstream = num(aiSdk?.upstream_inference_cost)
-    if (upstream !== undefined) return upstream
+    if (upstream !== undefined) return { amount: upstream, source: "aiSdk.cost_details.upstream_inference_cost" }
 
     // 3. Anthropic Messages or OpenAI Responses via Vercel AI Gateway. `cost` is the
     //    gateway fee that Kilo would pass through, but Kilo doesn't charge end users a
@@ -232,7 +240,7 @@ export namespace KiloSession {
     //    Values are emitted as strings on the wire.
     const gateway = input.metadata?.["gateway"] as { marketCost?: string | number } | undefined
     const marketCost = num(gateway?.marketCost)
-    if (marketCost !== undefined) return marketCost
+    if (marketCost !== undefined) return { amount: marketCost, source: "gateway.marketCost" }
 
     return undefined
   }

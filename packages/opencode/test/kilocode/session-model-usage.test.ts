@@ -55,6 +55,7 @@ const step = Effect.fn("ModelUsageTest.step")(function* (input: {
   messageID: MessageID
   model?: ReturnType<typeof ref>
   cost: number
+  accounting?: MessageV2.StepFinishPart["accounting"]
   tokens: MessageV2.StepFinishPart["tokens"]
 }) {
   const sessions = yield* Session.Service
@@ -66,6 +67,7 @@ const step = Effect.fn("ModelUsageTest.step")(function* (input: {
     reason: "stop",
     model: input.model,
     cost: input.cost,
+    accounting: input.accounting,
     tokens: input.tokens,
   })
 })
@@ -135,6 +137,7 @@ describe("session model usage", () => {
         totals: {
           steps: 3,
           cost: 1.125,
+          accounting: { amount: 0, reported: 0, estimated: 0, partial: 0, unknown: 0, legacy: 3 },
           tokens: { input: 350, output: 70, reasoning: 20, cache: { read: 700, write: 45 } },
         },
         models: [
@@ -142,16 +145,67 @@ describe("session model usage", () => {
             ...direct,
             steps: 2,
             cost: 0.875,
+            accounting: { amount: 0, reported: 0, estimated: 0, partial: 0, unknown: 0, legacy: 2 },
             tokens: { input: 250, output: 50, reasoning: 15, cache: { read: 500, write: 35 } },
           },
           {
             ...routed,
             steps: 1,
             cost: 0.25,
+            accounting: { amount: 0, reported: 0, estimated: 0, partial: 0, unknown: 0, legacy: 1 },
             tokens: { input: 100, output: 20, reasoning: 5, cache: { read: 200, write: 10 } },
           },
         ],
       })
+    }),
+  )
+
+  it.instance("persists evidence and aggregates each child's own step exactly once", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const root = yield* sessions.create({ title: "accounting" })
+      const child = yield* sessions.create({ parentID: root.id })
+      const model = ref("test", "priced")
+      const tokens = { input: 10, output: 1, reasoning: 0, cache: { read: 0, write: 0 } }
+      const parent = yield* seed(root.id, model)
+      const assistant = yield* seed(child.id, model)
+      const evidence = {
+        version: 1 as const,
+        status: "estimated" as const,
+        currency: "USD" as const,
+        amount: 0.25,
+        source: "model-rate-snapshot",
+        buckets: [{ name: "input", tokens: 10, rate: 25000 }],
+        issues: [],
+      }
+      yield* step({ sessionID: root.id, messageID: parent.id, cost: 0.25, tokens, accounting: evidence })
+      yield* step({
+        sessionID: child.id,
+        messageID: assistant.id,
+        cost: 0,
+        tokens,
+        accounting: {
+          version: 1,
+          status: "unknown",
+          source: "model-rate-snapshot",
+          buckets: [],
+          issues: ["no_verified_priced_usage"],
+        },
+      })
+      const reloaded = yield* sessions.messages({ sessionID: root.id })
+      expect(reloaded.flatMap((item) => item.parts).find((part) => part.type === "step-finish")).toMatchObject({
+        accounting: evidence,
+      })
+      const result = yield* ModelUsage.get(child.id)
+      expect(result?.totals.accounting).toEqual({
+        amount: 0.25,
+        reported: 0,
+        estimated: 1,
+        partial: 0,
+        unknown: 1,
+        legacy: 0,
+      })
+      expect((yield* ModelUsage.get(root.id))?.totals).toEqual(result?.totals)
     }),
   )
 

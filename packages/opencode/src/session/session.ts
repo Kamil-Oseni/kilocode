@@ -7,6 +7,7 @@ import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import path from "path"
 import { BackgroundJob } from "@/background/job"
 import { Decimal } from "decimal.js"
+import * as Accounting from "@/kilocode/session/accounting" // kilocode_change
 import type { ProviderMetadata, Usage } from "@opencode-ai/llm"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Database } from "@opencode-ai/core/database/database"
@@ -470,7 +471,8 @@ export const getUsage = (input: {
     provider: input.provider,
     providerID: input.model.providerID,
   })
-  if (reported !== undefined) return { cost: safe(reported), tokens }
+  if (reported !== undefined)
+    return { cost: reported.amount, tokens, accounting: Accounting.reported(reported.amount, reported.source) }
   // kilocode_change end
 
   const contextTokens = inputTokens
@@ -483,6 +485,15 @@ export const getUsage = (input: {
       : input.model.cost)
   const totalNanoAiu = input.metadata?.["copilot"]?.["totalNanoAiu"]
   return {
+    // kilocode_change start
+    accounting: Accounting.estimate({
+      model: input.model,
+      usage: input.usage,
+      tokens,
+      rates: costInfo,
+      nano: totalNanoAiu,
+    }),
+    // kilocode_change end
     cost:
       typeof totalNanoAiu === "number" && Number.isFinite(totalNanoAiu) && totalNanoAiu >= 0
         ? new Decimal(totalNanoAiu).div(100_000_000_000).toNumber()

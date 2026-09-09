@@ -1,3 +1,4 @@
+import { costLabel } from "../../context/accounting"
 // raya_change - Raya visible product copy
 /**
  * TaskHeader component
@@ -16,7 +17,7 @@ import { Tooltip } from "@kilocode/kilo-ui/tooltip"
 import { Icon } from "@kilocode/kilo-ui/icon"
 import { Checkbox } from "@kilocode/kilo-ui/checkbox"
 import { useSession } from "../../context/session"
-import { calcTokenUsage, collapseCostBreakdown } from "../../context/session-utils"
+import { calcTokenUsage } from "../../context/session-utils"
 import { useLanguage } from "../../context/language"
 import { displayTitle } from "../../utils/session-title" // raya_change - mask default session titles
 import { useVSCode } from "../../context/vscode"
@@ -52,29 +53,25 @@ export const TaskHeader: Component<TaskHeaderProps> = (props) => {
   const busy = createMemo(() => session.status() === "busy")
   const canCompact = createMemo(() => !busy() && session.visibleMessages().length > 0 && !!session.selected())
 
-  const money = createMemo(() => new Intl.NumberFormat(language.locale(), { style: "currency", currency: "USD" }))
-  const fmt = (n: number) => money().format(n)
-
   const breakdown = () => session.costBreakdown()
 
   const cost = createMemo(() => {
-    const total = breakdown().reduce((sum, e) => sum + e.cost, 0)
-    if (total === 0) return undefined
-    return fmt(total)
+    const usage = session.modelUsage()
+    if (usage?.totals.steps)
+      return {
+        label: costLabel(usage.totals, language.locale(), true),
+        detail: costLabel(usage.totals, language.locale()),
+      }
+    const total = breakdown().reduce((sum, item) => sum + item.cost, 0)
+    return total > 0
+      ? {
+          label: costLabel({ cost: total }, language.locale(), true),
+          detail: costLabel({ cost: total }, language.locale()),
+        }
+      : undefined
   })
 
-  const costTooltip = createMemo(() => {
-    const items = breakdown()
-    if (items.length <= 1) return <span>{language.t("context.usage.sessionCost")}</span>
-    const collapsed = collapseCostBreakdown(items, (n) =>
-      language.t("context.usage.olderSessions", { count: String(n) }),
-    )
-    return (
-      <div style={{ "text-align": "left", "white-space": "nowrap" }}>
-        <For each={collapsed}>{(e) => <div>{`${e.label}: ${fmt(e.cost)}`}</div>}</For>
-      </div>
-    )
-  })
+  const costTooltip = createMemo(() => <span>{cost()?.detail} | Model token usage; other charges may apply.</span>)
 
   const context = createMemo(() => {
     const usage = session.contextUsage()
@@ -260,7 +257,7 @@ export const TaskHeader: Component<TaskHeaderProps> = (props) => {
           <Show when={cost()}>
             {(c) => (
               <Tooltip value={costTooltip()} placement="bottom">
-                <span>{c()}</span>
+                <span aria-label={c().detail}>{c().label}</span>
               </Tooltip>
             )}
           </Show>

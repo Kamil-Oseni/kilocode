@@ -563,6 +563,27 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .pipe(Effect.catchTag("RayaSelfHeal.InputError", () => Effect.fail(new HttpApiError.BadRequest({}))))
     })
 
+    const selfHealOutcome = Effect.fn(function* (ctx: { params: { itemID: string } }) {
+      const outcome = yield* healing.outcome(ctx.params.itemID)
+      if (!outcome) return yield* new HttpApiError.NotFound({})
+      return outcome
+    })
+    const selfHealAdmit = Effect.fn(function* (ctx: {
+      params: { itemID: string }
+      payload: typeof RayaSelfHeal.RepairAdmission.Type
+    }) {
+      const result = yield* healing.admit(ctx.params.itemID, ctx.payload)
+      if (!result) return yield* new HttpApiError.NotFound({})
+      return result
+    })
+    const selfHealAdvance = Effect.fn(function* (ctx: {
+      params: { itemID: string }
+      payload: typeof RayaSelfHeal.RepairAdvance.Type
+    }) {
+      return yield* healing
+        .advance(ctx.params.itemID, ctx.payload)
+        .pipe(Effect.catchTag("SelfHeal.RepairConflict", () => Effect.fail(new HttpApiError.Conflict({}))))
+    })
     const selfHealList = Effect.fn("KilocodeHttpApi.selfHealList")(function* () {
       return yield* healing.list()
     })
@@ -646,6 +667,9 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .handle("designSystemGet", designSystemGet)
         .handle("designSystemSet", designSystemSet)
         .handle("selfHealCreate", selfHealCreate)
+        .handle("selfHealAdmit", selfHealAdmit)
+        .handle("selfHealOutcome", selfHealOutcome)
+        .handle("selfHealAdvance", selfHealAdvance)
         .handle("selfHealList", selfHealList)
         .handle("selfHealGet", selfHealGet)
         .handle("selfHealUpdate", selfHealUpdate)

@@ -2,10 +2,10 @@
 name: browser-recovery
 description: Recover grounded browser actions while preserving completed work.
 metadata:
-  version: "2"
+  version: "3"
 ---
 
-# Browser recovery, version 2
+# Browser recovery, version 3
 
 Start from current observable state and the last verified postcondition. Preserve source references, record IDs and drafts before changing approach. Never interpret an interrupted tool call as proof the host cancelled its external action.
 

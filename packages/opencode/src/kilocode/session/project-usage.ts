@@ -1,3 +1,4 @@
+import * as Accounting from "./accounting-summary"
 // raya_change - project-wide historical model token and cost analytics
 import { Database } from "@opencode-ai/core/database/database"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -23,6 +24,7 @@ export namespace ProjectUsage {
   const Usage = Schema.Struct({
     steps: NonNegativeInt,
     cost: Schema.Finite,
+    accounting: Schema.optional(Accounting.Summary),
     tokens: Tokens,
   })
 
@@ -44,7 +46,7 @@ export namespace ProjectUsage {
     models: Schema.Array(Model),
   })
 
-  type Row = {
+  type Row = typeof Accounting.Summary.Type & {
     providerID: string
     modelID: ModelV2.ID
     steps: number
@@ -66,6 +68,7 @@ export namespace ProjectUsage {
   const empty = () => ({
     steps: 0,
     cost: 0,
+    accounting: Accounting.empty(),
     tokens: {
       input: 0,
       output: 0,
@@ -90,6 +93,7 @@ export namespace ProjectUsage {
             coalesce(json_extract(part.data, '$.model.providerID'), json_extract(message.data, '$.providerID')) AS providerID,
             coalesce(json_extract(part.data, '$.model.modelID'), json_extract(message.data, '$.modelID')) AS modelID,
             max(0.0, cast(coalesce(json_extract(part.data, '$.cost'), 0) AS REAL)) AS cost,
+        ${Accounting.projection},
             max(0, cast(coalesce(json_extract(part.data, '$.tokens.input'), 0) AS INTEGER)) AS input,
             max(0, cast(coalesce(json_extract(part.data, '$.tokens.output'), 0) AS INTEGER)) AS output,
             max(0, cast(coalesce(json_extract(part.data, '$.tokens.reasoning'), 0) AS INTEGER)) AS reasoning,
@@ -111,6 +115,7 @@ export namespace ProjectUsage {
           modelID,
           count(*) AS steps,
           coalesce(sum(cost), 0) AS cost,
+      ${Accounting.aggregation},
           coalesce(sum(input), 0) AS input,
           coalesce(sum(output), 0) AS output,
           coalesce(sum(reasoning), 0) AS reasoning,
@@ -137,6 +142,7 @@ export namespace ProjectUsage {
         modelID: row.modelID,
         steps: row.steps,
         cost: row.cost,
+        accounting: Accounting.merge(totals.accounting, row),
         tokens: {
           input: row.input,
           output: row.output,

@@ -3,7 +3,7 @@ import * as vscode from "vscode"
 import type { BrowserFrame, BrowserKey, BrowserPointer, BrowserState } from "./browser-session"
 import { BrowserSession } from "./browser-session"
 
-type BrowserPanelMessage =
+type BrowserPanelMessage = { tabID?: string } & (
   | { type: "ready" }
   | { type: "navigate"; url: string }
   | { type: "back" }
@@ -15,12 +15,15 @@ type BrowserPanelMessage =
   | { type: "scroll"; input: { deltaX: number; deltaY: number } }
   | { type: "resize"; dpr: number; width: number; height: number } // raya_change - drive layout viewport + capture density to the panel
   | { type: "key"; input: BrowserKey }
+  | { type: "tab"; action: "open" | "select" | "close" }
+)
 
 export class BrowserPanel implements vscode.Disposable {
   static readonly viewType = "raya.BrowserPanel"
 
   private panel: vscode.WebviewPanel | undefined
   private off: (() => void) | undefined
+  private offTabs: (() => void) | undefined
   private offState: (() => void) | undefined
 
   constructor(private readonly session: BrowserSession) {}
@@ -46,10 +49,12 @@ export class BrowserPanel implements vscode.Disposable {
     panel.onDidDispose(() => {
       this.off?.()
       this.offState?.()
+      this.offTabs?.()
       this.off = undefined
       this.offState = undefined
       this.panel = undefined
     })
+    this.offTabs = this.session.onTabs((tabs) => void this.panel?.webview.postMessage({ type: "tabs", tabs }))
     this.off = this.session.onFrame((frame) => void this.frame(frame))
     this.offState = this.session.onState((state) => void this.status(state))
   }
@@ -63,10 +68,12 @@ export class BrowserPanel implements vscode.Disposable {
     panel.onDidDispose(() => {
       this.off?.()
       this.offState?.()
+      this.offTabs?.()
       this.off = undefined
       this.offState = undefined
       this.panel = undefined
     })
+    this.offTabs = this.session.onTabs((tabs) => void this.panel?.webview.postMessage({ type: "tabs", tabs }))
     this.off = this.session.onFrame((frame) => void this.frame(frame))
     this.offState = this.session.onState((state) => void this.status(state))
     void this.session
@@ -86,23 +93,31 @@ export class BrowserPanel implements vscode.Disposable {
     if (message.type === "ready") {
       const frame = this.session.latest()
       if (frame) await this.frame(frame)
+      await this.panel?.webview.postMessage({ type: "tabs", tabs: await this.session.inventory() })
       await this.status(this.session.current())
       return
     }
+    if (message.type === "tab") {
+      if (message.action !== "open" && !message.tabID) throw new Error("Observed tab identity is required")
+      await this.session.tab(message.action, message.tabID)
+      return
+    }
+    if (["navigate", "back", "forward", "reload", "pointer", "scroll", "key"].includes(message.type) && !message.tabID)
+      throw new Error("Wait for an identified browser frame before sending input")
     if (message.type === "navigate") {
-      await this.session.navigate(message.url)
+      await this.session.navigate(message.url, message.tabID)
       return
     }
     if (message.type === "back") {
-      await this.session.back()
+      await this.session.back(message.tabID)
       return
     }
     if (message.type === "forward") {
-      await this.session.forward()
+      await this.session.forward(message.tabID)
       return
     }
     if (message.type === "reload") {
-      await this.session.reload()
+      await this.session.reload(message.tabID)
       return
     }
     if (message.type === "resume") {
@@ -114,23 +129,24 @@ export class BrowserPanel implements vscode.Disposable {
       return
     }
     if (message.type === "pointer") {
-      await this.session.pointer(message.input)
+      await this.session.pointer(message.input, message.tabID)
       return
     }
     if (message.type === "scroll") {
-      await this.session.scroll(message.input.deltaX, message.input.deltaY)
+      await this.session.scroll(message.input.deltaX, message.input.deltaY, message.tabID)
       return
     }
     if (message.type === "resize") {
       await this.session.resize(message.dpr, message.width, message.height)
       return
     }
-    await this.session.key(message.input)
+    await this.session.key(message.input, message.tabID)
   }
 
   private async frame(frame: BrowserFrame): Promise<void> {
     await this.panel?.webview.postMessage({
       type: "frame",
+      tabID: frame.tabID,
       data: frame.data,
       width: frame.width,
       height: frame.height,
@@ -145,6 +161,7 @@ export class BrowserPanel implements vscode.Disposable {
   dispose(): void {
     this.off?.()
     this.offState?.()
+    this.offTabs?.()
     this.off = undefined
     this.offState = undefined
     this.panel?.dispose()
@@ -163,9 +180,9 @@ export class BrowserPanel implements vscode.Disposable {
     * { box-sizing: border-box; }
     [hidden] { display: none !important; }
     html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; color: var(--vscode-foreground); background: var(--vscode-editor-background); font-family: var(--vscode-font-family); }
-    body { display: grid; grid-template-rows: 42px 32px minmax(0, 1fr); }
+    body { display: grid; grid-template-rows: 36px 42px 32px minmax(0, 1fr); }
     header { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--vscode-panel-border); background: var(--vscode-sideBar-background); }
-    button, input { height: 28px; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, transparent); }
+    button, input, select { height: 28px; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, transparent); }
     button { min-width: 30px; cursor: pointer; }
     button:hover { background: var(--vscode-toolbar-hoverBackground); }
     input { flex: 1; padding: 0 8px; }
@@ -182,6 +199,7 @@ export class BrowserPanel implements vscode.Disposable {
   </style>
 </head>
 <body>
+  <header><select id="tabs" aria-label="Browser tab"></select><button id="newtab" aria-label="New tab">New tab</button><button id="closetab" aria-label="Close selected tab">Close tab</button></header>
   <header>
     <button id="back" title="Back" aria-label="Back">←</button>
     <button id="forward" title="Forward" aria-label="Forward">→</button>
@@ -208,8 +226,14 @@ export class BrowserPanel implements vscode.Disposable {
     const shield = document.getElementById("shield");
     const go = document.getElementById("go");
     const takeover = document.getElementById("takeover");
-    const controls = [...document.querySelectorAll("header button, header input")];
-    const send = (type, data = {}) => vscode.postMessage({ type, ...data });
+    const tabs = document.getElementById("tabs");
+    let selected;
+    let displayed;
+    const controls = [...document.querySelectorAll("header button, header input, header select")];
+    const send = (type, data = {}) => vscode.postMessage({ type, tabID: displayed, ...data });
+    document.getElementById("newtab").addEventListener("click", () => send("tab", { action: "open" }));
+    document.getElementById("closetab").addEventListener("click", () => send("tab", { action: "close", tabID: selected }));
+    tabs.addEventListener("change", () => send("tab", { action: "select", tabID: tabs.value }));
     document.getElementById("back").addEventListener("click", () => send("back"));
     document.getElementById("forward").addEventListener("click", () => send("forward"));
     document.getElementById("reload").addEventListener("click", () => send("reload"));
@@ -248,11 +272,11 @@ export class BrowserPanel implements vscode.Disposable {
     let move;
     let moving = false;
     screen.addEventListener("pointermove", (event) => {
-      move = event;
+      move = { event, tabID: displayed };
       if (moving) return;
       moving = true;
       requestAnimationFrame(() => {
-        send("pointer", { input: { type: "mouseMoved", ...point(move), button: "none" } });
+        send("pointer", { tabID: move.tabID, input: { type: "mouseMoved", ...point(move.event), button: "none" } });
         moving = false;
       });
     });
@@ -270,7 +294,27 @@ export class BrowserPanel implements vscode.Disposable {
     screen.addEventListener("keyup", (event) => { key("keyUp", event); event.preventDefault(); });
     screen.addEventListener("wheel", (event) => { send("scroll", { input: { deltaX: event.deltaX, deltaY: event.deltaY } }); event.preventDefault(); }, { passive: false });
     window.addEventListener("message", (event) => {
+      if (event.data.type === "tabs") {
+        const values = event.data.tabs;
+        selected = values.find((tab) => tab.selected)?.id;
+        tabs.replaceChildren(...values.map((tab) => {
+          const option = document.createElement("option");
+          option.value = tab.id;
+          option.textContent = (tab.title || tab.url) + (tab.openerID ? " (popup)" : "");
+          option.selected = tab.selected;
+          return option;
+        }));
+        if (!selected || displayed !== selected) {
+          displayed = undefined;
+          screen.hidden = true;
+          empty.hidden = false;
+          empty.textContent = selected ? "Loading selected tab..." : "Select or open a browser tab.";
+        }
+        return;
+      }
       if (event.data.type === "frame") {
+        if (event.data.tabID !== selected) return;
+        displayed = event.data.tabID;
         screen.src = "data:image/jpeg;base64," + event.data.data;
         screen.width = event.data.width;
         screen.height = event.data.height;

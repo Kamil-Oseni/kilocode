@@ -1,3 +1,4 @@
+import * as Accounting from "./accounting-summary"
 import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { Effect, Schema } from "effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -21,6 +22,7 @@ export namespace ModelUsage {
   const Usage = Schema.Struct({
     steps: NonNegativeInt,
     cost: Schema.Finite,
+    accounting: Schema.optional(Accounting.Summary),
     tokens: Tokens,
   })
 
@@ -49,7 +51,7 @@ export namespace ModelUsage {
     parentID: SessionID | null
   }
 
-  type Row = {
+  type Row = typeof Accounting.Summary.Type & {
     providerID: ProviderV2.ID
     modelID: ModelV2.ID
     steps: number
@@ -72,6 +74,7 @@ export namespace ModelUsage {
         coalesce(json_extract(part.data, '$.model.providerID'), json_extract(message.data, '$.providerID')) AS providerID,
         coalesce(json_extract(part.data, '$.model.modelID'), json_extract(message.data, '$.modelID')) AS modelID,
         max(0.0, cast(coalesce(json_extract(part.data, '$.cost'), 0) AS REAL)) AS cost,
+        ${Accounting.projection},
         max(0, cast(coalesce(json_extract(part.data, '$.tokens.input'), 0) AS INTEGER)) AS input,
         max(0, cast(coalesce(json_extract(part.data, '$.tokens.output'), 0) AS INTEGER)) AS output,
         max(0, cast(coalesce(json_extract(part.data, '$.tokens.reasoning'), 0) AS INTEGER)) AS reasoning,
@@ -91,6 +94,7 @@ export namespace ModelUsage {
       modelID,
       count(*) AS steps,
       coalesce(sum(cost), 0) AS cost,
+      ${Accounting.aggregation},
       coalesce(sum(input), 0) AS input,
       coalesce(sum(output), 0) AS output,
       coalesce(sum(reasoning), 0) AS reasoning,
@@ -104,6 +108,7 @@ export namespace ModelUsage {
   const empty = () => ({
     steps: 0,
     cost: 0,
+    accounting: Accounting.empty(),
     tokens: {
       input: 0,
       output: 0,
@@ -120,7 +125,8 @@ export namespace ModelUsage {
     if (!anchor) return undefined
 
     const ancestors = yield* db
-      .all<Ancestor>(sql`
+      .all<Ancestor>(
+        sql`
         WITH RECURSIVE ancestor(id, parent_id) AS (
           SELECT id, parent_id
           FROM session
@@ -134,13 +140,14 @@ export namespace ModelUsage {
           WHERE parent.project_id = ${anchor.projectID}
         )
         SELECT id, parent_id AS parentID
-        FROM ancestor`)
+        FROM ancestor`,
+      )
       .pipe(Effect.orDie)
     const ids = new Set(ancestors.map((item) => item.id))
     const rootID = ancestors.find((item) => !item.parentID || !ids.has(item.parentID))?.id ?? sessionID
-    const sessionIDs = (
-      yield* db
-        .all<{ id: SessionID }>(sql`
+    const sessionIDs = (yield* db
+      .all<{ id: SessionID }>(
+        sql`
           WITH RECURSIVE family(id) AS (
             SELECT id
             FROM session
@@ -155,9 +162,9 @@ export namespace ModelUsage {
           )
           SELECT id
           FROM family
-          ORDER BY id`)
-        .pipe(Effect.orDie)
-    ).map((item) => item.id)
+          ORDER BY id`,
+      )
+      .pipe(Effect.orDie)).map((item) => item.id)
     const rows = sessionIDs.length === 0 ? [] : yield* db.all<Row>(usageSql(sessionIDs)).pipe(Effect.orDie)
     const totals = empty()
     const models = rows.map((row): Model => {
@@ -173,6 +180,7 @@ export namespace ModelUsage {
         modelID: row.modelID,
         steps: row.steps,
         cost: row.cost,
+        accounting: Accounting.merge(totals.accounting, row),
         tokens: {
           input: row.input,
           output: row.output,

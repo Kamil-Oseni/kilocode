@@ -273,12 +273,18 @@ import type {
   KilocodeRoutineTemplatesResponses,
   KilocodeRoutineUpdateErrors,
   KilocodeRoutineUpdateResponses,
+  KilocodeSelfHealAdmitErrors,
+  KilocodeSelfHealAdmitResponses,
+  KilocodeSelfHealAdvanceErrors,
+  KilocodeSelfHealAdvanceResponses,
   KilocodeSelfHealCreateErrors,
   KilocodeSelfHealCreateResponses,
   KilocodeSelfHealGetErrors,
   KilocodeSelfHealGetResponses,
   KilocodeSelfHealListErrors,
   KilocodeSelfHealListResponses,
+  KilocodeSelfHealOutcomeErrors,
+  KilocodeSelfHealOutcomeResponses,
   KilocodeSelfHealUpdateErrors,
   KilocodeSelfHealUpdateResponses,
   KilocodeSessionImportMessageErrors,
@@ -9463,6 +9469,147 @@ export class SelfHeal extends HeyApiClient {
       ThrowOnError
     >({
       url: "/kilocode/self-heal",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Read a retained repair attempt
+   *
+   * Read the durable repair journal even when its original backlog item is unavailable.
+   */
+  public outcome<ThrowOnError extends boolean = false>(
+    parameters: {
+      itemID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "itemID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      KilocodeSelfHealOutcomeResponses,
+      KilocodeSelfHealOutcomeErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/self-heal/{itemID}/repair",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Reserve one repair attempt
+   *
+   * Retain exclusive repair ownership and report existing or conflicting attempts without replay.
+   */
+  public admit<ThrowOnError extends boolean = false>(
+    parameters: {
+      itemID: string
+      directory?: string
+      workspace?: string
+      source?: {
+        root: string
+        commit: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "itemID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "source" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeSelfHealAdmitResponses,
+      KilocodeSelfHealAdmitErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/self-heal/{itemID}/repair",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Advance the owned repair startup
+   *
+   * Record each startup boundary once; retain unknown dispatch outcomes without automatic replay.
+   */
+  public advance<ThrowOnError extends boolean = false>(
+    parameters: {
+      itemID: string
+      directory?: string
+      workspace?: string
+      token?: string
+      revision?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      phase?:
+        | "reserved"
+        | "session_creating"
+        | "session_created"
+        | "goal_creating"
+        | "goal_created"
+        | "dispatching"
+        | "submitted"
+        | "blocked"
+        | "dispatch_unknown"
+        | "legacy_conflict"
+      sessionID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "itemID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "token" },
+            { in: "body", key: "revision" },
+            { in: "body", key: "phase" },
+            { in: "body", key: "sessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeSelfHealAdvanceResponses,
+      KilocodeSelfHealAdvanceErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/self-heal/{itemID}/repair/step",
       ...options,
       ...params,
       headers: {

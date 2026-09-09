@@ -1,9 +1,16 @@
 // raya_change - durable global self-healing feedback backlog
 import { Effect, Schema } from "effect"
 import { Storage } from "@/storage/storage"
+import { createHash } from "node:crypto"
+import { repairs, Outcome, Admission, Granted, Advance } from "./repair"
 import { SessionID } from "@/session/schema"
 
 export namespace RayaSelfHeal {
+  export const Repair = Outcome
+  export const RepairAdmission = Admission
+  export const RepairGranted = Granted
+  export const RepairAdvance = Advance
+
   export const Category = Schema.Literals([
     "ui",
     "chat",
@@ -40,6 +47,7 @@ export namespace RayaSelfHeal {
   })
 
   export const Item = Schema.Struct({
+    repair: Schema.optional(Outcome),
     id: Schema.String,
     fingerprint: Schema.String,
     title: Schema.String,
@@ -170,22 +178,59 @@ export namespace RayaSelfHeal {
     return first.length <= 100 ? first : `${first.slice(0, 97)}...`
   }
 
-  export function make(storage: Pick<Storage.Interface, "list" | "read" | "write" | "remove">) {
-    const list = Effect.fn("RayaSelfHeal.list")(function* () {
-      const keys = yield* storage.list(prefix).pipe(Effect.orDie)
-      const rows = yield* Effect.forEach(keys, (path) =>
-        storage.read<unknown>(path).pipe(
-          Effect.flatMap(decode),
-          Effect.map((item) => ({ path, item })),
+  export function make(storage: Pick<Storage.Interface, "list" | "read" | "write" | "remove" | "create" | "replace">) {
+    const repair = repairs(storage)
+    const decorate = Effect.fn(function* (item: Item) {
+      const receipts = yield* storage.list(["raya", "self-heal", "reports", item.id]).pipe(Effect.orDie)
+      const baseline = yield* storage.read<number>(["raya", "self-heal", "reports", item.id, "base"]).pipe(
+        Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(item.reports)),
+        Effect.orDie,
+      )
+      const reports = receipts.filter((key) => !key.some((part) => part.startsWith(".")) && key.at(-1) !== "base")
+      const times = yield* Effect.forEach(reports, (key) =>
+        storage.read<{ at: number }>(key).pipe(
+          Effect.map((row) => row.at),
           Effect.orDie,
         ),
       )
-      const stale = rows.filter((row) => expired(row.item))
-      yield* Effect.forEach(stale, (row) => storage.remove(row.path).pipe(Effect.orDie), { discard: true })
-      return rows
-        .filter((row) => !expired(row.item))
-        .map((row) => row.item)
-        .toSorted((a, b) => b.updatedAt - a.updatedAt)
+      return {
+        ...item,
+        reports: Math.max(item.reports, baseline + reports.length),
+        updatedAt: times.reduce((latest, at) => Math.max(latest, at), item.updatedAt),
+        repair: yield* repair.get(item.id),
+      }
+    })
+    const list = Effect.fn("RayaSelfHeal.list")(function* () {
+      const keys = yield* storage.list(prefix).pipe(Effect.orDie)
+      const rows = yield* Effect.forEach(
+        keys.filter((key) => !key.some((part) => part.startsWith("."))),
+        (path) =>
+          storage.read<unknown>(path).pipe(
+            Effect.flatMap(decode),
+            Effect.map((item) => ({ path, item })),
+            Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(undefined)),
+            Effect.orDie,
+          ),
+      )
+      const checked = yield* Effect.forEach(
+        rows.filter((row) => row !== undefined),
+        (row) =>
+          repair.get(row.item.id).pipe(Effect.map((attempt) => ({ ...row, stale: expired(row.item) && !attempt }))),
+      )
+      const stale = checked.filter((row) => row.stale)
+      yield* Effect.forEach(
+        stale,
+        (row) =>
+          Effect.gen(function* () {
+            yield* storage.create(["raya", "self-heal", "closed", row.item.id], true).pipe(Effect.orDie)
+            yield* storage.remove(row.path).pipe(Effect.orDie)
+          }),
+        { discard: true },
+      )
+      return yield* Effect.forEach(
+        checked.filter((row) => !row.stale).map((row) => row.item),
+        decorate,
+      ).pipe(Effect.map((items) => items.toSorted((a, b) => b.updatedAt - a.updatedAt)))
     })
 
     const get = Effect.fn("RayaSelfHeal.get")(function* (id: string) {
@@ -194,7 +239,9 @@ export namespace RayaSelfHeal {
         Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(undefined)),
         Effect.orDie,
       )
-      if (!item || !expired(item)) return item
+      if (!item) return
+      if (!expired(item) || (yield* repair.get(id))) return yield* decorate(item)
+      yield* storage.create(["raya", "self-heal", "closed", id], true).pipe(Effect.orDie)
       yield* storage.remove(key(id)).pipe(Effect.orDie)
       return undefined // raya_change - lazy cleanup keeps persistence bounded without timers
     })
@@ -203,15 +250,7 @@ export namespace RayaSelfHeal {
       const description = clean(input.description)
       if (description.length < 8) return yield* new InputError({ message: "Describe the issue in more detail." })
       const hash = fingerprint(description)
-      const existing = (yield* list()).find(
-        (item) => item.fingerprint === hash && !["verified", "cancelled", "duplicate"].includes(item.status),
-      )
       const now = Date.now()
-      if (existing) {
-        const next = { ...existing, reports: existing.reports + 1, updatedAt: now }
-        yield* storage.write(key(existing.id), next).pipe(Effect.orDie)
-        return next
-      }
       const profile = classify(description)
       const category = profile?.category ?? "other"
       const item: Item = {
@@ -233,8 +272,51 @@ export namespace RayaSelfHeal {
         evidence: [],
         reloadRequired: false,
       }
-      yield* storage.write(key(item.id), item).pipe(Effect.orDie)
-      return item
+      const seedkey = ["raya", "self-heal", "seed", item.id]
+      yield* storage.create(seedkey, item).pipe(Effect.orDie)
+      const canonical = createHash("sha256").update(normalized(description)).digest("hex")
+      let generation = "initial"
+      for (let index = 0; index < 100; index++) {
+        const path = ["raya", "self-heal", "intake", canonical, generation]
+        const legacy = (yield* list())
+          .filter((row) => row.fingerprint === hash && !terminal.has(row.status))
+          .toSorted((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id))[0]
+        const candidate = { id: (legacy ?? item).id, baseline: legacy?.reports ?? 0 }
+        yield* storage.create(path, candidate).pipe(Effect.orDie)
+        const claim = yield* storage.read<typeof candidate>(path).pipe(Effect.orDie)
+        const existing = yield* storage.read<Item>(key(claim.id)).pipe(
+          Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(undefined)),
+          Effect.orDie,
+        )
+        const closed = yield* storage.read<boolean>(["raya", "self-heal", "closed", claim.id]).pipe(
+          Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(false)),
+          Effect.orDie,
+        )
+        const attempt = yield* repair.get(claim.id)
+        if (
+          (closed || terminal.has(existing?.status ?? "triaged")) &&
+          (!attempt || attempt.phase === "legacy_conflict")
+        ) {
+          generation = claim.id
+          continue
+        }
+        const seed =
+          existing ??
+          (yield* storage.read<Item>(["raya", "self-heal", "seed", claim.id]).pipe(
+            Effect.catchIf(Storage.NotFoundError.isInstance, () => storage.read<Item>(key(claim.id))),
+            Effect.orDie,
+          ))
+        yield* storage.create(key(claim.id), seed).pipe(Effect.orDie)
+        // Pending seed copies are removed only after complete item publication.
+        yield* storage.remove(["raya", "self-heal", "seed", claim.id]).pipe(Effect.orDie)
+        if (item.id !== claim.id) yield* storage.remove(seedkey).pipe(Effect.orDie)
+        yield* storage.create(["raya", "self-heal", "reports", claim.id, "base"], claim.baseline).pipe(Effect.orDie)
+        yield* storage
+          .create(["raya", "self-heal", "reports", claim.id, crypto.randomUUID()], { at: now })
+          .pipe(Effect.orDie)
+        return yield* decorate(seed)
+      }
+      return yield* new InputError({ message: "Feedback history needs reconciliation before another intake." })
     })
 
     const update = Effect.fn("RayaSelfHeal.update")(function* (id: string, input: typeof Update.Type) {
@@ -248,10 +330,20 @@ export namespace RayaSelfHeal {
         updatedAt: Date.now(),
         evidence: (input.evidence ?? item.evidence).slice(-50),
       } // raya_change - bound repeated verification evidence without losing the newest records
-      yield* storage.write(key(id), next).pipe(Effect.orDie)
+      yield* storage.replace(key(id), next).pipe(Effect.orDie)
       return next
     })
 
-    return { create, get, list, update }
+    const admit = Effect.fn(function* (id: string, input: typeof Admission.Type) {
+      const item = yield* get(id)
+      if (!item) return
+      const matches = (yield* list()).filter((row) => row.fingerprint === item.fingerprint && !terminal.has(row.status))
+      return yield* repair.admit(
+        id,
+        input.source,
+        terminal.has(item.status) || !!item.workSessionID || matches.length > 1,
+      )
+    })
+    return { create, get, list, update, admit, advance: repair.advance, outcome: repair.get }
   }
 }

@@ -1,4 +1,5 @@
 // raya_change - project-wide historical model token and cost tracker
+import { costLabel } from "../../context/accounting"
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, type Component } from "solid-js"
 import { useLanguage } from "../../context/language"
 import { groupModelUsage, modelUsageName } from "../../context/model-usage"
@@ -28,19 +29,6 @@ export const UsageHistoryView: Component<{
   onRange?: (range: Range) => void
 }> = (props) => {
   const groups = createMemo(() => groupModelUsage(props.usage?.models ?? [], props.providers))
-  const money = createMemo(
-    () =>
-      new Intl.NumberFormat(props.locale, {
-        style: "currency",
-        currency: "USD",
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 6,
-      }),
-  )
-  const cost = (value: number) => {
-    if (value > 0 && value < 0.000001) return "<$0.000001"
-    return money().format(value)
-  }
   const tokens = (usage: ProjectUsage["totals"]) =>
     usage.tokens.input +
     usage.tokens.output +
@@ -56,8 +44,8 @@ export const UsageHistoryView: Component<{
           <Show when={props.usage}>
             {(data) => (
               <span>
-                {cost(data().totals.cost)} · {formatCompactCount(tokens(data().totals))} tokens · {data().sessions}{" "}
-                sessions
+                {costLabel(data().totals, props.locale)} · {formatCompactCount(tokens(data().totals))} tokens ·{" "}
+                {data().sessions} sessions
               </span>
             )}
           </Show>
@@ -93,7 +81,7 @@ export const UsageHistoryView: Component<{
                 <div class="usage-history__model">
                   <span title={`${model.providerID}/${model.modelID}`}>{modelUsageName(model, props.providers)}</span>
                   <span>{formatCompactCount(tokens(model))} tokens</span>
-                  <strong>{cost(model.cost)}</strong>
+                  <strong>{costLabel(model, props.locale)}</strong>
                 </div>
               )}
             </For>

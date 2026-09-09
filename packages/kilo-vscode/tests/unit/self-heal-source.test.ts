@@ -5,6 +5,7 @@ import * as path from "node:path"
 import { createKiloClient } from "@kilocode/sdk/v2/client"
 import { exec } from "../../src/util/process"
 import { resolve, current } from "../../src/self-heal/source"
+import { summary, inspect } from "../../src/self-heal/summary"
 import { capture } from "../../src/self-heal/intake"
 
 async function git(dir: string, args: string[]) {
@@ -42,7 +43,7 @@ async function fixture() {
     },
   }
 }
-function client() {
+function client(opts: { failure?: string; reporting?: boolean; owned?: boolean; acknowledgement?: string } = {}) {
   const calls: Request[] = []
   const item = {
     id: "heal_fixture",
@@ -53,13 +54,43 @@ function client() {
     approach: "Reproduce",
     status: "triaged",
   }
+  let outcome = {
+    id: "attempt",
+    itemID: item.id,
+    source: { root: "", commit: "" },
+    phase: "reserved",
+    revision: 0,
+    at: 1,
+  }
   const sdk = createKiloClient({
     baseUrl: "http://unused.invalid",
     fetch: async (input, init) => {
       const request = new Request(input, init)
       calls.push(request)
       const url = new URL(request.url)
+      if (opts.failure && url.pathname.endsWith(opts.failure))
+        return Response.json({ error: "private raw backend failure" }, { status: 500 })
       if (url.pathname === "/kilocode/self-heal") return Response.json(item)
+      if (url.pathname.endsWith("/repair/step")) {
+        const body = await request.clone().json()
+        if (body.revision !== outcome.revision) return Response.json({}, { status: 409 })
+        if (opts.reporting === false && ["blocked", "dispatch_unknown"].includes(body.phase))
+          return Response.json({}, { status: 500 })
+        outcome = {
+          ...outcome,
+          phase: body.phase,
+          revision: outcome.revision + 1,
+          ...(body.sessionID ? { sessionID: body.sessionID } : {}),
+        }
+        if (opts.acknowledgement === body.phase) return Response.json({}, { status: 500 })
+        return Response.json(outcome)
+      }
+      if (url.pathname.endsWith("/repair"))
+        return Response.json({
+          owned: opts.owned !== false,
+          ...(opts.owned === false ? {} : { token: "owner" }),
+          outcome,
+        })
       if (url.pathname === "/session") return Response.json({ id: "repair-session" })
       if (url.pathname.endsWith("/prompt_async")) return new Response(null, { status: 204 })
       return Response.json({})
@@ -143,14 +174,15 @@ test("valid source admission binds all repair requests and records the observed 
   expect(result.session).toBe("repair-session")
   expect(result.source).toEqual({ root, commit })
   expect(result.notice).not.toContain("isolated")
-  expect(api.calls).toHaveLength(5)
-  const session = api.calls[1]!
+  expect(api.calls).toHaveLength(12)
+  const effects = api.calls.filter((call) => !new URL(call.url).pathname.includes("/self-heal/heal_fixture/repair"))
+  const session = effects[1]!
   expect(new URL(session.url).searchParams.get("directory")).toBe(root)
   expect(await session.json()).toMatchObject({ metadata: { sandbox: true, rayaSelfHealSource: { root, commit } } })
-  expect(new URL(api.calls[2]!.url).searchParams.get("directory")).toBe(root)
-  expect(new URL(api.calls[3]!.url).searchParams.get("directory")).toBe(run.store)
-  expect(new URL(api.calls[4]!.url).searchParams.get("directory")).toBe(root)
-  expect(JSON.stringify(await api.calls[4]!.json())).toContain(commit)
+  expect(new URL(effects[2]!.url).searchParams.get("directory")).toBe(root)
+  expect(new URL(effects[3]!.url).searchParams.get("directory")).toBe(run.store)
+  expect(new URL(effects[4]!.url).searchParams.get("directory")).toBe(root)
+  expect(JSON.stringify(await effects[4]!.json())).toContain(commit)
   expect(await fs.readFile(path.join(run.workspace, "keep.txt"), "utf8")).toBe("unrelated user work")
 }, 30_000)
 
@@ -245,3 +277,118 @@ test("a configured source link changing during preparation cannot redirect or re
   expect(api.calls).toHaveLength(1)
   expect(await fs.readdir(run.workspace)).toEqual(["keep.txt"])
 }, 30_000)
+
+test("duplicate repair admission creates no additional session or dispatch", async () => {
+  await using run = await fixture()
+  const api = client({ owned: false })
+  const result = await capture({
+    client: api.sdk,
+    store: run.store,
+    configured: run.root,
+    extension: "",
+    description: "Repeated issue report",
+    reporter: "reporter",
+    metadata: async () => undefined,
+  })
+  expect(result.session).toBeUndefined()
+  expect(api.calls).toHaveLength(2)
+  expect(result.notice).toContain("No additional repair was started")
+}, 30_000)
+
+test("startup failures retain their phase without repeating side effects or exposing raw errors", async () => {
+  await using run = await fixture()
+  for (const failure of ["/session", "/goal", "/heal_fixture", "/prompt_async"]) {
+    const api = client({ failure })
+    const result = await capture({
+      client: api.sdk,
+      store: run.store,
+      configured: run.root,
+      extension: "",
+      description: "Startup boundary failed",
+      reporter: "reporter",
+      metadata: async () => undefined,
+    })
+    expect(result.session).toBeUndefined()
+    expect(result.notice).toContain("startup needs review")
+    expect(result.notice).not.toContain("private raw")
+    const calls = api.calls.filter((call) => new URL(call.url).pathname.endsWith(failure))
+    expect(calls).toHaveLength(1)
+    const last = await api.calls.at(-1)!.clone().json()
+    expect(last.phase).toBe(failure === "/prompt_async" ? "dispatch_unknown" : "blocked")
+  }
+}, 30_000)
+
+test("unavailable failure reporting leaves a readable retained phase notice and never replays dispatch", async () => {
+  await using run = await fixture()
+  const api = client({ failure: "/prompt_async", reporting: false })
+  const result = await capture({
+    client: api.sdk,
+    store: run.store,
+    configured: run.root,
+    extension: "",
+    description: "Dispatch acknowledgement lost",
+    reporter: "reporter",
+    metadata: async () => undefined,
+  })
+  expect(result.notice).toContain("last durable phase")
+  expect(result.notice).toContain("repair-session")
+  expect(api.calls.filter((call) => new URL(call.url).pathname.endsWith("/prompt_async"))).toHaveLength(1)
+}, 30_000)
+
+test("backlog summary exposes retained startup outcome and authoritative attempt session", () => {
+  const text = summary({
+    id: "heal",
+    status: "in_progress",
+    category: "other",
+    severity: "high",
+    title: "Issue",
+    workSessionID: "old",
+    repair: { phase: "dispatch_unknown", sessionID: "retained", reason: "Do not replay dispatch." },
+  })
+  expect(text).toContain("repair dispatch_unknown: Do not replay dispatch.")
+  expect(text).toContain("session retained")
+  expect(text).not.toContain("session old")
+})
+
+test("lost phase acknowledgements never authorize their dependent side effects", async () => {
+  await using run = await fixture()
+  for (const acknowledgement of ["session_creating", "dispatching"]) {
+    const api = client({ acknowledgement })
+    const result = await capture({
+      client: api.sdk,
+      store: run.store,
+      configured: run.root,
+      extension: "",
+      description: "Phase acknowledgement lost",
+      reporter: "reporter",
+      metadata: async () => undefined,
+    })
+    expect(result.notice).toContain("last durable phase")
+    const forbidden = acknowledgement === "session_creating" ? "/session" : "/prompt_async"
+    expect(api.calls.filter((call) => new URL(call.url).pathname.endsWith(forbidden))).toHaveLength(0)
+  }
+}, 30_000)
+
+test("inspect reads the journal directly and handles missing outcomes without assuming release", async () => {
+  const calls: Request[] = []
+  const sdk = createKiloClient({
+    baseUrl: "http://unused.invalid",
+    fetch: async (input, init) => {
+      const request = new Request(input, init)
+      calls.push(request)
+      return calls.length === 1
+        ? Response.json({
+            id: "attempt",
+            itemID: "heal_missing",
+            phase: "dispatch_unknown",
+            sessionID: "retained",
+            reason: "Do not replay.",
+          })
+        : new Response(null, { status: 404 })
+    },
+  })
+  expect(await inspect(sdk, "heal_missing", "global")).toContain("dispatch_unknown in session retained. Do not replay.")
+  expect(new URL(calls[0].url).pathname).toBe("/kilocode/self-heal/heal_missing/repair")
+  expect(calls[0].method).toBe("GET")
+  expect(await inspect(sdk, "heal_missing", "global")).toContain("do not infer that its ownership was released")
+})

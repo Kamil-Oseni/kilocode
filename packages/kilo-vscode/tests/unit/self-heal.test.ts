@@ -9,6 +9,8 @@ describe("Raya self-heal", () => {
   test("parses intake, listing, and usage without guessing ordinary prompts", () => {
     expect(parseSelfHealCommand("hello")).toBeUndefined()
     expect(parseSelfHealCommand("/self-heal")?.kind).toBe("usage")
+    expect(parseSelfHealCommand("/self-heal inspect heal_missing")).toEqual({ kind: "inspect", id: "heal_missing" })
+    expect(parseSelfHealCommand("/self-heal inspect ../../other")?.kind).toBe("usage")
     expect(parseSelfHealCommand("/self-heal list")).toEqual({ kind: "list" })
     expect(parseSelfHealCommand("/self-heal The goal loops forever")).toEqual({
       kind: "capture",

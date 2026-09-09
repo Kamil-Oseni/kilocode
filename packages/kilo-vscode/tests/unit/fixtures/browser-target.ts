@@ -179,6 +179,78 @@ async function main() {
     assert.ok("passed" in incomplete)
     assert.equal(incomplete.passed, false)
     assert.equal(await page.evaluate(() => document.body.dataset.clicks), "1")
+
+    const original = (await session.inventory())[0].id
+    await page.setContent(
+      "<button onclick=\"window.open('about:blank')\">Popup</button><button onclick=\"document.body.dataset.saved='yes'\">Save</button>",
+    )
+    const pending = context.waitForEvent("page")
+    await session.execute({
+      operation: "click",
+      tabID: original,
+      selector: { kind: "role", role: "button", name: "Popup" },
+    })
+    const popup = await pending
+    await popup.waitForLoadState()
+    const inventory = await session.inventory()
+    const child = inventory.find((tab) => tab.id !== original)!
+    assert.equal(child.openerID, original)
+    assert.equal(child.selected, false)
+    assert.equal(inventory.find((tab) => tab.id === original)?.selected, true)
+    await assert.rejects(session.execute({ operation: "click", selector: "button" }), /observed tab ID/)
+    await session.tab("select", child.id)
+    await assert.rejects(
+      session.pointer({ type: "mousePressed", x: 0.5, y: 0.5 }, original),
+      /displayed browser tab changed/,
+    )
+    const saved = await session.execute({
+      operation: "click",
+      tabID: original,
+      selector: { kind: "role", role: "button", name: "Save" },
+    })
+    assert.equal(saved.tabID, original)
+    assert.equal(await page.evaluate(() => document.body.dataset.saved), "yes")
+    assert.equal((await session.inventory()).find((tab) => tab.id === child.id)?.selected, true)
+    const observed = await session.execute({ operation: "snapshot", tabID: original })
+    assert.equal(observed.tabID, original)
+    const parent = context.waitForEvent("page")
+    await popup.evaluate(() => window.open("about:blank"))
+    const descendant = await parent
+    await descendant.waitForLoadState()
+    const owned = (await session.inventory()).find((tab) => tab.openerID === child.id)!
+    assert.ok(owned)
+    await session.execute({ operation: "tabs", action: "close", tabID: child.id })
+    assert.equal((await session.inventory()).find((tab) => tab.id === owned.id)?.openerID, child.id)
+    await session.execute({ operation: "tabs", action: "close", tabID: owned.id })
+    await assert.rejects(
+      session.execute({ operation: "evaluate", tabID: child.id, expression: "1" }),
+      /closed or unknown/,
+    )
+    await assert.rejects(session.execute({ operation: "snapshot", tabID: child.id }), /closed or unknown/)
+    await assert.rejects(session.execute({ operation: "snapshot" }), /observed tab ID/)
+    assert.equal(context.pages().length, 1)
+    await session.execute({ operation: "tabs", action: "open", url: "about:blank" })
+    const opened = (await session.inventory()).find((tab) => tab.selected)!
+    assert.notEqual(opened.id, child.id)
+    const blocker = session.execute({
+      operation: "evaluate",
+      tabID: opened.id,
+      expression: "new Promise(resolve => setTimeout(() => resolve(1), 200))",
+    })
+    const waiting = session.execute({ operation: "click", tabID: original, selector: "button" }).then(
+      () => "unexpected dispatch",
+      (error: unknown) => (error instanceof Error ? error.message : String(error)),
+    )
+    await page.close()
+    await blocker
+    assert.match(await waiting, /closed or unknown/)
+    assert.equal(context.pages().length, 1)
+    await session.execute({ operation: "tabs", action: "close", tabID: opened.id })
+    await assert.rejects(session.execute({ operation: "tabs", action: "close", tabID: original }), /closed or unknown/)
+    assert.deepEqual(await session.inventory(), [])
+    await session.execute({ operation: "tabs", action: "open", url: "about:blank" })
+    assert.equal((await session.inventory()).length, 1)
+    await assert.rejects(session.execute({ operation: "snapshot", tabID: original }), /closed or unknown/)
   } finally {
     await session.dispose()
     await context.close()

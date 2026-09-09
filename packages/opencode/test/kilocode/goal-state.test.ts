@@ -2102,18 +2102,10 @@ describe("RayaGoal", () => {
     }),
   )
 
-  it.live("resume reconciles a saved completed turn without replaying an unconfirmed attempt", () =>
-    Effect.gen(function* () {
-      const storage = yield* Storage.Service
-      for (const boundary of [
-        "started",
-        "finished",
-        "accounted",
-        "error",
-        "interrupted",
-        "superseded",
-        "changed",
-      ] as const) {
+  for (const boundary of ["started", "finished", "accounted", "error", "interrupted", "superseded", "changed"] as const)
+    it.live(`resume reconciles a saved completed turn without replaying an unconfirmed attempt: ${boundary}`, () =>
+      Effect.gen(function* () {
+        const storage = yield* Storage.Service
         const sessionID = SessionID.make(`ses_goal_${crypto.randomUUID()}`)
         const rows: MessageV2.WithParts[] = []
         const goals = setup(storage, () => rows)
@@ -2172,7 +2164,7 @@ describe("RayaGoal", () => {
         if (boundary === "error" || boundary === "interrupted" || boundary === "superseded" || boundary === "changed") {
           expect(runs).toBe(0)
           expect(yield* goals.get(sessionID)).toEqual(before)
-          continue
+          return
         }
         const recovered = yield* goals.get(sessionID)
         expect(runs).toBe(1)
@@ -2183,9 +2175,8 @@ describe("RayaGoal", () => {
         yield* RayaGoalContinuation.resume(input)
         expect(runs).toBe(1)
         expect(yield* goals.get(sessionID)).toEqual(recovered)
-      }
-    }),
-  )
+      }),
+    )
 
   it.live("continuation dispatch rechecks steering, pause and deletion and cannot block a newer revision", () =>
     Effect.gen(function* () {
@@ -3451,10 +3442,10 @@ describe("RayaGoal", () => {
     }),
   )
 
-  it.live("renews recovery on resume and steering without erasing usage or replay receipts", () =>
-    Effect.gen(function* () {
-      const storage = yield* Storage.Service
-      for (const action of ["control", "edit", "model", "steer", "combined", "paused"] as const) {
+  for (const action of ["control", "edit", "model", "steer", "combined", "paused"] as const)
+    it.live(`renews recovery on resume and steering without erasing usage or replay receipts: ${action}`, () =>
+      Effect.gen(function* () {
+        const storage = yield* Storage.Service
         const sessionID = SessionID.make(`ses_goal_${crypto.randomUUID()}`)
         const goals = setup(storage, () => [])
         yield* Effect.addFinalizer(() => goals.clear(sessionID))
@@ -3487,9 +3478,8 @@ describe("RayaGoal", () => {
         expect(next?.status).toBe("active")
         expect(next?.usage.retries).toBe(1)
         expect(next?.usage.continuations).toBe(4)
-      }
-    }),
-  )
+      }),
+    )
 
   it.live("does not renew recovery through active no-op edits or pause alone", () =>
     Effect.gen(function* () {

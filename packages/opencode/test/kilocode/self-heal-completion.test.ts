@@ -175,6 +175,11 @@ it.live("public updates reject verified, delivery and forged session ownership; 
         expect(legacy?.legacyVerification).toBe(true)
         expect(legacy?.completion).toBeUndefined()
         expect(legacy?.reloadRequired).toBe(false)
+        const repeated = yield* healing.create({ description: item.description })
+        expect(repeated.id).toBe(item.id)
+        expect(repeated.status).toBe("blocked")
+        expect(repeated.legacyVerification).toBe(true)
+        expect((yield* healing.list()).length).toBe(1)
         expect((yield* healing.admit(item.id, { source: { root: "/other", commit: "b".repeat(40) } }))?.owned).toBe(
           false,
         )
@@ -338,7 +343,7 @@ it.live(
           expect((yield* service.get(sessionID))?.status).toBe("active")
           expect((yield* RayaSelfHeal.make(storage).get(fixture.item.id))?.status).toBe("verified")
           const done = yield* service.update(sessionID, { status: "complete", audit: audit(proof.part!.callID) })
-          expect(String(done.revision)).toBe(receipt.goal.completedRevision)
+          expect(done.revision).toBe(receipt.goal.completedRevision)
         }),
       )
     }),

@@ -46,8 +46,6 @@ try {
       const operation = (await list(id)).operations[0]
       return operation.status === "pending" ? undefined : operation
     })
-  for (let index = 0; index < 1030; index++)
-    await session.execute({ operation: "evaluate", tabID, expression: "1" })
   assert.equal((await list()).operations.length, 0)
   const alert = await pending('alert("Review <script>untrusted</script>"); "acknowledged"')
   assert.equal(alert.type, "alert")
@@ -193,6 +191,49 @@ try {
   assert.equal((await finished(leaving.operationID!)).status, "completed")
   assert.equal(page.isClosed(), true)
   assert.equal((await session.inventory()).length, 0)
+
+  // Disposal must release a queued beforeunload continuation without replaying it
+  // against the next browser context opened by the same session instance.
+  const profile = join(dir, "reopened")
+  const reusable = new BrowserSession(
+    profile,
+    async () =>
+      chromium.launchPersistentContext(profile, {
+        executablePath: process.env.RAYA_TEST_BROWSER,
+        headless: true,
+      }) as unknown as Promise<BrowserContextLike>,
+  )
+  try {
+    await reusable.ready()
+    const original = (await reusable.inventory())[0].id
+    await reusable.execute({
+      operation: "evaluate",
+      tabID: original,
+      expression: 'document.body.innerHTML = "<button>Activate</button>"',
+    })
+    await reusable.execute({
+      operation: "click",
+      tabID: original,
+      selector: { kind: "role", role: "button", name: "Activate" },
+    })
+    await reusable.execute({
+      operation: "evaluate",
+      tabID: original,
+      expression:
+        'window.addEventListener("beforeunload", event => { event.preventDefault(); event.returnValue = "" })',
+    })
+    await assert.rejects(reusable.execute({ operation: "tabs", action: "close", tabID: original }), /remains pending/)
+    assert.equal(reusable.dialogsState().dialogs.find((dialog) => dialog.status === "open")?.type, "beforeunload")
+    await reusable.dispose()
+    await reusable.ready()
+    const reopened = (await reusable.inventory())[0].id
+    assert.notEqual(reopened, original)
+    const result = await reusable.execute({ operation: "evaluate", tabID: reopened, expression: '"new context"' })
+    assert.match(JSON.stringify(result), /new context/)
+    assert.equal(reusable.dialogsState().dialogs.length, 0)
+  } finally {
+    await reusable.dispose()
+  }
 } finally {
   await session.dispose()
   await context.close()

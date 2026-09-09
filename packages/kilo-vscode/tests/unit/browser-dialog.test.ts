@@ -5,6 +5,21 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { pathToFileURL } from "node:url"
 import { chromium } from "playwright-core"
+import { BrowserDialogs } from "../../src/services/browser-automation/browser-dialog"
+
+test("ordinary completed operations do not exhaust retained dialog history", async () => {
+  const dialogs = new BrowserDialogs()
+  try {
+    for (let index = 0; index < 1030; index++) {
+      const job = dialogs.start("evaluate", "tab", async () => index)
+      expect(await job.result).toBe(index)
+      await job.settled
+    }
+    expect(dialogs.list().operations).toEqual([])
+  } finally {
+    dialogs.dispose()
+  }
+})
 
 const binary = process.env.RAYA_TEST_BROWSER ?? chromium.executablePath()
 const browser = existsSync(binary) ? test : test.skip

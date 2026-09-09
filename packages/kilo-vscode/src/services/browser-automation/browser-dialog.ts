@@ -94,7 +94,7 @@ export class BrowserDialogs {
     }
     const closed = () => {
       for (const entry of this.entries.values()) {
-        if (entry.info.tabID !== tabID || !["open", "resolving"].includes(entry.info.status)) continue
+        if (entry.info.tabID !== tabID || !["open", "resolving", "unknown"].includes(entry.info.status)) continue
         entry.info.status = "closed"
         entry.settled.resolve()
       }
@@ -159,7 +159,8 @@ export class BrowserDialogs {
       .finally(() => {
         if (!running.interrupted) this.operations.delete(info.id)
         for (const entry of this.entries.values()) {
-          if (info.status === "completed" && entry.info.operationID === info.id && entry.info.status === "unknown") entry.info.status = "closed"
+          if (info.status === "completed" && entry.info.operationID === info.id && entry.info.status === "unknown")
+            entry.info.status = "closed"
         }
         if (this.current === running) this.current = undefined
         this.publish()
@@ -208,7 +209,8 @@ export class BrowserDialogs {
       else await entry.native.dismiss()
       entry.info.status = action === "accept" ? "accepted" : "dismissed"
     } catch (error) {
-      entry.info.status = this.operations.get(entry.info.operationID ?? "")?.status === "completed" ? "closed" : "unknown"
+      entry.info.status =
+        this.operations.get(entry.info.operationID ?? "")?.status === "completed" ? "closed" : "unknown"
       throw new Error(
         `Dialog response outcome is uncertain; it will not be sent again. ${error instanceof Error ? error.message : String(error)}`,
       )

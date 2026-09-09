@@ -1095,7 +1095,7 @@ export namespace RayaGoal {
                   healing.complete(id, sessionID, attempt, {
                     intent: i,
                     revision: r,
-                    completedRevision: completed,
+                    completedRevision: completed.revision,
                     createdAt: state.createdAt,
                     objective: state.objective,
                     audit,

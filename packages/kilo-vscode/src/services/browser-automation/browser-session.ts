@@ -1019,9 +1019,8 @@ export class BrowserSession {
     for (const registry of this.documents.values()) registry.dispose()
     this.documents.clear()
     this.openers.clear()
-    if (cdp) await cdp.send("Page.stopScreencast").catch(() => undefined)
-    if (cdp) await cdp.detach().catch(() => undefined)
     if (context) await context.close().catch(() => undefined)
+    if (cdp) await cdp.detach().catch(() => undefined)
   }
 
   private active(): BrowserPage {

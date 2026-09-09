@@ -52,20 +52,32 @@ export namespace RayaTask {
 
   export const forecast = Effect.fn("RayaTask.forecast")(function* (input: Proposal, from = Date.now()) {
     if (!Number.isFinite(from) || Math.abs(from) > 8.64e15)
-      return yield* new GuardError({ message: "Use a valid schedule preview time." })
+      return yield* new GuardError({
+        kind: "schedule",
+        field: "schedule",
+        message: "Use a valid schedule preview time.",
+      })
     const resolved =
       input.kind === "local"
         ? yield* local(input.local, input.tz, input.fold).pipe(
             Effect.mapError(
               (err) =>
-                new GuardError({ message: err instanceof Error ? err.message : "Could not resolve this local time." }),
+                new GuardError({
+                  kind: "schedule",
+                  field: "schedule",
+                  message: err instanceof Error ? err.message : "Could not resolve this local time.",
+                }),
             ),
           )
         : undefined
     const schedule = yield* scheduled(input.kind === "local" ? { kind: "once", at: resolved!.at } : input)
     if (schedule.kind === "once") {
       if (!Number.isFinite(schedule.at) || schedule.at <= from || schedule.at > 8.64e15)
-        return yield* new GuardError({ message: "Choose a future time for this routine." })
+        return yield* new GuardError({
+          kind: "schedule",
+          field: "schedule",
+          message: "Choose a future time for this routine.",
+        })
       return { schedule, from, occurrences: [schedule.at], ...(resolved ? { timezone: resolved.timezone } : {}) }
     }
     if (schedule.kind !== "cron") return { schedule, from, occurrences: [] }
@@ -73,7 +85,12 @@ export namespace RayaTask {
     while (occurrences.length < 3) {
       const at = yield* upcoming(schedule.expr, occurrences.at(-1) ?? from, schedule.tz).pipe(
         Effect.mapError(
-          (err) => new GuardError({ message: err instanceof Error ? err.message : "Could not preview this schedule." }),
+          (err) =>
+            new GuardError({
+              kind: "schedule",
+              field: "schedule",
+              message: err instanceof Error ? err.message : "Could not preview this schedule.",
+            }),
         ),
       )
       occurrences.push(at)
@@ -220,6 +237,8 @@ export namespace RayaTask {
 
   export class GuardError extends Schema.TaggedErrorClass<GuardError>()("RayaTask.GuardError", {
     message: Schema.String,
+    kind: Schema.optional(Schema.Literals(["schedule", "capability", "conflict", "paused", "access", "unavailable"])),
+    field: Schema.optional(Schema.String),
   }) {}
 
   export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("RayaTask.NotFoundError", {
@@ -318,6 +337,8 @@ export namespace RayaTask {
       },
       catch: (err) =>
         new GuardError({
+          kind: "schedule",
+          field: err instanceof RangeError ? "timezone" : "schedule",
           message:
             err instanceof RangeError
               ? "Use a valid timezone for this routine."
@@ -374,6 +395,7 @@ export namespace RayaTask {
       Effect.gen(function* () {
         if (!store)
           return yield* new GuardError({
+            kind: "unavailable",
             message: "The routine archive database is unavailable. Reconnect before reading or removing routines.",
           })
         if (yield* store.ready().pipe(Effect.orDie)) return store
@@ -489,6 +511,8 @@ export namespace RayaTask {
       const capabilities = input.capabilities ?? []
       if (sensitive.has(role.toLowerCase()) && !allowed(role, capabilities)) {
         return yield* new GuardError({
+          kind: "capability",
+          field: "capabilities",
           message: consent(role),
         })
       }
@@ -537,18 +561,26 @@ export namespace RayaTask {
       const prior = items[index]!
       if (patch.expectedOutput !== undefined && !isDeepStrictEqual(patch.expectedOutput, prior.output ?? "unset"))
         return yield* new GuardError({
+          kind: "conflict",
+          field: "output",
           message: "This routine's output requirements changed. Reload it before editing again.",
         })
       if (patch.expectedAccess !== undefined && patch.expectedAccess !== (prior.access ?? "unset"))
         return yield* new GuardError({
+          kind: "conflict",
+          field: "access",
           message: "This routine's access changed. Reload it before reviewing access again.",
         })
       if (patch.expectedScheduleVersion !== undefined && patch.expectedScheduleVersion !== (prior.scheduleVersion ?? 1))
         return yield* new GuardError({
+          kind: "conflict",
+          field: "schedule",
           message: "This routine's schedule version changed. Reload it and preview your changes again.",
         })
       if (patch.expectedSchedule && !isDeepStrictEqual(prior.schedule, patch.expectedSchedule))
         return yield* new GuardError({
+          kind: "conflict",
+          field: "schedule",
           message: "This routine's schedule changed. Reload it and preview your changes again.",
         })
       const schedule = patch.schedule ? yield* scheduled(patch.schedule) : prior.schedule
@@ -587,6 +619,8 @@ export namespace RayaTask {
       }
       if (sensitive.has(next.role.toLowerCase()) && !allowed(next.role, next.capabilities) && next.enabled) {
         return yield* new GuardError({
+          kind: "capability",
+          field: "capabilities",
           message: consent(next.role),
         })
       }
@@ -612,11 +646,13 @@ export namespace RayaTask {
       const agent = yield* get(id)
       if (agent.access === undefined)
         return yield* new GuardError({
+          kind: "access",
+          field: "access",
           message: "Review this older routine's workspace access before starting another run.",
         })
-      if (!agent.enabled) return yield* new GuardError({ message: "This agent is paused." })
+      if (!agent.enabled) return yield* new GuardError({ kind: "paused", message: "This agent is paused." })
       const reason = blocked(agent, yield* runsFor(id))
-      if (reason) return yield* new GuardError({ message: reason })
+      if (reason) return yield* new GuardError({ kind: "paused", message: reason })
       return agent
     })
 

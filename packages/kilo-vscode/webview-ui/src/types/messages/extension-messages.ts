@@ -192,9 +192,11 @@ export interface GoalEditedMessage {
 
 export interface RoutineStateMessage {
   type: "routineState"
+  requestID?: string
   agents?: unknown[]
   templates?: unknown[]
   error?: string
+  recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
   append?: boolean
   saved?: boolean
 }
@@ -207,6 +209,7 @@ export interface RoutineForecastMessage {
   occurrences?: import("@kilocode/sdk/v2/client").KilocodeRoutineForecastResponse["occurrences"]
   timezone?: string
   error?: string
+  recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
 }
 
 export interface RoutineScheduleUpdatedMessage {
@@ -214,6 +217,7 @@ export interface RoutineScheduleUpdatedMessage {
   requestID: string
   agentID: string
   error?: string
+  recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
 }
 
 export interface RoutineRunsLoadedMessage {
@@ -228,6 +232,7 @@ export interface RoutineOutputUpdatedMessage {
   agentID: string
   output?: import("../../../../src/shared/routine-output").Output
   error?: string
+  recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
 }
 
 export interface RoutineAccessUpdatedMessage {
@@ -236,6 +241,7 @@ export interface RoutineAccessUpdatedMessage {
   agentID: string
   access?: "brief" | "full"
   error?: string
+  recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
 }
 
 export interface RoutineSnapshotMessage {
@@ -246,6 +252,7 @@ export interface RoutineSnapshotMessage {
   snapshot?: import("@kilocode/sdk/v2/client").KilocodeRoutineSnapshotResponse
   missing?: boolean
   error?: string
+  recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
 }
 
 export interface RoutineArchiveMessage {
@@ -256,6 +263,7 @@ export interface RoutineArchiveMessage {
   next?: string
   runs?: import("@kilocode/sdk/v2/client").KilocodeRoutineRunsResponse
   error?: string
+  recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
 }
 
 export interface RoutineStartedMessage {

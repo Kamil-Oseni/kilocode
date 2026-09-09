@@ -4,7 +4,7 @@ Source of scope: [Comprehensive audit](Raya-Comprehensive-Audit.md). All section
 
 ## Current work
 
-Latest verified installed product checkpoint: a05a539dec, pushed to origin/main. Browser downloads (OVR-02/OVR-10), source-bound repair verification (OVR-09), and ledger-aware terminal cost reporting (OVR-04) passed their checkpoint checks and the production snapshot workflow. Installed version: 7.4.23-snapshot+a05a539dec.kamil-oseni.1788979134178. Installation is not a claim of full post-reload workflow acceptance.
+Latest verified installed product checkpoint: 15de538fbc, pushed to origin/main. Authorized browser uploads, reviewable repair artifact preparation, usage report copying and goal progress hierarchy passed checkpoint checks and the production snapshot workflow. Installed version: 7.4.23-snapshot+15de538fbc.kamil-oseni.1788982288311. Actual retained-source artifact acceptance remains open; installation does not prove full post-reload workflows.
 
 Next work includes authorized browser uploads, source-to-build artifact provenance, and remaining accounting/product consumers. The two agents and primary agent continue in parallel, with broader tests batched at checkpoints. All audit sections remain in scope; In progress does not mean complete, and historical Verified rows apply only to their stated acceptance scope.
 
@@ -28,14 +28,14 @@ Next work includes authorized browser uploads, source-to-build artifact provenan
 | EN-08 — Repair schema regression checks and isolate contract-test state | Verified | Named contract manifests, Windows paths, and automatic temporary state isolation; schema 17, client 16, core migration 27 tests pass. All three package typechecks pass. |
 | EN-09 — Harden the update path and credential storage | In progress | Release eligibility, SecretStorage migration, exact platform filenames, bounded streamed downloads, SHA-256 verification, credential-safe redirects, and temporary staging tested. VSIX internal identity, bounded release-response validation/pagination, and persistent installation intent are also tested. Credential lifecycle edges, cross-window ownership, actual interruption/rollback, clean dependency installation, and packaged validation remain open. |
 | EN-10 — Specify the supported local-service security topology | Pending | |
-| EN-11 — Give browser identity and captured authentication a lifecycle | Pending | |
+| EN-11 — Give browser identity and captured authentication a lifecycle | In progress | Workspace-owned browser profiles, explicit authentication captures and reset/recovery operations are being implemented. Cross-process ownership, expiry, restore/revocation and real Chromium acceptance remain open. |
 | EN-12 — Make media failures observable and session ownership atomic | Pending | |
 | EN-13 — Treat recordings and telemetry as separate data products | Pending | |
 | EN-14 — Measure recovery and streaming performance across client boundaries | Pending | |
 | EN-15 — Make release confidence reproducible across the fork | In progress | Windows path normalization repaired in the Promise-facade guard; classified the existing real HTTP routine fixture with an exact reference count. Cross-package/snapshot checks are recorded per checkpoint. Broader reproducible release coverage remains open. |
 | UX-01 — Match review labels to action scope | In progress | Keep file / Undo file labels and scope tooltips implemented. File-level summary includes additions and deletions. Concurrent-edit acceptance and live interaction validation remain open. |
 | UX-02 — Present progress as current work and next decision | In progress | Paused/blocked next action and plan-task hierarchy implemented; activity counts disclosed separately. Rendered fixtures pass; live visual and workflow acceptance remain open. |
-| UX-03 — Use a consistent interruption and recovery vocabulary | Pending | |
+| UX-03 — Use a consistent interruption and recovery vocabulary | In progress | Generic routine HTTP errors no longer invent capability denials; specific backend guidance is preserved. Typed recovery codes and consistent cross-surface states remain open. |
 | UX-04 — Expose context provenance and control where work happens | Pending | |
 | UX-05 — Make history a route back to work, not just a list | Pending | |
 | UI-01 — Test real components in the visual harness | In progress | Preview frames now identify production views versus illustrative markup; evidence contract documents exact scope. Production composer/history/review migration and full interaction coverage remain open. |
@@ -1886,3 +1886,57 @@ The next accounting increment should preserve explicit rate presence and origin 
 - No new release has been installed for this uncommitted slice. Actual retained-source artifact packaging and final checkpoint checks remain outstanding.
 - Checkpoint guards additionally passed: extension Knip (native exit 0), forbidden change-marker scan and Markdown table validation. Logs: `.tmp/audit-knip.log`, `.tmp/audit-marker.log`, `.tmp/audit-markdown.log`. UX-02 is tracked as in progress with live visual acceptance still open.
 - Corrected the CLI inspection union into distinct discriminated variants and removed the unsupported ZIP constructor option. CLI typecheck now records native exit 0 (`.tmp/self-heal-artifact-cli-types.log`). Full extension lint passed (`.tmp/audit-extension-lint.log`); independent read-only goal/usage UI review found no concrete introduced defect. Source is frozen pending real retained-source artifact acceptance.
+
+### Verified upload/artifact/reporting snapshot checkpoint
+
+- Committed and pushed `15de538fbc` through normal hooks. All 29 main package type checks and the JetBrains typecheck passed. The worktree was clean after SDK preparation and production packaging.
+- Production snapshot workflow exited 0: CLI version, embedded model catalog and sandbox-worker smoke checks; extension host/webview type checks, lint and production bundle; VSIX packaging and installation.
+- Independently verified normal-user installed version: `eden.raya@7.4.23-snapshot+15de538fbc.kamil-oseni.1788982288311`.
+- VSIX: `C:/Users/User/AppData/Local/Temp/raya-vscode-snapshots/raya-vscode-snapshot-15de538fbc-kamil-oseni-1788982288311.vsix`; SHA-256 `019ECBBD55A59166E7FC9CAD62939521266AEA5B1B13B6D301C949803C019281`; 515,837,386 bytes, 406 entries; bundled CLI 228,225,024 bytes. Manifest identity matched and no .tmp/.env entries were present.
+- Logs: `.tmp/audit-checkpoint-commit.log`, `.tmp/audit-checkpoint-push.log`, `.tmp/audit-checkpoint-snapshot.log`, `.tmp/audit-snapshot-verification.log`.
+- Reload Window may be needed to activate this version; full post-reload acceptance is not claimed. Actual retained-source artifact bootstrap/build/inspection remains a separate open gate. All 39 requirements remain in scope.
+
+- Actual retained-source bootstrap exited 1 before a check ran: the real repair preparation did not reach worktree_ready. Admission was retained; inspection/recovery is underway without replaying admission. See `.tmp/audit-artifact-bootstrap.log`.
+
+
+### Routine recovery guidance and retained-source Windows diagnosis
+
+- Corrected generic routine failures: preserve specific backend messages, suppress raw HTTP/empty-object dumps, and state that the request is unconfirmed with a check-current-state next step. Do not infer money/message capability denial from HTTP 400. Focused tests passed 27/44 assertions; scoped lint passed (`.tmp/routine-error-guidance.log`, `.tmp/routine-error-guidance-lint.log`). The broader typed recovery/state contract remains open.
+- Artifact bootstrap retained worktree_unknown after a partial Windows checkout. Inspection found missing long paths (up to 302 characters) and no core.longpaths override, indicating a real preparation compatibility gap. The repair agent is implementing a per-command fix and regression; no unknown admission was replayed or deleted.
+
+### Typed routine recovery causes
+
+- Added optional schedule/capability/conflict/access/paused/unavailable categories and affected-field metadata to the owned routine guard error. Schedule validation, consent, optimistic-edit conflicts and launch eligibility now identify their cause explicitly. Routine HTTP handlers forward these through the already-supported InvalidRequestError kind/field fields without changing endpoint schemas.
+- Direct forecast checks passed 3 tests/18 assertions, including invalid dates/timezones retaining schedule identity (`.tmp/routine-error-contract-forecast.log`). Real HTTP assertions now cover schedule/conflict metadata and capability refusal without saving a routine; the HTTP run and combined types are queued at the next stable checkpoint. UI recovery controls and transport-specific handling remain open.
+### Routine recovery in the interface
+
+- Added a bounded shared recovery decoder for explicit backend kind/field and known transport error codes; HTTP status/message wording alone never becomes a guessed cause. The host forwards recovery metadata through routine replies, and the main routine view shows the next step while retaining the original error.
+- Background roster refresh no longer dismisses actionable errors. An explicit Dismiss message control only clears the notice; successful save still clears its error. Unit checks passed 30 tests/59 assertions (`.tmp/routine-recovery-unit.log`). A production Solid fixture now checks message persistence, explicit dismissal and no action replay; its current run is pending (`.tmp/routine-recovery-view.log`).
+- Windows repair worktree/snapshot checks passed 18 tests/85 assertions with command-local long-path support; scoped lint passed. The original partial admission remains unknown and preserved. Actual artifact acceptance will name the superseding committed fix rather than claim the installed15 source passed that workflow.
+### Output conflict comparison and HTTP diagnostic limits
+
+- Final routine recovery view fixture passed with message retention and access/output guidance (1 production-view harness test, `.tmp/routine-recovery-final-view.log`). Unit checks and scoped lint also passed.
+- Independent review identified that output conflict guidance required a comparison path without discarding the draft. Added correlated read-only routine-list reload, an in-place display of saved requirements alongside the unchanged draft, and explicit adoption of the displayed comparison baseline before a separate save. Loading, comparison and dismissal never save or start work. Its new production view regression is running (`.tmp/routine-comparison-view.log`).
+- Full routine HTTP file failed 2 of 9 tests with generic server errors during initial create; 7 passed/111 assertions (`.tmp/routine-recovery-http.log`). Both failing cases passed in fresh isolated processes (legacy access 1/9; startup snapshot 1/20). Storage-wide mutation-gate contention appears in the failed run; suite-order diagnosis remains open. Do not describe the full HTTP suite as passed.
+- In-place output comparison passed its actual Solid view regression (1 harness test with internal assertions, `.tmp/routine-comparison-view.log`). Scoped lint initially rejected handler complexity; separated the reload-response handler and final scoped lint passed (`.tmp/routine-comparison-lint-final.log`). Output reviews now also stay mounted if a roster refresh removes their routine, preserving the draft for the explicit missing-routine recovery path; final checkpoint view/type checks will cover this last adjustment.
+- Missing-routine draft preservation passed in the actual Solid view (1 harness test with internal comparison/reload/dismiss/save assertions, `.tmp/routine-missing-draft-view.log`, native exit 0). The later full HTTP diagnostic also failed, but overlapped a view run; its log name ending isolated does not make it isolated. Same-process claims were released around five seconds, so no stale dead-owner lock has been established. A read-only timing/call-site diagnostic is being run without overlapping root tests.
+### Routine contention root cause
+
+- An isolated instrumented HTTP run reproduced the failures without other tests: 6 pass/3 fail, 98 assertions (`.tmp/routine-recovery-http-lock-traced.log`). One successful mutation reached cleanup immediately, but Storage.remove waited about 4.6 seconds to acquire its write lock; deletion then completed in the same millisecond. Competing local mutations repeatedly inspect the same durable claim. This establishes local lock starvation during cleanup, not an expensive filesystem delete or stale dead owner.
+- Approved an owned-boundary fix to serialize local mutation contenders before durable claim acquisition while preserving cross-process claim/recovery semantics. Actual Storage concurrency and full HTTP regressions remain required; the fix is in progress with the repair agent.
+- Routine archive and saved-run review errors now display the same forwarded recovery guidance as the main view and editors; scoped lint passed (`.tmp/routine-recovery-readers-lint.log`). No read action was converted into automatic retry.
+- Browser profile/auth wiring is in place and focused native lifecycle tests are underway. A restart assertion involving session-only cookies failed; persistence semantics are being checked without introducing automatic capture restoration. Browser schema and final acceptance are not yet declared frozen/passed.
+### Verified routine mutation cleanup fix
+
+- The owned mutation boundary now serializes local contenders per exact Storage service with an Effect semaphore, before taking the existing durable claim. Cross-process ownership and recovery remain intact; unrelated stores remain independent and cancelled waiting requests never execute.
+- Real Storage concurrency/failure-cleanup/cancellation checks plus the complete routine HTTP suite passed: 11 tests/149 assertions, native exit 0, 30.23s (`.tmp/routine-mutation-fixed.log`). Scoped lint reported zero warnings/errors. This resolves the reproduced cleanup starvation; historical failed diagnostic logs remain recorded. Combined CLI typecheck and the next release checkpoint are still pending.
+### Browser identity integration checkpoint
+
+- Browser public schemas are frozen and SDK/OpenAPI regeneration passed (`.tmp/recovery-sdk-generation.log`). SDK typecheck passed; CLI types are running against the combined source. Extension typecheck awaits the final internal lifecycle fix.
+- Initial actual browser lifecycle/store/smoke checks passed 3 tests/37 assertions. Coverage includes persistent versus session-cookie restart behavior, IndexedDB replacement, expiry at dispatch, active-capture deletion, retained download bytes, incomplete-restoration startup refusal and native/second-Raya profile locks. This is focused acceptance, not the full browser regression suite.
+- Independent review found delete-before-ready could miss persisted active-auth provenance and skip profile reset/lease acquisition. Agent is correcting persisted-owner inspection and all authentication mutation ownership, with restart/second-owner regressions; no new public schema change is expected.
+### Routine and repair checkpoint readiness
+
+- Shared-source annotation, Promise-facade and Markdown table guards passed (`.tmp/recovery-annotations.log`, `.tmp/recovery-facades.log`, `.tmp/recovery-markdown.log`). SDK regeneration/types passed.
+- CLI typecheck passed after correcting the browser auth/profile fixture result branches and the optional-field test matcher (`.tmp/recovery-cli-types-final.log`). Webview typecheck first found implicit external-value inference in the root recovery decoder; explicit unknown narrowing fixed it, and the retry passed (`.tmp/recovery-webview-types-final.log`).
+- Saving the tested routine/recovery and Windows repair fixes as a separate checkpoint. Browser identity implementation and its generated SDK remain uncommitted pending final lifecycle checks. The installed product remains 15de538fbc until a later verified installation; actual retained-source artifact acceptance will use the new explicitly pinned repair-fix commit.

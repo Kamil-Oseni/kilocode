@@ -84,10 +84,15 @@ describe("routine schedule english", () => {
     expect(once.at).toBeLessThan(Date.now() + 3 * 60_000)
   })
 
-  test("turns raw HTTP 400 dumps into a capability sentence", () => {
+  test("does not infer a capability denial from a generic HTTP failure", () => {
     expect(reason(new Error("POST http://127.0.0.1:1/kilocode/agent → 400 Bad Request"))).toBe(
-      "Could not save that routine. Accountant jobs need you to allow money records. Inbox jobs need you to allow messages.",
+      "The routine request was not confirmed. Check its current state before trying again.",
     )
     expect(reason(new Error("This agent is paused."))).toBe("This agent is paused.")
+    expect(reason({ name: "InvalidRequestError", data: { message: "Choose a valid timezone." } })).toBe(
+      "Choose a valid timezone.",
+    )
+    for (const input of [undefined, null, {}, "Bad Request", new Error("DELETE http://localhost/agent: 400")])
+      expect(reason(input)).toBe("The routine request was not confirmed. Check its current state before trying again.")
   })
 })

@@ -511,7 +511,9 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
 
     const agentForecast = Effect.fn("KilocodeHttpApi.agentForecast")(function* (ctx: { payload: RayaTask.Proposal }) {
       return yield* RayaTask.forecast(ctx.payload).pipe(
-        Effect.catchTag("RayaTask.GuardError", (err) => Effect.fail(new InvalidRequestError({ message: err.message }))),
+        Effect.catchTag("RayaTask.GuardError", (err) =>
+          Effect.fail(new InvalidRequestError({ message: err.message, kind: err.kind, field: err.field })),
+        ),
       )
     })
     const agentList = Effect.fn("KilocodeHttpApi.agentList")(function* () {
@@ -524,7 +526,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .create(ctx.payload)
         .pipe(
           Effect.catchTag("RayaTask.GuardError", (err) =>
-            Effect.fail(new InvalidRequestError({ message: err.message })),
+            Effect.fail(new InvalidRequestError({ message: err.message, kind: err.kind, field: err.field })),
           ),
         )
     })
@@ -534,13 +536,17 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     }) {
       return yield* runner.tasks.update(ctx.params.agentID, ctx.payload).pipe(
         Effect.catchTag("RayaTask.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
-        Effect.catchTag("RayaTask.GuardError", (err) => Effect.fail(new InvalidRequestError({ message: err.message }))),
+        Effect.catchTag("RayaTask.GuardError", (err) =>
+          Effect.fail(new InvalidRequestError({ message: err.message, kind: err.kind, field: err.field })),
+        ),
       )
     })
     const agentRun = Effect.fn("KilocodeHttpApi.agentRun")(function* (ctx: { params: { agentID: string } }) {
       return yield* runner.fire(ctx.params.agentID).pipe(
         Effect.catchTag("RayaTask.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
-        Effect.catchTag("RayaTask.GuardError", (err) => Effect.fail(new InvalidRequestError({ message: err.message }))),
+        Effect.catchTag("RayaTask.GuardError", (err) =>
+          Effect.fail(new InvalidRequestError({ message: err.message, kind: err.kind, field: err.field })),
+        ),
       )
     })
     const agentRuns = Effect.fn("KilocodeHttpApi.agentRuns")(function* (ctx: { params: { agentID: string } }) {
@@ -562,7 +568,9 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     const agentRemove = Effect.fn("KilocodeHttpApi.agentRemove")(function* (ctx: { params: { agentID: string } }) {
       return yield* runner.tasks.remove(ctx.params.agentID).pipe(
         Effect.catchTag("RayaTask.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
-        Effect.catchTag("RayaTask.GuardError", (err) => Effect.fail(new InvalidRequestError({ message: err.message }))),
+        Effect.catchTag("RayaTask.GuardError", (err) =>
+          Effect.fail(new InvalidRequestError({ message: err.message, kind: err.kind, field: err.field })),
+        ),
       )
     })
     const agentTemplateList = Effect.fn("KilocodeHttpApi.agentTemplates")(function* () {
@@ -695,7 +703,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
             .page(ctx.query)
             .pipe(
               Effect.catchTag("RayaTask.GuardError", (err) =>
-                Effect.fail(new InvalidRequestError({ message: err.message })),
+                Effect.fail(new InvalidRequestError({ message: err.message, kind: err.kind, field: err.field })),
               ),
             ),
         )

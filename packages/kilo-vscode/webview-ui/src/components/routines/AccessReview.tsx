@@ -26,7 +26,7 @@ export function AccessReview(props: {
       return
     clearTimeout(timer)
     setRequest("")
-    if (msg.error) return setError(msg.error)
+    if (msg.error) return setError([msg.error, msg.recovery?.next].filter(Boolean).join(" "))
     if (msg.access !== choice())
       return setError("The saved access did not match your choice. Close and reload the routine.")
     setSaved(true)

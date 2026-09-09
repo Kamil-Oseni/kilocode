@@ -101,6 +101,21 @@ try {
     enabled: false,
   }
   emit({ type: "routineState", agents: [agent], templates: [] })
+  emit({
+    type: "routineState",
+    error: "Request interrupted.",
+    recovery: { kind: "connection", next: "Check the current routine before trying again." },
+  })
+  assert.match(root.querySelector('[role="alert"]').textContent, /Check the current routine/)
+  emit({ type: "routineState", agents: [agent] })
+  assert.match(root.querySelector('[role="alert"]').textContent, /Request interrupted/)
+  button("Dismiss message").click()
+  assert.equal(root.querySelector('[role="alert"]'), null)
+  assert.equal(
+    sent.some((msg) => msg.type === "routineRun"),
+    false,
+    "Dismissing a message must not repeat work",
+  )
   {
     const output = {
       destination: "conversation",
@@ -138,9 +153,25 @@ try {
       requestID: request.requestID,
       agentID: agent.id,
       error: "Output requirements changed; reload.",
+      recovery: { kind: "conflict", field: "output", next: "Compare the saved requirements with your draft." },
     })
     assert.match(root.textContent, /Output requirements changed; reload/)
+    assert.match(root.textContent, /Compare the saved requirements with your draft/)
     assert.equal(button("Save requirements").disabled, true)
+    button("Compare with current requirements").click()
+    const comparison = sent.findLast((msg) => msg.type === "routineList")
+    const current = { ...output, description: "Concurrent report" }
+    emit({ type: "routineState", requestID: "stale", agents: [{ ...agent, output: current }] })
+    assert.equal(root.textContent.includes("Currently saved requirements"), false)
+    emit({ type: "routineState", requestID: comparison.requestID, agents: [{ ...agent, output: current }] })
+    assert.match(root.querySelector("[data-routine-comparison]").textContent, /Concurrent report/)
+    assert.equal(edit.value, "Edited report")
+    const count = sent.filter((msg) => msg.type === "routineOutputUpdate").length
+    button("Keep my draft and continue editing").click()
+    assert.equal(sent.filter((msg) => msg.type === "routineOutputUpdate").length, count)
+    assert.equal(edit.value, "Edited report")
+    button("Save requirements").click()
+    assert.deepEqual(sent.findLast((msg) => msg.type === "routineOutputUpdate").expectedOutput, current)
     button("Close output review").click()
     await Promise.resolve()
     assert.equal(document.activeElement === button("Edit output"), true)
@@ -170,7 +201,13 @@ try {
     assert.match(root.textContent, /save could not be confirmed/)
     emit({ type: "routineOutputUpdated", requestID: late.requestID, agentID: agent.id, output: late.output })
     assert.doesNotMatch(root.textContent, /Output requirements saved/)
+    button("Compare with current requirements").click()
+    const missing = sent.findLast((msg) => msg.type === "routineList")
+    emit({ type: "routineState", requestID: missing.requestID, agents: [] })
+    assert.match(root.textContent, /no longer available/)
+    assert.equal(root.querySelector("section textarea").value, "Required text")
     button("Close output review").click()
+    emit({ type: "routineState", agents: [agent], templates: [] })
     await Promise.resolve()
   }
   assert.equal(button("Run now").disabled, true)
@@ -212,8 +249,10 @@ try {
     requestID: conflict.requestID,
     agentID: "routine",
     error: "Access changed; reload.",
+    recovery: { kind: "conflict", field: "access", next: "Compare the current access with your choice." },
   })
   assert.match(root.textContent, /Access changed; reload/)
+  assert.match(root.textContent, /Compare the current access with your choice/)
   assert.ok(button("Save access").disabled)
   button("Close access review").click()
   emit({ type: "routineAccessUpdated", requestID: conflict.requestID, agentID: "routine", access: "full" })

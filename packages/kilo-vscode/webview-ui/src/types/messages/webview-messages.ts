@@ -93,6 +93,7 @@ export interface GoalDiscardMessage {
 
 export interface RoutineListMessage {
   type: "routineList"
+  requestID?: string
 }
 
 export interface RoutineForecastRequestMessage {

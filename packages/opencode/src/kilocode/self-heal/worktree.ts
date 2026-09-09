@@ -39,6 +39,7 @@ async function command(root: string, args: string[], input?: string) {
       "git",
       [
         "--no-pager",
+        ...(process.platform === "win32" ? ["-c", "core.longpaths=true"] : []),
         "-c",
         `core.hooksPath=${process.platform === "win32" ? "NUL" : "/dev/null"}`,
         "-c",

@@ -13,6 +13,7 @@ import { plan, verify } from "@/kilocode/self-heal/worktree"
 import { checkout, git, lfs } from "./fixtures/self-heal-worktree"
 import { tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { capture, materialize, unchanged } from "@/kilocode/self-heal/snapshot"
 const it = testEffect(LayerNode.compile(LayerNode.group([FSUtil.node, Git.node, CrossSpawnSpawner.node])))
 function instance<A, E>(
   directory: string,
@@ -23,6 +24,65 @@ function instance<A, E>(
     return yield* run(RayaSelfHeal.make(yield* Storage.Service, root))
   }).pipe(Effect.provide(Storage.layerFromDir(directory)))
 }
+
+it.live(
+  "owned preparation and source capture support long Windows paths without changing repository Git configuration",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      const directory = path.join(root, "storage")
+      const source = yield* Effect.promise(() => checkout(directory))
+      const name = path.join(
+        "nested-" + "a".repeat(40),
+        "nested-" + "b".repeat(40),
+        "source-" + "c".repeat(40) + ".txt",
+      )
+      yield* Effect.promise(async () => {
+        await fs.mkdir(path.dirname(path.join(source.root, name)), { recursive: true })
+        await fs.writeFile(path.join(source.root, name), "long captured source")
+        await git(source.root, ["-c", "core.longpaths=true", "add", "."])
+        await git(source.root, [
+          "-c",
+          "core.longpaths=true",
+          "-c",
+          "user.name=Fixture",
+          "-c",
+          "user.email=fixture@example.invalid",
+          "commit",
+          "-m",
+          "long source fixture",
+        ])
+        source.commit = await git(source.root, ["rev-parse", "HEAD"])
+        await git(source.root, ["config", "core.longpaths", "false"])
+      })
+      const managed = path.join(root, "managed-" + "d".repeat(40))
+      const item = yield* instance(
+        directory,
+        (backlog) => backlog.create({ description: "Prepare long source paths" }),
+        managed,
+      )
+      const granted = (yield* instance(directory, (backlog) => backlog.admit(item.id, { source }), managed))!
+      const prepared = yield* instance(
+        directory,
+        (backlog) => backlog.prepare(item.id, { token: granted.token!, revision: 0 }),
+        managed,
+      )
+      expect(prepared.phase).toBe("worktree_ready")
+      expect(path.join(prepared.worktree!.directory, name).length).toBeGreaterThan(260)
+      yield* Effect.promise(async () => {
+        await verify(source, prepared.worktree!)
+        expect(await fs.readFile(path.join(prepared.worktree!.directory, name), "utf8")).toBe("long captured source")
+        const store = path.join(root, "captured-" + "e".repeat(40))
+        const snapshot = await capture(prepared.worktree!.directory, store, prepared.worktree)
+        expect(snapshot.files.some((file) => file.path === name.replaceAll("\\", "/"))).toBe(true)
+        const copy = await materialize(store, snapshot)
+        await unchanged(copy, snapshot)
+        expect(await fs.readFile(path.join(copy, name), "utf8")).toBe("long captured source")
+        expect(await git(source.root, ["config", "--get", "core.longpaths"])).toBe("false")
+      })
+    }),
+  30_000,
+)
 
 it.live(
   "independent owners create one exact-commit checkout without changing dirty source or running hooks/setup",

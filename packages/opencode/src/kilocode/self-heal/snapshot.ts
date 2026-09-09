@@ -68,7 +68,17 @@ async function git(root: string, args: string[]) {
   return new Promise<string>((resolve, reject) => {
     execFile(
       "git",
-      ["--no-pager", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=", "-C", root, ...args],
+      [
+        "--no-pager",
+        ...(process.platform === "win32" ? ["-c", "core.longpaths=true"] : []),
+        "-c",
+        "core.fsmonitor=false",
+        "-c",
+        "core.hooksPath=",
+        "-C",
+        root,
+        ...args,
+      ],
       {
         windowsHide: true,
         timeout: 30_000,

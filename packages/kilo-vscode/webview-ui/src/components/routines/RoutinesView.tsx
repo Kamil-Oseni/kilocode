@@ -216,7 +216,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   }
   const roster = (items: Agent[]) => {
     setAgents(items)
-    if (reviewed() && !items.some((item) => item.id === reviewed()?.id)) dismiss()
+    if (reviewed() && section() !== "output" && !items.some((item) => item.id === reviewed()?.id)) dismiss()
     if (items.some((item) => inspected(item.id))) return
     if (root?.querySelector(".routines-instructions")?.contains(document.activeElement)) return close()
     setInspection(undefined)
@@ -236,7 +236,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const receive = (msg: Extract<ExtensionMessage, { type: "routineForecast" }>) => {
     if (msg.requestID !== request()?.id || request()?.key !== key()) return
     setPreview(msg)
-    if (msg.error) setError(msg.error)
+    if (msg.error) setError([msg.error, msg.recovery?.next].filter(Boolean).join(" "))
   }
 
   const updated = (msg: Extract<ExtensionMessage, { type: "routineScheduleUpdated" }>) => {
@@ -247,7 +247,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     setPreview(undefined)
     setRequest(undefined)
     if (msg.error) {
-      setNotice(msg.error)
+      setNotice([msg.error, msg.recovery?.next].filter(Boolean).join(" "))
       return
     }
     setEditing(undefined)
@@ -260,16 +260,16 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     if (msg.type === "routineScheduleUpdated") updated(msg)
     if (msg.type === "routineState") {
       if (msg.error) {
-        setError(msg.error)
+        setError([msg.error, msg.recovery?.next].filter(Boolean).join(" "))
         if (!editing()) {
           hold = false
           setSaving(false)
         }
       }
       if (msg.agents) {
-        if (!msg.error) setError("")
         roster(msg.agents as Agent[])
         if (msg.saved && !msg.error && !editing()) {
+          setError("")
           hold = false
           setSaving(false)
           setScreen("roster")
@@ -519,6 +519,9 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
         <Show when={error()}>
           <p class="routines-error" role="alert">
             {error()}
+            <Button variant="ghost" size="small" onClick={() => setError("")}>
+              Dismiss message
+            </Button>
           </p>
         </Show>
         <Show when={screen() === "roster"}>

@@ -162,7 +162,7 @@ export function RunReview(props: {
       </Show>
       <Show when={reply()?.error}>
         <p class="routines-error" role="alert">
-          {reply()?.error}
+          {[reply()?.error, reply()?.recovery?.next].filter(Boolean).join(" ")}
         </p>
         <Button size="small" variant="secondary" onClick={load}>
           Try again

@@ -49,7 +49,7 @@ export function Archive(props: { onOpenSession?: (id: string) => void }) {
     setRequest("")
     setLoading(false)
     if (msg.error) {
-      setError(msg.error)
+      setError([msg.error, msg.recovery?.next].filter(Boolean).join(" "))
       return
     }
     if (target()) {

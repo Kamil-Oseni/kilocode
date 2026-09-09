@@ -56,7 +56,10 @@ function workspace() {
     const mod = yield* Effect.promise(() => import("@/project/instance-store"))
     const store = yield* Effect.serviceOption(mod.Service)
     if (Option.isNone(store)) {
-      return yield* new RayaTask.GuardError({ message: "Workspace services are unavailable for this routine." })
+      return yield* new RayaTask.GuardError({
+        kind: "unavailable",
+        message: "Workspace services are unavailable for this routine.",
+      })
     }
     return store.value
   })
@@ -133,7 +136,10 @@ export namespace RayaTaskRunner {
       if (item.dir?.trim()) yield* workspace()
       if (trigger?.kind === "timer") {
         if (!schedule)
-          return yield* new RayaTask.GuardError({ message: "The routine occurrence database is unavailable." })
+          return yield* new RayaTask.GuardError({
+            kind: "unavailable",
+            message: "The routine occurrence database is unavailable.",
+          })
         return { item, trigger: yield* schedule.check(item, trigger.selected) }
       }
       if (trigger?.kind === "event" && !RayaTask.listen(item, trigger.source, trigger.filter)) {

@@ -6,6 +6,7 @@ import { isDeepStrictEqual } from "node:util"
 import { getErrorMessage } from "../kilo-provider-utils"
 import { Edit, Proposal, Schedule } from "../shared/routine-schedule"
 import { Output } from "../shared/routine-output"
+import { recovery } from "../shared/routine-error"
 
 type Msg = { type: string } & Record<string, unknown>
 type Kilo = KiloClient["kilocode"]["routine"]
@@ -109,8 +110,13 @@ function reply(type: string) {
 
 export function reason(err: unknown) {
   const text = getErrorMessage(err)
-  if (text && !/^POST http/i.test(text) && text !== "Bad Request" && text !== "{}") return text
-  return "Could not save that routine. Accountant jobs need you to allow money records. Inbox jobs need you to allow messages."
+  if (
+    text &&
+    !/^(?:GET|POST|PUT|PATCH|DELETE) https?:/i.test(text) &&
+    !["Bad Request", "{}", "undefined", "null", "[object Object]"].includes(text)
+  )
+    return text
+  return "The routine request was not confirmed. Check its current state before trying again."
 }
 
 function owned(type: string) {
@@ -162,7 +168,7 @@ async function list(ctx: Ctx) {
     ctx.kilo.list({ directory: ctx.dir }, { throwOnError: true }),
     ctx.kilo.templates({ directory: ctx.dir }, { throwOnError: true }),
   ])
-  ctx.post({ type: "routineState", agents: agents.data, templates: templates.data })
+  ctx.post({ type: "routineState", requestID: ctx.message.requestID, agents: agents.data, templates: templates.data })
   await history(ctx.kilo, ctx.dir, ctx.post, (agents.data ?? []) as Listed[])
 }
 
@@ -446,6 +452,7 @@ export async function handleRoutineMessage(input: {
       agentID: ctx.message.agentID,
       runID: ctx.message.runID,
       error: reason(err),
+      recovery: recovery(err),
     })
     return true
   }

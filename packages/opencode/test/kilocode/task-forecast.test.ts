@@ -43,6 +43,8 @@ describe("routine schedule forecast", () => {
     ]) {
       const result = await Effect.runPromise(RayaTask.forecast(input, 1000).pipe(Effect.flip))
       expect(result._tag).toBe("RayaTask.GuardError")
+      expect(result.kind).toBe("schedule")
+      expect(["schedule", "timezone"]).toContain(result.field ?? "")
     }
   })
 })

@@ -19,6 +19,28 @@ afterEach(async () => {
   await resetDatabase()
 })
 
+test("routine capability errors identify the missing decision without saving a routine", async () => {
+  await using directory = await tmpdir({ git: true })
+  const headers = { "content-type": "application/json", "x-kilo-directory": directory.path }
+  const app = Server.Default().app
+  for (const role of ["accountant", "inbox"]) {
+    const response = await app.request("/kilocode/agent", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ name: "Review", role, objective: "Review records", schedule: { kind: "manual" } }),
+    })
+    expect(response.status).toBe(400)
+    expect(await response.json()).toMatchObject({
+      kind: "capability",
+      field: "capabilities",
+      message: expect.any(String),
+    })
+  }
+  const response = await app.request("/kilocode/agent", { headers })
+  expect(response.status).toBe(200)
+  expect(await response.json()).toEqual([])
+}, 30_000)
+
 test("routine output contracts round-trip and reject invalid updates without replacing saved requirements", async () => {
   await using directory = await tmpdir({ git: true })
   const headers = { "content-type": "application/json", "x-kilo-directory": directory.path }
@@ -86,7 +108,11 @@ test("routine output contracts round-trip and reject invalid updates without rep
       body: JSON.stringify({ output, expectedOutput }),
     })
     expect(stale.status).toBe(400)
-    expect(await stale.text()).toContain("output requirements changed")
+    expect(await stale.json()).toMatchObject({
+      message: expect.stringContaining("output requirements changed"),
+      kind: "conflict",
+      field: "output",
+    })
   }
   const legacy = await app.request("/kilocode/agent", {
     method: "POST",
@@ -450,7 +476,11 @@ test("schedule forecast HTTP route returns occurrences without adding a routine"
     body: JSON.stringify({ kind: "local", local: "2027-03-14T02:30", tz: "America/Toronto" }),
   })
   expect(gap.status).toBe(400)
-  expect(await gap.json()).toMatchObject({ message: expect.stringContaining("does not exist") })
+  expect(await gap.json()).toMatchObject({
+    message: expect.stringContaining("does not exist"),
+    kind: "schedule",
+    field: "schedule",
+  })
   const after = await app.request("/kilocode/agent", { headers })
   expect(await after.json()).toEqual(roster)
   const invalid = await app.request("/kilocode/agent-forecast", {
@@ -459,7 +489,11 @@ test("schedule forecast HTTP route returns occurrences without adding a routine"
     body: JSON.stringify({ kind: "cron", expr: "0 9 * * *", tz: "Invalid/Zone" }),
   })
   expect(invalid.status).toBe(400)
-  expect(await invalid.json()).toMatchObject({ message: "Use a valid timezone for this routine." })
+  expect(await invalid.json()).toMatchObject({
+    message: "Use a valid timezone for this routine.",
+    kind: "schedule",
+    field: "timezone",
+  })
 }, 30_000)
 
 test("archive pages stay bounded and anchored when newer removals arrive", async () => {

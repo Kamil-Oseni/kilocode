@@ -80,8 +80,18 @@ const roles = [
 const chat: Choice = { key: "chat", label: "Same as chat" }
 
 const work = [
-  { id: "full" as const, label: "Can edit the workspace" },
-  { id: "brief" as const, label: "Read and notify only" },
+  {
+    id: "full" as const,
+    label: "Full tool access",
+    description:
+      "Allows editing, shell commands, browser actions, delegation, and external tools unless a saved tool list restricts them. This is not limited to workspace files.",
+  },
+  {
+    id: "brief" as const,
+    label: "Read and report",
+    description:
+      "Read files and resources, search their contents, and report in the run conversation. Shell, browser actions, delegation, and unlisted tool permissions are denied.",
+  },
 ]
 
 function title(agent: AgentInfo) {
@@ -119,7 +129,7 @@ function folder(path: string) {
 function meta(item: Agent) {
   const when = item.nextRun ? `Next ${new Date(item.nextRun).toLocaleString()}` : whenLabel(item.schedule)
   const pause = item.enabled ? "" : "Paused · "
-  const brief = item.access === "brief" || (!item.access && item.role === "briefer") ? " · Notify only" : ""
+  const brief = item.access === "brief" || (!item.access && item.role === "briefer") ? " · Read and report" : ""
   const write = item.dir ? ` · ${folder(item.dir)}` : ""
   return `${pause}${item.role} · ${when}${brief}${write}`
 }
@@ -846,7 +856,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                 </p>
               </div>
               <div class="routines-field">
-                <span>How it works</span>
+                <span>Tool access</span>
                 <Select
                   options={work}
                   current={workOpt()}
@@ -856,6 +866,9 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                   variant="secondary"
                   size="small"
                 />
+                <p class="routines-hint">
+                  {workOpt().description} This policy does not provide operating-system confinement.
+                </p>
               </div>
               <Show when={role() === "accountant"}>
                 <div class="routines-consent">

@@ -56,6 +56,8 @@ import {
 } from "@kilocode/kilo-indexing/config"
 import { unique } from "remeda"
 import { installLocalPluginDependency, needsLocalPluginDependency } from "@/kilocode/config/plugin-deps"
+import * as RepairConfig from "@/kilocode/config/repair"
+import { Storage } from "@/storage/storage"
 // kilocode_change end
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import * as Log from "@opencode-ai/core/util/log" // kilocode_change
@@ -282,6 +284,7 @@ const layer = Layer.effect(
     const http = yield* HttpClient.HttpClient
     const git = yield* Git.Service // kilocode_change
     const flock = yield* EffectFlock.Service // kilocode_change - serialize global config read-merge-write updates
+    const storage = yield* Storage.Service // kilocode_change - inspect retained repair ownership before optional setup
 
     const readConfigFile = (filepath: string) => fs.readFileStringSafe(filepath).pipe(Effect.orDie)
 
@@ -313,7 +316,7 @@ const layer = Layer.effect(
 
     const loadConfig = Effect.fnUntraced(function* (
       text: string,
-      options: { path: string; original?: string } | { dir: string; source: string }, // kilocode_change
+      options: { path: string; original?: string; setup?: boolean } | { dir: string; source: string }, // kilocode_change
       env?: Record<string, string>,
       // kilocode_change start - trusted allows {env:}; fileScope confines untrusted {file:} reads to a root
       trusted?: boolean,
@@ -342,7 +345,7 @@ const layer = Layer.effect(
           getInsertionIndex: () => 0,
         })
         const updated = applyEdits(original, edits)
-        if (updated !== original) {
+        if (updated !== original && options.setup !== false) {
           yield* fs.writeFileString(options.path, updated).pipe(Effect.catch(() => Effect.void))
         }
         // kilocode_change end
@@ -356,6 +359,7 @@ const layer = Layer.effect(
       trusted?: boolean, // kilocode_change
       fileScope?: ConfigVariable.FileScope, // kilocode_change
       configWarnings?: Warning[], // kilocode_change - collect MCP header expansion warnings
+      setup = true, // kilocode_change - optional writes must not change managed repair source
     ) {
       yield* Effect.logInfo("loading", { path: filepath })
       const text = yield* readConfigFile(filepath)
@@ -367,7 +371,7 @@ const layer = Layer.effect(
       if (sanitized && configWarnings) configWarnings.push(...sanitized.warnings)
       const data = yield* loadConfig(
         content,
-        { path: filepath, original: text },
+        { path: filepath, original: text, setup },
         trusted === false ? undefined : env,
         trusted,
         fileScope,
@@ -480,6 +484,7 @@ const layer = Layer.effect(
       function* (ctx: InstanceContext) {
         // kilocode_change start - warning accumulator and legacy Kilo config
         const warnings: Warning[] = []
+        const setup = yield* RepairConfig.setup(storage, fs, ctx.directory)
         // Untrusted project config may only read files inside this root (worktree, or directory for non-git projects).
         const projectRoot = ctx.worktree === "/" ? ctx.directory : ctx.worktree
         const auth = yield* authSvc.all().pipe(Effect.orDie)
@@ -667,7 +672,7 @@ const layer = Layer.effect(
           yield* merge(
             Flag.KILO_CONFIG,
             // kilocode_change - KILO_CONFIG is an explicit user-provided path, trusted for {file:}/{env:}
-            yield* loadFile(Flag.KILO_CONFIG, authEnv, true).pipe(
+            yield* loadFile(Flag.KILO_CONFIG, authEnv, true, undefined, undefined, setup).pipe(
               Effect.catchDefect((err: unknown) => {
                 caughtWarning(warnings, Flag.KILO_CONFIG!, err)
                 return Effect.succeed({} as Info)
@@ -687,7 +692,7 @@ const layer = Layer.effect(
               yield* merge(
                 file,
                 // kilocode_change - project config is untrusted: {env:} rejected by substitution; MCP entries with variable-bearing headers dropped pre-substitution, {file:} confined to projectRoot
-                yield* loadFile(file, authEnv, false, { root: projectRoot, source: file }, warnings).pipe(
+                yield* loadFile(file, authEnv, false, { root: projectRoot, source: file }, warnings, setup).pipe(
                   Effect.catchDefect((err: unknown) => {
                     caughtWarning(warnings, file, err)
                     return Effect.succeed({} as Info)
@@ -738,7 +743,7 @@ const layer = Layer.effect(
               yield* Effect.logDebug(`loading config from ${source}`)
               // kilocode_change - untrusted config dirs confine {file:} reads to projectRoot
               const fileScope = dirTrusted ? undefined : { root: projectRoot, source }
-              const next = yield* loadFile(source, authEnv, dirTrusted, fileScope, dirTrusted ? undefined : warnings).pipe(
+              const next = yield* loadFile(source, authEnv, dirTrusted, fileScope, dirTrusted ? undefined : warnings, setup).pipe(
                 Effect.catchDefect((err: unknown) => {
                   caughtWarning(warnings, source, err)
                   return Effect.succeed({} as Info)
@@ -753,7 +758,7 @@ const layer = Layer.effect(
           }
           // kilocode_change end
 
-          yield* ensureGitignore(dir).pipe(Effect.orDie)
+          if (setup) yield* ensureGitignore(dir).pipe(Effect.orDie) // kilocode_change - preserve owned repair source
 
           // kilocode_change start - propagate parse errors to the Warning accumulator
           const sourceScopes = (names: readonly string[]) => [
@@ -791,7 +796,7 @@ const layer = Layer.effect(
           yield* mergePluginOrigins(dir, list, dirScope) // kilocode_change
 
           // kilocode_change start
-          if (needsLocalPluginDependency(plugins)) {
+          if (setup && needsLocalPluginDependency(plugins)) {
             deps.push(yield* installLocalPluginDependency(npmSvc, dir, InstallationVersion, InstallationLocal))
           }
           // kilocode_change end
@@ -1133,7 +1138,7 @@ const layer = Layer.effect(
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [FSUtil.node, Auth.node, Account.node, Env.node, Npm.node, httpClient, Git.node, EffectFlock.node], // kilocode_change
+  deps: [FSUtil.node, Auth.node, Account.node, Env.node, Npm.node, httpClient, Git.node, EffectFlock.node, Storage.node], // kilocode_change
 })
 
 export * as Config from "./config"

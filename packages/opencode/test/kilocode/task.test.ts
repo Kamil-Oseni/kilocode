@@ -1467,7 +1467,20 @@ describe("RayaTask store", () => {
       expect(agent.access).toBe("brief")
       for (const tools of [undefined, ["*"], ["edit", "write", "bash", "apply_patch", "read"], ["e*"]]) {
         const rules = RayaTask.rules({ ...agent, tools })
-        for (const permission of ["edit", "write", "bash", "apply_patch"])
+        for (const permission of [
+          "edit",
+          "write",
+          "bash",
+          "apply_patch",
+          "task",
+          "browser_click",
+          "browser_evaluate",
+          "browser_upload",
+          "browser_auth",
+          "plugin_write",
+          "mcp_send_message",
+          "external_directory",
+        ])
           expect(Permission.evaluate(permission, "file", rules).action).toBe("deny")
       }
       const updated = await Effect.runPromise(tasks.update(agent.id, { access: "full" }))
@@ -1504,7 +1517,17 @@ describe("RayaTask store", () => {
     expect(RayaTask.brief({ role: "inbox" })).toBe(false)
     expect(RayaTask.brief({ role: "briefer", access: "full" })).toBe(false)
     const denied = RayaTask.rules({ role: "briefer" })
-    expect(denied.some((rule) => rule.permission === "edit" && rule.action === "deny")).toBe(true)
+    expect(Permission.evaluate("edit", "file", denied).action).toBe("deny")
+    for (const permission of ["read", "glob", "grep", "question", "get_goal", "update_goal", "update_goal_plan"])
+      expect(Permission.evaluate(permission, "file", denied).action).toBe("allow")
+    const selected = RayaTask.rules({ role: "briefer", tools: ["read", "browser_*", "task"] })
+    expect(Permission.evaluate("read", "file", selected).action).toBe("allow")
+    for (const permission of ["grep", "browser_click", "task"])
+      expect(Permission.evaluate(permission, "file", selected).action).toBe("deny")
+    const tools = ["read", "write", "apply_patch", "bash", "task", "browser_click", "plugin_write", "mcp_send_message"]
+    expect([...Permission.disabled(tools, Permission.merge(Permission.fromConfig({ "*": "allow" }), denied))]).toEqual(
+      tools.filter((tool) => tool !== "read"),
+    )
   })
 })
 

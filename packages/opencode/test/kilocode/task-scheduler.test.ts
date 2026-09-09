@@ -288,7 +288,15 @@ it.live("startup pins its resolved instructions before session creation and refu
           ...sessions,
           create: (params) =>
             Effect.gen(function* () {
-              for (const permission of ["edit", "write", "bash", "apply_patch"])
+              for (const permission of [
+                "edit",
+                "write",
+                "bash",
+                "apply_patch",
+                "task",
+                "browser_click",
+                "mcp_send_message",
+              ])
                 expect(Permission.evaluate(permission, "file", params?.permission ?? []).action).toBe("deny")
               const keys = yield* input.storage.list(["raya", "agent-starts"])
               expect(keys).toHaveLength(1)

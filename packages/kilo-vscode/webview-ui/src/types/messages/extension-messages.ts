@@ -744,7 +744,8 @@ export interface SpeechRealtimeReadyMessage {
 export interface SpeechRealtimeErrorMessage {
   type: "speechRealtimeError"
   error: string
-  fallback: "cascade-v1" | "text"
+  fallback?: "cascade-v1" | "text"
+  code?: "configuration" | "busy" | "setup_failed" | "cleanup_failed" | "admission_unknown" | "cancelled"
 }
 
 export interface SpeechRealtimeStoppedMessage {

@@ -7,27 +7,17 @@ import { VoiceReplies } from "./replies"
 import { getErrorMessage } from "../kilo-provider-utils"
 import { cancelSpeechCapture, startSpeechCapture, stopSpeechCapture } from "../speech-to-text/capture" // raya_change - native fallback when VS Code denies webview mic access
 import type { KiloConnectionService } from "../services/cli-backend/connection-service" // raya_change - realtime voice session broker
+import { RealtimeBroker } from "./realtime-broker"
 import { voiceFallback } from "./fallback" // raya_change - explicit three-rung degradation
 
 type Post = (message: unknown) => void
-type RealtimeSession = {
-  id: string
-  room: string
-  livekitURL: string
-  clientToken: string
-  mediaToken: string
-  engine: "qwen-realtime"
-  acceptsTruncation: boolean
-}
 
 export class SpeechService implements vscode.Disposable {
   readonly settings: SpeechSettingsStore
   private readonly tts = new MiniMaxTts()
   private readonly aborts = new Map<string, AbortController>()
   private readonly replies = new VoiceReplies() // raya_change - extension-host voice reply handoff
-  private realtime:
-    | { info: RealtimeSession; mediaURL: string; backendURL: string; auth: string; directory: string }
-    | undefined // raya_change - provider secrets remain extension-host only
+  private readonly realtime = new RealtimeBroker()
 
   constructor(context: vscode.ExtensionContext) {
     this.settings = new SpeechSettingsStore(context.globalState, context.secrets)
@@ -54,49 +44,56 @@ export class SpeechService implements vscode.Disposable {
     input: { sessionID: string; directory: string; connection: KiloConnectionService },
     post: Post,
   ): Promise<void> {
-    await this.realtimeStop(() => undefined)
-    const settings = await this.settings.load()
-    const fallback = voiceFallback(settings)
-    if (settings.voiceEngine !== "qwen-realtime") {
-      post({ type: "speechRealtimeError", error: "Native realtime voice is disabled in Speech settings.", fallback })
-      return
-    }
-    const key = await this.settings.key("realtime")
-    if (!key) {
-      post({ type: "speechRealtimeError", error: "Add the Qwen realtime key in Speech settings.", fallback })
-      return
-    }
-    const result = await startRealtime(input, settings, key)
-    if (!result.ok) {
-      post({ type: "speechRealtimeError", error: result.error, fallback })
-      return
-    }
-    this.realtime = result.value
-    post({
-      type: "speechRealtimeReady",
-      connection: {
-        id: result.value.info.id,
-        livekitURL: result.value.info.livekitURL,
-        clientToken: result.value.info.clientToken,
-        engine: result.value.info.engine,
-        acceptsTruncation: result.value.info.acceptsTruncation,
+    const result = await this.realtime.start(
+      async () => {
+        const settings = await this.settings.load()
+        const fallback = voiceFallback(settings)
+        if (settings.voiceEngine !== "qwen-realtime") {
+          return {
+            ok: false,
+            code: "configuration",
+            error: "Native realtime voice is disabled in Speech settings.",
+            fallback,
+          }
+        }
+        const key = await this.settings.key("realtime")
+        if (!key) {
+          return { ok: false, code: "configuration", error: "Add the Qwen realtime key in Speech settings.", fallback }
+        }
+        await input.connection.getClientAsync(input.directory)
+        const server = input.connection.getServerConfig()
+        if (!server) throw new Error("Raya backend is not connected")
+        return {
+          sessionID: input.sessionID,
+          directory: input.directory,
+          backendURL: server.baseUrl,
+          auth: `Basic ${Buffer.from(`kilo:${server.password}`).toString("base64")}`,
+          key,
+          settings,
+        }
       },
-    })
+      (info) =>
+        post({
+          type: "speechRealtimeReady",
+          connection: {
+            id: info.id,
+            livekitURL: info.livekitURL,
+            clientToken: info.clientToken,
+            engine: info.engine,
+            acceptsTruncation: info.acceptsTruncation,
+          },
+        }),
+    )
+    if (!result.ok && result.code !== "cancelled")
+      post({ type: "speechRealtimeError", error: result.error, code: result.code, fallback: result.fallback })
   }
 
   async realtimeStop(post: Post): Promise<void> {
-    const current = this.realtime
-    this.realtime = undefined
-    this.replies.cancel() // raya_change - stopping the orb also cancels any pending MiniMax handoff
-    if (current) {
-      const query = `?directory=${encodeURIComponent(current.directory)}`
-      await Promise.allSettled([
-        fetch(`${current.mediaURL.replace(/\/$/, "")}/v1/sessions/${current.info.id}`, { method: "DELETE" }),
-        fetch(`${current.backendURL}/kilocode/voice/session/${current.info.id}${query}`, {
-          method: "DELETE",
-          headers: { Authorization: current.auth },
-        }),
-      ])
+    this.replies.cancel()
+    const failure = await this.realtime.stop()
+    if (failure) {
+      post({ type: "speechRealtimeError", error: failure.error, code: failure.code })
+      return
     }
     post({ type: "speechRealtimeStopped" })
   }
@@ -130,7 +127,12 @@ export class SpeechService implements vscode.Disposable {
       post({ type: "speechToTextCancelled", requestId: input.requestId })
       return
     }
-    post({ type: "speechToTextError", requestId: input.requestId, error: result.error, code: result.code })
+    post({
+      type: "speechToTextError",
+      requestId: input.requestId,
+      error: result.error,
+      code: result.code,
+    })
   }
 
   // raya_change start - configured STT through extension-host capture and VAD
@@ -261,76 +263,15 @@ export class SpeechService implements vscode.Disposable {
 
   dispose(): void {
     this.cancel()
-    void this.realtimeStop(() => undefined) // raya_change - close media and backend sessions on extension disposal
+    void this.realtime.dispose().then(
+      (failure) => {
+        if (failure) console.error("[Kilo New] Voice disposal failed:", failure.error)
+      },
+      () => console.error("[Kilo New] Voice disposal failed; resource release is unconfirmed."),
+    )
     this.tts.dispose()
   }
 }
-
-// raya_change start - ordered backend admission followed by secret-bearing local media admission
-async function startRealtime(
-  input: { sessionID: string; directory: string; connection: KiloConnectionService },
-  settings: SpeechSettings,
-  key: string,
-): Promise<
-  | {
-      ok: true
-      value: { info: RealtimeSession; mediaURL: string; backendURL: string; auth: string; directory: string }
-    }
-  | { ok: false; error: string }
-> {
-  try {
-    await input.connection.getClientAsync(input.directory)
-    const server = input.connection.getServerConfig()
-    if (!server) return { ok: false, error: "Raya backend is not connected." }
-    const auth = `Basic ${Buffer.from(`kilo:${server.password}`).toString("base64")}`
-    const query = `?directory=${encodeURIComponent(input.directory)}`
-    const mediaURL = settings.mediaFrontendURL.replace(/\/$/, "")
-    const started = await fetch(`${server.baseUrl}/kilocode/voice/session${query}`, {
-      method: "POST",
-      headers: { Authorization: auth, "Content-Type": "application/json" },
-      body: JSON.stringify({ parentSessionID: input.sessionID, mediaURL }),
-      signal: AbortSignal.timeout(5_000),
-    })
-    if (!started.ok) return { ok: false, error: `Voice session admission failed (${started.status}).` }
-    const info = (await started.json()) as RealtimeSession
-    const media = await fetch(`${mediaURL}/v1/sessions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: info.id,
-        room: info.room,
-        livekitUrl: info.livekitURL,
-        livekitToken: info.mediaToken,
-        backendUrl: server.baseUrl,
-        backendAuthorization: auth,
-        directory: input.directory,
-        engine: {
-          endpoint: settings.realtimeEndpoint,
-          key,
-          model: settings.realtimeModel,
-          voice: settings.realtimeVoice,
-          instructions:
-            "You are Raya Voice. Be concise and conversational. Use delegate for grounded workspace facts or read-only actions.",
-          mode: "hands-free",
-          threshold: settings.vadThreshold,
-          silence: settings.vadSilenceMs * 1_000_000,
-        },
-      }),
-      signal: AbortSignal.timeout(8_000),
-    })
-    if (!media.ok) {
-      await fetch(`${server.baseUrl}/kilocode/voice/session/${info.id}${query}`, {
-        method: "DELETE",
-        headers: { Authorization: auth },
-      })
-      return { ok: false, error: `Realtime media frontend failed (${media.status}).` }
-    }
-    return { ok: true, value: { info, mediaURL, backendURL: server.baseUrl, auth, directory: input.directory } }
-  } catch (err) {
-    return { ok: false, error: getErrorMessage(err) }
-  }
-}
-// raya_change end
 
 function speakable(text: string) {
   return text

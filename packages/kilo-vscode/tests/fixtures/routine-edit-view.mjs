@@ -213,7 +213,7 @@ try {
   assert.equal(button("Run now").disabled, true)
   button("Review access").click()
   await Promise.resolve()
-  assert.match(document.activeElement.textContent, /Workspace access for Review/)
+  assert.match(document.activeElement.textContent, /Tool access for Review/)
   assert.match(root.textContent, /no saved access choice/)
   assert.equal(button("Save access").disabled, true)
   const access = root.querySelector("section[aria-labelledby] select")
@@ -720,7 +720,7 @@ try {
     button("Accountant starter").click()
     const money = root.querySelector('.routines-consent input[type="checkbox"]')
     assert.equal(money.checked, false)
-    assert.match(root.textContent, /Read and notify only/)
+    assert.match(root.textContent, /Read and report/)
     money.click()
     assert.equal(money.checked, true)
     const previous = [...root.querySelectorAll("label")]

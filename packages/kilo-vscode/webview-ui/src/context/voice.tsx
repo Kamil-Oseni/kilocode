@@ -52,7 +52,7 @@ export const VoiceProvider: ParentComponent = (props) => {
   const [aec, setAec] = createSignal(false)
   const [error, setError] = createSignal<string | undefined>()
   const [cascade, setCascade] = createSignal(false)
-  const state = { request: "" }
+  const state = { request: "", generation: 0, terminal: false }
   const echo = new VoiceEcho()
   const player = new StreamPlayer(() => {
     setPlaying(false)
@@ -80,11 +80,19 @@ export const VoiceProvider: ParentComponent = (props) => {
   const realtime = new RealtimeVoice({
     status: setStatus,
     transcript: setTranscript,
-    error: setError,
+    error: (message) => {
+      setError(message)
+      if (!state.terminal) vscode.postMessage({ type: "speechRealtimeStop" })
+      state.terminal = true
+    },
     fallback: degrade,
     aec: setAec,
   })
   function demote(message: Extract<ExtensionMessage, { type: "speechRealtimeError" }>) {
+    if (message.code === "busy") {
+      setError(message.error)
+      return
+    }
     if (message.fallback === "cascade-v1") {
       setCascade(true)
       update({ mode: "hands-free", autoSpeak: true })
@@ -138,10 +146,19 @@ export const VoiceProvider: ParentComponent = (props) => {
     if (message.type === "speechRealtimeReady") {
       setCascade(false)
       setError(undefined)
-      void realtime.start(message.connection).catch(async (err: unknown) => {
-        const error = err instanceof Error ? err.message : String(err)
-        await realtime.stop()
-        degrade(error)
+      const generation = ++state.generation
+      void realtime.start(message.connection).catch(async () => {
+        if (generation !== state.generation) return
+        state.terminal = true
+        vscode.postMessage({ type: "speechRealtimeStop" })
+        await realtime.stop().catch(() => {
+          if (generation === state.generation) setError("Voice cleanup failed. Restart Raya before reconnecting.")
+        })
+        if (generation !== state.generation) return
+        setError(
+          "Voice connection could not finish. Check your audio device and media frontend, then reconnect or continue typing.",
+        )
+        setStatus("degraded")
       })
       return
     }
@@ -150,7 +167,7 @@ export const VoiceProvider: ParentComponent = (props) => {
       return
     }
     if (message.type === "speechRealtimeStopped") {
-      setStatus("off")
+      setStatus(state.terminal ? "degraded" : "off")
       setTranscript(undefined)
     }
   })
@@ -169,7 +186,8 @@ export const VoiceProvider: ParentComponent = (props) => {
   vscode.postMessage({ type: "speechSettingsRequest" })
   onCleanup(() => {
     unsubscribe()
-    void realtime.stop()
+    state.generation++
+    void realtime.stop().catch(() => console.error("[Kilo New] Voice cleanup failed during webview disposal."))
     vscode.postMessage({ type: "speechRealtimeStop" })
     player.stop(false)
     vscode.postMessage({ type: "speechPlaybackCancel", requestId: state.request || undefined })
@@ -200,9 +218,14 @@ export const VoiceProvider: ParentComponent = (props) => {
     })
   }
   const stop = () => {
+    state.terminal = false
     setCascade(false)
     echo.clear()
-    void realtime.stop()
+    state.generation++
+    void realtime.stop().catch(() => {
+      setError("Voice cleanup failed. Restart Raya before reconnecting.")
+      setStatus("degraded")
+    })
     vscode.postMessage({ type: "speechRealtimeStop" })
     loop.stop()
     player.stop(false) // raya_change - only full orb deactivation closes the webview audio sink
@@ -227,6 +250,7 @@ export const VoiceProvider: ParentComponent = (props) => {
         setKey: (kind, key) => vscode.postMessage({ type: "speechKeyUpdate", kind, key }),
         setMode,
         start: (sessionID) => {
+          state.terminal = false
           setCascade(false)
           echo.clear()
           player.unlock()
@@ -274,4 +298,3 @@ export function useVoice() {
   if (!value) throw new Error("useVoice must be used within VoiceProvider")
   return value
 }
-

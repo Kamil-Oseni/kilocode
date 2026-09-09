@@ -66,18 +66,20 @@ export function AccessReview(props: {
         props.onClose()
       }}
     >
-      <h3 id={`${id}-title`}>Workspace access for {props.item.name}</h3>
+      <h3 id={`${id}-title`}>Tool access for {props.item.name}</h3>
       <p class="routines-hint">
         {expected === "unset"
-          ? "This older routine has no saved access choice; its role previously determined workspace access."
-          : `Saved access: ${expected === "full" ? "editing allowed" : "read/notify"}.`}
+          ? "This older routine has no saved access choice; its role previously determined tool permissions."
+          : `Saved access: ${expected === "full" ? "full tool access" : "read and report"}.`}
       </p>
       <p class="routines-hint">
         Choose access for future runs. Saving does not enable this routine or start work. An existing session keeps its
-        current permissions. Read/notify restricts built-in editing and shell tools; it is not a sandbox for external
-        tools.
+        current permissions. Read and report allows workspace reading, search, questions and goal tracking. Other tool
+        permissions, including shell, browser actions and delegation, are denied. Full access permits external tools and
+        actions as well as editing, unless a saved tool list restricts them. Neither profile is an operating-system
+        sandbox.
       </p>
-      <label for={`${id}-choice`}>Workspace access</label>
+      <label for={`${id}-choice`}>Tool access</label>
       <select
         id={`${id}-choice`}
         value={choice()}
@@ -88,8 +90,8 @@ export function AccessReview(props: {
         }}
       >
         <option value="">Choose access</option>
-        <option value="brief">Read and notify only</option>
-        <option value="full">Allow workspace editing</option>
+        <option value="brief">Read and report</option>
+        <option value="full">Full tool access</option>
       </select>
       <Show when={error()}>
         <p role="alert" class="routines-error">

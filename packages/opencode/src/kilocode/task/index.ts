@@ -305,15 +305,34 @@ export namespace RayaTask {
   }
 
   export function rules(agent: Pick<Agent, "role" | "access" | "tools">) {
-    const restricted = brief(agent)
-      ? Permission.fromConfig({ edit: "deny", write: "deny", bash: "deny", apply_patch: "deny" })
-      : []
+    if (brief(agent)) {
+      const cfg: Record<string, "allow" | "deny"> = { "*": "deny", question: "allow" }
+      const reads = [
+        "read",
+        "glob",
+        "grep",
+        "list",
+        "skill",
+        "question",
+        "todoread",
+        "todowrite",
+        "get_goal",
+        "update_goal",
+        "update_goal_plan",
+      ]
+      const selected = agent.tools?.length
+        ? Permission.fromConfig(Object.fromEntries(agent.tools.map((tool) => [tool, "allow" as const])))
+        : undefined
+      for (const tool of reads) {
+        if (!selected || Permission.evaluate(tool, "*", selected).action === "allow") cfg[tool] = "allow"
+      }
+      return Permission.fromConfig(cfg)
+    }
     if (agent.tools?.length) {
       const cfg: Record<string, "allow" | "deny"> = { "*": "deny", question: "allow" }
       for (const tool of agent.tools) cfg[tool] = "allow"
-      return [...Permission.fromConfig(cfg), ...restricted]
+      return Permission.fromConfig(cfg)
     }
-    if (restricted.length) return restricted
     return Permission.fromConfig({ "*": "allow", edit: "allow", write: "allow", bash: "allow" })
   }
 

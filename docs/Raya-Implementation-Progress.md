@@ -4,9 +4,9 @@ Source of scope: [Comprehensive audit](Raya-Comprehensive-Audit.md). All section
 
 ## Current work
 
-Latest verified installed product checkpoint: 15de538fbc, pushed to origin/main. Authorized browser uploads, reviewable repair artifact preparation, usage report copying and goal progress hierarchy passed checkpoint checks and the production snapshot workflow. Installed version: 7.4.23-snapshot+15de538fbc.kamil-oseni.1788982288311. Actual retained-source artifact acceptance remains open; installation does not prove full post-reload workflows.
+Latest verified installed product checkpoint: ccb3ff52f0, pushed to origin/main. Routine recovery, mutation contention prevention, Windows repair long paths and workspace browser identity passed checkpoint checks and the production snapshot workflow. Installed version: 7.4.23-snapshot+ccb3ff52f0.kamil-oseni.1788985830477. Actual retained-source artifact acceptance remains open; installation does not prove full post-reload workflows.
 
-Next work includes authorized browser uploads, source-to-build artifact provenance, and remaining accounting/product consumers. The two agents and primary agent continue in parallel, with broader tests batched at checkpoints. All audit sections remain in scope; In progress does not mean complete, and historical Verified rows apply only to their stated acceptance scope.
+Next work includes the managed repair configuration-write boundary, retained-source artifact acceptance, and remaining product, engineering, UX and UI requirements. The two agents and primary agent continue in parallel, with broader tests batched at checkpoints. All audit sections remain in scope; In progress does not mean complete, and historical Verified rows apply only to their stated acceptance scope.
 
 ## Findings and overhauls
 
@@ -1951,3 +1951,10 @@ The next accounting increment should preserve explicit rate presence and origin 
 - Final combined actual Chrome/store/panel/bridge suite: 21 tests passed, 123 assertions, native exit 0 (`.tmp/en11-browser-tests.log`). Backend browser tools/skills: 11 passed, 111 assertions, native exit 0 (`.tmp/en11-backend-tests-final.log`). The first backend run exposed missing plain-English activation copy; the tool description was corrected before the passing rerun.
 - Extension host types, Knip and forbidden-marker guard passed. Prior final CLI, SDK and webview types also passed. Scoped browser lint passed. Package/install validation is still pending.
 - Retained-source bootstrap failed after successful full capture: session configuration initialization created `.kilo/.gitignore` and `.kilocode/.gitignore`, so strict checkout verification correctly blocked dispatch. The helper then surfaced a secondary invalid transition. No regression check or artifact build was executed. Preserve this attempt and fix the optional configuration-write boundary without weakening checkout verification.
+## Verified browser and routine recovery release — 2026-09-09
+
+- Pushed `f16aca1dc1` and `ccb3ff52f0` to `origin/main` with normal hooks. Cross-package types and JetBrains checks passed; push exited 0.
+- Production snapshot workflow exited 0: SDK preparation without tracked drift, compiled Windows CLI version/models/sandbox-worker smoke checks, extension types, full lint, production bundle, VSIX packaging and installation.
+- Normal-user VS Code listing verified `eden.raya@7.4.23-snapshot+ccb3ff52f0.kamil-oseni.1788985830477`.
+- VSIX: `C:/Users/User/AppData/Local/Temp/raya-vscode-snapshots/raya-vscode-snapshot-ccb3ff52f0-kamil-oseni-1788985830477.vsix`; 516,036,860 bytes, 406 entries, bundled CLI 228,250,112 bytes. SHA-256: `0518B3ADF8C37C4E51EE2B00FF4D7117478C1A2A4684E2193BE0540ED0437980`. Independent inspection confirmed eden/raya identity and excluded `.tmp`/`.env` entries.
+- Logs: `.tmp/en11-checkpoint-push.log`, `.tmp/en11-snapshot-install.log`, `.tmp/en11-snapshot-verification.log`. Reload Window may be required; full post-reload workflows and retained-source repair acceptance remain open.

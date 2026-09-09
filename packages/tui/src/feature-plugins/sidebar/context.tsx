@@ -2,13 +2,9 @@ import type { AssistantMessage } from "@kilocode/sdk/v2"
 import type { TuiPlugin, TuiPluginApi } from "@kilocode/plugin/tui"
 import type { BuiltinTuiPlugin } from "../builtins"
 import { createMemo, createSignal, Show } from "solid-js" // kilocode_change
+import { accounting } from "../../kilocode/accounting" // kilocode_change
 
 const id = "internal:sidebar-context"
-
-const money = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-})
 
 function View(props: { api: TuiPluginApi; session_id: string }) {
   // kilocode_change start
@@ -16,15 +12,8 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   // kilocode_change end
   const theme = () => props.api.theme.current
   const msg = createMemo(() => props.api.state.session.messages(props.session_id))
-  const session = createMemo(() => props.api.state.session.get(props.session_id))
   // kilocode_change start
-  const cost = createMemo(() => {
-    const total = msg().reduce((sum, item) => {
-      if (item.role !== "assistant") return sum
-      return sum + (item.cost ?? 0)
-    }, 0)
-    return Math.max(session()?.cost ?? 0, total)
-  })
+  const cost = accounting(props.api, () => props.session_id)
   // kilocode_change end
 
   const state = createMemo(() => {
@@ -55,7 +44,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
           <Show when={!open()}>
             <span style={{ fg: theme().textMuted }}>
               {" "}
-              ({state().percent ?? 0}% · {money.format(cost())})
+              ({state().percent ?? 0}% · {cost.label(true)})
             </span>
           </Show>
         </text>
@@ -63,7 +52,8 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       <Show when={open()}>
         <text fg={theme().textMuted}>{state().tokens.toLocaleString()} tokens</text>
         <text fg={theme().textMuted}>{state().percent ?? 0}% used</text>
-        <text fg={theme().textMuted}>{money.format(cost())} spent</text>
+        <text fg={theme().textMuted}>{cost.label()}</text>
+        <text fg={theme().textMuted}>{cost.scope()}</text>
       </Show>
       {/* kilocode_change end */}
     </box>

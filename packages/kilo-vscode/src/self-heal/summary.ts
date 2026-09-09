@@ -22,5 +22,10 @@ export async function inspect(client: KiloClient, id: string, directory: string)
   const tested = outcome.completion
     ? ` Tested evidence receipt retained for goal revision ${outcome.completion.goal.revision}; not released or installed. This receipt does not confirm the subsequent goal-state save was acknowledged.`
     : " No authoritative tested-completion receipt is retained."
-  return `Repair attempt ${outcome.id} for ${outcome.itemID}: ${outcome.phase}${outcome.sessionID ? ` in session ${outcome.sessionID}` : ""}${outcome.worktree ? `; checkout ${outcome.worktree.directory} (${outcome.worktree.branch})` : ""}. ${outcome.reason ?? "Inspect the retained attempt before recovery; no automatic replay or takeover is available."}${tested}`
+  const source = outcome.completion?.verification
+  const verification =
+    source?.status === "snapshot-input"
+      ? ` Source input ${source.digest} at ${source.head}; ${source.checks.length} check receipt(s). ${source.contract}`
+      : ` Delivery source identity is unknown.${source?.status === "unknown" ? ` ${source.reason}` : ""}`
+  return `Repair attempt ${outcome.id} for ${outcome.itemID}: ${outcome.phase}${outcome.sessionID ? ` in session ${outcome.sessionID}` : ""}${outcome.worktree ? `; checkout ${outcome.worktree.directory} (${outcome.worktree.branch})` : ""}. ${outcome.reason ?? "Inspect the retained attempt before recovery; no automatic replay or takeover is available."}${tested}${verification}`
 }

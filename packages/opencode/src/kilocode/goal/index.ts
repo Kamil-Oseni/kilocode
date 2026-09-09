@@ -23,6 +23,7 @@ import * as Artifact from "./artifact"
 import { inspection } from "@opencode-ai/core/kilocode/evidence-inspection"
 import { digest } from "@opencode-ai/core/kilocode/evidence-digest"
 import { collect } from "./evidence-scope"
+import { verification, identity as sourceIdentity } from "@/kilocode/self-heal/verification"
 
 const log = Log.create({ service: "raya-goal-retention" })
 
@@ -257,6 +258,7 @@ export namespace RayaGoal {
   ]
 
   export function make(deps: Deps) {
+    const source = verification(deps.storage)
     const healing = RayaSelfHeal.make(deps.storage) // raya_change - linked repairs close or block their global item
     const ownership = Effect.fn(function* (sessionID: SessionID, id: string, attempt?: string) {
       const owned = yield* healing
@@ -1091,15 +1093,26 @@ export namespace RayaGoal {
                 )
               }
               return ownership(sessionID, id, attempt).pipe(
-                Effect.flatMap(() =>
-                  healing.complete(id, sessionID, attempt, {
-                    intent: i,
-                    revision: r,
-                    completedRevision: completed.revision,
-                    createdAt: state.createdAt,
-                    objective: state.objective,
-                    audit,
-                    review,
+                Effect.flatMap((owned) =>
+                  Effect.gen(function* () {
+                    const assessment = yield* source
+                      .certify(owned, sourceIdentity(state), audit.requirements, tools(messages))
+                      .pipe(Effect.catchCause((cause) => Effect.fail(new AuditError({ message: Cause.pretty(cause) }))))
+                    return yield* healing.complete(
+                      id,
+                      sessionID,
+                      attempt,
+                      {
+                        intent: i,
+                        revision: r,
+                        completedRevision: completed.revision,
+                        createdAt: state.createdAt,
+                        objective: state.objective,
+                        audit,
+                        review,
+                      },
+                      assessment,
+                    )
                   }),
                 ),
                 Effect.map((receipt) => receipt.goal.completedRevision),
@@ -1197,6 +1210,10 @@ export namespace RayaGoal {
             })
           }
           cited.push(part)
+          if (part.tool === "self_heal_verify")
+            yield* source
+              .inspect(part)
+              .pipe(Effect.catchCause((cause) => Effect.fail(new AuditError({ message: Cause.pretty(cause) }))))
           if (
             (part.tool === "write" || part.tool === "edit" || part.tool === "apply_patch" || part.tool === "read") &&
             "rayaRevision" in part.state.metadata &&

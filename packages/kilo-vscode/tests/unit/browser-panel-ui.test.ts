@@ -54,6 +54,25 @@ it("binds panel input to displayed tab identity and hides stale frames", () => {
           { id: "second", title: "Second", selected: selected === "second", openerID: "first" },
         ],
       })
+    message({
+      type: "downloads",
+      offset: 0,
+      transfers: [{ id: "download_seen", filename: "<img src=x onerror=bad()>", status: "completed", bytes: 12 }],
+    })
+    const downloads = window.document.getElementById("downloads")!
+    expect(downloads.textContent).toContain("<img src=x onerror=bad()>")
+    expect(downloads.querySelector("img")).toBeNull()
+    downloads.querySelector("button")!.click()
+    expect(sent.at(-1)).toMatchObject({ type: "download", action: "reveal", transferID: "download_seen" })
+    downloads.querySelectorAll("button")[1]!.click()
+    expect(sent.at(-1)).toMatchObject({ type: "download", action: "save", transferID: "download_seen" })
+    message({
+      type: "downloads",
+      offset: 0,
+      transfers: [{ id: "pending_seen", filename: "report", status: "receiving" }],
+    })
+    downloads.querySelector("button")!.click()
+    expect(sent.at(-1)).toMatchObject({ type: "download", action: "cancel", transferID: "pending_seen" })
     inventory("first")
     message({ type: "frame", tabID: "first", data: "", width: 100, height: 100, url: "https://first.test" })
     window.document.getElementById("reload")!.click()

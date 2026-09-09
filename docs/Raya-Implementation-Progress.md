@@ -1,10 +1,12 @@
 # Raya implementation progress
 
-Source of scope: [Comprehensive audit](Raya-Comprehensive-Audit.md). All sections and all ten overhauls remain in scope. Work proceeds in dependency order, with relevant checks before the next feature. A completed subtask does not mean the overall overhaul is complete.
+Source of scope: [Comprehensive audit](Raya-Comprehensive-Audit.md). All sections and all ten overhauls remain in scope. Work proceeds in dependency order, with broader validation batched at checkpoints. A completed subtask does not mean the overall overhaul is complete.
 
 ## Current work
 
-Current feature: routine execution ownership (EN-02). Structured scheduling, schedule versions, trigger evidence and consumed-occurrence retention are implemented. Timer startup now uses the transactional SQLite occurrence queue. Selected-work reopening, reservation before session creation, session linking and terminal reconciliation are implemented; automatic continuation ownership checks are implemented; atomic execution fencing, catch-up policy and unfinished-start recovery remain. Update hardening has passed targeted selection, credential, artifact, manifest, flow, and installation-journal checks; clean dependency installation and live/packaged validation remain open. Canvas recovery implementation has passed targeted compiler, protocol, service, draft, rollback, edit-preservation, and retention checks; its remaining coordination and live/packaged gates stay open below. Targeted review regressions pass; review reconciliation and release gates remain open. Database recovery and baseline contract-test reliability are implemented and verified; deployed-version lineage and production release validation remain open gates. No production user database is being opened or migrated for development.
+Active implementation: browser downloads (OVR-02/OVR-10), source-bound repair verification (OVR-09), and ledger-aware terminal cost reporting (OVR-04). These changes are implemented and undergoing combined validation; they are not yet a released checkpoint. The latest verified installed product checkpoint is 02114afae4, with generated API and installation evidence saved in f859d0b2e8. Both are pushed to origin/main.
+
+The two agents own browser transfers and repair verification; the primary agent owns accounting and integration/release checks. Broader tests are batched at checkpoints. The chronological entries below retain failures, corrections, exact test results and installation evidence. All audit sections remain in scope; In progress does not mean complete, and historical Verified rows apply only to their stated acceptance scope.
 
 ## Findings and overhauls
 
@@ -40,15 +42,15 @@ Current feature: routine execution ownership (EN-02). Structured scheduling, sch
 | UI-02 — Establish measurable accessibility gates | Pending | |
 | UI-03 — Consolidate component semantics while preserving host-specific styling | Pending | |
 | 11.1 OVR-01 — OpenAI native realtime multimodal voice | Pending | |
-| 11.2 OVR-02 — A first-class browser skill for agents | Pending | |
+| 11.2 OVR-02 — A first-class browser skill for agents | In progress | Browser skills, stable tab/frame targeting and explicit dialog handling are implemented and tested; download integration is in validation. Full workflow evaluations and remaining browser capabilities are open. |
 | 11.3 OVR-03 — Smarter Auto routing and orchestration | Pending | |
-| 11.4 OVR-04 — Calculated, explainable token and tool costs | Pending | |
-| 11.5 OVR-05 — A durable, understandable routine system | Pending | |
-| 11.6 OVR-06 — An outcome-driven Goal system | Pending | |
+| 11.4 OVR-04 — Calculated, explainable token and tool costs | In progress | Persisted accounting provenance, rate evidence and extension disclosure are installed; TUI, direct-run and CLI stats integration is in validation. Modality/tool charges, reconciliation and remaining budget/export consumers are open. |
+| 11.5 OVR-05 — A durable, understandable routine system | In progress | Structured scheduling and durable occurrence/ownership work are implemented as recorded below. Full routine lifecycle, policy and UI acceptance remain open. |
+| 11.6 OVR-06 — An outcome-driven Goal system | In progress | Goal ownership, continuation, review/evidence and repair completion have targeted and checkpoint verification. The full outcome-driven lifecycle and UI acceptance remain open. |
 | 11.7 OVR-07 — Complete Raya UI and UX redesign | Pending | |
 | 11.8 OVR-08 — Broad work tools with discoverable capabilities | Pending | |
-| 11.9 OVR-09 — Self-heal as verified recovery and repair | Pending | |
-| 11.10 OVR-10 — Browser runtime and product overhaul | Pending | |
+| 11.9 OVR-09 — Self-heal as verified recovery and repair | In progress | Owned repair worktrees and immutable completion receipts are installed. Captured-source check execution and inspection are in validation; build/install linkage and post-install verification remain open. |
+| 11.10 OVR-10 — Browser runtime and product overhaul | In progress | Tab/frame identity, manual control and JavaScript dialogs are installed; durable downloads are in validation. Uploads and the remaining runtime/product acceptance are open. |
 
 ## Cross-cutting acceptance
 
@@ -1809,3 +1811,30 @@ The next accounting increment should preserve explicit rate presence and origin 
 - SDK preparation revealed a stale generated type file from earlier committed completion-schema changes. The packaged build includes the generated named `RayaSelfHealCompletion` and finite receipt timestamps; the normal root generator is now synchronizing the tracked SDK/OpenAPI outputs. This corrects the earlier assumption that no regeneration was needed. Generated output was not edited by hand.
 - Reload Window may be needed to activate the installed host. Installation does not prove every feature has been exercised in the reloaded window. Full audit implementation remains active, including browser transfer support, repaired-source/build/install provenance, and ledger-aware terminal cost reporting.
 - Root SDK/OpenAPI generation completed successfully, and generated SDK typecheck plus whitespace verification passed. The diff consolidates the repeated completion shape into the named schema and reflects its finite timestamps. This saves the generated representation already used by the installed snapshot; no product source changed after that build.
+### Terminal accounting implementation started
+
+- Outcome/generated API checkpoint `f859d0b2e8` was pushed successfully after cross-package TypeScript and JetBrains generation/checks passed. Source is unfrozen for the next parallel browser, repair verification and accounting increments.
+- The TUI sidebar now requests the complete session-tree model-usage ledger and uses a shared browser-safe cost formatter with the extension. It no longer substitutes loaded-message compatibility totals for evidenced costs. Scope text names settled model steps and related conversations; loading and refresh failure remain explicit.
+- Initial scoped TUI typecheck passed. Rendered refresh/session-switch regressions, shared formatter validation, extension checks and final accounting-consumer work remain pending. Direct-run footer and CLI stats are not yet migrated by this change.
+- Terminal accounting regression checks passed before the broader-test batching update: 2 tests, 11 assertions (`.tmp/terminal-accounting-tests.log`). They use the actual SDK and rendered Solid controller with a controlled HTTP transport, covering stale session responses, related-session refresh, HTTP failure/recovery, reported zero and listener disposal. Shared formatter assertions cover unknown, legacy, tiny and incomplete amounts.
+- CLI statistics now aggregate persisted step accounting separately from compatibility numeric totals, including each child session's direct steps once and retaining model-level provenance. Totals and averages use the shared cost labels. This newer stats implementation is awaiting the combined accounting test/typecheck checkpoint; direct-run footer work remains next.
+- Direct-run footer now retains observed step receipts by part ID, replacing duplicate/update events rather than adding their cost again. It labels observed model-step totals separately from an unverified current-message fallback, and uses the shared formatter for measured zero, unavailable, estimated and incomplete usage. Other-session step events remain excluded by the existing reducer boundary.
+- Added reducer regression cases and expanded the real-storage parent/child stats fixture to cover both legacy and evidenced costs. These new cases are written but not yet run, following the updated preference to batch broader validation after implementation. Shared summary aggregation guards non-finite amounts; CLI statistics name their recorded-step/selected-session scope.
+### Accounting checkpoint checks in progress
+
+- Direct-run accounting plus existing session reducer suite passed: 14 tests, 29 assertions (`.tmp/terminal-accounting-reducer-tests.log`). Real-storage CLI stats passed both legacy and evidenced parent/child scenarios: 2 tests, 24 assertions (`.tmp/terminal-accounting-stats-tests.log`). All handles closed.
+- Shared formatter extension integration render passed in the normal user environment (`.tmp/terminal-accounting-extension-view-normal.log`). The first sandbox run failed before rendering because esbuild could not traverse an ancestor directory; no source workaround was introduced.
+- Scoped accounting lint passed with two warnings and zero errors. Removed a redundant existing non-null assertion and made the event fixture generic instead of relying on `CustomEvent<any>`; final lint/type checks remain queued for the combined schema freeze.
+- Independent browser review identified receipt-write failure and completion-publication races; the browser agent is resolving these before freeze. Repair snapshot review identified actual-repository config compatibility and invocation inspection gaps; these are being completed before generation and production validation.
+### Downloads, snapshot verification and accounting integration
+
+- Root SDK/OpenAPI generation passed after both new schemas froze (`.tmp/transfers-verification-sdk.log`). Generated changes include browser transfer references and the named repair source assessment. No generated files were edited by hand.
+- The actual Raya capture probe traversed its source/config/LFS/size/mode checks but rejected unequal observations while concurrent source edits occurred. This is evidence of eligibility traversal and mutation rejection, not a successfully retained/materialized stable snapshot.
+- Browser final targeted regression initially had 35 passes and two failures: Windows rejected flushing a read-only artifact handle, and an unnecessary async wrapper changed a capacity-test dispatch boundary. The agent applied the diagnosed runtime corrections; final rerun remains pending.
+- CLI, extension host/webview, TUI and core typechecks are running together on frozen source. No real Git/Chromium test jobs overlap this typecheck window. Further browser cross-tab/open-tab cases and ordinary file retrieval are queued for the next edit window.
+- Browser final targeted verification passed: 37 tests, 141 assertions, including real Chromium downloads and verified Save copy. CLI browser tool/skill loading passed 9 tests, 95 assertions. Browser scoped ESLint passed with no warnings/errors; source is frozen.
+- Accounting combined scoped lint passed with four warnings and no errors (three existing stats warnings and the typed event-adapter assertion in the new test fixture). Source-link extraction and shared-code annotations passed; the source-link inventory adds the snapshot implementation reference to the existing LFS specification URL.
+- The latest repair combined suite passed 21 tests and failed one junction fixture at Windows link removal (`EFAULT` from `rm`), not at the snapshot rejection assertion. The fixture cleanup and inspection-after-goal-clear regression are being finalized before the next typecheck window. This entry does not claim the repair suite is fully green.
+- Final integration typechecks passed for CLI, extension host/webview and TUI; core typecheck passed in the preceding frozen window. Extension Knip, Kilo marker checks, shared-code annotations, source-link extraction and whitespace checks passed. The Markdown guard initially found 18 pre-existing padded separators in the voice architecture document; its scoped formatter corrected table whitespace and the guard now passes.
+- Repair recovery verification passed 9 tests/34 assertions, including redirected-directory refusal and inspection after goal removal. Extension repair/prompt tests passed 19 tests/121 assertions; scoped repair lint completed with 36 warnings and zero errors. A final combined repair suite is running to replace the earlier fixture-only failure with current-code evidence before release.
+- Final combined repair rerun passed on current frozen source: 22 tests, 117 assertions, zero failures (`.tmp/integration-repair-suite.log`, 97.65 seconds). This supersedes the earlier fixture-cleanup failure. The checkpoint is ready for commit/push and the production snapshot workflow; artifact installation remains a separate pending outcome.

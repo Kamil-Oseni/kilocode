@@ -2,12 +2,12 @@
 name: browser
 description: Ground and verify work in Raya's shared browser.
 metadata:
-  version: "5"
+  version: "6"
 ---
 
 # Browser
 
-Skill package version 5, paired with the `browser-runtime` capability reference version 5.
+Skill package version 6, paired with the `browser-runtime` capability reference version 6.
 
 Use the `skill` tool with `name: "browser-runtime"` before selecting operations. Load `browser-workflows` for task-specific playbooks, and `browser-recovery` when an action fails or its outcome is uncertain. These are discoverable companion skills compiled into Raya; do not try to read a nonexistent built-in filesystem directory. Actual available tool schemas and host results determine capabilities.
 

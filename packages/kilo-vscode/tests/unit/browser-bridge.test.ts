@@ -7,6 +7,75 @@ import { DialogPendingError } from "../../src/services/browser-automation/browse
 import { BrowserBridge } from "../../src/services/browser-automation/browser-bridge"
 
 describe("Raya browser bridge", () => {
+  it("returns the same download transfer after lost acknowledgement without another export click", async () => {
+    const first = Promise.withResolvers<void>()
+    const second = Promise.withResolvers<void>()
+    const replies: unknown[] = []
+    let count = 0
+    const client = {
+      kilocode: {
+        browser: {
+          list: async () => ({ data: [] }),
+          reply: async (value: unknown) => {
+            replies.push(value)
+            if (replies.length === 1) {
+              first.resolve()
+              throw new Error("lost acknowledgement")
+            }
+            second.resolve()
+            return {}
+          },
+          reject: async () => ({}),
+        },
+      },
+    } as unknown as KiloClient
+    const connection = harness(client)
+    const bridge = new BrowserBridge(connection.value, {
+      show: async () => undefined,
+      execute: async (action) => {
+        count++
+        expect(action.origin).toEqual({ requestID: "brr_download", sessionID: "ses_test", directory: "C:\\workspace" })
+        return {
+          operation: "download",
+          transfers: [
+            {
+              version: 1,
+              id: "00000000-0000-4000-8000-000000000001",
+              tabID: "tab_seen",
+              profile: "profile",
+              status: "receiving",
+              filename: "report",
+              url: "https://example.test/export",
+              createdAt: 1,
+              updatedAt: 1,
+            },
+          ],
+        }
+      },
+    })
+    const event = {
+      type: "kilocode.browser.requested",
+      properties: {
+        id: "brr_download",
+        sessionID: "ses_test",
+        tabID: "tab_seen",
+        operation: "download",
+        action: "start",
+        selector: "#export",
+      },
+    }
+    try {
+      connection.event(event)
+      await first.promise
+      await new Promise<void>((resolve) => setTimeout(resolve, 0))
+      connection.event(event)
+      await second.promise
+      expect(count).toBe(1)
+      expect(replies[1]).toEqual(replies[0])
+    } finally {
+      bridge.dispose()
+    }
+  })
   it("retains dialog-pending failures across lost delivery without replaying the initiating action", async () => {
     const first = Promise.withResolvers<void>()
     const second = Promise.withResolvers<void>()
@@ -362,6 +431,7 @@ describe("Raya browser bridge", () => {
         id: "brr_test",
         sessionID: "ses_test",
         ...input,
+        origin: { requestID: "forged", sessionID: "forged", directory: "forged" },
       },
     })
 
@@ -376,6 +446,7 @@ describe("Raya browser bridge", () => {
         id: "brr_test",
         sessionID: "ses_test",
         ...input,
+        origin: { requestID: "brr_test", sessionID: "ses_test", directory: "C:\\workspace" },
       },
     ])
     bridge.dispose()

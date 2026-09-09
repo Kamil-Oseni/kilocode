@@ -121,6 +121,11 @@ export class BrowserBridge {
     }
   }
 
+  private show(request: BrowserRequest) {
+    if (request.operation !== "download" || request.action === "start") return this.host.show()
+    return Promise.resolve()
+  }
+
   private async run(request: BrowserRequest, directory: string, recovered = false): Promise<void> {
     if (this.disposed) return
     const fingerprint = createHash("sha256")
@@ -181,9 +186,12 @@ export class BrowserBridge {
     this.active.set(request.id, controller)
     const state = { completed: false }
     try {
-      await this.host.show()
+      await this.show(request)
       if (controller.signal.aborted) return
-      const result = (await this.host.execute(action(request))) as HostBrowserResult
+      const result = (await this.host.execute({
+        ...action(request),
+        origin: { requestID: request.id, sessionID: request.sessionID, directory },
+      })) as HostBrowserResult
       state.completed = true
       if (controller.signal.aborted) return
       if (Buffer.byteLength(JSON.stringify(result), "utf8") <= 64_000) {

@@ -28,13 +28,9 @@ import type { Event, Part, PermissionRequest, QuestionRequest, ToolPart } from "
 import type { RunInteractiveTerminalSnapshot } from "@/kilocode/cli/cmd/run/types" // kilocode_change
 import * as Locale from "@/util/locale"
 import { appendTerminalOutput } from "@/kilocode/interactive-terminal/output" // kilocode_change
+import { cost, costs } from "@/kilocode/cli/cmd/run/accounting" // kilocode_change
 import { toolView } from "./tool"
 import type { FooterOutput, FooterPatch, FooterView, StreamCommit } from "./types"
-
-const money = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-})
 
 type Tokens = {
   input?: number
@@ -81,6 +77,8 @@ export type SessionData = {
   permissions: PermissionRequest[]
   questions: QuestionRequest[]
   terminal?: RunInteractiveTerminalSnapshot // kilocode_change
+  costs: ReturnType<typeof costs> // kilocode_change
+  usage?: { tokens?: Tokens; limit?: number } // kilocode_change
   role: Map<string, MessageRole>
   msg: Map<string, string>
   part: Map<string, PartKind>
@@ -117,6 +115,7 @@ export function createSessionData(
     tools: new Set(),
     call: new Map(),
     shell: new Map(),
+    costs: costs(), // kilocode_change
     permissions: [],
     questions: [],
     role: new Map(),
@@ -137,7 +136,7 @@ function modelKey(provider: string, model: string): string {
 function formatUsage(
   tokens: Tokens | undefined,
   limit: number | undefined,
-  cost: number | undefined,
+  cost: string | undefined, // kilocode_change
 ): string | undefined {
   const total =
     (tokens?.input ?? 0) +
@@ -146,19 +145,12 @@ function formatUsage(
     (tokens?.cache?.read ?? 0) +
     (tokens?.cache?.write ?? 0)
 
-  if (total <= 0) {
-    if (typeof cost === "number" && cost > 0) {
-      return money.format(cost)
-    }
-    return undefined
-  }
+  if (total <= 0) return cost // kilocode_change
 
   const text =
     limit && limit > 0 ? `${Locale.number(total)} (${Math.round((total / limit) * 100)}%)` : Locale.number(total)
 
-  if (typeof cost === "number" && cost > 0) {
-    return `${text} · ${money.format(cost)}`
-  }
+  if (cost) return `${text} · ${cost}` // kilocode_change
 
   return text
 }
@@ -863,11 +855,10 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
       next = { status: "assistant responding" }
     }
 
-    const usage = formatUsage(
-      info.tokens,
-      input.limits[modelKey(info.providerID, info.modelID)],
-      typeof info.cost === "number" ? info.cost : undefined,
-    )
+    // kilocode_change start - preserve observed step provenance in direct-run costs
+    data.usage = { tokens: info.tokens, limit: input.limits[modelKey(info.providerID, info.modelID)] }
+    const usage = formatUsage(data.usage.tokens, data.usage.limit, cost(data.costs, info.cost))
+    // kilocode_change end
     if (usage) {
       next = {
         ...next,
@@ -940,6 +931,15 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
     if (part.sessionID !== input.sessionID) {
       return out(data, commits)
     }
+
+    // kilocode_change start - replacing a step receipt does not count it twice
+    if (part.type === "step-finish") {
+      data.costs.set(part.id, part)
+      return out(data, commits, patch({
+        usage: formatUsage(data.usage?.tokens, data.usage?.limit, cost(data.costs)),
+      }))
+    }
+    // kilocode_change end
 
     if (part.type === "tool") {
       const view = syncPermission(data, part) ?? syncQuestion(data, part)

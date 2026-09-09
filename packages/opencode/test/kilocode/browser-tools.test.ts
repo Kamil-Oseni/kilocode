@@ -8,6 +8,7 @@ import { Browser, HostError } from "@/kilocode/browser/service"
 import { Permission } from "@/permission"
 import {
   BrowserDialogTool,
+  BrowserDownloadTool,
   BrowserFramesTool,
   BrowserTabsTool,
   BrowserAuthCaptureTool,
@@ -29,6 +30,7 @@ import { testEffect } from "../lib/effect"
 
 const calls: Browser.Input[] = []
 function result(input: Browser.Input): Result {
+  if (input.operation === "download") return { operation: "download", transfers: [] }
   if (input.operation === "dialog") return { operation: "dialog", tabID: input.tabID, dialogs: [], operations: [] }
   if (input.operation === "frames") return { operation: "frames", tabID: input.tabID, frames: [] }
   if (input.operation === "tabs") return { operation: "tabs", tabs: [] }
@@ -98,6 +100,7 @@ test("auto-approves every native browser action in VS Code", () => {
     const rules = KiloAgent.prepare({}).defaultsPatch
     for (const permission of [
       "browser_dialog",
+      "browser_download",
       "browser_frames",
       "browser_tabs",
       "browser_navigate",
@@ -120,6 +123,44 @@ test("auto-approves every native browser action in VS Code", () => {
 })
 
 describe("browser host tools", () => {
+  it.instance(
+    "download inspection stays task-bound and never repeats an initiating click",
+    () =>
+      Effect.gen(function* () {
+        calls.length = 0
+        const ctx = context([])
+        const tool = yield* BrowserDownloadTool.pipe(
+          Effect.provideService(Browser.Service, host),
+          Effect.flatMap(Tool.init),
+        )
+        yield* tool.execute(
+          { action: "start", tab_id: "tab_seen", selector: { kind: "role", role: "button", name: "Export" } },
+          ctx,
+        )
+        yield* tool.execute({ action: "inspect", transfer_id: "transfer_seen" }, ctx)
+        yield* tool.execute({ action: "cancel", transfer_id: "transfer_seen" }, ctx)
+        expect(calls).toHaveLength(3)
+        expect(calls[0]).toMatchObject({
+          operation: "download",
+          action: "start",
+          sessionID: ctx.sessionID,
+          tabID: "tab_seen",
+        })
+        expect(calls[1]).toMatchObject({
+          operation: "download",
+          action: "inspect",
+          sessionID: ctx.sessionID,
+          transferID: "transfer_seen",
+        })
+        expect(calls[2]).toMatchObject({
+          operation: "download",
+          action: "cancel",
+          sessionID: ctx.sessionID,
+          transferID: "transfer_seen",
+        })
+      }),
+    60000,
+  )
   test("semantic target schemas preserve exact fields and reject incomplete targets", () => {
     const decode = Schema.decodeUnknownSync(Selector)
     for (const target of [

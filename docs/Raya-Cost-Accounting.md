@@ -31,6 +31,12 @@ Provider-reported amounts are not asserted to be invoice-final. These views cove
 
 The task usage disclosure shows stored per-step amounts, pricing model, token buckets, rates, origins and missing information for the loaded conversation. It starts with twenty recent steps and allows earlier calculations to be expanded. Related-conversation totals can include steps not loaded in this view; the disclosure names that scope. Historical project queries enforce both inclusive start and end boundaries, including the end boundary for the All range.
 
+The terminal sidebar requests the same complete related-conversation ledger instead of summing its limited message window. Its shared formatter distinguishes reported zero, estimates, unknown and incomplete costs. Failed refreshes show unavailable cost; responses belonging to a previously selected session are discarded.
+
+CLI statistics retain their compatibility numeric fields and separately aggregate accounting from each selected session's direct step records, including child steps once. The displayed model totals and daily averages use that provenance. Selection remains based on the command's session filters; this is not a new invoice-period query.
+
+The direct-run footer labels costs from observed model steps in its current conversation. It replaces repeated receipts by part ID instead of counting them again. Before any step receipt arrives, a message-level fallback is explicitly unverified. This streaming view is not presented as the complete historical or related-conversation ledger.
+
 ## Remaining OVR-04 work
 
 - Effective dates, refresh verification, trusted contract overrides and historical rate-card identities. Declared catalog/configured rate presence does not prove current contract applicability.

@@ -19,6 +19,9 @@ import { RayaGoal } from "@/kilocode/goal"
 import { RayaSelfHeal } from "@/kilocode/self-heal"
 import { testEffect } from "../lib/effect"
 import { tmpdirScoped } from "../fixture/fixture"
+import * as fs from "node:fs/promises"
+import { checkout } from "./fixtures/self-heal-worktree"
+import { verification, identity } from "@/kilocode/self-heal/verification"
 const it = testEffect(
   LayerNode.compile(LayerNode.group([FSUtil.node, CrossSpawnSpawner.node, Git.node, Agent.node, Truncate.node])),
 )
@@ -109,22 +112,26 @@ function goals(storage: Storage.Interface, rows: MessageV2.WithParts[]) {
   })
 }
 const journal = (id: string) => ["raya", "self-heal", "repair", createHash("sha256").update(id).digest("hex"), "0"]
-const seed = Effect.fn(function* (storage: Storage.Interface, sessionID: SessionID) {
+const seed = Effect.fn(function* (
+  storage: Storage.Interface,
+  sessionID: SessionID,
+  source?: { root: string; commit: string },
+) {
   const item = yield* RayaSelfHeal.make(storage).create({ description: `Completion fixture ${crypto.randomUUID()}` })
   const outcome = {
     id: crypto.randomUUID(),
     itemID: item.id,
     sessionID,
-    source: { root: "/admitted/raya", commit: "a".repeat(40) },
+    source: source ?? { root: "/admitted/raya", commit: "a".repeat(40) },
     worktree: {
       root: "/managed",
-      directory: "/managed/attempt",
+      directory: source?.root ?? "/managed/attempt",
       branch: "raya/repair/attempt",
-      common: "/admitted/raya/.git",
-      commit: "a".repeat(40),
+      common: source ? path.join(source.root, ".git") : "/admitted/raya/.git",
+      commit: source?.commit ?? "a".repeat(40),
     },
     revision: 0,
-    phase: "submitted",
+    phase: "submitted" as const,
     at: Date.now(),
   }
   yield* storage.create(journal(item.id), { owner: "private", outcome })
@@ -150,6 +157,153 @@ const audit = (callID: string) => ({
     { criterionID: "result", requirement: "Result", passed: true, evidence: [{ callID, summary: "Successful check" }] },
   ],
 })
+
+for (const changed of [false, true])
+  it.live(
+    `real snapshot check receipts gate repair completion against subsequent source changes: ${changed}`,
+    () =>
+      Effect.gen(function* () {
+        const directory = yield* tmpdirScoped()
+        const source = yield* Effect.promise(() => checkout(path.join(directory, "storage")))
+        yield* instance(path.join(directory, "storage"), (storage) =>
+          Effect.gen(function* () {
+            const sessionID = SessionID.make("ses_snapshot")
+            const { item, outcome } = yield* seed(storage, sessionID, source)
+            const rows: MessageV2.WithParts[] = []
+            const service = goals(storage, rows)
+            const state = yield* service.create(sessionID, "Result", undefined, undefined, item.id)
+            const proof = transcript({ sessionID, tool: "self_heal_verify", exit: 0 })
+            const part = proof.part!
+            if (part.state.status !== "completed") throw new Error("Fixture part is incomplete")
+            const input = {
+              command:
+                'if ((await Bun.file("tracked.txt").text()) !== "committed content\\n") process.exit(1); console.log("original reproduction passed")',
+            }
+            part.state.input = input
+            const checks = verification(storage, path.join(directory, "snapshots"))
+            const result = yield* checks.run({
+              outcome,
+              goal: identity(state),
+              sessionID,
+              messageID: part.messageID,
+              callID: part.callID,
+              input,
+              current: () => service.repair(sessionID).pipe(Effect.asVoid, Effect.orDie),
+              execute: (command, cwd) =>
+                Effect.promise(async () => {
+                  const child = Bun.spawn([process.execPath, "--eval", command], {
+                    cwd,
+                    stdout: "pipe",
+                    stderr: "pipe",
+                    windowsHide: true,
+                  })
+                  return { output: await new Response(child.stdout).text(), metadata: { exit: await child.exited } }
+                }),
+            })
+            part.state.output = result.output
+            part.state.metadata = result.metadata
+            rows.push(...proof.rows)
+            expect(result.metadata.exit).toBe(0)
+            expect(result.output).toContain("original reproduction passed")
+            expect(yield* checks.inspect(part)).toBeTruthy()
+            if (changed)
+              yield* Effect.promise(() => fs.writeFile(path.join(source.root, "tracked.txt"), "untested change"))
+            const completed = yield* service
+              .update(sessionID, { status: "complete", audit: audit(part.callID) })
+              .pipe(Effect.exit)
+            expect(Exit.isSuccess(completed)).toBe(!changed)
+            const receipt = (yield* RayaSelfHeal.make(storage).outcome(item.id))?.completion
+            if (changed) {
+              expect(receipt).toBeUndefined()
+              return
+            }
+            expect(receipt?.verification?.status).toBe("snapshot-input")
+            expect(receipt?.verification).toMatchObject({ head: source.commit })
+            expect(
+              Exit.isFailure(
+                yield* checks
+                  .run({
+                    outcome,
+                    goal: identity(state),
+                    sessionID,
+                    messageID: part.messageID,
+                    callID: part.callID,
+                    input,
+                    current: () => Effect.void,
+                    execute: () => Effect.die("duplicate verification was dispatched"),
+                  })
+                  .pipe(Effect.exit),
+              ),
+            ).toBe(true)
+          }),
+        )
+      }),
+    30_000,
+  )
+
+for (const mode of ["dependencies", "source-change", "snapshot-change", "failed-setup"] as const)
+  it.live(
+    `snapshot execution preserves source and records only successful checks: ${mode}`,
+    () =>
+      Effect.gen(function* () {
+        const directory = yield* tmpdirScoped()
+        const source = yield* Effect.promise(() => checkout(path.join(directory, "storage")))
+        yield* Effect.promise(() => fs.writeFile(path.join(source.root, ".gitignore"), "node_modules/\n"))
+        yield* instance(path.join(directory, "storage"), (storage) =>
+          Effect.gen(function* () {
+            const sessionID = SessionID.make("ses_setup")
+            const { item, outcome } = yield* seed(storage, sessionID, source)
+            const service = goals(storage, [])
+            const goal = yield* service.create(sessionID, "Result", undefined, undefined, item.id)
+            const checks = verification(storage, path.join(directory, "snapshots"))
+            const input = {
+              setup:
+                mode === "failed-setup"
+                  ? "process.exit(1)"
+                  : 'await Bun.write("node_modules/fixture/index.js", "module.exports = 42")',
+              command:
+                mode === "source-change"
+                  ? `await Bun.write(${JSON.stringify(path.join(source.root, "tracked.txt"))}, "changed")`
+                  : mode === "snapshot-change"
+                    ? 'await Bun.write("tracked.txt", "changed")'
+                    : 'if (require("./node_modules/fixture") !== 42) process.exit(1); console.log("dependency check passed")',
+            }
+            const messageID = MessageID.ascending()
+            const result = yield* checks
+              .run({
+                outcome,
+                goal: identity(goal),
+                sessionID,
+                messageID,
+                callID: "check",
+                input,
+                current: () => service.repair(sessionID).pipe(Effect.asVoid, Effect.orDie),
+                execute: (command, cwd) =>
+                  Effect.promise(async () => {
+                    const child = Bun.spawn([process.execPath, "--eval", command], {
+                      cwd,
+                      stdout: "pipe",
+                      stderr: "pipe",
+                      windowsHide: true,
+                    })
+                    return { output: await new Response(child.stdout).text(), metadata: { exit: await child.exited } }
+                  }),
+              })
+              .pipe(Effect.exit)
+            expect(Exit.isSuccess(result)).toBe(mode === "dependencies")
+            const retained = yield* checks.status(sessionID, messageID, "check")
+            expect(retained?.intent).toBeTruthy()
+            expect(retained?.snapshot).toBeTruthy()
+            expect(retained?.preparation).toBeTruthy()
+            if (mode !== "dependencies") expect(retained?.terminal).toMatchObject({ status: "failed" })
+            expect((yield* RayaSelfHeal.make(storage).outcome(item.id))?.completion).toBeUndefined()
+            expect((yield* service.get(sessionID))?.status).toBe("active")
+            if (Exit.isSuccess(result)) expect(result.value.output).toContain("dependency check passed")
+          }),
+        )
+      }),
+    30_000,
+  )
 
 it.live("public updates reject verified, delivery and forged session ownership; legacy claims remain unverified", () =>
   Effect.gen(function* () {

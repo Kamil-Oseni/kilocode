@@ -44881,6 +44881,171 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "frameID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["download"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["start"]
+              },
+              "selector": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 10000
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["role"]
+                      },
+                      "role": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 10000
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 10000
+                      },
+                      "scope": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 10000
+                      }
+                    },
+                    "required": ["kind", "role", "name"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["label"]
+                      },
+                      "text": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 10000
+                      },
+                      "scope": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 10000
+                      }
+                    },
+                    "required": ["kind", "text"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["testid"]
+                      },
+                      "value": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 10000
+                      },
+                      "scope": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 10000
+                      }
+                    },
+                    "required": ["kind", "value"],
+                    "additionalProperties": false
+                  }
+                ],
+                "description": "Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected."
+              }
+            },
+            "required": ["id", "sessionID", "tabID", "operation", "action", "selector"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["download"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["list"]
+              },
+              "offset": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": ["id", "sessionID", "operation", "action"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["download"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["inspect", "cancel"]
+              },
+              "transferID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              }
+            },
+            "required": ["id", "sessionID", "operation", "action", "transferID"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
               "operation": {
                 "type": "string",
                 "enum": ["dialog"]
@@ -58845,8 +59010,109 @@
         "required": ["code", "message"],
         "additionalProperties": false
       },
+      "BrowserTransfer": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "number",
+            "enum": [1]
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "tabID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+          },
+          "profile": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "object",
+            "properties": {
+              "requestID": {
+                "type": "string"
+              },
+              "sessionID": {
+                "type": "string"
+              },
+              "directory": {
+                "type": "string"
+              }
+            },
+            "required": ["requestID", "sessionID", "directory"],
+            "additionalProperties": false
+          },
+          "status": {
+            "type": "string",
+            "enum": ["waiting", "receiving", "completed", "failed", "cancelled", "unknown"]
+          },
+          "filename": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "number",
+            "minimum": 0
+          },
+          "updatedAt": {
+            "type": "number",
+            "minimum": 0
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": ["version", "id", "tabID", "profile", "status", "filename", "url", "createdAt", "updatedAt"],
+        "additionalProperties": false
+      },
       "BrowserResult": {
         "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": ["download"]
+              },
+              "transfers": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/BrowserTransfer"
+                }
+              },
+              "next": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "artifact": {
+                "type": "string"
+              },
+              "error": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000
+              }
+            },
+            "required": ["operation", "transfers"],
+            "additionalProperties": false
+          },
           {
             "type": "object",
             "properties": {
@@ -58959,6 +59225,12 @@
           {
             "type": "object",
             "properties": {
+              "transfers": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/BrowserTransfer"
+                }
+              },
               "operation": {
                 "type": "string",
                 "enum": ["tabs"]
@@ -59079,6 +59351,16 @@
           {
             "type": "object",
             "properties": {
+              "navigation": {
+                "type": "string",
+                "enum": ["download"]
+              },
+              "transfers": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/BrowserTransfer"
+                }
+              },
               "frameID": {
                 "type": "string",
                 "minLength": 1,
@@ -59118,6 +59400,16 @@
           {
             "type": "object",
             "properties": {
+              "navigation": {
+                "type": "string",
+                "enum": ["download"]
+              },
+              "transfers": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/BrowserTransfer"
+                }
+              },
               "frameID": {
                 "type": "string",
                 "minLength": 1,
@@ -59157,6 +59449,16 @@
           {
             "type": "object",
             "properties": {
+              "navigation": {
+                "type": "string",
+                "enum": ["download"]
+              },
+              "transfers": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/BrowserTransfer"
+                }
+              },
               "frameID": {
                 "type": "string",
                 "minLength": 1,
@@ -59196,6 +59498,16 @@
           {
             "type": "object",
             "properties": {
+              "navigation": {
+                "type": "string",
+                "enum": ["download"]
+              },
+              "transfers": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/BrowserTransfer"
+                }
+              },
               "frameID": {
                 "type": "string",
                 "minLength": 1,
@@ -59235,6 +59547,16 @@
           {
             "type": "object",
             "properties": {
+              "navigation": {
+                "type": "string",
+                "enum": ["download"]
+              },
+              "transfers": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/BrowserTransfer"
+                }
+              },
               "frameID": {
                 "type": "string",
                 "minLength": 1,
@@ -59274,6 +59596,16 @@
           {
             "type": "object",
             "properties": {
+              "navigation": {
+                "type": "string",
+                "enum": ["download"]
+              },
+              "transfers": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/BrowserTransfer"
+                }
+              },
               "frameID": {
                 "type": "string",
                 "minLength": 1,
@@ -59313,6 +59645,16 @@
           {
             "type": "object",
             "properties": {
+              "navigation": {
+                "type": "string",
+                "enum": ["download"]
+              },
+              "transfers": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/BrowserTransfer"
+                }
+              },
               "frameID": {
                 "type": "string",
                 "minLength": 1,
@@ -59356,6 +59698,16 @@
           {
             "type": "object",
             "properties": {
+              "navigation": {
+                "type": "string",
+                "enum": ["download"]
+              },
+              "transfers": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/BrowserTransfer"
+                }
+              },
               "frameID": {
                 "type": "string",
                 "minLength": 1,
@@ -59395,6 +59747,16 @@
           {
             "type": "object",
             "properties": {
+              "navigation": {
+                "type": "string",
+                "enum": ["download"]
+              },
+              "transfers": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/BrowserTransfer"
+                }
+              },
               "frameID": {
                 "type": "string",
                 "minLength": 1,
@@ -59484,6 +59846,16 @@
           {
             "type": "object",
             "properties": {
+              "navigation": {
+                "type": "string",
+                "enum": ["download"]
+              },
+              "transfers": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/BrowserTransfer"
+                }
+              },
               "frameID": {
                 "type": "string",
                 "minLength": 1,
@@ -61410,6 +61782,171 @@
       },
       "BrowserRequest1": {
         "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "frameID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["download"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["start"]
+              },
+              "selector": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 10000
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["role"]
+                      },
+                      "role": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 10000
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 10000
+                      },
+                      "scope": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 10000
+                      }
+                    },
+                    "required": ["kind", "role", "name"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["label"]
+                      },
+                      "text": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 10000
+                      },
+                      "scope": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 10000
+                      }
+                    },
+                    "required": ["kind", "text"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["testid"]
+                      },
+                      "value": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 10000
+                      },
+                      "scope": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 10000
+                      }
+                    },
+                    "required": ["kind", "value"],
+                    "additionalProperties": false
+                  }
+                ],
+                "description": "Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected."
+              }
+            },
+            "required": ["id", "sessionID", "tabID", "operation", "action", "selector"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["download"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["list"]
+              },
+              "offset": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": ["id", "sessionID", "operation", "action"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["download"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["inspect", "cancel"]
+              },
+              "transferID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              }
+            },
+            "required": ["id", "sessionID", "operation", "action", "transferID"],
+            "additionalProperties": false
+          },
           {
             "type": "object",
             "properties": {
@@ -70316,6 +70853,52 @@
         "required": ["workspaceID", "status"],
         "additionalProperties": false
       },
+      "RayaSelfHealSourceAssessment": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["unknown"]
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": ["status", "reason"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["snapshot-input"]
+              },
+              "digest": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "head": {
+                "type": "string"
+              },
+              "checks": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "contract": {
+                "type": "string",
+                "enum": ["Captured source input; execution checkout is writable and dependencies are not sealed."]
+              }
+            },
+            "required": ["status", "digest", "head", "checks", "contract"],
+            "additionalProperties": false
+          }
+        ]
+      },
       "RayaSelfHealCompletion": {
         "type": "object",
         "properties": {
@@ -70494,6 +71077,9 @@
             },
             "required": ["intent", "revision", "completedRevision", "createdAt", "objective", "audit"],
             "additionalProperties": false
+          },
+          "verification": {
+            "$ref": "#/components/schemas/RayaSelfHealSourceAssessment"
           },
           "at": {
             "type": "number",

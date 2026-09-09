@@ -28,6 +28,58 @@ export const FrameID = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLe
   description: "Observed frame document identity; invalid after navigation or detachment.",
 })
 const Framed = { frameID: Schema.optional(FrameID) }
+export const TransferID = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100))
+export const Transfer = Schema.Struct({
+  version: Schema.Literal(1),
+  id: TransferID,
+  tabID: TabID,
+  profile: Schema.String,
+  origin: Schema.optional(
+    Schema.Struct({ requestID: Schema.String, sessionID: Schema.String, directory: Schema.String }),
+  ),
+  status: Schema.Literals(["waiting", "receiving", "completed", "failed", "cancelled", "unknown"]),
+  filename: Schema.String,
+  url: Schema.String,
+  createdAt: Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0)),
+  updatedAt: Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0)),
+  bytes: Schema.optional(Schema.Number.check(Schema.isFinite(), Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))),
+  sha256: Schema.optional(Schema.String),
+  error: Schema.optional(Schema.String),
+}).annotate({ identifier: "BrowserTransfer" })
+const Transfers = { transfers: Schema.optional(Schema.Array(Transfer)) }
+export const DownloadRequest = Schema.Union([
+  Schema.Struct({
+    id: RequestID,
+    sessionID: SessionID,
+    tabID: TabID,
+    ...Framed,
+    operation: Schema.Literal("download"),
+    action: Schema.Literal("start"),
+    selector: Selector,
+  }),
+  Schema.Struct({
+    id: RequestID,
+    sessionID: SessionID,
+    operation: Schema.Literal("download"),
+    action: Schema.Literal("list"),
+    offset: Schema.optional(Schema.Number.check(Schema.isFinite(), Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))),
+  }),
+  Schema.Struct({
+    id: RequestID,
+    sessionID: SessionID,
+    operation: Schema.Literal("download"),
+    action: Schema.Literals(["inspect", "cancel"]),
+    transferID: TransferID,
+  }),
+])
+export const DownloadResult = Schema.Struct({
+  operation: Schema.Literal("download"),
+  transfers: Schema.Array(Transfer),
+  next: Schema.optional(Schema.Number.check(Schema.isFinite(), Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))),
+  artifact: Schema.optional(Schema.String),
+  error: Schema.optional(Schema.String),
+  url: Schema.optional(Url),
+})
 export const FrameInfo = Schema.Struct({
   id: FrameID,
   tabID: TabID,
@@ -76,6 +128,7 @@ export const Tab = Schema.Struct({
   openerID: Schema.optional(TabID),
 })
 export const TabsResult = Schema.Struct({
+  ...Transfers,
   operation: Schema.Literal("tabs"),
   tabs: Schema.Array(Tab),
   tabID: Schema.optional(TabID),
@@ -245,6 +298,7 @@ export const SmokeRequest = Schema.Struct({
 // raya_change end
 
 export const Request = Schema.Union([
+  DownloadRequest,
   DialogRequest,
   TabsRequest,
   FramesRequest,
@@ -262,6 +316,8 @@ export const Request = Schema.Union([
 export type Request = Schema.Schema.Type<typeof Request>
 
 const ResultBase = {
+  navigation: Schema.optional(Schema.Literal("download")),
+  ...Transfers,
   ...Framed,
   frameURL: Schema.optional(Schema.String),
   tabID: Schema.optional(TabID),
@@ -347,6 +403,7 @@ export const SmokeResult = Schema.Struct({
 // raya_change end
 
 export const Result = Schema.Union([
+  DownloadResult,
   DialogResult,
   TabsResult,
   FramesResult,

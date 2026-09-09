@@ -6,11 +6,14 @@ import { Database } from "@opencode-ai/core/database/database"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { Project } from "@/project/project"
 import { InstanceRef } from "@/effect/instance-ref"
+import * as Accounting from "@opencode-ai/core/kilocode/accounting-summary" // kilocode_change
+import { costLabel } from "@opencode-ai/core/kilocode/accounting-label" // kilocode_change
 
 interface SessionStats {
   totalSessions: number
   totalMessages: number
   totalCost: number
+  accounting?: ReturnType<typeof Accounting.empty> // kilocode_change
   totalTokens: {
     input: number
     output: number
@@ -34,6 +37,7 @@ interface SessionStats {
         }
       }
       cost: number
+      accounting?: ReturnType<typeof Accounting.empty> // kilocode_change
     }
   >
   dateRange: {
@@ -127,6 +131,7 @@ export const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* 
     totalSessions: filteredSessions.length,
     totalMessages: 0,
     totalCost: 0,
+    accounting: Accounting.empty(), // kilocode_change
     totalTokens: {
       input: 0,
       output: 0,
@@ -171,6 +176,7 @@ export const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* 
           .pipe(Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed([])))
 
         let legacyCost = 0
+        const accounting = Accounting.empty() // kilocode_change
         const legacyTokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
         const sessionTokens = session.tokens ?? legacyTokens
         let sessionToolUsage: Record<string, number> = {}
@@ -180,6 +186,7 @@ export const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* 
             messages: number
             tokens: { input: number; output: number; cache: { read: number; write: number } }
             cost: number
+            accounting?: ReturnType<typeof Accounting.empty> // kilocode_change
           }
         > = {}
 
@@ -188,6 +195,8 @@ export const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* 
             // kilocode_change start - count propagated subagent cost once but keep child model stats (#6321)
             const parts = message.parts.filter((part) => part.type === "step-finish")
             const cost = parts.length ? parts.reduce((sum, part) => sum + part.cost, 0) : message.info.cost || 0
+            const summary = Accounting.summarize(parts.length ? parts : [{}])
+            Accounting.merge(accounting, summary)
             if (!session.parentID) legacyCost += message.info.cost || 0
             // kilocode_change end
 
@@ -197,10 +206,12 @@ export const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* 
                 messages: 0,
                 tokens: { input: 0, output: 0, cache: { read: 0, write: 0 } },
                 cost: 0,
+                accounting: Accounting.empty(), // kilocode_change
               }
             }
             sessionModelUsage[modelKey].messages++
             sessionModelUsage[modelKey].cost += cost // kilocode_change
+            Accounting.merge(sessionModelUsage[modelKey].accounting ??= Accounting.empty(), summary) // kilocode_change
 
             if (message.info.tokens) {
               if (!session.tokens) {
@@ -228,6 +239,7 @@ export const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* 
 
         return {
           messageCount: messages.length,
+          accounting, // kilocode_change
           // Persisted totals may reflect step costs while parent assistant
           // messages include propagated subagent cost. Keep the larger total.
           sessionCost: session.parentID ? 0 : Math.max(session.cost ?? 0, legacyCost),
@@ -259,6 +271,7 @@ export const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* 
     stats.totalTokens.reasoning += result.sessionTokens.reasoning
     stats.totalTokens.cache.read += result.sessionTokens.cache.read
     stats.totalTokens.cache.write += result.sessionTokens.cache.write
+    Accounting.merge(stats.accounting ??= Accounting.empty(), result.accounting) // kilocode_change
 
     for (const [tool, count] of Object.entries(result.sessionToolUsage)) {
       stats.toolUsage[tool] = (stats.toolUsage[tool] || 0) + count
@@ -278,6 +291,7 @@ export const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* 
       stats.modelUsage[model].tokens.cache.read += usage.tokens.cache.read
       stats.modelUsage[model].tokens.cache.write += usage.tokens.cache.write
       stats.modelUsage[model].cost += usage.cost
+      Accounting.merge(stats.modelUsage[model].accounting ??= Accounting.empty(), usage.accounting ?? Accounting.empty()) // kilocode_change
     }
   }
 
@@ -335,8 +349,13 @@ export function displayStats(stats: SessionStats, toolLimit?: number, modelLimit
   const cost = isNaN(stats.totalCost) ? 0 : stats.totalCost
   const costPerDay = isNaN(stats.costPerDay) ? 0 : stats.costPerDay
   const tokensPerSession = isNaN(stats.tokensPerSession) ? 0 : stats.tokensPerSession
-  console.log(renderRow("Total Cost", `$${cost.toFixed(2)}`))
-  console.log(renderRow("Avg Cost/Day", `$${costPerDay.toFixed(2)}`))
+  // kilocode_change start - preserve cost provenance in CLI statistics
+  console.log(renderRow("Model Cost", costLabel({ cost, accounting: stats.accounting }, "en-US", true)))
+  console.log(renderRow("Avg Model Cost/Day", costLabel({
+    cost: costPerDay,
+    accounting: stats.accounting && { ...stats.accounting, amount: stats.accounting.amount / Math.max(1, stats.days) },
+  }, "en-US", true)))
+  // kilocode_change end
   console.log(renderRow("Avg Tokens/Session", formatNumber(Math.round(tokensPerSession))))
   const medianTokensPerSession = isNaN(stats.medianTokensPerSession) ? 0 : stats.medianTokensPerSession
   console.log(renderRow("Median Tokens/Session", formatNumber(Math.round(medianTokensPerSession))))
@@ -348,6 +367,7 @@ export function displayStats(stats: SessionStats, toolLimit?: number, modelLimit
   console.log()
 
   // Model Usage section
+  console.log("Model costs cover recorded steps in the selected sessions; ≈ estimated, partial incomplete.") // kilocode_change
   if (modelLimit !== undefined && Object.keys(stats.modelUsage).length > 0) {
     const sortedModels = Object.entries(stats.modelUsage).sort(([, a], [, b]) => b.messages - a.messages)
     const modelsToDisplay = modelLimit === Infinity ? sortedModels : sortedModels.slice(0, modelLimit)
@@ -363,7 +383,7 @@ export function displayStats(stats: SessionStats, toolLimit?: number, modelLimit
       console.log(renderRow("  Output Tokens", formatNumber(usage.tokens.output)))
       console.log(renderRow("  Cache Read", formatNumber(usage.tokens.cache.read)))
       console.log(renderRow("  Cache Write", formatNumber(usage.tokens.cache.write)))
-      console.log(renderRow("  Cost", `$${usage.cost.toFixed(4)}`))
+      console.log(renderRow("  Cost", costLabel(usage, "en-US", true))) // kilocode_change
       console.log("├────────────────────────────────────────────────────────┤")
     }
     // Remove last separator and add bottom border

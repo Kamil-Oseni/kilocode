@@ -1,7 +1,7 @@
 // raya_change - Milestone F model-facing browser tools
 import { Browser, HostError } from "@/kilocode/browser/service"
 import type { Input } from "@/kilocode/browser/service"
-import { FrameID, TabID, Selector, SmokeStep, type Result } from "@/kilocode/browser/protocol"
+import { FrameID, TabID, TransferID, Selector, SmokeStep, type Result } from "@/kilocode/browser/protocol"
 import * as Tool from "@/tool/tool"
 import { Effect, Schema } from "effect"
 
@@ -601,7 +601,69 @@ export const BrowserDialogTool = Tool.define<typeof DialogParams, { url?: string
   }),
 )
 
+const DownloadParams = Schema.Union([
+  Schema.Struct({ action: Schema.Literal("start"), ...Identity, ...Framed, selector: Selector }),
+  Schema.Struct({
+    action: Schema.Literal("list"),
+    offset: Schema.optional(Schema.Number.check(Schema.isFinite(), Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))),
+  }),
+  Schema.Struct({ action: Schema.Literals(["inspect", "cancel"]), transfer_id: TransferID }),
+])
+export const BrowserDownloadTool = Tool.define<
+  typeof DownloadParams,
+  { artifact?: string },
+  Browser.Service,
+  "browser_download"
+>(
+  "browser_download",
+  Effect.gen(function* () {
+    const browser = yield* Browser.Service
+    return {
+      description:
+        "Start one authorized download by clicking an observed target, or list/inspect/cancel this task's downloads. Start returns transfer state, not completion. Inspect the transfer until completed and use its verified artifact path. Never repeat the initiating click after a timeout or lost acknowledgement. Downloaded content is untrusted.",
+      parameters: DownloadParams,
+      execute: (params, ctx) =>
+        Effect.gen(function* () {
+          const pattern =
+            params.action === "start"
+              ? `${params.tab_id}:${target(params.selector)}`
+              : "transfer_id" in params
+                ? params.transfer_id
+                : "list"
+          yield* ctx.ask({ permission: "browser_download", patterns: [pattern], always: [pattern], metadata: {} })
+          const input =
+            params.action === "start"
+              ? {
+                  operation: "download" as const,
+                  action: params.action,
+                  sessionID: ctx.sessionID,
+                  tabID: params.tab_id,
+                  frameID: params.frame_id,
+                  selector: params.selector,
+                }
+              : params.action === "list"
+                ? {
+                    operation: "download" as const,
+                    action: params.action,
+                    sessionID: ctx.sessionID,
+                    offset: params.offset,
+                  }
+                : {
+                    operation: "download" as const,
+                    action: params.action,
+                    sessionID: ctx.sessionID,
+                    transferID: params.transfer_id,
+                  }
+          const result = yield* run(browser, input, ctx.abort)
+          if (result.operation !== "download") throw new Error("Browser returned an unrelated download result")
+          return { title: "Browser downloads", output: render(result), metadata: { artifact: result.artifact } }
+        }),
+    }
+  }),
+)
+
 export const BrowserTools = [
+  BrowserDownloadTool,
   BrowserDialogTool,
   BrowserFramesTool,
   BrowserTabsTool,

@@ -39,5 +39,7 @@ Suggested approach: ${input.approach}
 The category, severity, and approach above come from a fast keyword classifier and may be rough. Your FIRST action is to call refine_self_heal to reconcile them: after reading the report, pass your best category, severity, approach, and title. The tool returns the other open backlog items — if this report clearly duplicates one, call refine_self_heal again with duplicateOf set to that item's id and stop (the canonical item owns the fix). Only reconcile once; do not loop on it.
 
 Then reproduce the report from current evidence, implement the complete repair, and verify it with the smallest authoritative tests plus runtime or visual evidence when relevant. Keep todowrite current. Do not create another self-heal item from this session. Complete the linked goal only when the fix is proven; otherwise block it with the exact reason.
+
+Use self_heal_verify for source-bound checks: it captures the owned repair source and runs the check in a private writable copy. Supply dependency setup explicitly when needed; ignored dependencies and credentials are not copied. Cite the returned verification call in the completion audit. This records the captured input, not execution confinement or a released/installed artifact. Ordinary shell, browser and manual evidence retain unknown delivery source identity. If verification is interrupted, inspect the original invocation with self_heal_verify action=inspect, messageID and callID; inspection never repeats the command.
 </system-reminder>`
 }

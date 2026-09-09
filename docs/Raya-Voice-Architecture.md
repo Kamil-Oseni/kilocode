@@ -91,7 +91,7 @@ Two seconds is roughly ten times the human conversational gap. It is enough time
 Turn detection is only the first of the serial costs. In a cascaded system the latency budget accumulates through stages that cannot overlap, because each stage requires its predecessor's complete output.
 
 | Stage | Typical cost | Why it cannot be overlapped |
-| :--- | :--- | :--- |
+|:---|:---|:---|
 | Endpointing decision | 500–2000 ms | Nothing downstream may start until the turn is judged complete |
 | Speech recognition finalization | 100–500 ms | Partial transcripts are unstable; the language model needs final text |
 | Context assembly and prompt processing | 50–300 ms | Requires the finalized user message |
@@ -281,7 +281,7 @@ The following walkthrough is normative; the numbered stages are referenced by la
 ## 2.7 Deployment topology
 
 | Component | Platform | Region at launch | Scaling unit | Statefulness |
-| :--- | :--- | :--- | :--- | :--- |
+|:---|:---|:---|:---|:---|
 | Clients | Web, iOS, Android, desktop, SIP | — | — | Session-local |
 | SFU | LiveKit Cloud, region-pinned `us` | US | Managed | Per-room |
 | `raya-mf` | Cloud Run, CPU always allocated | `us-central1` | Concurrent sessions | Session-affine, ephemeral |
@@ -314,7 +314,7 @@ Honesty in this table is worth more than advocacy. A CTO reading it should be ab
 ### Adopted unchanged
 
 | Design element | Why |
-| :--- | :--- |
+|:---|:---|
 | Two-plane separation | The central insight, and it is correct |
 | Media frontend in Go | Their published result was that Go's p95 matched their previous Python p50 |
 | Asynchronous delegation off the media path | The only way to have both responsiveness and intelligence |
@@ -325,7 +325,7 @@ Honesty in this table is worth more than advocacy. A CTO reading it should be ab
 ### Where our design is better
 
 | Design element | GPT-Live | Raya Voice | Why it is a real advantage |
-| :--- | :--- | :--- | :--- |
+|:---|:---|:---|:---|
 | Model coupling | Welded to a model they own | Interface-defined, swappable by database write | Their architecture cannot outlive their model. Ours can move to Azure, to an open full-duplex model, or to a Canadian host without a rewrite |
 | Financial grounding | None | Plaid-sourced balances, transactions and liabilities behind every answer | This is the product. A general assistant cannot see the user's money and never will |
 | Memory on compaction | Summarize and discard | Summarize into durable structured memory | Raya already has a memory system; compaction becomes productive rather than lossy, and the memory survives the session |
@@ -343,7 +343,7 @@ Honesty in this table is worth more than advocacy. A CTO reading it should be ab
 ### Where we cannot compete, and accept it
 
 | Design element | GPT-Live | Raya Voice | Consequence |
-| :--- | :--- | :--- | :--- |
+|:---|:---|:---|:---|
 | Model-internal control | Own the model; control stateful inference, compaction internals, warm handoff at the KV-cache level | Vendor-controlled | Our handoff is semantic rather than acoustic: a snapshot reconstitutes the conversation's meaning, not its exact internal state |
 | Latency floor | Colocated inference, own transport stack | Public API plus a network hop | We pay tens of milliseconds we cannot recover. Part IV budgets it honestly |
 | Transport optimization | WARP and Instant Connect | Standard WebRTC over a managed SFU | Deferred to Phase 4 at the earliest; the drafts are individual and partly expired |
@@ -829,13 +829,13 @@ Two budgets matter and they are measured separately.
 **Session establishment**, from the user's tap to the first frame of their audio reaching the engine. Target 800 ms at p95.
 
 | Hop | Budget | Notes |
-| :--- | ---: | :--- |
+|:---|---:|:---|
 | Client to `raya-api`, auth, entitlement, spend check | 120 ms | Cached entitlement; a database read here would blow the budget |
 | LiveKit token mint and engine credential mint | 30 ms | Both are local signing operations |
 | ICE, DTLS handshake, first media | 250 ms | Dominated by round trips; the largest single item |
 | `raya-mf` dispatch and room join | 150 ms | Warm instance assumed; cold start is handled by min-instances |
 | Realtime API session open and configuration | 200 ms | Vendor-controlled |
-| First frame captured, encoded, forwarded, decoded | 40 ms | |
+| First frame captured, encoded, forwarded, decoded | 40 ms |  |
 | **Total** | **790 ms** | 10 ms of slack, which is honest rather than comfortable |
 
 Delegate warming runs concurrently with all of this and must not appear in the budget. If it ever blocks session establishment, the boundary has been violated.
@@ -843,17 +843,17 @@ Delegate warming runs concurrently with all of this and must not appear in the b
 **Response latency**, from the user finishing speaking to the first assistant audio reaching their ear. Target 600 ms at p50 and 1000 ms at p95.
 
 | Hop | p50 | Notes |
-| :--- | ---: | :--- |
+|:---|---:|:---|
 | Capture, encode, client to SFU | 40 ms | Includes one frame of encoder latency |
 | SFU forward to `raya-mf` | 15 ms | Same-region |
-| Decode, resample, fork to sidecar, push | 5 ms | |
+| Decode, resample, fork to sidecar, push | 5 ms |  |
 | `raya-mf` to Realtime API | 25 ms | Same-region, WebSocket |
 | Endpointing decision and generation to first audio | 350 ms | Vendor-controlled; the dominant term |
-| Realtime API to `raya-mf` | 25 ms | |
+| Realtime API to `raya-mf` | 25 ms |  |
 | Adaptive buffer and publish | 60 ms | Tunable; the one term we trade deliberately |
-| SFU to client | 15 ms | |
+| SFU to client | 15 ms |  |
 | Client jitter buffer and playout | 60 ms | Browser-controlled |
-| **Total** | **595 ms** | |
+| **Total** | **595 ms** |  |
 
 Roughly three-fifths of that budget is the vendor's and roughly one-fifth is buffering we chose. That is a materially better position than the 1.5 to 2.5 seconds a cascade produces, and it is a materially worse position than OpenAI's own product achieves with colocated inference and their own transport. Both halves of that sentence belong in the document.
 
@@ -972,11 +972,11 @@ Three routes exist and they are not equally good.
 The per-minute figures used throughout this document decompose into three layers.
 
 | Layer | Per voice-minute | Notes |
-| :--- | ---: | :--- |
+|:---|---:|:---|
 | Realtime model, `gpt-realtime-2.1` | ~$0.054 | Audio in and out plus re-billed cached history; rises with session length |
 | Transport | ~$0.0025 | LiveKit participant minutes plus Cloud Run for `raya-mf` and the sidecar |
 | Reasoning delegate | ~$0.0005 | Roughly 1.33 calls per minute on a cached prefix |
-| **All-in** | **~$0.057** | |
+| **All-in** | **~$0.057** |  |
 
 Three observations govern how these numbers should be treated.
 
@@ -1060,7 +1060,7 @@ The class is assigned by the orchestrator from the request payload, not declared
 Four entries, selected per request by intent and filtered by data class. All are OpenAI wire-compatible, so a registry entry is a base URL, a model string, and a set of capability flags.
 
 | Tier | Model | Provider | In / cached / out per 1M | Data class | Used for |
-| :--- | :--- | :--- | ---: | :--- | :--- |
+|:---|:---|:---|---:|:---|:---|
 | Economy | `deepseek-v4-flash` | Fireworks, US-pinned | $0.14 / $0.028 / $0.28 | A, and B on verification | The voice-path default. Classification, entity extraction, retrieval formulation, single-tool lookups, narration guidance |
 | Standard | `MiniMax-M2.7` | Fireworks or Together, US | $0.30 / $0.06 / $1.20 | A, and B on verification | Multi-tool orchestration, transaction analysis, comparative questions |
 | Standard, verified | `glm-5.1` | DeepInfra, US | $1.05 / $0.205 / $3.50 | A and B | The Class B default until other providers are verified. MIT weights, top-decile agentic scores, documented zero retention with SOC 2 and ISO 27001 |
@@ -1113,7 +1113,7 @@ When delegation is slow, something has to happen in the conversation. OpenAI's a
 The ladder is latency-adaptive. Each rung is reachable from the one before without contradiction, so a delegation that escalates through all of them produces a coherent stretch of speech rather than a sequence of unrelated fillers.
 
 | Elapsed | Behaviour |
-| :--- | :--- |
+|:---|:---|
 | 0–400 ms | Say nothing. This is within human conversational range and filling it makes Raya sound nervous |
 | 400–1200 ms | A minimal acknowledgement in Raya's own words. Not a fixed phrase — a fixed phrase becomes a tic within a week |
 | 1200–2500 ms | A substantive holding statement that names what is being fetched. "Let me pull last month's card statements" tells the user the request was understood, which is most of what the anxiety of waiting is about |
@@ -1317,11 +1317,11 @@ Differentiation happens on capability, which is where it belongs. Basic subscrib
 ## 10.2 Cost per voice-minute
 
 | Layer | Per minute | Share |
-| :--- | ---: | ---: |
+|:---|---:|---:|
 | Realtime model, `gpt-realtime-2.1` | $0.0540 | 95% |
 | Transport — LiveKit participant minutes, Cloud Run for `raya-mf` and the sidecar | $0.0025 | 4% |
 | Reasoning delegate — ~1.33 calls per minute on a cached prefix | $0.0005 | 1% |
-| **All-in** | **$0.0570** | |
+| **All-in** | **$0.0570** |  |
 
 The concentration in the top line is the operative fact. Ninety-five percent of voice cost is a vendor invoice we do not control, which means the only meaningful cost levers are session length, compaction aggressiveness per Section 5.3, and the engine choice itself. Optimizing transport or delegation is optimizing four percent.
 
@@ -1330,7 +1330,7 @@ The concentration in the top line is the operative fact. Ninety-five percent of 
 Prices in Canadian dollars, costs in US dollars at 1.37 CAD/USD, contribution at the 30% utilisation typical of voice products.
 
 | Tier | CAD/mo | Annual | Voice allowance | Spend ceiling | Revenue | Contribution at 30% | Margin | Contribution at full allowance | Margin |
-| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+|:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | Basic | $25 | $275 | 60 min | $3.93 | $18.25 | $11.84 | 65% | $8.01 | 44% |
 | Plus | $49 | $539 | 240 min | $15.73 | $35.77 | $27.11 | 76% | $13.54 | 38% |
 | Pro | $99 | $1,089 | 600 min | $39.33 | $72.26 | $53.26 | 74% | $19.36 | 27% |
@@ -1387,7 +1387,7 @@ Voice is one line in a larger bill, and the tier prices have to carry all of it.
 The first block scales linearly with subscribers and is **already netted out of the contribution figures in Section 10.3**. It is reproduced here for visibility, not to be subtracted a second time.
 
 | Per-subscriber line | 100 subs | 1,000 subs | 10,000 subs |
-| :--- | ---: | ---: | ---: |
+|:---|---:|---:|---:|
 | Plaid | $85 | $850 | $8,500 |
 | Stripe — 2.9% processing plus 0.7% Billing plus CA$0.30 | $165 | $1,654 | $16,537 |
 | **Subtotal** | **$250** | **$2,504** | **$25,037** |
@@ -1395,7 +1395,7 @@ The first block scales linearly with subscribers and is **already netted out of 
 The second block is platform cost that does not scale one-for-one with subscribers. This is the block that contribution must cover, alongside salaries.
 
 | Platform line | 100 subs | 1,000 subs | 10,000 subs |
-| :--- | ---: | ---: | ---: |
+|:---|---:|---:|---:|
 | Google Cloud — Run, SQL, Redis, registry, secrets, observability, egress | $60 | $150 | $1,050 |
 | LiveKit Cloud — SFU, participant minutes | $50 | $66 | $630 |
 | Vercel | $20 | $24 | $60 |
@@ -1450,7 +1450,7 @@ OpenAI's published account is candid that their observability lagged their syste
 Every one of these is measured per session, aggregated per engine, and broken out by client type, because a SIP call and a browser session fail differently.
 
 | Indicator | Objective | Why it matters |
-| :--- | :--- | :--- |
+|:---|:---|:---|
 | Session establishment, tap to first frame | p95 ≤ 800 ms | The first impression, and the only latency the user attributes entirely to us |
 | Response latency, user stop to first audio at ear | p50 ≤ 600 ms, p95 ≤ 1000 ms | The core experience metric |
 | Barge-in cessation, speech onset to inaudible at the ear | p95 ≤ 100 ms | Below this, interruption feels responsive; above it, broken. Measured at the ear, per Section 4.6, not at the point publication stops |
@@ -1507,7 +1507,7 @@ The corollary is that dropping a session is the last resort rather than the defa
 ## 12.2 The ladder
 
 | Rung | Condition | Behaviour | User experience |
-| :--- | :--- | :--- | :--- |
+|:---|:---|:---|:---|
 | 0 | Healthy | Flagship engine, full capability | Normal |
 | 1 | Delegate slow or a provider erroring | Cross-provider retry within the registry tier; narration ladder covers the gap | Slightly slower answers |
 | 2 | Delegate tier unavailable | Fall back to the economy tier for Class B work on a verified provider; reduce speculation to zero | Answers are shallower; Raya asks more clarifying questions |
@@ -1599,7 +1599,7 @@ Azure Voice Live adoption if the spike was favourable, delivering Raya's own voi
 ## 13.7 Staffing
 
 | Role | Phase 0 | Phase 1 | Phase 2 | Phase 3 |
-| :--- | :--- | :--- | :--- | :--- |
+|:---|:---|:---|:---|:---|
 | Media engineer, Go | 0.5 | 1.0 | 0.5 | 0.5 |
 | Backend engineer, NestJS | 0.5 | 1.0 | 1.0 | 0.5 |
 | Client engineer | — | 0.5 | 1.0 | 0.5 |
@@ -1641,7 +1641,7 @@ We do not move for a benchmark result, for a licence preference, or because self
 # Part XV: Risk Register
 
 | # | Risk | Likelihood | Impact | Response |
-| :--- | :--- | :--- | :--- | :--- |
+|:---|:---|:---|:---|:---|
 | 1 | Truncation accounting implemented incorrectly and the defect ships | High | High | Conformance test in Phase 1 exit criteria; it is the single named gate |
 | 2 | Measured cost per voice-minute materially exceeds the model | Medium | High | Phase 0 measurement before commitment; allowances move, not the architecture |
 | 3 | Vendor price increase | Medium | High | `cascade-v1` maintained at production quality; conformance suite keeps its economics honest |

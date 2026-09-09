@@ -8,9 +8,14 @@ import { locate, TargetError, type BrowserTarget, type TargetPage } from "./brow
 import { FrameRegistry, type FrameOwner, type FrameInfo, type DocumentFrame } from "./browser-frame"
 import { pending, BrowserDialogs, type DialogPage, type DialogInfo, type DialogOperation } from "./browser-dialog"
 import { BrowserSmoke } from "./browser-smoke"
+import { save } from "./browser-save"
+import { BrowserTransfers, type TransferInfo, type TransferOrigin, type TransferPage } from "./browser-transfer"
 import type { SmokeConsole, SmokeCookie, SmokeInput, SmokeOrigin, SmokeResponse, SmokeResult } from "./browser-smoke"
 
-export type BrowserAction = { tabID?: string; frameID?: string } & (
+export type BrowserAction = { tabID?: string; frameID?: string; origin?: TransferOrigin } & (
+  | { operation: "download"; action: "start"; selector: BrowserTarget }
+  | { operation: "download"; action: "list"; offset?: number }
+  | { operation: "download"; action: "inspect" | "cancel"; transferID: string }
   | {
       operation: "dialog"
       action: "list" | "accept" | "dismiss"
@@ -20,7 +25,7 @@ export type BrowserAction = { tabID?: string; frameID?: string } & (
     }
   | { operation: "navigate"; url: string }
   | { operation: "snapshot" }
-  | { operation: "click"; selector: BrowserTarget }
+  | { operation: "click"; selector: BrowserTarget; capture?: boolean }
   | { operation: "type"; selector: BrowserTarget; text: string; submit: boolean }
   | { operation: "select"; selector: BrowserTarget; values: string[] }
   | { operation: "scroll"; deltaX: number; deltaY: number; selector?: BrowserTarget }
@@ -33,16 +38,26 @@ export type BrowserAction = { tabID?: string; frameID?: string } & (
 )
 type BrowserNativeAction = Exclude<
   BrowserAction,
-  { operation: "auth_capture" | "smoke" | "tabs" | "frames" | "dialog" }
+  { operation: "auth_capture" | "smoke" | "tabs" | "frames" | "dialog" | "download" }
 >
 export type BrowserTab = { id: string; url: string; title: string; selected: boolean; openerID?: string }
 
-export type BrowserResult = { tabID?: string; frameID?: string; frameURL?: string } & (
+export type BrowserResult = {
+  tabID?: string
+  frameID?: string
+  frameURL?: string
+  transfers?: TransferInfo[]
+  navigation?: "download"
+} & (
+  | { operation: "download"; transfers: TransferInfo[]; next?: number; artifact?: string; error?: string; url?: string }
   | { operation: "dialog"; dialogs: DialogInfo[]; operations: DialogOperation[]; url?: string; title?: string }
   | { operation: "frames"; frames: FrameInfo[]; url?: string; title?: string }
   | { operation: "tabs"; tabs: BrowserTab[]; url?: string; title?: string }
   | {
-      operation: Exclude<BrowserAction["operation"], "auth_capture" | "smoke" | "tabs" | "frames" | "dialog">
+      operation: Exclude<
+        BrowserAction["operation"],
+        "auth_capture" | "smoke" | "tabs" | "frames" | "dialog" | "download"
+      >
       url: string
       title: string
       snapshot?: string
@@ -217,6 +232,7 @@ const launch: BrowserLaunch = async (profile) =>
 export class BrowserSession {
   private context: BrowserContextLike | undefined
   private dialogs = new BrowserDialogs()
+  private transfers: BrowserTransfers
   private readonly documents = new Map<BrowserPage, FrameRegistry>()
   private readonly tabs = new Map<string, BrowserPage>()
   private readonly identities = new Map<BrowserPage, string>()
@@ -245,7 +261,9 @@ export class BrowserSession {
     readonly profile: string,
     private readonly launcher: BrowserLaunch = launch,
     private readonly artifacts = join(profile, "raya-smoke"),
-  ) {}
+  ) {
+    this.transfers = new BrowserTransfers(join(profile, "raya-downloads"), profile)
+  }
 
   async ready(): Promise<void> {
     if (this.context) return
@@ -258,6 +276,7 @@ export class BrowserSession {
   }
 
   private async open(): Promise<void> {
+    await this.transfers.load()
     await mkdir(this.profile, { recursive: true })
     const context = await this.launcher(this.profile)
     const page = context.pages()[0] ?? (await context.newPage())
@@ -323,6 +342,7 @@ export class BrowserSession {
       this.identities.set(page, id)
       this.tabs.set(id, page)
       if (page.isClosed) this.dialogs.attach(page as unknown as DialogPage, id)
+      if (page.isClosed) this.transfers.attach(page as unknown as TransferPage, id)
       if (page.frames && page.mainFrame) this.documents.set(page, new FrameRegistry(page as unknown as FrameOwner, id))
       const context = this.context
       if (page.opener)
@@ -405,7 +425,16 @@ export class BrowserSession {
       const page = await this.browser().newPage()
       this.register()
       await this.bind(page)
-      await page.goto(action.url ?? "about:blank", this.wait())
+      const off = this.transfers.own(this.identity(page), action.origin)
+      try {
+        await page.goto(action.url ?? "about:blank", this.wait())
+      } catch (error) {
+        if (!action.origin || !/Download is starting/i.test(error instanceof Error ? error.message : String(error)))
+          throw error
+        if ((await this.transfers.observed(action.origin)).length === 0) throw error
+      } finally {
+        off()
+      }
     }
     if (action.action === "select") {
       if (!action.tabID) throw new TargetError("Observed tab ID is required to select a tab")
@@ -475,11 +504,14 @@ export class BrowserSession {
   }
 
   takeControl(reason = "You took manual control of the browser."): void {
+    this.transfers.takeover()
     this.handover(reason, undefined, this.running > 0)
   }
 
   async execute(action: BrowserAction): Promise<BrowserResult> {
+    if (action.operation === "download" && action.action !== "start") return this.download(action)
     await this.ready()
+    if (action.operation === "download") return this.download(action)
     if (action.operation === "dialog") return this.dialog(action)
     const blocked = this.dialogs.blocked()
     if (blocked) throw blocked
@@ -495,7 +527,38 @@ export class BrowserSession {
     const settled = this.queue.then(() => {
       if (this.revision !== revision)
         throw new TargetError("Queued browser action cancelled by manual control; no action dispatched")
-      const job = this.dialogs.start(action.operation, action.tabID ?? "", () => this.perform(action))
+      const job = this.dialogs.start(action.operation, action.tabID ?? "", async () => {
+        if (action.operation === "click" && action.capture) {
+          if (!action.origin || !action.tabID) throw new TargetError("Download capture requires task and tab identity")
+          await this.transfers.arm(action.tabID, action.origin)
+        }
+        const off = this.transfers.own(action.tabID ?? "", action.origin)
+        try {
+          const result = await this.perform(action).catch(async (error: unknown) => {
+            const transfers = action.origin
+              ? /Download is starting/i.test(error instanceof Error ? error.message : String(error))
+                ? await this.transfers.observed(action.origin)
+                : (await this.transfers.list(action.origin, undefined, 0, action.origin.requestID)).transfers
+              : []
+            if (action.operation !== "navigate" || transfers.length === 0) throw error
+            const page = this.resolve(action.tabID)
+            return {
+              operation: "navigate" as const,
+              tabID: action.tabID,
+              url: page.url(),
+              title: await page.title(),
+              navigation: "download" as const,
+              transfers,
+            }
+          })
+          const records = action.origin
+            ? (await this.transfers.list(action.origin, undefined, 0, action.origin.requestID)).transfers
+            : []
+          return records.length ? { ...result, transfers: records } : result
+        } finally {
+          off()
+        }
+      })
       void job.result.then(result.resolve, result.reject)
       return job.settled
     })
@@ -510,6 +573,65 @@ export class BrowserSession {
 
   dialogsState() {
     return this.dialogs.list()
+  }
+
+  downloads(offset = 0) {
+    return this.transfers.list(undefined, undefined, offset)
+  }
+  onDownloads(listener: () => void) {
+    return this.transfers.onChange(listener)
+  }
+  downloadArtifact(id: string) {
+    return this.transfers.artifact(id)
+  }
+  async downloadInfo(id: string) {
+    return (await this.transfers.list(undefined, id)).transfers[0]
+  }
+  async saveDownload(id: string, destination: string, replace = false) {
+    const source = await this.transfers.artifact(id)
+    const info = await this.downloadInfo(id)
+    if (info.bytes === undefined || !info.sha256) throw new Error("Download has no verified receipt")
+    await save(source, destination, { bytes: info.bytes, sha256: info.sha256 }, replace)
+  }
+  cancelDownload(id: string) {
+    return this.transfers.cancel(id)
+  }
+
+  private async download(action: Extract<BrowserAction, { operation: "download" }>): Promise<BrowserResult> {
+    if (!action.origin) throw new TargetError("Download operations require an identified task and request")
+    if (action.action === "list")
+      return { operation: "download", ...(await this.transfers.list(action.origin, undefined, action.offset)) }
+    if (action.action === "cancel") {
+      await this.transfers.cancel(action.transferID, action.origin)
+      return { operation: "download", ...(await this.transfers.list(action.origin, action.transferID)) }
+    }
+    if (action.action === "inspect") {
+      const result = await this.transfers.list(action.origin, action.transferID)
+      const artifact =
+        result.transfers[0].status === "completed"
+          ? await this.transfers.artifact(action.transferID, action.origin)
+          : undefined
+      return { operation: "download", ...result, artifact }
+    }
+    if (action.action !== "start") throw new TargetError("Unknown download action")
+    if (!action.tabID) throw new TargetError("Observed download tab identity is required")
+    this.resolve(action.tabID)
+    const error = await this.execute({
+      operation: "click",
+      capture: true,
+      tabID: action.tabID,
+      frameID: action.frameID,
+      selector: action.selector,
+      origin: action.origin,
+    }).then(
+      () => undefined,
+      (error: unknown) => (error instanceof Error ? error.message : String(error)),
+    )
+    return {
+      operation: "download",
+      ...(await this.transfers.list(action.origin, undefined, 0, action.origin.requestID)),
+      error,
+    }
   }
   onDialogs(listener: () => void): () => void {
     return this.dialogs.onChange(listener)
@@ -531,7 +653,7 @@ export class BrowserSession {
     return { operation: "dialog", tabID: action.tabID, ...this.dialogs.list(action.tabID, action.operationID) }
   }
 
-  private async perform(action: Exclude<BrowserAction, { operation: "dialog" }>): Promise<BrowserResult> {
+  private async perform(action: Exclude<BrowserAction, { operation: "dialog" | "download" }>): Promise<BrowserResult> {
     await this.ready()
     // A new tool call is an explicit instruction to return control to the agent.
     if (this.state.control === "manual") this.resume()
@@ -546,7 +668,7 @@ export class BrowserSession {
   }
 
   private async attempt(
-    action: Exclude<BrowserAction, { operation: "dialog" }>,
+    action: Exclude<BrowserAction, { operation: "dialog" | "download" }>,
     number: number,
     revision: number,
   ): Promise<BrowserResult> {
@@ -623,20 +745,6 @@ export class BrowserSession {
     }
   }
 
-  private async probe(url: string): Promise<void> {
-    if (!/^https?:\/\//i.test(url) || !/localhost|127\.0\.0\.1/i.test(url)) return
-    try {
-      await fetch(url, { method: "GET", signal: AbortSignal.timeout(3_000) })
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error)
-      if (/ECONNREFUSED|ENOTFOUND|fetch failed|Failed to fetch|Unable to connect|network|abort/i.test(detail)) {
-        throw new Error(
-          `Cannot open ${url}: connection refused. Start the app or inspect background_process for the listening port.`,
-        )
-      }
-    }
-  }
-
   private async press(page: BrowserPage, selector: BrowserTarget, dispatch: () => void): Promise<void> {
     if (typeof selector !== "string") {
       const locator = await locate(page, selector)
@@ -659,7 +767,6 @@ export class BrowserSession {
 
   private async drive(action: BrowserNativeAction, page: ReturnType<BrowserSession["active"]>, dispatch: () => void) {
     if (action.operation === "navigate") {
-      await this.probe(action.url)
       try {
         dispatch()
         const response = await page.goto(action.url, this.wait())
@@ -667,6 +774,8 @@ export class BrowserSession {
         if (status === 403 || status === 429) throw new Error(`Site returned HTTP ${status}`)
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error)
+        if (/ERR_CONNECTION_REFUSED/i.test(detail))
+          throw new Error(`Cannot open ${action.url}: connection refused. Start the app or inspect the listening port.`)
         if (!(/Timeout \d+ms exceeded/i.test(detail) && this.reached(page, action.url))) throw error
       }
       return
@@ -875,7 +984,6 @@ export class BrowserSession {
     if (blocked) throw blocked
     this.release()
     const tab = this.identity(this.resolve(id))
-    await this.probe(url)
     this.input(tab)
     await this.travel((page) => page.goto(url, this.wait()), tab)
   }
@@ -1016,6 +1124,8 @@ export class BrowserSession {
     this.identities.clear()
     this.dialogs.dispose()
     this.dialogs = new BrowserDialogs()
+    this.transfers.dispose()
+    this.transfers = new BrowserTransfers(join(this.profile, "raya-downloads"), this.profile)
     for (const registry of this.documents.values()) registry.dispose()
     this.documents.clear()
     this.openers.clear()

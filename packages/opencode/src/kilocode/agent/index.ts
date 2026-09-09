@@ -448,6 +448,7 @@ export function prepare(cfg: Config.Info): KiloData {
     ...(Flag.KILO_CLIENT === "vscode"
       ? {
           browser_dialog: "allow" as const,
+          browser_download: "allow" as const,
           browser_frames: "allow" as const,
           browser_tabs: "allow" as const,
           browser_navigate: "allow" as const,
@@ -881,6 +882,7 @@ export function patchAgents(
         explore.permission,
         Permission.fromConfig({
           browser_dialog: "allow",
+          browser_download: "allow",
           browser_frames: "allow",
           browser_tabs: "allow",
           browser_navigate: "allow",

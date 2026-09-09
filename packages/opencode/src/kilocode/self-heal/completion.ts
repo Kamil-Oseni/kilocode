@@ -4,6 +4,7 @@ import { Storage } from "@/storage/storage"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { Source, Conflict, type repairs } from "./repair"
 import { Worktree } from "./worktree"
+import { Assessment } from "./verification"
 
 const Time = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))
 const Evidence = Schema.Struct({
@@ -50,6 +51,7 @@ export const Completion = Schema.Struct({
   source: Source,
   worktree: Worktree,
   goal: Goal,
+  verification: Schema.optional(Assessment),
   at: Time,
 }).annotate({ identifier: "Raya.SelfHealCompletion" })
 const identity = (goal: typeof Goal.Type) =>
@@ -90,7 +92,13 @@ export function completions(storage: Pick<Storage.Interface, "read" | "create">,
   })
   // Internal capability: only the goal service calls this after its evidence and human-review gates.
   // No HTTP route accepts a receipt or invokes this publication boundary.
-  const record = Effect.fn(function* (id: string, sessionID: SessionID, attempt: string, input: unknown) {
+  const record = Effect.fn(function* (
+    id: string,
+    sessionID: SessionID,
+    attempt: string,
+    input: unknown,
+    verification?: typeof Assessment.Type,
+  ) {
     const outcome = yield* link(id, sessionID, attempt)
     if (!["dispatching", "submitted", "dispatch_unknown"].includes(outcome.phase))
       return yield* new Conflict({ message: "Repair dispatch has not reached a completion-eligible phase." })
@@ -105,6 +113,7 @@ export function completions(storage: Pick<Storage.Interface, "read" | "create">,
       source: outcome.source,
       worktree: outcome.worktree!,
       goal,
+      verification,
       at: Date.now(),
     }
     if (yield* storage.create(key(id), receipt).pipe(Effect.orDie)) return receipt

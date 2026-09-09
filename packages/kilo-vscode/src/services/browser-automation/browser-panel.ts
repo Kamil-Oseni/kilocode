@@ -1,5 +1,8 @@
 // raya_change - Milestone F in-editor CDP screencast panel
 import * as vscode from "vscode"
+import { homedir } from "node:os"
+import { join } from "node:path"
+import { destination, filename } from "./browser-save"
 import type { BrowserFrame, BrowserKey, BrowserPointer, BrowserState } from "./browser-session"
 import { BrowserSession } from "./browser-session"
 
@@ -16,6 +19,8 @@ type BrowserPanelMessage = { tabID?: string } & (
   | { type: "resize"; dpr: number; width: number; height: number } // raya_change - drive layout viewport + capture density to the panel
   | { type: "key"; input: BrowserKey }
   | { type: "dialog"; dialogID: string; action: "accept" | "dismiss"; text?: string }
+  | { type: "download"; transferID: string; action: "reveal" | "cancel" | "save" }
+  | { type: "downloads"; offset: number }
   | { type: "tab"; action: "open" | "select" | "close" }
 )
 
@@ -25,6 +30,7 @@ export class BrowserPanel implements vscode.Disposable {
   private panel: vscode.WebviewPanel | undefined
   private off: (() => void) | undefined
   private offDialogs: (() => void) | undefined
+  private offDownloads: (() => void) | undefined
   private offTabs: (() => void) | undefined
   private offState: (() => void) | undefined
 
@@ -49,6 +55,7 @@ export class BrowserPanel implements vscode.Disposable {
     panel.webview.html = this.html()
     panel.webview.onDidReceiveMessage((message: BrowserPanelMessage) => this.handle(message))
     panel.onDidDispose(() => {
+      this.offDownloads?.()
       this.off?.()
       this.offState?.()
       this.offTabs?.()
@@ -60,6 +67,7 @@ export class BrowserPanel implements vscode.Disposable {
     this.offDialogs = this.session.onDialogs(
       () => void this.panel?.webview.postMessage({ type: "dialogs", ...this.session.dialogsState() }),
     )
+    this.offDownloads = this.session.onDownloads(() => void this.downloads())
     this.offTabs = this.session.onTabs((tabs) => void this.panel?.webview.postMessage({ type: "tabs", tabs }))
     this.off = this.session.onFrame((frame) => void this.frame(frame))
     this.offState = this.session.onState((state) => void this.status(state))
@@ -72,6 +80,7 @@ export class BrowserPanel implements vscode.Disposable {
     panel.webview.html = this.html()
     panel.webview.onDidReceiveMessage((message: BrowserPanelMessage) => this.handle(message))
     panel.onDidDispose(() => {
+      this.offDownloads?.()
       this.off?.()
       this.offState?.()
       this.offTabs?.()
@@ -83,6 +92,7 @@ export class BrowserPanel implements vscode.Disposable {
     this.offDialogs = this.session.onDialogs(
       () => void this.panel?.webview.postMessage({ type: "dialogs", ...this.session.dialogsState() }),
     )
+    this.offDownloads = this.session.onDownloads(() => void this.downloads())
     this.offTabs = this.session.onTabs((tabs) => void this.panel?.webview.postMessage({ type: "tabs", tabs }))
     this.off = this.session.onFrame((frame) => void this.frame(frame))
     this.offState = this.session.onState((state) => void this.status(state))
@@ -104,16 +114,60 @@ export class BrowserPanel implements vscode.Disposable {
     await this.session.respond(message.tabID, message.dialogID, message.action, message.text)
   }
 
-  private async receive(message: BrowserPanelMessage): Promise<void> {
-    if (message.type === "ready") {
-      const frame = this.session.latest()
-      if (frame) await this.frame(frame)
-      await this.panel?.webview.postMessage({ type: "dialogs", ...this.session.dialogsState() })
-      await this.status(this.session.current())
-      await this.panel?.webview.postMessage({ type: "tabs", tabs: await this.session.inventory() })
+  private async downloads(offset = 0) {
+    if (!Number.isSafeInteger(offset) || offset < 0) throw new Error("Invalid download page")
+    await this.panel?.webview.postMessage({ type: "downloads", offset, ...(await this.session.downloads(offset)) })
+  }
+
+  private async transfer(message: Extract<BrowserPanelMessage, { type: "download" }>) {
+    if (message.action === "save") return this.save(message.transferID)
+    if (message.action === "cancel") await this.session.cancelDownload(message.transferID)
+    if (message.action === "reveal")
+      await vscode.commands.executeCommand(
+        "revealFileInOS",
+        vscode.Uri.file(await this.session.downloadArtifact(message.transferID)),
+      )
+    await this.downloads()
+  }
+
+  private async save(id: string) {
+    const info = await this.session.downloadInfo(id)
+    if (info.status !== "completed") throw new Error("Download is not complete")
+    const target = await vscode.window.showSaveDialog({
+      title: "Save a copy of the download",
+      saveLabel: "Save copy",
+      defaultUri: vscode.Uri.file(join(homedir(), "Downloads", filename(info.filename))),
+    })
+    if (!target) return
+    if (target.scheme !== "file") throw new Error("Choose a local file destination")
+    const existing = await destination(target.fsPath)
+    if (
+      existing &&
+      (await vscode.window.showWarningMessage(
+        "Replace the existing destination file with this download?",
+        { modal: true },
+        "Replace",
+      )) !== "Replace"
+    )
       return
-    }
+    await this.session.saveDownload(id, target.fsPath, Boolean(existing))
+    await vscode.window.showInformationMessage(`Saved ${target.fsPath}`)
+  }
+
+  private async initialize() {
+    await this.downloads()
+    const frame = this.session.latest()
+    if (frame) await this.frame(frame)
+    await this.panel?.webview.postMessage({ type: "dialogs", ...this.session.dialogsState() })
+    await this.status(this.session.current())
+    await this.panel?.webview.postMessage({ type: "tabs", tabs: await this.session.inventory() })
+  }
+
+  private async receive(message: BrowserPanelMessage): Promise<void> {
+    if (message.type === "ready") return this.initialize()
     if (message.type === "dialog") return this.respond(message)
+    if (message.type === "download") return this.transfer(message)
+    if (message.type === "downloads") return this.downloads(message.offset)
     if (message.type === "tab") {
       if (message.action !== "open" && !message.tabID) throw new Error("Observed tab identity is required")
       await this.session.tab(message.action, message.tabID)
@@ -176,6 +230,7 @@ export class BrowserPanel implements vscode.Disposable {
   }
 
   dispose(): void {
+    this.offDownloads?.()
     this.off?.()
     this.offState?.()
     this.offTabs?.()
@@ -212,6 +267,8 @@ export class BrowserPanel implements vscode.Disposable {
     main { position: relative; display: grid; place-items: center; min-width: 0; min-height: 0; overflow: hidden; background: #111; }
     img { display: block; max-width: 100%; max-height: 100%; outline: none; user-select: none; -webkit-user-drag: none; image-rendering: -webkit-optimize-contrast; }
     #empty { color: var(--vscode-descriptionForeground); }
+    #downloads { position: absolute; bottom: 8px; left: 8px; z-index: 4; max-height: 35%; max-width: 90%; overflow: auto; background: var(--vscode-editor-background); padding: 6px; }
+    #downloads:empty { display: none; }
     #shield { position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; color: white; background: rgb(0 0 0 / 28%); cursor: wait; }
     #dialogs { position: absolute; inset: 12px; z-index: 3; overflow: auto; pointer-events: none; }
     #dialogs > section { pointer-events: auto; margin: 8px auto; max-width: 640px; padding: 16px; border: 1px solid var(--vscode-focusBorder); background: var(--vscode-editor-background); }
@@ -235,6 +292,7 @@ export class BrowserPanel implements vscode.Disposable {
     <button id="resume" hidden>Resume agent</button>
   </section>
   <main>
+    <section id="downloads" aria-label="Downloads" aria-live="polite"></section>
     <div id="dialogs" aria-live="polite"></div>
     <span id="empty">Starting the shared browser…</span>
     <img id="screen" tabindex="0" alt="Live browser" hidden>
@@ -252,6 +310,7 @@ export class BrowserPanel implements vscode.Disposable {
     const takeover = document.getElementById("takeover");
     const tabs = document.getElementById("tabs");
     const dialogs = document.getElementById("dialogs");
+    const downloads = document.getElementById("downloads");
     const cards = new Map();
     let selected;
     let displayed;
@@ -320,6 +379,39 @@ export class BrowserPanel implements vscode.Disposable {
     screen.addEventListener("keyup", (event) => { key("keyUp", event); event.preventDefault(); });
     screen.addEventListener("wheel", (event) => { send("scroll", { input: { deltaX: event.deltaX, deltaY: event.deltaY } }); event.preventDefault(); }, { passive: false });
     window.addEventListener("message", (event) => {
+      if (event.data.type === "downloads") {
+        downloads.replaceChildren();
+        for (const item of event.data.transfers) {
+          const row = document.createElement("div");
+          const label = document.createElement("span");
+          label.textContent = item.filename + " — " + item.status + (item.bytes === undefined ? "" : " (" + item.bytes + " bytes)") + (item.error ? ": " + item.error : "");
+          row.append(label);
+          const action = item.status === "completed" ? "reveal" : ["waiting", "receiving"].includes(item.status) ? "cancel" : undefined;
+          if (action) {
+            const button = document.createElement("button");
+            button.textContent = action === "reveal" ? "Show file" : "Cancel download";
+            button.addEventListener("click", () => send("download", { transferID: item.id, action }));
+            row.append(button);
+          }
+          if (item.status === "completed") {
+            const button = document.createElement("button");
+            button.textContent = "Save copy…";
+            button.addEventListener("click", () => send("download", { transferID: item.id, action: "save" }));
+            row.append(button);
+          }
+          downloads.append(row);
+        }
+        if (event.data.offset > 0 || event.data.next !== undefined) {
+          for (const [label, offset] of [["Previous downloads", Math.max(0, event.data.offset - 50)], ["Next downloads", event.data.next]]) {
+            if (offset === undefined || offset === event.data.offset) continue;
+            const button = document.createElement("button");
+            button.textContent = label;
+            button.addEventListener("click", () => send("downloads", { offset }));
+            downloads.append(button);
+          }
+        }
+        return;
+      }
       if (event.data.type === "dialogs") {
         const open = event.data.dialogs.filter((dialog) => ["open", "resolving", "unknown"].includes(dialog.status));
         const ids = new Set(open.map((dialog) => dialog.id));

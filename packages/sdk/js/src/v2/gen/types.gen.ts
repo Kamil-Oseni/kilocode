@@ -475,6 +475,55 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID: string
+      /**
+       * Observed frame document identity; invalid after navigation or detachment.
+       */
+      frameID?: string
+      operation: "download"
+      action: "start"
+      /**
+       * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
+       */
+      selector:
+        | string
+        | {
+            kind: "role"
+            role: string
+            name: string
+            scope?: string
+          }
+        | {
+            kind: "label"
+            text: string
+            scope?: string
+          }
+        | {
+            kind: "testid"
+            value: string
+            scope?: string
+          }
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      operation: "download"
+      action: "list"
+      offset?: number
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      operation: "download"
+      action: "inspect" | "cancel"
+      transferID: string
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID: string
       operation: "dialog"
       action: "list"
       operationID?: string
@@ -4964,7 +5013,38 @@ export type NotebookFailure = {
   currentRevision?: string
 }
 
+export type BrowserTransfer = {
+  version: 1
+  id: string
+  /**
+   * Opaque observed browser tab identity; never infer from a tab index or URL.
+   */
+  tabID: string
+  profile: string
+  origin?: {
+    requestID: string
+    sessionID: string
+    directory: string
+  }
+  status: "waiting" | "receiving" | "completed" | "failed" | "cancelled" | "unknown"
+  filename: string
+  url: string
+  createdAt: number
+  updatedAt: number
+  bytes?: number
+  sha256?: string
+  error?: string
+}
+
 export type BrowserResult =
+  | {
+      operation: "download"
+      transfers: Array<BrowserTransfer>
+      next?: number
+      artifact?: string
+      error?: string
+      url?: string
+    }
   | {
       operation: "dialog"
       /**
@@ -5000,6 +5080,7 @@ export type BrowserResult =
       title?: string
     }
   | {
+      transfers?: Array<BrowserTransfer>
       operation: "tabs"
       tabs: Array<{
         /**
@@ -5048,6 +5129,8 @@ export type BrowserResult =
       title?: string
     }
   | {
+      navigation?: "download"
+      transfers?: Array<BrowserTransfer>
       /**
        * Observed frame document identity; invalid after navigation or detachment.
        */
@@ -5063,6 +5146,8 @@ export type BrowserResult =
       snapshot?: string
     }
   | {
+      navigation?: "download"
+      transfers?: Array<BrowserTransfer>
       /**
        * Observed frame document identity; invalid after navigation or detachment.
        */
@@ -5078,6 +5163,8 @@ export type BrowserResult =
       snapshot: string
     }
   | {
+      navigation?: "download"
+      transfers?: Array<BrowserTransfer>
       /**
        * Observed frame document identity; invalid after navigation or detachment.
        */
@@ -5093,6 +5180,8 @@ export type BrowserResult =
       snapshot?: string
     }
   | {
+      navigation?: "download"
+      transfers?: Array<BrowserTransfer>
       /**
        * Observed frame document identity; invalid after navigation or detachment.
        */
@@ -5108,6 +5197,8 @@ export type BrowserResult =
       snapshot?: string
     }
   | {
+      navigation?: "download"
+      transfers?: Array<BrowserTransfer>
       /**
        * Observed frame document identity; invalid after navigation or detachment.
        */
@@ -5123,6 +5214,8 @@ export type BrowserResult =
       snapshot?: string
     }
   | {
+      navigation?: "download"
+      transfers?: Array<BrowserTransfer>
       /**
        * Observed frame document identity; invalid after navigation or detachment.
        */
@@ -5138,6 +5231,8 @@ export type BrowserResult =
       snapshot?: string
     }
   | {
+      navigation?: "download"
+      transfers?: Array<BrowserTransfer>
       /**
        * Observed frame document identity; invalid after navigation or detachment.
        */
@@ -5154,6 +5249,8 @@ export type BrowserResult =
       data: string
     }
   | {
+      navigation?: "download"
+      transfers?: Array<BrowserTransfer>
       /**
        * Observed frame document identity; invalid after navigation or detachment.
        */
@@ -5169,6 +5266,8 @@ export type BrowserResult =
       output: string
     }
   | {
+      navigation?: "download"
+      transfers?: Array<BrowserTransfer>
       /**
        * Observed frame document identity; invalid after navigation or detachment.
        */
@@ -5187,6 +5286,8 @@ export type BrowserResult =
       origins: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     }
   | {
+      navigation?: "download"
+      transfers?: Array<BrowserTransfer>
       /**
        * Observed frame document identity; invalid after navigation or detachment.
        */
@@ -5765,6 +5866,55 @@ export type InteractiveTerminalInfo1 = {
 }
 
 export type BrowserRequest1 =
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID: string
+      /**
+       * Observed frame document identity; invalid after navigation or detachment.
+       */
+      frameID?: string
+      operation: "download"
+      action: "start"
+      /**
+       * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
+       */
+      selector:
+        | string
+        | {
+            kind: "role"
+            role: string
+            name: string
+            scope?: string
+          }
+        | {
+            kind: "label"
+            text: string
+            scope?: string
+          }
+        | {
+            kind: "testid"
+            value: string
+            scope?: string
+          }
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      operation: "download"
+      action: "list"
+      offset?: number
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      operation: "download"
+      action: "inspect" | "cancel"
+      transferID: string
+    }
   | {
       id: BrowserRequestId
       sessionID: string
@@ -8381,6 +8531,19 @@ export type WorkspaceEventConnectionStatus = {
   status: "connected" | "connecting" | "disconnected" | "error"
 }
 
+export type RayaSelfHealSourceAssessment =
+  | {
+      status: "unknown"
+      reason: string
+    }
+  | {
+      status: "snapshot-input"
+      digest: string
+      head: string
+      checks: Array<string>
+      contract: "Captured source input; execution checkout is writable and dependencies are not sealed."
+    }
+
 export type RayaSelfHealCompletion = {
   version: 1
   itemID: string
@@ -8431,6 +8594,7 @@ export type RayaSelfHealCompletion = {
       acceptedAt: number
     }
   }
+  verification?: RayaSelfHealSourceAssessment
   at: number
 }
 

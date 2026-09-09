@@ -43,7 +43,12 @@ function assistant(sessionID: SessionID, parentID: MessageID, cost: number): Mes
   }
 }
 
-const step = Effect.fn("StatsSubagentCost.step")(function* (sessionID: SessionID, messageID: MessageID, cost: number) {
+const step = Effect.fn("StatsSubagentCost.step")(function* (
+  sessionID: SessionID,
+  messageID: MessageID,
+  cost: number,
+  status?: "reported" | "estimated",
+) {
   const svc = yield* Session.Service
   yield* svc.updatePart({
     id: PartID.ascending(),
@@ -52,6 +57,9 @@ const step = Effect.fn("StatsSubagentCost.step")(function* (sessionID: SessionID
     type: "step-finish",
     reason: "stop",
     cost,
+    accounting: status
+      ? { version: 1, status, source: "test", currency: "USD", amount: cost, buckets: [], issues: [] }
+      : undefined,
     tokens: { total: 15, input: 10, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
   })
 })
@@ -78,50 +86,57 @@ const tool = Effect.fn("StatsSubagentCost.tool")(function* (sessionID: SessionID
 })
 
 describe("stats subagent cost", () => {
-  it.instance(
-    "counts child usage without double-counting propagated cost",
-    () =>
-      Effect.gen(function* () {
-        const svc = yield* Session.Service
-        const parent = yield* svc.create({ title: "root" })
-        const child = yield* svc.create({ parentID: parent.id, title: "subagent" })
+  for (const evidence of [false, true])
+    it.instance(
+      `counts child usage without double-counting propagated cost (${evidence ? "evidenced" : "legacy"})`,
+      () =>
+        Effect.gen(function* () {
+          const svc = yield* Session.Service
+          const parent = yield* svc.create({ title: "root" })
+          const child = yield* svc.create({ parentID: parent.id, title: "subagent" })
 
-        const userMsg = yield* svc.updateMessage({
-          id: MessageID.ascending(),
-          role: "user",
-          sessionID: parent.id,
-          agent: "build",
-          model: ref,
-          time: { created: Date.now() },
-        })
-        const parentMsg = yield* svc.updateMessage(assistant(parent.id, userMsg.id, 1.5))
-        yield* step(parent.id, parentMsg.id, 1)
+          const userMsg = yield* svc.updateMessage({
+            id: MessageID.ascending(),
+            role: "user",
+            sessionID: parent.id,
+            agent: "build",
+            model: ref,
+            time: { created: Date.now() },
+          })
+          const parentMsg = yield* svc.updateMessage(assistant(parent.id, userMsg.id, 1.5))
+          yield* step(parent.id, parentMsg.id, 1, evidence ? "reported" : undefined)
 
-        const childUser = yield* svc.updateMessage({
-          id: MessageID.ascending(),
-          role: "user",
-          sessionID: child.id,
-          agent: "general",
-          model: ref,
-          time: { created: Date.now() },
-        })
-        const childMsg = yield* svc.updateMessage(assistant(child.id, childUser.id, 0.5))
-        yield* step(child.id, childMsg.id, 0.5)
-        yield* tool(child.id, childMsg.id)
+          const childUser = yield* svc.updateMessage({
+            id: MessageID.ascending(),
+            role: "user",
+            sessionID: child.id,
+            agent: "general",
+            model: ref,
+            time: { created: Date.now() },
+          })
+          const childMsg = yield* svc.updateMessage(assistant(child.id, childUser.id, 0.5))
+          yield* step(child.id, childMsg.id, 0.5, evidence ? "estimated" : undefined)
+          yield* tool(child.id, childMsg.id)
 
-        const stats = yield* aggregateSessionStats()
-        const model = stats.modelUsage["test/test-model"]!
-        expect(stats.totalCost).toBeCloseTo(1.5, 6)
-        expect(stats.totalSessions).toBe(2)
-        expect(stats.totalMessages).toBe(4)
-        expect(stats.totalTokens.input).toBe(20)
-        expect(stats.totalTokens.output).toBe(10)
-        expect(stats.toolUsage.bash).toBe(1)
-        expect(model.messages).toBe(2)
-        expect(model.tokens.input).toBe(20)
-        expect(model.tokens.output).toBe(10)
-        expect(model.cost).toBeCloseTo(1.5, 6)
-      }),
-    { git: true },
-  )
+          const stats = yield* aggregateSessionStats()
+          const model = stats.modelUsage["test/test-model"]
+          expect(stats.totalCost).toBeCloseTo(1.5, 6)
+          expect(stats.totalSessions).toBe(2)
+          expect(stats.totalMessages).toBe(4)
+          expect(stats.totalTokens.input).toBe(20)
+          expect(stats.totalTokens.output).toBe(10)
+          expect(stats.toolUsage.bash).toBe(1)
+          expect(model.messages).toBe(2)
+          expect(model.tokens.input).toBe(20)
+          expect(model.tokens.output).toBe(10)
+          expect(model.cost).toBeCloseTo(1.5, 6)
+          expect(stats.accounting).toEqual(
+            evidence
+              ? { amount: 1.5, reported: 1, estimated: 1, partial: 0, unknown: 0, legacy: 0 }
+              : { amount: 0, reported: 0, estimated: 0, partial: 0, unknown: 0, legacy: 2 },
+          )
+          expect(model.accounting).toEqual(stats.accounting)
+        }),
+      { git: true },
+    )
 })

@@ -4,9 +4,9 @@ Source of scope: [Comprehensive audit](Raya-Comprehensive-Audit.md). All section
 
 ## Current work
 
-Active implementation: browser downloads (OVR-02/OVR-10), source-bound repair verification (OVR-09), and ledger-aware terminal cost reporting (OVR-04). These changes are implemented and undergoing combined validation; they are not yet a released checkpoint. The latest verified installed product checkpoint is 02114afae4, with generated API and installation evidence saved in f859d0b2e8. Both are pushed to origin/main.
+Latest verified installed product checkpoint: a05a539dec, pushed to origin/main. Browser downloads (OVR-02/OVR-10), source-bound repair verification (OVR-09), and ledger-aware terminal cost reporting (OVR-04) passed their checkpoint checks and the production snapshot workflow. Installed version: 7.4.23-snapshot+a05a539dec.kamil-oseni.1788979134178. Installation is not a claim of full post-reload workflow acceptance.
 
-The two agents own browser transfers and repair verification; the primary agent owns accounting and integration/release checks. Broader tests are batched at checkpoints. The chronological entries below retain failures, corrections, exact test results and installation evidence. All audit sections remain in scope; In progress does not mean complete, and historical Verified rows apply only to their stated acceptance scope.
+Next work includes authorized browser uploads, source-to-build artifact provenance, and remaining accounting/product consumers. The two agents and primary agent continue in parallel, with broader tests batched at checkpoints. All audit sections remain in scope; In progress does not mean complete, and historical Verified rows apply only to their stated acceptance scope.
 
 ## Findings and overhauls
 
@@ -42,15 +42,15 @@ The two agents own browser transfers and repair verification; the primary agent 
 | UI-02 — Establish measurable accessibility gates | Pending | |
 | UI-03 — Consolidate component semantics while preserving host-specific styling | Pending | |
 | 11.1 OVR-01 — OpenAI native realtime multimodal voice | Pending | |
-| 11.2 OVR-02 — A first-class browser skill for agents | In progress | Browser skills, stable tab/frame targeting and explicit dialog handling are implemented and tested; download integration is in validation. Full workflow evaluations and remaining browser capabilities are open. |
+| 11.2 OVR-02 — A first-class browser skill for agents | In progress | Browser skills, stable tab/frame targeting, explicit dialogs and durable downloads are installed and checkpoint-tested. Authorized uploads, full workflow evaluations and remaining capabilities are open. |
 | 11.3 OVR-03 — Smarter Auto routing and orchestration | Pending | |
-| 11.4 OVR-04 — Calculated, explainable token and tool costs | In progress | Persisted accounting provenance, rate evidence and extension disclosure are installed; TUI, direct-run and CLI stats integration is in validation. Modality/tool charges, reconciliation and remaining budget/export consumers are open. |
+| 11.4 OVR-04 — Calculated, explainable token and tool costs | In progress | Persisted accounting provenance, rate evidence, extension disclosure, TUI, direct-run and CLI stats are installed and checkpoint-tested. Modality/tool charges, reconciliation and remaining budget/export consumers are open. |
 | 11.5 OVR-05 — A durable, understandable routine system | In progress | Structured scheduling and durable occurrence/ownership work are implemented as recorded below. Full routine lifecycle, policy and UI acceptance remain open. |
 | 11.6 OVR-06 — An outcome-driven Goal system | In progress | Goal ownership, continuation, review/evidence and repair completion have targeted and checkpoint verification. The full outcome-driven lifecycle and UI acceptance remain open. |
 | 11.7 OVR-07 — Complete Raya UI and UX redesign | Pending | |
 | 11.8 OVR-08 — Broad work tools with discoverable capabilities | Pending | |
-| 11.9 OVR-09 — Self-heal as verified recovery and repair | In progress | Owned repair worktrees and immutable completion receipts are installed. Captured-source check execution and inspection are in validation; build/install linkage and post-install verification remain open. |
-| 11.10 OVR-10 — Browser runtime and product overhaul | In progress | Tab/frame identity, manual control and JavaScript dialogs are installed; durable downloads are in validation. Uploads and the remaining runtime/product acceptance are open. |
+| 11.9 OVR-09 — Self-heal as verified recovery and repair | In progress | Owned repair worktrees, immutable completion receipts and captured-source check execution/inspection are installed and checkpoint-tested. Build/install linkage and post-install verification remain open. |
+| 11.10 OVR-10 — Browser runtime and product overhaul | In progress | Tab/frame identity, manual control, dialogs and durable downloads are installed and checkpoint-tested. Uploads and remaining runtime/product acceptance are open. |
 
 ## Cross-cutting acceptance
 
@@ -1838,3 +1838,9 @@ The next accounting increment should preserve explicit rate presence and origin 
 - Final integration typechecks passed for CLI, extension host/webview and TUI; core typecheck passed in the preceding frozen window. Extension Knip, Kilo marker checks, shared-code annotations, source-link extraction and whitespace checks passed. The Markdown guard initially found 18 pre-existing padded separators in the voice architecture document; its scoped formatter corrected table whitespace and the guard now passes.
 - Repair recovery verification passed 9 tests/34 assertions, including redirected-directory refusal and inspection after goal removal. Extension repair/prompt tests passed 19 tests/121 assertions; scoped repair lint completed with 36 warnings and zero errors. A final combined repair suite is running to replace the earlier fixture-only failure with current-code evidence before release.
 - Final combined repair rerun passed on current frozen source: 22 tests, 117 assertions, zero failures (`.tmp/integration-repair-suite.log`, 97.65 seconds). This supersedes the earlier fixture-cleanup failure. The checkpoint is ready for commit/push and the production snapshot workflow; artifact installation remains a separate pending outcome.
+
+### Downloads, source verification and terminal accounting installed
+
+- Product checkpoint `a05a539dec` pushed to `origin/main` after the normal cross-package and JetBrains checks passed. Production snapshot preparation, CLI version/model/helper smoke checks, extension host/webview types, lint and production bundle all passed. SDK preparation left no tracked drift.
+- Snapshot installation and the normal-user VS Code listing confirm `eden.raya@7.4.23-snapshot+a05a539dec.kamil-oseni.1788979134178`. Artifact: `C:/Users/User/AppData/Local/Temp/raya-vscode-snapshots/raya-vscode-snapshot-a05a539dec-kamil-oseni-1788979134178.vsix`; 406 entries, 514,900,323 bytes. SHA-256: `1D3EAD7E3C5C0E62FE5C9456A97D4962A7B76FD5AF3347EE5155130E64486C10`. Compiled and bundled CLI files both measure 227,314,688 bytes. No `.tmp` or `.env` entries were found.
+- Logs: `.tmp/transfers-checkpoint-commit.log`, `.tmp/transfers-checkpoint-push.log`, `.tmp/transfers-checkpoint-snapshot.log`. All processes completed successfully. Reload Window may be needed to activate the installed extension; full post-reload workflow testing is not claimed. All broader audit work remains active.

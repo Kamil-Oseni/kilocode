@@ -191,21 +191,6 @@ describe("Raya Chief routing", () => {
       "update_canvas",
     ])
     // raya_change end
-    expect(RayaChief.repair({ agent: "auto", tools: { chief_route: tools.chief_route } })).toEqual({
-      toolName: "chief_route",
-      input: { objective: "Route the current user's exact request." },
-    })
-    expect(
-      RayaChief.repair({
-        agent: "auto",
-        tools: { chief_route: tools.chief_route, task: tools.task },
-        name: "write",
-      }),
-    ).toMatchObject({ toolName: "task" })
-    expect(RayaChief.repair({ agent: "auto", tools: { task: tools.task } })).toMatchObject({
-      toolName: "task",
-    })
-    expect(RayaChief.repair({ agent: "code", tools: { chief_route: tools.chief_route } })).toBeUndefined()
     expect(RayaChief.begin({ [RayaChief.phaseKey]: "goal" })).toBe("route")
     expect(RayaChief.begin({ [RayaChief.phaseKey]: "goal" }, true)).toBe("task")
     expect(RayaChief.begin({ [RayaChief.phaseKey]: "route" }, true)).toBe("task")

@@ -2177,7 +2177,9 @@ describe("session.llm.stream", () => {
                     delta: {
                       role: "assistant",
                       content: null,
-                      tool_calls: [{ index: 0, id: "call-1", type: "function", function: { name: " bash", arguments: "" } }],
+                      tool_calls: [
+                        { index: 0, id: "call-1", type: "function", function: { name: " bash", arguments: "" } },
+                      ],
                     },
                   },
                 ],
@@ -2249,6 +2251,113 @@ describe("session.llm.stream", () => {
         },
       }),
     },
+  )
+  // Invalid Auto calls must not become broader delegation.
+  it.instance(
+    "rejects invalid Auto tool calls without routing or delegating the read-only request",
+    () =>
+      Effect.gen(function* () {
+        const fixture = loadFixture(alibabaQwenFixture.providerID, alibabaQwenFixture.modelID)
+        const model = yield* Provider.use.getModel(
+          ProviderV2.ID.make(alibabaQwenFixture.providerID),
+          ModelV2.ID.make(fixture.model.id),
+        )
+        const sessionID = SessionID.make("session-auto-authority")
+        const agent = { name: "auto", mode: "primary", options: {}, permission: [] } satisfies Agent.Info
+        const user = {
+          id: MessageID.make("msg_auto-authority"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: model.providerID, modelID: model.id },
+        } satisfies MessageV2.User
+        const calls: string[] = []
+        for (const name of ["read", "write", "nonexistent", "task", "chief_route"]) {
+          void waitRequest(
+            "/chat/completions",
+            createEventResponse(
+              [
+                {
+                  id: "chatcmpl-authority",
+                  object: "chat.completion.chunk",
+                  choices: [
+                    {
+                      index: 0,
+                      delta: {
+                        role: "assistant",
+                        content: null,
+                        tool_calls: [
+                          { index: 0, id: `call-${name}`, type: "function", function: { name, arguments: "{}" } },
+                        ],
+                      },
+                    },
+                  ],
+                },
+                {
+                  id: "chatcmpl-authority",
+                  object: "chat.completion.chunk",
+                  choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }],
+                },
+              ],
+              true,
+            ),
+          )
+          const events = yield* LLM.Service.use((service) =>
+            service
+              .stream({
+                user,
+                sessionID,
+                model,
+                agent,
+                system: [],
+                messages: [
+                  {
+                    role: "user",
+                    content: "Read the report and summarize it. Do not modify any files or delegate work.",
+                  },
+                ],
+                tools: {
+                  task: tool({
+                    description: "Delegate",
+                    inputSchema: z.object({ prompt: z.string(), description: z.string() }),
+                    execute: async () => {
+                      calls.push("task")
+                      return "delegated"
+                    },
+                  }),
+                  chief_route: tool({
+                    description: "Route",
+                    inputSchema: z.object({ objective: z.string() }),
+                    execute: async () => {
+                      calls.push("chief_route")
+                      return "routed"
+                    },
+                  }),
+                },
+              })
+              .pipe(Stream.runCollect),
+          )
+          expect(events.filter((event) => event.type === "provider-error")).toEqual([])
+          expect(state.queue).toHaveLength(0)
+          const errors = events.filter((event) => event.type === "tool-error")
+          expect(errors).toHaveLength(1)
+          expect(errors[0]).toMatchObject({ name, message: expect.stringContaining(name) })
+          expect(events.some((event) => event.type === "tool-result")).toBe(false)
+        }
+        expect(calls).toEqual([])
+      }),
+    {
+      config: () => ({
+        enabled_providers: [alibabaQwenFixture.providerID],
+        provider: {
+          [alibabaQwenFixture.providerID]: {
+            options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
+          },
+        },
+      }),
+    },
+    60_000,
   )
   // kilocode_change end
 })

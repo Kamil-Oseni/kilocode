@@ -39,7 +39,6 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { LLMAISDK } from "./llm/ai-sdk"
 import { LLMNativeRuntime } from "./llm/native-runtime"
 import { LLMRequestPrep } from "./llm/request"
-import { RayaChief } from "@/kilocode/chief" // kilocode_change // raya_change - enforce Auto tool repair
 
 const log = Log.create({ service: "llm" }) // kilocode_change
 
@@ -379,28 +378,12 @@ const live: Layer.Layer<
         // Copilot returns the authoritative billed amount only in provider-specific response fields.
         includeRawChunks: input.model.providerID.includes("github-copilot"),
         async experimental_repairToolCall(failed) {
-          // kilocode_change start
-          // raya_change start - redirect Auto hallucinations to its sole legal phase action
-          const auto = RayaChief.repair({
-            agent: input.agent.name,
-            tools: prepared.tools,
-            name: failed.toolCall.toolName,
-          })
-          if (auto) {
-            l.info("repairing Auto tool call", { tool: failed.toolCall.toolName, repaired: auto.toolName })
-            return {
-              ...failed.toolCall,
-              toolName: auto.toolName,
-              input: JSON.stringify(auto.input),
-            }
-          }
-          // raya_change end
-          // kilocode_change end
           const lower = failed.toolCall.toolName.trim().toLowerCase() // kilocode_change
           if (lower !== failed.toolCall.toolName && prepared.tools[lower]) {
             l.info("repairing tool call", { tool: failed.toolCall.toolName, repaired: lower }) // kilocode_change
             return { ...failed.toolCall, toolName: lower }
           }
+          if (input.agent.name === "auto") return null // kilocode_change - preserve the original error instead of inventing delegation or an unavailable invalid-tool call
           return {
             ...failed.toolCall,
             input: JSON.stringify({

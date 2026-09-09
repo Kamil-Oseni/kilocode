@@ -61,35 +61,6 @@ export namespace RayaChief {
     // Unknown tool failures
   }
 
-  export function repair(input: { agent: string; tools: Readonly<Record<string, unknown>>; name?: string }) {
-    if (input.agent !== "auto") return
-    if (input.name && input.tools[input.name] && input.name !== "invalid") return
-    if (input.tools.task && input.name && input.name !== "task" && input.name !== "chief_route") {
-      return {
-        toolName: "task",
-        input: {
-          description: "Delegate work Auto cannot run directly",
-          prompt: `Auto cannot call ${input.name}. Delegate the user's current request to a write-capable specialist and wait for the result.`,
-        },
-      }
-    }
-    const names = Object.keys(input.tools).filter((name) => name !== "invalid")
-    if (names.includes("chief_route") && (!input.name || input.name === "chief_route")) {
-      return {
-        toolName: "chief_route",
-        input: { objective: "Route the current user's exact request." },
-      }
-    }
-    if (names.includes("task")) {
-      return {
-        toolName: "task",
-        input: {
-          description: "Execute the routed request",
-          prompt: "Execute the original user request selected by Chief.",
-        },
-      }
-    }
-  }
   // raya_change end
 
   export const Role = Schema.Literals([

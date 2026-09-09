@@ -6,6 +6,258 @@ import type { BrowserConnection, BrowserHost } from "../../src/services/browser-
 import { BrowserBridge } from "../../src/services/browser-automation/browser-bridge"
 
 describe("Raya browser bridge", () => {
+  it("does not execute recovered work without a local receipt", async () => {
+    const done = Promise.withResolvers<void>()
+    let calls = 0
+    const failures: unknown[] = []
+    const client = {
+      kilocode: {
+        browser: {
+          list: async () => ({
+            data: [{ id: "brr_old", sessionID: "ses_test", operation: "click", selector: "#save" }],
+          }),
+          reply: async () => ({}),
+          reject: async (input: unknown) => {
+            failures.push(input)
+            done.resolve()
+            return {}
+          },
+        },
+      },
+    } as unknown as KiloClient
+    const connection = harness(client)
+    const bridge = new BrowserBridge(connection.value, {
+      show: async () => undefined,
+      execute: async () => {
+        calls++
+        throw new Error("Must not execute")
+      },
+    })
+    try {
+      connection.state("connected")
+      await done.promise
+      expect(calls).toBe(0)
+      expect(failures[0]).toMatchObject({ error: { message: expect.stringContaining("no local execution receipt") } })
+    } finally {
+      bridge.dispose()
+    }
+  })
+
+  it("reports completion uncertainty when retaining a host result fails", async () => {
+    const done = Promise.withResolvers<void>()
+    const failures: unknown[] = []
+    const client = {
+      kilocode: {
+        browser: {
+          list: async () => ({ data: [] }),
+          reply: async () => ({}),
+          reject: async (input: unknown) => {
+            failures.push(input)
+            done.resolve()
+            return {}
+          },
+        },
+      },
+    } as unknown as KiloClient
+    const connection = harness(client)
+    const bridge = new BrowserBridge(connection.value, {
+      show: async () => undefined,
+      execute: async () => ({
+        operation: "evaluate",
+        url: "https://example.test",
+        title: "Saved",
+        get output(): string {
+          throw new Error("serialization failed")
+        },
+      }),
+    })
+    try {
+      connection.event({
+        type: "kilocode.browser.requested",
+        properties: { id: "brr_serialize", sessionID: "ses_test", operation: "evaluate", expression: "save()" },
+      })
+      await done.promise
+      expect(failures[0]).toMatchObject({
+        error: { message: expect.stringContaining("action completed but its result could not be retained") },
+      })
+    } finally {
+      bridge.dispose()
+    }
+  })
+
+  it("retains payload-bound receipts across lost replies and concurrent duplicate requests", async () => {
+    const started = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    const attempted = Promise.withResolvers<void>()
+    const recovered = Promise.withResolvers<void>()
+    const collision = Promise.withResolvers<void>()
+    let reads = 0
+    const request = { id: "brr_once", sessionID: "ses_test", operation: "click", selector: "#save" } as const
+    let calls = 0
+    const replies: unknown[] = []
+    const failures: unknown[] = []
+    const client = {
+      kilocode: {
+        browser: {
+          list: async () => {
+            if (++reads === 1) throw new Error("connection lost during recovery")
+            return { data: [request] }
+          },
+          reply: async (input: unknown) => {
+            replies.push(input)
+            if (replies.length === 1) {
+              attempted.resolve()
+              throw new Error("acknowledgement lost")
+            }
+            recovered.resolve()
+            return {}
+          },
+          reject: async (input: unknown) => {
+            failures.push(input)
+            collision.resolve()
+            return {}
+          },
+        },
+      },
+    } as unknown as KiloClient
+    const connection = harness(client)
+    const bridge = new BrowserBridge(connection.value, {
+      show: async () => undefined,
+      execute: async () => {
+        calls++
+        started.resolve()
+        await release.promise
+        return { operation: "click", url: "https://example.test/saved", title: "Saved" }
+      },
+    })
+    const send = (properties: unknown) => connection.event({ type: "kilocode.browser.requested", properties })
+    try {
+      send(request)
+      await started.promise
+      send(request)
+      send({ selector: request.selector, operation: request.operation, sessionID: request.sessionID, id: request.id })
+      send({ ...request, selector: "#different" })
+      await collision.promise
+      expect(calls).toBe(1)
+      expect(failures).toHaveLength(1)
+      expect(failures[0]).toMatchObject({
+        error: { message: expect.stringContaining("reused with different content") },
+      })
+      release.resolve()
+      await attempted.promise
+      await new Promise<void>((resolve) => setTimeout(resolve, 0))
+      connection.state("connected")
+      await new Promise<void>((resolve) => setTimeout(resolve, 0))
+      expect(calls).toBe(1)
+      expect(replies).toHaveLength(1)
+      connection.state("connected")
+      await recovered.promise
+      expect(calls).toBe(1)
+      expect(replies).toHaveLength(2)
+      expect(replies[1]).toEqual(replies[0])
+    } finally {
+      release.resolve()
+      bridge.dispose()
+    }
+  })
+
+  it("retains dispatched failures instead of executing them again during recovery", async () => {
+    const delivered = Promise.withResolvers<void>()
+    const repeated = Promise.withResolvers<void>()
+    const request = {
+      id: "brr_failed_once",
+      sessionID: "ses_test",
+      operation: "evaluate",
+      expression: "mutateThenThrow()",
+    } as const
+    let calls = 0
+    const failures: unknown[] = []
+    const client = {
+      kilocode: {
+        browser: {
+          list: async () => ({ data: [request] }),
+          reply: async () => ({}),
+          reject: async (input: unknown) => {
+            failures.push(input)
+            ;(failures.length === 1 ? delivered : repeated).resolve()
+            return {}
+          },
+        },
+      },
+    } as unknown as KiloClient
+    const connection = harness(client)
+    const bridge = new BrowserBridge(connection.value, {
+      show: async () => undefined,
+      execute: async () => {
+        calls++
+        throw new Error("The action may have taken effect; inspect the destination")
+      },
+    })
+    try {
+      connection.event({ type: "kilocode.browser.requested", properties: request })
+      await delivered.promise
+      await new Promise<void>((resolve) => setTimeout(resolve, 0))
+      connection.state("connected")
+      await repeated.promise
+      expect(calls).toBe(1)
+      expect(failures[1]).toEqual(failures[0])
+    } finally {
+      bridge.dispose()
+    }
+  })
+
+  it("fails before dispatch at receipt capacity without evicting an in-flight request", async () => {
+    const release = Promise.withResolvers<void>()
+    const capacity = Promise.withResolvers<void>()
+    const finished = Promise.withResolvers<void>()
+    let calls = 0
+    let replies = 0
+    const failures: unknown[] = []
+    const client = {
+      kilocode: {
+        browser: {
+          list: async () => ({ data: [] }),
+          reply: async () => {
+            if (++replies === 1024) finished.resolve()
+            return {}
+          },
+          reject: async (input: unknown) => {
+            failures.push(input)
+            capacity.resolve()
+            return {}
+          },
+        },
+      },
+    } as unknown as KiloClient
+    const connection = harness(client)
+    const bridge = new BrowserBridge(connection.value, {
+      show: async () => undefined,
+      execute: async () => {
+        calls++
+        await release.promise
+        return { operation: "click", url: "https://example.test", title: "Saved" }
+      },
+    })
+    const send = (id: number) =>
+      connection.event({
+        type: "kilocode.browser.requested",
+        properties: { id: `brr_capacity_${id}`, sessionID: "ses_test", operation: "click", selector: "#save" },
+      })
+    try {
+      for (let id = 0; id <= 1024; id++) send(id)
+      await capacity.promise
+      send(0)
+      expect(calls).toBe(1024)
+      expect(failures[0]).toMatchObject({ error: { message: expect.stringContaining("not dispatched") } })
+      release.resolve()
+      await finished.promise
+      expect(calls).toBe(1024)
+    } finally {
+      release.resolve()
+      bridge.dispose()
+    }
+  })
+
   it.each([
     { operation: "navigate" as const, url: "https://example.test" },
     { operation: "click" as const, selector: { kind: "role" as const, role: "button", name: "Save", scope: "#form" } },
@@ -214,6 +466,8 @@ function harness(client: KiloClient) {
     event(input: unknown) {
       event(input as SSEPayload, "C:\\workspace")
     },
-    state,
+    state(input: "connecting" | "connected" | "disconnected" | "error") {
+      state(input)
+    },
   }
 }

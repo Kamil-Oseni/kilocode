@@ -78,7 +78,8 @@ class FakePage implements BrowserPage {
   }
   async reload(options?: { waitUntil?: string }): Promise<void> {
     this.waitUntil = options?.waitUntil ?? "load"
-    if (this.hang) throw new Error("page.reload: Timeout 30000ms exceeded.\nCall log:\n  - waiting for navigation until \"load\"")
+    if (this.hang)
+      throw new Error('page.reload: Timeout 30000ms exceeded.\nCall log:\n  - waiting for navigation until "load"')
     if (this.refuse) throw new Error("page.reload: Protocol error (Page.reload): Not attached to an active page")
   }
   async waitForTimeout(): Promise<void> {}
@@ -122,12 +123,13 @@ class FakePage implements BrowserPage {
   }
 
   async evaluate<R>(fn: (source: unknown) => R, source: unknown): Promise<R> {
-    const value = typeof source === "string" ? source.match(/^document\.cookie\s*=\s*["'](.+)["']$/)?.[1] : undefined
+    const input = typeof source === "string" ? source.replace(/^\(([\s\S]*)\)$/, "$1") : source
+    const value = typeof input === "string" ? input.match(/^document\.cookie\s*=\s*["'](.+)["']$/)?.[1] : undefined
     if (value) {
       this.state.cookie = value
       return value as R
     }
-    if (source === "document.cookie") return this.state.cookie as R
+    if (input === "document.cookie") return this.state.cookie as R
     return fn(source)
   }
 
@@ -169,6 +171,27 @@ function harness() {
 }
 
 describe("Raya browser session", () => {
+  it("parses before execution and never replays a runtime error in another wrapper", async () => {
+    const key = "__raya_browser_effects"
+    try {
+      for (const source of [
+        '(() => { globalThis.__raya_browser_effects++; throw new Error("after mutation") })',
+        'globalThis.__raya_browser_effects++; throw new Error("after mutation")',
+        'globalThis.__raya_browser_effects++; throw new SyntaxError("runtime syntax error")',
+        'globalThis.__raya_browser_effects++; await Promise.reject(new Error("async failure")); return 1',
+      ]) {
+        Reflect.set(globalThis, key, 0)
+        await expect(Promise.resolve().then(() => evaluate(source))).rejects.toThrow()
+        expect(Reflect.get(globalThis, key)).toBe(1)
+      }
+      Reflect.set(globalThis, key, 0)
+      expect(() => evaluate("globalThis.__raya_browser_effects++; ???")).toThrow(SyntaxError)
+      expect(Reflect.get(globalThis, key)).toBe(0)
+    } finally {
+      Reflect.deleteProperty(globalThis, key)
+    }
+  })
+
   it("evaluates object literals, functions, and statement sequences", () => {
     expect(evaluate("{ values: Array.from([1, 2]).map((value) => value * 2) }")).toEqual({ values: [2, 4] })
     expect(evaluate("() => ({ ok: true })")).toEqual({ ok: true })
@@ -325,44 +348,44 @@ describe("Raya browser session", () => {
     await second.dispose()
   })
 
-  it("retries transient failures twice before succeeding on the third attempt", async () => {
+  it("does not retry a click whose dispatch outcome is unknown", async () => {
     const fake = harness()
     const session = new BrowserSession("retry-profile", fake.launch)
     await session.ready()
     fake.pages[0]!.failClicks = 2
 
-    await session.execute({ operation: "click", selector: "#delayed" })
+    await expect(session.execute({ operation: "click", selector: "#delayed" })).rejects.toThrow("may have taken effect")
 
-    expect(fake.pages[0]!.clickAttempts).toBe(3)
-    expect(fake.pages[0]!.clicks).toEqual(["#delayed"])
+    expect(fake.pages[0]!.clickAttempts).toBe(1)
+    expect(fake.pages[0]!.clicks).toEqual([])
     expect(session.current()).toEqual({ control: "agent", busy: false })
     await session.dispose()
   })
 
-  it("backs off and retries HTTP rate-limit responses", async () => {
+  it("preserves the destination instead of replaying dispatched rate-limited navigation", async () => {
     const fake = harness()
     const session = new BrowserSession("rate-profile", fake.launch)
     await session.ready()
     fake.pages[0]!.failNavigations = 2
 
-    await session.execute({ operation: "navigate", url: "https://example.test/rate-limited" })
+    await expect(session.execute({ operation: "navigate", url: "https://example.test/rate-limited" })).rejects.toThrow(
+      "may have taken effect",
+    )
 
-    expect(fake.pages[0]!.gotoAttempts).toBe(3)
+    expect(fake.pages[0]!.gotoAttempts).toBe(1)
     expect(session.current()).toEqual({ control: "agent", busy: false })
     await session.dispose()
   })
 
-  it("keeps agent control after three failed clicks so the next tool can continue", async () => {
+  it("keeps agent control after an uncertain click so a fresh request can continue", async () => {
     const fake = harness()
     const session = new BrowserSession("retry-exhausted-profile", fake.launch)
     await session.ready()
     fake.pages[0]!.failClicks = 3
 
-    await expect(session.execute({ operation: "click", selector: "#missing" })).rejects.toThrow(
-      "The click action failed after three attempts",
-    )
+    await expect(session.execute({ operation: "click", selector: "#missing" })).rejects.toThrow("may have taken effect")
 
-    expect(fake.pages[0]!.clickAttempts).toBe(3)
+    expect(fake.pages[0]!.clickAttempts).toBe(1)
     expect(session.current()).toEqual({ control: "agent", busy: false })
     fake.pages[0]!.failClicks = 0
     await session.execute({ operation: "click", selector: "#agent-resumed" })
@@ -391,7 +414,7 @@ describe("Raya browser session", () => {
 
     await expect(
       session.execute({ operation: "navigate", url: "http://example.test/lessons/p0-03-the-sound-system" }),
-    ).rejects.toThrow(/timed out|navigate action failed/i)
+    ).rejects.toThrow(/may have taken effect/i)
     expect(session.current()).toEqual({ control: "agent", busy: false })
     expect(fake.pages.length).toBe(1)
     fake.pages[0]!.hang = false
@@ -409,7 +432,7 @@ describe("Raya browser session", () => {
     fake.pages[0]!.failClicks = 3
 
     await expect(session.execute({ operation: "click", selector: "#continue" })).rejects.toThrow(
-      /failed after three attempts/i,
+      /may have taken effect/i,
     )
     expect(fake.pages.length).toBe(1)
     expect(session.current()).toEqual({ control: "agent", busy: false })
@@ -423,7 +446,7 @@ describe("Raya browser session", () => {
     await session.reload()
     expect(fake.pages[0]!.waitUntil).toBe("commit")
     fake.pages[0]!.hang = true
-    await session.reload()
+    await expect(session.reload()).rejects.toThrow("may have taken effect")
     expect(session.current().control).toBe("agent")
     await session.dispose()
   })

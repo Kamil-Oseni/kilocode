@@ -7,6 +7,12 @@ metadata:
 
 # Browser runtime contract, version 2
 
+## Execution and recovery
+
+Evaluation candidates are parsed before execution; the selected expression, script or async body runs once. Runtime exceptions, including runtime SyntaxError and promise rejection, never select another wrapper. Navigation, clicks, typing, selection, scrolling, evaluation and smoke work are not automatically retried once dispatched. An uncertain outcome preserves the current page; inspect the destination before issuing a fresh action. Read-only snapshots/screenshots may retry within existing bounds. A syntax/target preflight failure is distinct from an action that may have taken effect. A failed smoke assertion returns its structured report without restarting earlier steps.
+
+The extension bridge binds each request ID to its canonical payload and directory. Identical requests reuse retained outcomes; changed content under the same ID is rejected. Lost reply delivery does not rerun the browser action. Receipts last for that bridge instance, retain at most 1,024 request identities and at most 64,000 UTF-8 serialized bytes per result, and never expire or evict an in-flight identity. Oversized results retain a non-replay marker. Capacity exhaustion rejects new work before dispatch; reconnecting does not clear capacity. Review unresolved outcomes before intentionally reloading the extension, which discards local receipts and cannot establish old outcomes. Recovered pending requests without a local receipt are refused for inspection, not replayed. These are process-local protections, not durable exactly-once execution across a host restart.
+
 This reference describes the model-facing BrowserTools in `kilocode/tool/browser-host.ts` and protocol in `kilocode/browser/protocol.ts`. Use live tool schemas when available; report mismatches instead of guessing parameters. These tools are exposed to the VS Code client and require a connected extension browser host. Other clients can discover this guidance without having browser tools. Availability in the skill list does not establish a connected host or permission to use it.
 
 | Tool | Parameters | Evidence and limits |

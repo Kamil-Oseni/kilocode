@@ -1,6 +1,7 @@
 // raya_change - Milestone F shared persistent Playwright browser session
 import { mkdir } from "node:fs/promises"
 import { join } from "node:path"
+import { Script } from "node:vm"
 import { chromium } from "playwright-core"
 import { locate, TargetError, type BrowserTarget, type TargetPage } from "./browser-target"
 import { BrowserSmoke } from "./browser-smoke"
@@ -133,20 +134,39 @@ export interface BrowserContextLike {
 export type BrowserLaunch = (profile: string) => Promise<BrowserContextLike>
 
 // raya_change start - accept model-authored JS: expressions, statement sequences, and top-level await.
-// Try expression-wrap first (object literals), then raw source, then an async IIFE for await/statements.
-// Throw the last failure — never the first wrap SyntaxError — so the model sees the real problem.
-export function evaluate(source: string): unknown {
-  const invoke = (value: unknown) => (typeof value === "function" ? value() : value)
+// Parse each candidate without running it. A runtime exception must never select another wrapper.
+function prepare(source: string): string {
   const forms = [`(${source})`, source, `(async () => { ${source}\n })()`]
   let last: unknown
   for (const form of forms) {
     try {
-      return invoke(globalThis.eval(form) as unknown)
+      // Bun defers Script parsing until cached data is requested; neither call executes user code.
+      new Script(form).createCachedData()
+      return form
     } catch (err) {
-      last = err
+      last = err instanceof SyntaxError ? err : new SyntaxError(err instanceof Error ? err.message : String(err))
     }
   }
   throw last
+}
+
+function execute(source: string): unknown {
+  const value: unknown = globalThis.eval(source)
+  return typeof value === "function" ? value() : value
+}
+
+export function evaluate(source: string): unknown {
+  return execute(prepare(source))
+}
+
+class OutcomeError extends Error {
+  readonly name = "BrowserOutcomeError"
+
+  constructor(operation: string, detail: string) {
+    super(
+      `The ${operation} action may have taken effect. It was not retried and the current page was preserved. Inspect the destination before repeating it. ${detail}`,
+    )
+  }
 }
 // raya_change end
 
@@ -305,25 +325,29 @@ export class BrowserSession {
   private async attempt(action: BrowserAction, number: number, revision: number): Promise<BrowserResult> {
     if (revision !== this.revision) throw new Error("Browser action cancelled for manual takeover.")
     await this.pace(number)
+    const state = { dispatched: false }
+    const dispatch = () => {
+      state.dispatched = true
+    }
     try {
       const result =
         action.operation === "auth_capture" || action.operation === "smoke"
-          ? await this.smoke(action)
-          : await this.once(action)
+          ? await this.smoke(action, dispatch)
+          : await this.once(action, dispatch)
       if (revision !== this.revision) throw new Error("Browser action cancelled for manual takeover.")
       return result
     } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      if (state.dispatched) throw new OutcomeError(action.operation, detail)
       if (error instanceof TargetError) throw error
       if (this.state.control === "manual") throw error
-      const detail = error instanceof Error ? error.message : String(error)
+      if (action.operation !== "snapshot" && action.operation !== "screenshot")
+        throw new Error(`The ${action.operation} action was not dispatched: ${detail}`)
       if (this.stuck(detail)) {
         await this.replace()
         throw new Error(this.explain(action.operation, detail))
       }
       if (/TypeError:|SyntaxError:/i.test(detail)) throw new Error(`The ${action.operation} action failed: ${detail}`)
-      if (action.operation === "navigate" && /Timeout \d+ms exceeded/i.test(detail)) {
-        throw new Error(`The navigate action failed: ${detail}`)
-      }
       if (/strict mode violation|resolved to \d+ elements/i.test(detail)) {
         throw new Error(
           `Locator was not unique (${detail}). Use getByRole with a visible name instead of a shared class.`,
@@ -363,17 +387,12 @@ export class BrowserSession {
   }
 
   private async travel(run: (page: BrowserPage) => Promise<unknown>): Promise<void> {
+    const page = this.active()
     try {
-      await run(this.active())
+      await run(page)
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error)
-      if (/not attached|Target closed|frame was detached/i.test(detail)) {
-        await this.replace()
-        await run(this.active())
-        return
-      }
-      if (/Timeout \d+ms exceeded|ERR_ABORTED/i.test(detail)) return
-      throw error
+      throw new OutcomeError("navigation", detail)
     }
   }
 
@@ -402,24 +421,31 @@ export class BrowserSession {
     }
   }
 
-  private async press(page: BrowserPage, selector: BrowserTarget): Promise<void> {
+  private async press(page: BrowserPage, selector: BrowserTarget, dispatch: () => void): Promise<void> {
     if (typeof selector !== "string") {
-      await (await locate(page, selector)).click({ timeout: 5_000 })
+      const locator = await locate(page, selector)
+      dispatch()
+      await locator.click({ timeout: 5_000 })
       return
     }
     const named = selector.match(/^button(?:\[name=['"](.+)['"]\]|\.(.+))$/)
     if (named?.[1] || named?.[2]) {
       const name = named[1] ?? named[2]!.replace(/-/g, " ")
-      await page.getByRole("button", { name: new RegExp(name, "i") }).click({ timeout: 5_000 })
+      const locator = page.getByRole("button", { name: new RegExp(name, "i") })
+      dispatch()
+      await locator.click({ timeout: 5_000 })
       return
     }
-    await page.locator(selector).click({ timeout: 5_000 })
+    const locator = page.locator(selector)
+    dispatch()
+    await locator.click({ timeout: 5_000 })
   }
 
-  private async drive(action: BrowserNativeAction, page: ReturnType<BrowserSession["active"]>) {
+  private async drive(action: BrowserNativeAction, page: ReturnType<BrowserSession["active"]>, dispatch: () => void) {
     if (action.operation === "navigate") {
       await this.probe(action.url)
       try {
+        dispatch()
         const response = await page.goto(action.url, this.wait())
         const status = response?.status()
         if (status === 403 || status === 429) throw new Error(`Site returned HTTP ${status}`)
@@ -430,17 +456,20 @@ export class BrowserSession {
       return
     }
     if (action.operation === "click") {
-      await this.press(page, action.selector)
+      await this.press(page, action.selector, dispatch)
       return
     }
     if (action.operation === "type") {
       const locator = await locate(page, action.selector)
+      dispatch()
       await locator.fill(action.text, { timeout: 5_000 })
       if (action.submit) await locator.press("Enter", { timeout: 5_000 })
       return
     }
     if (action.operation === "select") {
-      await (await locate(page, action.selector)).selectOption(action.values, { timeout: 5_000 })
+      const locator = await locate(page, action.selector)
+      dispatch()
+      await locator.selectOption(action.values, { timeout: 5_000 })
       return
     }
     if (action.operation !== "scroll") return
@@ -448,24 +477,31 @@ export class BrowserSession {
     if (action.selector) {
       const locator = await locate(page, action.selector)
       if (!locator.evaluate) throw new Error("Browser host cannot scroll the selected target")
+      dispatch()
       await locator.evaluate((element, next) => element.scrollBy(next.x, next.y), delta)
       return
     }
-    await page.mouse
-      .wheel(action.deltaX, action.deltaY)
-      .catch(() => page.evaluate((next) => window.scrollBy(next.x, next.y), delta))
+    dispatch()
+    await page.mouse.wheel(action.deltaX, action.deltaY)
   }
 
-  private async once(action: BrowserNativeAction): Promise<BrowserResult> {
+  private async once(action: BrowserNativeAction, dispatch: () => void): Promise<BrowserResult> {
     const page = this.active()
-    await this.drive(action, page)
+    await this.drive(action, page, dispatch)
     const snapshot =
       action.operation === "snapshot" ? await page.locator("body").ariaSnapshot({ timeout: 10_000 }) : undefined
     const data =
       action.operation === "screenshot"
         ? (await page.screenshot({ type: "png", fullPage: action.fullPage })).toString("base64")
         : undefined
-    const value = action.operation === "evaluate" ? await page.evaluate(evaluate, action.expression) : undefined
+    const value =
+      action.operation === "evaluate"
+        ? await (async () => {
+            const source = prepare(action.expression)
+            dispatch()
+            return page.evaluate(execute, source)
+          })()
+        : undefined
     return {
       operation: action.operation,
       url: page.url(),
@@ -483,7 +519,11 @@ export class BrowserSession {
   }
 
   // raya_change - Milestone G keeps smoke branching outside the generic browser action runner
-  private async smoke(action: Extract<BrowserAction, { operation: "auth_capture" | "smoke" }>): Promise<BrowserResult> {
+  private async smoke(
+    action: Extract<BrowserAction, { operation: "auth_capture" | "smoke" }>,
+    dispatch: () => void,
+  ): Promise<BrowserResult> {
+    dispatch()
     if (action.operation === "auth_capture")
       return new BrowserSmoke(this.artifacts, this.active(), this.browser()).capture(action.name)
     return new BrowserSmoke(this.artifacts, this.active(), this.browser()).run({

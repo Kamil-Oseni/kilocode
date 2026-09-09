@@ -106,6 +106,79 @@ async function main() {
     })
     assert.equal(failed.passed, false)
     assert.ok(failed.steps[0].error?.includes("matched 2"))
+    for (const expression of [
+      '(() => { globalThis.__raya_effects++; throw new Error("after mutation") })',
+      'globalThis.__raya_effects++; throw new Error("Target closed after mutation")',
+      'globalThis.__raya_effects++; throw new SyntaxError("runtime syntax error")',
+      'globalThis.__raya_effects++; await Promise.reject(new Error("async failure")); return 1',
+    ]) {
+      await page.evaluate(() => Reflect.set(globalThis, "__raya_effects", 0))
+      await assert.rejects(session.execute({ operation: "evaluate", expression }), /may have taken effect/)
+      assert.equal(await page.evaluate(() => Reflect.get(globalThis, "__raya_effects")), 1)
+      assert.equal(context.pages().length, 1)
+    }
+    await page.evaluate(() => Reflect.set(globalThis, "__raya_effects", 0))
+    await assert.rejects(
+      session.execute({ operation: "evaluate", expression: "globalThis.__raya_effects++; ???" }),
+      /not dispatched/,
+    )
+    assert.equal(await page.evaluate(() => Reflect.get(globalThis, "__raya_effects")), 0)
+    for (const [expression, output] of [
+      ["const n = 2; n * 3", "6"],
+      ["{ ok: true }", '{"ok":true}'],
+      ["() => ({ ok: true })", '{"ok":true}'],
+      ["const n = await Promise.resolve(4); return n", "4"],
+    ]) {
+      const result = await session.execute({ operation: "evaluate", expression })
+      assert.ok("output" in result)
+      assert.equal(result.output, output)
+    }
+    await page.setContent(
+      '<button onclick="document.body.dataset.clicks=String(Number(document.body.dataset.clicks || 0)+1)">Commit</button>',
+    )
+    const title = page.title.bind(page)
+    page.title = async () => {
+      throw new Error("result observation channel failed")
+    }
+    try {
+      await assert.rejects(
+        session.execute({ operation: "click", selector: { kind: "role", role: "button", name: "Commit" } }),
+        /may have taken effect/,
+      )
+    } finally {
+      page.title = title
+    }
+    assert.equal(await page.evaluate(() => document.body.dataset.clicks), "1")
+    assert.equal(context.pages().length, 1)
+    await page.setContent(
+      '<button onclick="document.body.dataset.clicks=String(Number(document.body.dataset.clicks || 0)+1)">Commit</button><button>Duplicate</button><button>Duplicate</button>',
+    )
+    const incomplete = await session.execute({
+      operation: "smoke",
+      name: "once-smoke",
+      mode: "scripted",
+      steps: [
+        {
+          id: "commit",
+          title: "Commit once",
+          action: { kind: "click", selector: { kind: "role", role: "button", name: "Commit" } },
+          assertions: [
+            { kind: "visible", selector: "body", text: "Commit" },
+            { kind: "console", level: "error", max: 0 },
+          ],
+        },
+        {
+          id: "ambiguous",
+          title: "Reject next ambiguous target",
+          action: { kind: "click", selector: { kind: "role", role: "button", name: "Duplicate" } },
+          assertions: [{ kind: "visible", selector: "body" }],
+        },
+      ],
+    })
+    assert.equal(incomplete.operation, "smoke")
+    assert.ok("passed" in incomplete)
+    assert.equal(incomplete.passed, false)
+    assert.equal(await page.evaluate(() => document.body.dataset.clicks), "1")
   } finally {
     await session.dispose()
     await context.close()

@@ -9,6 +9,10 @@ metadata:
 
 Start from current observable state and the last verified postcondition. Preserve source references, record IDs and drafts before changing approach. Never interpret an interrupted tool call as proof the host cancelled its external action.
 
+If an action reports that it may have taken effect, inspect the preserved page or destination record before issuing a new request. Script exceptions do not mean the script had no side effects. The host does not retry a dispatched mutation or rerun earlier smoke steps after an uncertain failure. A returned failed smoke report identifies the executed steps; preserve their outcomes.
+
+A request recovered without a local receipt needs inspection even when its original authorization remains valid. Reusing an ID with changed content is rejected. Reconnects reuse retained receipts, including failures, rather than execute the action again. At the 1,024-request receipt limit, new requests are confirmed not dispatched. Review unresolved work before intentionally reloading the extension to create a fresh bridge; reloading discards process-local receipts and does not prove previous actions failed. An oversized result may leave a completed-but-unretained outcome: inspect the destination rather than repeat it merely to obtain a smaller result.
+
 | Situation | Next useful observation/action | Stop condition |
 |---|---|---|
 | Stale target after SPA rerender | Snapshot again; locate the current field/control by observed name or stable attribute. | Stop reusing the old selector when it no longer matches. |

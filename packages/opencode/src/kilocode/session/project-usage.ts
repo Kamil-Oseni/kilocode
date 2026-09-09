@@ -37,6 +37,7 @@ export namespace ProjectUsage {
   type Model = typeof Model.Type
 
   export const Info = Schema.Struct({
+    projectID: Schema.optional(ProjectV2.ID),
     range: Range,
     since: Schema.optional(Schema.Finite),
     until: Schema.Finite,
@@ -157,6 +158,6 @@ export namespace ProjectUsage {
     })
     const sessions = rows[0]?.sessions ?? 0
 
-    return { range, since: since ?? undefined, until, timezone: "UTC" as const, sessions, totals, models }
+    return { projectID, range, since: since ?? undefined, until, timezone: "UTC" as const, sessions, totals, models }
   })
 }

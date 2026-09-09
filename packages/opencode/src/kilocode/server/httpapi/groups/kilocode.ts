@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import { UploadChunk } from "@/kilocode/browser/upload-schema"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "@/server/routes/instance/httpapi/middleware/authorization"
 import { InstanceContextMiddleware } from "@/server/routes/instance/httpapi/middleware/instance-context"
@@ -159,6 +160,8 @@ export const KilocodePaths = {
   selfHeal: `${root}/self-heal`, // raya_change - global structured feedback backlog
   selfHealItem: `${root}/self-heal/:itemID`, // raya_change
   browserList: `${root}/browser`, // raya_change - Milestone F browser host API
+  browserUploadChunk: `${root}/browser/uploads/:uploadID/files/:fileID/chunk`,
+  browserUploadRelease: `${root}/browser/uploads/:uploadID/files/:fileID/release`,
   browserReply: `${root}/browser/:requestID/reply`, // raya_change - Milestone F browser host API
   browserReject: `${root}/browser/:requestID/reject`, // raya_change - Milestone F browser host API
   canvasList: `${root}/canvas`, // raya_change - Milestone E canvas host API
@@ -306,6 +309,35 @@ export const KilocodeApi = HttpApi.make("kilocode")
           }),
         ),
         // raya_change start - Milestone F browser host API
+        HttpApiEndpoint.post("browserUploadChunk", KilocodePaths.browserUploadChunk, {
+          params: { uploadID: Schema.String, fileID: Schema.String },
+          query: WorkspaceRoutingQuery,
+          payload: Schema.Struct({
+            sessionID: SessionID,
+            offset: Schema.Number.check(Schema.isFinite(), Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)),
+          }),
+          success: UploadChunk,
+          error: HttpApiError.BadRequest,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.browser.uploadChunk",
+            summary: "Read an authorized staged upload chunk",
+            description: "Read at most one MiB from a task-bound upload file reference; no arbitrary path is accepted.",
+          }),
+        ),
+        HttpApiEndpoint.post("browserUploadRelease", KilocodePaths.browserUploadRelease, {
+          params: { uploadID: Schema.String, fileID: Schema.String },
+          query: WorkspaceRoutingQuery,
+          payload: Schema.Struct({ sessionID: SessionID }),
+          success: Schema.Boolean,
+          error: HttpApiError.BadRequest,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.browser.uploadRelease",
+            summary: "Release staged upload bytes",
+            description: "Remove the source staging bytes after verified host staging or cancellation.",
+          }),
+        ),
         HttpApiEndpoint.get("browserList", KilocodePaths.browserList, {
           query: WorkspaceRoutingQuery,
           success: described(Schema.Array(BrowserRequest), "Pending browser host requests"),

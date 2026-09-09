@@ -16,8 +16,8 @@ Next work includes authorized browser uploads, source-to-build artifact provenan
 | PR-02 — Make completion an inspectable agreement | Pending | |
 | PR-03 — Make routine scheduling explicit before activation | In progress | Structured creation/editing, absolute date controls, explicit timezone, backend occurrence preview and version-checked confirmation implemented. Real view DOM interactions verified; migration review and full live UI verification remain open. |
 | PR-04 — Define a routine's authority in capabilities, not its persona | Pending | |
-| PR-05 — Make spending understandable and bounded where needed | Pending | |
-| PR-06 — Publish a supported-client and feature matrix | Pending | |
+| PR-05 — Make spending understandable and bounded where needed | In progress | Provenance-aware model cost views are installed; exact-window/project usage summary copy and retry controls are implemented with focused tests. Cross-child budget reservations, overrides and full billing coverage remain open. |
+| PR-06 — Publish a supported-client and feature matrix | In progress | Source-backed client/platform/feature matrix and README entry point added. Company support ownership, non-Windows rollout and full client acceptance remain open. |
 | EN-01 — Gate destructive session migration on an explicit upgrade policy | In progress | Transactional recovery archive and CLI export verified; deployed-version lineage and rollout policy remain open. |
 | EN-02 — Give routines atomic execution ownership and restart semantics | In progress | Overlap exclusion, startup claims, schedule versions and immutable trigger evidence implemented. Transactional occurrence store, migration and timer runner integration implemented. Automatic goal resume/retry checks queue ownership. Interrupted-start recovery, atomic execution fencing, full transaction boundaries and lifecycle semantics remain open. A loaded contention test timed out; its isolated rerun passed. |
 | EN-03 — Implement timezone and event-filter semantics end to end | In progress | Stored timezone evaluation, exact event filters, schedule error isolation and read-only forecast verified. Creation/editing UI sends an explicit timezone; deployed event integration and legacy migration review remain open. |
@@ -32,13 +32,13 @@ Next work includes authorized browser uploads, source-to-build artifact provenan
 | EN-12 — Make media failures observable and session ownership atomic | Pending | |
 | EN-13 — Treat recordings and telemetry as separate data products | Pending | |
 | EN-14 — Measure recovery and streaming performance across client boundaries | Pending | |
-| EN-15 — Make release confidence reproducible across the fork | Pending | |
+| EN-15 — Make release confidence reproducible across the fork | In progress | Windows path normalization repaired in the Promise-facade guard; classified the existing real HTTP routine fixture with an exact reference count. Cross-package/snapshot checks are recorded per checkpoint. Broader reproducible release coverage remains open. |
 | UX-01 — Match review labels to action scope | In progress | Keep file / Undo file labels and scope tooltips implemented. File-level summary includes additions and deletions. Concurrent-edit acceptance and live interaction validation remain open. |
-| UX-02 — Present progress as current work and next decision | Pending | |
+| UX-02 — Present progress as current work and next decision | In progress | Paused/blocked next action and plan-task hierarchy implemented; activity counts disclosed separately. Rendered fixtures pass; live visual and workflow acceptance remain open. |
 | UX-03 — Use a consistent interruption and recovery vocabulary | Pending | |
 | UX-04 — Expose context provenance and control where work happens | Pending | |
 | UX-05 — Make history a route back to work, not just a list | Pending | |
-| UI-01 — Test real components in the visual harness | Pending | |
+| UI-01 — Test real components in the visual harness | In progress | Preview frames now identify production views versus illustrative markup; evidence contract documents exact scope. Production composer/history/review migration and full interaction coverage remain open. |
 | UI-02 — Establish measurable accessibility gates | Pending | |
 | UI-03 — Consolidate component semantics while preserving host-specific styling | Pending | |
 | 11.1 OVR-01 — OpenAI native realtime multimodal voice | Pending | |
@@ -1844,3 +1844,45 @@ The next accounting increment should preserve explicit rate presence and origin 
 - Product checkpoint `a05a539dec` pushed to `origin/main` after the normal cross-package and JetBrains checks passed. Production snapshot preparation, CLI version/model/helper smoke checks, extension host/webview types, lint and production bundle all passed. SDK preparation left no tracked drift.
 - Snapshot installation and the normal-user VS Code listing confirm `eden.raya@7.4.23-snapshot+a05a539dec.kamil-oseni.1788979134178`. Artifact: `C:/Users/User/AppData/Local/Temp/raya-vscode-snapshots/raya-vscode-snapshot-a05a539dec-kamil-oseni-1788979134178.vsix`; 406 entries, 514,900,323 bytes. SHA-256: `1D3EAD7E3C5C0E62FE5C9456A97D4962A7B76FD5AF3347EE5155130E64486C10`. Compiled and bundled CLI files both measure 227,314,688 bytes. No `.tmp` or `.env` entries were found.
 - Logs: `.tmp/transfers-checkpoint-commit.log`, `.tmp/transfers-checkpoint-push.log`, `.tmp/transfers-checkpoint-snapshot.log`. All processes completed successfully. Reload Window may be needed to activate the installed extension; full post-reload workflow testing is not claimed. All broader audit work remains active.
+
+
+### Supported-client contract
+
+- Added `docs/Raya-Supported-Clients.md` and a Raya fork notice in the root README. The matrix distinguishes the primary VS Code distribution, fork CLI, experimental console, inherited JetBrains/Zed integrations, upstream services and planned mobile client. It names same-build backend compatibility, credential boundaries, declared release targets versus verified Windows installation, and host-dependent feature limits.
+- All local source/document links resolve. Markdown formatting and whitespace checks are being run with this documentation increment. This does not certify new platforms, remote topologies, a company SLA or full feature parity.
+
+
+### Windows architecture-guard recovery
+
+- Reproduced the Promise-facade guard failure on Windows: native backslashes failed POSIX classification keys, reporting existing shared runtime boundaries as new and classified tests as missing. Normalize scanned relative paths before ownership checks and classification in both source and test scans.
+- The corrected scan then exposed one genuinely unclassified existing HTTP routine fixture. Reviewed its 11 AppRuntime references: they seed legacy/corrupt records and run history in the same runtime used by Server.Default HTTP requests. Added an exact-count integration-boundary entry with that reason; no general exemption, runtime facade or test behavior was added.
+- The actual repository guard now passes, as do scoped formatting and whitespace checks (`.tmp/facade-guard-before.log`, `.tmp/facade-guard-after.log`, `.tmp/facade-guard-final.log`). This repairs the previously recorded Windows blocker without claiming all EN-15 release gates are complete.
+
+
+### Usage summary review and recovery
+
+- Added optional backend project identity to historical usage responses and a versioned JSON summary copy action. Exact UTC range, model IDs, amount precision and accounting counts are preserved; compatibility cost is separately labeled. Missing evidence/project identity remains explicit, and reports disclose their aggregate-only scope. Refresh/retry keeps the selected range. Clipboard success appears only after the existing host acknowledgement; stale request notices are discarded.
+- Focused report/history tests: 6 pass/42 assertions. Actual Solid view harness passed its internal assertions for date scope, copy/disabled state, retry and status alongside prior accounting cases (1 harness test). Logs: `.tmp/usage-report-unit.log`, `.tmp/usage-report-view.log`. Formatting/whitespace checks passed.
+- Backend test stopped before collection because the concurrently developed browser upload module imported the removed `@/global` path (`.tmp/usage-report-project.log`). The browser agent has the diagnostic; backend rerun waits for stable imports. This does not prove an accounting regression. Final SDK regeneration and combined types/lint remain at the next checkpoint.
+
+- After the upload import correction, the actual project-usage storage test passed (1 test/6 assertions, `.tmp/usage-report-project-retry.log`), including backend project identity and inclusive time boundaries. Added accessible error/loading status roles. Final combined schema/type/lint verification remains queued with the parallel feature checkpoint.
+
+### Preview evidence boundaries
+
+- The dev preview now labels every frame with visible production-view/sample-data or illustrative-markup provenance and a machine-readable `data-preview-kind`. Goal and usage render production views; composer/history/review/conversation and other duplicated markup remain explicitly illustrative. See [preview evidence](Raya-Preview-Evidence.md). This prevents fixture-only observations from being presented as product acceptance; it does not complete component migration or accessibility acceptance.
+- Normal-user preview compilation passed (`.tmp/preview-evidence-build.log`). Markdown checks passed. A follow-up label simplification correctly classifies the wholly illustrative conversation; final formatting/build check is included in the checkpoint work.
+
+- Independent integration review found two retained-state gaps in the in-progress agent slices: artifact inspection needed to compare reported byte sizes/output path in addition to hashes; upload selection needed a dispatch flag independent of mutable receipt status so a post-selection receipt-write failure cannot become a replayable-looking failure. Agents are applying explicit comparisons/state tracking and regressions. The artifact suite's later direct native-exit capture passed (16 tests/121 assertions, exit 0); the earlier all-pass summary with unexplained wrapper exit 1 remains historical evidence, not a confirmed pass.
+### Goal progress hierarchy
+
+- Paused and blocked goals now lead with the reason and next action. Plan completion is labeled as completed plan tasks; turn/tool activity moves into a collapsed, keyboard-operable details section with an explicit activity-versus-completion explanation. The progress message uses larger text, two collapsed lines and full wrapping when expanded.
+- Production Solid goal edit/history fixtures passed (2 harness tests with internal assertions, native exit 0; `.tmp/goal-progress-view.log`). The later font/wrapping adjustment awaits browser visual acceptance.
+- The narrow dark/light screenshot attempt failed during Chrome launch after 180 seconds, before a page connection (`.tmp/goal-preview-check.log`); no screenshot or live layout acceptance is claimed. The owned preview server was stopped after the attempt. Final combined types/lint and moderated workflow acceptance remain outstanding.
+### Combined upload, artifact and reporting checkpoint checks
+
+- Regenerated SDK/OpenAPI successfully with isolated test configuration (`.tmp/audit-sdk-generation.log`). SDK and extension host/webview type checks passed; scoped goal/usage UI lint passed. Source-link extraction and shared-source annotation checks passed.
+- CLI type checking found three introduced artifact errors: inspection union narrowing before check execution (two diagnostics) and an unsupported ZIP fixture constructor option. Repair agent is correcting these; `.tmp/audit-cli-types.log` is a failed check, not release-ready evidence.
+- Browser upload source is frozen. Actual Chrome/panel/bridge checks passed 20 tests/84 assertions; backend stage/tool/skill batch passed 10/123, added authorization test 1/6 and close/admission race regression 1/3. Coverage includes verified 40 MiB upload bytes, delayed submission, server rejection, frame/multiple/empty files, stale destination, digest refusal, lost acknowledgement and restart. Selection is explicitly distinct from destination acceptance.
+- No new release has been installed for this uncommitted slice. Actual retained-source artifact packaging and final checkpoint checks remain outstanding.
+- Checkpoint guards additionally passed: extension Knip (native exit 0), forbidden change-marker scan and Markdown table validation. Logs: `.tmp/audit-knip.log`, `.tmp/audit-marker.log`, `.tmp/audit-markdown.log`. UX-02 is tracked as in progress with live visual acceptance still open.
+- Corrected the CLI inspection union into distinct discriminated variants and removed the unsupported ZIP constructor option. CLI typecheck now records native exit 0 (`.tmp/self-heal-artifact-cli-types.log`). Full extension lint passed (`.tmp/audit-extension-lint.log`); independent read-only goal/usage UI review found no concrete introduced defect. Source is frozen pending real retained-source artifact acceptance.

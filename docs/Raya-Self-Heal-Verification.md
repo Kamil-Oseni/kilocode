@@ -28,4 +28,14 @@ Goal validation resolves a real persisted `self_heal_verify` tool part against i
 
 Other legitimate evidence still supports the existing goal audit, but its delivery source identity remains explicitly unknown. Existing tested-completion receipts are not retroactively upgraded using today's HEAD. Human acceptance and objective revisions keep their existing goal semantics; verification does not replace intent or complete a goal itself.
 
-The next delivery stages still must bind this input to a packaged artifact, retain the artifact digest and release identity, reconcile the running installed build, replay the relevant check, and notify the reporter once. None of those stages follows solely from a source snapshot receipt.
+## Reviewable artifact preparation
+
+After a repair goal completes with full snapshot-input coverage, `self_heal_verify` supports `action: "build-artifact"`, explicit dependency `setup`, and an optional timeout up to one hour. It resolves the stored completion and each cited successful check itself, then materializes their retained source bytes into a new private writable checkout. It does not capture a later HEAD and label it tested. Legacy or incomplete source coverage is ineligible.
+
+The packaging command runs through the same shell permission path. A host-created build input binds the completion digest, check IDs, snapshot digest, target platform, unique extension/CLI version, and private output path. Repair packaging uses these source identities instead of requiring original Git history. SDK generation or build scripts that change captured source fail the source contract; generated drift must be checked and completed as a new source input. The repair cache path cannot fall back to an unrelated compiled binary when validation fails.
+
+The package embeds `dist/raya-build.json`. After a successful build, the host independently reads the actual VSIX package identity, XML identity, embedded build identity, and CLI bytes, and hashes the complete archive. It retains a `ready-for-review` artifact receipt only after these checks. This proves the recorded artifact was produced from the captured input contract; build commands can still write their checkout, and dependencies, toolchains, environment, network responses, and transient writes remain unsealed. It is not reproducible-build or execution-confinement proof.
+
+Use `action: "inspect-artifact"` with the original message/call IDs to inspect intent, build input, dispatch, terminal acknowledgement, and any retained result. Inspection rehashes available artifact bytes and reports whether they still match the receipt. Failed setup, build failures, and interrupted or lost acknowledgements never become successful artifacts, and invocation IDs cannot replay execution. Artifact files remain in private snapshot storage for review; no publication or installation follows from this tool.
+
+The remaining delivery stages must retain a release identity, reconcile the running installed build, replay the relevant check, and notify the reporter once. A reviewable artifact receipt does not establish any of those outcomes.

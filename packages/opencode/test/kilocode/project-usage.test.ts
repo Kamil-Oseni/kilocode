@@ -78,6 +78,7 @@ describe("project usage", () => {
       expect(anchor).toBeDefined()
 
       expect(yield* ProjectUsage.get(anchor!.projectID, "24h", now)).toMatchObject({
+        projectID: anchor!.projectID,
         range: "24h",
         since: now - 24 * 60 * 60 * 1_000,
         until: now,

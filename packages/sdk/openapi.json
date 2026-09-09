@@ -15855,6 +15855,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "projectID": {
+                      "type": "string"
+                    },
                     "range": {
                       "type": "string",
                       "enum": ["24h", "7d", "30d", "all"]
@@ -16306,6 +16309,198 @@
           {
             "lang": "js",
             "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.notebook.reject({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/browser/uploads/{uploadID}/files/{fileID}/chunk": {
+      "post": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.browser.uploadChunk",
+        "parameters": [
+          {
+            "name": "uploadID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "fileID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "BrowserUploadChunk",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrowserUploadChunk"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Read at most one MiB from a task-bound upload file reference; no arbitrary path is accepted.",
+        "summary": "Read an authorized staged upload chunk",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "offset": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": ["sessionID", "offset"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.browser.uploadChunk({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/browser/uploads/{uploadID}/files/{fileID}/release": {
+      "post": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.browser.uploadRelease",
+        "parameters": [
+          {
+            "name": "uploadID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "fileID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Remove the source staging bytes after verified host staging or cancellation.",
+        "summary": "Release staged upload bytes",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  }
+                },
+                "required": ["sessionID"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.browser.uploadRelease({\n  ...\n})"
           }
         ]
       }
@@ -44863,8 +45058,227 @@
       "BrowserRequestID": {
         "type": "string"
       },
+      "BrowserUploadFile": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "selectedName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": ["id", "name", "bytes", "sha256"],
+        "additionalProperties": false
+      },
       "BrowserRequest": {
         "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "frameID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["upload"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["start"]
+              },
+              "uploadID": {
+                "type": "string",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                "format": "uuid"
+              },
+              "destination": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000
+              },
+              "selector": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 10000
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["role"]
+                      },
+                      "role": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 10000
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 10000
+                      },
+                      "scope": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 10000
+                      }
+                    },
+                    "required": ["kind", "role", "name"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["label"]
+                      },
+                      "text": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 10000
+                      },
+                      "scope": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 10000
+                      }
+                    },
+                    "required": ["kind", "text"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["testid"]
+                      },
+                      "value": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 10000
+                      },
+                      "scope": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 10000
+                      }
+                    },
+                    "required": ["kind", "value"],
+                    "additionalProperties": false
+                  }
+                ],
+                "description": "Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected."
+              },
+              "files": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/BrowserUploadFile"
+                },
+                "minItems": 1,
+                "maxItems": 100
+              }
+            },
+            "required": [
+              "id",
+              "sessionID",
+              "tabID",
+              "operation",
+              "action",
+              "uploadID",
+              "destination",
+              "selector",
+              "files"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["upload"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["list"]
+              }
+            },
+            "required": ["id", "sessionID", "operation", "action"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["upload"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["inspect", "cancel"]
+              },
+              "uploadID": {
+                "type": "string",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                "format": "uuid"
+              }
+            },
+            "required": ["id", "sessionID", "operation", "action", "uploadID"],
+            "additionalProperties": false
+          },
           {
             "type": "object",
             "properties": {
@@ -59010,6 +59424,86 @@
         "required": ["code", "message"],
         "additionalProperties": false
       },
+      "BrowserUploadChunk": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "string"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "next": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": ["data", "offset", "next"],
+        "additionalProperties": false
+      },
+      "BrowserUploadInfo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+            "format": "uuid"
+          },
+          "tabID": {
+            "type": "string"
+          },
+          "frameID": {
+            "type": "string"
+          },
+          "sessionID": {
+            "type": "string"
+          },
+          "directory": {
+            "type": "string"
+          },
+          "requestID": {
+            "type": "string"
+          },
+          "destination": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BrowserUploadFile"
+            }
+          },
+          "status": {
+            "type": "string",
+            "enum": ["staging", "selecting", "selected", "failed", "cancelled", "unknown"]
+          },
+          "createdAt": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "updatedAt": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tabID",
+          "sessionID",
+          "directory",
+          "requestID",
+          "destination",
+          "files",
+          "status",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
       "BrowserTransfer": {
         "type": "object",
         "properties": {
@@ -59081,6 +59575,28 @@
       },
       "BrowserResult": {
         "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": ["upload"]
+              },
+              "uploads": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/BrowserUploadInfo"
+                }
+              },
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000
+              }
+            },
+            "required": ["operation", "uploads"],
+            "additionalProperties": false
+          },
           {
             "type": "object",
             "properties": {
@@ -61782,6 +62298,195 @@
       },
       "BrowserRequest1": {
         "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "tabID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "frameID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "description": "Observed frame document identity; invalid after navigation or detachment."
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["upload"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["start"]
+              },
+              "uploadID": {
+                "type": "string",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                "format": "uuid"
+              },
+              "destination": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000
+              },
+              "selector": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 10000
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["role"]
+                      },
+                      "role": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 10000
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 10000
+                      },
+                      "scope": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 10000
+                      }
+                    },
+                    "required": ["kind", "role", "name"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["label"]
+                      },
+                      "text": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 10000
+                      },
+                      "scope": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 10000
+                      }
+                    },
+                    "required": ["kind", "text"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["testid"]
+                      },
+                      "value": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 10000
+                      },
+                      "scope": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 10000
+                      }
+                    },
+                    "required": ["kind", "value"],
+                    "additionalProperties": false
+                  }
+                ],
+                "description": "Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected."
+              },
+              "files": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/BrowserUploadFile"
+                },
+                "minItems": 1,
+                "maxItems": 100
+              }
+            },
+            "required": [
+              "id",
+              "sessionID",
+              "tabID",
+              "operation",
+              "action",
+              "uploadID",
+              "destination",
+              "selector",
+              "files"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["upload"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["list"]
+              }
+            },
+            "required": ["id", "sessionID", "operation", "action"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/BrowserRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["upload"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["inspect", "cancel"]
+              },
+              "uploadID": {
+                "type": "string",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                "format": "uuid"
+              }
+            },
+            "required": ["id", "sessionID", "operation", "action", "uploadID"],
+            "additionalProperties": false
+          },
           {
             "type": "object",
             "properties": {

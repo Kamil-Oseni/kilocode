@@ -74,6 +74,7 @@ export function describe(target: BrowserTarget): string {
 }
 
 export interface TargetElement extends TargetLocator {
+  setInputFiles?(files: string[], options?: { timeout?: number }): Promise<void>
   contentFrame?(): Promise<import("./browser-frame").DocumentFrame | null>
   dispose?(): Promise<void>
 }

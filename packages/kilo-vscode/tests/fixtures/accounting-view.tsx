@@ -18,6 +18,11 @@ const { createSignal } = await import("solid-js")
 const { costLabel } = await import("../../webview-ui/src/context/accounting")
 const tokens = { input: 100, output: 20, reasoning: 0, cache: { read: 0, write: 0 } }
 const [accounting, set] = createSignal({ amount: 0, reported: 0, estimated: 0, partial: 0, unknown: 1, legacy: 0 })
+const [failure, setFailure] = createSignal<string>()
+const [copying, setCopying] = createSignal(false)
+const [notice, setNotice] = createSignal<string>()
+let copies = 0
+let refreshes = 0
 const root = document.createElement("div")
 document.body.append(root)
 const dispose = render(
@@ -26,6 +31,11 @@ const dispose = render(
       range="all"
       locale="en-US"
       providers={{}}
+      error={failure()}
+      copying={copying()}
+      notice={notice()}
+      onCopy={() => copies++}
+      onRefresh={() => refreshes++}
       usage={{
         range: "all",
         until: 1,
@@ -50,6 +60,21 @@ assert.match(root.textContent!, /≈ \$0\.0385 known · incomplete cost/)
 assert.equal(costLabel({ cost: 0.0385, accounting: accounting() }, "en-US", true), "≈ $0.0385 partial")
 set({ amount: 0.00000001, reported: 1, estimated: 0, partial: 0, unknown: 0, legacy: 0 })
 assert.match(root.textContent!, /< \$0\.000001/)
+assert.match(root.textContent!, /All recorded time through 1970-01-01T00:00:00.001Z/)
+const action = (label: string) =>
+  Array.from(root.querySelectorAll("button")).find((item) => item.textContent === label)!
+action("Copy JSON report").click()
+assert.equal(copies, 1)
+setCopying(true)
+assert.equal(action("Copying report…").disabled, true)
+setCopying(false)
+setFailure("Could not load usage")
+assert.equal(action("Copy JSON report").disabled, true)
+action("Retry").click()
+assert.equal(refreshes, 1)
+setFailure(undefined)
+setNotice("Usage summary copied as JSON.")
+assert.equal(root.querySelector('[role="status"]')?.textContent, "Usage summary copied as JSON.")
 dispose()
 const { CostDetails } = await import("../../webview-ui/src/components/chat/CostDetails")
 const close = render(

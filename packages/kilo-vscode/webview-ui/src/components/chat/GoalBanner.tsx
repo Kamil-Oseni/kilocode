@@ -91,6 +91,12 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
   const progress = () => {
     if (archive()) return
     if (props.goal?.status === "complete") return props.goal.audit?.summary ?? latest()
+    if (props.goal?.status === "blocked")
+      return `Blocked: ${props.goal.blockedReason ?? "Review the latest result and steer or resume when the blocker is resolved."}`
+    if (props.goal?.status === "paused")
+      return props.goal.review?.status === "pending"
+        ? "Your review is needed. Inspect the result, then accept it or request changes."
+        : "Paused. Resume when ready, or steer the goal before continuing."
     if (props.goal?.plan && (props.goal.plan.review || props.goal.plan.objective !== props.goal.objective))
       return "The saved work plan needs review after the requirements changed."
     const tasks = current()
@@ -241,11 +247,11 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                 </Show>
                 <Show when={!archive()}>
                   <span class="goal-banner__usage">
-                    {duration()} ·{" "}
+                    {duration()}
                     <Show when={todos().length}>
-                      Plan: {percent()}% ({done()}/{todos().length} tasks completed) ·{" "}
+                      {" "}
+                      · Plan: {done()}/{todos().length} tasks completed
                     </Show>
-                    {plural(state().usage.turns, "turn")} · {plural(state().usage.toolCalls, "tool")}
                   </span>
                 </Show>
                 <button
@@ -281,7 +287,7 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                 </div>
                 <Show when={progress()}>
                   {(line) => (
-                    <div class="goal-banner__progress" role="status">
+                    <div class="goal-banner__progress" role="status" data-expanded={props.expanded ? "" : undefined}>
                       {line()}
                     </div>
                   )}
@@ -328,6 +334,13 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                   <GoalRevisions goal={state()} sessionID={props.sessionID} />
                   <GoalPlan goal={state()} />
                   <GoalReport goal={state()} sessionID={props.sessionID} />
+                  <details class="goal-banner__activity">
+                    <summary>Activity counts</summary>
+                    <p>
+                      {plural(state().usage.turns, "turn")} · {plural(state().usage.toolCalls, "tool call")}. These
+                      counts describe activity, not goal completion.
+                    </p>
+                  </details>
                   <Show when={!state().plan && todos().length}>
                     <div class="goal-banner__tasks" aria-label="Goal tasks">
                       <div class="goal-banner__section-title">Work plan</div>

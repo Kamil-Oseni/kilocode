@@ -12,6 +12,7 @@ import type {
 import type { SSEPayload } from "../cli-backend/sdk-sse-adapter"
 import type { ConnectionState } from "../cli-backend/connection-service"
 import type { BrowserAction, BrowserResult } from "./browser-session"
+import type { UploadTransport } from "./browser-upload"
 
 export interface BrowserConnection {
   onEvent(listener: (event: SSEPayload, directory?: string) => void): () => void
@@ -122,8 +123,29 @@ export class BrowserBridge {
   }
 
   private show(request: BrowserRequest) {
+    if (request.operation === "upload" && request.action !== "start") return Promise.resolve()
     if (request.operation !== "download" || request.action === "start") return this.host.show()
     return Promise.resolve()
+  }
+
+  private uploader(request: BrowserRequest, directory: string): UploadTransport | undefined {
+    if (request.operation !== "upload" || request.action !== "start") return
+    const owner = { directory, sessionID: request.sessionID, uploadID: request.uploadID }
+    return {
+      chunk: async (file, offset, signal) => {
+        const response = await this.connection
+          .getClient()
+          .kilocode.browser.uploadChunk({ ...owner, fileID: file.id, offset }, { signal })
+        if (response.error || !response.data) throw new Error("Authorized upload chunk could not be read")
+        return response.data
+      },
+      release: async (file) => {
+        const response = await this.connection
+          .getClient()
+          .kilocode.browser.uploadRelease({ ...owner, fileID: file.id }, { signal: AbortSignal.timeout(5000) })
+        if (response.error) throw new Error("Source upload bytes could not be released")
+      },
+    }
   }
 
   private async run(request: BrowserRequest, directory: string, recovered = false): Promise<void> {
@@ -191,6 +213,7 @@ export class BrowserBridge {
       const result = (await this.host.execute({
         ...action(request),
         origin: { requestID: request.id, sessionID: request.sessionID, directory },
+        uploader: this.uploader(request, directory),
       })) as HostBrowserResult
       state.completed = true
       if (controller.signal.aborted) return

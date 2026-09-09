@@ -25,11 +25,17 @@ import {
 import { MessageID, SessionID } from "@/session/schema"
 import * as Tool from "@/tool/tool"
 import { Truncate } from "@/tool/truncate"
+import { BrowserUploadTool } from "@/kilocode/tool/browser-upload"
+import { UploadStage } from "@/kilocode/browser/upload-stage"
+import { InstanceState } from "@/effect/instance-state"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import path from "node:path"
 import { Effect, Layer, Schema } from "effect"
 import { testEffect } from "../lib/effect"
 
 const calls: Browser.Input[] = []
 function result(input: Browser.Input): Result {
+  if (input.operation === "upload") return { operation: "upload", uploads: [] }
   if (input.operation === "download") return { operation: "download", transfers: [] }
   if (input.operation === "dialog") return { operation: "dialog", tabID: input.tabID, dialogs: [], operations: [] }
   if (input.operation === "frames") return { operation: "frames", tabID: input.tabID, frames: [] }
@@ -79,7 +85,13 @@ const host: Browser.Interface = {
   reply: () => Effect.void,
   reject: () => Effect.void,
 }
-const it = testEffect(Layer.mergeAll(AppNodeBuilder.build(Agent.node), AppNodeBuilder.build(Truncate.node)))
+const it = testEffect(
+  Layer.mergeAll(
+    AppNodeBuilder.build(Agent.node),
+    AppNodeBuilder.build(Truncate.node),
+    AppNodeBuilder.build(FSUtil.node),
+  ),
+)
 
 function context(asks: Parameters<Tool.Context["ask"]>[0][]): Tool.Context {
   return {
@@ -101,6 +113,7 @@ test("auto-approves every native browser action in VS Code", () => {
     for (const permission of [
       "browser_dialog",
       "browser_download",
+      "browser_upload",
       "browser_frames",
       "browser_tabs",
       "browser_navigate",
@@ -123,6 +136,53 @@ test("auto-approves every native browser action in VS Code", () => {
 })
 
 describe("browser host tools", () => {
+  it.instance(
+    "upload tool reads an authorized source and forwards only owned staged references",
+    () =>
+      Effect.gen(function* () {
+        calls.length = 0
+        const asks: Parameters<Tool.Context["ask"]>[0][] = []
+        const ctx = context(asks)
+        const instance = yield* InstanceState.context
+        const source = path.join(instance.directory, "upload.txt")
+        yield* Effect.promise(() => Bun.write(source, "authorized upload"))
+        const tool = yield* BrowserUploadTool.pipe(
+          Effect.provideService(Browser.Service, host),
+          Effect.flatMap(Tool.init),
+        )
+        yield* tool.execute(
+          {
+            action: "start",
+            tab_id: "tab_seen",
+            selector: "input[type=file]",
+            destination: "https://example.test/form",
+            paths: [source],
+          },
+          ctx,
+        )
+        expect(asks.map((ask) => ask.permission)).toEqual(["browser_upload", "read"])
+        const request = calls[0]
+        expect(request.operation).toBe("upload")
+        if (request.operation !== "upload" || request.action !== "start") throw new Error("Missing upload request")
+        expect(request.files[0]).toMatchObject({ name: "upload.txt", bytes: 17 })
+        expect(JSON.stringify(request)).not.toContain(source)
+        const stage = new UploadStage()
+        const owner = { directory: instance.directory, sessionID: ctx.sessionID, uploadID: request.uploadID }
+        const chunk = yield* Effect.promise(() => stage.chunk(owner, request.files[0].id, 0))
+        expect(Buffer.from(chunk.data, "base64").toString()).toBe("authorized upload")
+        yield* Effect.promise(() => stage.release(owner, request.files[0].id))
+        yield* tool.execute({ action: "inspect", upload_id: request.uploadID }, ctx)
+        expect(calls[1]).toMatchObject({
+          operation: "upload",
+          action: "inspect",
+          uploadID: request.uploadID,
+          sessionID: ctx.sessionID,
+        })
+      }),
+    { git: true },
+    30_000,
+  )
+
   it.instance(
     "download inspection stays task-bound and never repeats an initiating click",
     () =>

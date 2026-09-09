@@ -14,6 +14,7 @@ import {
 } from "../src/services/cli-backend/cli-resources"
 import { currentBwrapTarget, ensureBwrapForTarget } from "./bwrap-helper"
 import { currentFfmpegTarget, ensureFfmpegForTarget } from "./ffmpeg-helper"
+import { fingerprint as repairFingerprint } from "../../opencode/src/kilocode/self-heal/build-input"
 
 const forceRebuild = process.argv.includes("--force")
 const compiledOnly = process.argv.includes("--compiled")
@@ -106,6 +107,8 @@ async function cliInputs() {
 }
 
 async function cliSourceHash() {
+  // A declared repair contract fails closed; it must never enter the legacy Git/cache fallback.
+  if (process.env.RAYA_REPAIR_BUILD_INPUT) return await repairFingerprint(repoDir, await cliInputs())
   try {
     const inputs = await cliInputs()
     const [tree, diff, extra, branch] = await Promise.all([

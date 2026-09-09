@@ -121,7 +121,13 @@ try {
     { id: "three", content: "Third task", status: "in_progress", priority: "medium" },
   ])
   assert.equal(root.querySelector('[role="progressbar"]').getAttribute("aria-valuenow"), "33")
-  assert.ok(root.querySelector(".goal-banner__usage").textContent.includes("Plan: 33% (1/3 tasks completed)"))
+  assert.ok(root.querySelector(".goal-banner__usage").textContent.includes("Plan: 1/3 tasks completed"))
+  assert.ok(!root.querySelector(".goal-banner__usage").textContent.includes("turn"))
+  assert.ok(!root.querySelector(".goal-banner__usage").textContent.includes("tool"))
+  const activity = root.querySelector(".goal-banner__activity")
+  assert.equal(activity.open, false)
+  assert.equal(activity.querySelector("summary").textContent, "Activity counts")
+  assert.ok(activity.textContent.includes("not goal completion"))
   assert.equal(
     root.querySelector(".goal-banner__progress").textContent,
     "Plan: Second task and 1 other task are marked in progress.",

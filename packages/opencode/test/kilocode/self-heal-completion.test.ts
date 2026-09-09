@@ -22,6 +22,10 @@ import { tmpdirScoped } from "../fixture/fixture"
 import * as fs from "node:fs/promises"
 import { checkout } from "./fixtures/self-heal-worktree"
 import { verification, identity } from "@/kilocode/self-heal/verification"
+import { artifacts } from "@/kilocode/self-heal/artifact"
+import { Build } from "@/kilocode/self-heal/build-input"
+import { Schema } from "effect"
+import { archive } from "./fixtures/self-heal-artifact"
 const it = testEffect(
   LayerNode.compile(LayerNode.group([FSUtil.node, CrossSpawnSpawner.node, Git.node, Agent.node, Truncate.node])),
 )
@@ -165,6 +169,12 @@ for (const changed of [false, true])
       Effect.gen(function* () {
         const directory = yield* tmpdirScoped()
         const source = yield* Effect.promise(() => checkout(path.join(directory, "storage")))
+        yield* Effect.promise(() =>
+          fs.writeFile(
+            path.join(source.root, "packages/kilo-vscode/package.json"),
+            JSON.stringify({ name: "raya", publisher: "eden", version: "1.2.3" }),
+          ),
+        )
         yield* instance(path.join(directory, "storage"), (storage) =>
           Effect.gen(function* () {
             const sessionID = SessionID.make("ses_snapshot")
@@ -219,6 +229,104 @@ for (const changed of [false, true])
             }
             expect(receipt?.verification?.status).toBe("snapshot-input")
             expect(receipt?.verification).toMatchObject({ head: source.commit })
+            expect((yield* checks.lineage(receipt!)).snapshot.digest).toBe(
+              receipt!.verification!.status === "snapshot-input" ? receipt!.verification!.digest : "unexpected",
+            )
+            const delivery = artifacts(storage, path.join(directory, "snapshots"))
+            const request = {
+              outcome,
+              sessionID,
+              messageID: MessageID.ascending(),
+              callID: "artifact",
+              setup: "fixture-prepare",
+              current: () => service.repair(sessionID).pipe(Effect.asVoid, Effect.orDie),
+              execute: (command: string, cwd: string) =>
+                Effect.promise(async () => {
+                  if (command !== "fixture-prepare") {
+                    const build = Schema.decodeUnknownSync(Build)(
+                      await Bun.file(path.join(cwd, ".git/raya-build-input.json")).json(),
+                    )
+                    await archive(build)
+                  }
+                  return { output: "fixture artifact execution", metadata: { exit: 0 } }
+                }),
+            }
+            expect((yield* delivery.run(request)).metadata.status).toBe("ready-for-review")
+            expect((yield* delivery.status(sessionID, request.messageID, request.callID))?.observed?.status).toBe(
+              "matches-receipt",
+            )
+            expect(Exit.isFailure(yield* delivery.run(request).pipe(Effect.exit))).toBe(true)
+            const failed = {
+              ...request,
+              callID: "failed-artifact",
+              execute: () => Effect.succeed({ output: "setup failed", metadata: { exit: 1 } }),
+            }
+            expect(Exit.isFailure(yield* delivery.run(failed).pipe(Effect.exit))).toBe(true)
+            expect((yield* delivery.status(sessionID, failed.messageID, failed.callID))?.terminal).toBeTruthy()
+            expect(yield* delivery.status("unrelated-session", request.messageID, request.callID)).toBeUndefined()
+            const retained = yield* delivery.status(sessionID, request.messageID, request.callID)
+            const built = Schema.decodeUnknownSync(Build)(retained?.build)
+            const publication = [
+              "raya",
+              "self-heal",
+              "artifact",
+              createHash("sha256")
+                .update(JSON.stringify([sessionID, request.messageID, request.callID]))
+                .digest("hex"),
+              "result",
+            ]
+            const published = yield* storage
+              .read<{ output: string; artifact: { size: number }; binary: { size: number } }>(publication)
+              .pipe(Effect.orDie)
+            for (const changed of [
+              { ...published, output: path.join(directory, "unrelated.vsix") },
+              { ...published, artifact: { ...published.artifact, size: published.artifact.size + 1 } },
+              { ...published, binary: { ...published.binary, size: published.binary.size + 1 } },
+            ]) {
+              yield* storage.write(publication, changed).pipe(Effect.orDie)
+              expect((yield* delivery.status(sessionID, request.messageID, request.callID))?.observed?.status).toBe(
+                "unavailable-or-changed",
+              )
+            }
+            yield* storage.write(publication, published).pipe(Effect.orDie)
+            yield* Effect.promise(() => fs.writeFile(built.output, "corrupted archive"))
+            expect((yield* delivery.status(sessionID, request.messageID, request.callID))?.observed?.status).toBe(
+              "unavailable-or-changed",
+            )
+            for (const mode of ["source", "build", "lost"] as const) {
+              const rejected = {
+                ...request,
+                callID: `${mode}-artifact`,
+                execute: (command: string, cwd: string) =>
+                  mode === "lost"
+                    ? Effect.die("lost build acknowledgement")
+                    : Effect.promise(async () => {
+                        if (mode === "source")
+                          await fs.writeFile(path.join(cwd, "tracked.txt"), "unverified build input")
+                        return {
+                          output: "fixture",
+                          metadata: { exit: mode === "build" && command !== "fixture-prepare" ? 1 : 0 },
+                        }
+                      }),
+              }
+              expect(Exit.isFailure(yield* delivery.run(rejected).pipe(Effect.exit))).toBe(true)
+              const retained = yield* delivery.status(sessionID, rejected.messageID, rejected.callID)
+              expect(retained?.result).toBeUndefined()
+              expect(retained?.terminal).toBeTruthy()
+            }
+            const coordinate = [
+              "raya",
+              "self-heal",
+              "verification",
+              createHash("sha256")
+                .update(JSON.stringify([sessionID, part.messageID, part.callID]))
+                .digest("hex"),
+              "result",
+            ]
+            const original = yield* storage.read<Record<string, unknown>>(coordinate).pipe(Effect.orDie)
+            yield* storage.write(coordinate, { ...original, messageID: MessageID.ascending() }).pipe(Effect.orDie)
+            expect(Exit.isFailure(yield* checks.lineage(receipt!).pipe(Effect.exit))).toBe(true)
+            yield* storage.write(coordinate, original).pipe(Effect.orDie)
             expect(
               Exit.isFailure(
                 yield* checks

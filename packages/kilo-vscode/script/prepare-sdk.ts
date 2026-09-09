@@ -3,6 +3,7 @@ import { $ } from "bun"
 import { createHash } from "node:crypto"
 import { existsSync, mkdirSync } from "node:fs"
 import { dirname, join } from "node:path"
+import { fingerprint as repairFingerprint } from "../../opencode/src/kilocode/self-heal/build-input"
 
 const root = join(import.meta.dir, "..")
 const repo = join(root, "..", "..")
@@ -37,6 +38,8 @@ function log(msg: string) {
 }
 
 async function fingerprint(paths: string[]) {
+  const repair = await repairFingerprint(repo, paths)
+  if (repair) return repair
   const [tree, diff, extra] = await Promise.all([
     $`git ls-tree -r HEAD -- ${paths}`.cwd(repo).quiet(),
     $`git diff --binary HEAD -- ${paths}`.cwd(repo).quiet(),

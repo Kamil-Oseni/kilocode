@@ -21,6 +21,7 @@ type BrowserPanelMessage = { tabID?: string } & (
   | { type: "dialog"; dialogID: string; action: "accept" | "dismiss"; text?: string }
   | { type: "download"; transferID: string; action: "reveal" | "cancel" | "save" }
   | { type: "downloads"; offset: number }
+  | { type: "upload"; uploadID: string; action: "cancel" }
   | { type: "tab"; action: "open" | "select" | "close" }
 )
 
@@ -31,6 +32,7 @@ export class BrowserPanel implements vscode.Disposable {
   private off: (() => void) | undefined
   private offDialogs: (() => void) | undefined
   private offDownloads: (() => void) | undefined
+  private offUploads: (() => void) | undefined
   private offTabs: (() => void) | undefined
   private offState: (() => void) | undefined
 
@@ -55,6 +57,7 @@ export class BrowserPanel implements vscode.Disposable {
     panel.webview.html = this.html()
     panel.webview.onDidReceiveMessage((message: BrowserPanelMessage) => this.handle(message))
     panel.onDidDispose(() => {
+      this.offUploads?.()
       this.offDownloads?.()
       this.off?.()
       this.offState?.()
@@ -68,6 +71,7 @@ export class BrowserPanel implements vscode.Disposable {
       () => void this.panel?.webview.postMessage({ type: "dialogs", ...this.session.dialogsState() }),
     )
     this.offDownloads = this.session.onDownloads(() => void this.downloads())
+    this.offUploads = this.session.onUploads(() => void this.uploads())
     this.offTabs = this.session.onTabs((tabs) => void this.panel?.webview.postMessage({ type: "tabs", tabs }))
     this.off = this.session.onFrame((frame) => void this.frame(frame))
     this.offState = this.session.onState((state) => void this.status(state))
@@ -80,6 +84,7 @@ export class BrowserPanel implements vscode.Disposable {
     panel.webview.html = this.html()
     panel.webview.onDidReceiveMessage((message: BrowserPanelMessage) => this.handle(message))
     panel.onDidDispose(() => {
+      this.offUploads?.()
       this.offDownloads?.()
       this.off?.()
       this.offState?.()
@@ -93,6 +98,7 @@ export class BrowserPanel implements vscode.Disposable {
       () => void this.panel?.webview.postMessage({ type: "dialogs", ...this.session.dialogsState() }),
     )
     this.offDownloads = this.session.onDownloads(() => void this.downloads())
+    this.offUploads = this.session.onUploads(() => void this.uploads())
     this.offTabs = this.session.onTabs((tabs) => void this.panel?.webview.postMessage({ type: "tabs", tabs }))
     this.off = this.session.onFrame((frame) => void this.frame(frame))
     this.offState = this.session.onState((state) => void this.status(state))
@@ -117,6 +123,14 @@ export class BrowserPanel implements vscode.Disposable {
   private async downloads(offset = 0) {
     if (!Number.isSafeInteger(offset) || offset < 0) throw new Error("Invalid download page")
     await this.panel?.webview.postMessage({ type: "downloads", offset, ...(await this.session.downloads(offset)) })
+  }
+
+  private async uploads() {
+    await this.panel?.webview.postMessage({ type: "uploads", uploads: await this.session.uploadState() })
+  }
+  private async cancelUpload(id: string) {
+    await this.session.cancelUpload(id)
+    await this.uploads()
   }
 
   private async transfer(message: Extract<BrowserPanelMessage, { type: "download" }>) {
@@ -155,6 +169,7 @@ export class BrowserPanel implements vscode.Disposable {
   }
 
   private async initialize() {
+    await this.uploads()
     await this.downloads()
     const frame = this.session.latest()
     if (frame) await this.frame(frame)
@@ -167,6 +182,7 @@ export class BrowserPanel implements vscode.Disposable {
     if (message.type === "ready") return this.initialize()
     if (message.type === "dialog") return this.respond(message)
     if (message.type === "download") return this.transfer(message)
+    if (message.type === "upload") return this.cancelUpload(message.uploadID)
     if (message.type === "downloads") return this.downloads(message.offset)
     if (message.type === "tab") {
       if (message.action !== "open" && !message.tabID) throw new Error("Observed tab identity is required")
@@ -230,6 +246,7 @@ export class BrowserPanel implements vscode.Disposable {
   }
 
   dispose(): void {
+    this.offUploads?.()
     this.offDownloads?.()
     this.off?.()
     this.offState?.()
@@ -269,6 +286,8 @@ export class BrowserPanel implements vscode.Disposable {
     #empty { color: var(--vscode-descriptionForeground); }
     #downloads { position: absolute; bottom: 8px; left: 8px; z-index: 4; max-height: 35%; max-width: 90%; overflow: auto; background: var(--vscode-editor-background); padding: 6px; }
     #downloads:empty { display: none; }
+    #uploads { position: absolute; top: 8px; right: 8px; z-index: 4; max-height: 35%; max-width: 45%; overflow: auto; overflow-wrap: anywhere; background: var(--vscode-editor-background); padding: 6px; }
+    #uploads:empty { display: none; }
     #shield { position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; color: white; background: rgb(0 0 0 / 28%); cursor: wait; }
     #dialogs { position: absolute; inset: 12px; z-index: 3; overflow: auto; pointer-events: none; }
     #dialogs > section { pointer-events: auto; margin: 8px auto; max-width: 640px; padding: 16px; border: 1px solid var(--vscode-focusBorder); background: var(--vscode-editor-background); }
@@ -293,6 +312,7 @@ export class BrowserPanel implements vscode.Disposable {
   </section>
   <main>
     <section id="downloads" aria-label="Downloads" aria-live="polite"></section>
+    <section id="uploads" aria-label="Uploads" aria-live="polite"></section>
     <div id="dialogs" aria-live="polite"></div>
     <span id="empty">Starting the shared browser…</span>
     <img id="screen" tabindex="0" alt="Live browser" hidden>
@@ -311,6 +331,7 @@ export class BrowserPanel implements vscode.Disposable {
     const tabs = document.getElementById("tabs");
     const dialogs = document.getElementById("dialogs");
     const downloads = document.getElementById("downloads");
+    const uploads = document.getElementById("uploads");
     const cards = new Map();
     let selected;
     let displayed;
@@ -379,6 +400,23 @@ export class BrowserPanel implements vscode.Disposable {
     screen.addEventListener("keyup", (event) => { key("keyUp", event); event.preventDefault(); });
     screen.addEventListener("wheel", (event) => { send("scroll", { input: { deltaX: event.deltaX, deltaY: event.deltaY } }); event.preventDefault(); }, { passive: false });
     window.addEventListener("message", (event) => {
+      if (event.data.type === "uploads") {
+        uploads.replaceChildren();
+        for (const item of event.data.uploads) {
+          const row = document.createElement("div");
+          const label = document.createElement("p");
+          label.textContent = item.files.map((file) => file.name + (file.selectedName && file.selectedName !== file.name ? " → " + file.selectedName : "") + " (" + file.bytes + " bytes)").join(", ") + " → " + item.destination + ": " + (item.status === "selected" ? "Files selected; verify the upload result on the page" : item.status) + (item.error ? ": " + item.error : "");
+          row.append(label);
+          if (item.status === "staging") {
+            const button = document.createElement("button");
+            button.textContent = "Cancel before selection";
+            button.addEventListener("click", () => send("upload", { uploadID: item.id, action: "cancel" }));
+            row.append(button);
+          }
+          uploads.append(row);
+        }
+        return;
+      }
       if (event.data.type === "downloads") {
         downloads.replaceChildren();
         for (const item of event.data.transfers) {

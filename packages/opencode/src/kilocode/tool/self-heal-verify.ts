@@ -3,6 +3,7 @@ import * as Tool from "@/tool/tool"
 import { ShellTool } from "@/tool/shell"
 import { RayaGoal } from "@/kilocode/goal"
 import { verification, identity } from "@/kilocode/self-heal/verification"
+import { artifacts } from "@/kilocode/self-heal/artifact"
 import type { Storage } from "@/storage/storage"
 import { MessageID } from "@/session/schema"
 
@@ -19,6 +20,16 @@ const Input = Schema.Union([
     messageID: MessageID,
     callID: Schema.String.check(Schema.isMinLength(1)),
   }),
+  Schema.Struct({
+    action: Schema.Literal("inspect-artifact"),
+    messageID: MessageID,
+    callID: Schema.String.check(Schema.isMinLength(1)),
+  }),
+  Schema.Struct({
+    action: Schema.Literal("build-artifact"),
+    setup: Schema.String.check(Schema.isMinLength(1)),
+    timeout: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(3_600_000))),
+  }),
 ])
 
 export function selfHealVerify(goals: ReturnType<typeof RayaGoal.make>, storage: Storage.Interface) {
@@ -27,15 +38,20 @@ export function selfHealVerify(goals: ReturnType<typeof RayaGoal.make>, storage:
     Effect.gen(function* () {
       const shell = yield* ShellTool
       const service = verification(storage)
+      const delivery = artifacts(storage)
       return {
         description:
-          "Run a repair check from an immutable capture of this self-heal session's owned source. Captures tracked and nonignored untracked files, including dirty bytes; excludes ignored dependency and credential files and rejects known credential-shaped inputs. This is not a general secret scanner. Runs in a private writable checkout. Optional setup is an explicitly authorized dependency preparation command, e.g. bun install --frozen-lockfile --ignore-scripts; it runs before the check and must preserve source. workdir is relative to the snapshot. Dependencies, external services and transient writes are not sealed. Cite the resulting self_heal_verify call when completing the goal. Ordinary bash or browser evidence has unknown delivery source identity. Inspect uncertain outcomes with action=inspect and the original messageID/callID in this session; inspection never repeats setup or the check.",
+          "Run a repair check from an immutable capture of this self-heal session's owned source. Captures tracked and nonignored untracked files, including dirty bytes; excludes ignored dependency and credential files and rejects known credential-shaped inputs. This is not a general secret scanner. Runs in a private writable checkout. Optional setup is an explicitly authorized dependency preparation command, e.g. bun install --frozen-lockfile --ignore-scripts; it runs before the check and must preserve source. workdir is relative to the snapshot. Dependencies, external services and transient writes are not sealed. Cite the resulting self_heal_verify call when completing the goal. Ordinary bash or browser evidence has unknown delivery source identity. Inspect uncertain outcomes with action=inspect and the original messageID/callID in this session; inspection never repeats setup or the check. After a source-backed repair goal completes, action=build-artifact with explicit setup prepares a uniquely identified VSIX for review. It never publishes or installs. Inspect retained build stages and current artifact bytes with action=inspect-artifact and the original messageID/callID.",
         parameters: Input,
         execute: (input: typeof Input.Type, ctx) =>
           Effect.gen(function* () {
             if (!ctx.callID) throw new Error("Snapshot verification requires a durable tool invocation identity")
-            if (input.action === "inspect") {
-              const retained = yield* service.status(ctx.sessionID, input.messageID, input.callID)
+            if (input.action === "inspect" || input.action === "inspect-artifact") {
+              const retained = yield* (input.action === "inspect" ? service : delivery).status(
+                ctx.sessionID,
+                input.messageID,
+                input.callID,
+              )
               return {
                 title: "Repair verification outcome",
                 metadata: {},
@@ -46,6 +62,35 @@ export function selfHealVerify(goals: ReturnType<typeof RayaGoal.make>, storage:
             }
             const outcome = yield* goals.repair(ctx.sessionID).pipe(Effect.orDie)
             const goal = yield* goals.get(ctx.sessionID)
+            if (input.action === "build-artifact") {
+              if (goal?.status !== "complete") throw new Error("Artifact preparation requires a completed repair goal")
+              const command = yield* Tool.init(shell)
+              const result = yield* delivery.run({
+                outcome,
+                sessionID: ctx.sessionID,
+                messageID: ctx.messageID,
+                callID: ctx.callID,
+                setup: input.setup,
+                current: () =>
+                  Effect.gen(function* () {
+                    const owned = yield* goals.repair(ctx.sessionID).pipe(Effect.orDie)
+                    const state = yield* goals.get(ctx.sessionID)
+                    if (owned.id !== outcome.id || state?.status !== "complete" || state.intent !== goal.intent)
+                      throw new Error("The completed repair owner or goal changed during artifact preparation")
+                  }),
+                execute: (text, directory) =>
+                  command.execute(
+                    {
+                      command: text,
+                      workdir: directory,
+                      timeout: input.timeout,
+                      description: "Prepare reviewable repair artifact",
+                    },
+                    ctx,
+                  ),
+              })
+              return { title: "Reviewable repair artifact", ...result }
+            }
             if (!goal || goal.status !== "active")
               throw new Error("Snapshot verification requires the active repair goal")
             const owner = identity(goal)

@@ -7,6 +7,81 @@ import { DialogPendingError } from "../../src/services/browser-automation/browse
 import { BrowserBridge } from "../../src/services/browser-automation/browser-bridge"
 
 describe("Raya browser bridge", () => {
+  it("binds staged upload API calls to the authoritative task and preserves lost acknowledgements", async () => {
+    const first = Promise.withResolvers<void>()
+    const second = Promise.withResolvers<void>()
+    const requests: unknown[] = []
+    const replies: unknown[] = []
+    let executions = 0
+    const client = {
+      kilocode: {
+        browser: {
+          list: async () => ({ data: [] }),
+          uploadChunk: async (value: unknown) => {
+            requests.push(value)
+            return { data: { data: "eA==", offset: 0, next: 1 } }
+          },
+          uploadRelease: async (value: unknown) => {
+            requests.push(value)
+            return { data: true }
+          },
+          reply: async (value: unknown) => {
+            replies.push(value)
+            if (replies.length === 1) {
+              first.resolve()
+              throw new Error("lost acknowledgement")
+            }
+            second.resolve()
+            return {}
+          },
+          reject: async () => ({}),
+        },
+      },
+    } as unknown as KiloClient
+    const connection = harness(client)
+    const file = { id: "00000000-0000-4000-8000-000000000002", name: "report.txt", bytes: 1, sha256: "0".repeat(64) }
+    const uploadID = "00000000-0000-4000-8000-000000000001"
+    const bridge = new BrowserBridge(connection.value, {
+      show: async () => undefined,
+      execute: async (action) => {
+        executions++
+        expect(action.uploader).toBeDefined()
+        await action.uploader!.chunk(file, 0, AbortSignal.any([]))
+        await action.uploader!.release(file)
+        return { operation: "upload", uploads: [] }
+      },
+    })
+    const event = {
+      type: "kilocode.browser.requested",
+      properties: {
+        id: "brr_upload",
+        sessionID: "ses_test",
+        tabID: "tab_seen",
+        operation: "upload",
+        action: "start",
+        uploadID,
+        selector: "#files",
+        destination: "https://example.test/form",
+        files: [file],
+        origin: { directory: "forged", sessionID: "forged" },
+      },
+    }
+    try {
+      connection.event(event)
+      await first.promise
+      await new Promise<void>((resolve) => setTimeout(resolve, 0))
+      connection.event(event)
+      await second.promise
+      expect(executions).toBe(1)
+      expect(replies[1]).toEqual(replies[0])
+      expect(requests).toEqual([
+        { directory: "C:\\workspace", sessionID: "ses_test", uploadID, fileID: file.id, offset: 0 },
+        { directory: "C:\\workspace", sessionID: "ses_test", uploadID, fileID: file.id },
+      ])
+    } finally {
+      bridge.dispose()
+    }
+  })
   it("returns the same download transfer after lost acknowledgement without another export click", async () => {
     const first = Promise.withResolvers<void>()
     const second = Promise.withResolvers<void>()

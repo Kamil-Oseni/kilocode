@@ -197,6 +197,10 @@ import type {
   KilocodeBrowserRejectResponses,
   KilocodeBrowserReplyErrors,
   KilocodeBrowserReplyResponses,
+  KilocodeBrowserUploadChunkErrors,
+  KilocodeBrowserUploadChunkResponses,
+  KilocodeBrowserUploadReleaseErrors,
+  KilocodeBrowserUploadReleaseResponses,
   KilocodeCanvasListErrors,
   KilocodeCanvasListResponses,
   KilocodeCanvasRejectErrors,
@@ -7919,6 +7923,98 @@ export class Notebook extends HeyApiClient {
 }
 
 export class Browser extends HeyApiClient {
+  /**
+   * Read an authorized staged upload chunk
+   *
+   * Read at most one MiB from a task-bound upload file reference; no arbitrary path is accepted.
+   */
+  public uploadChunk<ThrowOnError extends boolean = false>(
+    parameters: {
+      uploadID: string
+      fileID: string
+      directory?: string
+      workspace?: string
+      sessionID?: string
+      offset?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "uploadID" },
+            { in: "path", key: "fileID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "offset" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeBrowserUploadChunkResponses,
+      KilocodeBrowserUploadChunkErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/browser/uploads/{uploadID}/files/{fileID}/chunk",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Release staged upload bytes
+   *
+   * Remove the source staging bytes after verified host staging or cancellation.
+   */
+  public uploadRelease<ThrowOnError extends boolean = false>(
+    parameters: {
+      uploadID: string
+      fileID: string
+      directory?: string
+      workspace?: string
+      sessionID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "uploadID" },
+            { in: "path", key: "fileID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "sessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeBrowserUploadReleaseResponses,
+      KilocodeBrowserUploadReleaseErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/browser/uploads/{uploadID}/files/{fileID}/release",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
   /**
    * List pending browser requests
    *

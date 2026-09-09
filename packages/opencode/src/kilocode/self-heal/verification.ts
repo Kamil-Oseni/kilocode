@@ -7,6 +7,7 @@ import type { Storage } from "@/storage/storage"
 import { Storage as Store } from "@/storage/storage"
 import { SessionID, MessageID } from "@/session/schema"
 import type { Outcome } from "./repair"
+import type { Completion } from "./completion"
 import * as Source from "./snapshot"
 import { digest } from "@opencode-ai/core/kilocode/evidence-digest"
 
@@ -291,5 +292,53 @@ export function verification(
       contract: "Captured source input; execution checkout is writable and dependencies are not sealed." as const,
     }
   })
-  return { run, inspect, certify, status }
+  // Resolve retained receipts by the completion's exact evidence coordinates; callers cannot supply a snapshot.
+  const lineage = Effect.fn(function* (completion: typeof Completion.Type) {
+    const assessment = completion.verification
+    if (assessment?.status !== "snapshot-input" || !assessment.checks.length)
+      throw new Error("Delivery source identity is unknown; complete a snapshot-backed repair audit first")
+    const checks: Array<typeof Receipt.Type> = []
+    for (const requirement of completion.goal.audit.requirements.filter((row) => row.passed)) {
+      const rows = yield* Effect.forEach(requirement.evidence, (ref) =>
+        get(ref.sessionID, ref.messageID, ref.callID).pipe(
+          Effect.map((row) => {
+            if (
+              row &&
+              (row.sessionID !== ref.sessionID || row.messageID !== ref.messageID || row.callID !== ref.callID)
+            )
+              throw new Error("Retained verification receipt coordinates do not match completion evidence")
+            return row
+          }),
+        ),
+      )
+      const found = rows.filter((row) => row && assessment.checks.includes(row.id))
+      if (!found.length) throw new Error("Retained completion has lost its source verification coverage")
+      for (const row of found) {
+        if (!row) continue
+        if (
+          row.exit !== 0 ||
+          row.itemID !== completion.itemID ||
+          row.attemptID !== completion.attemptID ||
+          row.sessionID !== completion.sessionID ||
+          row.goal.createdAt !== completion.goal.createdAt ||
+          row.goal.objective !== completion.goal.objective ||
+          row.snapshot.digest !== assessment.digest ||
+          row.snapshot.head !== assessment.head ||
+          row.finishedAt > completion.at ||
+          row.startedAt > row.finishedAt
+        )
+          throw new Error("Retained check does not match the completed repair source")
+        checks.push(row)
+      }
+    }
+    if (assessment.checks.some((id) => !checks.some((row) => row.id === id)))
+      throw new Error("A completion check receipt is missing")
+    if (
+      !checks.length ||
+      checks.some((row) => !equal(row.snapshot, checks[0].snapshot) || !equal(row.goal, checks[0].goal))
+    )
+      throw new Error("Completion checks disagree about captured source")
+    return { snapshot: checks[0].snapshot, checks: assessment.checks, store: root }
+  })
+  return { run, inspect, certify, status, lineage }
 }

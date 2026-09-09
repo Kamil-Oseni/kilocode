@@ -8,6 +8,7 @@ import { Context, Deferred, Duration, Effect, Layer, LayerMap, Schema } from "ef
 import * as Log from "@opencode-ai/core/util/log"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ErrorCode, Event, type Failure, type Request, RequestID, type Result } from "./protocol"
+import { UploadStage } from "./upload-stage"
 
 const log = Log.create({ service: "browser-host" })
 type WithoutID<T> = T extends unknown ? Omit<T, "id"> : never
@@ -65,6 +66,8 @@ export function layer(timeout: Duration.Input = "2 minutes") {
     Service,
     Effect.gen(function* () {
       const bus = yield* Bus.Service
+      const stop = new UploadStage().watch()
+      yield* Effect.addFinalizer(() => Effect.sync(stop))
       const states = new Map<string, State>()
       const stateLayer = (directory: string) =>
         Layer.effect(

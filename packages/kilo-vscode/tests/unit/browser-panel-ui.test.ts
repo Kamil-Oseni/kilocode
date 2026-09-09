@@ -46,6 +46,35 @@ it("binds panel input to displayed tab identity and hides stale frames", () => {
       window.requestAnimationFrame.bind(window),
     )
     const message = (data: unknown) => window.dispatchEvent(new window.MessageEvent("message", { data }))
+    message({
+      type: "uploads",
+      uploads: [
+        {
+          id: "upload_seen",
+          destination: "https://example.test/<img>",
+          files: [{ name: "<img src=x onerror=bad()>", bytes: 42 }],
+          status: "staging",
+        },
+      ],
+    })
+    const uploads = window.document.getElementById("uploads")!
+    expect(uploads.textContent).toContain("<img src=x onerror=bad()>")
+    expect(uploads.querySelector("img")).toBeNull()
+    uploads.querySelector("button")!.click()
+    expect(sent.at(-1)).toMatchObject({ type: "upload", action: "cancel", uploadID: "upload_seen" })
+    message({
+      type: "uploads",
+      uploads: [
+        {
+          id: "upload_seen",
+          destination: "https://example.test/form",
+          files: [{ name: "report.pdf", bytes: 42 }],
+          status: "selected",
+        },
+      ],
+    })
+    expect(uploads.textContent).toContain("verify the upload result on the page")
+    expect(uploads.querySelector("button")).toBeNull()
     const inventory = (selected: string) =>
       message({
         type: "tabs",

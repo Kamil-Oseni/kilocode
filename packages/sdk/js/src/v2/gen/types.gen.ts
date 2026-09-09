@@ -467,7 +467,66 @@ export type NotebookRequest = NotebookReadRequest | NotebookEditRequest | Notebo
 
 export type BrowserRequestId = string
 
+export type BrowserUploadFile = {
+  id: string
+  name: string
+  selectedName?: string
+  bytes: number
+  sha256: string
+}
+
 export type BrowserRequest =
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID: string
+      /**
+       * Observed frame document identity; invalid after navigation or detachment.
+       */
+      frameID?: string
+      operation: "upload"
+      action: "start"
+      uploadID: string
+      destination: string
+      /**
+       * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
+       */
+      selector:
+        | string
+        | {
+            kind: "role"
+            role: string
+            name: string
+            scope?: string
+          }
+        | {
+            kind: "label"
+            text: string
+            scope?: string
+          }
+        | {
+            kind: "testid"
+            value: string
+            scope?: string
+          }
+      files: Array<BrowserUploadFile>
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      operation: "upload"
+      action: "list"
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      operation: "upload"
+      action: "inspect" | "cancel"
+      uploadID: string
+    }
   | {
       id: BrowserRequestId
       sessionID: string
@@ -5013,6 +5072,27 @@ export type NotebookFailure = {
   currentRevision?: string
 }
 
+export type BrowserUploadChunk = {
+  data: string
+  offset: number
+  next: number
+}
+
+export type BrowserUploadInfo = {
+  id: string
+  tabID: string
+  frameID?: string
+  sessionID: string
+  directory: string
+  requestID: string
+  destination: string
+  files: Array<BrowserUploadFile>
+  status: "staging" | "selecting" | "selected" | "failed" | "cancelled" | "unknown"
+  createdAt: number
+  updatedAt: number
+  error?: string
+}
+
 export type BrowserTransfer = {
   version: 1
   id: string
@@ -5037,6 +5117,11 @@ export type BrowserTransfer = {
 }
 
 export type BrowserResult =
+  | {
+      operation: "upload"
+      uploads: Array<BrowserUploadInfo>
+      url?: string
+    }
   | {
       operation: "download"
       transfers: Array<BrowserTransfer>
@@ -5866,6 +5951,57 @@ export type InteractiveTerminalInfo1 = {
 }
 
 export type BrowserRequest1 =
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      /**
+       * Opaque observed browser tab identity; never infer from a tab index or URL.
+       */
+      tabID: string
+      /**
+       * Observed frame document identity; invalid after navigation or detachment.
+       */
+      frameID?: string
+      operation: "upload"
+      action: "start"
+      uploadID: string
+      destination: string
+      /**
+       * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
+       */
+      selector:
+        | string
+        | {
+            kind: "role"
+            role: string
+            name: string
+            scope?: string
+          }
+        | {
+            kind: "label"
+            text: string
+            scope?: string
+          }
+        | {
+            kind: "testid"
+            value: string
+            scope?: string
+          }
+      files: Array<BrowserUploadFile>
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      operation: "upload"
+      action: "list"
+    }
+  | {
+      id: BrowserRequestId
+      sessionID: string
+      operation: "upload"
+      action: "inspect" | "cancel"
+      uploadID: string
+    }
   | {
       id: BrowserRequestId
       sessionID: string
@@ -18619,6 +18755,7 @@ export type KilocodeProjectUsageResponses = {
    * Project model token and cost history
    */
   200: {
+    projectID?: string
     range: "24h" | "7d" | "30d" | "all"
     since?: number
     until: number
@@ -18772,6 +18909,76 @@ export type KilocodeNotebookRejectResponses = {
 }
 
 export type KilocodeNotebookRejectResponse = KilocodeNotebookRejectResponses[keyof KilocodeNotebookRejectResponses]
+
+export type KilocodeBrowserUploadChunkData = {
+  body?: {
+    sessionID: string
+    offset: number
+  }
+  path: {
+    uploadID: string
+    fileID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/browser/uploads/{uploadID}/files/{fileID}/chunk"
+}
+
+export type KilocodeBrowserUploadChunkErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type KilocodeBrowserUploadChunkError = KilocodeBrowserUploadChunkErrors[keyof KilocodeBrowserUploadChunkErrors]
+
+export type KilocodeBrowserUploadChunkResponses = {
+  /**
+   * BrowserUploadChunk
+   */
+  200: BrowserUploadChunk
+}
+
+export type KilocodeBrowserUploadChunkResponse =
+  KilocodeBrowserUploadChunkResponses[keyof KilocodeBrowserUploadChunkResponses]
+
+export type KilocodeBrowserUploadReleaseData = {
+  body?: {
+    sessionID: string
+  }
+  path: {
+    uploadID: string
+    fileID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/browser/uploads/{uploadID}/files/{fileID}/release"
+}
+
+export type KilocodeBrowserUploadReleaseErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type KilocodeBrowserUploadReleaseError =
+  KilocodeBrowserUploadReleaseErrors[keyof KilocodeBrowserUploadReleaseErrors]
+
+export type KilocodeBrowserUploadReleaseResponses = {
+  /**
+   * Success
+   */
+  200: boolean
+}
+
+export type KilocodeBrowserUploadReleaseResponse =
+  KilocodeBrowserUploadReleaseResponses[keyof KilocodeBrowserUploadReleaseResponses]
 
 export type KilocodeBrowserListData = {
   body?: never

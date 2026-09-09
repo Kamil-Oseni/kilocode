@@ -1,4 +1,5 @@
 import { Effect } from "effect"
+import { UploadStage } from "@/kilocode/browser/upload-stage"
 import { Database } from "@opencode-ai/core/database/database"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import * as KiloAgent from "@/kilocode/agent"
@@ -227,6 +228,36 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     })
 
     // raya_change start - Milestone F browser host API
+    const browserUploadChunk = Effect.fn("KilocodeHttpApi.browserUploadChunk")(function* (ctx: {
+      params: { uploadID: string; fileID: string }
+      payload: { sessionID: string; offset: number }
+    }) {
+      const instance = yield* InstanceState.context
+      return yield* Effect.tryPromise({
+        try: () =>
+          new UploadStage().chunk(
+            { uploadID: ctx.params.uploadID, sessionID: ctx.payload.sessionID, directory: instance.directory },
+            ctx.params.fileID,
+            ctx.payload.offset,
+          ),
+        catch: () => new HttpApiError.BadRequest({}),
+      })
+    })
+    const browserUploadRelease = Effect.fn("KilocodeHttpApi.browserUploadRelease")(function* (ctx: {
+      params: { uploadID: string; fileID: string }
+      payload: { sessionID: string }
+    }) {
+      const instance = yield* InstanceState.context
+      yield* Effect.tryPromise({
+        try: () =>
+          new UploadStage().release(
+            { uploadID: ctx.params.uploadID, sessionID: ctx.payload.sessionID, directory: instance.directory },
+            ctx.params.fileID,
+          ),
+        catch: () => new HttpApiError.BadRequest({}),
+      })
+      return true
+    })
     const browserList = Effect.fn("KilocodeHttpApi.browserList")(function* () {
       return yield* browser.list()
     })
@@ -629,6 +660,8 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .handle("notebookReject", notebookReject)
         // raya_change start - Milestone F browser host API
         .handle("browserList", browserList)
+        .handle("browserUploadChunk", browserUploadChunk)
+        .handle("browserUploadRelease", browserUploadRelease)
         .handle("browserReply", browserReply)
         .handle("browserReject", browserReject)
         // raya_change end

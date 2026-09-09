@@ -4,6 +4,7 @@ import type { Input } from "@/kilocode/browser/service"
 import { FrameID, TabID, TransferID, Selector, SmokeStep, type Result } from "@/kilocode/browser/protocol"
 import * as Tool from "@/tool/tool"
 import { Effect, Schema } from "effect"
+import { BrowserUploadTool } from "./browser-upload"
 
 const Text = Schema.String.check(Schema.isMaxLength(200_000))
 const Identity = { tab_id: TabID }
@@ -663,6 +664,7 @@ export const BrowserDownloadTool = Tool.define<
 )
 
 export const BrowserTools = [
+  BrowserUploadTool,
   BrowserDownloadTool,
   BrowserDialogTool,
   BrowserFramesTool,

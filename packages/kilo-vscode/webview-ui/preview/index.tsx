@@ -1,6 +1,6 @@
 // raya_change - dev-only visual preview harness. Renders isolated presentational
-// components with mock props, in mocked light and dark VS Code themes, so they
-// can be reviewed and screenshotted without a running backend.
+// components with sample props and explicitly labeled illustrative markup, in
+// simulated VS Code themes. Only production-view fixtures verify product markup.
 /* @refresh reload */
 import "@kilocode/kilo-ui/styles"
 import "../src/styles/eden.css"
@@ -495,8 +495,8 @@ const Conversation: Component = () => (
             <div data-component="text-part">
               <div data-component="markdown">
                 <p>
-                  On it. I grouped the routing and goal-bookkeeping steps into a single quiet row so the
-                  conversation stays readable, then made the edits.
+                  On it. I grouped the routing and goal-bookkeeping steps into a single quiet row so the conversation
+                  stays readable, then made the edits.
                 </p>
               </div>
             </div>
@@ -570,9 +570,18 @@ const chrome = new Set<PvState>([
 ])
 
 const Fixture: Component<{ id: string; theme: Theme; state: PvState }> = (props) => (
-  <figure class="pv-fixture" data-fixture={props.id}>
+  <figure
+    class="pv-fixture"
+    data-fixture={props.id}
+    data-preview-kind={chrome.has(props.state) ? "illustrative" : "production-view"}
+  >
     <figcaption class="pv-fixture__label">
       {props.theme} · {props.state}
+      <span>
+        {chrome.has(props.state)
+          ? " · Illustrative markup; not production UI"
+          : " · Production view with sample data"}
+      </span>
     </figcaption>
     <div class={`pv-panel pv-theme--${props.theme}`}>
       <Show when={props.state === "usage"}>
@@ -631,7 +640,8 @@ render(
       <header class="pv-page__header">
         <h1 class="pv-page__title">Raya · component preview</h1>
         <p class="pv-page__sub">
-          Goal status banner on Eden tokens. Instrument Serif for the voice, Outfit for the UI.
+          Goal and usage fixtures render production views with sample data. Composer, history, review and other
+          illustrative fixtures are labeled and cannot establish production interaction or accessibility results.
         </p>
       </header>
       <For each={fixtures}>

@@ -2,10 +2,10 @@
 name: browser-recovery
 description: Recover grounded browser actions while preserving completed work.
 metadata:
-  version: "6"
+  version: "7"
 ---
 
-# Browser recovery, version 6
+# Browser recovery, version 7
 
 Start from current observable state and the last verified postcondition. Preserve source references, record IDs and drafts before changing approach. Never interpret an interrupted tool call as proof the host cancelled its external action.
 
@@ -20,7 +20,7 @@ A request recovered without a local receipt needs inspection even when its origi
 | Click/submit timed out or connection interrupted | Inspect the saved record, destination status or unique submitted values first. | Do not repeat an uncertain non-idempotent action until duplicate creation is ruled out. |
 | Modal blocks work | Inspect its title/actions; dismiss only if consistent with the user's task and draft preservation. | An unexpected consent or destructive action requires authority for that action. |
 | Account or permission changed | Read the visible account/project and error; preserve draft and explain the needed correction. | Do not retry writes against a different account to bypass denial. |
-| Popup or iframe contains the required control | Determine what is visible in the current page and explain the missing tab/frame capability. | Do not claim to switch context using a nonexistent tool. Use a supported connector or manual step. |
+| Popup or iframe contains the required control | List tabs or resolve the observed iframe, then inspect its current document. | Never substitute a guessed tab or stale frame document. |
 | Login challenge | Ask the user to complete the specific login/challenge in the browser and wait. | Reinspect after explicit completion; elapsed time is not an answer. |
 | Repeated host failure | Inspect returned error and connection state; make at most two evidence-based recovery attempts for the same failure. | Report the blocker and preserved work rather than loop; resume after new evidence or environment change. |
 
@@ -33,3 +33,5 @@ Report the last verified outcome, uncertain action if any, exact remaining step,
 For a stale frame document, list frames for the observed tab and inspect the newly returned document before acting. The same iframe selector, name or URL does not prove it is the same document. An uncertain frame mutation is not permission to retry it on a replacement frame.
 
 For `dialog_pending`, use the reported operation ID to inspect and respond to the observed dialog. Do not repeat the initiating action. After any lost response acknowledgement, inspect the retained dialog/original operation; never assume acceptance, cancellation or page closure from transport success alone.
+
+For an interrupted upload, inspect its retained upload ID and the destination. Staging can be cancelled before file selection; selecting/selected/unknown may already have submitted data. Do not repeat selection after a lost acknowledgement or host restart. A selected file is not proof of a saved attachment: check validation errors and the actual destination record. A changed file source, expired staging reference, wrong destination, stale frame or digest mismatch requires fresh authorized source/destination observation before a new operation.

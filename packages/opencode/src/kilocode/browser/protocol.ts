@@ -2,6 +2,7 @@
 import { BusEvent } from "@/bus/bus-event"
 import { SessionID } from "@/session/schema"
 import { Schema } from "effect"
+import { UploadFile, UploadInfo } from "./upload-schema"
 
 export const RequestID = Schema.String.pipe(Schema.brand("BrowserRequestID")).annotate({
   identifier: "BrowserRequestID",
@@ -28,6 +29,38 @@ export const FrameID = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLe
   description: "Observed frame document identity; invalid after navigation or detachment.",
 })
 const Framed = { frameID: Schema.optional(FrameID) }
+export const UploadRequest = Schema.Union([
+  Schema.Struct({
+    id: RequestID,
+    sessionID: SessionID,
+    tabID: TabID,
+    ...Framed,
+    operation: Schema.Literal("upload"),
+    action: Schema.Literal("start"),
+    uploadID: Schema.String.check(Schema.isUUID()),
+    destination: Url,
+    selector: Selector,
+    files: Schema.Array(UploadFile).check(Schema.isMinLength(1), Schema.isMaxLength(100)),
+  }),
+  Schema.Struct({
+    id: RequestID,
+    sessionID: SessionID,
+    operation: Schema.Literal("upload"),
+    action: Schema.Literal("list"),
+  }),
+  Schema.Struct({
+    id: RequestID,
+    sessionID: SessionID,
+    operation: Schema.Literal("upload"),
+    action: Schema.Literals(["inspect", "cancel"]),
+    uploadID: Schema.String.check(Schema.isUUID()),
+  }),
+])
+export const UploadResult = Schema.Struct({
+  operation: Schema.Literal("upload"),
+  uploads: Schema.Array(UploadInfo),
+  url: Schema.optional(Url),
+})
 export const TransferID = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100))
 export const Transfer = Schema.Struct({
   version: Schema.Literal(1),
@@ -298,6 +331,7 @@ export const SmokeRequest = Schema.Struct({
 // raya_change end
 
 export const Request = Schema.Union([
+  UploadRequest,
   DownloadRequest,
   DialogRequest,
   TabsRequest,
@@ -403,6 +437,7 @@ export const SmokeResult = Schema.Struct({
 // raya_change end
 
 export const Result = Schema.Union([
+  UploadResult,
   DownloadResult,
   DialogResult,
   TabsResult,

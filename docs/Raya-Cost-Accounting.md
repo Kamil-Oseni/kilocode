@@ -37,6 +37,8 @@ CLI statistics retain their compatibility numeric fields and separately aggregat
 
 The direct-run footer labels costs from observed model steps in its current conversation. It replaces repeated receipts by part ID instead of counting them again. Before any step receipt arrives, a message-level fallback is explicitly unverified. This streaming view is not presented as the complete historical or related-conversation ledger.
 
+Usage history can refresh or retry the current range and copy an acknowledged JSON summary. The report retains exact UTC boundaries, backend project identity when supplied, full amount precision, model identifiers, coverage counts and a separately named legacy compatibility amount. Missing accounting evidence remains `null`, not zero. The report explicitly excludes individual receipts, rate cards, prompts and separately billed tools/media; it is an aggregate review aid, not a full ledger export or invoice. A range change discards stale load and clipboard-status responses.
+
 ## Remaining OVR-04 work
 
 - Effective dates, refresh verification, trusted contract overrides and historical rate-card identities. Declared catalog/configured rate presence does not prove current contract applicability.

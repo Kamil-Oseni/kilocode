@@ -8,11 +8,27 @@ import { locate, TargetError, type BrowserTarget, type TargetPage } from "./brow
 import { FrameRegistry, type FrameOwner, type FrameInfo, type DocumentFrame } from "./browser-frame"
 import { pending, BrowserDialogs, type DialogPage, type DialogInfo, type DialogOperation } from "./browser-dialog"
 import { BrowserSmoke } from "./browser-smoke"
-import { save } from "./browser-save"
+import { BrowserUploads, type UploadFile, type UploadInfo, type UploadTransport } from "./browser-upload"
+import { filename, save } from "./browser-save"
 import { BrowserTransfers, type TransferInfo, type TransferOrigin, type TransferPage } from "./browser-transfer"
 import type { SmokeConsole, SmokeCookie, SmokeInput, SmokeOrigin, SmokeResponse, SmokeResult } from "./browser-smoke"
 
-export type BrowserAction = { tabID?: string; frameID?: string; origin?: TransferOrigin } & (
+export type BrowserAction = {
+  tabID?: string
+  frameID?: string
+  origin?: TransferOrigin
+  uploader?: UploadTransport
+} & (
+  | {
+      operation: "upload"
+      action: "start"
+      uploadID: string
+      destination: string
+      selector: BrowserTarget
+      files: readonly UploadFile[]
+    }
+  | { operation: "upload"; action: "list" }
+  | { operation: "upload"; action: "inspect" | "cancel"; uploadID: string }
   | { operation: "download"; action: "start"; selector: BrowserTarget }
   | { operation: "download"; action: "list"; offset?: number }
   | { operation: "download"; action: "inspect" | "cancel"; transferID: string }
@@ -38,7 +54,7 @@ export type BrowserAction = { tabID?: string; frameID?: string; origin?: Transfe
 )
 type BrowserNativeAction = Exclude<
   BrowserAction,
-  { operation: "auth_capture" | "smoke" | "tabs" | "frames" | "dialog" | "download" }
+  { operation: "auth_capture" | "smoke" | "tabs" | "frames" | "dialog" | "download" | "upload" }
 >
 export type BrowserTab = { id: string; url: string; title: string; selected: boolean; openerID?: string }
 
@@ -49,6 +65,7 @@ export type BrowserResult = {
   transfers?: TransferInfo[]
   navigation?: "download"
 } & (
+  | { operation: "upload"; uploads: UploadInfo[]; url?: string }
   | { operation: "download"; transfers: TransferInfo[]; next?: number; artifact?: string; error?: string; url?: string }
   | { operation: "dialog"; dialogs: DialogInfo[]; operations: DialogOperation[]; url?: string; title?: string }
   | { operation: "frames"; frames: FrameInfo[]; url?: string; title?: string }
@@ -56,7 +73,7 @@ export type BrowserResult = {
   | {
       operation: Exclude<
         BrowserAction["operation"],
-        "auth_capture" | "smoke" | "tabs" | "frames" | "dialog" | "download"
+        "auth_capture" | "smoke" | "tabs" | "frames" | "dialog" | "download" | "upload"
       >
       url: string
       title: string
@@ -233,6 +250,7 @@ export class BrowserSession {
   private context: BrowserContextLike | undefined
   private dialogs = new BrowserDialogs()
   private transfers: BrowserTransfers
+  private uploads: BrowserUploads
   private readonly documents = new Map<BrowserPage, FrameRegistry>()
   private readonly tabs = new Map<string, BrowserPage>()
   private readonly identities = new Map<BrowserPage, string>()
@@ -263,6 +281,7 @@ export class BrowserSession {
     private readonly artifacts = join(profile, "raya-smoke"),
   ) {
     this.transfers = new BrowserTransfers(join(profile, "raya-downloads"), profile)
+    this.uploads = new BrowserUploads(join(profile, "raya-uploads"))
   }
 
   async ready(): Promise<void> {
@@ -509,6 +528,7 @@ export class BrowserSession {
   }
 
   async execute(action: BrowserAction): Promise<BrowserResult> {
+    if (action.operation === "upload") return this.upload(action)
     if (action.operation === "download" && action.action !== "start") return this.download(action)
     await this.ready()
     if (action.operation === "download") return this.download(action)
@@ -596,6 +616,132 @@ export class BrowserSession {
   cancelDownload(id: string) {
     return this.transfers.cancel(id)
   }
+  uploadState() {
+    return this.uploads.list()
+  }
+  onUploads(listener: () => void) {
+    return this.uploads.onChange(listener)
+  }
+  cancelUpload(id: string) {
+    return this.uploads.cancel(id)
+  }
+
+  private async upload(action: Extract<BrowserAction, { operation: "upload" }>): Promise<BrowserResult> {
+    if (!action.origin) throw new TargetError("Upload operations require task and request identity")
+    if (action.action === "list") return { operation: "upload", uploads: await this.uploads.list(action.origin) }
+    if (action.action === "inspect")
+      return { operation: "upload", uploads: await this.uploads.list(action.origin, action.uploadID) }
+    if (action.action === "cancel")
+      return { operation: "upload", uploads: await this.uploads.cancel(action.uploadID, action.origin) }
+    if (action.action !== "start" || !action.uploader || !action.tabID)
+      throw new TargetError("Upload requires a connected authorized file transport and observed tab")
+    if (this.state.control === "manual") throw new TargetError("Resume agent browser control before starting an upload")
+    await this.ready()
+    const blocked = this.dialogs.blocked()
+    if (blocked) throw blocked
+    const lease = this.document(action.tabID, action.frameID)
+    const expected = new URL(action.destination).href
+    const revision = this.revision
+    const element = await lease.element(action.selector)
+    const check = async () => {
+      lease.check()
+      if (this.revision !== revision || lease.frame.url() !== expected)
+        throw new TargetError("Upload destination changed before file selection")
+      if (!element.evaluate || !element.setInputFiles)
+        throw new TargetError("Browser host cannot select files on this observed input")
+      const input = await element.evaluate(
+        (node) => ({
+          connected: node.isConnected,
+          type: node instanceof HTMLInputElement ? node.type : "",
+          multiple: node instanceof HTMLInputElement && node.multiple,
+          disabled: node instanceof HTMLInputElement && node.disabled,
+        }),
+        undefined,
+      )
+      lease.check()
+      if (!input.connected || input.type !== "file" || input.disabled || (action.files.length > 1 && !input.multiple))
+        throw new TargetError(
+          "Observed upload input is disconnected, disabled, not a file input, or does not accept multiple files",
+        )
+    }
+    try {
+      await check()
+      const uploads = await this.uploads.start(
+        {
+          id: action.uploadID,
+          origin: action.origin,
+          tabID: action.tabID,
+          frameID: lease.id,
+          destination: expected,
+          files: action.files,
+        },
+        action.uploader,
+        async (files, signal, dispatch) => {
+          const settled = this.queue.then(async () => {
+            await check()
+            const blocked = this.dialogs.blocked()
+            if (blocked) throw blocked
+            this.running++
+            this.update({ control: "agent", busy: true, attempts: 1 })
+            try {
+              const job = this.dialogs.start("upload", action.tabID!, async () => {
+                signal.throwIfAborted()
+                await check()
+                await dispatch()
+                await check()
+                signal.throwIfAborted()
+                await element.setInputFiles!(files, { timeout: 30000 })
+                lease.check()
+                if (lease.frame.url() !== expected)
+                  throw new TargetError(
+                    "Upload selected files, but the destination navigated before confirmation; inspect its result",
+                  )
+                const selected = await element.evaluate!(
+                  (node) =>
+                    node instanceof HTMLInputElement
+                      ? [...(node.files ?? [])].map((file) => ({ name: file.name, bytes: file.size }))
+                      : [],
+                  undefined,
+                )
+                lease.check()
+                if (
+                  selected.length !== action.files.length ||
+                  selected.some(
+                    (file, index) =>
+                      file.name !== filename(action.files[index].name) || file.bytes !== action.files[index].bytes,
+                  )
+                )
+                  throw new TargetError(
+                    "File input changed after selection; inspect the destination before selecting again",
+                  )
+              })
+              // Dialog inspection owns the early interruption; the queue follows the actual native continuation.
+              void job.result.then(
+                () => undefined,
+                () => undefined,
+              )
+              await job.settled
+            } finally {
+              this.running--
+              this.update({ ...this.state, busy: false })
+            }
+          })
+          this.queue = settled.then(
+            () => undefined,
+            () => undefined,
+          )
+          await settled
+        },
+        async () => {
+          await element.dispose?.()
+        },
+      )
+      return { operation: "upload", uploads }
+    } catch (error) {
+      await element.dispose?.()
+      throw error
+    }
+  }
 
   private async download(action: Extract<BrowserAction, { operation: "download" }>): Promise<BrowserResult> {
     if (!action.origin) throw new TargetError("Download operations require an identified task and request")
@@ -653,7 +799,9 @@ export class BrowserSession {
     return { operation: "dialog", tabID: action.tabID, ...this.dialogs.list(action.tabID, action.operationID) }
   }
 
-  private async perform(action: Exclude<BrowserAction, { operation: "dialog" | "download" }>): Promise<BrowserResult> {
+  private async perform(
+    action: Exclude<BrowserAction, { operation: "dialog" | "download" | "upload" }>,
+  ): Promise<BrowserResult> {
     await this.ready()
     // A new tool call is an explicit instruction to return control to the agent.
     if (this.state.control === "manual") this.resume()
@@ -668,7 +816,7 @@ export class BrowserSession {
   }
 
   private async attempt(
-    action: Exclude<BrowserAction, { operation: "dialog" | "download" }>,
+    action: Exclude<BrowserAction, { operation: "dialog" | "download" | "upload" }>,
     number: number,
     revision: number,
   ): Promise<BrowserResult> {
@@ -1109,6 +1257,8 @@ export class BrowserSession {
     this.revision += 1
     const context = this.context
     const cdp = this.cdp
+    const uploads = this.uploads
+    uploads.stop()
     this.context = undefined
     this.page = undefined
     this.cdp = undefined
@@ -1130,6 +1280,8 @@ export class BrowserSession {
     this.documents.clear()
     this.openers.clear()
     if (context) await context.close().catch(() => undefined)
+    await uploads.close()
+    this.uploads = new BrowserUploads(join(this.profile, "raya-uploads"))
     if (cdp) await cdp.detach().catch(() => undefined)
   }
 

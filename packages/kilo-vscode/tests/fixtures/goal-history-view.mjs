@@ -135,7 +135,16 @@ assert.deepEqual(
 update({ ...goal, status: "paused" })
 await tick()
 assert.ok(!root.textContent.includes("Now:"))
-assert.ok(root.textContent.includes("are marked in progress."))
+assert.equal(
+  root.querySelector(".goal-banner__progress").textContent,
+  "Paused. Resume when ready, or steer the goal before continuing.",
+)
+update({ ...goal, status: "blocked", blockedReason: "Waiting for approved source files" })
+await tick()
+assert.equal(root.querySelector(".goal-banner__progress").textContent, "Blocked: Waiting for approved source files")
+update({ ...goal, status: "paused", review: { status: "pending", at: 1, criteria: [] } })
+await tick()
+assert.ok(root.querySelector(".goal-banner__progress").textContent.includes("Your review is needed"))
 update({ ...goal, status: "complete", audit: { summary: "Accepted result summary", requirements: [], verifiedAt: 2 } })
 await tick()
 assert.ok(root.querySelector(".goal-banner__progress").textContent.includes("Accepted result summary"))

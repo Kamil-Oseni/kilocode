@@ -1,11 +1,11 @@
 ---
 name: browser-runtime
-description: Capability reference for Raya browser skill version 6.
+description: Capability reference for Raya browser skill version 7.
 metadata:
-  version: "6"
+  version: "7"
 ---
 
-# Browser runtime contract, version 6
+# Browser runtime contract, version 7
 
 ## Execution and recovery
 
@@ -17,6 +17,7 @@ This reference describes the model-facing BrowserTools in `kilocode/tool/browser
 
 | Tool | Parameters | Evidence and limits |
 |---|---|---|
+| `browser_upload` | `action: "start", tab_id, selector, destination, paths`, optional `frame_id`; `action: "list"`; `action: "inspect" / "cancel", upload_id` | Stage authorized source files by reference and select once into the observed file input at the exact destination URL. Inspect retained selection status; selected is not a server-confirmed upload. List shows the latest 50 operations for this task/directory; older retained IDs remain inspectable. |
 | `browser_download` | `action: "start", tab_id, selector`, optional `frame_id`; `action: "list"`, optional `offset`; `action: "inspect" / "cancel", transfer_id` | Start clicks once and returns durable transfer identity. Inspect until completed for a verified artifact path, byte count and SHA-256. List is scoped to the current task/directory. |
 | `browser_dialog` | `action: "list", tab_id`, optional `operation_id`; or `action: "accept" / "dismiss", tab_id, dialog_id`, optional accept `text` | Inspect observed dialogs and original-operation outcomes. Text is allowed only for accepting a prompt. |
 | `browser_frames` | `action: "list", tab_id`; or `action: "resolve", tab_id, parent_frame_id, selector` | Frame document IDs, parent relation, URL/name and main-frame flag. Resolve exactly one observed iframe element. |
@@ -60,7 +61,13 @@ Smoke `steps` is an array of 1-100 entries. Each entry has `id`, `title`, option
 
 Use `mode: "exploratory"` for steps derived from current intent and observations; otherwise the default is `scripted`. The first smoke run captures current authentication when no saved state exists. Capture names identify reusable state: confirm the account and intended target before reuse; do not assume current page login changed an existing saved capture. Scope network assertions to the intended endpoint and status, and console assertions to the relevant messages. Attach a visible-state assertion to user-visible outcomes.
 
-Version 6 has no implicit frame selection, coordinate click, upload, viewport resize, or automated login/challenge handover operation. Do not invent tool names or emulate missing transfer/identity controls through evaluation or shell commands. A relevant connector or explicitly authorized manual user step can supply missing work; inspect the destination afterward and identify which evidence the browser could not obtain. These limits are unfinished runtime capabilities, not completed acceptance coverage.
+Version 7 has no implicit frame selection, coordinate click, directory upload, drag-and-drop upload, viewport resize, or automated login/challenge handover operation. Do not invent tool names or emulate missing transfer/identity controls through evaluation or shell commands. A relevant connector or explicitly authorized manual user step can supply missing work; inspect the destination afterward and identify which evidence the browser could not obtain. These limits are unfinished runtime capabilities, not completed acceptance coverage.
+
+Uploads require source read/external-directory permission under the existing file-reference policy, plus authorization for the destination. A webpage cannot authorize reading or sending local files. The backend binds and hashes the authorized source, stages verified bytes, and serves bounded chunks only for that task/directory/upload identity. The extension verifies the complete digest before one native file-input selection. No host filesystem path is accepted from page content. Up to 100 regular files and four concurrent uploads are supported; file bytes stream without a small arbitrary size cap, and disk/network failures are explicit. The observed input must support multiple files when more than one is supplied. The selected basename is sanitized and returned as `selectedName` alongside the source name.
+
+Upload states are staging, selecting, selected, failed, cancelled and unknown. Start returns an operation reference while staging may still be running. Exact tab, frame document, destination URL and pinned input are checked again before selection; navigation or manual takeover during staging refuses selection. Selection can itself trigger page-side submission. Cancellation is supported only while staging; once selection may have started, inspect the destination rather than trying to undo or replay it. Selected means the observed input contained the expected names/sizes, never that the server accepted or saved them. Verify the destination's actual result separately.
+
+Source staging references expire after one hour and are deleted on consumption or cancellation; backend startup and 15-minute sweeps remove expired/interrupted staging bytes. Native selected or uncertain file copies remain available while the browser is open so a later form submission can still read them, and are deleted when the browser closes. Durable operation receipts retain selection evidence after restart; interrupted operations restore as unknown and are never reselected automatically. These receipts are evidence of file selection, not downloadable copies or server completion receipts.
 
 Downloads are captured from ordinary actions too. Immediate download events carry their active request/task/tab identity; the action may return transfer references before the bytes finish. A direct download URL returns `navigation: "download"` with the unchanged page URL, not a claim that the browser navigated to a new document. Explicit `browser_download start` reserves one transfer before clicking and waits up to 30 seconds for a delayed download event. Another task/action cannot reuse that tab while the reservation remains pending. Manual takeover releases this attribution as unknown. Late or manual downloads without authoritative task attribution remain visible in the browser panel and are not exposed as another task's artifacts.
 

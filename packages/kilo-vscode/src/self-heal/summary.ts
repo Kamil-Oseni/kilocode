@@ -1,16 +1,8 @@
-import type { KiloClient } from "@kilocode/sdk/v2/client"
+import type { KiloClient, KilocodeSelfHealListResponse } from "@kilocode/sdk/v2/client"
 
-export function summary(item: {
-  id: string
-  status: string
-  category: string
-  severity: string
-  title: string
-  completion?: { attemptID: string; at: number }
-  legacyVerification?: boolean
-  workSessionID?: string
-  repair?: { phase: string; sessionID?: string; reason?: string; worktree?: { directory: string; branch: string } }
-}) {
+type SelfHealItem = KilocodeSelfHealListResponse extends ReadonlyArray<infer Item> ? Item : never
+
+export function summary(item: SelfHealItem) {
   const session = item.repair?.sessionID ?? item.workSessionID
   const status = item.completion
     ? "Fix tested; not released or installed"

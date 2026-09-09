@@ -27,7 +27,11 @@ const layer = Layer.effect(
       wait: (input) => InstanceState.useEffect(state, (jobs) => jobs.wait(input)),
       waitForPromotion: (id) => InstanceState.useEffect(state, (jobs) => jobs.waitForPromotion(id)),
       promote: (id) => InstanceState.useEffect(state, (jobs) => jobs.promote(id)),
-      cancel: (id) => InstanceState.useEffect(state, (jobs) => jobs.cancel(id)),
+      cancel: (id, revision) => InstanceState.useEffect(state, (jobs) => jobs.cancel(id, revision)), // kilocode_change
+      // kilocode_change start
+      cancelInput: (id, revision, message) =>
+        InstanceState.useEffect(state, (jobs) => jobs.cancelInput(id, revision, message)),
+      // kilocode_change end
     })
   }),
 )

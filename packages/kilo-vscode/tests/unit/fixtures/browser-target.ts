@@ -1,0 +1,116 @@
+import assert from "node:assert/strict"
+import { mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { chromium } from "playwright-core"
+import { BrowserSession, type BrowserContextLike } from "../../../src/services/browser-automation/browser-session"
+import { BrowserSmoke } from "../../../src/services/browser-automation/browser-smoke"
+import { locate, type BrowserTarget, type TargetPage } from "../../../src/services/browser-automation/browser-target"
+
+const binary = process.env.RAYA_TEST_BROWSER ?? chromium.executablePath()
+
+async function main() {
+  const dir = await mkdtemp(join(tmpdir(), "raya-target-"))
+  const context = await chromium.launchPersistentContext(dir, {
+    executablePath: binary,
+    headless: true,
+    timeout: 10_000,
+  })
+  const page = context.pages()[0] ?? (await context.newPage())
+  const session = new BrowserSession(dir, async () => context as unknown as BrowserContextLike)
+  try {
+    await page.setContent(`
+      <section id="first"><button onclick="this.textContent='Saved first'">Save</button></section>
+      <section id="second"><button onclick="this.textContent='Saved second'">Save</button></section>
+      <button onclick="this.textContent='Wrong'">Save copy</button>
+      <label>Name<input id="name"></label><label>Name extra<input id="extra"></label>
+      <label for="choice">Choice</label><select id="choice"><option value="a">A</option><option value="b">B</option></select>
+      <div data-testid="result">Ready</div>
+      <button id="legacy" onclick="document.querySelector('[data-testid=result]').textContent='Done'">Finish</button>
+    `)
+    await session.ready()
+    const host = page as unknown as TargetPage
+    const attempts: number[] = []
+    const off = session.onState((state) => {
+      if (state.attempts !== undefined) attempts.push(state.attempts)
+    })
+    await assert.rejects(
+      session.execute({ operation: "click", selector: { kind: "role", role: "button", name: "Save" } }),
+      /matched 2/,
+    )
+    off()
+    assert.equal(Math.max(...attempts), 1)
+    await assert.rejects(locate(host, { kind: "role", role: "button", name: "Save" }), new RegExp("matched 2"))
+    await assert.rejects(
+      locate(host, { kind: "role", role: "button", name: "Save", scope: "section" }),
+      new RegExp("scope matched 2"),
+    )
+    await assert.rejects(locate(host, { kind: "testid", value: "missing" }), new RegExp("matched 0"))
+    for (const target of [
+      { kind: "role", role: "button" },
+      { kind: "label", text: "" },
+      { kind: "other", value: "result" },
+      { kind: "testid", value: "result", extra: true },
+    ])
+      await assert.rejects(locate(host, target as BrowserTarget), new RegExp("Invalid browser semantic target"))
+    assert.equal(await page.getByRole("button", { name: "Save", exact: true }).count(), 2)
+    await session.execute({
+      operation: "click",
+      selector: { kind: "role", role: "button", name: "Save", scope: "#second" },
+    })
+    assert.equal(await page.locator("#second button").textContent(), "Saved second")
+    assert.equal(await page.locator("#first button").textContent(), "Save")
+    assert.equal(await page.getByRole("button", { name: "Save copy", exact: true }).textContent(), "Save copy")
+    await session.execute({ operation: "type", selector: { kind: "label", text: "Name" }, text: "Ada", submit: false })
+    assert.equal(await page.locator("#name").inputValue(), "Ada")
+    assert.equal(await page.locator("#extra").inputValue(), "")
+    await session.execute({ operation: "select", selector: { kind: "label", text: "Choice" }, values: ["b"] })
+    assert.equal(await page.locator("select").inputValue(), "b")
+    await session.execute({ operation: "click", selector: "#legacy" })
+    assert.equal(await page.getByTestId("result").textContent(), "Done")
+    await page.getByTestId("result").evaluate((element) => {
+      element.textContent = "Ready"
+    })
+    const smoke = new BrowserSmoke(join(dir, "artifacts"), page, context)
+    const report = await smoke.run({
+      name: "semantic",
+      mode: "scripted",
+      steps: [
+        {
+          id: "finish",
+          title: "Finish saved form",
+          action: { kind: "click", selector: { kind: "role", role: "button", name: "Finish" } },
+          assertions: [
+            { kind: "visible", selector: { kind: "testid", value: "result" }, text: "Done" },
+            { kind: "console", level: "error", max: 0 },
+          ],
+        },
+      ],
+    })
+    assert.equal(report.passed, true)
+    assert.ok(report.steps[0].assertions[0].expected.includes('"kind":"testid"'))
+    await page.setContent("<button>Duplicate</button><button>Duplicate</button>")
+    const failed = await smoke.run({
+      name: "semantic",
+      mode: "scripted",
+      steps: [
+        {
+          id: "ambiguous",
+          title: "Reject ambiguous assertion",
+          assertions: [
+            { kind: "visible", selector: { kind: "role", role: "button", name: "Duplicate" } },
+            { kind: "console", level: "error", max: 0 },
+          ],
+        },
+      ],
+    })
+    assert.equal(failed.passed, false)
+    assert.ok(failed.steps[0].error?.includes("matched 2"))
+  } finally {
+    await session.dispose()
+    await context.close()
+    await rm(dir, { recursive: true, force: true })
+  }
+}
+
+await main()

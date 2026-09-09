@@ -3,7 +3,7 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { describe, expect, test } from "bun:test"
 import { Agent } from "@/agent/agent"
 import * as KiloAgent from "@/kilocode/agent"
-import type { Result } from "@/kilocode/browser/protocol"
+import { Selector, SmokeStep, type Result } from "@/kilocode/browser/protocol"
 import { Browser } from "@/kilocode/browser/service"
 import { Permission } from "@/permission"
 import {
@@ -21,7 +21,7 @@ import {
 import { MessageID, SessionID } from "@/session/schema"
 import * as Tool from "@/tool/tool"
 import { Truncate } from "@/tool/truncate"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Schema } from "effect"
 import { testEffect } from "../lib/effect"
 
 const calls: Browser.Input[] = []
@@ -111,6 +111,57 @@ test("auto-approves every native browser action in VS Code", () => {
 })
 
 describe("browser host tools", () => {
+  test("semantic target schemas preserve exact fields and reject incomplete targets", () => {
+    const decode = Schema.decodeUnknownSync(Selector)
+    for (const target of [
+      "#legacy",
+      { kind: "role", role: "button", name: "Save", scope: "#form" },
+      { kind: "label", text: "Name" },
+      { kind: "testid", value: "result" },
+    ] as const)
+      expect(decode(target)).toEqual(target)
+    for (const target of [
+      { kind: "role", role: "button" },
+      { kind: "label", text: "" },
+      { kind: "testid", value: 1 },
+      { kind: "unknown", value: "x" },
+      { kind: "label", text: "Name", scope: "" },
+    ])
+      expect(() => decode(target)).toThrow()
+    const step = {
+      id: "save",
+      title: "Save",
+      action: { kind: "click", selector: { kind: "role", role: "button", name: "Save" } },
+      assertions: [{ kind: "visible", selector: { kind: "testid", value: "saved" } }],
+    } as const
+    expect(Schema.decodeUnknownSync(SmokeStep)(step)).toEqual(step)
+  })
+
+  it.instance(
+    "semantic targets reach the host with stable permission patterns",
+    () =>
+      Effect.gen(function* () {
+        calls.length = 0
+        const asks: Parameters<Tool.Context["ask"]>[0][] = []
+        const tool = yield* BrowserClickTool.pipe(
+          Effect.provideService(Browser.Service, host),
+          Effect.flatMap(Tool.init),
+        )
+        const selector = { kind: "role" as const, role: "button", name: "Save", scope: "#form" }
+        yield* tool.execute({ selector }, context(asks))
+        expect(calls[0]).toMatchObject({ operation: "click", selector })
+        expect(asks[0].patterns).toEqual([JSON.stringify(selector)])
+        expect(asks[0].always).toEqual([JSON.stringify(selector)])
+        const count = calls.length
+        const failed = yield* tool
+          .execute({ selector: { kind: "role", role: "button" } as typeof Selector.Type }, context(asks))
+          .pipe(Effect.exit)
+        expect(failed._tag).toBe("Failure")
+        expect(calls).toHaveLength(count)
+      }),
+    60_000,
+  )
+
   it.instance(
     "forwards all operations with dedicated permissions and image output",
     () =>

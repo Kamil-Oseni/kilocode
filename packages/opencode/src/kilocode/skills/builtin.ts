@@ -4,6 +4,10 @@
 // Registered before all discovery phases so user skills with the same name override.
 
 import KILO_CONFIG from "./kilo-config.md" with { type: "text" }
+import BROWSER from "./browser/SKILL.md" with { type: "text" }
+import WORKFLOWS from "./browser-workflows/SKILL.md" with { type: "text" }
+import RECOVERY from "./browser-recovery/SKILL.md" with { type: "text" }
+import RUNTIME from "./browser-runtime/SKILL.md" with { type: "text" }
 
 export interface BuiltinSkill {
   name: string
@@ -12,6 +16,30 @@ export interface BuiltinSkill {
 }
 
 export const BUILTIN_SKILLS: BuiltinSkill[] = [
+  {
+    name: "browser",
+    description:
+      "Operate Raya's shared browser for browsing, research, forms, authenticated work, UI testing, and rendered design inspection. Load for browser tasks to ground actions and verify results.",
+    content: BROWSER,
+  },
+  {
+    name: "browser-workflows",
+    description:
+      "Task playbooks for the browser skill: research, forms, authentication, file transfers, smoke testing, and visual inspection. Load the relevant playbook when performing these browser workflows.",
+    content: WORKFLOWS,
+  },
+  {
+    name: "browser-recovery",
+    description:
+      "Recover browser work after stale or ambiguous targets, interrupted actions, login challenges, and untrusted page instructions. Load when browser progress fails or destination state is uncertain.",
+    content: RECOVERY,
+  },
+  {
+    name: "browser-runtime",
+    description:
+      "Versioned capability reference for Raya's browser tools, including parameters, smoke assertions, and unsupported operations. Load before selecting browser operations or interpreting runtime evidence.",
+    content: RUNTIME,
+  },
   {
     name: "kilo-config",
     description:

@@ -8,7 +8,17 @@ export const RequestID = Schema.String.pipe(Schema.brand("BrowserRequestID")).an
 })
 export type RequestID = Schema.Schema.Type<typeof RequestID>
 
-const Selector = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(10_000))
+const Match = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(10_000))
+const Scope = { scope: Schema.optional(Match) }
+export const Selector = Schema.Union([
+  Match,
+  Schema.Struct({ kind: Schema.Literal("role"), role: Match, name: Match, ...Scope }),
+  Schema.Struct({ kind: Schema.Literal("label"), text: Match, ...Scope }),
+  Schema.Struct({ kind: Schema.Literal("testid"), value: Match, ...Scope }),
+]).annotate({
+  description:
+    "Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.",
+})
 const Url = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(20_000))
 const Text = Schema.String.check(Schema.isMaxLength(200_000))
 const Base = { id: RequestID, sessionID: SessionID }

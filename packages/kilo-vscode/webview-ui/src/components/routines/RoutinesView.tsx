@@ -1,4 +1,4 @@
-import { Component, For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import { Component, For, Show, createMemo, createSignal, createUniqueId, onCleanup, onMount } from "solid-js"
 import { Button } from "@kilocode/kilo-ui/button"
 import { Checkbox } from "@kilocode/kilo-ui/checkbox"
 import { Dialog } from "@kilocode/kilo-ui/dialog"
@@ -11,6 +11,15 @@ import { useLanguage } from "../../context/language"
 import { useSession } from "../../context/session"
 import { runPresence } from "../../utils/run-presence"
 import type { AgentInfo, ExtensionMessage } from "../../types/messages"
+import { action, reason, select, type Execution } from "./run"
+import { compile, initial, populate } from "../../../../src/shared/routine-schedule"
+import { ScheduleEditor } from "./ScheduleEditor"
+import { RunReview } from "./RunReview"
+import { Archive } from "./Archive"
+import { AccessReview } from "./AccessReview"
+import { OutputEditor } from "./OutputEditor"
+import { OutputReview } from "./OutputReview"
+import { Output } from "../../../../src/shared/routine-output"
 
 type Schedule =
   | { kind: "once"; at: number }
@@ -23,11 +32,14 @@ type Agent = {
   name: string
   role: string
   objective: string
+  output?: Output
   capabilities: string[]
   schedule: Schedule
+  scheduleVersion?: number
   enabled: boolean
   note?: string
   nextRun?: number
+  execution?: Execution
   access?: "full" | "brief"
   dir?: string
 }
@@ -36,10 +48,11 @@ type Run = {
   id: string
   agentID: string
   at: number
+  trigger?: import("@kilocode/sdk/v2/client").KilocodeRoutineRunsResponse[number]["trigger"]
   sessionID: string
   status: "running" | "complete" | "blocked" | "error"
   blockedReason?: string
-  outcome?: { kind: string; summary: string; cost: number }
+  outcome?: import("@kilocode/sdk/v2/client").KilocodeRoutineRunsResponse[number]["outcome"]
 }
 
 type Template = {
@@ -79,9 +92,9 @@ function title(agent: AgentInfo) {
     .join(" ")
 }
 
-function whenLabel(schedule: Schedule) {
+function whenLabel(schedule: NonNullable<Extract<ExtensionMessage, { type: "routineForecast" }>["schedule"]>) {
   if (schedule.kind === "manual") return "When you ask"
-  if (schedule.kind === "once") return new Date(schedule.at).toLocaleString()
+  if (schedule.kind === "once") return new Date(Number(schedule.at)).toLocaleString()
   if (schedule.kind === "event") return `On ${schedule.source}${schedule.filter ? ` (${schedule.filter})` : ""}`
   if (schedule.expr === "0 18 * * 1-5") return "Weekdays at 6pm"
   if (schedule.expr === "0 9 * * 1-5") return "Weekday mornings"
@@ -89,8 +102,13 @@ function whenLabel(schedule: Schedule) {
   return schedule.expr
 }
 
+function timezone(schedule: NonNullable<Extract<ExtensionMessage, { type: "routineForecast" }>["schedule"]>) {
+  return schedule.kind === "cron" ? schedule.tz : undefined
+}
+
 function latest(item: Agent, book: Record<string, Run[]>) {
-  return (book[item.id] ?? []).at(-1)
+  if (item.execution) return (book[item.id] ?? []).findLast((run) => run.sessionID === item.execution?.sessionID)
+  return select(book[item.id] ?? [])
 }
 
 function folder(path: string) {
@@ -119,12 +137,31 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const [agents, setAgents] = createSignal<Agent[]>([])
   const [templates, setTemplates] = createSignal<Template[]>([])
   const [runs, setRuns] = createSignal<Record<string, Run[]>>({})
+  const [inspection, setInspection] = createSignal<{ agentID: string; name: string; runID?: string }>()
+  const [reviewed, setReviewed] = createSignal<Agent>()
+  const [section, setSection] = createSignal<"access" | "output">("access")
+  const panel = createUniqueId()
+  let root: HTMLDivElement | undefined
   const [error, setError] = createSignal("")
   const [name, setName] = createSignal("")
   const [role, setRole] = createSignal("briefer")
   const [custom, setCustom] = createSignal("")
   const [objective, setObjective] = createSignal("")
-  const [when, setWhen] = createSignal("every weekday at 6pm")
+  const [output, setOutput] = createSignal<Output>({
+    destination: "conversation",
+    description: "",
+    criteria: [{ id: `criterion-${crypto.randomUUID()}`, description: "", verification: "" }],
+  })
+  const deliverable = createMemo(() => Output.safeParse(output()).success)
+  const [draft, setDraft] = createSignal(initial(Intl.DateTimeFormat().resolvedOptions().timeZone))
+  const [editing, setEditing] = createSignal<Agent>()
+  const [pending, setPending] = createSignal("")
+  const [notice, setNotice] = createSignal("")
+  const [request, setRequest] = createSignal<{ id: string; key: string }>()
+  const [preview, setPreview] = createSignal<Extract<ExtensionMessage, { type: "routineForecast" }>>()
+  const key = () => JSON.stringify([draft(), editing()?.id, editing()?.schedule, editing()?.scheduleVersion])
+  const confirmed = () => Boolean(preview()?.forecastID) && request()?.key === key()
+  const previewing = () => request()?.key === key() && !preview()
   const [money, setMoney] = createSignal(false)
   const [messages, setMessages] = createSignal(false)
   const [plan, setPlan] = createSignal("")
@@ -138,6 +175,53 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const [saving, setSaving] = createSignal(false)
   let hold = false
 
+  const dismiss = () => {
+    const id = reviewed()?.id
+    const attribute = section() === "output" ? "data-routine-output" : "data-routine-access"
+    setReviewed(undefined)
+    vscode.postMessage({ type: "routineList" })
+    queueMicrotask(() => {
+      if (reviewed() || inspection() || !root?.isConnected) return
+      const button = [...(root?.querySelectorAll<HTMLButtonElement>(`[${attribute}]`) ?? [])].find(
+        (item) => item.getAttribute(attribute) === id,
+      )
+      const target = button ?? root?.querySelector<HTMLElement>(".routines-title")
+      target?.focus()
+    })
+  }
+
+  const inspected = (id: string) => inspection()?.agentID === id
+  const close = () => {
+    const id = inspection()?.agentID
+    setInspection(undefined)
+    queueMicrotask(() => {
+      if (inspection() || reviewed() || !root?.isConnected) return
+      const button = [...root.querySelectorAll<HTMLButtonElement>("[data-routine-instructions]")].find(
+        (item) => item.dataset.routineInstructions === id,
+      )
+      const target = button ?? root.querySelector<HTMLElement>(".routines-title")
+      target?.focus()
+    })
+  }
+  const inspect = (item: Agent) => {
+    setReviewed(undefined)
+    if (inspected(item.id)) return close()
+    setInspection({ agentID: item.id, name: item.name, runID: item.execution?.runID ?? latest(item, runs())?.id })
+  }
+  const inspectable = (item: Agent) => Boolean(item.execution?.runID || runs()[item.id]?.length)
+  const review = (item: Agent, section: "access" | "output" = "access") => {
+    setInspection(undefined)
+    setSection(section)
+    setReviewed(item)
+  }
+  const roster = (items: Agent[]) => {
+    setAgents(items)
+    if (reviewed() && !items.some((item) => item.id === reviewed()?.id)) dismiss()
+    if (items.some((item) => inspected(item.id))) return
+    if (root?.querySelector(".routines-instructions")?.contains(document.activeElement)) return close()
+    setInspection(undefined)
+  }
+
   const load = () => vscode.postMessage({ type: "routineList" })
 
   onMount(() => {
@@ -149,17 +233,43 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     onCleanup(() => clearInterval(tick))
   })
 
+  const receive = (msg: Extract<ExtensionMessage, { type: "routineForecast" }>) => {
+    if (msg.requestID !== request()?.id || request()?.key !== key()) return
+    setPreview(msg)
+    if (msg.error) setError(msg.error)
+  }
+
+  const updated = (msg: Extract<ExtensionMessage, { type: "routineScheduleUpdated" }>) => {
+    if (!pending() || msg.requestID !== pending() || msg.agentID !== editing()?.id) return
+    setPending("")
+    hold = false
+    setSaving(false)
+    setPreview(undefined)
+    setRequest(undefined)
+    if (msg.error) {
+      setNotice(msg.error)
+      return
+    }
+    setEditing(undefined)
+    setScreen("roster")
+    load()
+  }
+
   const unsub = vscode.onMessage((msg: ExtensionMessage) => {
+    if (msg.type === "routineForecast") receive(msg)
+    if (msg.type === "routineScheduleUpdated") updated(msg)
     if (msg.type === "routineState") {
       if (msg.error) {
         setError(msg.error)
-        hold = false
-        setSaving(false)
+        if (!editing()) {
+          hold = false
+          setSaving(false)
+        }
       }
       if (msg.agents) {
         if (!msg.error) setError("")
-        setAgents(msg.agents as Agent[])
-        if (msg.saved && !msg.error) {
+        roster(msg.agents as Agent[])
+        if (msg.saved && !msg.error && !editing()) {
           hold = false
           setSaving(false)
           setScreen("roster")
@@ -197,28 +307,57 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
 
   const pick = (next: string) => {
     setRole(next)
-    if (next === "accountant") setMoney(true)
-    if (next === "inbox") setMessages(true)
-    if (next !== "accountant") setMoney(false)
-    if (next !== "inbox") setMessages(false)
-    setAccess(next === "briefer" ? "brief" : "full")
+    setMoney(false)
+    setMessages(false)
   }
 
+  const consent = () => (role() !== "accountant" || money()) && (role() !== "inbox" || messages())
+
   const apply = (item: Template) => {
+    setEditing(undefined)
     setScreen("assign")
     setName(item.name)
     pick(item.role)
     setObjective(item.objective)
-    setMoney(item.capabilities.includes("money"))
-    setMessages(item.capabilities.includes("messages"))
-    if (item.schedule.kind === "cron") setWhen(whenLabel(item.schedule))
-    if (item.schedule.kind === "manual") setWhen("just when I ask")
+    setOutput({
+      destination: "conversation",
+      description: "",
+      criteria: [
+        {
+          id: `criterion-${crypto.randomUUID()}`,
+          description: "",
+          verification: "",
+        },
+      ],
+    })
+    setDraft(populate(item.schedule, draft().zone))
   }
 
   const create = () => {
+    if (!editing() && !consent()) {
+      setError("Choose whether to allow the records this role needs before assigning it.")
+      return
+    }
+    if (!editing() && !deliverable()) {
+      setError("Describe the required output and how to verify each criterion before assigning it.")
+      return
+    }
+    const token = preview()?.forecastID
+    if (!confirmed() || !token) {
+      setError("Preview the schedule before assigning this routine.")
+      return
+    }
     setError("")
     setSaving(true)
     hold = true
+    const item = editing()
+    if (item) {
+      const id = crypto.randomUUID()
+      setPending(id)
+      setNotice("")
+      vscode.postMessage({ type: "routineScheduleUpdate", requestID: id, agentID: item.id, forecastID: token })
+      return
+    }
     const capabilities = [money() ? "money" : "", messages() ? "messages" : ""].filter(Boolean)
     const chosen = current()
     vscode.postMessage({
@@ -226,7 +365,8 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
       name: name() || (role() === "custom" ? custom() : role()),
       role: role() === "custom" ? custom().trim() || "custom" : role(),
       objective: objective(),
-      when: when(),
+      output: output(),
+      forecastID: token,
       capabilities,
       plan: plan().trim() || undefined,
       access: access(),
@@ -238,17 +378,34 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const toggle = (item: Agent) =>
     vscode.postMessage({ type: "routineUpdate", agentID: item.id, enabled: !item.enabled })
 
+  const edit = (item: Agent) => {
+    setEditing(item)
+    setDraft(populate(item.schedule, Intl.DateTimeFormat().resolvedOptions().timeZone))
+    setPreview(undefined)
+    setRequest(undefined)
+    setNotice("")
+    setError("")
+    setScreen("assign")
+  }
+
+  const cancel = () => {
+    setEditing(undefined)
+    setNotice("")
+    setScreen("roster")
+    load()
+  }
+
   const fire = (item: Agent) => {
     if (busy()[item.id]) return
     const last = latest(item, runs())
-    if (last?.status === "running") return
+    if (action(last, false, item.execution) !== "start") return
     setBusy((prior) => ({ ...prior, [item.id]: true }))
     vscode.postMessage({ type: "routineRun", agentID: item.id })
   }
 
   const open = (item: Agent) => {
-    const run = latest(item, runs())
-    if (run?.sessionID) props.onOpenSession?.(run.sessionID)
+    const id = item.execution ? item.execution.sessionID : latest(item, runs())?.sessionID
+    if (id) props.onOpenSession?.(id)
   }
 
   const mark = (id: string, on: boolean) => {
@@ -286,7 +443,10 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     dialog.show(() => (
       <Dialog title={title} fit>
         <div class="dialog-confirm-body">
-          <span>Past chats stay in History. This cannot be undone from the roster.</span>
+          <span>
+            Removed routines stop launching work. Definitions, run history, role memory, and chats are retained. Resolve
+            unfinished work first; restoration is not available.
+          </span>
           <div class="dialog-confirm-actions">
             <Button variant="secondary" size="large" onClick={() => dialog.close()}>
               Keep
@@ -309,6 +469,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   }
 
   const state = (item: Agent) => {
+    if (item.execution) return item.execution.state === "recovery" ? ("error" as const) : ("working" as const)
     const last = latest(item, runs())
     return runPresence({
       busy: last?.status === "running" || !!busy()[item.id],
@@ -323,7 +484,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const workOpt = createMemo(() => work.find((item) => item.id === access()) ?? work[0])
 
   return (
-    <div class="routines-view history-view">
+    <div ref={root} class="routines-view history-view">
       <div class="history-view-header">
         <Show when={props.onBack}>
           <Button variant="ghost" size="small" icon="arrow-left" onClick={props.onBack}>
@@ -331,16 +492,13 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
           </Button>
         </Show>
         <Show when={screen() === "roster" && !empty()}>
-          <Checkbox
-            hideLabel
-            checked={allOn()}
-            indeterminate={someOn()}
-            onChange={markAll}
-          >
+          <Checkbox hideLabel checked={allOn()} indeterminate={someOn()} onChange={markAll}>
             Select all
           </Checkbox>
         </Show>
-        <h2 class="routines-title">{screen() === "assign" ? "Assign a routine" : "Routines"}</h2>
+        <h2 class="routines-title" tabIndex={-1}>
+          {editing() ? "Edit schedule" : screen() === "assign" ? "Assign a routine" : "Routines"}
+        </h2>
         <Show when={screen() === "roster" && selected().length > 0}>
           <Button class="routines-header-action" size="small" onClick={() => confirm(selected())}>
             Remove {selected().length}
@@ -352,7 +510,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
           </Button>
         </Show>
         <Show when={screen() === "assign"}>
-          <Button class="routines-header-action" variant="ghost" size="small" onClick={() => setScreen("roster")}>
+          <Button class="routines-header-action" variant="ghost" size="small" disabled={saving()} onClick={cancel}>
             Done
           </Button>
         </Show>
@@ -364,6 +522,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
           </p>
         </Show>
         <Show when={screen() === "roster"}>
+          <Archive onOpenSession={props.onOpenSession} />
           <Show when={empty()}>
             <div class="routines-empty-block">
               <p class="routines-empty">No standing jobs yet. Assign one and it will sleep until it is time to work.</p>
@@ -374,8 +533,17 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
             <For each={agents()}>
               {(item) => {
                 const run = () => latest(item, runs())
+                const summary = () => run()?.outcome?.summary
                 const presence = () => state(item)
-                const canOpen = () => !!run()?.sessionID
+                const canOpen = () =>
+                  !!(item.execution ? item.execution.sessionID : run()?.sessionID) && !!props.onOpenSession
+                const command = () => action(run(), !!busy()[item.id], item.execution)
+                const unavailable = () =>
+                  (item.access === undefined && command() !== "open") ||
+                  command() === "running" ||
+                  command() === "review" ||
+                  (command() === "open" && !canOpen())
+                const resume = () => (!item.enabled ? `${panel}-${item.id}-resume` : undefined)
                 const on = () => !!picked()[item.id]
                 return (
                   <li
@@ -387,15 +555,23 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                     <Checkbox hideLabel checked={on()} onChange={(value) => mark(item.id, value)}>
                       Select {item.name}
                     </Checkbox>
-                    <button
-                      type="button"
-                      class="routines-identity"
-                      disabled={!canOpen()}
-                      onClick={() => open(item)}
-                    >
+                    <button type="button" class="routines-identity" disabled={!canOpen()} onClick={() => open(item)}>
                       <span class="routines-name">{item.name}</span>
                       <span class="routines-meta">{meta(item)}</span>
                       <span class="routines-job">{item.objective}</span>
+                      <Show when={summary()}>
+                        <span class="routines-note routines-result-summary">Recorded result: {summary()}</span>
+                      </Show>
+                      <Show when={run()}>{(run) => <span class="routines-note">{reason(run())}</span>}</Show>
+                      <Show when={item.execution?.state === "recovery"}>
+                        <span class="routines-note">Recovery review required before another run can start.</span>
+                      </Show>
+                      <Show when={run()?.blockedReason}>
+                        <span class="routines-note">{run()?.blockedReason}</span>
+                      </Show>
+                      <Show when={item.note}>
+                        <span class="routines-note">{item.note}</span>
+                      </Show>
                     </button>
                     <div class="routines-side">
                       <PresenceBadge state={presence()} onAck={canOpen() ? () => open(item) : undefined} />
@@ -403,14 +579,50 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                         <Button
                           size="small"
                           variant="ghost"
-                          disabled={!!busy()[item.id] || run()?.status === "running"}
-                          onClick={() => fire(item)}
+                          disabled={unavailable()}
+                          onClick={() => (command() === "open" ? open(item) : fire(item))}
                         >
-                          {busy()[item.id] || run()?.status === "running" ? "Running" : "Run now"}
+                          {command() === "review"
+                            ? "Needs review"
+                            : command() === "running"
+                              ? item.execution?.state === "starting"
+                                ? "Starting"
+                                : "Running"
+                              : command() === "open"
+                                ? item.execution?.state === "recovery"
+                                  ? "Review run"
+                                  : "Open run"
+                                : "Run now"}
                         </Button>
-                        <Button size="small" variant="ghost" onClick={() => toggle(item)}>
+                        <Button size="small" variant="ghost" aria-describedby={resume()} onClick={() => toggle(item)}>
                           {item.enabled ? "Pause" : "Enable"}
                         </Button>
+                        <Button size="small" variant="ghost" onClick={() => edit(item)}>
+                          Edit schedule
+                        </Button>
+                        <Button size="small" variant="ghost" data-routine-access={item.id} onClick={() => review(item)}>
+                          Review access
+                        </Button>
+                        <Button
+                          size="small"
+                          variant="ghost"
+                          data-routine-output={item.id}
+                          onClick={() => review(item, "output")}
+                        >
+                          Edit output
+                        </Button>
+                        <Show when={inspectable(item)}>
+                          <Button
+                            size="small"
+                            variant="ghost"
+                            aria-expanded={inspected(item.id)}
+                            aria-controls={inspected(item.id) ? panel : undefined}
+                            data-routine-instructions={item.id}
+                            onClick={() => inspect(item)}
+                          >
+                            {inspected(item.id) ? "Hide review" : "Review runs"}
+                          </Button>
+                        </Show>
                         <IconButton
                           icon="trash"
                           size="small"
@@ -420,23 +632,80 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                         />
                       </div>
                     </div>
+                    <Show when={!item.enabled}>
+                      <p id={resume()} class="routines-hint routines-resume">
+                        Enabling allows future runs and starts a fresh consecutive-block count. Earlier runs remain in
+                        history. Resolve the cause of a pause before enabling again.
+                      </p>
+                    </Show>
                   </li>
                 )
               }}
             </For>
           </ul>
+          <Show when={reviewed()} keyed>
+            {(item) => (
+              <Show when={section() === "output"} fallback={<AccessReview item={item} onClose={dismiss} />}>
+                <OutputReview item={item} onClose={dismiss} />
+              </Show>
+            )}
+          </Show>
+          <Show when={inspection()} keyed>
+            {(item) => (
+              <RunReview
+                id={panel}
+                name={item.name}
+                onClose={close}
+                onOpenSession={props.onOpenSession}
+                agentID={item.agentID}
+                selected={item.runID}
+                runs={runs()[item.agentID] ?? []}
+              />
+            )}
+          </Show>
         </Show>
         <Show when={screen() === "assign"}>
-          <p class="routines-lede">Name the job in a sentence, then say when it should wake.</p>
-          <div class="routines-suggest" role="list">
-            <For each={templates()}>
-              {(item) => (
-                <button type="button" class="routines-suggest-btn" onClick={() => apply(item)}>
-                  {item.name}
-                </button>
-              )}
-            </For>
-          </div>
+          <Show when={editing()}>
+            {(item) => (
+              <div class="routines-field">
+                <strong>{item().name}</strong>
+                <span>Current schedule: {whenLabel(item().schedule)}</span>
+                <span>
+                  {item().enabled
+                    ? "Existing runs continue. The new schedule applies after unfinished work settles."
+                    : "This routine is paused. Saving keeps it paused."}
+                </span>
+                <Show when={item().schedule.kind === "cron" && !timezone(item().schedule)}>
+                  <p role="note">
+                    This routine has no saved timezone. Choose the intended timezone and check the preview before
+                    saving.
+                  </p>
+                </Show>
+              </div>
+            )}
+          </Show>
+          <Show when={notice()}>
+            {(message) => (
+              <div role="alert">
+                <p>{message()}</p>
+                <Button variant="secondary" onClick={cancel}>
+                  Back to routines to reload
+                </Button>
+              </div>
+            )}
+          </Show>
+          <Show when={!editing()}>
+            <p class="routines-lede">Name the job in a sentence, then say when it should wake.</p>
+            <div class="routines-suggest" role="list">
+              <For each={templates()}>
+                {(item) => (
+                  <button type="button" class="routines-suggest-btn" onClick={() => apply(item)}>
+                    {item.name}
+                  </button>
+                )}
+              </For>
+            </div>
+          </Show>
           <form
             class="routines-form"
             onSubmit={(event) => {
@@ -444,132 +713,204 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
               create()
             }}
           >
-            <label class="routines-field">
-              Name
-              <input value={name()} onInput={(e) => setName(e.currentTarget.value)} placeholder="Nightly review" />
-            </label>
-            <div class="routines-field">
-              <span>Role</span>
-              <Select
-                options={[...roles]}
-                current={roleOpt()}
-                label={(item) => item.label}
-                value={(item) => item.id}
-                onSelect={(item) => item && pick(item.id)}
-                variant="secondary"
-                size="small"
-              />
-            </div>
-            <Show when={role() === "custom"}>
+            <Show when={!editing()}>
               <label class="routines-field">
-                Custom role
-                <input
-                  value={custom()}
-                  onInput={(e) => setCustom(e.currentTarget.value)}
-                  placeholder="ops, researcher, gardener"
+                Name
+                <input value={name()} onInput={(e) => setName(e.currentTarget.value)} placeholder="Nightly review" />
+              </label>
+              <div class="routines-field">
+                <span>Role</span>
+                <Select
+                  options={[...roles]}
+                  current={roleOpt()}
+                  label={(item) => item.label}
+                  value={(item) => item.id}
+                  onSelect={(item) => item && pick(item.id)}
+                  variant="secondary"
+                  size="small"
+                />
+              </div>
+              <Show when={role() === "custom"}>
+                <label class="routines-field">
+                  Custom role
+                  <input
+                    value={custom()}
+                    onInput={(e) => setCustom(e.currentTarget.value)}
+                    placeholder="ops, researcher, gardener"
+                  />
+                </label>
+              </Show>
+              <label class="routines-field">
+                Standing job
+                <textarea
+                  value={objective()}
+                  onInput={(e) => setObjective(e.currentTarget.value)}
+                  placeholder="Review the repo for bugs every weekday evening."
+                  rows={3}
                 />
               </label>
             </Show>
-            <label class="routines-field">
-              Standing job
-              <textarea
-                value={objective()}
-                onInput={(e) => setObjective(e.currentTarget.value)}
-                placeholder="Review the repo for bugs every weekday evening."
-                rows={3}
-              />
-            </label>
-            <label class="routines-field">
-              When
-              <input
-                value={when()}
-                onInput={(e) => setWhen(e.currentTarget.value)}
-                placeholder="every weekday at 6pm"
-              />
-            </label>
-            <div class="routines-field">
-              <span>Agent</span>
-              <Select
-                options={picks()}
-                current={current()}
-                label={(item) => item.label}
-                value={(item) => item.key}
-                onSelect={(item) => item && setMode(item.key)}
-                variant="secondary"
-                size="small"
-              />
-              <p class="routines-hint">
-                Same as chat, or a mode from Settings. It uses the model you assigned that mode.
-                <button
-                  type="button"
-                  class="routines-inline"
-                  onClick={() => vscode.postMessage({ type: "openSettingsPanel", tab: "agentBehaviour" })}
-                >
-                  Open Settings
-                </button>
-              </p>
-            </div>
-            <div class="routines-field">
-              <span>How it works</span>
-              <Select
-                options={work}
-                current={workOpt()}
-                label={(item) => item.label}
-                value={(item) => item.id}
-                onSelect={(item) => item && setAccess(item.id)}
-                variant="secondary"
-                size="small"
-              />
-            </div>
-            <Show when={role() === "accountant"}>
-              <div class="routines-consent">
-                <Checkbox checked={money()} onChange={setMoney}>
-                  Allow money records
-                </Checkbox>
-                <p class="routines-hint">Receipts, ledgers, and invoices. It will not send payments.</p>
-              </div>
+            <ScheduleEditor value={draft()} onChange={setDraft} disabled={saving()} />
+            <Show when={!editing()}>
+              <OutputEditor value={output()} onChange={setOutput} disabled={saving()} />
             </Show>
-            <Show when={role() === "inbox"}>
-              <div class="routines-consent">
-                <Checkbox checked={messages()} onChange={setMessages}>
-                  Allow messages
-                </Checkbox>
-                <p class="routines-hint">Read the inbox and draft replies. It will not send unless you ask.</p>
-              </div>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={saving()}
+              onClick={() => {
+                const id = crypto.randomUUID()
+                setError("")
+                setPreview(undefined)
+                setRequest({ id, key: key() })
+                try {
+                  const item = editing()
+                  vscode.postMessage({
+                    type: "routineForecast",
+                    requestID: id,
+                    schedule: compile(draft()),
+                    edit: item
+                      ? {
+                          agentID: item.id,
+                          expectedSchedule: item.schedule,
+                          expectedScheduleVersion: item.scheduleVersion ?? 1,
+                        }
+                      : undefined,
+                  })
+                } catch (err) {
+                  setPreview({
+                    type: "routineForecast",
+                    requestID: id,
+                    error: err instanceof Error ? err.message : "Choose a valid schedule.",
+                  })
+                }
+              }}
+            >
+              {previewing() ? "Checking schedule — click to retry" : "Preview schedule"}
+            </Button>
+            <Show when={request()?.key === key() && preview()?.error}>
+              {(message) => <p role="alert">{message()}</p>}
             </Show>
-            <div class="routines-field">
-              <span>Write folder</span>
-              <div class="routines-pick">
-                <input
-                  value={dir()}
-                  onInput={(e) => setDir(e.currentTarget.value)}
-                  placeholder="Choose or type a folder"
-                />
-                <Button
-                  type="button"
+            <Show when={confirmed() && preview()?.schedule}>
+              {(schedule) => (
+                <div class="routines-field" role="status" aria-live="polite">
+                  <strong>Schedule to confirm</strong>
+                  <span>{schedule().kind === "once" ? "Once at the time below" : whenLabel(schedule())}</span>
+                  <Show when={preview()?.timezone ?? timezone(schedule())}>
+                    <span>Timezone: {preview()?.timezone ?? timezone(schedule())}</span>
+                  </Show>
+                  <Show when={schedule().kind === "cron"}>
+                    <span>Next three scheduled times:</span>
+                  </Show>
+                  <For each={preview()?.occurrences ?? []}>
+                    {(at) => (
+                      <span>
+                        {new Date(Number(at)).toLocaleString(undefined, {
+                          timeZone: preview()?.timezone ?? timezone(schedule()),
+                          timeZoneName: "short",
+                        })}
+                      </span>
+                    )}
+                  </For>
+                  <span class="routines-hint">
+                    Confirmation saves this schedule. Scheduled times require Raya's backend to be running; an
+                    unfinished run can delay or prevent another start.
+                  </span>
+                </div>
+              )}
+            </Show>
+            <Show when={!editing()}>
+              <div class="routines-field">
+                <span>Agent</span>
+                <Select
+                  options={picks()}
+                  current={current()}
+                  label={(item) => item.label}
+                  value={(item) => item.key}
+                  onSelect={(item) => item && setMode(item.key)}
                   variant="secondary"
                   size="small"
-                  onClick={() => {
-                    const id = crypto.randomUUID()
-                    setWait(id)
-                    vscode.postMessage({ type: "requestFolderPicker", requestId: id })
-                  }}
-                >
-                  Choose
-                </Button>
+                />
+                <p class="routines-hint">
+                  Same as chat, or a mode from Settings. It uses the model you assigned that mode.
+                  <button
+                    type="button"
+                    class="routines-inline"
+                    onClick={() => vscode.postMessage({ type: "openSettingsPanel", tab: "agentBehaviour" })}
+                  >
+                    Open Settings
+                  </button>
+                </p>
               </div>
-              <p class="routines-hint">It can read from anywhere. New files go in this folder.</p>
-            </div>
-            <label class="routines-field">
-              Plan file
-              <input
-                value={plan()}
-                onInput={(e) => setPlan(e.currentTarget.value)}
-                placeholder="Optional path to a .md plan"
-              />
-            </label>
-            <Button type="submit" disabled={!objective().trim() || !dir().trim() || saving()}>
-              {saving() ? "Assigning" : "Assign"}
+              <div class="routines-field">
+                <span>How it works</span>
+                <Select
+                  options={work}
+                  current={workOpt()}
+                  label={(item) => item.label}
+                  value={(item) => item.id}
+                  onSelect={(item) => item && setAccess(item.id)}
+                  variant="secondary"
+                  size="small"
+                />
+              </div>
+              <Show when={role() === "accountant"}>
+                <div class="routines-consent">
+                  <Checkbox checked={money()} onChange={setMoney}>
+                    Allow money records
+                  </Checkbox>
+                  <p class="routines-hint">Receipts, ledgers, and invoices. It will not send payments.</p>
+                </div>
+              </Show>
+              <Show when={role() === "inbox"}>
+                <div class="routines-consent">
+                  <Checkbox checked={messages()} onChange={setMessages}>
+                    Allow messages
+                  </Checkbox>
+                  <p class="routines-hint">Read the inbox and draft replies. It will not send unless you ask.</p>
+                </div>
+              </Show>
+              <div class="routines-field">
+                <span>Write folder</span>
+                <div class="routines-pick">
+                  <input
+                    value={dir()}
+                    onInput={(e) => setDir(e.currentTarget.value)}
+                    placeholder="Choose or type a folder"
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="small"
+                    onClick={() => {
+                      const id = crypto.randomUUID()
+                      setWait(id)
+                      vscode.postMessage({ type: "requestFolderPicker", requestId: id })
+                    }}
+                  >
+                    Choose
+                  </Button>
+                </div>
+                <p class="routines-hint">It can read from anywhere. New files go in this folder.</p>
+              </div>
+              <label class="routines-field">
+                Plan file
+                <input
+                  value={plan()}
+                  onInput={(e) => setPlan(e.currentTarget.value)}
+                  placeholder="Optional path to a .md plan"
+                />
+              </label>
+            </Show>
+            <Button
+              type="submit"
+              disabled={
+                (!editing() && (!objective().trim() || !dir().trim() || !consent() || !deliverable())) ||
+                saving() ||
+                !confirmed()
+              }
+            >
+              {saving() ? "Saving" : editing() ? "Confirm schedule change" : "Confirm and assign"}
             </Button>
           </form>
         </Show>

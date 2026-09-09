@@ -15,6 +15,7 @@ import { SessionID, MessageID } from "../../src/session/schema"
 import * as Tool from "../../src/tool/tool"
 import { testEffect } from "../lib/effect"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
+import * as Artifact from "@/kilocode/goal/artifact" // kilocode_change
 
 const ctx = {
   sessionID: SessionID.make("ses_test-edit-session"),
@@ -152,6 +153,8 @@ describe("tool.edit", () => {
 
         expect(result.output).toContain("Edit applied successfully")
         expect(yield* load(filepath)).toBe("new content here")
+        expect(result.metadata.rayaRevision).toMatchObject({ status: "captured", path: filepath }) // kilocode_change
+        expect(yield* Artifact.current(result.metadata.rayaRevision)).toBe(true) // kilocode_change
       }),
     )
 

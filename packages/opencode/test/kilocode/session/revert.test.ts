@@ -1,7 +1,8 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { Global } from "@opencode-ai/core/global"
 import { describe, expect } from "bun:test"
-import { Effect, Exit } from "effect"
+import { Deferred, Effect, Exit, Fiber } from "effect"
 import fs from "node:fs/promises"
 import path from "node:path"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -11,9 +12,14 @@ import { MessageV2 } from "@/session/message-v2"
 import { KiloSessionRevert } from "@/kilocode/session/revert"
 import { RayaRevertNote } from "@/kilocode/session/revert-note"
 import { SessionRevert } from "@/session/revert"
+import { SessionSummary } from "@/session/summary"
 import { MessageID, PartID } from "@/session/schema"
 import { Session } from "@/session/session"
 import { Snapshot } from "@/snapshot"
+import { Storage } from "@/storage/storage"
+import { revision } from "@/kilocode/session/review-revision"
+import { ReviewGate } from "@/kilocode/session/review-gate"
+import { BackgroundJob } from "@/background/job"
 import { provideInstance, provideTmpdirInstance } from "../../fixture/fixture"
 import { testEffect } from "../../lib/effect"
 
@@ -22,8 +28,12 @@ const env = LayerNode.compile(
     Session.node,
     SessionProjector.node,
     SessionRevert.node,
+    SessionSummary.node,
     Snapshot.node,
     CrossSpawnSpawner.node,
+    Storage.node,
+    ReviewGate.node,
+    BackgroundJob.node,
   ]),
 )
 const it = testEffect(env)
@@ -115,6 +125,583 @@ const setup = Effect.fnUntraced(function* (dir: string, deleted = false) {
     locked,
     protected: protectedFile,
     writable: writableFile,
+  }
+})
+
+describe("kept boundary integrity", () => {
+  for (const action of ["keepChanges", "discardChanges"] as const) {
+    it.live(
+      `${action} cannot create a receipt for a deleted session`,
+      provideTmpdirInstance(
+        (dir) =>
+          Effect.gen(function* () {
+            const state = yield* setup(dir)
+            const storage = yield* Storage.Service
+            yield* state.sessions.remove(state.session.id)
+            expect(
+              Exit.isFailure(
+                yield* Effect.exit(
+                  state.revert[action]({ sessionID: state.session.id, requestID: "after-deletion", expected: {} }),
+                ),
+              ),
+            ).toBe(true)
+            expect(yield* storage.list(["review_receipt", state.session.id])).toEqual([])
+            expect(yield* Effect.promise(() => fs.readFile(state.writable, "utf8"))).toBe("after")
+          }),
+        { git: true },
+      ),
+      30_000,
+    )
+  }
+
+  it.live(
+    "deletion cancels background work before taking its cleanup gate",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const state = yield* setup(dir)
+          const gate = yield* ReviewGate.Service
+          const background = yield* BackgroundJob.Service
+          const entered = yield* Deferred.make<void>()
+          let cleaned = false
+          yield* background.start({
+            id: state.session.id,
+            type: "task",
+            metadata: { sessionId: state.session.id },
+            run: Effect.gen(function* () {
+              yield* Deferred.succeed(entered, undefined)
+              yield* Effect.never
+              return "complete"
+            }).pipe(
+              Effect.ensuring(
+                gate.withPermits(1)(
+                  Effect.sync(() => {
+                    cleaned = true
+                  }),
+                ),
+              ),
+            ),
+          })
+          yield* Deferred.await(entered)
+          yield* state.sessions.remove(state.session.id)
+          expect(cleaned).toBe(true)
+          expect(Exit.isFailure(yield* Effect.exit(state.sessions.get(state.session.id)))).toBe(true)
+        }),
+      { git: true },
+    ),
+    30_000,
+  )
+
+  for (const action of ["remove", "keepChanges", "discardChanges"] as const) {
+    it.live(
+      `${action} waits for the shared review lifecycle gate`,
+      provideTmpdirInstance(
+        (dir) =>
+          Effect.gen(function* () {
+            const state = yield* setup(dir)
+            const gate = yield* ReviewGate.Service
+            const entered = yield* Deferred.make<void>()
+            const release = yield* Deferred.make<void>()
+            const holder = yield* gate
+              .withPermits(1)(
+                Effect.gen(function* () {
+                  yield* Deferred.succeed(entered, undefined)
+                  yield* Deferred.await(release)
+                }),
+              )
+              .pipe(Effect.forkChild)
+            yield* Deferred.await(entered)
+            const child = yield* state.sessions.create({ parentID: state.session.id })
+            yield* state.sessions.updateMessage({ ...state.user, id: MessageID.ascending(), sessionID: child.id })
+            let done = false
+            const operation =
+              action === "remove"
+                ? state.sessions.remove(state.session.id).pipe(Effect.orDie)
+                : state.revert[action]({ sessionID: state.session.id, expected: {} }).pipe(Effect.asVoid, Effect.orDie)
+            const pending = yield* operation.pipe(
+              Effect.tap(() =>
+                Effect.sync(() => {
+                  done = true
+                }),
+              ),
+              Effect.forkChild,
+            )
+            yield* Effect.yieldNow
+            expect(done).toBe(false)
+            expect((yield* state.sessions.get(state.session.id)).id).toBe(state.session.id)
+            yield* Deferred.succeed(release, undefined)
+            yield* Fiber.join(holder)
+            yield* Fiber.join(pending)
+            expect(done).toBe(true)
+            if (action === "remove") {
+              expect(Exit.isFailure(yield* Effect.exit(state.sessions.get(state.session.id)))).toBe(true)
+              expect(Exit.isFailure(yield* Effect.exit(state.sessions.get(child.id)))).toBe(true)
+            }
+          }),
+        { git: true },
+      ),
+      30_000,
+    )
+  }
+
+  it.live(
+    "identical content from a later agent edit has a new review identity",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const state = yield* setup(dir)
+          const storage = yield* Storage.Service
+          const summary = yield* SessionSummary.Service
+          const diffs = yield* state.snapshot.diffFull(state.patch.hash, state.after)
+          yield* storage.write(["session_diff", state.session.id], diffs)
+          const before = yield* summary.diff({ sessionID: state.session.id })
+          const expected = Object.fromEntries(before.map((diff) => [diff.file!, revision(diff)]))
+          yield* state.revert.keepChanges({ sessionID: state.session.id, expected, requestID: "first-generation" })
+          const messages = yield* state.sessions.messages({ sessionID: state.session.id })
+          const previous = messages.find((message) => message.info.role === "assistant")!
+          const next = MessageID.ascending()
+          yield* state.sessions.updateMessage({ ...previous.info, id: next })
+          for (const part of previous.parts) {
+            yield* state.sessions.updatePart({ ...part, id: PartID.ascending(), messageID: next })
+          }
+          const after = yield* summary.diff({ sessionID: state.session.id })
+          expect(after.map((diff) => diff.patch)).toEqual(before.map((diff) => diff.patch))
+          expect(after.map(revision)).not.toEqual(before.map(revision))
+          expect(after.every((diff) => diff.reviewed === "")).toBe(true)
+          expect((yield* Effect.flip(state.revert.keepChanges({ sessionID: state.session.id, expected })))._tag).toBe(
+            "ReviewConflict",
+          )
+          const current = Object.fromEntries(after.map((diff) => [diff.file!, revision(diff)]))
+          yield* state.revert.keepChanges({
+            sessionID: state.session.id,
+            expected: current,
+            requestID: "second-generation",
+          })
+          expect(
+            (yield* summary.diff({ sessionID: state.session.id })).every((diff) => diff.reviewed === revision(diff)),
+          ).toBe(true)
+        }),
+      { git: true },
+    ),
+    30_000,
+  )
+
+  it.live(
+    "a pre-mutation revision rejection does not poison a corrected retry",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const state = yield* setup(dir)
+          const storage = yield* Storage.Service
+          const diffs = yield* state.snapshot.diffFull(state.patch.hash, state.after)
+          yield* storage.write(["session_diff", state.session.id], diffs)
+          const expected = Object.fromEntries(
+            (yield* (yield* SessionSummary.Service).diff({ sessionID: state.session.id }))
+              .filter((diff) => diff.file)
+              .map((diff) => [diff.file!, revision(diff)]),
+          )
+          const input = { sessionID: state.session.id, requestID: "corrected-a" }
+          expect(
+            (yield* Effect.flip(state.revert.keepChanges({ ...input, expected: { missing: "stale" } })))._tag,
+          ).toBe("ReviewConflict")
+          expect((yield* state.revert.keepChanges({ ...input, expected })).id).toBe(state.session.id)
+        }),
+      { git: true },
+    ),
+    30_000,
+  )
+
+  for (const action of ["keepChanges", "discardChanges"] as const) {
+    it.live(
+      `${action} replays a completed request without touching newer manual work`,
+      provideTmpdirInstance(
+        (dir) =>
+          Effect.gen(function* () {
+            const state = yield* setup(dir)
+            const storage = yield* Storage.Service
+            const diffs = yield* state.snapshot.diffFull(state.patch.hash, state.after)
+            yield* storage.write(["session_diff", state.session.id], diffs)
+            const expected = Object.fromEntries(
+              (yield* (yield* SessionSummary.Service).diff({ sessionID: state.session.id }))
+                .filter((diff) => diff.file)
+                .map((diff) => [diff.file!, revision(diff)]),
+            )
+            const input = { sessionID: state.session.id, expected, requestID: "retry-a" }
+            const results = yield* Effect.all([state.revert[action](input), state.revert[action](input)], {
+              concurrency: 2,
+            })
+            expect(results.map((result) => result.id)).toEqual([state.session.id, state.session.id])
+            expect(yield* Effect.promise(() => fs.readFile(state.writable, "utf8"))).toBe(
+              action === "keepChanges" ? "after" : "before",
+            )
+            yield* Effect.promise(() => fs.writeFile(state.writable, "manual work after completion"))
+            expect((yield* state.revert[action](input)).id).toBe(state.session.id)
+            expect(yield* Effect.promise(() => fs.readFile(state.writable, "utf8"))).toBe(
+              "manual work after completion",
+            )
+            const opposite = action === "keepChanges" ? "discardChanges" : "keepChanges"
+            expect((yield* Effect.flip(state.revert[opposite](input)))._tag).toBe("ReviewConflict")
+          }),
+        { git: true },
+      ),
+      30_000,
+    )
+  }
+
+  it.live(
+    "an incomplete review receipt blocks replay after an unexpected storage failure",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const state = yield* setup(dir)
+          const storage = yield* Storage.Service
+          const diffs = yield* state.snapshot.diffFull(state.patch.hash, state.after)
+          yield* storage.write(["session_diff", state.session.id], diffs)
+          const expected = Object.fromEntries(
+            (yield* (yield* SessionSummary.Service).diff({ sessionID: state.session.id }))
+              .filter((diff) => diff.file)
+              .map((diff) => [diff.file!, revision(diff)]),
+          )
+          const input = { sessionID: state.session.id, expected, requestID: "interrupted-a" }
+          yield* storage.write(["session_kept", state.session.id], { invalid: 123 })
+          expect(Exit.isFailure(yield* Effect.exit(state.revert.discardChanges(input)))).toBe(true)
+          yield* storage.write(["session_kept", state.session.id], {})
+          const error = yield* Effect.flip(state.revert.discardChanges(input))
+          expect(error._tag).toBe("ReviewConflict")
+          expect("message" in error && error.message).toContain("outcome is uncertain")
+          expect(yield* Effect.promise(() => fs.readFile(state.writable, "utf8"))).toBe("after")
+        }),
+      { git: true },
+    ),
+    30_000,
+  )
+
+  for (const direction of ["child", "parent"] as const) {
+    it.live(
+      `a ${direction} Keep is visible across the session hierarchy and fences Undo`,
+      provideTmpdirInstance(
+        (dir) =>
+          Effect.gen(function* () {
+            const state = yield* setup(dir)
+            const storage = yield* Storage.Service
+            const summary = yield* SessionSummary.Service
+            const messages = yield* state.sessions.messages({ sessionID: state.session.id })
+            const previous = messages.find((message) => message.info.role === "assistant")!
+            const user = messages.find((message) => message.info.role === "user")!
+            const child = yield* state.sessions.create({ parentID: state.session.id })
+            const prompt = MessageID.ascending()
+            yield* state.sessions.updateMessage({ ...user.info, id: prompt, sessionID: child.id })
+            const id = MessageID.ascending()
+            if (previous.info.role !== "assistant") throw new Error("Expected assistant")
+            yield* state.sessions.updateMessage({ ...previous.info, id, sessionID: child.id, parentID: prompt })
+            yield* state.sessions.updatePart({
+              id: PartID.ascending(),
+              sessionID: child.id,
+              messageID: id,
+              type: "patch",
+              hash: state.patch.hash,
+              files: [state.writable],
+            })
+            const diffs = (yield* state.snapshot.diffFull(state.patch.hash, state.after)).filter(
+              (diff) => diff.file === "writable.txt",
+            )
+            yield* storage.write(["session_diff", state.session.id], [])
+            yield* storage.write(["session_diff", child.id], diffs)
+            const owner = direction === "child" ? child.id : state.session.id
+            const target = direction === "child" ? state.session.id : child.id
+            yield* state.revert.keepChanges({ sessionID: owner, files: [state.writable] })
+            const projected = yield* summary.diff({ sessionID: target })
+            expect(projected[0]?.reviewed).toBe(revision(projected[0]))
+            const kept = yield* storage.read<Record<string, string>>(["session_kept", owner])
+            yield* storage.write(["session_kept", owner], { invalid: 123 })
+            expect(Exit.isFailure(yield* Effect.exit(state.revert.discardChanges({ sessionID: target })))).toBe(true)
+            expect(yield* Effect.promise(() => fs.readFile(state.writable, "utf8"))).toBe("after")
+            yield* storage.write(["session_kept", owner], kept)
+            yield* state.revert.discardChanges({ sessionID: target })
+            expect(yield* Effect.promise(() => fs.readFile(state.writable, "utf8"))).toBe("after")
+            yield* Effect.promise(() => fs.writeFile(state.writable, "later parent edit"))
+            const later = MessageID.ascending()
+            yield* state.sessions.updateMessage({
+              ...previous.info,
+              id: later,
+              sessionID: target,
+              parentID: target === child.id ? prompt : previous.info.parentID,
+            })
+            yield* state.sessions.updatePart({
+              id: PartID.ascending(),
+              sessionID: target,
+              messageID: later,
+              type: "patch",
+              hash: state.after,
+              files: [state.writable],
+            })
+            expect((yield* summary.diff({ sessionID: target }))[0]?.reviewed).toBe("")
+            yield* state.revert.discardChanges({ sessionID: target, files: [state.writable] })
+            expect(yield* Effect.promise(() => fs.readFile(state.writable, "utf8"))).toBe("after")
+          }),
+        { git: true },
+      ),
+      30_000,
+    )
+  }
+
+  it.live(
+    "review acceptance is reconstructed from persisted boundaries and revoked by later edits",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const state = yield* setup(dir)
+          const summary = yield* SessionSummary.Service
+          const storage = yield* Storage.Service
+          const diffs = yield* state.snapshot.diffFull(state.patch.hash, state.after)
+          yield* storage.write(["session_diff", state.session.id], diffs)
+          expect((yield* summary.diff({ sessionID: state.session.id })).every((diff) => !diff.reviewed)).toBe(true)
+          yield* state.revert.keepChanges({ sessionID: state.session.id, files: [state.writable] })
+          const restored = yield* summary.diff({ sessionID: state.session.id })
+          const accepted = restored.find((diff) => diff.file === "writable.txt")
+          expect(accepted?.reviewed).toBe(revision(accepted!))
+          expect(restored.find((diff) => diff.file?.includes("protected"))?.reviewed).toBe("")
+          const messages = yield* state.sessions.messages({ sessionID: state.session.id })
+          const previous = messages.find((message) => message.info.role === "assistant")!
+          const id = MessageID.ascending()
+          yield* state.sessions.updateMessage({ ...previous.info, id })
+          yield* state.sessions.updatePart({
+            id: PartID.ascending(),
+            messageID: id,
+            sessionID: state.session.id,
+            type: "patch",
+            hash: state.after,
+            files: [state.writable],
+          })
+          expect(
+            (yield* summary.diff({ sessionID: state.session.id })).find((diff) => diff.file === "writable.txt")
+              ?.reviewed,
+          ).toBe("")
+          yield* storage.write(["session_kept", state.session.id], { invalid: 123 })
+          expect(Exit.isFailure(yield* Effect.exit(summary.diff({ sessionID: state.session.id })))).toBe(true)
+        }),
+      { git: true },
+    ),
+    30_000,
+  )
+
+  it.live(
+    "workspace verification rejects a redirected parent directory even with identical content",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const state = yield* setup(dir)
+          const expected = [{ hash: state.after, files: [state.protected] }]
+          expect(yield* state.snapshot.matches(expected)).toBe(true)
+          const moved = path.join(dir, "relocated")
+          yield* Effect.promise(() => fs.rename(state.locked, moved))
+          yield* Effect.promise(() =>
+            fs.symlink(moved, state.locked, process.platform === "win32" ? "junction" : "dir"),
+          )
+          expect(yield* Effect.promise(() => fs.readFile(state.protected, "utf8"))).toBe("after")
+          expect(yield* state.snapshot.matches(expected)).toBe(false)
+        }),
+      { git: true },
+    ),
+    30_000,
+  )
+
+  it.live(
+    "a late workspace conflict does not roll back newer manual edits",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const state = yield* setup(dir)
+          const expected = [{ hash: state.after, files: [state.writable] }]
+          expect(yield* state.snapshot.matches(expected)).toBe(true)
+          const baseline = yield* state.snapshot.track()
+          yield* Effect.promise(() => fs.writeFile(state.writable, "late manual edit"))
+          const result = yield* Effect.exit(
+            KiloSessionRevert.apply(
+              state.snapshot,
+              baseline,
+              [state.writable],
+              state.snapshot.revert([{ hash: state.patch.hash, files: [state.writable] }], expected),
+            ),
+          )
+          expect(Exit.isFailure(result)).toBe(true)
+          expect(yield* Effect.promise(() => fs.readFile(state.writable, "utf8"))).toBe("late manual edit")
+        }),
+      { git: true },
+    ),
+    30_000,
+  )
+
+  it.live(
+    "workspace verification detects recreation of a deleted file and missing snapshots",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const state = yield* setup(dir, true)
+          const expected = [{ hash: state.after, files: [state.protected] }]
+          expect(yield* state.snapshot.matches(expected)).toBe(true)
+          yield* Effect.promise(() => fs.writeFile(state.protected, "recreated manually"))
+          expect(yield* state.snapshot.matches(expected)).toBe(false)
+          expect(yield* state.snapshot.matches([{ hash: "0".repeat(40), files: [state.writable] }])).toBe(false)
+          expect(yield* state.snapshot.matches([{ hash: state.after, files: [path.join(dir, "..", "outside")] }])).toBe(
+            false,
+          )
+        }),
+      { git: true },
+    ),
+    30_000,
+  )
+
+  for (const action of ["keepChanges", "discardChanges"] as const) {
+    it.live(
+      `${action} protects newer workspace content outside the recorded diff`,
+      provideTmpdirInstance(
+        (dir) =>
+          Effect.gen(function* () {
+            const state = yield* setup(dir)
+            const storage = yield* Storage.Service
+            const diffs = yield* state.snapshot.diffFull(state.patch.hash, state.after)
+            yield* storage.write(["session_diff", state.session.id], diffs)
+            const expected = Object.fromEntries(
+              (yield* (yield* SessionSummary.Service).diff({ sessionID: state.session.id }))
+                .filter((diff) => diff.file)
+                .map((diff) => [diff.file!, revision(diff)]),
+            )
+            yield* Effect.promise(() => fs.writeFile(state.writable, "newer manual work"))
+            const result = yield* Effect.exit(state.revert[action]({ sessionID: state.session.id, expected }))
+            expect(yield* Effect.promise(() => fs.readFile(state.writable, "utf8"))).toBe("newer manual work")
+            expect(Exit.isFailure(result)).toBe(true)
+            expect((yield* Effect.flip(storage.read(["session_kept", state.session.id])))._tag).toBe("NotFoundError")
+          }),
+        { git: true },
+      ),
+      30_000,
+    )
+  }
+
+  it.live(
+    "revision-guarded Undo all restores the original boundary across multiple edits",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const state = yield* setup(dir)
+          const storage = yield* Storage.Service
+          const messages = yield* state.sessions.messages({ sessionID: state.session.id })
+          const assistant = messages.find((message) => message.info.role === "assistant")
+          if (!assistant) throw new Error("Expected an assistant edit")
+          yield* Effect.promise(() => fs.writeFile(state.writable, "third"))
+          const after = yield* state.snapshot.track()
+          if (!after) throw new Error("Expected current snapshot")
+          const patch = yield* state.snapshot.patch(state.after)
+          const finish = assistant.parts.find((part) => part.type === "step-finish")
+          if (!finish) throw new Error("Expected completed edit")
+          yield* state.sessions.updatePart({ ...finish, id: PartID.ascending(), snapshot: after })
+          yield* state.sessions.updatePart({
+            id: PartID.ascending(),
+            messageID: assistant.info.id,
+            sessionID: state.session.id,
+            type: "patch",
+            hash: patch.hash,
+            files: patch.files,
+          })
+          const diffs = yield* state.snapshot.diffFull(state.patch.hash, after)
+          yield* storage.write(["session_diff", state.session.id], diffs)
+          const expected = Object.fromEntries(
+            (yield* (yield* SessionSummary.Service).diff({ sessionID: state.session.id }))
+              .filter((diff) => diff.file)
+              .map((diff) => [diff.file!, revision(diff)]),
+          )
+          yield* state.revert.discardChanges({ sessionID: state.session.id, expected })
+          expect(yield* Effect.promise(() => fs.readFile(state.writable, "utf8"))).toBe("before")
+        }),
+      { git: true },
+    ),
+    30_000,
+  )
+
+  for (const action of ["keepChanges", "discardChanges"] as const) {
+    it.live(
+      `${action} rejects superseded review content before mutating files or acceptance`,
+      provideTmpdirInstance(
+        (dir) =>
+          Effect.gen(function* () {
+            const state = yield* setup(dir)
+            const storage = yield* Storage.Service
+            const diffs = yield* state.snapshot.diffFull(state.patch.hash, state.after)
+            expect(diffs.length).toBeGreaterThan(0)
+            yield* storage.write(["session_diff", state.session.id], diffs)
+            const expected = Object.fromEntries(
+              (yield* (yield* SessionSummary.Service).diff({ sessionID: state.session.id }))
+                .filter((diff) => diff.file)
+                .map((diff) => [diff.file!, revision(diff)]),
+            )
+            const changed = diffs.map((diff, index) =>
+              index === 0 ? { ...diff, patch: `${diff.patch}\n+later edit` } : diff,
+            )
+            yield* storage.write(["session_diff", state.session.id], changed)
+            const error = yield* Effect.flip(state.revert[action]({ sessionID: state.session.id, expected }))
+            expect(error._tag).toBe("ReviewConflict")
+            expect(yield* Effect.promise(() => fs.readFile(state.writable, "utf8"))).toBe("after")
+            expect((yield* Effect.flip(storage.read(["session_kept", state.session.id])))._tag).toBe("NotFoundError")
+            yield* storage.write(["session_diff", state.session.id], diffs)
+            yield* state.revert[action]({ sessionID: state.session.id, expected })
+            expect(yield* Effect.promise(() => fs.readFile(state.writable, "utf8"))).toBe(
+              action === "keepChanges" ? "after" : "before",
+            )
+          }),
+        { git: true },
+      ),
+      30_000,
+    )
+  }
+
+  it.live(
+    "concurrent per-file keeps preserve both accepted boundaries",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const state = yield* setup(dir)
+          const storage = yield* Storage.Service
+          yield* Effect.all(
+            [state.protected, state.writable].map((file) =>
+              state.revert.keepChanges({ sessionID: state.session.id, files: [file] }),
+            ),
+            { concurrency: "unbounded" },
+          )
+          const kept = yield* storage.read<Record<string, string>>(["session_kept", state.session.id])
+          expect(Object.keys(kept).sort()).toEqual(
+            [state.protected, state.writable].map((file) => file.replaceAll("\\", "/")).sort(),
+          )
+          yield* state.revert.discardChanges({ sessionID: state.session.id })
+          expect(yield* Effect.promise(() => fs.readFile(state.protected, "utf8"))).toBe("after")
+          expect(yield* Effect.promise(() => fs.readFile(state.writable, "utf8"))).toBe("after")
+        }),
+      { git: true },
+    ),
+    30_000,
+  )
+
+  for (const action of ["keepChanges", "discardChanges"] as const) {
+    it.live(
+      `${action} fails safely on unreadable or malformed accepted boundaries`,
+      provideTmpdirInstance(
+        (dir) =>
+          Effect.gen(function* () {
+            const state = yield* setup(dir)
+            const target = path.join(Global.Path.data, "storage", "session_kept", `${state.session.id}.json`)
+            yield* Effect.promise(() => fs.mkdir(path.dirname(target), { recursive: true }))
+            for (const content of ["{broken", JSON.stringify({ [state.writable]: 42 })]) {
+              yield* Effect.promise(() => fs.writeFile(target, content))
+              const result = yield* Effect.exit(state.revert[action]({ sessionID: state.session.id }))
+              expect(Exit.isFailure(result)).toBe(true)
+              expect(yield* Effect.promise(() => fs.readFile(state.writable, "utf8"))).toBe("after")
+              expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe(content)
+            }
+          }),
+        { git: true },
+      ),
+      30_000,
+    )
   }
 })
 

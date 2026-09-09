@@ -3,13 +3,14 @@ import { dirname, join } from "node:path"
 import * as vscode from "vscode"
 import type { CanvasBuild } from "./canvas-compiler"
 
-type CanvasPanelMessage =
+type CanvasPanelMessage = (
   | { type: "ready" }
   | { type: "rendered" }
   | { type: "runtimeError"; error?: string }
   | { type: "captured"; data?: string } // raya_change - run artifact capture
   | { type: "captureError"; error?: string } // raya_change - run artifact capture
   | { type: "designPick"; text?: string } // raya_change - canvas Design Mode
+) & { token?: string }
 
 function escape(value: string) {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;")
@@ -20,6 +21,9 @@ export class CanvasPanel implements vscode.Disposable {
 
   private panel: vscode.WebviewPanel | undefined
   private current: CanvasBuild | undefined
+  private token = ""
+  private failed = false
+  private failure: ((build: CanvasBuild) => void) | undefined
   private settle: ((build: CanvasBuild) => void) | undefined
   private timer: NodeJS.Timeout | undefined
   // raya_change - Design Mode routes a picked element back to the chat composer.
@@ -35,6 +39,14 @@ export class CanvasPanel implements vscode.Disposable {
     this.designPick = handler
   }
 
+  onFailure(handler: (build: CanvasBuild) => void): void {
+    this.failure = handler
+  }
+
+  owns(build: CanvasBuild): boolean {
+    return this.current?.path === build.path && this.current?.revision === build.revision
+  }
+
   async show(build: CanvasBuild, preserveFocus = true): Promise<CanvasBuild> {
     if (this.settle && this.current) {
       this.resolve({
@@ -44,6 +56,8 @@ export class CanvasPanel implements vscode.Disposable {
       })
     }
     this.current = build
+    this.token = crypto.randomUUID()
+    this.failed = false
     const panel = this.panel ?? this.create(preserveFocus)
     panel.title = `Raya Canvas: ${build.name}`
     panel.reveal(vscode.ViewColumn.Beside, preserveFocus)
@@ -55,7 +69,7 @@ export class CanvasPanel implements vscode.Disposable {
       enableScripts: true,
       localResourceRoots: [this.extension, vscode.Uri.file(dirname(build.bundle))],
     }
-    panel.webview.html = this.html(panel.webview, build.bundle)
+    panel.webview.html = this.html(panel.webview, build)
     return new Promise<CanvasBuild>((resolve) => {
       this.finish()
       this.settle = resolve
@@ -88,6 +102,8 @@ export class CanvasPanel implements vscode.Disposable {
     }
     this.panel?.dispose()
     this.panel = undefined
+    this.token = ""
+    this.current = undefined
   }
 
   private create(preserveFocus: boolean) {
@@ -121,10 +137,13 @@ export class CanvasPanel implements vscode.Disposable {
         error: "Canvas panel was closed before rendering completed.",
       })
       this.panel = undefined
+      this.token = ""
+      this.current = undefined
     })
   }
 
   private receive(message: CanvasPanelMessage) {
+    if (!this.panel || !this.token || message.token !== this.token) return
     if (message.type === "ready") {
       void this.panel?.webview.postMessage({ type: "data", data: this.current?.data ?? {} })
       return
@@ -146,14 +165,27 @@ export class CanvasPanel implements vscode.Disposable {
     // raya_change end
     if (!this.current) return
     if (message.type === "runtimeError") {
-      this.resolve({
-        ...this.current,
-        status: "error",
-        error: message.error?.slice(0, 100_000) || "Canvas runtime failed.",
-      })
+      this.fail(message.error)
       return
     }
-    this.resolve({ ...this.current, status: "ready", error: undefined })
+    if (message.type === "rendered" && !this.failed)
+      this.resolve({ ...this.current, status: "ready", error: undefined })
+  }
+
+  private fail(error: unknown) {
+    if (this.failed || !this.current) return
+    this.failed = true
+    const build: CanvasBuild = {
+      ...this.current,
+      status: "error",
+      error: typeof error === "string" ? error.slice(0, 100_000) || "Canvas runtime failed." : "Canvas runtime failed.",
+    }
+    this.current = build
+    if (this.settle) {
+      this.resolve(build)
+      return
+    }
+    this.failure?.(build)
   }
 
   private resolve(build: CanvasBuild) {
@@ -197,9 +229,9 @@ export class CanvasPanel implements vscode.Disposable {
     if (choice === open) void vscode.commands.executeCommand("vscode.open", vscode.Uri.file(file))
   }
 
-  private html(webview: vscode.Webview, bundle: string) {
+  private html(webview: vscode.Webview, build: CanvasBuild) {
     const runtime = webview.asWebviewUri(this.runtime)
-    const artifact = webview.asWebviewUri(vscode.Uri.file(bundle))
+    const artifact = webview.asWebviewUri(vscode.Uri.file(build.bundle!))
     const nonce = crypto.randomUUID().replaceAll("-", "")
     const frame = `<!doctype html>
 <html>
@@ -228,6 +260,7 @@ export class CanvasPanel implements vscode.Disposable {
     const src = JSON.stringify(frame).replaceAll("<", "\\u003c")
     const bridge = `
     const vscode = acquireVsCodeApi();
+    vscode.setState(${JSON.stringify({ root: dirname(dirname(dirname(build.path))), name: build.name }).replaceAll("<", "\\u003c")});
     const frame = document.getElementById("raya-canvas-frame");
     frame.srcdoc = ${src};
     const toInner = (message) => frame.contentWindow?.postMessage({ source: "raya-canvas-host", ...message }, "*");
@@ -242,7 +275,7 @@ export class CanvasPanel implements vscode.Disposable {
     captureBtn.addEventListener("click", () => toInner({ type: "capture" }));
     window.addEventListener("message", (event) => {
       if (event.source === frame.contentWindow && event.data?.source === "raya-canvas") {
-        vscode.postMessage({ type: event.data.type, error: event.data.error, data: event.data.data, text: event.data.text });
+        vscode.postMessage({ type: event.data.type, error: event.data.error, data: event.data.data, text: event.data.text, token: ${JSON.stringify(this.token)} });
         return;
       }
       if (event.data?.type !== "data") return;

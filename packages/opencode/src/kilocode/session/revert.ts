@@ -2,6 +2,9 @@ import { Cause, Effect } from "effect"
 import type { MessageV2 } from "@/session/message-v2"
 import type { Session } from "@/session/session"
 import type { Snapshot } from "@/snapshot"
+import { WorkspaceConflict } from "@/kilocode/snapshot/verify"
+import { ReviewConflict } from "./review-revision"
+import { canonical } from "./review-boundaries"
 
 export namespace KiloSessionRevert {
   const rollback = <E>(snap: Snapshot.Interface, hash: string, files: string[], cause: Cause.Cause<E>) =>
@@ -34,6 +37,8 @@ export namespace KiloSessionRevert {
   ) {
     return yield* effect.pipe(
       Effect.catchCause((cause) => {
+        if (cause.reasons.some((reason) => Cause.isDieReason(reason) && reason.defect instanceof WorkspaceConflict))
+          return Effect.failCause(cause)
         if (!baseline || files.length === 0) return Effect.failCause(cause)
         return rollback(snap, baseline, files, cause)
       }),
@@ -93,6 +98,8 @@ export namespace KiloSessionRevert {
     messages: MessageV2.WithParts[],
     only?: string[],
     kept?: Record<string, string>,
+    step = !!only?.length,
+    expected?: readonly Snapshot.Patch[],
   ) {
     const filter = only && only.length > 0 ? new Set(only.map((file) => file.replaceAll("\\", "/"))) : undefined
     // raya_change - group each file's patches in message order, then honor the kept boundary and
@@ -111,18 +118,30 @@ export namespace KiloSessionRevert {
           }
     const patches: Snapshot.Patch[] = []
     for (const [file, list] of perFile) {
-      const boundary = kept?.[file.replaceAll("\\", "/")]
+      const boundary = kept?.[canonical(file)] ?? kept?.[file.replaceAll("\\", "/")]
       const eligible = boundary ? list.filter((patch) => patch.id > boundary) : list
       if (eligible.length === 0) continue
-      const target = filter ? eligible[eligible.length - 1]! : eligible[0]!
+      const target = step ? eligible[eligible.length - 1] : eligible[0]
       patches.push({ hash: target.hash, files: [file] })
     }
     const files = [...new Set(patches.flatMap((patch) => patch.files))]
     if (files.length === 0) return { files: [] as string[] }
     const baseline = yield* snap.track()
     if (!baseline)
-      return yield* Effect.die(new Error("Cannot discard changes because the current workspace snapshot is unavailable"))
-    yield* apply(snap, baseline, files, snap.revert(patches))
+      return yield* Effect.die(
+        new Error("Cannot discard changes because the current workspace snapshot is unavailable"),
+      )
+    yield* apply(snap, baseline, files, snap.revert(patches, expected)).pipe(
+      Effect.catchCause((cause) => {
+        if (cause.reasons.some((reason) => Cause.isDieReason(reason) && reason.defect instanceof WorkspaceConflict))
+          return Effect.fail(
+            new ReviewConflict({
+              message: "Workspace files changed before Undo. Inspect and reconcile the files before retrying.",
+            }),
+          )
+        return Effect.failCause(cause)
+      }),
+    )
     return { files }
   })
 }

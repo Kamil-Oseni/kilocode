@@ -51,7 +51,10 @@ describe("realtime voice thin client", () => {
       }
     }
     Object.defineProperty(globalThis, "AudioContext", { configurable: true, value: Context })
-    const player = new StreamPlayer(() => {}, () => {})
+    const player = new StreamPlayer(
+      () => {},
+      () => {},
+    )
     player.unlock()
     player.reset()
     player.push("AQAAAA==", "audio/pcm;rate=16000")
@@ -122,7 +125,8 @@ describe("realtime voice thin client", () => {
     expect(player).toContain("this.output = sink")
     expect(client).toContain('topic: "raya.playout"')
     expect(client).toContain('"raya.playout.item"')
-    expect(client).toContain("this.sink.fallback")
+    expect(client).not.toContain("this.sink.fallback")
+    expect(client).toContain("Reconnect with the selected provider")
     expect(client).toContain('registerProcessor("raya-playout"')
     expect(client).not.toContain('type: "sendMessage"')
   })

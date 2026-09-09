@@ -3,6 +3,7 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder" // ki
 import { InstanceState } from "@/effect/instance-state"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Runner } from "@/effect/runner"
+import { observe } from "@/kilocode/effect/observation" // kilocode_change
 import { BackgroundJob } from "@/background/job"
 import { Effect, Latch, Layer, Scope, Context } from "effect"
 import { Session } from "./session"
@@ -10,6 +11,9 @@ import { SessionID } from "./schema"
 import { SessionStatus } from "./status"
 
 export interface Interface {
+  readonly inspect: (sessionID: SessionID) => Effect.Effect<ReturnType<typeof observe>> // kilocode_change
+  readonly cancelRun: (sessionID: SessionID, id: string) => Effect.Effect<boolean> // kilocode_change
+  readonly requestCancel: (sessionID: SessionID, id: string) => Effect.Effect<Effect.Effect<boolean>> // kilocode_change
   readonly assertNotBusy: (sessionID: SessionID) => Effect.Effect<void, Session.BusyError>
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
   readonly ensureRunning: (
@@ -105,7 +109,21 @@ export const layer = Layer.effect(
         .pipe(Effect.catchTag("RunnerBusy", () => Effect.fail(busyError(sessionID))))
     })
 
-    return Service.of({ assertNotBusy, cancel, ensureRunning, startShell })
+    // kilocode_change start - observe and conditionally cancel existing handles without creating work
+    const inspect = Effect.fn("SessionRunState.inspect")(function* (sessionID: SessionID) {
+      return observe((yield* InstanceState.get(state)).runners.get(sessionID))
+    })
+    const cancelRun = Effect.fn("SessionRunState.cancelRun")(function* (sessionID: SessionID, id: string) {
+      const current = (yield* InstanceState.get(state)).runners.get(sessionID)
+      return current ? yield* current.cancelRun(id) : false
+    })
+    const requestCancel = Effect.fn("SessionRunState.requestCancel")(function* (sessionID: SessionID, id: string) {
+      const current = (yield* InstanceState.get(state)).runners.get(sessionID)
+      return current ? yield* current.requestCancel(id) : Effect.succeed(false)
+    })
+    // kilocode_change end
+
+    return Service.of({ assertNotBusy, cancel, ensureRunning, startShell, inspect, cancelRun, requestCancel }) // kilocode_change
   }),
 )
 

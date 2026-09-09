@@ -19,6 +19,8 @@ import { DiffFull } from "../kilocode/snapshot/diff-full"
 import { KiloSnapshotTrack } from "../kilocode/snapshot/track"
 import { KiloSnapshotSeed } from "../kilocode/snapshot/seed"
 import { KiloSnapshotMaterialize } from "../kilocode/snapshot/materialize"
+import { internal } from "../kilocode/snapshot/internal"
+import { matches as verify, WorkspaceConflict } from "../kilocode/snapshot/verify"
 import type { MessageID, SessionID } from "../session/schema"
 import { withStatics } from "@opencode-ai/core/schema"
 import { zod } from "@opencode-ai/core/effect-zod"
@@ -69,7 +71,8 @@ export interface Interface {
   // kilocode_change end
   readonly patch: (hash: string) => Effect.Effect<Patch>
   readonly restore: (snapshot: string) => Effect.Effect<void>
-  readonly revert: (patches: Patch[]) => Effect.Effect<void>
+  readonly revert: (patches: Patch[], expected?: readonly Patch[]) => Effect.Effect<void> // kilocode_change - recheck live files before guarded restore
+  readonly matches: (patches: readonly Patch[]) => Effect.Effect<boolean> // kilocode_change - live workspace precondition
   readonly diff: (hash: string) => Effect.Effect<string>
   readonly diffFull: (from: string, to: string) => Effect.Effect<FileDiff[]>
   readonly diffFile: (from: string, to: string, file: string) => Effect.Effect<FileDiff | undefined> // kilocode_change - authoritative full-content detail
@@ -119,6 +122,14 @@ export const layer: Layer.Layer<Service, never, Requirements> =
           }
           // kilocode_change end
 
+          // kilocode_change start - never snapshot runtime stores contained by a parent workspace
+          const stores = internal(state.worktree, [
+            Global.Path.data,
+            Global.Path.cache,
+            Global.Path.state,
+            path.join(Global.Path.data, "snapshot"),
+          ])
+          // kilocode_change end
           const args = (cmd: string[]) => ["--git-dir", state.gitdir, "--work-tree", state.worktree, ...cmd]
 
           const feed = (list: string[]) => list.join("\0") + "\0"
@@ -167,13 +178,17 @@ export const layer: Layer.Layer<Service, never, Requirements> =
                 stdin: feed(checkIgnorePaths),
               },
             )
-            if (check.code !== 0 && check.code !== 1) return new Set<string>()
-            return new Set(
-              check.text
+            // kilocode_change start - protected runtime files stay excluded without a source repository
+            const excluded = files.filter(stores.contains)
+            if (check.code !== 0 && check.code !== 1) return new Set(excluded)
+            return new Set([
+              ...excluded,
+              ...check.text
                 .split("\0")
                 .filter(Boolean)
                 .map((item) => (item.startsWith("./:") ? item.slice(2) : item)),
-            )
+            ])
+            // kilocode_change end
           })
 
           const drop = Effect.fnUntraced(function* (files: string[]) {
@@ -258,6 +273,7 @@ export const layer: Layer.Layer<Service, never, Requirements> =
             const text = [
               file ? (yield* read(file)).trimEnd() : "",
               ...list.map((item) => `/${item.replaceAll("\\", "/")}`),
+              ...stores.patterns, // kilocode_change - preserve exclusions after source ignore rules
             ]
               .filter(Boolean)
               .join("\n")
@@ -269,6 +285,31 @@ export const layer: Layer.Layer<Service, never, Requirements> =
           const add = Effect.fnUntraced(function* (opts?: { env?: Record<string, string>; root?: boolean }) {
             // kilocode_change end
             yield* sync()
+            // kilocode_change start - remove legacy runtime entries without deleting runtime files
+            if (stores.paths.length) {
+              const result = yield* git(
+                [
+                  ...cfg,
+                  ...args([
+                    "rm",
+                    "-r",
+                    "--cached",
+                    "--ignore-unmatch",
+                    "-f",
+                    "--pathspec-from-file=-",
+                    "--pathspec-file-nul",
+                  ]),
+                ],
+                {
+                  cwd: state.worktree,
+                  stdin: literal(stores.paths),
+                  env: opts?.env,
+                },
+              )
+              if (result.code !== 0)
+                return yield* Effect.die(new Error("Could not exclude runtime stores from snapshot"))
+            }
+            // kilocode_change end
             const [diff, other] = yield* Effect.all(
               [
                 git([...quote, ...args(["diff-files", "--name-only", "-z", "--", "."])], {
@@ -484,6 +525,15 @@ export const layer: Layer.Layer<Service, never, Requirements> =
           const restore = Effect.fnUntraced(function* (snapshot: string) {
             return yield* locked(
               Effect.gen(function* () {
+                // kilocode_change start - contaminated legacy snapshots must not overwrite live runtime data
+                if (stores.paths.length) {
+                  const tree = yield* git([...core, ...args(["ls-tree", "-r", "--name-only", "-z", snapshot])], {
+                    cwd: state.worktree,
+                  })
+                  if (tree.code !== 0 || tree.text.split("\0").filter(Boolean).some(stores.contains))
+                    return yield* Effect.die(new Error("Snapshot is unavailable or contains protected runtime data"))
+                }
+                // kilocode_change end
                 yield* Effect.logInfo("restore", { commit: snapshot })
                 const result = yield* git([...core, ...args(["read-tree", snapshot])], { cwd: state.worktree })
                 if (result.code === 0) {
@@ -508,10 +558,26 @@ export const layer: Layer.Layer<Service, never, Requirements> =
             )
           })
 
-          const revert = Effect.fnUntraced(function* (patches: Patch[]) {
+          // kilocode_change start - compare live files without relying on the mutable snapshot index
+          const current = (patches: readonly Patch[]) =>
+            Effect.gen(function* () {
+              if (!(yield* enabled())) return false
+              return yield* verify(
+                (cmd, stdin) => git([...quote, ...args(cmd)], { cwd: state.worktree, stdin }),
+                state.worktree,
+                patches,
+              )
+            })
+          const matches = (patches: readonly Patch[]) => locked(current(patches))
+          // kilocode_change end
+          const revert = Effect.fnUntraced(function* (patches: Patch[], expected?: readonly Patch[]) {
+            // kilocode_change
             return yield* locked(
               Effect.gen(function* () {
                 // kilocode_change start - validate every checkpoint before mutating workspace files
+                if (patches.some((item) => item.files.some(stores.contains)))
+                  return yield* Effect.die(new Error("Cannot restore protected runtime data from a snapshot"))
+                if (expected && !(yield* current(expected))) yield* Effect.die(new WorkspaceConflict())
                 for (const hash of new Set(patches.filter((item) => item.files.length > 0).map((item) => item.hash))) {
                   const tree = yield* git([...core, ...args(["cat-file", "-e", `${hash}^{tree}`])], {
                     cwd: state.worktree,
@@ -935,7 +1001,7 @@ export const layer: Layer.Layer<Service, never, Requirements> =
           })
           // kilocode_change end
 
-          return { cleanup, track, patch, restore, revert, diff, diffFull, diffFile } // kilocode_change - diffFile
+          return { cleanup, track, patch, restore, revert, diff, diffFull, diffFile, matches } // kilocode_change - diffFile and workspace preconditions
         }),
       )
 
@@ -986,9 +1052,14 @@ export const layer: Layer.Layer<Service, never, Requirements> =
         restore: Effect.fn("Snapshot.restore")(function* (snapshot: string) {
           return yield* InstanceState.useEffect(state, (s) => s.restore(snapshot))
         }),
-        revert: Effect.fn("Snapshot.revert")(function* (patches: Patch[]) {
-          return yield* InstanceState.useEffect(state, (s) => s.revert(patches))
+        // kilocode_change start - guarded restore and live-file comparison
+        matches: Effect.fn("Snapshot.matches")(function* (patches: readonly Patch[]) {
+          return yield* InstanceState.useEffect(state, (s) => s.matches(patches))
         }),
+        revert: Effect.fn("Snapshot.revert")(function* (patches: Patch[], expected?: readonly Patch[]) {
+          return yield* InstanceState.useEffect(state, (s) => s.revert(patches, expected))
+        }),
+        // kilocode_change end
         diff: Effect.fn("Snapshot.diff")(function* (hash: string) {
           return yield* InstanceState.useEffect(state, (s) => s.diff(hash))
         }),

@@ -483,13 +483,53 @@ export type BrowserRequest =
       id: BrowserRequestId
       sessionID: string
       operation: "click"
-      selector: string
+      /**
+       * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
+       */
+      selector:
+        | string
+        | {
+            kind: "role"
+            role: string
+            name: string
+            scope?: string
+          }
+        | {
+            kind: "label"
+            text: string
+            scope?: string
+          }
+        | {
+            kind: "testid"
+            value: string
+            scope?: string
+          }
     }
   | {
       id: BrowserRequestId
       sessionID: string
       operation: "type"
-      selector: string
+      /**
+       * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
+       */
+      selector:
+        | string
+        | {
+            kind: "role"
+            role: string
+            name: string
+            scope?: string
+          }
+        | {
+            kind: "label"
+            text: string
+            scope?: string
+          }
+        | {
+            kind: "testid"
+            value: string
+            scope?: string
+          }
       text: string
       submit: boolean
     }
@@ -497,7 +537,27 @@ export type BrowserRequest =
       id: BrowserRequestId
       sessionID: string
       operation: "select"
-      selector: string
+      /**
+       * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
+       */
+      selector:
+        | string
+        | {
+            kind: "role"
+            role: string
+            name: string
+            scope?: string
+          }
+        | {
+            kind: "label"
+            text: string
+            scope?: string
+          }
+        | {
+            kind: "testid"
+            value: string
+            scope?: string
+          }
       values: Array<string>
     }
   | {
@@ -506,7 +566,24 @@ export type BrowserRequest =
       operation: "scroll"
       deltaX: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       deltaY: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      selector?: string
+      selector?:
+        | string
+        | {
+            kind: "role"
+            role: string
+            name: string
+            scope?: string
+          }
+        | {
+            kind: "label"
+            text: string
+            scope?: string
+          }
+        | {
+            kind: "testid"
+            value: string
+            scope?: string
+          }
     }
   | {
       id: BrowserRequestId
@@ -542,23 +619,103 @@ export type BrowserRequest =
             }
           | {
               kind: "click"
-              selector: string
+              /**
+               * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
+               */
+              selector:
+                | string
+                | {
+                    kind: "role"
+                    role: string
+                    name: string
+                    scope?: string
+                  }
+                | {
+                    kind: "label"
+                    text: string
+                    scope?: string
+                  }
+                | {
+                    kind: "testid"
+                    value: string
+                    scope?: string
+                  }
             }
           | {
               kind: "type"
-              selector: string
+              /**
+               * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
+               */
+              selector:
+                | string
+                | {
+                    kind: "role"
+                    role: string
+                    name: string
+                    scope?: string
+                  }
+                | {
+                    kind: "label"
+                    text: string
+                    scope?: string
+                  }
+                | {
+                    kind: "testid"
+                    value: string
+                    scope?: string
+                  }
               text: string
               submit?: boolean
             }
           | {
               kind: "select"
-              selector: string
+              /**
+               * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
+               */
+              selector:
+                | string
+                | {
+                    kind: "role"
+                    role: string
+                    name: string
+                    scope?: string
+                  }
+                | {
+                    kind: "label"
+                    text: string
+                    scope?: string
+                  }
+                | {
+                    kind: "testid"
+                    value: string
+                    scope?: string
+                  }
               values: Array<string>
             }
         assertions: Array<
           | {
               kind: "visible"
-              selector: string
+              /**
+               * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
+               */
+              selector:
+                | string
+                | {
+                    kind: "role"
+                    role: string
+                    name: string
+                    scope?: string
+                  }
+                | {
+                    kind: "label"
+                    text: string
+                    scope?: string
+                  }
+                | {
+                    kind: "testid"
+                    value: string
+                    scope?: string
+                  }
               text?: string
             }
           | {
@@ -3559,6 +3716,24 @@ export type NotFoundError = {
   }
 }
 
+export type ReviewFileDiff = {
+  file?: string
+  patch?: string
+  before?: string
+  after?: string
+  additions: number
+  deletions: number
+  status?: "added" | "deleted" | "modified"
+  /**
+   * Opaque identity of the latest persisted agent patch event for this file.
+   */
+  generation?: string
+  /**
+   * Accepted revision fingerprint, or an empty string when review is pending.
+   */
+  reviewed?: string
+}
+
 export type Session3 = {
   id: string
   slug: string
@@ -4044,6 +4219,11 @@ export type Session10 = {
     diff?: string
     workspace?: "restored" | "snapshots-disabled" | "unavailable"
   }
+}
+
+export type ReviewConflict = {
+  _tag: "ReviewConflict"
+  message: string
 }
 
 export type Session11 = {
@@ -4819,6 +4999,10 @@ export type AgentManagerFailure = {
   message: string
 }
 
+export type EffectHttpApiErrorConflict = {
+  _tag: "Conflict"
+}
+
 export type AnacondaDesktopStatus =
   | {
       type: "unsupported-platform"
@@ -5218,13 +5402,53 @@ export type BrowserRequest1 =
       id: BrowserRequestId
       sessionID: string
       operation: "click"
-      selector: string
+      /**
+       * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
+       */
+      selector:
+        | string
+        | {
+            kind: "role"
+            role: string
+            name: string
+            scope?: string
+          }
+        | {
+            kind: "label"
+            text: string
+            scope?: string
+          }
+        | {
+            kind: "testid"
+            value: string
+            scope?: string
+          }
     }
   | {
       id: BrowserRequestId
       sessionID: string
       operation: "type"
-      selector: string
+      /**
+       * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
+       */
+      selector:
+        | string
+        | {
+            kind: "role"
+            role: string
+            name: string
+            scope?: string
+          }
+        | {
+            kind: "label"
+            text: string
+            scope?: string
+          }
+        | {
+            kind: "testid"
+            value: string
+            scope?: string
+          }
       text: string
       submit: boolean
     }
@@ -5232,7 +5456,27 @@ export type BrowserRequest1 =
       id: BrowserRequestId
       sessionID: string
       operation: "select"
-      selector: string
+      /**
+       * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
+       */
+      selector:
+        | string
+        | {
+            kind: "role"
+            role: string
+            name: string
+            scope?: string
+          }
+        | {
+            kind: "label"
+            text: string
+            scope?: string
+          }
+        | {
+            kind: "testid"
+            value: string
+            scope?: string
+          }
       values: Array<string>
     }
   | {
@@ -5241,7 +5485,24 @@ export type BrowserRequest1 =
       operation: "scroll"
       deltaX: number | "NaN" | "Infinity" | "-Infinity"
       deltaY: number | "NaN" | "Infinity" | "-Infinity"
-      selector?: string
+      selector?:
+        | string
+        | {
+            kind: "role"
+            role: string
+            name: string
+            scope?: string
+          }
+        | {
+            kind: "label"
+            text: string
+            scope?: string
+          }
+        | {
+            kind: "testid"
+            value: string
+            scope?: string
+          }
     }
   | {
       id: BrowserRequestId
@@ -5277,23 +5538,103 @@ export type BrowserRequest1 =
             }
           | {
               kind: "click"
-              selector: string
+              /**
+               * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
+               */
+              selector:
+                | string
+                | {
+                    kind: "role"
+                    role: string
+                    name: string
+                    scope?: string
+                  }
+                | {
+                    kind: "label"
+                    text: string
+                    scope?: string
+                  }
+                | {
+                    kind: "testid"
+                    value: string
+                    scope?: string
+                  }
             }
           | {
               kind: "type"
-              selector: string
+              /**
+               * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
+               */
+              selector:
+                | string
+                | {
+                    kind: "role"
+                    role: string
+                    name: string
+                    scope?: string
+                  }
+                | {
+                    kind: "label"
+                    text: string
+                    scope?: string
+                  }
+                | {
+                    kind: "testid"
+                    value: string
+                    scope?: string
+                  }
               text: string
               submit?: boolean
             }
           | {
               kind: "select"
-              selector: string
+              /**
+               * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
+               */
+              selector:
+                | string
+                | {
+                    kind: "role"
+                    role: string
+                    name: string
+                    scope?: string
+                  }
+                | {
+                    kind: "label"
+                    text: string
+                    scope?: string
+                  }
+                | {
+                    kind: "testid"
+                    value: string
+                    scope?: string
+                  }
               values: Array<string>
             }
         assertions: Array<
           | {
               kind: "visible"
-              selector: string
+              /**
+               * Observed legacy selector or exact semantic target. Optional scope is an observed selector matching one container. Ambiguous targets are rejected.
+               */
+              selector:
+                | string
+                | {
+                    kind: "role"
+                    role: string
+                    name: string
+                    scope?: string
+                  }
+                | {
+                    kind: "label"
+                    text: string
+                    scope?: string
+                  }
+                | {
+                    kind: "testid"
+                    value: string
+                    scope?: string
+                  }
               text?: string
             }
           | {
@@ -5352,6 +5693,8 @@ export type EventSessionTurnClose = {
   properties: {
     sessionID: string
     parentID?: string
+    messageID?: string
+    goalIntent?: string
     reason: "completed" | "error" | "interrupted" | "superseded"
   }
 }
@@ -13902,7 +14245,7 @@ export type SessionDiffResponses = {
   /**
    * Successfully retrieved diff
    */
-  200: Array<SnapshotFileDiff>
+  200: Array<ReviewFileDiff>
 }
 
 export type SessionDiffResponse = SessionDiffResponses[keyof SessionDiffResponses]
@@ -14543,7 +14886,11 @@ export type SessionUnrevertResponse = SessionUnrevertResponses[keyof SessionUnre
 
 export type SessionDiscardChangesData = {
   body?: {
+    requestID?: string
     files?: Array<string>
+    expected?: {
+      [key: string]: string
+    }
   }
   path: {
     sessionID: string
@@ -14565,9 +14912,9 @@ export type SessionDiscardChangesErrors = {
    */
   404: NotFoundError
   /**
-   * SessionBusyError
+   * SessionBusyError | ReviewConflict
    */
-  409: SessionBusyError
+  409: SessionBusyError | ReviewConflict
 }
 
 export type SessionDiscardChangesError = SessionDiscardChangesErrors[keyof SessionDiscardChangesErrors]
@@ -14583,7 +14930,11 @@ export type SessionDiscardChangesResponse = SessionDiscardChangesResponses[keyof
 
 export type SessionKeepChangesData = {
   body?: {
+    requestID?: string
     files?: Array<string>
+    expected?: {
+      [key: string]: string
+    }
   }
   path: {
     sessionID: string
@@ -14605,9 +14956,9 @@ export type SessionKeepChangesErrors = {
    */
   404: NotFoundError
   /**
-   * SessionBusyError
+   * SessionBusyError | ReviewConflict
    */
-  409: SessionBusyError
+  409: SessionBusyError | ReviewConflict
 }
 
 export type SessionKeepChangesError = SessionKeepChangesErrors[keyof SessionKeepChangesErrors]
@@ -18066,6 +18417,7 @@ export type KilocodeGoalClearData = {
   query?: {
     directory?: string
     workspace?: string
+    expectedIntent?: string
   }
   url: "/session/{sessionID}/goal"
 }
@@ -18075,6 +18427,10 @@ export type KilocodeGoalClearErrors = {
    * Bad request
    */
   400: BadRequestError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
 }
 
 export type KilocodeGoalClearError = KilocodeGoalClearErrors[keyof KilocodeGoalClearErrors]
@@ -18118,7 +18474,133 @@ export type KilocodeGoalGetResponses = {
    * Current goal
    */
   200: {
+    review?: {
+      status: "pending" | "accepted"
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      criteria: Array<string>
+      acceptedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
+    revisions?: Array<{
+      review?: {
+        status: "pending" | "accepted"
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        criteria: Array<string>
+        acceptedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
+      id: string
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      source: "steering" | "control"
+      intent?: string
+      objective: string
+      criteria?: Array<{
+        id: string
+        description: string
+        verification: string
+        required?: boolean
+        review?: boolean
+      }>
+      plan?: {
+        review?: boolean
+        objective: string
+        revision: string
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        tasks: Array<{
+          id: string
+          description: string
+          output: string
+          owner: string
+          verification: string
+          status: "pending" | "in_progress" | "completed" | "cancelled"
+          dependencies: Array<string>
+        }>
+      }
+      audit?: {
+        requirements: Array<{
+          criterionID?: string
+          requirement: string
+          passed: boolean
+          evidence: Array<{
+            messageID?: string
+            partID?: string
+            sessionID?: string
+            callID: string
+            summary: string
+            record?: {
+              version: 1
+              digest: string
+              at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            }
+          }>
+        }>
+        summary: string
+        verifiedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
+      auditAttempt?: {
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        accepted: boolean
+        reason?: string
+        requirements: Array<{
+          criterionID?: string
+          requirement: string
+          passed: boolean
+          evidence: Array<{
+            messageID?: string
+            partID?: string
+            sessionID?: string
+            callID: string
+            summary: string
+            record?: {
+              version: 1
+              digest: string
+              at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            }
+          }>
+        }>
+      }
+    }>
+    plan?: {
+      review?: boolean
+      objective: string
+      revision: string
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      tasks: Array<{
+        id: string
+        description: string
+        output: string
+        owner: string
+        verification: string
+        status: "pending" | "in_progress" | "completed" | "cancelled"
+        dependencies: Array<string>
+      }>
+    }
     objective: string
+    revision?: string
+    intent?: string
+    inputs?: Array<string>
+    dispatch?: {
+      id: string
+      messageID?: string
+      intent: string
+      phase: "queued" | "started" | "finished"
+      queuedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      startedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      finishedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      assistantID?: string
+      worker?: string
+      outcome?: "completed" | "error" | "interrupted"
+    }
+    retryEvents?: Array<string>
+    accounted?: {
+      userID: string
+      messages: Array<string>
+    }
+    criteria?: Array<{
+      id: string
+      description: string
+      verification: string
+      required?: boolean
+      review?: boolean
+    }>
     startMessageID?: string
     startSnapshot?: string
     selfHealID?: string
@@ -18136,12 +18618,20 @@ export type KilocodeGoalGetResponses = {
     blockedReason?: string
     audit?: {
       requirements: Array<{
+        criterionID?: string
         requirement: string
         passed: boolean
         evidence: Array<{
           messageID?: string
+          partID?: string
+          sessionID?: string
           callID: string
           summary: string
+          record?: {
+            version: 1
+            digest: string
+            at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          }
         }>
       }>
       summary: string
@@ -18152,12 +18642,20 @@ export type KilocodeGoalGetResponses = {
       accepted: boolean
       reason?: string
       requirements: Array<{
+        criterionID?: string
         requirement: string
         passed: boolean
         evidence: Array<{
           messageID?: string
+          partID?: string
+          sessionID?: string
           callID: string
           summary: string
+          record?: {
+            version: 1
+            digest: string
+            at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          }
         }>
       }>
     }
@@ -18167,11 +18665,167 @@ export type KilocodeGoalGetResponses = {
       message: string
     }>
     history?: Array<{
+      review?: {
+        status: "pending" | "accepted"
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        criteria: Array<string>
+        acceptedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
+      revisions?: Array<{
+        review?: {
+          status: "pending" | "accepted"
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          criteria: Array<string>
+          acceptedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+        id: string
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        source: "steering" | "control"
+        intent?: string
+        objective: string
+        criteria?: Array<{
+          id: string
+          description: string
+          verification: string
+          required?: boolean
+          review?: boolean
+        }>
+        plan?: {
+          review?: boolean
+          objective: string
+          revision: string
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          tasks: Array<{
+            id: string
+            description: string
+            output: string
+            owner: string
+            verification: string
+            status: "pending" | "in_progress" | "completed" | "cancelled"
+            dependencies: Array<string>
+          }>
+        }
+        audit?: {
+          requirements: Array<{
+            criterionID?: string
+            requirement: string
+            passed: boolean
+            evidence: Array<{
+              messageID?: string
+              partID?: string
+              sessionID?: string
+              callID: string
+              summary: string
+              record?: {
+                version: 1
+                digest: string
+                at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+              }
+            }>
+          }>
+          summary: string
+          verifiedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+        auditAttempt?: {
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          accepted: boolean
+          reason?: string
+          requirements: Array<{
+            criterionID?: string
+            requirement: string
+            passed: boolean
+            evidence: Array<{
+              messageID?: string
+              partID?: string
+              sessionID?: string
+              callID: string
+              summary: string
+              record?: {
+                version: 1
+                digest: string
+                at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+              }
+            }>
+          }>
+        }
+      }>
+      plan?: {
+        review?: boolean
+        objective: string
+        revision: string
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        tasks: Array<{
+          id: string
+          description: string
+          output: string
+          owner: string
+          verification: string
+          status: "pending" | "in_progress" | "completed" | "cancelled"
+          dependencies: Array<string>
+        }>
+      }
+      usage?: {
+        turns: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        continuations: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        toolCalls: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        retries?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
+      activeMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       objective: string
+      criteria?: Array<{
+        id: string
+        description: string
+        verification: string
+        required?: boolean
+        review?: boolean
+      }>
       status: "active" | "paused" | "complete" | "blocked"
       createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       blockedReason?: string
+      audit?: {
+        requirements: Array<{
+          criterionID?: string
+          requirement: string
+          passed: boolean
+          evidence: Array<{
+            messageID?: string
+            partID?: string
+            sessionID?: string
+            callID: string
+            summary: string
+            record?: {
+              version: 1
+              digest: string
+              at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            }
+          }>
+        }>
+        summary: string
+        verifiedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
+      auditAttempt?: {
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        accepted: boolean
+        reason?: string
+        requirements: Array<{
+          criterionID?: string
+          requirement: string
+          passed: boolean
+          evidence: Array<{
+            messageID?: string
+            partID?: string
+            sessionID?: string
+            callID: string
+            summary: string
+            record?: {
+              version: 1
+              digest: string
+              at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            }
+          }>
+        }>
+      }
     }>
   }
 }
@@ -18180,8 +18834,17 @@ export type KilocodeGoalGetResponse = KilocodeGoalGetResponses[keyof KilocodeGoa
 
 export type KilocodeGoalUpdateData = {
   body?: {
+    accept?: true
+    criteria?: Array<{
+      id: string
+      description: string
+      verification: string
+      required?: boolean
+      review?: boolean
+    }>
     status?: "active" | "paused"
     objective?: string
+    expectedIntent?: string
   }
   path: {
     sessionID: string
@@ -18202,6 +18865,10 @@ export type KilocodeGoalUpdateErrors = {
    * Not found
    */
   404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
 }
 
 export type KilocodeGoalUpdateError = KilocodeGoalUpdateErrors[keyof KilocodeGoalUpdateErrors]
@@ -18211,7 +18878,133 @@ export type KilocodeGoalUpdateResponses = {
    * Updated goal
    */
   200: {
+    review?: {
+      status: "pending" | "accepted"
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      criteria: Array<string>
+      acceptedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
+    revisions?: Array<{
+      review?: {
+        status: "pending" | "accepted"
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        criteria: Array<string>
+        acceptedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
+      id: string
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      source: "steering" | "control"
+      intent?: string
+      objective: string
+      criteria?: Array<{
+        id: string
+        description: string
+        verification: string
+        required?: boolean
+        review?: boolean
+      }>
+      plan?: {
+        review?: boolean
+        objective: string
+        revision: string
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        tasks: Array<{
+          id: string
+          description: string
+          output: string
+          owner: string
+          verification: string
+          status: "pending" | "in_progress" | "completed" | "cancelled"
+          dependencies: Array<string>
+        }>
+      }
+      audit?: {
+        requirements: Array<{
+          criterionID?: string
+          requirement: string
+          passed: boolean
+          evidence: Array<{
+            messageID?: string
+            partID?: string
+            sessionID?: string
+            callID: string
+            summary: string
+            record?: {
+              version: 1
+              digest: string
+              at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            }
+          }>
+        }>
+        summary: string
+        verifiedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
+      auditAttempt?: {
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        accepted: boolean
+        reason?: string
+        requirements: Array<{
+          criterionID?: string
+          requirement: string
+          passed: boolean
+          evidence: Array<{
+            messageID?: string
+            partID?: string
+            sessionID?: string
+            callID: string
+            summary: string
+            record?: {
+              version: 1
+              digest: string
+              at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            }
+          }>
+        }>
+      }
+    }>
+    plan?: {
+      review?: boolean
+      objective: string
+      revision: string
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      tasks: Array<{
+        id: string
+        description: string
+        output: string
+        owner: string
+        verification: string
+        status: "pending" | "in_progress" | "completed" | "cancelled"
+        dependencies: Array<string>
+      }>
+    }
     objective: string
+    revision?: string
+    intent?: string
+    inputs?: Array<string>
+    dispatch?: {
+      id: string
+      messageID?: string
+      intent: string
+      phase: "queued" | "started" | "finished"
+      queuedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      startedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      finishedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      assistantID?: string
+      worker?: string
+      outcome?: "completed" | "error" | "interrupted"
+    }
+    retryEvents?: Array<string>
+    accounted?: {
+      userID: string
+      messages: Array<string>
+    }
+    criteria?: Array<{
+      id: string
+      description: string
+      verification: string
+      required?: boolean
+      review?: boolean
+    }>
     startMessageID?: string
     startSnapshot?: string
     selfHealID?: string
@@ -18229,12 +19022,20 @@ export type KilocodeGoalUpdateResponses = {
     blockedReason?: string
     audit?: {
       requirements: Array<{
+        criterionID?: string
         requirement: string
         passed: boolean
         evidence: Array<{
           messageID?: string
+          partID?: string
+          sessionID?: string
           callID: string
           summary: string
+          record?: {
+            version: 1
+            digest: string
+            at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          }
         }>
       }>
       summary: string
@@ -18245,12 +19046,20 @@ export type KilocodeGoalUpdateResponses = {
       accepted: boolean
       reason?: string
       requirements: Array<{
+        criterionID?: string
         requirement: string
         passed: boolean
         evidence: Array<{
           messageID?: string
+          partID?: string
+          sessionID?: string
           callID: string
           summary: string
+          record?: {
+            version: 1
+            digest: string
+            at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          }
         }>
       }>
     }
@@ -18260,11 +19069,167 @@ export type KilocodeGoalUpdateResponses = {
       message: string
     }>
     history?: Array<{
+      review?: {
+        status: "pending" | "accepted"
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        criteria: Array<string>
+        acceptedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
+      revisions?: Array<{
+        review?: {
+          status: "pending" | "accepted"
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          criteria: Array<string>
+          acceptedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+        id: string
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        source: "steering" | "control"
+        intent?: string
+        objective: string
+        criteria?: Array<{
+          id: string
+          description: string
+          verification: string
+          required?: boolean
+          review?: boolean
+        }>
+        plan?: {
+          review?: boolean
+          objective: string
+          revision: string
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          tasks: Array<{
+            id: string
+            description: string
+            output: string
+            owner: string
+            verification: string
+            status: "pending" | "in_progress" | "completed" | "cancelled"
+            dependencies: Array<string>
+          }>
+        }
+        audit?: {
+          requirements: Array<{
+            criterionID?: string
+            requirement: string
+            passed: boolean
+            evidence: Array<{
+              messageID?: string
+              partID?: string
+              sessionID?: string
+              callID: string
+              summary: string
+              record?: {
+                version: 1
+                digest: string
+                at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+              }
+            }>
+          }>
+          summary: string
+          verifiedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+        auditAttempt?: {
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          accepted: boolean
+          reason?: string
+          requirements: Array<{
+            criterionID?: string
+            requirement: string
+            passed: boolean
+            evidence: Array<{
+              messageID?: string
+              partID?: string
+              sessionID?: string
+              callID: string
+              summary: string
+              record?: {
+                version: 1
+                digest: string
+                at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+              }
+            }>
+          }>
+        }
+      }>
+      plan?: {
+        review?: boolean
+        objective: string
+        revision: string
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        tasks: Array<{
+          id: string
+          description: string
+          output: string
+          owner: string
+          verification: string
+          status: "pending" | "in_progress" | "completed" | "cancelled"
+          dependencies: Array<string>
+        }>
+      }
+      usage?: {
+        turns: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        continuations: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        toolCalls: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        retries?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
+      activeMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       objective: string
+      criteria?: Array<{
+        id: string
+        description: string
+        verification: string
+        required?: boolean
+        review?: boolean
+      }>
       status: "active" | "paused" | "complete" | "blocked"
       createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       blockedReason?: string
+      audit?: {
+        requirements: Array<{
+          criterionID?: string
+          requirement: string
+          passed: boolean
+          evidence: Array<{
+            messageID?: string
+            partID?: string
+            sessionID?: string
+            callID: string
+            summary: string
+            record?: {
+              version: 1
+              digest: string
+              at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            }
+          }>
+        }>
+        summary: string
+        verifiedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
+      auditAttempt?: {
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        accepted: boolean
+        reason?: string
+        requirements: Array<{
+          criterionID?: string
+          requirement: string
+          passed: boolean
+          evidence: Array<{
+            messageID?: string
+            partID?: string
+            sessionID?: string
+            callID: string
+            summary: string
+            record?: {
+              version: 1
+              digest: string
+              at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            }
+          }>
+        }>
+      }
     }>
   }
 }
@@ -18305,7 +19270,133 @@ export type KilocodeGoalCreateResponses = {
    * Created goal
    */
   200: {
+    review?: {
+      status: "pending" | "accepted"
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      criteria: Array<string>
+      acceptedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
+    revisions?: Array<{
+      review?: {
+        status: "pending" | "accepted"
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        criteria: Array<string>
+        acceptedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
+      id: string
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      source: "steering" | "control"
+      intent?: string
+      objective: string
+      criteria?: Array<{
+        id: string
+        description: string
+        verification: string
+        required?: boolean
+        review?: boolean
+      }>
+      plan?: {
+        review?: boolean
+        objective: string
+        revision: string
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        tasks: Array<{
+          id: string
+          description: string
+          output: string
+          owner: string
+          verification: string
+          status: "pending" | "in_progress" | "completed" | "cancelled"
+          dependencies: Array<string>
+        }>
+      }
+      audit?: {
+        requirements: Array<{
+          criterionID?: string
+          requirement: string
+          passed: boolean
+          evidence: Array<{
+            messageID?: string
+            partID?: string
+            sessionID?: string
+            callID: string
+            summary: string
+            record?: {
+              version: 1
+              digest: string
+              at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            }
+          }>
+        }>
+        summary: string
+        verifiedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
+      auditAttempt?: {
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        accepted: boolean
+        reason?: string
+        requirements: Array<{
+          criterionID?: string
+          requirement: string
+          passed: boolean
+          evidence: Array<{
+            messageID?: string
+            partID?: string
+            sessionID?: string
+            callID: string
+            summary: string
+            record?: {
+              version: 1
+              digest: string
+              at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            }
+          }>
+        }>
+      }
+    }>
+    plan?: {
+      review?: boolean
+      objective: string
+      revision: string
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      tasks: Array<{
+        id: string
+        description: string
+        output: string
+        owner: string
+        verification: string
+        status: "pending" | "in_progress" | "completed" | "cancelled"
+        dependencies: Array<string>
+      }>
+    }
     objective: string
+    revision?: string
+    intent?: string
+    inputs?: Array<string>
+    dispatch?: {
+      id: string
+      messageID?: string
+      intent: string
+      phase: "queued" | "started" | "finished"
+      queuedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      startedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      finishedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      assistantID?: string
+      worker?: string
+      outcome?: "completed" | "error" | "interrupted"
+    }
+    retryEvents?: Array<string>
+    accounted?: {
+      userID: string
+      messages: Array<string>
+    }
+    criteria?: Array<{
+      id: string
+      description: string
+      verification: string
+      required?: boolean
+      review?: boolean
+    }>
     startMessageID?: string
     startSnapshot?: string
     selfHealID?: string
@@ -18323,12 +19414,20 @@ export type KilocodeGoalCreateResponses = {
     blockedReason?: string
     audit?: {
       requirements: Array<{
+        criterionID?: string
         requirement: string
         passed: boolean
         evidence: Array<{
           messageID?: string
+          partID?: string
+          sessionID?: string
           callID: string
           summary: string
+          record?: {
+            version: 1
+            digest: string
+            at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          }
         }>
       }>
       summary: string
@@ -18339,12 +19438,20 @@ export type KilocodeGoalCreateResponses = {
       accepted: boolean
       reason?: string
       requirements: Array<{
+        criterionID?: string
         requirement: string
         passed: boolean
         evidence: Array<{
           messageID?: string
+          partID?: string
+          sessionID?: string
           callID: string
           summary: string
+          record?: {
+            version: 1
+            digest: string
+            at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          }
         }>
       }>
     }
@@ -18354,16 +19461,314 @@ export type KilocodeGoalCreateResponses = {
       message: string
     }>
     history?: Array<{
+      review?: {
+        status: "pending" | "accepted"
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        criteria: Array<string>
+        acceptedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
+      revisions?: Array<{
+        review?: {
+          status: "pending" | "accepted"
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          criteria: Array<string>
+          acceptedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+        id: string
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        source: "steering" | "control"
+        intent?: string
+        objective: string
+        criteria?: Array<{
+          id: string
+          description: string
+          verification: string
+          required?: boolean
+          review?: boolean
+        }>
+        plan?: {
+          review?: boolean
+          objective: string
+          revision: string
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          tasks: Array<{
+            id: string
+            description: string
+            output: string
+            owner: string
+            verification: string
+            status: "pending" | "in_progress" | "completed" | "cancelled"
+            dependencies: Array<string>
+          }>
+        }
+        audit?: {
+          requirements: Array<{
+            criterionID?: string
+            requirement: string
+            passed: boolean
+            evidence: Array<{
+              messageID?: string
+              partID?: string
+              sessionID?: string
+              callID: string
+              summary: string
+              record?: {
+                version: 1
+                digest: string
+                at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+              }
+            }>
+          }>
+          summary: string
+          verifiedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+        auditAttempt?: {
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          accepted: boolean
+          reason?: string
+          requirements: Array<{
+            criterionID?: string
+            requirement: string
+            passed: boolean
+            evidence: Array<{
+              messageID?: string
+              partID?: string
+              sessionID?: string
+              callID: string
+              summary: string
+              record?: {
+                version: 1
+                digest: string
+                at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+              }
+            }>
+          }>
+        }
+      }>
+      plan?: {
+        review?: boolean
+        objective: string
+        revision: string
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        tasks: Array<{
+          id: string
+          description: string
+          output: string
+          owner: string
+          verification: string
+          status: "pending" | "in_progress" | "completed" | "cancelled"
+          dependencies: Array<string>
+        }>
+      }
+      usage?: {
+        turns: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        continuations: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        toolCalls: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        retries?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
+      activeMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       objective: string
+      criteria?: Array<{
+        id: string
+        description: string
+        verification: string
+        required?: boolean
+        review?: boolean
+      }>
       status: "active" | "paused" | "complete" | "blocked"
       createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       blockedReason?: string
+      audit?: {
+        requirements: Array<{
+          criterionID?: string
+          requirement: string
+          passed: boolean
+          evidence: Array<{
+            messageID?: string
+            partID?: string
+            sessionID?: string
+            callID: string
+            summary: string
+            record?: {
+              version: 1
+              digest: string
+              at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            }
+          }>
+        }>
+        summary: string
+        verifiedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
+      auditAttempt?: {
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        accepted: boolean
+        reason?: string
+        requirements: Array<{
+          criterionID?: string
+          requirement: string
+          passed: boolean
+          evidence: Array<{
+            messageID?: string
+            partID?: string
+            sessionID?: string
+            callID: string
+            summary: string
+            record?: {
+              version: 1
+              digest: string
+              at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            }
+          }>
+        }>
+      }
     }>
   }
 }
 
 export type KilocodeGoalCreateResponse = KilocodeGoalCreateResponses[keyof KilocodeGoalCreateResponses]
+
+export type KilocodeGoalStopResultData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/goal/stop"
+}
+
+export type KilocodeGoalStopResultErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeGoalStopResultError = KilocodeGoalStopResultErrors[keyof KilocodeGoalStopResultErrors]
+
+export type KilocodeGoalStopResultResponses = {
+  /**
+   * Latest saved goal stop result
+   */
+  200: {
+    sessionID: string
+    intent: string
+    phase: "requested" | "cleared" | "finished"
+    at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    finishedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    interrupted?: boolean
+    background?: {
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      status: "checked" | "unavailable"
+      jobs: Array<{
+        id: string
+        type: string
+        title?: string
+      }>
+    }
+    operations?: Array<
+      | {
+          id: string
+          jobID: string
+          revision: string
+          messageID?: string
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          phase: "requested"
+        }
+      | {
+          id: string
+          jobID: string
+          revision: string
+          messageID?: string
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          phase: "observed"
+          observedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          result: "accepted" | "not-selected" | "cancelled" | "completed" | "error" | "running"
+        }
+    >
+  }
+}
+
+export type KilocodeGoalStopResultResponse = KilocodeGoalStopResultResponses[keyof KilocodeGoalStopResultResponses]
+
+export type KilocodeGoalStopData = {
+  body?: {
+    expectedIntent: string
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/goal/stop"
+}
+
+export type KilocodeGoalStopErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeGoalStopError = KilocodeGoalStopErrors[keyof KilocodeGoalStopErrors]
+
+export type KilocodeGoalStopResponses = {
+  /**
+   * Saved goal stop result
+   */
+  200: {
+    sessionID: string
+    intent: string
+    phase: "requested" | "cleared" | "finished"
+    at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    finishedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    interrupted?: boolean
+    background?: {
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      status: "checked" | "unavailable"
+      jobs: Array<{
+        id: string
+        type: string
+        title?: string
+      }>
+    }
+    operations?: Array<
+      | {
+          id: string
+          jobID: string
+          revision: string
+          messageID?: string
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          phase: "requested"
+        }
+      | {
+          id: string
+          jobID: string
+          revision: string
+          messageID?: string
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          phase: "observed"
+          observedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          result: "accepted" | "not-selected" | "cancelled" | "completed" | "error" | "running"
+        }
+    >
+  }
+}
+
+export type KilocodeGoalStopResponse = KilocodeGoalStopResponses[keyof KilocodeGoalStopResponses]
 
 export type KilocodeGoalDiscardData = {
   body?: never
@@ -18539,6 +19944,79 @@ export type KilocodeCheckpointJumpResponses = {
 
 export type KilocodeCheckpointJumpResponse = KilocodeCheckpointJumpResponses[keyof KilocodeCheckpointJumpResponses]
 
+export type KilocodeRoutineForecastData = {
+  body?:
+    | {
+        kind: "once"
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
+    | {
+        kind: "cron"
+        expr: string
+        tz?: string
+      }
+    | {
+        kind: "event"
+        source: string
+        filter?: string
+      }
+    | {
+        kind: "manual"
+      }
+    | {
+        kind: "local"
+        local: string
+        tz: string
+        fold?: "reject" | "earlier" | "later"
+      }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/agent-forecast"
+}
+
+export type KilocodeRoutineForecastErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+}
+
+export type KilocodeRoutineForecastError = KilocodeRoutineForecastErrors[keyof KilocodeRoutineForecastErrors]
+
+export type KilocodeRoutineForecastResponses = {
+  /**
+   * Normalized schedule and upcoming occurrences
+   */
+  200: {
+    schedule:
+      | {
+          kind: "once"
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+      | {
+          kind: "cron"
+          expr: string
+          tz?: string
+        }
+      | {
+          kind: "event"
+          source: string
+          filter?: string
+        }
+      | {
+          kind: "manual"
+        }
+    from: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    occurrences: Array<number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN">
+    timezone?: string
+  }
+}
+
+export type KilocodeRoutineForecastResponse = KilocodeRoutineForecastResponses[keyof KilocodeRoutineForecastResponses]
+
 export type KilocodeRoutineListData = {
   body?: never
   path?: never
@@ -18568,6 +20046,15 @@ export type KilocodeRoutineListResponses = {
     avatar?: string
     role: string
     objective: string
+    output?: {
+      destination: "conversation"
+      description: string
+      criteria: Array<{
+        id: string
+        description: string
+        verification: string
+      }>
+    }
     capabilities: Array<string>
     memoryScope: "role" | "project" | "session"
     schedule:
@@ -18588,7 +20075,10 @@ export type KilocodeRoutineListResponses = {
       | {
           kind: "manual"
         }
+    scheduleVersion?: number
+    scheduleUpdatedAt?: number
     enabled: boolean
+    blockReset?: Array<string>
     plan?: string
     model?: {
       providerID: string
@@ -18602,6 +20092,11 @@ export type KilocodeRoutineListResponses = {
     updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     note?: string
     nextRun?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    execution?: {
+      state: "starting" | "active" | "recovery"
+      runID?: string
+      sessionID?: string
+    }
   }>
 }
 
@@ -18612,6 +20107,15 @@ export type KilocodeRoutineCreateData = {
     name: string
     role?: string
     objective: string
+    output?: {
+      destination: "conversation"
+      description: string
+      criteria: Array<{
+        id: string
+        description: string
+        verification: string
+      }>
+    }
     capabilities?: Array<string>
     memoryScope?: "role" | "project" | "session"
     schedule:
@@ -18671,6 +20175,15 @@ export type KilocodeRoutineCreateResponses = {
     avatar?: string
     role: string
     objective: string
+    output?: {
+      destination: "conversation"
+      description: string
+      criteria: Array<{
+        id: string
+        description: string
+        verification: string
+      }>
+    }
     capabilities: Array<string>
     memoryScope: "role" | "project" | "session"
     schedule:
@@ -18691,7 +20204,10 @@ export type KilocodeRoutineCreateResponses = {
       | {
           kind: "manual"
         }
+    scheduleVersion?: number
+    scheduleUpdatedAt?: number
     enabled: boolean
+    blockReset?: Array<string>
     plan?: string
     model?: {
       providerID: string
@@ -18705,10 +20221,109 @@ export type KilocodeRoutineCreateResponses = {
     updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     note?: string
     nextRun?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    execution?: {
+      state: "starting" | "active" | "recovery"
+      runID?: string
+      sessionID?: string
+    }
   }
 }
 
 export type KilocodeRoutineCreateResponse = KilocodeRoutineCreateResponses[keyof KilocodeRoutineCreateResponses]
+
+export type KilocodeRoutineArchiveData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    cursor?: string
+    agentID?: string
+  }
+  url: "/kilocode/agent-archive"
+}
+
+export type KilocodeRoutineArchiveErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+}
+
+export type KilocodeRoutineArchiveError = KilocodeRoutineArchiveErrors[keyof KilocodeRoutineArchiveErrors]
+
+export type KilocodeRoutineArchiveResponses = {
+  /**
+   * Removed routine page
+   */
+  200: {
+    items: Array<{
+      version: 1
+      archivedAt: number
+      definition: {
+        id: string
+        name: string
+        avatar?: string
+        role: string
+        objective: string
+        output?: {
+          destination: "conversation"
+          description: string
+          criteria: Array<{
+            id: string
+            description: string
+            verification: string
+          }>
+        }
+        capabilities: Array<string>
+        memoryScope: "role" | "project" | "session"
+        schedule:
+          | {
+              kind: "once"
+              at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            }
+          | {
+              kind: "cron"
+              expr: string
+              tz?: string
+            }
+          | {
+              kind: "event"
+              source: string
+              filter?: string
+            }
+          | {
+              kind: "manual"
+            }
+        scheduleVersion?: number
+        scheduleUpdatedAt?: number
+        enabled: boolean
+        blockReset?: Array<string>
+        plan?: string
+        model?: {
+          providerID: string
+          id: string
+        }
+        mode?: string
+        dir?: string
+        access?: "full" | "brief"
+        tools?: Array<string>
+        createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        note?: string
+        nextRun?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        execution?: {
+          state: "starting" | "active" | "recovery"
+          runID?: string
+          sessionID?: string
+        }
+      }
+    }>
+    next?: string
+  }
+}
+
+export type KilocodeRoutineArchiveResponse = KilocodeRoutineArchiveResponses[keyof KilocodeRoutineArchiveResponses]
 
 export type KilocodeRoutineRemoveData = {
   body?: never
@@ -18724,9 +20339,9 @@ export type KilocodeRoutineRemoveData = {
 
 export type KilocodeRoutineRemoveErrors = {
   /**
-   * Bad request
+   * InvalidRequestError
    */
-  400: BadRequestError
+  400: InvalidRequestError
   /**
    * Not found
    */
@@ -18749,6 +20364,15 @@ export type KilocodeRoutineUpdateData = {
     name?: string
     role?: string
     objective?: string
+    output?: {
+      destination: "conversation"
+      description: string
+      criteria: Array<{
+        id: string
+        description: string
+        verification: string
+      }>
+    }
     capabilities?: Array<string>
     memoryScope?: "role" | "project" | "session"
     schedule?:
@@ -18769,6 +20393,37 @@ export type KilocodeRoutineUpdateData = {
       | {
           kind: "manual"
         }
+    expectedSchedule?:
+      | {
+          kind: "once"
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+      | {
+          kind: "cron"
+          expr: string
+          tz?: string
+        }
+      | {
+          kind: "event"
+          source: string
+          filter?: string
+        }
+      | {
+          kind: "manual"
+        }
+    expectedAccess?: "brief" | "full" | "unset"
+    expectedOutput?:
+      | {
+          destination: "conversation"
+          description: string
+          criteria: Array<{
+            id: string
+            description: string
+            verification: string
+          }>
+        }
+      | "unset"
+    expectedScheduleVersion?: number
     avatar?: string
     enabled?: boolean
     plan?: string
@@ -18815,6 +20470,15 @@ export type KilocodeRoutineUpdateResponses = {
     avatar?: string
     role: string
     objective: string
+    output?: {
+      destination: "conversation"
+      description: string
+      criteria: Array<{
+        id: string
+        description: string
+        verification: string
+      }>
+    }
     capabilities: Array<string>
     memoryScope: "role" | "project" | "session"
     schedule:
@@ -18835,7 +20499,10 @@ export type KilocodeRoutineUpdateResponses = {
       | {
           kind: "manual"
         }
+    scheduleVersion?: number
+    scheduleUpdatedAt?: number
     enabled: boolean
+    blockReset?: Array<string>
     plan?: string
     model?: {
       providerID: string
@@ -18849,6 +20516,11 @@ export type KilocodeRoutineUpdateResponses = {
     updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     note?: string
     nextRun?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    execution?: {
+      state: "starting" | "active" | "recovery"
+      runID?: string
+      sessionID?: string
+    }
   }
 }
 
@@ -18889,10 +20561,40 @@ export type KilocodeRoutineRunResponses = {
     at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     sessionID: string
     status: "running" | "complete" | "blocked" | "error"
+    scheduleVersion?: number
+    trigger?:
+      | {
+          kind: "manual"
+        }
+      | {
+          kind: "timer"
+          id: string
+          scheduledAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          observedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          tz?: string
+        }
+      | {
+          kind: "event"
+          source: string
+          filter?: string
+          receivedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+    revision?: number
     outcome?: {
       kind: "code" | "notify"
       summary: string
       evidence?: Array<string>
+      verification?: {
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        requirements: Array<{
+          criterionID?: string
+          requirement: string
+          verification?: string
+          required: boolean
+          passed: boolean
+          evidence: Array<string>
+        }>
+      }
       cost: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     }
     blockedReason?: string
@@ -18932,10 +20634,40 @@ export type KilocodeRoutineRunsResponses = {
     at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     sessionID: string
     status: "running" | "complete" | "blocked" | "error"
+    scheduleVersion?: number
+    trigger?:
+      | {
+          kind: "manual"
+        }
+      | {
+          kind: "timer"
+          id: string
+          scheduledAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          observedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          tz?: string
+        }
+      | {
+          kind: "event"
+          source: string
+          filter?: string
+          receivedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+    revision?: number
     outcome?: {
       kind: "code" | "notify"
       summary: string
       evidence?: Array<string>
+      verification?: {
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        requirements: Array<{
+          criterionID?: string
+          requirement: string
+          verification?: string
+          required: boolean
+          passed: boolean
+          evidence: Array<string>
+        }>
+      }
       cost: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     }
     blockedReason?: string
@@ -18943,6 +20675,105 @@ export type KilocodeRoutineRunsResponses = {
 }
 
 export type KilocodeRoutineRunsResponse = KilocodeRoutineRunsResponses[keyof KilocodeRoutineRunsResponses]
+
+export type KilocodeRoutineSnapshotData = {
+  body?: never
+  path: {
+    agentID: string
+    runID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/agent/{agentID}/runs/{runID}/snapshot"
+}
+
+export type KilocodeRoutineSnapshotErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeRoutineSnapshotError = KilocodeRoutineSnapshotErrors[keyof KilocodeRoutineSnapshotErrors]
+
+export type KilocodeRoutineSnapshotResponses = {
+  /**
+   * Original startup instructions
+   */
+  200: {
+    version: 1
+    runID: string
+    agentID: string
+    at: number
+    definition: {
+      id: string
+      name: string
+      avatar?: string
+      role: string
+      objective: string
+      output?: {
+        destination: "conversation"
+        description: string
+        criteria: Array<{
+          id: string
+          description: string
+          verification: string
+        }>
+      }
+      capabilities: Array<string>
+      memoryScope: "role" | "project" | "session"
+      schedule:
+        | {
+            kind: "once"
+            at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            kind: "cron"
+            expr: string
+            tz?: string
+          }
+        | {
+            kind: "event"
+            source: string
+            filter?: string
+          }
+        | {
+            kind: "manual"
+          }
+      scheduleVersion?: number
+      scheduleUpdatedAt?: number
+      enabled: boolean
+      blockReset?: Array<string>
+      plan?: string
+      model?: {
+        providerID: string
+        id: string
+      }
+      mode?: string
+      dir?: string
+      access?: "full" | "brief"
+      tools?: Array<string>
+      createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      note?: string
+      nextRun?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      execution?: {
+        state: "starting" | "active" | "recovery"
+        runID?: string
+        sessionID?: string
+      }
+    }
+    objective: string
+  }
+}
+
+export type KilocodeRoutineSnapshotResponse = KilocodeRoutineSnapshotResponses[keyof KilocodeRoutineSnapshotResponses]
 
 export type KilocodeRoutineTemplatesData = {
   body?: never
@@ -19029,10 +20860,40 @@ export type KilocodeRoutineEventResponses = {
     at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     sessionID: string
     status: "running" | "complete" | "blocked" | "error"
+    scheduleVersion?: number
+    trigger?:
+      | {
+          kind: "manual"
+        }
+      | {
+          kind: "timer"
+          id: string
+          scheduledAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          observedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          tz?: string
+        }
+      | {
+          kind: "event"
+          source: string
+          filter?: string
+          receivedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+    revision?: number
     outcome?: {
       kind: "code" | "notify"
       summary: string
       evidence?: Array<string>
+      verification?: {
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        requirements: Array<{
+          criterionID?: string
+          requirement: string
+          verification?: string
+          required: boolean
+          passed: boolean
+          evidence: Array<string>
+        }>
+      }
       cost: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     }
     blockedReason?: string
@@ -21020,6 +22881,27 @@ export type KilocodeVoiceStateResponses = {
     }
     lastSeq: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     incomplete: boolean
+    failure?: {
+      code:
+        | "room_data_closed"
+        | "room_input_closed"
+        | "engine_audio_closed"
+        | "engine_events_closed"
+        | "audio_input"
+        | "audio_publish"
+        | "playout_metadata"
+        | "transcript_send"
+        | "playout_flush"
+        | "engine_interrupt"
+        | "interruption_send"
+        | "backend_delivery"
+        | "event_queue_overflow"
+        | "engine_failure"
+        | "engine_inject"
+      message: string
+      recovery: string
+      at: string
+    }
     turns: Array<{
       id: string
       role: "user" | "assistant"

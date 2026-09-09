@@ -36,6 +36,15 @@ func main() {
 		}
 		write(writer, http.StatusCreated, started)
 	})
+	mux.HandleFunc("GET /v1/sessions/{id}", func(writer http.ResponseWriter, request *http.Request) {
+		status, found := manager.Status(request.PathValue("id"))
+		if !found {
+			write(writer, http.StatusNotFound, map[string]string{"error": "voice session not found"})
+			return
+		}
+		write(writer, http.StatusOK, status)
+	})
+
 	mux.HandleFunc("POST /v1/sessions/{id}/inject", func(writer http.ResponseWriter, request *http.Request) {
 		var input wire.Inject
 		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {

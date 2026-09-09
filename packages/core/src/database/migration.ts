@@ -5,6 +5,7 @@ import { Effect, Semaphore } from "effect"
 import type { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
 import { migrations } from "./migration.gen"
 import schema from "./schema.gen"
+import { capture } from "../kilocode/migration-backup" // kilocode_change - preserve a recoverable snapshot before destructive upgrades
 
 type Database = EffectDrizzleSqlite.EffectSQLiteDatabase
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0]
@@ -73,6 +74,7 @@ export function applyOnly(db: Database, input: Migration[]) {
         (tx) =>
           Effect.gen(function* () {
             if (yield* tx.get(sql`SELECT id FROM ${sql.identifier("migration")} WHERE id = ${migration.id}`)) return
+            yield* capture(tx, migration.id) // kilocode_change - snapshot and migration commit or roll back together
             yield* migration.up(tx)
             yield* tx.run(
               sql`INSERT INTO ${sql.identifier("migration")} (id, time_completed) VALUES (${migration.id}, ${Date.now()})`,

@@ -1,5 +1,7 @@
 import { Cause, Deferred, Effect, Exit, Fiber, Latch, Schema, Scope, SynchronizedRef } from "effect"
 import { KiloRunner } from "@/kilocode/effect/runner" // kilocode_change
+import { cancel as cancelObserved } from "@/kilocode/effect/cancellation" // kilocode_change
+import { executing } from "@/kilocode/effect/observation" // kilocode_change
 
 export interface Runner<A, E = never> {
   readonly state: State<A, E>
@@ -7,6 +9,8 @@ export interface Runner<A, E = never> {
   readonly ensureRunning: (work: Effect.Effect<A, E>) => Effect.Effect<A, E>
   readonly startShell: (work: Effect.Effect<A, E>, ready?: Latch.Latch) => Effect.Effect<A, E | Busy>
   readonly cancel: Effect.Effect<void>
+  readonly cancelRun: (id: string) => Effect.Effect<boolean> // kilocode_change
+  readonly requestCancel: (id: string) => Effect.Effect<Effect.Effect<boolean>> // kilocode_change
 }
 
 export class Cancelled extends Schema.TaggedErrorClass<Cancelled>()("RunnerCancelled", {}) {}
@@ -85,7 +89,7 @@ export const make = <A, E = never>(
   const startRun = (work: Effect.Effect<A, E>, done: Deferred.Deferred<A, E | Cancelled>) => {
     const id = next()
     return KiloRunner.start({
-      work,
+      work: executing(done, work), // kilocode_change - carry the actual execution identity into its work
       scope,
       finish: (exit) => finishRun(id, done, exit),
       handle: (fiber) => ({ id, done, fiber }) satisfies RunHandle<A, E>,
@@ -206,6 +210,16 @@ export const make = <A, E = never>(
     }
   }).pipe(Effect.flatten)
 
+  // kilocode_change start - compare identity and select the exact handle atomically
+  const requestCancel = (id: string) =>
+    SynchronizedRef.modify(ref, (st) => cancelObserved(st, id, idleIfCurrent(), new Cancelled())).pipe(
+      Effect.flatMap((stop) => Effect.forkIn(stop, scope)),
+      Effect.map((fiber) => Fiber.join(fiber)),
+      Effect.uninterruptible,
+    )
+  const cancelRun = (id: string) => requestCancel(id).pipe(Effect.flatten)
+  // kilocode_change end
+
   return {
     get state() {
       return state()
@@ -216,6 +230,8 @@ export const make = <A, E = never>(
     ensureRunning,
     startShell,
     cancel,
+    cancelRun, // kilocode_change
+    requestCancel, // kilocode_change
   }
 }
 

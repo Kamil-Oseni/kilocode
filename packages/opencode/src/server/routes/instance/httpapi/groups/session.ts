@@ -6,11 +6,13 @@ import { Session } from "@/session/session"
 import { MessageV2 } from "@/session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
 import { SessionRevert } from "@/session/revert"
+import { ReviewConflict } from "@/kilocode/session/review-revision" // kilocode_change - stale review response contract
+import { ReviewDiff } from "@/kilocode/session/review-state" // kilocode_change - persisted acceptance metadata
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
 import { MessageID, PartID, SessionID } from "@/session/schema"
-import { Snapshot } from "@/snapshot"
+// kilocode_change - session diff responses use ReviewDiff to include persisted acceptance
 import { Schema, Struct } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
@@ -74,7 +76,9 @@ export const ShellPayload = Schema.Struct(Struct.omit(SessionPrompt.ShellInput.f
 export const RevertPayload = Schema.Struct(Struct.omit(SessionRevert.RevertInput.fields, ["sessionID"]))
 // kilocode_change - optional file subset for per-edit Undo; omit to discard every edit
 export const DiscardChangesPayload = Schema.Struct({
+  requestID: Schema.optional(Schema.String), // kilocode_change - durable review retry identity
   files: Schema.optional(Schema.Array(Schema.String)),
+  expected: Schema.optional(Schema.Record(Schema.String, Schema.String)), // kilocode_change - expected per-file review revisions
 })
 export const PermissionResponsePayload = Schema.Struct({
   response: PermissionV1.Reply,
@@ -189,7 +193,7 @@ export const SessionApi = HttpApi.make("session")
         HttpApiEndpoint.get("diff", SessionPaths.diff, {
           params: { sessionID: SessionID },
           query: DiffQuery,
-          success: described(Schema.Array(Snapshot.FileDiff), "Successfully retrieved diff"),
+          success: described(Schema.Array(ReviewDiff), "Successfully retrieved diff"), // kilocode_change - persisted review acceptance
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.diff",
@@ -419,7 +423,7 @@ export const SessionApi = HttpApi.make("session")
           query: WorkspaceRoutingQuery,
           payload: DiscardChangesPayload,
           success: described(Session.Info, "Updated session"),
-          error: [HttpApiError.BadRequest, ApiNotFoundError, SessionBusyError],
+          error: [HttpApiError.BadRequest, ApiNotFoundError, SessionBusyError, ReviewConflict],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.discardChanges",
@@ -434,7 +438,7 @@ export const SessionApi = HttpApi.make("session")
           query: WorkspaceRoutingQuery,
           payload: DiscardChangesPayload,
           success: described(Session.Info, "Updated session"),
-          error: [HttpApiError.BadRequest, ApiNotFoundError, SessionBusyError],
+          error: [HttpApiError.BadRequest, ApiNotFoundError, SessionBusyError, ReviewConflict],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.keepChanges",

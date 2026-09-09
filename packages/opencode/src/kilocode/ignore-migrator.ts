@@ -18,6 +18,7 @@ export namespace IgnoreMigrator {
 
   export interface MigrationResult {
     permission: ConfigPermission.Info
+    origins: Record<string, Record<string, "global" | "local">>
     warnings: string[]
     patternCount: number
   }
@@ -176,12 +177,21 @@ export namespace IgnoreMigrator {
     if (allPatterns.length === 0) {
       return {
         permission: {},
+        origins: {},
         warnings,
         patternCount: 0,
       }
     }
 
     const rules = buildPermissionRules(allPatterns)
+    const origins: Record<string, "global" | "local"> = {}
+    // Match buildPermissionRules: negated entries override deny entries.
+    for (const negated of [false, true]) {
+      for (const item of allPatterns) {
+        if (item.negated !== negated) continue
+        origins[convertToGlob(item.pattern)] = item.source === "project" ? "local" : "global"
+      }
+    }
 
     // 4. Create permission config for both read and edit
     const permission: ConfigPermission.Info = {
@@ -191,6 +201,7 @@ export namespace IgnoreMigrator {
 
     return {
       permission,
+      origins: { read: origins, edit: { ...origins } },
       warnings,
       patternCount: allPatterns.length,
     }

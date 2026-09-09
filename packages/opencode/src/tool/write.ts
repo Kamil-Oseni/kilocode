@@ -18,6 +18,7 @@ import { ConfigValidation } from "../kilocode/config-validation" // kilocode_cha
 import * as EncodedIO from "../kilocode/tool/encoded-io" // kilocode_change
 import { assertMutablePath } from "../kilocode/agent-manager/protection" // kilocode_change
 import * as Bom from "@/util/bom"
+import * as Artifact from "@/kilocode/goal/artifact" // kilocode_change
 
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
 
@@ -107,6 +108,7 @@ export const WriteTool = Tool.define(
               diagnostics: filterDiagnostics(diagnostics, [normalizedFilepath]), // kilocode_change
               filepath,
               exists: exists,
+              rayaRevision: yield* Artifact.capture(fs, filepath), // kilocode_change - fingerprint actual encoded/formatted bytes
               diff, // kilocode_change
               filediff, // kilocode_change
             },

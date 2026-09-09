@@ -1,15 +1,16 @@
 // raya_change - Milestone G authenticated smoke walkthrough runner and evidence artifacts
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
+import { describe, locate, type BrowserTarget, type TargetPage } from "./browser-target"
 
 export type SmokeAction =
   | { kind: "navigate"; url: string }
-  | { kind: "click"; selector: string }
-  | { kind: "type"; selector: string; text: string; submit?: boolean }
-  | { kind: "select"; selector: string; values: string[] }
+  | { kind: "click"; selector: BrowserTarget }
+  | { kind: "type"; selector: BrowserTarget; text: string; submit?: boolean }
+  | { kind: "select"; selector: BrowserTarget; values: string[] }
 
 export type SmokeAssertion =
-  | { kind: "visible"; selector: string; text?: string }
+  | { kind: "visible"; selector: BrowserTarget; text?: string }
   | { kind: "network"; url: string; status?: number }
   | { kind: "console"; level?: "error" | "warning" | "log" | "info"; message?: string; max: number }
 
@@ -75,7 +76,7 @@ export interface SmokeConsole {
   text(): string
 }
 
-export interface SmokePage {
+export interface SmokePage extends TargetPage {
   goto(url: string, options?: { timeout?: number; waitUntil?: "load" }): Promise<unknown>
   waitForTimeout(timeout: number): Promise<void>
   addInitScript<A>(script: (arg: A) => void, arg: A): Promise<void>
@@ -260,7 +261,7 @@ export class BrowserSmoke {
       await this.page.waitForTimeout(250)
       return
     }
-    const locator = this.page.locator(action.selector)
+    const locator = await locate(this.page, action.selector)
     if (action.kind === "click") {
       await locator.click({ timeout: 5_000 })
       return
@@ -279,7 +280,7 @@ export class BrowserSmoke {
     console: SmokeFinding[],
   ): Promise<SmokeAssertionResult> {
     if (assertion.kind === "visible") {
-      const locator = this.page.locator(assertion.selector)
+      const locator = await locate(this.page, assertion.selector)
       const visible = await locator.isVisible({ timeout: 5_000 })
       const content = visible ? await locator.textContent({ timeout: 5_000 }) : null
       const passed = visible && (assertion.text === undefined || content?.includes(assertion.text) === true)
@@ -287,8 +288,8 @@ export class BrowserSmoke {
         kind: assertion.kind,
         passed,
         expected: assertion.text
-          ? `${assertion.selector} contains "${assertion.text}"`
-          : `${assertion.selector} is visible`,
+          ? `${describe(assertion.selector)} contains "${assertion.text}"`
+          : `${describe(assertion.selector)} is visible`,
         actual: visible ? `visible: ${content ?? ""}` : "not visible",
       }
     }

@@ -6,11 +6,14 @@ import { SessionEvent } from "../src/session-event"
 import { SessionTodo } from "../src/session-todo"
 import { SessionV1 } from "../src/session-v1"
 import { WorkspaceEvent } from "../src/workspace-event"
+import surface from "./kilocode/fixtures/event-surface.json" // kilocode_change - reviewed event names/versions, independent of manifest order
 
 describe("public event manifest", () => {
   test("owns the complete public event surface", () => {
-    expect(EventManifest.ServerDefinitions.length).toBe(55)
-    expect(EventManifest.Definitions.length).toBe(85)
+    // kilocode_change start - compare compact identities rather than stale counts or huge schema-object diffs
+    expect(EventManifest.ServerDefinitions.map<string>((item) => item.type).sort()).toEqual(surface.server)
+    expect(EventManifest.Definitions.map<string>((item) => item.type).sort()).toEqual(surface.all)
+    // kilocode_change end
     expect(SessionV1.Event.Definitions).toEqual([
       SessionV1.Event.Created,
       SessionV1.Event.Updated,
@@ -23,8 +26,10 @@ describe("public event manifest", () => {
       SessionV1.Event.Diff,
       SessionV1.Event.Error,
     ])
-    expect(EventManifest.Latest.size).toBe(85)
-    expect(EventManifest.Durable.size).toBe(32)
+    // kilocode_change start
+    expect([...EventManifest.Latest.keys()].sort()).toEqual(surface.all)
+    expect([...EventManifest.Durable.keys()].sort()).toEqual(surface.durable)
+    // kilocode_change end
   })
 
   test("uses canonical definitions for current public events", () => {
@@ -42,11 +47,17 @@ describe("public event manifest", () => {
     expect(Reference.Event.Definitions).toEqual([Reference.Event.Updated])
     expect(EventManifest.Latest.has("ide.installed")).toBe(false)
     expect(IdeEvent.Definitions).toEqual([IdeEvent.Installed])
-    expect(EventManifest.Definitions.slice(40, 43)).toEqual([
-      SessionV1.Event.PartDelta,
-      SessionV1.Event.Diff,
-      SessionV1.Event.Error,
-    ])
+    // kilocode_change start - these compatibility events retain identity without positional assumptions
+    for (const item of [SessionV1.Event.PartDelta, SessionV1.Event.Diff, SessionV1.Event.Error]) {
+      expect(EventManifest.Latest.get(item.type)).toBe(item)
+      expect(EventManifest.ServerDefinitions.some((entry) => entry.type === item.type)).toBe(false)
+    }
+    for (const item of Object.values(SessionEvent.RevertEvent)) {
+      expect(EventManifest.Latest.get(item.type)).toBe(item)
+      expect(EventManifest.ServerDefinitions.some((entry) => entry === item)).toBe(true)
+      expect(EventManifest.Durable.get(`${item.type}.1`)).toBe(item)
+    }
+    // kilocode_change end
     expect(EventManifest.Durable.has("session.next.step.ended.1")).toBe(false)
     expect(EventManifest.Durable.get("session.next.step.ended.2")).toBe(SessionEvent.Step.Ended)
   })

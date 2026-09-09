@@ -29,7 +29,7 @@ import { ModelV2 } from "@opencode-ai/core/model" // raya_change - Milestone B p
 import { ProviderV2 } from "@opencode-ai/core/provider" // raya_change - Milestone B preserved target model
 
 export interface TaskPromptOps {
-  cancel(sessionID: SessionID): Effect.Effect<void>
+  cancel(sessionID: SessionID, messageID?: MessageID): Effect.Effect<void> // kilocode_change
   resolvePromptParts(template: string): Effect.Effect<SessionPrompt.PromptInput["parts"]>
   prompt(input: SessionPrompt.PromptInput): Effect.Effect<SessionV1.WithParts>
 }
@@ -349,9 +349,11 @@ export const TaskTool = Tool.define(
       }
       // raya_change end
       // kilocode_change end
+      const message = MessageID.ascending() // kilocode_change - reserve durable child evidence identity before publishing metadata
       const metadata: {
         parentSessionId: SessionID
         sessionId: SessionID
+        childMessageID?: MessageID // kilocode_change - older results lack verifiable input lineage
         selectedAgent?: string
         selection?: "auto" | "explicit"
         stepCap?: number
@@ -361,6 +363,7 @@ export const TaskTool = Tool.define(
       } = {
         parentSessionId: ctx.sessionID,
         sessionId: nextSession.id,
+        childMessageID: message, // kilocode_change
         selectedAgent: next.name, // raya_change - expose Chief routing to parent and nested UI
         selection: explicit ? "explicit" : "auto", // raya_change
         stepCap: limit, // raya_change
@@ -382,7 +385,7 @@ export const TaskTool = Tool.define(
           const parts = yield* ops.resolvePromptParts(handoff) // raya_change - structured brief, never raw transcript context
           KiloSessionProcessor.markReviewTelemetry(parts, params.command) // kilocode_change - carry review command into child session telemetry
           const result = yield* ops.prompt({
-            messageID: MessageID.ascending(),
+            messageID: message, // kilocode_change - use the exact child input recorded for this invocation
             sessionID: nextSession.id,
             model: {
               modelID: model.modelID,
@@ -466,14 +469,27 @@ export const TaskTool = Tool.define(
             }),
         )
 
-      const backgroundRun = withCostPropagation(runTask().pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id))))
+      const backgroundRun = withCostPropagation(runTask().pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id, message)))) // kilocode_change
+      // kilocode_change end
+
+      // kilocode_change start - retain the exact parent invocation for every admitted task run
+      const origin = ctx.callID
+        ? {
+            sessionID: ctx.sessionID,
+            messageID: ctx.messageID,
+            callID: ctx.callID,
+            childSessionID: nextSession.id,
+            childMessageID: message,
+          }
+        : undefined
       // kilocode_change end
 
       if (
         yield* background.extend({
+          origin, // kilocode_change
           id: nextSession.id,
           // kilocode_change - extended background work also propagates its cost
-          run: withCostPropagation(runTask().pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id)))),
+          run: withCostPropagation(runTask().pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id, message)))), // kilocode_change
         })
       ) {
         return {
@@ -496,6 +512,7 @@ export const TaskTool = Tool.define(
         ? undefined
         : yield* KiloCostPropagation.childCost(sessions, nextSession.id) // kilocode_change - snapshot before the foreground job starts
       const info = yield* background.start({
+        origin, // kilocode_change
         id: nextSession.id,
         type: id,
         title: params.description,
@@ -509,7 +526,7 @@ export const TaskTool = Tool.define(
         ]),
         // kilocode_change - only the initial-background start needs its own cost bracket; the
         // foreground/promoted path below is already wrapped by the acquireUseRelease at the bottom of run()
-        run: runInBackground ? backgroundRun : runTask().pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id))),
+        run: runInBackground ? backgroundRun : runTask().pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id, message))), // kilocode_change
       })
 
       function backgroundResult() {
@@ -535,7 +552,7 @@ export const TaskTool = Tool.define(
       }
 
       const runCancel = yield* EffectBridge.make()
-      const cancel = ops.cancel(nextSession.id)
+      const cancel = ops.cancel(nextSession.id, message) // kilocode_change
 
       function onAbort() {
         runCancel.fork(cancel)
@@ -567,7 +584,7 @@ export const TaskTool = Tool.define(
         (costBefore, exit) =>
           Effect.gen(function* () {
             if (Exit.hasInterrupts(exit))
-              yield* Effect.all([cancel, background.cancel(nextSession.id)], { discard: true })
+              yield* Effect.all([cancel, info.revision ? background.cancel(nextSession.id, info.revision) : Effect.void], { discard: true }) // kilocode_change
           }).pipe(
             Effect.ensuring(
               Effect.gen(function* () {

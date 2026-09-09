@@ -1,3 +1,6 @@
+import * as GoalMessage from "@/kilocode/goal/message" // kilocode_change
+import * as GoalTurn from "@/kilocode/goal/turn" // kilocode_change
+import * as TaskWorker from "@/kilocode/session/task-worker" // kilocode_change
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder" // kilocode_change
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
@@ -153,6 +156,8 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const status = yield* SessionStatus.Service
+    const goals = yield* GoalTurn.observer // kilocode_change
+    const bind = yield* GoalTurn.binding // kilocode_change
     const sessions = yield* Session.Service
     const agents = yield* Agent.Service
     const provider = yield* Provider.Service
@@ -173,6 +178,7 @@ export const layer = Layer.effect(
     const scope = yield* Scope.Scope
     const instruction = yield* Instruction.Service
     const state = yield* SessionRunState.Service
+    const workers = yield* TaskWorker.Service // kilocode_change
     const revert = yield* SessionRevert.Service
     const summary = yield* SessionSummary.Service
     const sys = yield* SystemPrompt.Service
@@ -184,7 +190,10 @@ export const layer = Layer.effect(
     const { db } = database
     const ops = Effect.fn("SessionPrompt.ops")(function* () {
       return {
-        cancel: (sessionID: SessionID) => cancel(sessionID),
+        // kilocode_change start - task cleanup targets its exact prompt, including startup races
+        cancel: (sessionID: SessionID, messageID?: MessageID) =>
+          messageID ? workers.cancel(sessionID, messageID).pipe(Effect.asVoid) : cancel(sessionID),
+        // kilocode_change end
         resolvePromptParts: (template: string) => resolvePromptParts(template),
         prompt: (input: PromptInput) => prompt(input).pipe(Effect.catch(Effect.die)),
       } satisfies TaskPromptOps
@@ -1091,6 +1100,7 @@ export const layer = Layer.effect(
                     sessions,
                     agent: ag,
                     session,
+                    origins: (yield* config.get()).permission_origins,
                     request: {
                       ...request,
                       sessionID: input.sessionID,
@@ -1410,7 +1420,18 @@ export const layer = Layer.effect(
         })
       }
 
-      yield* sessions.updateMessage(info)
+      // kilocode_change start - conditionally insert a reserved goal prompt
+      yield* input.goalQueuedAt === undefined
+        ? sessions.updateMessage(info)
+        : GoalMessage.publish({
+            database,
+            events,
+            info,
+            sessionID: input.sessionID,
+            messageID: input.messageID,
+            queuedAt: input.goalQueuedAt,
+          })
+      // kilocode_change end
       for (const part of parts) yield* sessions.updatePart(part)
 
       return { info, parts }
@@ -1493,6 +1514,7 @@ export const layer = Layer.effect(
       "SessionPrompt.run",
     )(function* (input: LoopInput) {
       const sessionID = input.sessionID
+      yield* bind(sessions, state, sessionID)
       // kilocode_change end
       // kilocode_change — cache environment details per turn (prompt caching)
       const envCache: KiloSessionPrompt.EnvCache = {}
@@ -1523,6 +1545,7 @@ export const layer = Layer.effect(
         // kilocode_change end
 
         if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
+        if (!(yield* workers.bind(sessionID, lastUser.id))) return yield* Effect.interrupt // kilocode_change
 
         const lastAssistantMsg = msgs.findLast(
           (msg) => msg.info.role === "assistant" && msg.info.id === lastAssistant?.id,
@@ -1970,17 +1993,20 @@ export const layer = Layer.effect(
       const session = yield* sessions.get(input.sessionID)
       yield* KiloSessionPrompt.recoverDanglingAssistant({ sessionID: input.sessionID, status, sessions })
       yield* KiloSessionPrompt.recoverProviderFinishError({ sessionID: input.sessionID, status, sessions })
+      const goalIntent = yield* goals(input.sessionID)
       yield* KiloSession.publishTurnOpen({ sessionID: input.sessionID })
       return yield* Effect.onExit(
         state.ensureRunning(
           input.sessionID,
           lastAssistant(input.sessionID).pipe(Effect.orDie),
-          runLoop(input).pipe(Effect.orDie),
+          runLoop(input).pipe(Effect.orDie, Effect.ensuring(workers.release)), // kilocode_change - release only this execution's binding
         ), // kilocode_change
         Effect.fnUntraced(function* (exit) {
           yield* KiloSession.publishTurnClose({
             sessionID: input.sessionID,
             parentID: session.parentID,
+            goalIntent,
+            messageID: Exit.isSuccess(exit) ? exit.value.info.id : yield* GoalTurn.closing(sessions, input.sessionID),
             reason: KiloSessionPrompt.resolveCloseReason({
               sessionID: input.sessionID,
               closeReasons,
@@ -2599,6 +2625,7 @@ export type PromptInput = Omit<Schema.Schema.Type<typeof PromptInput>, "parts" |
   parts: PartInputUnion[]
   editorContext?: MessageV2.EditorContext
   ephemeralTools?: Record<string, boolean>
+  goalQueuedAt?: number // kilocode_change - internal dispatch precondition, never accepted from HTTP clients
   goalObjective?: string // kilocode_change - raya_change: internal continuation routing, never accepted from HTTP clients
 }
 // kilocode_change end
@@ -2711,6 +2738,7 @@ export const node = LayerNode.make({
     CrossSpawnSpawner.node,
     Instruction.node,
     SessionRunState.node,
+    TaskWorker.node, // kilocode_change
     SessionRevert.node,
     SessionSummary.node,
     SystemPrompt.node,
@@ -2720,6 +2748,7 @@ export const node = LayerNode.make({
     Database.node,
     Question.node, // kilocode_change
     repositoryCacheNode, // kilocode_change
+    GoalTurn.node, // kilocode_change
   ],
 })
 

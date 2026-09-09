@@ -1,4 +1,5 @@
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { Database } from "@opencode-ai/core/database/database"
 import { afterEach, describe, expect, spyOn, test } from "bun:test"
 import { Effect, Layer, Schema, Stream } from "effect"
 import * as Log from "@opencode-ai/core/util/log"
@@ -16,6 +17,7 @@ import { Provider } from "../../src/provider/provider"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { Session } from "../../src/session/session"
+import { SessionRunState } from "../../src/session/run-state"
 import { SessionSummary } from "../../src/session/summary"
 import { Config } from "../../src/config/config" // raya_change - Milestone I bootstrap dependency
 import { ToolRegistry } from "../../src/tool/registry"
@@ -486,20 +488,32 @@ describe("kilocode tool registry indexing", () => {
     const watcher = Layer.succeed(KilocodeWatcher.Service, KilocodeWatcher.Service.of({ init: () => Effect.void }))
     const config = Layer.succeed(Config.Service, {} as Config.Interface) // raya_change - Milestone I
     const indexing = spyOn(KiloIndexing, "init").mockRejectedValue(err)
-    const warn = spyOn(logger, "warn").mockImplementation(() => {})
+    const observed = Promise.withResolvers<void>()
+    const warn = spyOn(logger, "warn").mockImplementation(() => observed.resolve())
 
     try {
       await Effect.runPromise(
         KilocodeBootstrap.Service.use((svc) => svc.init()).pipe(
           Effect.provide(
             KilocodeBootstrap.layer.pipe(
-              Layer.provide([sessions, bus, memory, session, summary, provider, watcher, config]), // raya_change
+              Layer.provide([
+                sessions,
+                bus,
+                memory,
+                session,
+                summary,
+                provider,
+                watcher,
+                config,
+                Database.layerFromPath(":memory:"),
+                AppNodeBuilder.build(SessionRunState.node),
+              ]), // raya_change
             ),
           ),
           Effect.scoped,
         ),
       )
-      await new Promise((resolve) => setTimeout(resolve, 0))
+      await observed.promise
 
       expect(calls).toEqual(["sessions"])
       expect(indexing).toHaveBeenCalledTimes(1)

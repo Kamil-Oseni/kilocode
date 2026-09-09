@@ -48,6 +48,7 @@ import { Effect, Layer, Option, Context, Schema, Types } from "effect"
 import { NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { AbsolutePath } from "@opencode-ai/core/schema" // kilocode_change
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { ReviewGate } from "@/kilocode/session/review-gate" // kilocode_change - coordinate deletion with checkpoint mutations
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 
@@ -586,7 +587,7 @@ export type Patch = Omit<Partial<Info>, "time" | "share" | "summary" | "revert" 
 export const layer: Layer.Layer<
   Service,
   never,
-  BackgroundJob.Service | RuntimeFlags.Service | Database.Service | EventV2Bridge.Service
+  BackgroundJob.Service | RuntimeFlags.Service | Database.Service | EventV2Bridge.Service | ReviewGate.Service // kilocode_change
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -595,6 +596,7 @@ export const layer: Layer.Layer<
     const background = yield* BackgroundJob.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
+    const gate = yield* ReviewGate.Service // kilocode_change - shared review/deletion lifecycle boundary
 
     // kilocode_change start - inherited sandbox policy source
     const createNext = Effect.fn("Session.createNext")(function* (input: {
@@ -737,12 +739,13 @@ export const layer: Layer.Layer<
                 ),
               )
             }
-            // kilocode_change - migrated from legacy sync.run/sync.remove to EventV2 (events.publish/remove)
-            yield* events.publish(SessionV1.Event.Deleted, { sessionID, info: session })
-            // kilocode_change - capture final session-export workspace delta on close/delete
-            const workspaceKey = hasInstance ? yield* InstanceState.directory : undefined // kilocode_change
-            yield* Effect.promise(() => SessionExport.onSessionClose(sessionID, workspaceKey)) // kilocode_change
-            yield* events.remove(sessionID)
+            // Cancel jobs before taking the gate: cancellation may await their checkpoint cleanup.
+            yield* gate.withPermits(1)(Effect.gen(function* () {
+              yield* events.publish(SessionV1.Event.Deleted, { sessionID, info: session })
+              const workspaceKey = hasInstance ? yield* InstanceState.directory : undefined
+              yield* Effect.promise(() => SessionExport.onSessionClose(sessionID, workspaceKey))
+              yield* events.remove(sessionID)
+            }))
           }),
         )
         // kilocode_change end
@@ -1225,7 +1228,7 @@ export const fork = kiloSessionFork
 export const node = LayerNode.make({
   service: Service,
   layer,
-  deps: [BackgroundJob.node, RuntimeFlags.node, Database.node, EventV2Bridge.node],
+  deps: [BackgroundJob.node, RuntimeFlags.node, Database.node, EventV2Bridge.node, ReviewGate.node], // kilocode_change
 })
 
 export * as Session from "./session"

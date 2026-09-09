@@ -29,6 +29,7 @@ import { useServer } from "../../context/server"
 import { TranscriptSearchProvider } from "../../context/transcript-search"
 import { isPromptBlocked, isSuggesting, isQuestioning } from "./prompt-input-utils"
 import { editReview } from "./edit-review" // raya_change - inline edit review chrome
+import { reviewResult, retry, type ReviewRequest } from "./review-request"
 import { showTabStrip } from "../../utils/local-tabs"
 
 interface ChatViewProps {
@@ -71,6 +72,10 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   const [repoBranch, setRepoBranch] = createSignal<string>()
   const [kept, setKept] = createSignal<string>()
   const [discarding, setDiscarding] = createSignal(false)
+  const [reviewing, setReviewing] = createSignal<ReviewRequest>()
+  const [failed, setFailed] = createSignal<ReviewRequest>()
+  let epoch = 0
+  const [revision, setRevision] = createSignal<{ session: string; value: string; expected?: Record<string, string> }>()
   let worktreeRef: HTMLDivElement | undefined
 
   // Permissions and questions scoped to this session's family (self + subagents).
@@ -171,37 +176,39 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     const sid = id()
     const next = stats()
     if (!sid || !next?.files) return
-    return `${sid}:${next.files}:${next.additions}:${next.deletions}`
+    return `${sid}:${revision()?.session === sid ? revision()?.value : ""}:${next.files}:${next.additions}:${next.deletions}`
   }
   const pending = () => {
     const key = changeKey()
     return !!key && kept() !== key && !session.revert()
   }
-  const keepAll = () => {
-    const key = changeKey()
-    if (key) setKept(key)
+  const requestReview = (action: "keep" | "undo", file?: string) => {
     const sid = id()
-    if (sid) {
-      editReview.keepAll(sid)
-      vscode.postMessage({ type: "editReviewKeepAll", sessionID: sid })
+    if (!sid || props.readonly || reviewing() || session.status() !== "idle" || server.connectionState() !== "connected") return
+    const selected = file ? editReview.select(sid, file) : undefined
+    const expected = file ? selected?.expected : revision()?.session === sid ? revision()?.expected : undefined
+    if (!expected || Object.keys(expected).length === 0) {
+      showToast({ title: "Session review details are not available yet. Open Review changes to inspect the current files." })
+      return
     }
-    setDiscarding(false)
+    const attempt = { session: sid, key: changeKey(), epoch, file: selected?.file, revision: selected && expected[selected.file], action }
+    const request = retry(failed(), attempt) ?? crypto.randomUUID()
+    setReviewing({ ...attempt, request })
+    const files = selected ? [selected.file] : undefined
+    if (action === "keep") vscode.postMessage({ type: "editReviewKeepAll", sessionID: sid, requestID: request, expected, files })
+    if (action === "undo") vscode.postMessage({ type: "discardSessionChanges", sessionID: sid, requestID: request, expected, files })
   }
-  const discardAll = () => {
-    // raya_change - Undo all discards the session's file edits only; the conversation
-    // stays and nothing becomes redoable. (Previously this reverted to the first
-    // user message, which wiped the chat and offered a nonsensical redo.)
+  const keepAll = () => requestReview("keep")
+  const discardAll = () => requestReview("undo")
+
+  createEffect(() => {
     const sid = id()
-    if (!sid || session.status() !== "idle") return
-    // raya_change - retire the Keep all/Undo all cluster immediately, same as keepAll.
-    // The backend revert + reviewStats refresh is async, so without pinning kept() the
-    // buttons linger after "Confirm undo" until stats happen to drop to zero.
-    const key = changeKey()
-    if (key) setKept(key)
-    vscode.postMessage({ type: "discardSessionChanges", sessionID: sid })
-    editReview.keepAll(sid) // raya_change - clear inline review chrome for every edit
-    setDiscarding(false)
-  }
+    if (!sid || props.readonly) return
+    onCleanup(editReview.connect(sid, {
+      request: requestReview,
+      busy: () => !!reviewing() || session.status() !== "idle" || server.connectionState() !== "connected",
+    }))
+  })
 
   const moveToWorktree = () => {
     if (transferring()) return
@@ -246,28 +253,65 @@ export const ChatView: Component<ChatViewProps> = (props) => {
 
   createEffect(() => {
     id()
+    setFailed(undefined)
+    setReviewing(undefined)
+    epoch++
     setDiscarding(false)
     setKept(undefined)
+  })
+
+  createEffect(() => {
+    if (server.connectionState() === "connected" || !reviewing()) return
+    setFailed(reviewing())
+    setReviewing(undefined)
+    showToast({ title: "Connection lost before review was confirmed. Reconnect and review the current changes." })
   })
 
   // A new agent turn can re-edit a file with the same add/del counts; drop the
   // Keep-all pin so Keep all / Undo all come back instead of staying single-use.
   createEffect(() => {
     if (session.status() === "idle") return
+    epoch++
     setKept(undefined)
-    const sid = id()
-    if (sid) editReview.reset(sid)
   })
 
   onMount(() => {
     const off = vscode.onMessage((message) => {
-      if (message.type !== "editReviewSync" || message.sessionID !== id()) return
-      editReview.keep(message.sessionID, message.file)
-      const left = editReview.pending(message.sessionID)
-      if (left.length === 0) {
-        const key = changeKey()
-        if (key) setKept(key)
+      if (message.type === "reviewStatsLoaded" && message.sessionID && message.sessionID === id() && message.revision) {
+        editReview.update(message.sessionID, message.expected ?? {}, message.aliases, message.windows, message.accepted)
+        setRevision({ session: message.sessionID, value: message.revision, expected: message.expected })
+        if (message.accepted && message.expected) {
+          const files = Object.entries(message.expected)
+          setKept(files.length > 0 && files.every(([file, hash]) => message.accepted?.[file] === hash)
+            ? `${message.sessionID}:${message.revision}:${message.files}:${message.additions}:${message.deletions}`
+            : undefined)
+        }
+        return
       }
+      if (message.type === "editReviewResult") {
+        const current = reviewing()
+        const outcome = reviewResult(current, message, { session: id(), key: changeKey(), epoch })
+        if (!current || outcome === "ignore") return
+        setReviewing(undefined)
+        if (outcome === "failed") {
+          setFailed(current)
+          showToast({ title: message.error })
+          return
+        }
+        setDiscarding(false)
+        setFailed(undefined)
+        if (outcome === "accept") {
+          if (current.file) editReview.keep(current.session, current.file, current.revision)
+          if (!current.file) {
+            editReview.keepAll(current.session)
+            setKept(current.key)
+          }
+        }
+        vscode.postMessage({ type: "editReviewAcknowledged", sessionID: current.session, requestID: current.request })
+        return
+      }
+      if (message.type !== "editReviewSync" || message.sessionID !== id()) return
+      if (message.revision) editReview.keep(message.sessionID, message.file, message.revision)
     })
     onCleanup(off)
   })
@@ -425,10 +469,10 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                   variant="ghost"
                   size="small"
                   class="session-move-changes"
-                  disabled={session.status() !== "idle"}
+                  disabled={session.status() !== "idle" || !!reviewing()}
                   onClick={keepAll}
                 >
-                  Keep all
+                  {reviewing() ? "Saving review..." : "Keep all"}
                 </Button>
               </Tooltip>
             </Show>
@@ -440,7 +484,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                     variant="ghost"
                     size="small"
                     class="session-move-changes"
-                    disabled={session.status() !== "idle"}
+                    disabled={session.status() !== "idle" || !!reviewing()}
                     onClick={() => setDiscarding(true)}
                   >
                     Undo all
@@ -453,10 +497,10 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                   variant="secondary"
                   size="small"
                   class="session-move-changes session-move-changes--confirm"
-                  disabled={session.status() !== "idle"}
+                  disabled={session.status() !== "idle" || !!reviewing()}
                   onClick={discardAll}
                 >
-                  Confirm undo
+                  {reviewing() ? "Undoing..." : "Confirm undo"}
                 </Button>
               </Tooltip>
               <Button
@@ -464,6 +508,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                 size="small"
                 class="session-move-changes"
                 aria-label="Cancel undo"
+                disabled={!!reviewing()}
                 onClick={() => setDiscarding(false)}
               >
                 Cancel

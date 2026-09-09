@@ -1,0 +1,3 @@
+# kilocode_change - contract identity tests import runtime facades; isolate their global state first
+[test]
+preload = ["../core/test/kilocode/isolate.ts"]

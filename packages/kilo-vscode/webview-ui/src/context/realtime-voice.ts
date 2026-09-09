@@ -1,5 +1,5 @@
 // raya_change - Thin LiveKit client: capture, playout accounting, discontinuity flush, and transcript display only.
-import { RemoteAudioTrack, Room, RoomEvent, Track } from "livekit-client"
+import { RemoteAudioTrack, Room, RoomEvent, Track, type RoomOptions } from "livekit-client"
 
 export type RealtimeConnection = {
   id: string
@@ -30,16 +30,20 @@ export class RealtimeVoice {
   private room: Room | undefined
   private playout: Playout | undefined
   private connection: RealtimeConnection | undefined
-  private manual = false
+  private generation = 0
 
-  constructor(private readonly sink: Sink) {}
+  constructor(
+    private readonly sink: Sink,
+    private readonly create: (options: RoomOptions) => Room = (options) => new Room(options),
+  ) {}
 
   async start(connection: RealtimeConnection) {
-    await this.stop()
-    this.manual = false
+    const generation = ++this.generation
+    await this.release()
+    if (generation !== this.generation) return
     this.connection = connection
     this.sink.status("connecting")
-    const room = new Room({
+    const room = this.create({
       adaptiveStream: false,
       dynacast: false,
       audioCaptureDefaults: {
@@ -51,69 +55,123 @@ export class RealtimeVoice {
     })
     this.room = room
     room.on(RoomEvent.TrackSubscribed, (track) => {
+      if (generation !== this.generation || this.room !== room) return
       if (track.kind !== Track.Kind.Audio) return
       const audio = track as RemoteAudioTrack
-      this.playout = new Playout(room, audio, this.sink.error)
-      void this.playout.start()
+      this.playout = new Playout(room, audio, () => {
+        if (generation === this.generation && this.room === room)
+          this.failed("Voice playback accounting failed. Reconnect with the selected provider, or continue typing.")
+      })
+      void this.playout.start().catch(() => {
+        if (generation === this.generation && this.room === room)
+          this.failed("Voice playback could not start. Check your audio device and reconnect, or continue typing.")
+      })
       this.sink.status("speaking")
     })
     room.on(RoomEvent.TrackUnsubscribed, (track) => {
+      if (generation !== this.generation || this.room !== room) return
       if (track.kind !== Track.Kind.Audio) return
-      void this.playout?.stop()
+      void this.playout?.stop().catch(() => {
+        if (generation === this.generation && this.room === room)
+          this.failed("Voice playback could not stop. End voice and reconnect.")
+      })
       this.playout = undefined
       this.sink.status("listening")
     })
     room.on(RoomEvent.DataReceived, (payload, _participant, _kind, topic) => {
-      this.data(payload, topic)
+      if (generation === this.generation && this.room === room) this.data(payload, topic)
     })
-    room.on(RoomEvent.Reconnecting, () => this.sink.status("degraded"))
-    room.on(RoomEvent.Reconnected, () => this.sink.status("listening"))
+    room.on(RoomEvent.Reconnecting, () => {
+      if (generation === this.generation && this.room === room) this.sink.status("degraded")
+    })
+    room.on(RoomEvent.Reconnected, () => {
+      if (generation === this.generation && this.room === room) this.sink.status("listening")
+    })
     room.on(RoomEvent.Disconnected, () => {
-      if (this.manual || this.room !== room) return
-      void this.stop().finally(() =>
-        this.sink.fallback("Realtime media disconnected. Continuing with configured speech fallback."),
-      )
+      if (generation !== this.generation || this.room !== room) return
+      this.failed("Realtime media disconnected. Reconnect with the selected provider, or continue typing.")
     })
-    await room.connect(connection.livekitURL, connection.clientToken, { autoSubscribe: true })
-    await room.startAudio()
-    const publication = await room.localParticipant.setMicrophoneEnabled(true, {
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true,
-      channelCount: 1,
-    })
-    const capture = publication?.track?.mediaStreamTrack.getSettings()
-    this.sink.aec(capture?.echoCancellation === true)
-    this.sink.status("listening")
+    try {
+      await room.connect(connection.livekitURL, connection.clientToken, { autoSubscribe: true })
+      if (generation !== this.generation) {
+        await room.disconnect()
+        return
+      }
+      await room.startAudio()
+      if (generation !== this.generation) {
+        await room.disconnect()
+        return
+      }
+      const publication = await room.localParticipant.setMicrophoneEnabled(true, {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        channelCount: 1,
+      })
+      if (generation !== this.generation) {
+        await room.disconnect()
+        return
+      }
+      const capture = publication?.track?.mediaStreamTrack.getSettings()
+      this.sink.aec(capture?.echoCancellation === true)
+      this.sink.status("listening")
+    } catch (err) {
+      if (generation === this.generation) throw err
+      await room.disconnect().catch(() => console.warn("[Kilo New] Superseded voice transport cleanup failed."))
+    }
   }
 
   async stop() {
-    this.manual = true
-    await this.playout?.stop()
-    this.playout = undefined
+    const generation = ++this.generation
+    await this.release()
+    if (generation === this.generation) this.sink.status("off")
+  }
+
+  private async release() {
     const room = this.room
-    this.room = undefined
-    this.connection = undefined
-    if (room) {
-      await room.localParticipant.setMicrophoneEnabled(false)
-      await room.disconnect()
+    const playout = this.playout
+    const results = await Promise.allSettled([playout?.stop(), room?.localParticipant.setMicrophoneEnabled(false)])
+    // Always attempt transport teardown even when microphone or playout cleanup fails.
+    const disconnected = await Promise.allSettled([room?.disconnect()])
+    if (results[0]?.status === "fulfilled" && this.playout === playout) this.playout = undefined
+    if (disconnected[0]?.status === "fulfilled" && this.room === room) {
+      this.room = undefined
+      this.connection = undefined
     }
-    this.sink.status("off")
+    if ([...results, ...disconnected].some((result) => result.status === "rejected")) {
+      throw new Error("Voice cleanup failed. End voice and restart the media frontend before reconnecting.")
+    }
+  }
+
+  private failed(message: string) {
+    this.sink.error(message)
+    const stopping = this.stop()
+    const generation = this.generation
+    void stopping.then(
+      () => {
+        if (generation === this.generation) this.sink.status("degraded")
+      },
+      () => {
+        if (generation !== this.generation) return
+        this.sink.error("Voice cleanup failed. End voice and restart the media frontend before reconnecting.")
+        this.sink.status("degraded")
+      },
+    )
   }
 
   private data(payload: Uint8Array, topic?: string) {
     if (topic !== "raya.transcript" && topic !== "raya.control" && topic !== "raya.playout.item") return
-    const message = JSON.parse(new TextDecoder().decode(payload)) as Record<string, unknown>
-    if (topic === "raya.playout.item" && typeof message.item === "string") {
-      this.playout?.setItem(message.item)
+    const message = packet(payload)
+    if (!message) return
+    if (topic === "raya.control") {
+      this.control(message)
       return
     }
-    if (topic === "raya.control" && message.type === "discontinuity") {
-      void this.playout?.flush()
-      this.sink.status("listening")
+    if (topic === "raya.playout.item") {
+      if (typeof message.item === "string") this.playout?.setItem(message.item)
       return
     }
-    if (topic !== "raya.transcript" || typeof message.text !== "string" || typeof message.type !== "string") return
+    if (typeof message.text !== "string" || typeof message.type !== "string") return
     if (message.type.includes("output") && typeof message.item === "string") this.playout?.setItem(message.item)
     this.sink.transcript({
       type: message.type,
@@ -124,6 +182,43 @@ export class RealtimeVoice {
       truncated: message.truncated === true,
     })
   }
+
+  private control(message: Record<string, unknown>) {
+    if (message.type === "failure") {
+      const error = failure(message, this.connection?.id)
+      if (error) this.failed(error)
+      return
+    }
+    if (message.type !== "discontinuity") return
+    const generation = this.generation
+    void this.playout?.flush().catch(() => {
+      if (generation === this.generation)
+        this.failed("Voice playback could not be interrupted. End voice and reconnect.")
+    })
+    this.sink.status("listening")
+  }
+}
+
+function record(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value)
+}
+
+function packet(payload: Uint8Array) {
+  try {
+    const value: unknown = JSON.parse(new TextDecoder().decode(payload))
+    return record(value) ? value : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function failure(message: Record<string, unknown>, id?: string) {
+  if (!id || message.session !== id || !record(message.failure)) return
+  const value = message.failure
+  if (typeof value.code !== "string" || typeof value.message !== "string" || typeof value.recovery !== "string") return
+  if (!value.message.trim() || !value.recovery.trim() || value.message.length > 500 || value.recovery.length > 500)
+    return
+  return `${value.message} ${value.recovery}`
 }
 
 class Playout {
@@ -140,9 +235,14 @@ class Playout {
 
   async start() {
     const context = new AudioContext()
+    this.context = context
     const module = URL.createObjectURL(new Blob([worklet], { type: "text/javascript" }))
-    await context.audioWorklet.addModule(module)
-    URL.revokeObjectURL(module)
+    try {
+      await context.audioWorklet.addModule(module)
+    } finally {
+      URL.revokeObjectURL(module)
+    }
+    if (this.context !== context) return
     const source = context.createMediaStreamSource(new MediaStream([this.track.mediaStreamTrack]))
     const node = new AudioWorkletNode(context, "raya-playout")
     node.port.onmessage = (event: MessageEvent<{ samples: number }>) => {
@@ -168,8 +268,9 @@ class Playout {
     this.node?.disconnect()
     this.node = undefined
     this.source = undefined
-    await this.context?.close()
+    const context = this.context
     this.context = undefined
+    await context?.close()
   }
 
   setItem(item: string) {

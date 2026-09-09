@@ -6,7 +6,7 @@ Use proactively when:
 - The work is non-trivial and benefits from planning
 - The user provides multiple tasks (numbered or comma-separated) or explicitly asks for a todo list
 - New instructions arrive - capture them as todos
-- You start a task - mark it `in_progress` (only one at a time) before working
+- You start a task - mark it `in_progress` before working; independent authorized tasks may run in parallel <!-- kilocode_change -->
 - You finish a task - mark it `completed` and add any follow-ups discovered during the work
 
 ## When NOT to use
@@ -17,7 +17,7 @@ Skip when:
 
 ## States
 - `pending` - not started
-- `in_progress` - actively working (exactly ONE at a time)
+- `in_progress` - actively working; include every task actually running, including independent parallel work <!-- kilocode_change -->
 - `completed` - finished successfully
 - `cancelled` - no longer needed
 
@@ -27,7 +27,7 @@ Skip when:
 - After completing each item, call this tool before starting the next item, with the completed item marked `completed` and the next item marked `in_progress`.
 - Do not complete multiple items or continue through multiple steps without updating the list between them.
 - Mark `completed` only after the required work is actually done, including any required verification. Never based on intent.
-- Keep exactly one `in_progress` while work remains
+- Keep statuses faithful to actual execution. Multiple items may be `in_progress` only when independent work is genuinely running; keep dependency-blocked items `pending` until prerequisites finish. <!-- kilocode_change -->
 - If blocked or partial, keep it `in_progress` and add a follow-up todo describing the blocker
 - Preserve user-provided commands verbatim (flags, args, order)
 - Items should be specific and actionable; break large work into smaller steps

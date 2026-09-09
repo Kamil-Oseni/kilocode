@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { fileURLToPath } from "node:url" // kilocode_change - preserve native drive paths on Windows
 import { LegacyEvent } from "../src/legacy-event"
 import { PermissionV1 } from "../src/permission-v1"
 import { QuestionV1 } from "../src/question-v1"
@@ -17,9 +18,11 @@ test("compatibility entrypoints preserve isolated V1 schema identity", () => {
 
 test("current source does not import the V1 subtree directly", async () => {
   const allowed = new Set(["legacy-event.ts", "permission-v1.ts", "question-v1.ts", "session-v1.ts"])
-  const files = [...new Bun.Glob("*.ts").scanSync(new URL("../src", import.meta.url).pathname)].filter(
+  // kilocode_change start - native Windows path, not a file URL pathname
+  const files = [...new Bun.Glob("*.ts").scanSync(fileURLToPath(new URL("../src", import.meta.url)))].filter(
     (file) => !allowed.has(file),
   )
+  // kilocode_change end
   const directImports = await Promise.all(
     files.map(async (file) => ({ file, source: await Bun.file(new URL(`../src/${file}`, import.meta.url)).text() })),
   ).then((values) => values.filter((value) => value.source.includes('from "./v1/')))

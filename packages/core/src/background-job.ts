@@ -3,11 +3,15 @@ export * as BackgroundJob from "./background-job"
 import { Cause, Clock, Context, Deferred, Effect, Exit, Layer, Scope, SynchronizedRef } from "effect"
 import { Identifier } from "./id/id"
 import { makeGlobalNode } from "./effect/app-node"
+import { copy, type Origin } from "./kilocode/background-origin" // kilocode_change
+import * as Invocation from "./kilocode/background-invocation" // kilocode_change
 
 export type Status = "running" | "completed" | "error" | "cancelled"
 
 export type Info = {
   id: string
+  revision?: string // kilocode_change - observation of this generation and its admitted work
+  origins?: ReadonlyArray<Origin | undefined> // kilocode_change - preserve unknown and mixed ownership
   type: string
   title?: string
   status: Status
@@ -19,7 +23,10 @@ export type Info = {
 }
 
 type Active = {
+  invocations: readonly Invocation.Control[] // kilocode_change
+  outcome?: { sequence: number; cancelled: boolean } // kilocode_change - terminal outcome follows admission order
   info: Info
+  revision: string // kilocode_change - changes when another invocation is admitted
   done: Deferred.Deferred<Info>
   scope: Scope.Closeable
   token: object
@@ -62,6 +69,7 @@ type ExtendResult =
     }
 
 export type StartInput = {
+  origin?: Origin // kilocode_change
   id?: string
   type: string
   title?: string
@@ -71,6 +79,7 @@ export type StartInput = {
 }
 
 export type ExtendInput = {
+  origin?: Origin // kilocode_change
   id: string
   run: Effect.Effect<string, unknown>
 }
@@ -93,7 +102,8 @@ export interface Interface {
   readonly wait: (input: WaitInput) => Effect.Effect<WaitResult>
   readonly waitForPromotion: (id: string) => Effect.Effect<Info>
   readonly promote: (id: string) => Effect.Effect<Info | undefined>
-  readonly cancel: (id: string) => Effect.Effect<Info | undefined>
+  readonly cancel: (id: string, revision?: string) => Effect.Effect<Info | undefined> // kilocode_change - conditional cancellation
+  readonly cancelInput: (id: string, revision: string, message: string) => Effect.Effect<boolean> // kilocode_change
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/BackgroundJob") {}
@@ -101,6 +111,8 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Ba
 function snapshot(job: Active): Info {
   return {
     ...job.info,
+    revision: job.revision, // kilocode_change
+    origins: job.info.origins?.map(copy), // kilocode_change - callers cannot mutate registry ownership
     ...(job.info.metadata ? { metadata: { ...job.info.metadata } } : {}),
   }
 }
@@ -140,14 +152,28 @@ export const make = Effect.gen(function* () {
         Exit.isSuccess(exit) && (!job.output || sequence > job.output.sequence)
           ? { sequence, text: exit.value }
           : job.output
-      if (Exit.isSuccess(exit) && pending > 0) {
-        return [{}, new Map(jobs).set(id, { ...job, pending, output })]
+      const cancelled = Exit.isFailure(exit) && Invocation.cancelled(exit.cause) // kilocode_change
+      // kilocode_change start - cleanup scheduling must not choose a stale invocation's terminal result
+      const outcome =
+        (Exit.isSuccess(exit) || cancelled) && (!job.outcome || sequence > job.outcome.sequence)
+          ? { sequence, cancelled }
+          : job.outcome
+      // kilocode_change end
+      // kilocode_change start - preserve unrelated extensions
+      if ((Exit.isSuccess(exit) || cancelled) && pending > 0) {
+        return [{}, new Map(jobs).set(id, { ...job, pending, output, outcome })]
       }
-      const status: Exclude<Status, "running"> = Exit.isSuccess(exit)
-        ? "completed"
-        : Cause.hasInterruptsOnly(exit.cause)
-          ? "cancelled"
-          : "error"
+      // kilocode_change end
+      // kilocode_change start
+      const status: Exclude<Status, "running"> =
+        Exit.isSuccess(exit) || cancelled
+          ? outcome?.cancelled
+            ? "cancelled"
+            : "completed"
+          : Cause.hasInterruptsOnly(exit.cause)
+            ? "cancelled"
+            : "error"
+      // kilocode_change end
       const next = {
         ...job,
         onPromote: undefined,
@@ -158,7 +184,13 @@ export const make = Effect.gen(function* () {
           status,
           completed_at,
           ...(output ? { output: output.text } : {}),
-          ...(Exit.isFailure(exit) ? { error: errorText(Cause.squash(exit.cause)) } : {}),
+          // kilocode_change start
+          ...(status === "cancelled" && outcome?.cancelled
+            ? { error: "Task invocation cancelled" }
+            : Exit.isFailure(exit) && !cancelled
+              ? { error: errorText(Cause.squash(exit.cause)) }
+              : {}),
+          // kilocode_change end
         },
       }
       return [{ info: snapshot(next), done: job.done, scope: job.scope }, new Map(jobs).set(id, next)]
@@ -207,6 +239,7 @@ export const make = Effect.gen(function* () {
         const done = yield* Deferred.make<Info>()
         const promoted = yield* Deferred.make<Info>()
         const tail = yield* Deferred.make<void>()
+        const invocation = yield* Invocation.make // kilocode_change
         const result = yield* SynchronizedRef.modifyEffect(
           state.jobs,
           Effect.fnUntraced(function* (jobs) {
@@ -217,6 +250,8 @@ export const make = Effect.gen(function* () {
             const scope = yield* Scope.fork(state.scope, "parallel")
             const token = {}
             const job = {
+              invocations: [invocation], // kilocode_change
+              revision: crypto.randomUUID(), // kilocode_change - never reuse a prior execution's cancellation identity
               info: {
                 id,
                 type: input.type,
@@ -224,6 +259,7 @@ export const make = Effect.gen(function* () {
                 status: "running" as const,
                 started_at,
                 metadata: input.metadata,
+                origins: [copy(input.origin)], // kilocode_change
               },
               done,
               scope,
@@ -246,7 +282,7 @@ export const make = Effect.gen(function* () {
             id,
             result.token,
             0,
-            restore(input.run).pipe(Effect.ensuring(Deferred.succeed(tail, undefined))),
+            invocation.run(restore(input.run)).pipe(Effect.ensuring(Deferred.succeed(tail, undefined))), // kilocode_change
           )
         return result.info
       }),
@@ -257,6 +293,7 @@ export const make = Effect.gen(function* () {
     return yield* Effect.uninterruptibleMask((restore) =>
       Effect.gen(function* () {
         const tail = yield* Deferred.make<void>()
+        const invocation = yield* Invocation.make // kilocode_change
         const result = yield* SynchronizedRef.modify(
           state.jobs,
           (jobs): readonly [ExtendResult, Map<string, Active>] => {
@@ -266,6 +303,9 @@ export const make = Effect.gen(function* () {
               { extended: true, previous: job.tail, scope: job.scope, tail, token: job.token, sequence: job.next },
               new Map(jobs).set(input.id, {
                 ...job,
+                invocations: [...job.invocations, invocation], // kilocode_change
+                revision: crypto.randomUUID(), // kilocode_change - stale observations cannot cancel newly admitted work
+                info: { ...job.info, origins: [...(job.info.origins ?? []), copy(input.origin)] }, // kilocode_change
                 pending: job.pending + 1,
                 next: job.next + 1,
                 tail,
@@ -280,7 +320,7 @@ export const make = Effect.gen(function* () {
           result.token,
           result.sequence,
           Deferred.await(result.previous).pipe(
-            Effect.andThen(restore(input.run)),
+            Effect.andThen(invocation.run(restore(input.run))), // kilocode_change - queued cancellation preserves predecessor ordering
             Effect.ensuring(Deferred.succeed(result.tail, undefined)),
           ),
         )
@@ -334,11 +374,14 @@ export const make = Effect.gen(function* () {
     return result.info
   })
 
-  const cancel: Interface["cancel"] = Effect.fn("BackgroundJob.cancel")(function* (id) {
+  // kilocode_change start - optional revision is compared atomically below
+  const cancel: Interface["cancel"] = Effect.fn("BackgroundJob.cancel")(function* (id, revision) {
+    // kilocode_change end
     const completed_at = yield* Clock.currentTimeMillis
     const result = yield* SynchronizedRef.modify(state.jobs, (jobs): readonly [FinishResult, Map<string, Active>] => {
       const job = jobs.get(id)
       if (!job) return [{}, jobs]
+      if (revision !== undefined && revision !== job.revision) return [{}, jobs] // kilocode_change - compare under the registry lock
       if (job.info.status !== "running") return [{ info: snapshot(job) }, jobs]
       const next = {
         ...job,
@@ -357,7 +400,27 @@ export const make = Effect.gen(function* () {
     return result.info
   })
 
-  return Service.of({ list, get, start, extend, wait, waitForPromotion, promote, cancel })
+  // kilocode_change start - select a unique invocation under the same admission lock
+  const cancelInput: Interface["cancelInput"] = Effect.fn("BackgroundJob.cancelInput")(
+    function* (id, revision, message) {
+      const wait = yield* SynchronizedRef.modifyEffect(state.jobs, (jobs) =>
+        Effect.gen(function* () {
+          const job = jobs.get(id)
+          if (!job || job.info.status !== "running" || job.revision !== revision)
+            return [Effect.succeed(false), jobs] as const
+          const matches = (job.info.origins ?? []).flatMap((origin, index) =>
+            origin?.childSessionID === id && origin.childMessageID === message ? [index] : [],
+          )
+          if (matches.length !== 1) return [Effect.succeed(false), jobs] as const
+          return [yield* job.invocations[matches[0]].request, jobs] as const
+        }),
+      ).pipe(Effect.uninterruptible)
+      return yield* wait
+    },
+  )
+  // kilocode_change end
+
+  return Service.of({ list, get, start, extend, wait, waitForPromotion, promote, cancel, cancelInput }) // kilocode_change
 })
 
 const layer = Layer.effect(Service, make)

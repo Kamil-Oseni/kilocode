@@ -1,5 +1,9 @@
+import { createHash } from "node:crypto"
+import { fingerprint } from "./edit-review/revision"
 // raya_change - Raya extension namespace
 import * as path from "path"
+import { assertSaved, failure } from "./edit-review/unsaved"
+import { forget, remember } from "./edit-review/attempts"
 import { existsSync } from "fs"
 import * as vscode from "vscode"
 import { TRANSIENT as MEMORY_TRANSIENT } from "@kilocode/kilo-memory/schema"
@@ -62,6 +66,8 @@ import { removeAgent } from "./services/agent-removal"
 import { normalize, type SSEPayload, type SyncPayload, type WirePayload } from "./services/cli-backend/sdk-sse-adapter"
 import { slimInfo, slimPart, slimParts } from "./kilo-provider/slim-metadata"
 import { handleRoutineMessage as dispatchRoutine, reason } from "./kilo-provider/routines"
+import { editGoal, stopGoal, stopResult } from "./kilo-provider/goal"
+import { evidence as goalEvidence } from "./kilo-provider/goal-evidence"
 import { shouldNotify } from "./kilo-provider/presence-notify"
 import { parseMessageFiles, type MessageFile } from "./kilo-provider/message-files"
 import { renameSession } from "./kilo-provider/rename-session"
@@ -394,6 +400,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private syncedChildSessions: Set<string> = new Set()
   private readonly inspectorSessionIds = new Set<string>()
   private readonly checkpoints = new Map<string, Promise<void>>()
+  private readonly deliveries = new Map<string, () => Promise<void>>()
   private readonly sessionCreations = new Map<string, Promise<{ sid: string; dir: string } | undefined>>()
   private readonly draftSessions = new Map<string, { sid: string; dir: string; expires: number }>()
   private readonly sandboxTransitions = new Map<string, Promise<void>>()
@@ -468,10 +475,16 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private statsPoller: GitStatsPoller | null = null
   private statsGitOps: GitOps | null = null
   private cachedStats: unknown = null
-  private cachedReview: { type: "reviewStatsLoaded"; sessionID: string; files: number; additions: number; deletions: number } | null =
-    null // raya_change - session.diff review counts survive webview reload
+  private cachedReview: {
+    type: "reviewStatsLoaded"
+    sessionID: string
+    files: number
+    additions: number
+    deletions: number
+  } | null = null // raya_change - session.diff review counts survive webview reload
   private reviewTimer: ReturnType<typeof setTimeout> | undefined
   private lastReviewHash = ""
+  private reviewGeneration = 0
   private cachedGitRepo = false
   private cachedGitDirectory: string | undefined
   private gitStatusRevision = 0
@@ -485,7 +498,9 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
   private createWorktreeHandler: ((baseBranch?: string, branchName?: string) => Promise<void>) | null = null
 
-  private inEditorReview: { refresh(): void; dismissAll(): void; reset(): void } | undefined // raya_change
+  private inEditorReview:
+    | { refresh(): void; dismissAll(): void; reset(): void; capture(session: string, files?: string[]): () => void }
+    | undefined // raya_change
   private diffVirtualProvider: import("./DiffVirtualProvider").DiffVirtualProvider | undefined
   private diffViewerProvider: import("./diff/DiffViewerProvider").DiffViewerProvider | undefined
   private documentViewerProvider: import("./DocumentViewerProvider").DocumentViewerProvider | undefined
@@ -941,13 +956,18 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   // raya_change - in-editor edit review (green highlight + inline Keep/Undo).
-  public setInEditorReview(review: { refresh(): void; dismissAll(): void; reset(): void }): void {
+  public setInEditorReview(review: {
+    refresh(): void
+    dismissAll(): void
+    reset(): void
+    capture(session: string, files?: string[]): () => void
+  }): void {
     this.inEditorReview = review
   }
 
   // raya_change - in-editor Keep/Undo must retire the matching chat Keep all / Undo all cluster
-  public syncEditReview(input: { sessionID: string; file: string; action: "keep" | "undo" }): void {
-    this.postMessage({ type: "editReviewSync", sessionID: input.sessionID, file: input.file, action: input.action })
+  public syncEditReview(input: { sessionID: string; file: string; action: "keep" | "undo"; revision?: string }): void {
+    this.postMessage({ type: "editReviewSync", ...input })
     this.scheduleReview(input.sessionID)
   }
 
@@ -1597,6 +1617,20 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private async handleGoalMessage(
     message: TypedWebviewMessage & { sessionID?: unknown; action?: unknown; objective?: unknown; messageID?: unknown },
   ): Promise<boolean> {
+    if (message.type === "goalEdit" || message.type === "goalStop") {
+      const operation = message.type === "goalStop" ? stopGoal : editGoal
+      await operation({
+        client: this.client,
+        directory: this.getWorkspaceDirectory(typeof message.sessionID === "string" ? message.sessionID : undefined),
+        message,
+        post: (reply) => this.postMessage(reply),
+      })
+      return true
+    }
+    if (message.type === "goalEvidence") {
+      await goalEvidence({ client: this.client, directory: this.getWorkspaceDirectory(typeof message.sessionID === "string" ? message.sessionID : undefined), message, post: (reply) => this.postMessage(reply) })
+      return true
+    }
     if (message.type === "goalGet") {
       if (typeof message.sessionID === "string") await this.fetchAndSendGoal(message.sessionID)
       return true
@@ -1640,7 +1674,9 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
   // raya_change end
 
-  private async handleRoutineMessage(message: TypedWebviewMessage): Promise<boolean> {
+  private async handleRoutineMessage(
+    message: TypedWebviewMessage & { requestID?: unknown; agentID?: unknown; runID?: unknown },
+  ): Promise<boolean> {
     try {
       return await dispatchRoutine({
         message,
@@ -1650,6 +1686,43 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         track: (id) => this.trackSession(id),
       })
     } catch (err) {
+      if (message.type === "routineSnapshot") {
+        this.postMessage({
+          type: "routineSnapshot",
+          requestID: message.requestID,
+          agentID: message.agentID,
+          runID: message.runID,
+          error: "Could not connect to read the saved instructions. Try again.",
+        })
+        return true
+      }
+      if (message.type === "routineArchive") {
+        this.postMessage({
+          type: "routineArchive",
+          requestID: message.requestID,
+          agentID: message.agentID,
+          error: "Could not connect to read the routine archive. Try again.",
+        })
+        return true
+      }
+      if (message.type === "routineOutputUpdate") {
+        this.postMessage({
+          type: "routineOutputUpdated",
+          requestID: message.requestID,
+          agentID: message.agentID,
+          error: "Could not connect to save output requirements. Reconnect and reload the routine.",
+        })
+        return true
+      }
+      if (message.type === "routineAccessUpdate") {
+        this.postMessage({
+          type: "routineAccessUpdated",
+          requestID: message.requestID,
+          agentID: message.agentID,
+          error: "Could not connect to save routine access. Reconnect and reload the routine.",
+        })
+        return true
+      }
       if (
         message.type !== "routineList" &&
         message.type !== "routineCreate" &&
@@ -1741,21 +1814,48 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   // the main webview message switch stays under its complexity budget. "Undo all"
   // (discardSessionChanges) undoes file edits only and never touches the conversation.
   private handleCheckpointMessage(
-    message: TypedWebviewMessage & { sessionID?: unknown; messageID?: unknown; partID?: unknown; files?: unknown },
+    message: TypedWebviewMessage & {
+      sessionID?: unknown
+      messageID?: unknown
+      partID?: unknown
+      files?: unknown
+      requestID?: unknown
+      expected?: unknown
+    },
   ): boolean {
-    if (message.type === "editReviewKeepAll") {
-      if (typeof message.sessionID === "string") {
-        this.inEditorReview?.dismissAll()
-        this.lastReviewHash = ""
-        // raya_change - persist a kept boundary so a later Undo all stops here instead of
-        // rewinding to the session's first edit (which wiped work the user already kept).
+    if (message.type === "editReviewAcknowledged") {
+      if (typeof message.sessionID === "string" && typeof message.requestID === "string") {
         const sid = message.sessionID
-        const files = Array.isArray(message.files) ? message.files.filter((f): f is string => typeof f === "string") : undefined
-        this.checkpoint(sid, () => this.handleKeepSessionChanges(sid, files && files.length > 0 ? files : undefined))
+        const request = message.requestID
+        this.checkpoint(sid, () => this.acknowledgeReview(sid, request))
       }
       return true
     }
-    if (message.type !== "revertSession" && message.type !== "unrevertSession" && message.type !== "discardSessionChanges")
+    if (message.type === "editReviewKeepAll") {
+      if (typeof message.sessionID === "string") {
+        // raya_change - persist a kept boundary so a later Undo all stops here instead of
+        // rewinding to the session's first edit (which wiped work the user already kept).
+        const sid = message.sessionID
+        const files = Array.isArray(message.files)
+          ? message.files.filter((f): f is string => typeof f === "string")
+          : undefined
+        this.checkpoint(sid, () =>
+          this.reviewAction(
+            sid,
+            "keep",
+            message.requestID,
+            files && files.length > 0 ? files : undefined,
+            message.expected,
+          ),
+        )
+      }
+      return true
+    }
+    if (
+      message.type !== "revertSession" &&
+      message.type !== "unrevertSession" &&
+      message.type !== "discardSessionChanges"
+    )
       return false
     if (typeof message.sessionID !== "string") return true
     const sid = message.sessionID
@@ -1769,9 +1869,79 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       this.checkpoint(sid, () => this.handleUnrevertSession(sid))
       return true
     }
-    const files = Array.isArray(message.files) ? message.files.filter((f): f is string => typeof f === "string") : undefined
-    this.checkpoint(sid, () => this.handleDiscardSessionChanges(sid, files && files.length > 0 ? files : undefined))
+    const files = Array.isArray(message.files)
+      ? message.files.filter((f): f is string => typeof f === "string")
+      : undefined
+    this.checkpoint(sid, () =>
+      this.reviewAction(
+        sid,
+        "undo",
+        message.requestID,
+        files && files.length > 0 ? files : undefined,
+        message.expected,
+      ),
+    )
     return true
+  }
+
+  private async reviewAction(
+    sid: string,
+    action: "keep" | "undo",
+    request?: unknown,
+    files?: string[],
+    expected?: unknown,
+  ): Promise<void> {
+    const requestID = typeof request === "string" ? request : undefined
+    const accept = this.inEditorReview?.capture(sid, files)
+    try {
+      if (
+        expected !== undefined &&
+        (!expected ||
+          typeof expected !== "object" ||
+          Array.isArray(expected) ||
+          Object.values(expected).some((value) => typeof value !== "string"))
+      )
+        throw new Error("Invalid review revisions")
+      const revisions = expected as Record<string, string> | undefined
+      assertSaved(this.getWorkspaceDirectory(sid), files ?? (revisions ? Object.keys(revisions) : undefined))
+      const attempt = requestID
+        ? await remember(this.extensionContext?.workspaceState, {
+            request: requestID,
+            session: sid,
+            directory: this.getWorkspaceDirectory(sid),
+            action,
+            files,
+            expected: revisions,
+          })
+        : undefined
+      assertSaved(this.getWorkspaceDirectory(sid), files ?? (revisions ? Object.keys(revisions) : undefined))
+      if (action === "keep") await this.handleKeepSessionChanges(sid, files, revisions, attempt?.id)
+      if (action === "undo") await this.handleDiscardSessionChanges(sid, files, revisions, attempt?.id)
+      if (!attempt?.recovered) accept?.()
+      if (requestID && attempt) this.deliveries.set(`${sid}\0${requestID}`, attempt.complete)
+      if (requestID)
+        this.postMessage({
+          type: "editReviewResult",
+          sessionID: sid,
+          requestID,
+          action,
+          ...(attempt?.recovered ? { refreshOnly: true } : {}),
+        })
+    } catch (error) {
+      console.error("[Kilo New] review action failed:", error)
+      this.scheduleReview(sid)
+      const message = failure(error, `Could not ${action} file changes. Review remains available.`)
+      if (requestID) this.postMessage({ type: "editReviewResult", sessionID: sid, requestID, action, error: message })
+      if (!requestID) this.postMessage({ type: "error", sessionID: sid, message })
+    }
+  }
+
+  private async acknowledgeReview(sid: string, request: string): Promise<void> {
+    const key = `${sid}\0${request}`
+    const complete = this.deliveries.get(key)
+    if (!complete) return
+    await complete()
+    if (this.deliveries.get(key) === complete) this.deliveries.delete(key)
   }
 
   private handleStreamVisibilityMessage(
@@ -2509,6 +2679,12 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
    * a session the backend has already deleted.
    */
   private pruneDeletedSession(sessionID: string): void {
+    void forget(this.extensionContext?.workspaceState, sessionID).catch((error) =>
+      console.error("[Raya] Could not remove deleted session review attempts:", error),
+    )
+    for (const key of this.deliveries.keys()) {
+      if (key.startsWith(`${sessionID}\0`)) this.deliveries.delete(key)
+    }
     this.trackedSessionIds.delete(sessionID)
     this.openSessionIds.delete(sessionID)
     for (const [key, session] of this.draftSessions) {
@@ -4311,8 +4487,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         this.postMessage({ type: "goalState", sessionID: sid, notice: command.notice })
         return
       }
-      const armed =
-        command?.kind === "start" ? await this.armGoal(sid, dir, command.objective, messageID) : undefined
+      const armed = command?.kind === "start" ? await this.armGoal(sid, dir, command.objective, messageID) : undefined
       if (armed?.data) {
         this.postMessage({
           type: "goalState",
@@ -4410,6 +4585,10 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       goal: response.data as GoalState | undefined,
       notice,
     })
+    if (response.response.status === 404 && !notice) {
+      const saved = await stopResult(this.client, sessionID, directory)
+      if (saved) this.postMessage({ type: "goalStopResult", sessionID, notice: saved })
+    }
   }
 
   private async handleGoalControl(
@@ -4591,17 +4770,28 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   // edited files to their pre-session state via the files-only server op; no revert
   // boundary is set, so nothing becomes redoable. Passing `files` undoes just that
   // subset (a single inline edit's Undo); omitting it undoes every edit (Undo all).
-  private async handleDiscardSessionChanges(sessionID: string, files?: string[]): Promise<void> {
-    if (!this.client) return
+  private async handleDiscardSessionChanges(
+    sessionID: string,
+    files?: string[],
+    expected?: Record<string, string>,
+    requestID?: string,
+  ): Promise<void> {
+    if (!this.client) throw new Error("Backend is not connected")
     const dir = this.getWorkspaceDirectory(sessionID)
-    const { data, error } = await this.client.session.discardChanges({ sessionID, directory: dir, files })
+    const { data, error } = await this.client.session.discardChanges({
+      sessionID,
+      directory: dir,
+      files,
+      expected,
+      requestID,
+    })
     if (error) {
       console.error("[Kilo New] KiloProvider: Failed to discard session changes:", error)
       this.postMessage({ type: "error", message: "Failed to undo file changes", sessionID })
       throw error
     }
     if (!data) throw new Error("Discard returned no session")
-    this.inEditorReview?.dismissAll()
+    if (this.currentSession?.id === sessionID) this.inEditorReview?.refresh()
     this.lastReviewHash = ""
     this.refreshes.set(sessionID, (this.refreshes.get(sessionID) ?? 0) + 1)
     if (this.currentSession?.id === sessionID) this.setCurrentSession(data)
@@ -4613,11 +4803,25 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   // current edits become accepted, so a later Undo only rewinds edits made after
   // this point instead of wiping work the user already kept. Passing `files` keeps
   // a single file (in-editor Keep); omitting it keeps every current edit (Keep all).
-  private async handleKeepSessionChanges(sessionID: string, files?: string[]): Promise<void> {
-    if (!this.client) return
+  private async handleKeepSessionChanges(
+    sessionID: string,
+    files?: string[],
+    expected?: Record<string, string>,
+    requestID?: string,
+  ): Promise<void> {
+    if (!this.client) throw new Error("Backend is not connected")
     const dir = this.getWorkspaceDirectory(sessionID)
-    const { error } = await this.client.session.keepChanges({ sessionID, directory: dir, files })
-    if (error) console.error("[Kilo New] KiloProvider: Failed to record kept changes:", error)
+    const { data, error } = await this.client.session.keepChanges({
+      sessionID,
+      directory: dir,
+      files,
+      expected,
+      requestID,
+    })
+    if (error) throw error
+    if (!data) throw new Error("Keep returned no session")
+    this.lastReviewHash = ""
+    this.scheduleReview(sessionID)
   }
 
   private async handleUnrevertSession(sessionID: string): Promise<void> {
@@ -5861,16 +6065,28 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private async refreshReview(sessionID?: string): Promise<void> {
     const sid = sessionID ?? this.currentSession?.id
     if (!sid || !this.client) return
+    const generation = ++this.reviewGeneration
+    const revisions: string[] = []
+    const expected = new Map<string, string>()
+    const accepted = new Map<string, string>()
+    let authoritative = true
     const ids = new Set([sid, ...this.syncedChildSessions])
     const files = new Map<string, { additions: number; deletions: number }>()
     for (const id of ids) {
       const directory = this.getWorkspaceDirectory(id)
-      const result = await this.client.session.diff({ sessionID: id, directory }).catch((err) => {
-        console.error("[Kilo New] session review stats failed:", err)
-        return { data: undefined as { file?: string; additions?: number; deletions?: number }[] | undefined }
-      })
-      for (const item of result.data ?? []) {
+      const result = await this.client.session
+        .diff({ sessionID: id, directory }, { throwOnError: true })
+        .catch((err) => {
+          console.error("[Kilo New] session review stats failed:", err)
+          return undefined
+        })
+      if (!result?.data) return
+      for (const item of result.data) {
+        if (item.reviewed === undefined) authoritative = false
+        revisions.push(JSON.stringify([id, item.file, fingerprint(item)]))
         if (!item.file || files.has(item.file)) continue
+        expected.set(item.file, fingerprint(item))
+        if (item.reviewed === fingerprint(item)) accepted.set(item.file, item.reviewed)
         files.set(item.file, { additions: item.additions ?? 0, deletions: item.deletions ?? 0 })
       }
     }
@@ -5897,12 +6113,21 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         deletions = fallback.deletions
       }
     }
-    const hash = `${sid}:${files.size}:${additions}:${deletions}`
+    if (generation !== this.reviewGeneration) return
+    const revision = createHash("sha256").update(JSON.stringify(revisions.sort())).digest("hex")
+    const hash = `${sid}:${revision}:${files.size}:${additions}:${deletions}`
     this.inEditorReview?.refresh()
     this.lastReviewHash = hash
     const msg = {
       type: "reviewStatsLoaded" as const,
       sessionID: sid,
+      revision,
+      expected: Object.fromEntries(expected),
+      accepted: authoritative ? Object.fromEntries(accepted) : undefined,
+      aliases: Object.fromEntries(
+        [...expected.keys()].map((file) => [path.resolve(this.getWorkspaceDirectory(sid), file), file]),
+      ),
+      windows: process.platform === "win32",
       files: files.size,
       additions,
       deletions,
@@ -5944,6 +6169,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
    * Does NOT kill the server — that's the connection service's job.
    */
   dispose(): void {
+    this.deliveries.clear()
     if (this.opts.focusContext) {
       void vscode.commands.executeCommand("setContext", this.opts.focusContext, false)
     }

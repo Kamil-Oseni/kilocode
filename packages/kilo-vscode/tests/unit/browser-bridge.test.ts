@@ -6,7 +6,17 @@ import type { BrowserConnection, BrowserHost } from "../../src/services/browser-
 import { BrowserBridge } from "../../src/services/browser-automation/browser-bridge"
 
 describe("Raya browser bridge", () => {
-  it("opens the panel and returns the shared session result for an agent drive request", async () => {
+  it.each([
+    { operation: "navigate" as const, url: "https://example.test" },
+    { operation: "click" as const, selector: { kind: "role" as const, role: "button", name: "Save", scope: "#form" } },
+    {
+      operation: "type" as const,
+      selector: { kind: "label" as const, text: "Email" },
+      text: "person@example.test",
+      submit: false,
+    },
+    { operation: "select" as const, selector: { kind: "testid" as const, value: "choice" }, values: ["b"] },
+  ])("opens the panel and preserves an agent drive request: $operation", async (input) => {
     const actions: BrowserRequest[] = []
     const shown: number[] = []
     let reply: (input: Record<string, unknown>) => void = () => undefined
@@ -43,23 +53,21 @@ describe("Raya browser bridge", () => {
       properties: {
         id: "brr_test",
         sessionID: "ses_test",
-        operation: "navigate",
-        url: "https://example.test",
+        ...input,
       },
     })
 
     expect(await result).toMatchObject({
       requestID: "brr_test",
       directory: "C:\\workspace",
-      result: { operation: "navigate", url: "https://example.test" },
+      result: { operation: input.operation, url: "https://example.test" },
     })
     expect(shown).toHaveLength(1)
     expect(actions).toEqual([
       {
         id: "brr_test",
         sessionID: "ses_test",
-        operation: "navigate",
-        url: "https://example.test",
+        ...input,
       },
     ])
     bridge.dispose()

@@ -26,6 +26,7 @@ import { Todo } from "@/session/todo"
 import { Session } from "@/session/session"
 import { SessionStatus } from "@/session/status"
 import { SessionRunState } from "@/session/run-state"
+import * as TaskWorker from "@/kilocode/session/task-worker" // kilocode_change
 import { SessionProcessor } from "@/session/processor"
 import { SessionCompaction } from "@/session/compaction"
 import { SessionRevert } from "@/session/revert"
@@ -73,6 +74,7 @@ import { Pty } from "@opencode-ai/core/pty" // kilocode_change
 const memory = LayerNode.make({ service: MemoryService.Service, layer: MemoryService.layer, deps: [] })
 // raya_change start - Milestone F browser bridge
 const kilo = LayerNode.group([
+  TaskWorker.node,
   Credential.node,
   ModelCache.node,
   AgentManager.node,

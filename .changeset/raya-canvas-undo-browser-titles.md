@@ -1,5 +1,5 @@
 ---
-"kilo-code": patch
+"raya": patch
 ---
 
 Fix live canvas, per-file undo, responsive browser, and new-chat titles

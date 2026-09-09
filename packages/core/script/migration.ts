@@ -6,6 +6,7 @@ import os from "os"
 import path from "path"
 import { pathToFileURL } from "url"
 import { parseArgs } from "util"
+import * as kilo from "./kilocode/migration" // kilocode_change
 
 const root = path.resolve(import.meta.dirname, "../../..")
 const snapshot = path.join(root, "packages/core/schema.json")
@@ -107,7 +108,7 @@ export default { ...config, out: ${JSON.stringify(output)} }
 
 async function generatedMigrations(directory: string) {
   return (await Array.fromAsync(new Bun.Glob("*/migration.sql").scan({ cwd: directory })))
-    .map((file) => file.split("/")[0])
+    .map((file) => path.basename(path.dirname(file))) // kilocode_change - Bun glob paths use native separators on Windows
     .filter((name): name is string => name !== undefined)
     .sort()
 }
@@ -146,19 +147,19 @@ import type { DatabaseMigration } from "./migration"
 export default {
   up(tx) {
     return Effect.gen(function* () {
-${renderStatements(sql)}
+${renderStatements(sql, true) /* kilocode_change */}
     })
   },
 } satisfies Omit<DatabaseMigration.Migration, "id">
 `
 }
 
-function renderStatements(sql: string) {
+function renderStatements(sql: string, annotated = false) { // kilocode_change
   return sql
     .split("--> statement-breakpoint")
     .map((statement) => statement.trim())
     .filter((statement) => statement.length > 0)
-    .map(renderRun)
+    .map((statement) => annotated ? kilo.statement(statement, renderRun(statement)) : renderRun(statement)) // kilocode_change
     .join("\n")
 }
 
@@ -189,7 +190,7 @@ function renderRegistry(names: string[]) {
 
 export const migrations = (
   await Promise.all([
-${names.map((name) => `    import("./migration/${name}"),`).join("\n")}
+${names.map((name) => kilo.entry(name, `    import("./migration/${name}"),`)).join("\n") /* kilocode_change */}
   ])
 ).map((module) => module.default) satisfies DatabaseMigration.Migration[]
 `

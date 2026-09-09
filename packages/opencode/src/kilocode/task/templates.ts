@@ -14,19 +14,48 @@ export type Template = typeof Template.Type
 export const templates: Template[] = [
   {
     id: "briefer",
-    name: "Briefer",
+    name: "Morning project brief",
     role: "briefer",
-    objective: "Morning summary of what changed in this repo since the last briefing.",
-    capabilities: [] as string[],
-    schedule: { kind: "cron" as const, expr: "0 9 * * 1-5" },
+    objective:
+      "Summarize project changes since the previous briefing, or the last working day if no briefing exists. Report in this run's conversation: important changes, unresolved risks, and suggested next actions. Cite the files or commits supporting each finding, state the period reviewed, and identify anything you could not inspect. Do not modify files or send messages.",
+    capabilities: [],
+    schedule: { kind: "cron", expr: "0 9 * * 1-5" },
   },
   {
     id: "reviewer",
-    name: "Reviewer",
+    name: "Repository maintenance check",
     role: "reviewer",
-    objective: "Review the repo for bugs and security issues on a schedule and cite the files you checked.",
-    capabilities: [] as string[],
-    schedule: { kind: "cron" as const, expr: "0 18 * * 1-5" },
+    objective:
+      "Review the repository for actionable maintenance issues. Report in this run's conversation: prioritized findings, affected file paths, supporting evidence, and recommended fixes. Distinguish observed failures from suspected risks and list checks you could not run. Do not claim checks passed without their recorded results. Propose changes without editing files, installing dependencies, or publishing anything.",
+    capabilities: [],
+    schedule: { kind: "cron", expr: "0 18 * * 1-5" },
+  },
+  {
+    id: "document-review",
+    name: "Weekly document review",
+    role: "reviewer",
+    objective:
+      "Review documents in the selected folder for outdated statements, contradictions, missing decisions, and unclear ownership. Report in this run's conversation: prioritized findings with document paths and section references, proposed corrections, and unresolved questions. State which documents were reviewed and which could not be read. Suggest edits without modifying source documents or contacting their owners.",
+    capabilities: [],
+    schedule: { kind: "cron", expr: "0 16 * * 5" },
+  },
+  {
+    id: "folder-report",
+    name: "Watched-folder report",
+    role: "briefer",
+    objective:
+      "Report changes in the selected folder since the previous report. On the first run, describe the current contents as a baseline rather than inventing changes. Include changed file paths, a concise description of each change, the comparison period, and unreadable or missing files in this run's conversation. Do not modify files. This starter runs on demand; configure a supported trigger separately to automate it.",
+    capabilities: [],
+    schedule: { kind: "manual" },
+  },
+  {
+    id: "research-digest",
+    name: "Research digest",
+    role: "generalist",
+    objective:
+      "Research the topic and sources specified in this standing job. If the topic is missing, ask for it before researching. Deliver a digest in this run's conversation with key findings, source links, publication dates where available, disagreements, and open questions. Distinguish new information from earlier reports and unsupported claims from verified evidence. State unavailable sources. Do not subscribe, purchase access, or send the digest externally.",
+    capabilities: [],
+    schedule: { kind: "cron", expr: "0 10 * * 1" },
   },
   {
     id: "accountant",

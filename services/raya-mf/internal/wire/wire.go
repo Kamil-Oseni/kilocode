@@ -56,3 +56,19 @@ type Transcript struct {
 	Stable    bool   `json:"stable"`
 	Truncated bool   `json:"truncated"`
 }
+
+// Failure carries a stable category and recovery action, never a provider payload.
+type Failure struct {
+	Code     string    `json:"code"`
+	Message  string    `json:"message"`
+	Recovery string    `json:"recovery"`
+	At       time.Time `json:"at"`
+}
+type Status struct {
+	ID            string   `json:"id"`
+	State         string   `json:"state"`
+	Failure       *Failure `json:"failure,omitempty"`
+	RoomReport    string   `json:"roomReport,omitempty"`
+	BackendReport string   `json:"backendReport,omitempty"`
+	Cleanup       string   `json:"cleanup,omitempty"`
+}

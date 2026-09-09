@@ -1,4 +1,5 @@
 import type { InstallMarketplaceItemOptions, MarketplaceFilters, MarketplaceItem } from "../marketplace"
+import type { Output } from "../../../../src/shared/routine-output"
 import type { FileAttachment } from "./parts"
 import type { MessageLoadMode } from "./sessions"
 import type { PermissionFileDiff } from "./permissions"
@@ -45,6 +46,15 @@ export interface AbortRequest {
 }
 
 // raya_change start - Milestone A goal state controls
+export interface GoalEvidenceMessage {
+  revisionID?: string
+  type: "goalEvidence"
+  sessionID: string
+  requestID: string
+  createdAt?: number
+  evidence: import("../../../../src/shared/goal").GoalEvidence
+}
+
 export interface GoalGetMessage {
   type: "goalGet"
   sessionID: string
@@ -57,6 +67,24 @@ export interface GoalControlMessage {
   objective?: string
 }
 
+export interface GoalStopMessage {
+  type: "goalStop"
+  sessionID: string
+  requestID: string
+  expectedIntent: string
+}
+
+export interface GoalEditMessage {
+  accept?: true
+  criteria?: import("../../../../src/shared/goal").GoalState["criteria"]
+  type: "goalEdit"
+  sessionID: string
+  requestID: string
+  objective: string
+  expectedIntent: string
+  status?: "active" | "paused"
+}
+
 export interface GoalDiscardMessage {
   type: "goalDiscard"
   sessionID: string
@@ -67,13 +95,32 @@ export interface RoutineListMessage {
   type: "routineList"
 }
 
+export interface RoutineForecastRequestMessage {
+  type: "routineForecast"
+  requestID: string
+  when?: string
+  tz?: string
+  schedule?: import("../../../../src/shared/routine-schedule").Proposal
+  edit?: import("../../../../src/shared/routine-schedule").Edit
+}
+
+export interface RoutineScheduleUpdateMessage {
+  type: "routineScheduleUpdate"
+  requestID: string
+  agentID: string
+  forecastID: string
+}
+
 export interface RoutineCreateMessage {
   type: "routineCreate"
   name: string
   role?: string
   objective: string
+  output?: Output
   when?: string
   cron?: string
+  tz?: string
+  forecastID?: string
   capabilities?: string[]
   plan?: string
   enabled?: boolean
@@ -101,6 +148,22 @@ export interface RoutineUpdateMessage {
   tools?: string[]
 }
 
+export interface RoutineOutputUpdateMessage {
+  type: "routineOutputUpdate"
+  requestID: string
+  agentID: string
+  output: Output
+  expectedOutput: Output | "unset"
+}
+
+export interface RoutineAccessUpdateMessage {
+  type: "routineAccessUpdate"
+  requestID: string
+  agentID: string
+  access: "brief" | "full"
+  expectedAccess: "brief" | "full" | "unset"
+}
+
 export interface RoutineRunMessage {
   type: "routineRun"
   agentID: string
@@ -109,6 +172,20 @@ export interface RoutineRunMessage {
 export interface RoutineRunsMessage {
   type: "routineRuns"
   agentID: string
+}
+
+export interface RoutineSnapshotRequestMessage {
+  type: "routineSnapshot"
+  requestID: string
+  agentID: string
+  runID: string
+}
+
+export interface RoutineArchiveRequestMessage {
+  type: "routineArchive"
+  requestID: string
+  agentID?: string
+  cursor?: string
 }
 
 export interface RoutineRemoveMessage {
@@ -154,12 +231,23 @@ export interface DiscardSessionChangesRequest {
   type: "discardSessionChanges"
   sessionID: string
   files?: string[]
+  requestID?: string
+  expected?: Record<string, string>
 }
 
 // raya_change - chat Keep all hides in-editor Keep/Undo without reverting files
 export interface EditReviewKeepAllRequest {
+  files?: string[]
   type: "editReviewKeepAll"
   sessionID: string
+  requestID?: string
+  expected?: Record<string, string>
+}
+
+export interface EditReviewAcknowledgedRequest {
+  type: "editReviewAcknowledged"
+  sessionID: string
+  requestID: string
 }
 
 export interface DeleteMessageRequest {
@@ -1665,13 +1753,22 @@ export type WebviewMessage =
   | SendMessageRequest
   | AbortRequest
   | GoalGetMessage // raya_change - Milestone A
+  | GoalEvidenceMessage
   | GoalControlMessage // raya_change - Milestone A
+  | GoalStopMessage
+  | GoalEditMessage
   | GoalDiscardMessage // raya_change - safe ordered goal rollback
   | RoutineListMessage
+  | RoutineForecastRequestMessage
+  | RoutineScheduleUpdateMessage
   | RoutineCreateMessage
   | RoutineUpdateMessage
+  | RoutineAccessUpdateMessage
+  | RoutineOutputUpdateMessage
   | RoutineRunMessage
   | RoutineRunsMessage
+  | RoutineSnapshotRequestMessage
+  | RoutineArchiveRequestMessage
   | RoutineRemoveMessage
   | RequestBackgroundJobsMessage
   | CancelBackgroundJobMessage
@@ -1680,6 +1777,7 @@ export type WebviewMessage =
   | UnrevertSessionRequest
   | DiscardSessionChangesRequest
   | EditReviewKeepAllRequest
+  | EditReviewAcknowledgedRequest
   | DeleteMessageRequest
   | UpdateQueuedMessageRequest
   | PermissionResponseRequest

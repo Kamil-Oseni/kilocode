@@ -158,6 +158,38 @@ export interface GoalStateMessage {
   notice?: string
 }
 
+export interface GoalStoppedMessage {
+  type: "goalStopped"
+  sessionID: string
+  requestID: string
+  cleared?: true
+  worker?: "interrupted" | "preserved" | "unconfirmed"
+  background?: string
+  error?: string
+}
+
+export interface GoalStopResultMessage {
+  type: "goalStopResult"
+  sessionID: string
+  notice: string
+}
+
+export interface GoalEvidenceResultMessage {
+  type: "goalEvidenceResult"
+  sessionID: string
+  requestID: string
+  source?: import("../../../../src/shared/goal").GoalSource
+  error?: string
+}
+
+export interface GoalEditedMessage {
+  type: "goalEdited"
+  sessionID: string
+  requestID: string
+  goal?: GoalState
+  error?: string
+}
+
 export interface RoutineStateMessage {
   type: "routineState"
   agents?: unknown[]
@@ -167,10 +199,63 @@ export interface RoutineStateMessage {
   saved?: boolean
 }
 
+export interface RoutineForecastMessage {
+  type: "routineForecast"
+  requestID: string
+  forecastID?: string
+  schedule?: import("@kilocode/sdk/v2/client").KilocodeRoutineForecastResponse["schedule"]
+  occurrences?: import("@kilocode/sdk/v2/client").KilocodeRoutineForecastResponse["occurrences"]
+  timezone?: string
+  error?: string
+}
+
+export interface RoutineScheduleUpdatedMessage {
+  type: "routineScheduleUpdated"
+  requestID: string
+  agentID: string
+  error?: string
+}
+
 export interface RoutineRunsLoadedMessage {
   type: "routineRuns"
   agentID: string
   runs?: unknown[]
+}
+
+export interface RoutineOutputUpdatedMessage {
+  type: "routineOutputUpdated"
+  requestID: string
+  agentID: string
+  output?: import("../../../../src/shared/routine-output").Output
+  error?: string
+}
+
+export interface RoutineAccessUpdatedMessage {
+  type: "routineAccessUpdated"
+  requestID: string
+  agentID: string
+  access?: "brief" | "full"
+  error?: string
+}
+
+export interface RoutineSnapshotMessage {
+  type: "routineSnapshot"
+  requestID: string
+  agentID: string
+  runID: string
+  snapshot?: import("@kilocode/sdk/v2/client").KilocodeRoutineSnapshotResponse
+  missing?: boolean
+  error?: string
+}
+
+export interface RoutineArchiveMessage {
+  type: "routineArchive"
+  requestID: string
+  agentID?: string
+  archive?: import("@kilocode/sdk/v2/client").KilocodeRoutineArchiveResponse["items"]
+  next?: string
+  runs?: import("@kilocode/sdk/v2/client").KilocodeRoutineRunsResponse
+  error?: string
 }
 
 export interface RoutineStartedMessage {
@@ -1283,6 +1368,11 @@ export interface WorktreeStatsLoadedMessage {
 
 // Sidebar: Session snapshot review stats, including child task sessions
 export interface ReviewStatsLoadedMessage {
+  accepted?: Record<string, string>
+  aliases?: Record<string, string>
+  windows?: boolean
+  revision?: string
+  expected?: Record<string, string>
   type: "reviewStatsLoaded"
   sessionID?: string
   files: number
@@ -1292,10 +1382,20 @@ export interface ReviewStatsLoadedMessage {
 
 // raya_change - in-editor Keep/Undo must hide the matching chat review cluster
 export interface EditReviewSyncMessage {
+  revision?: string
   type: "editReviewSync"
   sessionID: string
   file: string
   action: "keep" | "undo"
+}
+
+export interface EditReviewResultMessage {
+  refreshOnly?: boolean
+  type: "editReviewResult"
+  sessionID: string
+  requestID: string
+  action: "keep" | "undo"
+  error?: string
 }
 
 // Set the model for a session (extension → webview, used during multi-version creation)
@@ -1553,8 +1653,18 @@ export type ExtensionMessage =
   | SendMessageFailedMessage
   | SessionCommandCompletedMessage
   | GoalStateMessage // raya_change - Milestone A
+  | GoalStoppedMessage
+  | GoalStopResultMessage
+  | GoalEditedMessage
+  | GoalEvidenceResultMessage
   | RoutineStateMessage
+  | RoutineForecastMessage
+  | RoutineScheduleUpdatedMessage
   | RoutineRunsLoadedMessage
+  | RoutineSnapshotMessage
+  | RoutineAccessUpdatedMessage
+  | RoutineOutputUpdatedMessage
+  | RoutineArchiveMessage
   | RoutineStartedMessage
   | PartUpdatedMessage
   | PartsUpdatedMessage
@@ -1738,6 +1848,7 @@ export type ExtensionMessage =
   | WorktreeStatsLoadedMessage
   | ReviewStatsLoadedMessage
   | EditReviewSyncMessage
+  | EditReviewResultMessage
   | McpStatusLoadedMessage
   | ClearPendingPromptsMessage
   | ExtensionDataReadyMessage

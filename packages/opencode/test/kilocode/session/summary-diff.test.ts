@@ -13,6 +13,7 @@ import { Storage } from "@/storage/storage"
 import { Database } from "@opencode-ai/core/database/database"
 import { provideTmpdirProject } from "../../fixture/fixture"
 import { testEffect } from "../../lib/effect"
+import { boundaries } from "@/kilocode/session/review-boundaries"
 
 const env = LayerNode.compile(
   LayerNode.group([
@@ -32,6 +33,36 @@ const it = testEffect(env)
 // session.diff on the parent must fold in descendant sessions so the in-editor
 // review and "review changes" show what the subagents actually wrote.
 describe("SessionSummary.diff subagent aggregation", () => {
+  it.live(
+    "ancestor boundary lookup does not import sibling acceptance",
+    provideTmpdirProject(
+      () =>
+        Effect.gen(function* () {
+          const sessions = yield* Session.Service
+          const storage = yield* Storage.Service
+          const parent = yield* sessions.create({})
+          const target = yield* sessions.create({ parentID: parent.id })
+          const sibling = yield* sessions.create({ parentID: parent.id })
+          for (const session of [parent, target, sibling]) {
+            yield* sessions.updateMessage({
+              id: MessageID.ascending(),
+              sessionID: session.id,
+              role: "user",
+              agent: "auto",
+              model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test") },
+              time: { created: Date.now() },
+            })
+          }
+          yield* storage.write(["session_kept", sibling.id], { "shared.txt": "newer-sibling" })
+          expect(yield* boundaries(storage, sessions, target.id)).toEqual({})
+          yield* storage.write(["session_kept", parent.id], { "shared.txt": "ancestor" })
+          expect(Object.values(yield* boundaries(storage, sessions, target.id))).toEqual(["ancestor"])
+        }),
+      { git: true },
+    ),
+    30_000,
+  )
+
   it.live(
     "surfaces a child subagent session's stored diff from the parent",
     provideTmpdirProject(
@@ -102,18 +133,22 @@ describe("SessionSummary.diff subagent aggregation", () => {
           const child = yield* sessions.create({ parentID: parent.id })
 
           // Parent has an empty-patch placeholder for the file; child has the real patch.
-          yield* storage.write(["session_diff", parent.id], [
-            { file: "a.txt", patch: "", additions: 0, deletions: 0, status: "modified" as const },
-          ])
-          yield* storage.write(["session_diff", child.id], [
-            {
-              file: "a.txt",
-              patch: "diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-old\n+new\n",
-              additions: 1,
-              deletions: 1,
-              status: "modified" as const,
-            },
-          ])
+          yield* storage.write(
+            ["session_diff", parent.id],
+            [{ file: "a.txt", patch: "", additions: 0, deletions: 0, status: "modified" as const }],
+          )
+          yield* storage.write(
+            ["session_diff", child.id],
+            [
+              {
+                file: "a.txt",
+                patch: "diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-old\n+new\n",
+                additions: 1,
+                deletions: 1,
+                status: "modified" as const,
+              },
+            ],
+          )
 
           const result = yield* summary.diff({ sessionID: parent.id })
 

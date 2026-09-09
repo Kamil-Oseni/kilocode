@@ -25,10 +25,12 @@ import { KiloMemory } from "@kilocode/kilo-memory/effect"
 import { MemoryPaths } from "@kilocode/kilo-memory/effect/paths"
 import type { Storage } from "@/storage/storage" // raya_change - Milestone A goal tool dependencies
 import type { Session } from "@/session/session" // raya_change - Milestone A goal audit evidence
+import type { SessionRunState } from "@/session/run-state"
 import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal state
 import { RayaSelfHeal } from "@/kilocode/self-heal" // raya_change - hybrid self-heal classification refinement
 import { goalTools } from "./goal" // raya_change - Milestone A model-facing tools
 import { scheduleTaskTool } from "./schedule-task"
+import { Database } from "@opencode-ai/core/database/database"
 import { selfHealTools } from "./self-heal" // raya_change - repair agent reconciles its own classification
 import { ChiefRouteTool } from "./chief-route" // raya_change - Milestone B intelligent auto-routing
 import { AskOptionsTool } from "./ask-options" // raya_change - Milestone C selectable options
@@ -81,7 +83,11 @@ export namespace KiloToolRegistry {
   export function infos(
     host?: AgentManager.Interface,
     notebook?: Notebook.Interface,
-    goalDeps?: { storage: Storage.Interface; sessions: Session.Interface }, // raya_change - Milestone A
+    goalDeps?: {
+      storage: Storage.Interface
+      sessions: Session.Interface
+      runs?: Pick<SessionRunState.Interface, "inspect">
+    }, // raya_change - Milestone A
     browser?: Browser.Interface, // raya_change - Milestone F browser bridge
     canvas?: Canvas.Interface, // raya_change - Milestone E canvas bridge
   ) {
@@ -115,15 +121,21 @@ export namespace KiloToolRegistry {
       // raya_change end
       // raya_change start - Milestone A model-facing goal tools
       const goalState = goalDeps ? RayaGoal.make(goalDeps) : undefined
-      const goals = goalState && goalDeps ? goalTools(goalState, goalDeps.sessions) : undefined
+      const goals = goalState && goalDeps ? goalTools(goalState, goalDeps.sessions, goalDeps.runs) : undefined
       const goalCreate = goals ? yield* goals.create : undefined
       const goalGet = goals ? yield* goals.get : undefined
       const goalUpdate = goals ? yield* goals.update : undefined
+      const goalPlan = goals ? yield* goals.plan : undefined
       // raya_change - hybrid self-heal: the repair agent reconciles its own item's classification
       const heal = goalState && goalDeps ? selfHealTools(goalState, RayaSelfHeal.make(goalDeps.storage)) : undefined
       const healRefine = heal ? yield* heal.refine : undefined
-      const goal = { goalCreate, goalGet, goalUpdate, healRefine }
-      const scheduleTask = goalDeps ? yield* scheduleTaskTool(goalDeps) : undefined
+      const goal = { goalCreate, goalGet, goalUpdate, goalPlan, healRefine }
+      const scheduleTask = goalDeps
+        ? yield* Effect.gen(function* () {
+            const database = yield* Database.Service
+            return yield* scheduleTaskTool({ ...goalDeps, database })
+          })
+        : undefined
       // raya_change end
       if (!notebook)
         return {
@@ -194,6 +206,7 @@ export namespace KiloToolRegistry {
       goalCreate?: Tool.Info // raya_change - Milestone A
       goalGet?: Tool.Info // raya_change - Milestone A
       goalUpdate?: Tool.Info // raya_change - Milestone A
+      goalPlan?: Tool.Info
       healRefine?: Tool.Info // raya_change - hybrid self-heal classification
       chief?: Tool.Info // raya_change - Milestone B
       ask?: Tool.Info // raya_change - Milestone C
@@ -240,6 +253,7 @@ export namespace KiloToolRegistry {
               goalCreate: Tool.init(tools.goalCreate),
               goalGet: Tool.init(tools.goalGet),
               goalUpdate: Tool.init(tools.goalUpdate),
+              goalPlan: tools.goalPlan ? Tool.init(tools.goalPlan) : Effect.succeed(undefined),
             })
           : {}
       // raya_change end
@@ -330,6 +344,7 @@ export namespace KiloToolRegistry {
       goalCreate?: Tool.Def // raya_change - Milestone A
       goalGet?: Tool.Def // raya_change - Milestone A
       goalUpdate?: Tool.Def // raya_change - Milestone A
+      goalPlan?: Tool.Def
       healRefine?: Tool.Def // raya_change - hybrid self-heal classification
       chief?: Tool.Def // raya_change - Milestone B
       ask?: Tool.Def // raya_change - Milestone C
@@ -361,6 +376,7 @@ export namespace KiloToolRegistry {
         ? [tools.goalCreate, tools.goalGet, tools.goalUpdate]
         : []),
       ...(tools.healRefine ? [tools.healRefine] : []), // raya_change - hybrid self-heal classification
+      ...(tools.goalPlan ? [tools.goalPlan] : []),
       ...(tools.chief ? [tools.chief] : []), // raya_change - Milestone B
       ...(tools.ask ? [tools.ask] : []), // raya_change - Milestone C
       ...(Flag.KILO_CLIENT === "vscode" ? (tools.browser ?? []) : []), // raya_change - Milestone F

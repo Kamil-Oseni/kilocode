@@ -225,6 +225,10 @@ import type {
   KilocodeGoalDiscardResponses,
   KilocodeGoalGetErrors,
   KilocodeGoalGetResponses,
+  KilocodeGoalStopErrors,
+  KilocodeGoalStopResponses,
+  KilocodeGoalStopResultErrors,
+  KilocodeGoalStopResultResponses,
   KilocodeGoalUpdateErrors,
   KilocodeGoalUpdateResponses,
   KilocodeHeapSnapshotErrors,
@@ -247,10 +251,14 @@ import type {
   KilocodeRemoveCommandResponses,
   KilocodeRemoveSkillErrors,
   KilocodeRemoveSkillResponses,
+  KilocodeRoutineArchiveErrors,
+  KilocodeRoutineArchiveResponses,
   KilocodeRoutineCreateErrors,
   KilocodeRoutineCreateResponses,
   KilocodeRoutineEventErrors,
   KilocodeRoutineEventResponses,
+  KilocodeRoutineForecastErrors,
+  KilocodeRoutineForecastResponses,
   KilocodeRoutineListErrors,
   KilocodeRoutineListResponses,
   KilocodeRoutineRemoveErrors,
@@ -259,6 +267,8 @@ import type {
   KilocodeRoutineRunResponses,
   KilocodeRoutineRunsErrors,
   KilocodeRoutineRunsResponses,
+  KilocodeRoutineSnapshotErrors,
+  KilocodeRoutineSnapshotResponses,
   KilocodeRoutineTemplatesErrors,
   KilocodeRoutineTemplatesResponses,
   KilocodeRoutineUpdateErrors,
@@ -5294,7 +5304,11 @@ export class Session2 extends HeyApiClient {
       sessionID: string
       directory?: string
       workspace?: string
+      requestID?: string
       files?: Array<string>
+      expected?: {
+        [key: string]: string
+      }
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5306,7 +5320,9 @@ export class Session2 extends HeyApiClient {
             { in: "path", key: "sessionID" },
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "body", key: "requestID" },
             { in: "body", key: "files" },
+            { in: "body", key: "expected" },
           ],
         },
       ],
@@ -5337,7 +5353,11 @@ export class Session2 extends HeyApiClient {
       sessionID: string
       directory?: string
       workspace?: string
+      requestID?: string
       files?: Array<string>
+      expected?: {
+        [key: string]: string
+      }
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5349,7 +5369,9 @@ export class Session2 extends HeyApiClient {
             { in: "path", key: "sessionID" },
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "body", key: "requestID" },
             { in: "body", key: "files" },
+            { in: "body", key: "expected" },
           ],
         },
       ],
@@ -8286,13 +8308,14 @@ export class Goal extends HeyApiClient {
   /**
    * Clear a session goal
    *
-   * Remove the durable goal state for a session.
+   * Remove goal tracking. A reviewed control revision also requests cancellation of its matching owned worker; the boolean only confirms tracking removal.
    */
   public clear<ThrowOnError extends boolean = false>(
     parameters: {
       sessionID: string
       directory?: string
       workspace?: string
+      expectedIntent?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -8304,6 +8327,7 @@ export class Goal extends HeyApiClient {
             { in: "path", key: "sessionID" },
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "query", key: "expectedIntent" },
           ],
         },
       ],
@@ -8357,8 +8381,17 @@ export class Goal extends HeyApiClient {
       sessionID: string
       directory?: string
       workspace?: string
+      accept?: true
+      criteria?: Array<{
+        id: string
+        description: string
+        verification: string
+        required?: boolean
+        review?: boolean
+      }>
       status?: "active" | "paused"
       objective?: string
+      expectedIntent?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -8370,8 +8403,11 @@ export class Goal extends HeyApiClient {
             { in: "path", key: "sessionID" },
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "body", key: "accept" },
+            { in: "body", key: "criteria" },
             { in: "body", key: "status" },
             { in: "body", key: "objective" },
+            { in: "body", key: "expectedIntent" },
           ],
         },
       ],
@@ -8421,6 +8457,81 @@ export class Goal extends HeyApiClient {
     )
     return (options?.client ?? this.client).post<KilocodeGoalCreateResponses, KilocodeGoalCreateErrors, ThrowOnError>({
       url: "/session/{sessionID}/goal",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Read the latest goal stop result
+   *
+   * Read the latest saved stop receipt for this session without changing tracking or cancelling work.
+   */
+  public stopResult<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      KilocodeGoalStopResultResponses,
+      KilocodeGoalStopResultErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/goal/stop",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Stop a reviewed goal and retrieve its saved result
+   *
+   * Retry with the same intent to retrieve the saved result without cancelling a replacement worker. A cleared phase confirms tracking removal but leaves the worker outcome unconfirmed.
+   */
+  public stop<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      expectedIntent?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "expectedIntent" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<KilocodeGoalStopResponses, KilocodeGoalStopErrors, ThrowOnError>({
+      url: "/session/{sessionID}/goal/stop",
       ...options,
       ...params,
       headers: {
@@ -8625,6 +8736,70 @@ export class Checkpoint extends HeyApiClient {
 
 export class Routine extends HeyApiClient {
   /**
+   * Preview a routine schedule
+   *
+   * Validate a schedule and calculate up to three upcoming occurrences without creating a routine.
+   */
+  public forecast<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      body?:
+        | {
+            kind: "once"
+            at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            kind: "cron"
+            expr: string
+            tz?: string
+          }
+        | {
+            kind: "event"
+            source: string
+            filter?: string
+          }
+        | {
+            kind: "manual"
+          }
+        | {
+            kind: "local"
+            local: string
+            tz: string
+            fold?: "reject" | "earlier" | "later"
+          }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "body", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeRoutineForecastResponses,
+      KilocodeRoutineForecastErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/agent-forecast",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
    * List assigned agents
    *
    * List persistent role-based agents and their standing jobs.
@@ -8666,6 +8841,15 @@ export class Routine extends HeyApiClient {
       name?: string
       role?: string
       objective?: string
+      output?: {
+        destination: "conversation"
+        description: string
+        criteria: Array<{
+          id: string
+          description: string
+          verification: string
+        }>
+      }
       capabilities?: Array<string>
       memoryScope?: "role" | "project" | "session"
       schedule?:
@@ -8710,6 +8894,7 @@ export class Routine extends HeyApiClient {
             { in: "body", key: "name" },
             { in: "body", key: "role" },
             { in: "body", key: "objective" },
+            { in: "body", key: "output" },
             { in: "body", key: "capabilities" },
             { in: "body", key: "memoryScope" },
             { in: "body", key: "schedule" },
@@ -8742,9 +8927,47 @@ export class Routine extends HeyApiClient {
   }
 
   /**
+   * List retained routine definitions
+   *
+   * Read up to 50 final definitions saved during successful routine removal, newest capture first. Pass next as cursor to continue, or agentID for a single retained definition. Excludes routines still in the roster. New removals appear on refresh. Does not restore or run work; earlier removals without an archive record are not reconstructed.
+   */
+  public archive<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      cursor?: string
+      agentID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "cursor" },
+            { in: "query", key: "agentID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      KilocodeRoutineArchiveResponses,
+      KilocodeRoutineArchiveErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/agent-archive",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
    * Remove an assigned agent
    *
-   * Delete a routine and its run history. Sessions already in History stay.
+   * Remove an idle routine from the roster. Preserve run history, role memory and sessions. Unfinished runs or unresolved startup prevent removal; disabling prevents future launches without stopping a run.
    */
   public remove<ThrowOnError extends boolean = false>(
     parameters: {
@@ -8790,6 +9013,15 @@ export class Routine extends HeyApiClient {
       name?: string
       role?: string
       objective?: string
+      output?: {
+        destination: "conversation"
+        description: string
+        criteria: Array<{
+          id: string
+          description: string
+          verification: string
+        }>
+      }
       capabilities?: Array<string>
       memoryScope?: "role" | "project" | "session"
       schedule?:
@@ -8810,6 +9042,37 @@ export class Routine extends HeyApiClient {
         | {
             kind: "manual"
           }
+      expectedSchedule?:
+        | {
+            kind: "once"
+            at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            kind: "cron"
+            expr: string
+            tz?: string
+          }
+        | {
+            kind: "event"
+            source: string
+            filter?: string
+          }
+        | {
+            kind: "manual"
+          }
+      expectedAccess?: "brief" | "full" | "unset"
+      expectedOutput?:
+        | {
+            destination: "conversation"
+            description: string
+            criteria: Array<{
+              id: string
+              description: string
+              verification: string
+            }>
+          }
+        | "unset"
+      expectedScheduleVersion?: number
       avatar?: string
       enabled?: boolean
       plan?: string
@@ -8836,9 +9099,14 @@ export class Routine extends HeyApiClient {
             { in: "body", key: "name" },
             { in: "body", key: "role" },
             { in: "body", key: "objective" },
+            { in: "body", key: "output" },
             { in: "body", key: "capabilities" },
             { in: "body", key: "memoryScope" },
             { in: "body", key: "schedule" },
+            { in: "body", key: "expectedSchedule" },
+            { in: "body", key: "expectedAccess" },
+            { in: "body", key: "expectedOutput" },
+            { in: "body", key: "expectedScheduleVersion" },
             { in: "body", key: "avatar" },
             { in: "body", key: "enabled" },
             { in: "body", key: "plan" },
@@ -8927,6 +9195,44 @@ export class Routine extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<KilocodeRoutineRunsResponses, KilocodeRoutineRunsErrors, ThrowOnError>({
       url: "/kilocode/agent/{agentID}/runs",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Read original routine startup instructions
+   *
+   * Read the immutable selected definition and resolved objective for a routine run, including retained snapshots after routine removal. The saved routine and run identities must match the request. Does not create or resume work.
+   */
+  public snapshot<ThrowOnError extends boolean = false>(
+    parameters: {
+      agentID: string
+      runID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "agentID" },
+            { in: "path", key: "runID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      KilocodeRoutineSnapshotResponses,
+      KilocodeRoutineSnapshotErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/agent/{agentID}/runs/{runID}/snapshot",
       ...options,
       ...params,
     })

@@ -36,7 +36,7 @@ const cliEntry = path.join(opencodeRoot, "src/index.ts")
 // kilocode_change start - reuse the runner's once-built CLI graph instead of transpiling it in every child
 const cliArgs = process.env[TestCli.ENV]
   ? ["run", process.env[TestCli.ENV]]
-  : ["run", "--conditions=browser", "--preload=@opentui/solid/preload", cliEntry]
+  : ["run", "--conditions=browser", `--preload=${Bun.resolveSync("@opentui/solid/preload", opencodeRoot)}`, cliEntry]
 // kilocode_change end
 
 export const testModelID = "test/test-model"

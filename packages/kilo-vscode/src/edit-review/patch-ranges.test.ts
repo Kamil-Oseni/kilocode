@@ -1,5 +1,18 @@
 import { describe, expect, test } from "bun:test"
-import { addedRanges, planReviewLenses } from "./patch-ranges"
+import { addedRanges, deletionRanges, planReviewLenses } from "./patch-ranges"
+
+describe("deletionRanges", () => {
+  test("anchors removed content and empty files without highlighting additions", () => {
+    const patch = "@@ -1,2 +0,0 @@\n-old\n-"
+    expect(deletionRanges(patch)).toEqual([{ start: 0, end: 0 }])
+    expect(addedRanges(patch)).toEqual([])
+    expect(deletionRanges("@@ -9,2 +8,0 @@\n-one\n-two")).toEqual([{ start: 7, end: 7 }])
+  })
+  test("does not mistake patch headers or replacement hunks for deletion-only hunks", () => {
+    expect(deletionRanges("--- a/file\n+++ b/file\n@@ -1 +1 @@\n-old\n+new")).toEqual([])
+    expect(deletionRanges("--- a/file\n+++ b/file")).toEqual([])
+  })
+})
 
 describe("addedRanges", () => {
   test("returns nothing for an empty patch", () => {
@@ -81,13 +94,13 @@ describe("planReviewLenses", () => {
     expect(lenses[0]).toEqual({ line: 4, title: "$(sparkle) 3 agent lines", command: "" })
     expect(lenses[1]).toEqual({
       line: 4,
-      title: "$(check) Keep",
+      title: "$(check) Keep file",
       command: "raya.editReview.keepFile",
       arguments: ["/abs/file.ts"],
     })
     expect(lenses[2]).toEqual({
       line: 4,
-      title: "$(discard) Undo",
+      title: "$(discard) Undo file",
       command: "raya.editReview.undoFile",
       arguments: ["/abs/file.ts"],
     })

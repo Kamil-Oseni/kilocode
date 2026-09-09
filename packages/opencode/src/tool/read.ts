@@ -19,6 +19,7 @@ import * as KiloConfiguredReference from "@/kilocode/reference"
 import { KiloReadObject } from "@/kilocode/tool/read-object"
 import * as Extract from "../kilocode/tool/read-extract"
 import * as TextStream from "../kilocode/text-stream"
+import * as Artifact from "@/kilocode/goal/read-artifact"
 // kilocode_change end
 
 const DEFAULT_READ_LIMIT = 2000
@@ -70,6 +71,7 @@ type Metadata = {
   truncated: boolean
   loaded: string[]
   display?: Display
+  rayaRevision?: unknown // kilocode_change
 }
 
 export const ReadTool = Tool.define<
@@ -386,7 +388,7 @@ export const ReadTool = Tool.define<
               },
             },
           }
-        }),
+        }).pipe((work) => Artifact.read(fs, bound, work, ctx.abort)), // kilocode_change
       )
       // kilocode_change end
     })

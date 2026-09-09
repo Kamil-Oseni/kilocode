@@ -28,6 +28,7 @@ import { KilocodeSystemPrompt } from "@/kilocode/system-prompt"
 import { KiloToolRegistry } from "@/kilocode/tool/registry"
 import ASK_CODE_SWITCH from "./ask-code-switch.txt"
 import { consumeAutoTitle, markAutoTitle } from "@/kilo-sessions/rename-adoptions"
+import { gate } from "./input-gate"
 
 export namespace KiloSessionPrompt {
   const modes = ["ask", "plan", "architect"]
@@ -48,7 +49,11 @@ export namespace KiloSessionPrompt {
           const entries = intakes.get(sessionID) ?? new Set()
           entries.add(entry)
           intakes.set(sessionID, entries)
-          const fiber = yield* work.pipe(Effect.ensuring(cleanup), Effect.forkIn(scope, { startImmediately: true }))
+          const fiber = yield* work.pipe(
+            gate.withLock(sessionID),
+            Effect.ensuring(cleanup),
+            Effect.forkIn(scope, { startImmediately: true }),
+          )
           entry.fiber = fiber
           if (entry.cancelled) yield* Fiber.interrupt(fiber)
           return yield* restore(Fiber.join(fiber))

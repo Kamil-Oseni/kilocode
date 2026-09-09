@@ -66,9 +66,33 @@ export const Turn = Schema.Struct({
   overlap: Schema.Boolean,
 })
 
+export const Failure = Schema.Struct({
+  code: Schema.Literals([
+    "room_data_closed",
+    "room_input_closed",
+    "engine_audio_closed",
+    "engine_events_closed",
+    "audio_input",
+    "audio_publish",
+    "playout_metadata",
+    "transcript_send",
+    "playout_flush",
+    "engine_interrupt",
+    "interruption_send",
+    "backend_delivery",
+    "event_queue_overflow",
+    "engine_failure",
+    "engine_inject",
+  ]),
+  message: Schema.String.check(Schema.isMaxLength(500)),
+  recovery: Schema.String.check(Schema.isMaxLength(500)),
+  at: Schema.String,
+})
+
 export const State = Schema.Struct({
   info: Info,
   lastSeq: Schema.Number,
   incomplete: Schema.Boolean,
+  failure: Schema.optional(Failure),
   turns: Schema.Array(Turn),
 })

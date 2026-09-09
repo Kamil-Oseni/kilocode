@@ -23,6 +23,53 @@ export default {
           \`time_completed\` integer NOT NULL
         );
       `)
+      // kilocode_change start
+      yield* tx.run(`
+        CREATE TABLE \`raya_routine_archive_import\` (
+          \`id\` text PRIMARY KEY,
+          \`time_completed\` integer NOT NULL
+        );
+      `)
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(`
+        CREATE TABLE \`raya_routine_archive\` (
+          \`id\` text PRIMARY KEY,
+          \`archived_at\` integer NOT NULL,
+          \`definition\` text NOT NULL
+        );
+      `)
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(`
+        CREATE TABLE \`raya_routine_cursor\` (
+          \`agent_id\` text NOT NULL,
+          \`schedule_version\` integer NOT NULL,
+          \`through\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL,
+          CONSTRAINT \`raya_routine_cursor_pk\` PRIMARY KEY(\`agent_id\`, \`schedule_version\`)
+        );
+      `)
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(`
+        CREATE TABLE \`raya_routine_occurrence\` (
+          \`id\` text PRIMARY KEY,
+          \`agent_id\` text NOT NULL,
+          \`schedule_version\` integer NOT NULL,
+          \`scheduled_at\` integer NOT NULL,
+          \`observed_at\` integer NOT NULL,
+          \`timezone\` text,
+          \`state\` text NOT NULL,
+          \`claim_id\` text,
+          \`owner\` text,
+          \`lease_until\` integer,
+          \`session_id\` text,
+          \`reason\` text,
+          \`time_updated\` integer NOT NULL
+        );
+      `)
+      // kilocode_change end
       yield* tx.run(`
         CREATE TABLE \`account_state\` (
           \`id\` integer PRIMARY KEY,
@@ -236,6 +283,26 @@ export default {
           CONSTRAINT \`fk_session_share_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
         );
       `)
+      // kilocode_change start
+      yield* tx.run(
+        `CREATE INDEX \`raya_routine_archive_order\` ON \`raya_routine_archive\` ("archived_at" desc,\`id\`);`,
+      )
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(
+        `CREATE UNIQUE INDEX \`raya_routine_occurrence_identity\` ON \`raya_routine_occurrence\` (\`agent_id\`,\`schedule_version\`,\`scheduled_at\`);`,
+      )
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(
+        `CREATE INDEX \`raya_routine_occurrence_pending\` ON \`raya_routine_occurrence\` (\`agent_id\`,\`schedule_version\`,\`state\`,\`scheduled_at\`);`,
+      )
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(
+        `CREATE INDEX \`raya_routine_occurrence_lease\` ON \`raya_routine_occurrence\` (\`state\`,\`lease_until\`);`,
+      )
+      // kilocode_change end
       yield* tx.run(`CREATE UNIQUE INDEX \`event_aggregate_seq_idx\` ON \`event\` (\`aggregate_id\`,\`seq\`);`)
       yield* tx.run(`CREATE INDEX \`event_aggregate_type_seq_idx\` ON \`event\` (\`aggregate_id\`,\`type\`,\`seq\`);`)
       yield* tx.run(

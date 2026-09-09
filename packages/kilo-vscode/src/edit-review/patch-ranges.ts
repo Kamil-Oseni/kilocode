@@ -59,6 +59,16 @@ export function addedRanges(patch: string): LineRange[] {
   return ranges
 }
 
+/** Anchor deletion-only hunks without painting surviving lines as additions. */
+export function deletionRanges(patch: string): LineRange[] {
+  return patch.split(/(?=^@@ )/m).flatMap((hunk) => {
+    const header = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(hunk)
+    if (!header || !/^-/m.test(hunk) || /^\+/m.test(hunk)) return []
+    const start = Math.max(0, Number(header[1]) - 1)
+    return [{ start, end: start }]
+  })
+}
+
 /** A single in-editor review CodeLens descriptor, decoupled from `vscode`. */
 export interface ReviewLens {
   /** Zero-based line the lens anchors to (the first line of its hunk). */
@@ -73,21 +83,25 @@ export interface ReviewLens {
  * Plan the Keep/Undo CodeLenses for a reviewed file: one cluster (summary badge
  * + Keep + Undo) at the top of every contiguous changed region, so an affordance
  * sits next to each hunk. Keep dismisses review chrome for this file; Undo
- * restores the whole file to its pre-session state (the backend cannot revert a
- * single hunk). Chat Keep all / Undo all is the workspace-wide counterpart.
+ * restores the previous unaccepted edit across the whole file, without crossing
+ * its kept boundary. Chat Keep all / Undo all targets the session's file changes.
  * Pure so it can be unit-tested without the `vscode` API.
  */
-export function planReviewLenses(ranges: LineRange[], key: string): ReviewLens[] {
+export function planReviewLenses(ranges: LineRange[], key: string, summary?: string): ReviewLens[] {
   if (!ranges.length) return []
   const total = ranges.reduce((sum, r) => sum + (r.end - r.start + 1), 0)
   const out: ReviewLens[] = []
   ranges.forEach((range, i) => {
     const hunk = range.end - range.start + 1
-    const title = i === 0 ? `$(sparkle) ${total} agent ${total === 1 ? "line" : "lines"}` : `$(sparkle) +${hunk}`
+    const title = summary
+      ? `$(sparkle) ${summary}`
+      : i === 0
+        ? `$(sparkle) ${total} agent ${total === 1 ? "line" : "lines"}`
+        : `$(sparkle) +${hunk}`
     out.push(
       { line: range.start, title, command: "" },
-      { line: range.start, title: "$(check) Keep", command: "raya.editReview.keepFile", arguments: [key] },
-      { line: range.start, title: "$(discard) Undo", command: "raya.editReview.undoFile", arguments: [key] },
+      { line: range.start, title: "$(check) Keep file", command: "raya.editReview.keepFile", arguments: [key] },
+      { line: range.start, title: "$(discard) Undo file", command: "raya.editReview.undoFile", arguments: [key] },
     )
   })
   return out

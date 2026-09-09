@@ -15,6 +15,7 @@ import { FileSystem } from "@opencode-ai/core/filesystem"
 import { filterDiagnostics } from "./diagnostics" // kilocode_change
 import { ConfigValidation } from "../kilocode/config-validation" // kilocode_change
 import * as EncodedIO from "../kilocode/tool/encoded-io" // kilocode_change
+import * as Artifact from "@/kilocode/goal/artifact" // kilocode_change
 import { Format } from "../format"
 import * as Bom from "@/util/bom"
 import { assertMutablePath } from "../kilocode/agent-manager/protection" // kilocode_change
@@ -335,6 +336,7 @@ export const ApplyPatchTool = Tool.define(
           diff: totalDiff,
           files,
           diagnostics: filterDiagnostics(diagnostics, changedPaths), // kilocode_change
+          rayaRevision: yield* Artifact.patch(afs, fileChanges), // kilocode_change
         },
         output,
       }

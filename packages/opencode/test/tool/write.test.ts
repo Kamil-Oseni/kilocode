@@ -15,6 +15,7 @@ import { SessionID, MessageID } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import * as Artifact from "@/kilocode/goal/artifact" // kilocode_change
 
 const ctx = {
   sessionID: SessionID.make("ses_test-write-session"),
@@ -68,6 +69,8 @@ describe("tool.write", () => {
 
         expect(result.output).toContain("Wrote file successfully")
         expect(result.metadata.exists).toBe(false)
+        expect(result.metadata.rayaRevision).toMatchObject({ status: "captured", path: filepath }) // kilocode_change
+        expect(yield* Artifact.current(result.metadata.rayaRevision)).toBe(true) // kilocode_change
 
         const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
         expect(content).toBe("Hello, World!")

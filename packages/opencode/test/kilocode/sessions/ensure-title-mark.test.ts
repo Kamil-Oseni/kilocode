@@ -219,10 +219,7 @@ const installHooks = Effect.fn("test.installTitleHooks")(function* () {
 
 function providerCfg(url: string): Partial<ConfigV1.Info> {
   return {
-    // Pin title/small generation to the TestLLMServer provider. Without this,
-    // getSmallModel("test") falls through to kilo-auto/small and ensureTitle
-    // never hits the local fixture (no setTitle, no E2E Title).
-    small_model: "test/test-model",
+    // Exercise title fallback to the selected model without a small_model override.
     provider: {
       test: {
         name: "Test",

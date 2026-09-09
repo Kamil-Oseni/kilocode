@@ -97,8 +97,8 @@ export function activate(context: vscode.ExtensionContext) {
   const canvasService = new CanvasService(connectionService, context)
   context.subscriptions.push(
     vscode.window.registerWebviewPanelSerializer(CanvasPanel.viewType, {
-      deserializeWebviewPanel(panel: vscode.WebviewPanel) {
-        canvasService.restore(panel)
+      deserializeWebviewPanel(panel: vscode.WebviewPanel, state: unknown) {
+        return canvasService.restore(panel, state)
         return Promise.resolve()
       },
     }),

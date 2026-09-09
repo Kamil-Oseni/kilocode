@@ -48,6 +48,10 @@ describe("native goal command", () => {
     expect(text).toContain('update_goal(status="complete")')
     expect(text).toContain("real successful tool calls")
     expect(text).toContain('update_goal(status="blocked")')
+    expect(text).toContain("Independent authorized tasks may be in progress together")
+    expect(text).toContain("keep dependent tasks pending")
+    expect(text).toContain("continue independent authorized work while waiting")
+    expect(text).not.toContain("exactly one item in progress")
   })
 
   // raya_change start - plain-English durable work should not require remembering /goal

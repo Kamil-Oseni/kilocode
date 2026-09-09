@@ -638,6 +638,7 @@ export function patchAgents(
           semantic_search: "allow",
           ask_options: "allow", // raya_change - plain-English decisions must not require tool approval
           get_goal: "allow",
+          update_goal_plan: "allow",
           update_goal: "allow",
           create_goal: "allow", // raya_change - primary sessions can close goals without Auto
           schedule_task: "allow", // raya_change - assign standing jobs from chat
@@ -923,6 +924,7 @@ export function addAuto(
         chief_route: "allow",
         task: "allow",
         get_goal: "allow",
+        update_goal_plan: "allow",
         update_goal: "allow",
         create_goal: "allow", // raya_change - Auto owns formal completion after delegated work
         schedule_task: "allow", // raya_change - assign standing jobs from chat

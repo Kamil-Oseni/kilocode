@@ -194,6 +194,8 @@ it.live("recognizes Windows named-pipe paths before filesystem inspection", () =
 )
 
 const cfg = {
+  // Exercise direct file permissions without depending on the default routing agent.
+  default_agent: "code",
   provider: {
     test: {
       name: "Test",

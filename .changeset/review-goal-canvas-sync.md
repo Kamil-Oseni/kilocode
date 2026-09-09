@@ -1,5 +1,5 @@
 ---
-"kilo-code": patch
+"raya": patch
 "@kilocode/cli": patch
 ---
 

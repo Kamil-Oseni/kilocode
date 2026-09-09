@@ -2,12 +2,13 @@ import path from "path"
 import { afterAll, beforeAll, expect, test } from "bun:test"
 import fs from "fs/promises"
 import os from "os"
-import { Effect } from "effect"
+import { Effect, ManagedRuntime } from "effect"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Database } from "@opencode-ai/core/database/database"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { AppRuntime } from "../../src/effect/app-runtime"
-import { makeRuntime } from "../../src/effect/run-service"
+import { attach } from "../../src/effect/run-service"
 import { MessageV2 } from "../../src/session/message-v2"
 import { Session } from "../../src/session/session"
 import { SessionPrompt } from "../../src/session/prompt"
@@ -23,9 +24,12 @@ import { remove as cleanup } from "./cleanup"
 
 const previous = Flag.KILO_DB
 const dbfile = path.join(os.tmpdir(), `kilo-prompt-steering-${process.pid}-${crypto.randomUUID()}.db`)
-const layer = LayerNode.compile(LayerNode.group([Session.node, SessionProjector.node]))
-const prompt = LayerNode.compile(LayerNode.group([SessionPrompt.node, SessionProjector.node]))
-const runtime = makeRuntime(Session.Service, layer)
+const database = Database.layerFromPath(dbfile)
+const layer = LayerNode.compile(LayerNode.group([Session.node, SessionProjector.node]), [[Database.node, database]])
+const prompt = LayerNode.compile(LayerNode.group([SessionPrompt.node, SessionProjector.node]), [
+  [Database.node, database],
+])
+const runtime = ManagedRuntime.make(layer)
 
 beforeAll(async () => {
   await fs.rm(dbfile, { force: true })
@@ -112,9 +116,9 @@ function question() {
 
 const sessions = {
   create: (input: Parameters<Session.Interface["create"]>[0]) =>
-    runtime.runPromise((svc) => svc.create(input)),
+    runtime.runPromise(attach(Session.Service.use((svc) => svc.create(input)))),
   messages: (sessionID: SessionID) =>
-    runtime.runPromise((svc) => svc.messages({ sessionID })),
+    runtime.runPromise(attach(Session.Service.use((svc) => svc.messages({ sessionID })))),
 }
 
 async function wait(sessionID: SessionID) {

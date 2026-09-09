@@ -29,6 +29,7 @@ import { SessionID } from "@/session/schema"
 import { CommandFiles } from "@/kilocode/command-files"
 import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal API contracts
 import { RayaTask } from "@/kilocode/task"
+import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
 import { Template as AgentTemplate } from "@/kilocode/task/templates"
 import { RayaCheckpoint } from "@/kilocode/checkpoint" // raya_change - named workspace checkpoints
 import { RayaDesignSystem } from "@/kilocode/design-system" // raya_change - owner design-system lock
@@ -96,9 +97,16 @@ export const TaskUpdatePayload = Schema.Struct({
   name: Schema.optional(Schema.String),
   role: Schema.optional(Schema.String),
   objective: Schema.optional(Schema.String),
+  output: Schema.optional(RayaTask.Output),
   capabilities: Schema.optional(Schema.Array(Schema.String)),
   memoryScope: Schema.optional(Schema.Literals(["role", "project", "session"])),
   schedule: Schema.optional(RayaTask.Schedule),
+  expectedSchedule: Schema.optional(RayaTask.Schedule),
+  expectedAccess: Schema.optional(Schema.Literals(["brief", "full", "unset"])),
+  expectedOutput: Schema.optional(Schema.Union([RayaTask.Output, Schema.Literal("unset")])),
+  expectedScheduleVersion: Schema.optional(
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER)),
+  ),
   avatar: Schema.optional(Schema.String),
   enabled: Schema.optional(Schema.Boolean),
   plan: Schema.optional(Schema.String),
@@ -144,6 +152,7 @@ export const KilocodePaths = {
   backgroundJobCancel: `${root}/background-jobs/:jobID/cancel`,
   goal: `/session/:sessionID/goal`, // raya_change - Milestone A session-scoped goal API
   goalDiscard: `/session/:sessionID/goal/discard`, // raya_change - reliable workspace rollback
+  goalStop: `/session/:sessionID/goal/stop`,
   checkpoint: `/session/:sessionID/checkpoint`, // raya_change - named workspace checkpoints
   checkpointItem: `/session/:sessionID/checkpoint/:checkpointID`, // raya_change - jump to / remove a named checkpoint
   designSystem: `${root}/design-system`, // raya_change - owner design-system lock
@@ -156,9 +165,12 @@ export const KilocodePaths = {
   canvasReply: `${root}/canvas/:requestID/reply`, // raya_change - Milestone E canvas host API
   canvasReject: `${root}/canvas/:requestID/reject`, // raya_change - Milestone E canvas host API
   agents: `${root}/agent`,
+  agentForecast: `${root}/agent-forecast`,
   agentItem: `${root}/agent/:agentID`,
   agentRun: `${root}/agent/:agentID/run`,
   agentRuns: `${root}/agent/:agentID/runs`,
+  agentArchive: `${root}/agent-archive`,
+  agentSnapshot: `${root}/agent/:agentID/runs/:runID/snapshot`,
   agentTemplates: `${root}/agent-templates`,
   agentEvent: `${root}/agent-event`,
 } as const
@@ -470,7 +482,7 @@ export const KilocodeApi = HttpApi.make("kilocode")
           query: WorkspaceRoutingQuery,
           payload: GoalUpdatePayload,
           success: described(RayaGoal.State, "Updated goal"),
-          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound, HttpApiError.Conflict],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "kilocode.goal.update",
@@ -480,13 +492,47 @@ export const KilocodeApi = HttpApi.make("kilocode")
         ),
         HttpApiEndpoint.delete("goalClear", KilocodePaths.goal, {
           params: { sessionID: SessionID },
-          query: WorkspaceRoutingQuery,
+          query: Schema.Struct({
+            ...WorkspaceRoutingQueryFields,
+            expectedIntent: RayaGoal.Control.fields.expectedIntent,
+          }),
           success: described(Schema.Boolean, "Goal cleared"),
+          error: [HttpApiError.Conflict],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "kilocode.goal.clear",
             summary: "Clear a session goal",
-            description: "Remove the durable goal state for a session.",
+            description:
+              "Remove goal tracking. A reviewed control revision also requests cancellation of its matching owned worker; the boolean only confirms tracking removal.",
+          }),
+        ),
+        HttpApiEndpoint.get("goalStopResult", KilocodePaths.goalStop, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(RayaGoal.Stop, "Latest saved goal stop result"),
+          error: [HttpApiError.NotFound],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.goal.stopResult",
+            summary: "Read the latest goal stop result",
+            description:
+              "Read the latest saved stop receipt for this session without changing tracking or cancelling work.",
+          }),
+        ),
+        HttpApiEndpoint.post("goalStop", KilocodePaths.goalStop, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          payload: Schema.Struct({
+            expectedIntent: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)),
+          }),
+          success: described(RayaGoal.Stop, "Saved goal stop result"),
+          error: [HttpApiError.Conflict],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.goal.stop",
+            summary: "Stop a reviewed goal and retrieve its saved result",
+            description:
+              "Retry with the same intent to retrieve the saved result without cancelling a replacement worker. A cleared phase confirms tracking removal but leaves the worker outcome unconfirmed.",
           }),
         ),
         HttpApiEndpoint.post("goalDiscard", KilocodePaths.goalDiscard, {
@@ -551,6 +597,19 @@ export const KilocodeApi = HttpApi.make("kilocode")
           }),
         ),
         // raya_change end
+        HttpApiEndpoint.post("agentForecast", KilocodePaths.agentForecast, {
+          query: WorkspaceRoutingQuery,
+          payload: RayaTask.Proposal,
+          success: described(RayaTask.Forecast, "Normalized schedule and upcoming occurrences"),
+          error: InvalidRequestError,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.forecast",
+            summary: "Preview a routine schedule",
+            description:
+              "Validate a schedule and calculate up to three upcoming occurrences without creating a routine.",
+          }),
+        ),
         HttpApiEndpoint.get("agentList", KilocodePaths.agents, {
           query: WorkspaceRoutingQuery,
           success: described(Schema.Array(RayaTask.Agent), "Assigned agents"),
@@ -559,6 +618,22 @@ export const KilocodeApi = HttpApi.make("kilocode")
             identifier: "kilocode.routine.list",
             summary: "List assigned agents",
             description: "List persistent role-based agents and their standing jobs.",
+          }),
+        ),
+        HttpApiEndpoint.get("agentArchive", KilocodePaths.agentArchive, {
+          query: Schema.Struct({
+            ...WorkspaceRoutingQueryFields,
+            cursor: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
+            agentID: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
+          }),
+          success: described(RayaTask.ArchivePage, "Removed routine page"),
+          error: InvalidRequestError,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.archive",
+            summary: "List retained routine definitions",
+            description:
+              "Read up to 50 final definitions saved during successful routine removal, newest capture first. Pass next as cursor to continue, or agentID for a single retained definition. Excludes routines still in the roster. New removals appear on refresh. Does not restore or run work; earlier removals without an archive record are not reconstructed.",
           }),
         ),
         HttpApiEndpoint.post("agentCreate", KilocodePaths.agents, {
@@ -590,12 +665,13 @@ export const KilocodeApi = HttpApi.make("kilocode")
           params: { agentID: Schema.String },
           query: WorkspaceRoutingQuery,
           success: described(Schema.Boolean, "Removed"),
-          error: HttpApiError.NotFound,
+          error: [InvalidRequestError, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "kilocode.routine.remove",
             summary: "Remove an assigned agent",
-            description: "Delete a routine and its run history. Sessions already in History stay.",
+            description:
+              "Remove an idle routine from the roster. Preserve run history, role memory and sessions. Unfinished runs or unresolved startup prevent removal; disabling prevents future launches without stopping a run.",
           }),
         ),
         HttpApiEndpoint.post("agentRun", KilocodePaths.agentRun, {
@@ -619,6 +695,19 @@ export const KilocodeApi = HttpApi.make("kilocode")
             identifier: "kilocode.routine.runs",
             summary: "List agent runs",
             description: "Bounded run history with outcome and cost.",
+          }),
+        ),
+        HttpApiEndpoint.get("agentSnapshot", KilocodePaths.agentSnapshot, {
+          params: { agentID: Schema.String, runID: Schema.String },
+          query: WorkspaceRoutingQuery,
+          success: described(RayaTaskSnapshot.Info, "Original startup instructions"),
+          error: [HttpApiError.NotFound, InvalidRequestError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.snapshot",
+            summary: "Read original routine startup instructions",
+            description:
+              "Read the immutable selected definition and resolved objective for a routine run, including retained snapshots after routine removal. The saved routine and run identities must match the request. Does not create or resume work.",
           }),
         ),
         HttpApiEndpoint.get("agentTemplates", KilocodePaths.agentTemplates, {

@@ -46,12 +46,18 @@
 .routines-empty,
 .routines-hint,
 .routines-meta,
-.routines-job {
+.routines-job,
+.routines-note {
   margin: 0;
   color: var(--text-weak, var(--vscode-descriptionForeground));
   font-family: var(--font-body);
   font-size: var(--kilo-font-size-12);
   line-height: 1.45;
+}
+
+.routines-note {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .routines-error {
@@ -65,6 +71,72 @@
   list-style: none;
   margin: 0;
   padding: 0;
+}
+
+.routines-instructions {
+  grid-column: 1 / -1;
+  min-width: 0;
+  margin-top: var(--raya-space-12);
+  color: var(--text-base, var(--vscode-foreground));
+  font-family: var(--font-body);
+  font-size: var(--kilo-font-size-13);
+}
+
+.routines-instructions label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--raya-space-4);
+}
+
+.routines-instructions select {
+  width: 100%;
+  min-width: 0;
+  padding: var(--raya-space-6);
+  color: var(--vscode-dropdown-foreground);
+  background: var(--vscode-dropdown-background);
+  border: 1px solid var(--vscode-dropdown-border, var(--vscode-contrastBorder, transparent));
+  font: inherit;
+}
+
+.routines-instructions pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 24rem;
+  overflow: auto;
+  font: inherit;
+  line-height: 1.5;
+}
+
+.routines-instructions:focus-visible,
+.routines-title:focus-visible,
+.routines-instructions :is(select, summary, pre):focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+}
+
+.routines-instructions-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--raya-space-8);
+}
+
+.routines-instructions-heading h3 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.routines-result-summary {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.routines-result {
+  margin-block: var(--raya-space-12);
 }
 
 .routines-row {
@@ -133,6 +205,11 @@
   gap: var(--raya-space-6);
 }
 
+.routines-resume {
+  grid-column: 2 / -1;
+  margin-top: var(--raya-space-6);
+}
+
 .routines-actions {
   display: flex;
   flex-wrap: wrap;
@@ -192,6 +269,7 @@
 }
 
 .routines-field input,
+.routines-field select,
 .routines-field textarea {
   width: 100%;
   box-sizing: border-box;
@@ -205,6 +283,7 @@
 }
 
 .routines-field input:focus,
+.routines-field select:focus,
 .routines-field textarea:focus {
   outline: 1px solid var(--border-focus, var(--vscode-focusBorder));
   outline-offset: -1px;
@@ -214,6 +293,41 @@
 .routines-field [data-component="button"] {
   width: 100%;
   justify-content: space-between;
+}
+
+.routines-schedule,
+.routines-weekdays {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.routines-schedule {
+  display: grid;
+  gap: var(--raya-space-14);
+}
+
+.routines-schedule legend,
+.routines-weekdays legend {
+  padding: 0 0 var(--raya-space-8);
+  font-family: var(--font-body);
+  font-size: var(--kilo-font-size-12);
+  color: var(--text-base, var(--vscode-foreground));
+}
+
+.routines-weekdays {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: var(--raya-space-8);
+}
+
+.routines-weekdays label {
+  display: flex;
+  align-items: center;
+  gap: var(--raya-space-6);
+  font-family: var(--font-body);
+  font-size: var(--kilo-font-size-12);
 }
 
 .routines-pick {
@@ -250,6 +364,35 @@
   color: var(--text-base, var(--vscode-foreground));
   text-decoration: underline;
   text-underline-offset: 0.18em;
+}
+
+.routines-archive {
+  margin-bottom: var(--raya-space-12);
+  overflow-wrap: anywhere;
+}
+
+.routines-archive > label {
+  display: block;
+  margin-top: var(--raya-space-8);
+}
+
+.routines-archive > select {
+  width: 100%;
+  color: var(--vscode-dropdown-foreground);
+  background: var(--vscode-dropdown-background);
+  border: 1px solid var(--vscode-dropdown-border);
+  padding: var(--raya-space-8);
+}
+
+.routines-archive pre {
+  white-space: pre-wrap;
+  max-height: 24rem;
+  overflow: auto;
+}
+
+.routines-archive :is(summary, select, pre):focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
 }
 
 .presence-badge {

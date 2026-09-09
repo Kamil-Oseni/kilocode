@@ -1,19 +1,21 @@
 import path from "path"
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test"
-import { Effect } from "effect"
+import { Effect, ManagedRuntime } from "effect"
 import fs from "fs/promises"
 import os from "os"
 import { Bus } from "../../src/bus"
 import { AppRuntime } from "../../src/effect/app-runtime"
-import { makeRuntime } from "../../src/effect/run-service"
+import { attach } from "../../src/effect/run-service"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { KiloSessionCompaction } from "@/kilocode/session/compaction"
 import { KiloSessionPromptQueue } from "@/kilocode/session/prompt-queue"
 import { KiloSession } from "@/kilocode/session"
+import * as TaskWorker from "@/kilocode/session/task-worker"
 import { Suggestion } from "../../src/kilocode/suggestion"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Database } from "@opencode-ai/core/database/database"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { InstanceStore } from "../../src/project/instance-store"
 import { provideTestInstance } from "../fixture/fixture"
@@ -33,9 +35,12 @@ setDefaultTimeout(15_000)
 
 const previous = Flag.KILO_DB
 const dbfile = path.join(os.tmpdir(), `kilo-prompt-queue-${process.pid}-${crypto.randomUUID()}.db`)
-const layer = LayerNode.compile(LayerNode.group([Session.node, SessionProjector.node]))
-const prompt = LayerNode.compile(LayerNode.group([SessionPrompt.node, SessionProjector.node]))
-const runtime = makeRuntime(Session.Service, layer)
+const database = Database.layerFromPath(dbfile)
+const layer = LayerNode.compile(LayerNode.group([Session.node, SessionProjector.node]), [[Database.node, database]])
+const prompt = LayerNode.compile(LayerNode.group([SessionPrompt.node, SessionProjector.node, TaskWorker.node]), [
+  [Database.node, database],
+])
+const runtime = ManagedRuntime.make(layer)
 
 beforeAll(async () => {
   await fs.rm(dbfile, { force: true })
@@ -57,13 +62,13 @@ const store = {
 
 const sessions = {
   create: (input?: Parameters<Session.Interface["create"]>[0]) =>
-    runtime.runPromise((svc) => svc.create(input)),
+    runtime.runPromise(attach(Session.Service.use((svc) => svc.create(input)))),
   messages: (input: Parameters<Session.Interface["messages"]>[0]) =>
-    runtime.runPromise((svc) => svc.messages(input)),
+    runtime.runPromise(attach(Session.Service.use((svc) => svc.messages(input)))),
   updateMessage: <T extends MessageV2.Info>(msg: T) =>
-    runtime.runPromise((svc) => svc.updateMessage(msg)),
+    runtime.runPromise(attach(Session.Service.use((svc) => svc.updateMessage(msg)))),
   updatePart: <T extends MessageV2.Part>(part: T) =>
-    runtime.runPromise((svc) => svc.updatePart(part)),
+    runtime.runPromise(attach(Session.Service.use((svc) => svc.updatePart(part)))),
 }
 
 function line(input: unknown) {
@@ -126,9 +131,13 @@ function hasText(msg: MessageV2.WithParts, text: string) {
   return msg.parts.some((part) => part.type === "text" && part.text.includes(text))
 }
 
-function scoped<T>(dir: string, fn: (prompt: SessionPrompt.Interface) => Promise<T>) {
+function scoped<T>(dir: string, fn: (prompt: SessionPrompt.Interface, workers: TaskWorker.Interface) => Promise<T>) {
   return Effect.runPromise(
-    SessionPrompt.Service.use((prompt) => Effect.promise(() => fn(prompt))).pipe(
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const workers = yield* TaskWorker.Service
+      return yield* Effect.promise(() => fn(prompt, workers))
+    }).pipe(
       Effect.provide(prompt),
       provideInstance(dir),
       Effect.provide(testInstanceStoreLayer),
@@ -188,6 +197,69 @@ function assistant(sessionID: SessionID, id: MessageID, parentID: MessageID): Me
 }
 
 describe("session prompt queue", () => {
+  test("the shared worker service cancels a bound prompt and preserves a later unrelated prompt", async () => {
+    const ready = Promise.withResolvers<void>()
+    const server = Bun.serve({
+      port: 0,
+      async fetch(req) {
+        if (!new URL(req.url).pathname.endsWith("/chat/completions")) return new Response(null, { status: 404 })
+        const body = JSON.stringify(await req.json())
+        return new Response(
+          body.includes("unrelated followup")
+            ? reply({ text: "unrelated reply" })
+            : new ReadableStream<Uint8Array>({
+                start(ctrl) {
+                  ctrl.enqueue(new TextEncoder().encode(line(chunk({ delta: { role: "assistant" } }))))
+                  ready.resolve()
+                },
+              }),
+          { headers: { "Content-Type": "text/event-stream" } },
+        )
+      },
+    })
+    try {
+      await using tmp = await tmpdir({
+        git: true,
+        init: async (dir) => {
+          await Bun.write(path.join(dir, "opencode.json"), JSON.stringify(providerCfg(server.url.origin)))
+        },
+      })
+      await provideTestInstance({
+        directory: tmp.path,
+        fn: () =>
+          scoped(tmp.path, async (prompt, workers) => {
+            const session = await sessions.create({ title: "Shared input cancellation" })
+            const message = MessageID.ascending()
+            const next = MessageID.ascending()
+            const first = Effect.runPromise(
+              prompt.prompt({
+                sessionID: session.id,
+                messageID: message,
+                agent: "code",
+                parts: [{ type: "text", text: "held goal prompt" }],
+              }),
+            )
+            await ready.promise
+            expect(await Effect.runPromise(workers.stop(session.id, [MessageID.ascending()]))).toBe(false)
+            expect(await Effect.runPromise(workers.stop(session.id, [message]))).toBe(true)
+            await first
+            const second = await Effect.runPromise(
+              prompt.prompt({
+                sessionID: session.id,
+                messageID: next,
+                agent: "code",
+                parts: [{ type: "text", text: "unrelated followup" }],
+              }),
+            )
+            expect(hasText(second, "unrelated reply")).toBe(true)
+            expect(await Effect.runPromise(workers.stop(session.id, [message]))).toBe(false)
+          }),
+      })
+    } finally {
+      server.stop(true)
+    }
+  }, 30_000)
+
   test("scopes queued turns without moving prior assistant history", async () => {
     const sessionID = SessionID.make("session_scope")
     const one = MessageID.make("msg_01")
@@ -750,10 +822,7 @@ describe("session prompt queue", () => {
       await using tmp = await tmpdir({
         git: true,
         init: async (dir) => {
-          await Bun.write(
-            path.join(dir, "opencode.json"),
-            JSON.stringify(providerCfg(server.url.origin)),
-          )
+          await Bun.write(path.join(dir, "opencode.json"), JSON.stringify(providerCfg(server.url.origin)))
         },
       })
 
@@ -968,10 +1037,7 @@ describe("session prompt queue", () => {
       await using tmp = await tmpdir({
         git: true,
         init: async (dir) => {
-          await Bun.write(
-            path.join(dir, "opencode.json"),
-            JSON.stringify(providerCfg(server.url.origin)),
-          )
+          await Bun.write(path.join(dir, "opencode.json"), JSON.stringify(providerCfg(server.url.origin)))
         },
       })
 

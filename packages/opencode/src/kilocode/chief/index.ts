@@ -50,7 +50,7 @@ export namespace RayaChief {
     // whitelist or the model hits "Unknown tool: ask_options". When the user invoked
     // /canvas, Auto may also create and refine the live canvas directly (and follow the
     // host's update_canvas retry hint) instead of only through a delegated subagent.
-    const names = ["chief_route", "task", "get_goal", "update_goal", "ask_options", "question"]
+    const names = ["chief_route", "task", "get_goal", "update_goal", "update_goal_plan", "ask_options", "question"]
     if (metadata?.["raya.canvas.command"] === true) names.push("create_canvas", "update_canvas")
     return Object.fromEntries(names.flatMap((name) => (available[name] ? [[name, available[name]]] : []))) as Record<
       string,

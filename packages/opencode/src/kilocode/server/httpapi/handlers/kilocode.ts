@@ -1,4 +1,5 @@
 import { Effect } from "effect"
+import { Database } from "@opencode-ai/core/database/database"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import * as KiloAgent from "@/kilocode/agent"
 import { CommandFiles } from "@/kilocode/command-files"
@@ -25,6 +26,7 @@ import { InvalidRequestError } from "@/server/routes/instance/httpapi/errors"
 import { Skill } from "@/skill"
 import { BackgroundJob } from "@/background/job"
 import { SessionRunState } from "@/session/run-state"
+import * as TaskWorker from "@/kilocode/session/task-worker"
 import { SessionID } from "@/session/schema"
 import { Session } from "@/session/session" // raya_change - Milestone A goal session validation
 import { Snapshot } from "@/snapshot" // raya_change - durable goal workspace checkpoints
@@ -32,6 +34,7 @@ import { Storage } from "@/storage/storage" // raya_change - Milestone A durable
 import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal operations
 import { RayaTask } from "@/kilocode/task"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
+import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
 import { templates as agentTemplates } from "@/kilocode/task/templates"
 import { RayaCheckpoint } from "@/kilocode/checkpoint" // raya_change - named workspace checkpoints
 import { RayaDesignSystem } from "@/kilocode/design-system" // raya_change - owner design-system lock
@@ -80,12 +83,14 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     const canvas = yield* Canvas.Service // raya_change - Milestone E canvas bridge
     const background = yield* BackgroundJob.Service
     const runState = yield* SessionRunState.Service
+    const workers = yield* TaskWorker.Service
     const snapshots = yield* Snapshot.Service // raya_change - goal rollback survives child sessions
     const locations = yield* LocationServiceMap.Service
     const sessions = yield* Session.Service // raya_change - Milestone A goal state and evidence
     const storage = yield* Storage.Service // raya_change - Milestone A durable goal storage
     const goals = RayaGoal.make({ storage, sessions }) // raya_change - Milestone A goal operations
-    const runner = RayaTaskRunner.make({ storage, sessions })
+    const database = yield* Database.Service
+    const runner = RayaTaskRunner.make({ storage, sessions, database })
     const checkpoints = RayaCheckpoint.make({ storage, snapshots }) // raya_change - named workspace checkpoints
     const designSystem = RayaDesignSystem.make({ storage }) // raya_change - owner design-system lock
     const healing = RayaSelfHeal.make(storage) // raya_change - one backlog shared across sessions and projects
@@ -369,33 +374,28 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       params: { sessionID: SessionID }
       payload: typeof GoalUpdatePayload.Type
     }) {
-      const prior = yield* goals.get(ctx.params.sessionID)
-      if (!ctx.payload.status && ctx.payload.objective === undefined) {
-        return yield* new HttpApiError.BadRequest({})
-      }
-      const revised =
-        ctx.payload.objective === undefined
-          ? prior
-          : yield* goals.revise(ctx.params.sessionID, ctx.payload.objective).pipe(
-              Effect.catchTag("RayaGoal.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
-              Effect.catchTag("RayaGoal.AuditError", () => Effect.fail(new HttpApiError.BadRequest({}))),
-            )
-      const goal = ctx.payload.status
-        ? yield* goals.control(ctx.params.sessionID, ctx.payload.status).pipe(
-            Effect.catchTag("RayaGoal.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
-            Effect.catchTag("RayaGoal.AuditError", () => Effect.fail(new HttpApiError.BadRequest({}))),
-          )
-        : revised
-      if (!goal) return yield* new HttpApiError.NotFound({})
+      const result = yield* goals.edit(ctx.params.sessionID, ctx.payload).pipe(
+        Effect.catchTag("NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+        Effect.catchTag("RayaGoal.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+        Effect.catchTag("RayaGoal.AuditError", (err) =>
+          Effect.fail(err.conflict ? new HttpApiError.Conflict({}) : new HttpApiError.BadRequest({})),
+        ),
+      )
+      const prior = result.prior
+      const goal = result.state
       if (
-        ((prior?.status === "paused" || prior?.status === "blocked") && goal.status === "active") ||
-        (prior?.status === "active" && ctx.payload.objective !== undefined)
+        goal.status === "active" &&
+        (prior.status === "paused" ||
+          prior.status === "blocked" ||
+          ctx.payload.objective !== undefined ||
+          ctx.payload.criteria !== undefined)
       ) {
         // Steer persists immediately. Resume only when idle so we do not collide
         // with the current model turn (that collision aborted task JSON).
         yield* runState.assertNotBusy(ctx.params.sessionID).pipe(
           Effect.andThen(
             RayaGoalContinuation.resume({
+              database,
               sessionID: ctx.params.sessionID,
               storage,
               sessions,
@@ -407,9 +407,31 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       return goal
     })
 
-    const goalClear = Effect.fn("KilocodeHttpApi.goalClear")(function* (ctx: { params: { sessionID: SessionID } }) {
-      yield* goals.clear(ctx.params.sessionID)
+    const goalClear = Effect.fn("KilocodeHttpApi.goalClear")(function* (ctx: {
+      params: { sessionID: SessionID }
+      query: { expectedIntent?: string }
+    }) {
+      yield* (
+        ctx.query.expectedIntent === undefined
+          ? goals.clear(ctx.params.sessionID)
+          : goals
+              .stop(ctx.params.sessionID, ctx.query.expectedIntent, runState, background, workers)
+              .pipe(Effect.asVoid)
+      ).pipe(Effect.catchTag("RayaGoal.AuditError", () => Effect.fail(new HttpApiError.Conflict({}))))
       return true
+    })
+
+    const goalStop = (ctx: { params: { sessionID: SessionID }; payload: { expectedIntent: string } }) =>
+      goals
+        .stop(ctx.params.sessionID, ctx.payload.expectedIntent, runState, background, workers)
+        .pipe(Effect.catchTag("RayaGoal.AuditError", () => Effect.fail(new HttpApiError.Conflict({}))))
+
+    const goalStopResult = Effect.fn("KilocodeHttpApi.goalStopResult")(function* (ctx: {
+      params: { sessionID: SessionID }
+    }) {
+      const receipt = yield* goals.stopResult(ctx.params.sessionID)
+      if (!receipt) return yield* new HttpApiError.NotFound({})
+      return receipt
     })
 
     const goalDiscard = Effect.fn("KilocodeHttpApi.goalDiscard")(function* (ctx: { params: { sessionID: SessionID } }) {
@@ -456,8 +478,13 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     })
     // raya_change end
 
+    const agentForecast = Effect.fn("KilocodeHttpApi.agentForecast")(function* (ctx: { payload: RayaTask.Proposal }) {
+      return yield* RayaTask.forecast(ctx.payload).pipe(
+        Effect.catchTag("RayaTask.GuardError", (err) => Effect.fail(new InvalidRequestError({ message: err.message }))),
+      )
+    })
     const agentList = Effect.fn("KilocodeHttpApi.agentList")(function* () {
-      return yield* runner.tasks.preview(Date.now())
+      return yield* runner.preview(Date.now())
     })
     const agentCreate = Effect.fn("KilocodeHttpApi.agentCreate")(function* (ctx: {
       payload: typeof TaskCreatePayload.Type
@@ -474,32 +501,38 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       params: { agentID: string }
       payload: typeof TaskUpdatePayload.Type
     }) {
-      return yield* runner.tasks
-        .update(ctx.params.agentID, ctx.payload)
-        .pipe(
-          Effect.catchTag("RayaTask.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
-          Effect.catchTag("RayaTask.GuardError", (err) =>
-            Effect.fail(new InvalidRequestError({ message: err.message })),
-          ),
-        )
+      return yield* runner.tasks.update(ctx.params.agentID, ctx.payload).pipe(
+        Effect.catchTag("RayaTask.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+        Effect.catchTag("RayaTask.GuardError", (err) => Effect.fail(new InvalidRequestError({ message: err.message }))),
+      )
     })
     const agentRun = Effect.fn("KilocodeHttpApi.agentRun")(function* (ctx: { params: { agentID: string } }) {
-      return yield* runner
-        .fire(ctx.params.agentID)
-        .pipe(
-          Effect.catchTag("RayaTask.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
-          Effect.catchTag("RayaTask.GuardError", (err) =>
-            Effect.fail(new InvalidRequestError({ message: err.message })),
-          ),
-        )
+      return yield* runner.fire(ctx.params.agentID).pipe(
+        Effect.catchTag("RayaTask.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+        Effect.catchTag("RayaTask.GuardError", (err) => Effect.fail(new InvalidRequestError({ message: err.message }))),
+      )
     })
     const agentRuns = Effect.fn("KilocodeHttpApi.agentRuns")(function* (ctx: { params: { agentID: string } }) {
       return yield* runner.tasks.runsFor(ctx.params.agentID)
     })
+    const agentSnapshot = Effect.fn("KilocodeHttpApi.agentSnapshot")(function* (ctx: {
+      params: { agentID: string; runID: string }
+    }) {
+      const snapshot = yield* RayaTaskSnapshot.make({ storage })
+        .find(ctx.params.runID)
+        .pipe(
+          Effect.catchTag("RayaTaskSnapshot.Invalid", (error) =>
+            Effect.fail(new InvalidRequestError({ message: error.message })),
+          ),
+        )
+      if (!snapshot || snapshot.agentID !== ctx.params.agentID) return yield* new HttpApiError.NotFound({})
+      return snapshot
+    })
     const agentRemove = Effect.fn("KilocodeHttpApi.agentRemove")(function* (ctx: { params: { agentID: string } }) {
-      return yield* runner.tasks
-        .remove(ctx.params.agentID)
-        .pipe(Effect.catchTag("RayaTask.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))))
+      return yield* runner.tasks.remove(ctx.params.agentID).pipe(
+        Effect.catchTag("RayaTask.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+        Effect.catchTag("RayaTask.GuardError", (err) => Effect.fail(new InvalidRequestError({ message: err.message }))),
+      )
     })
     const agentTemplateList = Effect.fn("KilocodeHttpApi.agentTemplates")(function* () {
       return agentTemplates
@@ -584,17 +617,30 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .handle("goalGet", goalGet)
         .handle("goalUpdate", goalUpdate)
         .handle("goalClear", goalClear)
+        .handle("goalStop", goalStop)
+        .handle("goalStopResult", goalStopResult)
         .handle("goalDiscard", goalDiscard)
         .handle("checkpointList", checkpointList)
         .handle("checkpointCreate", checkpointCreate)
         .handle("checkpointJump", checkpointJump)
         .handle("checkpointRemove", checkpointRemove)
+        .handle("agentForecast", agentForecast)
         .handle("agentList", agentList)
+        .handle("agentArchive", (ctx) =>
+          runner.tasks
+            .page(ctx.query)
+            .pipe(
+              Effect.catchTag("RayaTask.GuardError", (err) =>
+                Effect.fail(new InvalidRequestError({ message: err.message })),
+              ),
+            ),
+        )
         .handle("agentCreate", agentCreate)
         .handle("agentUpdate", agentUpdate)
         .handle("agentRemove", agentRemove)
         .handle("agentRun", agentRun)
         .handle("agentRuns", agentRuns)
+        .handle("agentSnapshot", agentSnapshot)
         .handle("agentTemplates", agentTemplateList)
         .handle("agentEvent", agentEvent)
         .handle("designSystemGet", designSystemGet)

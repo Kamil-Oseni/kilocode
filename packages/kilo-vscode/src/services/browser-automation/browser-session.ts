@@ -2,16 +2,17 @@
 import { mkdir } from "node:fs/promises"
 import { join } from "node:path"
 import { chromium } from "playwright-core"
+import { locate, TargetError, type BrowserTarget, type TargetPage } from "./browser-target"
 import { BrowserSmoke } from "./browser-smoke"
 import type { SmokeConsole, SmokeCookie, SmokeInput, SmokeOrigin, SmokeResponse, SmokeResult } from "./browser-smoke"
 
 export type BrowserAction =
   | { operation: "navigate"; url: string }
   | { operation: "snapshot" }
-  | { operation: "click"; selector: string }
-  | { operation: "type"; selector: string; text: string; submit: boolean }
-  | { operation: "select"; selector: string; values: string[] }
-  | { operation: "scroll"; deltaX: number; deltaY: number; selector?: string }
+  | { operation: "click"; selector: BrowserTarget }
+  | { operation: "type"; selector: BrowserTarget; text: string; submit: boolean }
+  | { operation: "select"; selector: BrowserTarget; values: string[] }
+  | { operation: "scroll"; deltaX: number; deltaY: number; selector?: BrowserTarget }
   | { operation: "screenshot"; fullPage: boolean }
   | { operation: "evaluate"; expression: string }
   | { operation: "auth_capture"; name: string }
@@ -78,7 +79,7 @@ type FrameEvent = {
   }
 }
 
-export interface BrowserPage {
+export interface BrowserPage extends TargetPage {
   url(): string
   title(): Promise<string>
   goto(
@@ -100,10 +101,7 @@ export interface BrowserPage {
     isVisible(options?: { timeout?: number }): Promise<boolean>
     textContent(options?: { timeout?: number }): Promise<string | null>
   }
-  getByRole(
-    role: string,
-    options?: { name?: string | RegExp },
-  ): ReturnType<BrowserPage["locator"]>
+  getByRole(role: string, options?: { name?: string | RegExp }): ReturnType<BrowserPage["locator"]>
   screenshot(options: { type: "png"; fullPage: boolean; path?: string }): Promise<Buffer>
   evaluate<R, A>(fn: (arg: A) => R, arg: A): Promise<R>
   on(event: "response", listener: (response: SmokeResponse) => void): void
@@ -217,9 +215,7 @@ export class BrowserSession {
     // raya_change - hide the remaining headless/automation fingerprint before any page loads:
     // drop "HeadlessChrome" from the User-Agent and make navigator.webdriver read undefined, so a
     // fresh navigation isn't flagged as a bot on the very first request.
-    const version = (await cdp.send("Browser.getVersion").catch(() => undefined)) as
-      | { userAgent?: string }
-      | undefined
+    const version = (await cdp.send("Browser.getVersion").catch(() => undefined)) as { userAgent?: string } | undefined
     const ua = version?.userAgent?.replace(/HeadlessChrome/i, "Chrome")
     if (ua)
       await cdp
@@ -317,6 +313,7 @@ export class BrowserSession {
       if (revision !== this.revision) throw new Error("Browser action cancelled for manual takeover.")
       return result
     } catch (error) {
+      if (error instanceof TargetError) throw error
       if (this.state.control === "manual") throw error
       const detail = error instanceof Error ? error.message : String(error)
       if (this.stuck(detail)) {
@@ -328,7 +325,9 @@ export class BrowserSession {
         throw new Error(`The navigate action failed: ${detail}`)
       }
       if (/strict mode violation|resolved to \d+ elements/i.test(detail)) {
-        throw new Error(`Locator was not unique (${detail}). Use getByRole with a visible name instead of a shared class.`)
+        throw new Error(
+          `Locator was not unique (${detail}). Use getByRole with a visible name instead of a shared class.`,
+        )
       }
       if (number < 3) {
         await new Promise((resolve) => setTimeout(resolve, number * 500))
@@ -403,7 +402,11 @@ export class BrowserSession {
     }
   }
 
-  private async press(page: BrowserPage, selector: string): Promise<void> {
+  private async press(page: BrowserPage, selector: BrowserTarget): Promise<void> {
+    if (typeof selector !== "string") {
+      await (await locate(page, selector)).click({ timeout: 5_000 })
+      return
+    }
     const named = selector.match(/^button(?:\[name=['"](.+)['"]\]|\.(.+))$/)
     if (named?.[1] || named?.[2]) {
       const name = named[1] ?? named[2]!.replace(/-/g, " ")
@@ -431,27 +434,26 @@ export class BrowserSession {
       return
     }
     if (action.operation === "type") {
-      const locator = page.locator(action.selector)
+      const locator = await locate(page, action.selector)
       await locator.fill(action.text, { timeout: 5_000 })
       if (action.submit) await locator.press("Enter", { timeout: 5_000 })
       return
     }
     if (action.operation === "select") {
-      await page.locator(action.selector).selectOption(action.values, { timeout: 5_000 })
+      await (await locate(page, action.selector)).selectOption(action.values, { timeout: 5_000 })
       return
     }
     if (action.operation !== "scroll") return
     const delta = { x: action.deltaX, y: action.deltaY }
     if (action.selector) {
-      await page
-        .locator(action.selector)
-        .evaluate((element, next) => element.scrollBy(next.x, next.y), delta)
-        .catch(() => page.evaluate((next) => window.scrollBy(next.x, next.y), delta))
+      const locator = await locate(page, action.selector)
+      if (!locator.evaluate) throw new Error("Browser host cannot scroll the selected target")
+      await locator.evaluate((element, next) => element.scrollBy(next.x, next.y), delta)
       return
     }
-    await page.mouse.wheel(action.deltaX, action.deltaY).catch(() =>
-      page.evaluate((next) => window.scrollBy(next.x, next.y), delta),
-    )
+    await page.mouse
+      .wheel(action.deltaX, action.deltaY)
+      .catch(() => page.evaluate((next) => window.scrollBy(next.x, next.y), delta))
   }
 
   private async once(action: BrowserNativeAction): Promise<BrowserResult> {
@@ -608,7 +610,9 @@ export class BrowserSession {
   private async apply(): Promise<void> {
     if (!this.cdp) return
     await this.metrics()
-    await this.channel().send("Page.stopScreencast").catch(() => undefined)
+    await this.channel()
+      .send("Page.stopScreencast")
+      .catch(() => undefined)
     await this.screencast()
   }
 

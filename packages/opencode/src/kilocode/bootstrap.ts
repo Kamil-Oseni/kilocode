@@ -8,6 +8,7 @@ import path from "node:path"
 import { Bus } from "@/bus"
 import { Provider } from "@/provider/provider"
 import { Session } from "@/session/session"
+import { SessionRunState } from "@/session/run-state"
 import { SessionSummary } from "@/session/summary"
 import { SessionExport } from "@/kilocode/session-export"
 import { createWorkspaceProvider } from "@/kilocode/session-export/workspace-provider"
@@ -24,6 +25,7 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder" // ki
 import { Storage } from "@/storage/storage" // raya_change - Milestone A durable goal storage
 import { RayaGoalContinuation } from "@/kilocode/goal/continuation" // raya_change - Milestone A idle continuation
 import { RayaTaskRunner } from "@/kilocode/task/runner"
+import { Database } from "@opencode-ai/core/database/database"
 import { Config } from "@/config/config" // raya_change - Milestone I goal continuation setting
 
 const log = Log.create({ service: "kilocode-bootstrap" })
@@ -43,12 +45,15 @@ export namespace KilocodeBootstrap {
       const kilo = yield* KiloSessions.Service
       const bus = yield* Bus.Service
       const sessions = yield* Session.Service
+      const runs = yield* SessionRunState.Service
       const summary = yield* SessionSummary.Service
       const provider = yield* Provider.Service
       const memory = yield* MemoryService.Service
       const watcher = yield* KilocodeWatcher.Service
       const storage = Option.getOrUndefined(yield* Effect.serviceOption(Storage.Service)) // raya_change - Milestone A durable goal storage
       const config = yield* Config.Service // raya_change - Milestone I
+      const database = yield* Database.Service
+      const routines = storage ? yield* RayaTaskRunner.lifecycle({ bus, storage, sessions, database }) : undefined
 
       const init = Effect.fn("KilocodeBootstrap.init")(function* () {
         yield* watcher.init()
@@ -56,12 +61,28 @@ export namespace KilocodeBootstrap {
         yield* MemoryLifecycle.subscribe({ bus, sessions, summary, provider, memory })
         if (storage) {
           yield* RayaGoalContinuation.subscribe({
+            database,
             bus,
             sessions,
             storage,
             enabled: () => config.get().pipe(Effect.map((cfg) => cfg.raya_routing?.goal_continuation !== false)),
           }) // raya_change - Milestones A/I configurable idle continuation
-          yield* RayaTaskRunner.subscribe({ bus, storage, sessions })
+          if (routines) yield* routines()
+          yield* RayaGoalContinuation.restore({
+            database,
+            directory: Instance.directory,
+            sessions,
+            storage,
+            enabled: () => config.get().pipe(Effect.map((cfg) => cfg.raya_routing?.goal_continuation !== false)),
+            idle: (id) => runs.inspect(id).pipe(Effect.map((state) => state.phase === "idle")),
+          }).pipe(
+            Effect.catchCause((cause) =>
+              Cause.hasInterrupts(cause)
+                ? Effect.interrupt
+                : Effect.sync(() => log.warn("goal startup scan failed", { err: Cause.squash(cause) })),
+            ),
+            Effect.forkDetach,
+          )
         }
         // Invalidate enabled cache on every memory state mutation (properties.directory holds the memory root).
         yield* bus.subscribeCallback(MemoryEvents.Status, (evt) =>
@@ -115,12 +136,14 @@ export namespace KilocodeBootstrap {
     Layer.provide([
       KiloSessions.defaultLayer,
       Session.defaultLayer,
+      AppNodeBuilder.build(SessionRunState.node),
       AppNodeBuilder.build(SessionSummary.node),
       AppNodeBuilder.build(Provider.node),
       MemoryService.layer,
       Bus.defaultLayer,
       KilocodeWatcher.defaultLayer,
       AppNodeBuilder.build(Storage.node), // raya_change - Milestone A durable goal storage
+      AppNodeBuilder.build(Database.node),
       AppNodeBuilder.build(Config.node), // raya_change - Milestone I routing settings
     ]),
   )
@@ -134,12 +157,14 @@ export namespace KilocodeBootstrap {
       deps: [
         KiloSessions.node,
         Session.node,
+        SessionRunState.node,
         SessionSummary.node,
         Provider.node,
         memory,
         Bus.node,
         watcher,
         Storage.node, // raya_change - Milestone A durable goal storage
+        Database.node,
         Config.node, // raya_change - Milestone I routing settings
       ],
     }),

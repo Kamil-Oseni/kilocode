@@ -36,8 +36,13 @@ export namespace KiloSession {
   export const publishTurnOpen = (input: { sessionID: SessionID }) =>
     Effect.promise(() => Bus.publish(Instance.current, Event.TurnOpen, input))
 
-  export const publishTurnClose = (input: { sessionID: SessionID; parentID?: SessionID; reason: CloseReason }) =>
-    Effect.promise(() => Bus.publish(Instance.current, Event.TurnClose, input))
+  export const publishTurnClose = (input: {
+    sessionID: SessionID
+    parentID?: SessionID
+    messageID?: MessageID
+    goalIntent?: string
+    reason: CloseReason
+  }) => Effect.promise(() => Bus.publish(Instance.current, Event.TurnClose, input))
 
   // FIFO snapshot of the per-session waiting list.
   // Emitted by KiloSessionPromptQueue on every transition that changes the set

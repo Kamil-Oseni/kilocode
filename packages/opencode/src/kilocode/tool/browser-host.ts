@@ -1,13 +1,16 @@
 // raya_change - Milestone F model-facing browser tools
 import { Browser, HostError } from "@/kilocode/browser/service"
 import type { Input } from "@/kilocode/browser/service"
-import { SmokeStep, type Result } from "@/kilocode/browser/protocol"
+import { Selector, SmokeStep, type Result } from "@/kilocode/browser/protocol"
 import * as Tool from "@/tool/tool"
 import { Effect, Schema } from "effect"
 
-const Selector = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(10_000))
 const Text = Schema.String.check(Schema.isMaxLength(200_000))
 const LIMIT = 100_000
+
+function target(value: typeof Selector.Type) {
+  return typeof value === "string" ? value : JSON.stringify(value)
+}
 
 function abort(signal: AbortSignal) {
   return Effect.callback<never, HostError>((resume) => {
@@ -100,14 +103,15 @@ export const BrowserClickTool = Tool.define<typeof ClickParams, { url?: string }
   Effect.gen(function* () {
     const browser = yield* Browser.Service
     return {
-      description: "Click an element in the shared browser using a selector from the latest browser snapshot.",
+      description:
+        "Click an observed target using an exact role/name, label, test ID, or legacy selector. Ambiguous semantic targets are rejected; scope to an observed container when needed.",
       parameters: ClickParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
           yield* ctx.ask({
             permission: "browser_click",
-            patterns: [params.selector],
-            always: [params.selector],
+            patterns: [target(params.selector)],
+            always: [target(params.selector)],
             metadata: {},
           })
           const result = yield* run(
@@ -115,7 +119,7 @@ export const BrowserClickTool = Tool.define<typeof ClickParams, { url?: string }
             { operation: "click", sessionID: ctx.sessionID, selector: params.selector },
             ctx.abort,
           )
-          return { title: `Clicked ${params.selector}`, output: render(result), metadata: { url: result.url } }
+          return { title: `Clicked ${target(params.selector)}`, output: render(result), metadata: { url: result.url } }
         }),
     }
   }),
@@ -137,8 +141,8 @@ export const BrowserTypeTool = Tool.define<typeof TypeParams, { url?: string }, 
         Effect.gen(function* () {
           yield* ctx.ask({
             permission: "browser_type",
-            patterns: [params.selector],
-            always: [params.selector],
+            patterns: [target(params.selector)],
+            always: [target(params.selector)],
             metadata: { selector: params.selector },
           })
           const result = yield* run(
@@ -152,7 +156,11 @@ export const BrowserTypeTool = Tool.define<typeof TypeParams, { url?: string }, 
             },
             ctx.abort,
           )
-          return { title: `Typed into ${params.selector}`, output: render(result), metadata: { url: result.url } }
+          return {
+            title: `Typed into ${target(params.selector)}`,
+            output: render(result),
+            metadata: { url: result.url },
+          }
         }),
     }
   }),
@@ -173,8 +181,8 @@ export const BrowserSelectTool = Tool.define<typeof SelectParams, { url?: string
         Effect.gen(function* () {
           yield* ctx.ask({
             permission: "browser_select",
-            patterns: [params.selector],
-            always: [params.selector],
+            patterns: [target(params.selector)],
+            always: [target(params.selector)],
             metadata: {},
           })
           const result = yield* run(
@@ -182,7 +190,7 @@ export const BrowserSelectTool = Tool.define<typeof SelectParams, { url?: string
             { operation: "select", sessionID: ctx.sessionID, selector: params.selector, values: params.values },
             ctx.abort,
           )
-          return { title: `Selected ${params.selector}`, output: render(result), metadata: { url: result.url } }
+          return { title: `Selected ${target(params.selector)}`, output: render(result), metadata: { url: result.url } }
         }),
     }
   }),
@@ -202,7 +210,7 @@ export const BrowserScrollTool = Tool.define<typeof ScrollParams, { url?: string
       parameters: ScrollParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
-          const pattern = params.selector ?? "*"
+          const pattern = params.selector === undefined ? "*" : target(params.selector)
           yield* ctx.ask({ permission: "browser_scroll", patterns: [pattern], always: [pattern], metadata: {} })
           const result = yield* run(
             browser,

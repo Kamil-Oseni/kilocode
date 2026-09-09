@@ -1,16 +1,17 @@
 // raya_change - Async voice plane: session admission, transcript truth, and reactive delegation.
-import { Effect } from "effect"
+import { Effect, Option, Schema, Semaphore } from "effect"
 import { AccessToken } from "livekit-server-sdk"
 import type { Session } from "@/session/session"
 import type { SessionPrompt } from "@/session/prompt"
 import type { Storage } from "@/storage/storage"
 import { VoiceReconstructor } from "./reconstructor"
-import { ContextItem, type Envelope, type Info, type Start, type State, VoiceSessionID } from "./protocol"
+import { ContextItem, Failure, type Envelope, type Info, type Start, type State, VoiceSessionID } from "./protocol"
 
 type Entry = {
   info: typeof Info.Type
   delegateID: (typeof Info.Type)["parentSessionID"]
   transcript: VoiceReconstructor
+  failure?: typeof Failure.Type
 }
 
 type Stored = typeof State.Type & { delegateID: Entry["delegateID"] }
@@ -32,6 +33,22 @@ const key = (id: VoiceSessionID) => ["raya_voice", id]
 export namespace RayaVoice {
   export function make(deps: Deps) {
     const entries = new Map<VoiceSessionID, Entry>()
+    const gates = new Map<VoiceSessionID, { semaphore: ReturnType<typeof Semaphore.makeUnsafe>; refs: number }>()
+    const locked = <A, E, R>(id: VoiceSessionID, effect: Effect.Effect<A, E, R>) =>
+      Effect.acquireUseRelease(
+        Effect.sync(() => {
+          const gate = gates.get(id) ?? { semaphore: Semaphore.makeUnsafe(1), refs: 0 }
+          gate.refs++
+          gates.set(id, gate)
+          return gate
+        }),
+        (gate) => effect.pipe(gate.semaphore.withPermits(1)),
+        (gate) =>
+          Effect.sync(() => {
+            gate.refs--
+            if (gate.refs === 0 && gates.get(id) === gate) gates.delete(id)
+          }),
+      )
     const livekit = deps.livekit ?? {
       url: process.env.RAYA_LIVEKIT_URL || "ws://127.0.0.1:7880",
       key: process.env.RAYA_LIVEKIT_API_KEY || "devkey",
@@ -97,11 +114,7 @@ export namespace RayaVoice {
             },
           ],
         })
-        .pipe(
-          Effect.timeout("2 seconds"),
-          Effect.ignore,
-          Effect.forkDetach,
-        )
+        .pipe(Effect.timeout("2 seconds"), Effect.ignore, Effect.forkDetach)
       return info
     })
 
@@ -114,9 +127,18 @@ export namespace RayaVoice {
     const event = Effect.fn("RayaVoice.event")(function* (input: typeof Envelope.Type) {
       const entry = yield* resolve(input.session)
       if (!entry) return false
+      if (entry.info.status === "closed" || entry.info.status === "failed") return true
       entry.transcript.ingest(input.seq, input.event)
       if (input.event.type === "session.updated") entry.info = { ...entry.info, status: "active" }
-      if (input.event.type === "engine.error") entry.info = { ...entry.info, status: "failed" }
+      if (input.event.type === "engine.error") {
+        entry.info = { ...entry.info, status: "failed" }
+        entry.failure = Option.getOrElse(Schema.decodeUnknownOption(Failure)(input.event.data?.failure), () => ({
+          code: "engine_failure" as const,
+          message: "The voice engine reported a failure.",
+          recovery: "Reconnect voice with the selected provider, or continue typing.",
+          at: new Date().toISOString(),
+        }))
+      }
       yield* persist(entry)
       if (input.event.type === "delegation.request") {
         yield* delegate(entry, input).pipe(Effect.forkDetach)
@@ -139,17 +161,16 @@ export namespace RayaVoice {
     const resolve = Effect.fn("RayaVoice.resolve")(function* (id: VoiceSessionID) {
       const active = entries.get(id)
       if (active) return active
-      const stored = yield* deps.storage
-        .read<Stored>(key(id))
-        .pipe(
-          Effect.catchTag("NotFoundError", () => Effect.succeed(undefined)),
-          Effect.orDie,
-        )
+      const stored = yield* deps.storage.read<Stored>(key(id)).pipe(
+        Effect.catchTag("NotFoundError", () => Effect.succeed(undefined)),
+        Effect.orDie,
+      )
       if (!stored?.delegateID) return
       const entry = {
         info: stored.info,
         delegateID: stored.delegateID,
         transcript: new VoiceReconstructor(stored),
+        failure: stored.failure,
       }
       entries.set(id, entry)
       return entry
@@ -158,6 +179,8 @@ export namespace RayaVoice {
     const state = (entry: Entry): typeof State.Type => ({
       info: entry.info,
       ...entry.transcript.state(),
+      incomplete: !!entry.failure || entry.transcript.state().incomplete,
+      failure: entry.failure,
     })
 
     const delegate = Effect.fn("RayaVoice.delegate")(function* (entry: Entry, input: typeof Envelope.Type) {
@@ -215,7 +238,12 @@ export namespace RayaVoice {
       }).pipe(Effect.orDie)
     })
 
-    return { start, get, event, close }
+    return {
+      start,
+      get: (id: VoiceSessionID) => locked(id, get(id)),
+      event: (input: typeof Envelope.Type) => locked(input.session, event(input)),
+      close: (id: VoiceSessionID) => locked(id, close(id)),
+    }
   }
 }
 

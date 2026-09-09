@@ -8,6 +8,8 @@ import { SessionID, MessageID } from "./schema"
 import { appendSessionDiffs, readSessionDiffBase } from "@/kilocode/session-portability/cumulative-diff" // kilocode_change
 import { Storage } from "@/storage/storage" // kilocode_change
 import { Config } from "@/config/config"
+import { reviewed, ReviewDiff } from "@/kilocode/session/review-state" // kilocode_change - persisted review acceptance
+import { Database } from "@opencode-ai/core/database/database" // kilocode_change - narrow review patch projection
 
 function unquoteGitPath(input: string) {
   if (!input.startsWith('"')) return input
@@ -67,7 +69,7 @@ function unquoteGitPath(input: string) {
 
 export interface Interface {
   readonly summarize: (input: { sessionID: SessionID; messageID: MessageID }) => Effect.Effect<void>
-  readonly diff: (input: DiffInput) => Effect.Effect<Snapshot.FileDiff[]> // kilocode_change - full-content detail input
+  readonly diff: (input: DiffInput) => Effect.Effect<(typeof ReviewDiff.Type)[]> // kilocode_change - full-content detail and review acceptance
   readonly computeDiff: (input: { messages: SessionV1.WithParts[] }) => Effect.Effect<Snapshot.FileDiff[]>
 }
 
@@ -81,6 +83,7 @@ const layer = Layer.effect(
     const events = yield* EventV2Bridge.Service
     const config = yield* Config.Service
     const storage = yield* Storage.Service // kilocode_change
+    const database = yield* Database.Service // kilocode_change - narrow review patch projection
 
     const computeDiff = Effect.fn("SessionSummary.computeDiff")(function* (input: { messages: SessionV1.WithParts[] }) {
       let from: string | undefined
@@ -210,7 +213,7 @@ const layer = Layer.effect(
             fold(normalize(yield* readStored(kid.id)))
           }
         }
-        return [...merged.values()]
+        return yield* reviewed(database.db, storage, sessions, input.sessionID, [...merged.values()])
       }
       // kilocode_change end
       const message = (yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)).find(
@@ -241,7 +244,7 @@ export type DiffInput = Schema.Schema.Type<typeof DiffInput>
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [Session.node, Snapshot.node, EventV2Bridge.node, Config.node, Storage.node], // kilocode_change
+  deps: [Session.node, Snapshot.node, EventV2Bridge.node, Config.node, Storage.node, Database.node], // kilocode_change
 })
 
 export * as SessionSummary from "./summary"

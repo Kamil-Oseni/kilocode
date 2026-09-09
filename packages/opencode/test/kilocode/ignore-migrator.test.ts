@@ -248,6 +248,9 @@ secrets/
       })
 
       expect(result.patternCount).toBe(7)
+      expect(result.origins.read?.["secrets/*"]).toBe("local")
+      expect(result.origins.read?.[".env.example"]).toBe("local")
+      expect(result.origins.edit).toEqual(result.origins.read)
 
       const readRules = result.permission.read as Record<string, string>
       expect(readRules["*"]).toBe("allow")

@@ -12,7 +12,10 @@ const fixtures = data as Fixture[]
 const agents: RayaChief.Agent[] = [
   { name: "generalist", description: "Fast generalist for small direct tasks" },
   { name: "coder", description: "Software implementation, fixes, refactors, APIs, and tests" },
-  { name: "engineer", description: "Hard implementation for concurrency, protocols, and correctness-sensitive systems" },
+  {
+    name: "engineer",
+    description: "Hard implementation for concurrency, protocols, and correctness-sensitive systems",
+  },
   { name: "designer", description: "UI, UX, Figma, layouts, visual systems, and motion" },
   { name: "researcher", description: "Research, sources, documentation, evidence, and benchmarks" },
   { name: "accountant", description: "Ledgers, reconciliation, invoices, statements, tax, and finance" },
@@ -167,10 +170,11 @@ describe("Raya Chief routing", () => {
       task: { id: "task" },
       get_goal: { id: "get" },
       update_goal: { id: "update" },
+      update_goal_plan: { id: "plan" },
       read: { id: "read" },
     }
 
-    const workflow = ["chief_route", "task", "get_goal", "update_goal"]
+    const workflow = ["chief_route", "task", "get_goal", "update_goal", "update_goal_plan"]
     expect(Object.keys(RayaChief.tools(tools, { [RayaChief.phaseKey]: "route" }))).toEqual(workflow)
     expect(Object.keys(RayaChief.tools(tools, { [RayaChief.phaseKey]: "task" }))).toEqual(workflow)
     expect(Object.keys(RayaChief.tools(tools, { [RayaChief.phaseKey]: "goal" }))).toEqual(workflow)

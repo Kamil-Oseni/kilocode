@@ -770,11 +770,11 @@ it.instance(
 )
 
 it.instance(
-  // kilocode_change start - Kilo always has an auto-routed small-model fallback
-  "getSmallModel falls back to Kilo auto when model IDs lack family metadata",
+  // kilocode_change start - auxiliary work must not silently switch providers
+  "getSmallModel leaves fallback with the caller when model IDs lack family metadata",
   Effect.gen(function* () {
     const model = yield* Provider.use.getSmallModel(ProviderV2.ID.make("test-provider"))
-    expect(model).toMatchObject({ providerID: "kilo", id: "kilo-auto/small" })
+    expect(model).toBeUndefined()
   }),
   // kilocode_change end
   {

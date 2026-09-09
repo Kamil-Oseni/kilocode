@@ -5,6 +5,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Effect, Exit, Layer, Option, RcMap, Schema, Context, TxReentrantLock } from "effect"
 import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { Git } from "@/git"
+import { publish } from "@/kilocode/session/review-publish" // kilocode_change - atomic review receipt persistence
 
 type Migration = (dir: string, fs: FSUtil.Interface, git: Git.Interface) => Effect.Effect<void, FSUtil.Error>
 
@@ -51,6 +52,10 @@ const decodeMessage = Schema.decodeUnknownOption(MessageFile)
 const decodeSummary = Schema.decodeUnknownOption(SummaryFile)
 
 export interface Interface {
+  // kilocode_change start - exclusive receipt claim and atomic completion
+  readonly create: (key: string[], content: unknown) => Effect.Effect<boolean, FSUtil.Error>
+  readonly replace: (key: string[], content: unknown) => Effect.Effect<void, FSUtil.Error>
+  // kilocode_change end
   readonly remove: (key: string[]) => Effect.Effect<void, FSUtil.Error>
   readonly read: <T>(key: string[]) => Effect.Effect<T, Error>
   readonly update: <T>(key: string[], fn: (draft: T) => void) => Effect.Effect<T, Error>
@@ -319,6 +324,10 @@ const make = (root?: string) =>
       })
 
       return Service.of({
+        // kilocode_change start - keep receipt publication separate from legacy JSON write behavior
+        create: (key, content) => withResolved(key, (target, rw) => TxReentrantLock.withWriteLock(rw, publish(fs, target, content))),
+        replace: (key, content) => withResolved(key, (target, rw) => TxReentrantLock.withWriteLock(rw, publish(fs, target, content, true).pipe(Effect.asVoid))),
+        // kilocode_change end
         remove,
         read,
         update,

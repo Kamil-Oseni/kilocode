@@ -1082,8 +1082,9 @@ Options:
 database tools
 
 Commands:
-  kilo db [query]     open an interactive sqlite3 shell or run a query  [default]
-  kilo db path        print the database path
+  kilo db [query]       open an interactive sqlite3 shell or run a query  [default]
+  kilo db path          print the database path
+  kilo db backups [id]  list pre-migration recovery snapshots or export one to a new SQL file
 
 Positionals:
   query  SQL query to execute  [string]
@@ -1102,6 +1103,20 @@ print the database path
 Options:
   --help     Show help  [boolean]
   --version  Show version number  [boolean]
+```
+
+### kilo db backups
+
+```
+list pre-migration recovery snapshots or export one to a new SQL file
+
+Positionals:
+  id  Migration snapshot identifier  [string]
+
+Options:
+  --help     Show help  [boolean]
+  --version  Show version number  [boolean]
+  --output   New SQL file for the selected snapshot (never overwritten)  [string]
 ```
 
 ## kilo config

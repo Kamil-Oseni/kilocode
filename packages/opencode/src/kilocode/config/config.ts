@@ -394,9 +394,10 @@ export namespace KilocodeConfig {
 
     // Load .kilocodeignore patterns
     try {
-      const permission = await IgnoreMigrator.loadIgnoreConfig(input.projectDir)
+      const migration = await IgnoreMigrator.migrate({ projectDir: input.projectDir })
+      const permission = migration.permission
       if (Object.keys(permission).length > 0) {
-        result = input.merge(result, { permission })
+        result = input.merge(result, { permission, permission_origins: migration.origins })
         log.debug("loaded kilocode ignore patterns", {
           hasRead: !!(permission as Record<string, unknown>).read,
           hasEdit: !!(permission as Record<string, unknown>).edit,

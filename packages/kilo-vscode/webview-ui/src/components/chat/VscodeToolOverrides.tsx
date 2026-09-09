@@ -7,12 +7,12 @@
  * upstream tool registrations have run (i.e. after importing message-part).
  */
 
-import { createMemo, For, onCleanup, onMount, Show, type Component } from "solid-js"
+import { createEffect, createMemo, For, onCleanup, Show, type Component } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { BasicTool } from "@kilocode/kilo-ui/basic-tool"
 import { ToolRegistry, type ToolProps } from "@kilocode/kilo-ui/message-part"
 import { useSession } from "../../context/session"
-import { useVSCode } from "../../context/vscode"
+import { Button } from "@kilocode/kilo-ui/button"
 import { editReview } from "./edit-review"
 
 /** Tools that should be open by default in the VS Code sidebar. */
@@ -159,12 +159,11 @@ function BackgroundProcessTool(props: ToolProps) {
 // raya_change - wrap an edit/write renderer with inline review chrome: a hued
 // block plus rounded Undo/Keep pills and an "N of M" navigator to step between
 // unaccepted edits, matching the Cursor-style review affordance the user asked
-// for. Undo restores just this file (files-only server discard); Keep hides the
-// chrome for this file. The chrome only appears once the edit has completed.
+// for. Both file-wide actions use the chat coordinator's acknowledged backend
+// request. The chrome only appears once the edit has completed.
 function reviewed(upstream: Component<ToolProps>): Component<ToolProps> {
   return (props) => {
     const session = useSession()
-    const vscode = useVSCode()
     let ref: HTMLDivElement | undefined
 
     const sid = () => session.currentSessionID() ?? ""
@@ -176,7 +175,7 @@ function reviewed(upstream: Component<ToolProps>): Component<ToolProps> {
       return { index: list.indexOf(file()), total: list.length }
     }
 
-    onMount(() => {
+    createEffect(() => {
       if (!ref || !file() || !sid()) return
       const dispose = editReview.register({ session: sid(), file: file(), el: ref })
       onCleanup(dispose)
@@ -184,10 +183,9 @@ function reviewed(upstream: Component<ToolProps>): Component<ToolProps> {
 
     const undo = () => {
       if (!sid() || !file()) return
-      vscode.postMessage({ type: "discardSessionChanges", sessionID: sid(), files: [file()] })
-      editReview.keep(sid(), file())
+      editReview.request(sid(), file(), "undo")
     }
-    const keep = () => editReview.keep(sid(), file())
+    const keep = () => editReview.request(sid(), file(), "keep")
     const step = (delta: number) => {
       const list = editReview.pending(sid())
       if (list.length === 0) return
@@ -206,12 +204,26 @@ function reviewed(upstream: Component<ToolProps>): Component<ToolProps> {
         <Dynamic component={upstream} {...props} />
         <Show when={show()}>
           <div data-slot="edit-review-actions">
-            <button type="button" data-slot="edit-review-undo" onClick={undo}>
-              Undo
-            </button>
-            <button type="button" data-slot="edit-review-keep" onClick={keep}>
-              Keep
-            </button>
+            <Button
+              variant="ghost"
+              size="small"
+              data-slot="edit-review-undo"
+              disabled={editReview.busy(sid())}
+              onClick={undo}
+              title="Undo the latest unaccepted edit in this file"
+            >
+              Undo file
+            </Button>
+            <Button
+              variant="ghost"
+              size="small"
+              data-slot="edit-review-keep"
+              disabled={editReview.busy(sid())}
+              onClick={keep}
+              title="Keep all current edits in this file"
+            >
+              Keep file
+            </Button>
             <Show when={nav().total > 1 && nav().index >= 0}>
               <span data-slot="edit-review-nav">
                 <button type="button" aria-label="Previous edit" onClick={() => step(-1)}>

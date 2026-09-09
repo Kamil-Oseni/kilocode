@@ -293,6 +293,7 @@ const snap = Layer.succeed(
     patch: (hash) => Effect.succeed({ hash, files: [] }),
     restore: () => Effect.void,
     revert: () => Effect.void,
+    matches: () => Effect.succeed(false),
     diff: () => Effect.succeed(""),
     diffFull: () => Effect.succeed([]),
     diffFile: () => Effect.succeed(undefined),

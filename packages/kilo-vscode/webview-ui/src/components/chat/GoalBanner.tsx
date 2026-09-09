@@ -1,11 +1,19 @@
 // raya_change - Milestone A persistent goal banner and controls
-import { For, Show, createEffect, createSignal, on, onCleanup, onMount, type Component } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount, type Component } from "solid-js"
 import { Button } from "@kilocode/kilo-ui/button"
 import { Icon } from "@kilocode/kilo-ui/icon" // raya_change - self-redesign status icons
 import { useSession } from "../../context/session"
 import { useVSCode } from "../../context/vscode"
 import type { GoalState, GoalStatus } from "../../../../src/shared/goal"
-import type { TodoItem } from "../../types/messages"
+import type { GoalEditedMessage, GoalStoppedMessage, TodoItem } from "../../types/messages"
+import { GoalAudit } from "./GoalAudit"
+import { GoalCriteria } from "./GoalCriteria"
+import { GoalRevisions } from "./GoalRevisions"
+import { GoalReview } from "./GoalReview"
+import { GoalReport } from "./GoalReport"
+import { GoalPlan } from "./GoalPlan"
+import { GoalCriteriaEditor } from "./GoalCriteriaEditor"
+import { valid, equal } from "../../../../src/shared/goal-criteria"
 
 // raya_change start - self-redesign: presentational goal banner. Split from the
 // connected wrapper below so it renders from props alone (mock data in the dev
@@ -17,20 +25,32 @@ const statusWord: Record<GoalStatus, string> = {
   blocked: "Blocked",
 }
 
+const steering: Record<GoalStatus, string> = {
+  active: "Any running work may finish. Your revision applies to the next step.",
+  paused: "The goal stays paused after this update. Resume it when you are ready to continue.",
+  blocked: "Raya will resume from this revision.",
+  complete: "Completed goals cannot be revised. Start a new goal for further work.",
+}
+
 export interface GoalBannerProps {
+  sessionID?: string
   goal?: GoalState
   notice?: string
   todos?: TodoItem[]
   disabled?: boolean
   expanded?: boolean
   editing?: boolean
+  saving?: boolean
+  editError?: string
   confirmingStop?: boolean
+  stopError?: string
   /** Design-preview only: statically render the hover, focus, or pressed state. */
   pv?: "hover" | "focus" | "active"
   onToggle?: () => void
   onEdit?: () => void
   onCancelEdit?: () => void
-  onRevise?: (objective: string) => void
+  onAccept?: () => void
+  onRevise?: (objective: string, expectedIntent: string, criteria?: GoalState["criteria"]) => void
   onStop?: () => void
   onCancelStop?: () => void
   onPause?: () => void
@@ -42,34 +62,52 @@ export interface GoalBannerProps {
 // raya_change - avoid "1 turns"; pluralize the metric label off its count
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`
 
+function label(goal: Pick<GoalState, "status" | "review">) {
+  return goal.status === "paused" && goal.review?.status === "pending" ? "Ready for review" : statusWord[goal.status]
+}
+
 export const GoalBannerView: Component<GoalBannerProps> = (props) => {
   const [page, setPage] = createSignal(0)
+  const identity = createMemo(() => props.goal?.createdAt)
   const pages = () => {
     const current = props.goal
     if (!current) return []
     return [current, ...(current.history ?? []).toReversed()]
   }
-  createEffect(
-    on(
-      () => props.goal?.createdAt,
-      () => setPage(0),
-    ),
-  )
+  createEffect(on(identity, () => setPage(0)))
   const viewing = () => pages()[page()] ?? props.goal
   const archive = () => page() > 0
+  const editable = () => props.goal?.status !== "complete"
+  const todos = () =>
+    props.goal?.plan?.tasks.map((task) => ({ content: task.description, status: task.status })) ?? props.todos ?? []
+  const planned = () => !archive() && !!todos().length
   const latest = () => (archive() ? undefined : props.goal?.progress.at(-1)?.message)
-  const done = () => props.todos?.filter((todo) => todo.status === "completed").length ?? 0
+  const done = () => todos().filter((todo) => todo.status === "completed").length ?? 0
   const percent = () => {
-    if (props.todos?.length) return Math.round((done() / props.todos.length) * 100)
-    return props.goal?.status === "complete" ? 100 : 0
+    if (todos().length) return Math.round((done() / todos().length) * 100)
+    return 0
   }
-  const current = () => props.todos?.find((todo) => todo.status === "in_progress")
+  const current = () => todos().filter((todo) => todo.status === "in_progress") ?? []
   const progress = () => {
-    const todo = current()
-    return todo ? `Now: ${todo.content}` : latest()
+    if (archive()) return
+    if (props.goal?.status === "complete") return props.goal.audit?.summary ?? latest()
+    if (props.goal?.plan && (props.goal.plan.review || props.goal.plan.objective !== props.goal.objective))
+      return "The saved work plan needs review after the requirements changed."
+    const tasks = current()
+    if (!tasks.length) return latest()
+    if (tasks.length === 1) return `Plan: ${tasks[0].content} is marked in progress.`
+    return `Plan: ${tasks[0].content} and ${plural(tasks.length - 1, "other task")} are marked in progress.`
   }
   let editor: HTMLTextAreaElement | undefined
+  let trigger: HTMLButtonElement | undefined
   const [draft, setDraft] = createSignal("")
+  const [original, setOriginal] = createSignal("")
+  const [basis, setBasis] = createSignal("unset")
+  const [criteria, setCriteria] = createSignal<NonNullable<GoalState["criteria"]>>([])
+  const [saved, setSaved] = createSignal<GoalState["criteria"]>()
+  const required = () => (!criteria().length && saved() === undefined ? undefined : criteria())
+  const revised = () => !equal(required(), saved())
+  const invalid = () => revised() && !valid(required())
   const [now, setNow] = createSignal(Date.now())
   const runtime = () => {
     const goal = props.goal
@@ -100,18 +138,45 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
   createEffect(
     on(
       () => props.editing,
-      (editing) => {
-        if (!editing || !props.goal) return
+      (editing, before) => {
+        if (!editing) {
+          if (before)
+            queueMicrotask(() => {
+              if (!props.editing && trigger?.isConnected) trigger.focus()
+            })
+          return
+        }
+        if (!props.goal) return
         setDraft(props.goal.objective)
+        setOriginal(props.goal.objective.trim())
+        setBasis(props.goal.intent ?? "unset")
+        setSaved(props.goal.criteria?.map((item) => ({ ...item })))
+        setCriteria(props.goal.criteria?.map((item) => ({ ...item })) ?? [])
         queueMicrotask(() => editor?.focus())
       },
     ),
   )
   // raya_change end
 
+  const disabled = () =>
+    props.disabled ||
+    !editable() ||
+    props.saving ||
+    !!props.editError ||
+    !draft().trim() ||
+    (draft().trim() === original() && !revised()) ||
+    invalid()
   const submit = () => {
     const objective = draft().trim()
-    if (objective) props.onRevise?.(objective)
+    if (
+      objective &&
+      (objective !== original() || revised()) &&
+      !invalid() &&
+      !props.disabled &&
+      !props.saving &&
+      !props.editError
+    )
+      props.onRevise?.(objective, basis(), revised() ? required() : undefined)
   }
 
   return (
@@ -121,6 +186,7 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
         data-status={(viewing() ?? props.goal)?.status ?? "notice"}
         data-pv={props.pv}
         aria-label="Goal status"
+        aria-busy={props.saving || props.disabled}
       >
         <Show when={props.notice}>
           {(text) => (
@@ -146,7 +212,7 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                     across states). Status color carries the meaning. */}
                 <span class="goal-banner__status">
                   <span class="goal-banner__label">Goal</span>
-                  <span class="goal-banner__status-word">{statusWord[(viewing() ?? state()).status]}</span>
+                  <span class="goal-banner__status-word">{label(viewing() ?? state())}</span>
                 </span>
                 <Show when={pages().length > 1}>
                   <span class="goal-banner__pages">
@@ -175,9 +241,9 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                 </Show>
                 <Show when={!archive()}>
                   <span class="goal-banner__usage">
-                    {percent()}% · {duration()} ·{" "}
-                    <Show when={props.todos?.length}>
-                      {done()}/{props.todos!.length} tasks ·{" "}
+                    {duration()} ·{" "}
+                    <Show when={todos().length}>
+                      Plan: {percent()}% ({done()}/{todos().length} tasks completed) ·{" "}
                     </Show>
                     {plural(state().usage.turns, "turn")} · {plural(state().usage.toolCalls, "tool")}
                   </span>
@@ -196,9 +262,19 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                   warm accent its intended home: the persistent goal's progress.
                   Terminal states adopt the status color so the fill agrees with
                   the status word. */}
-              <div class="goal-banner__track" aria-hidden="true">
-                <span class="goal-banner__track-fill" style={{ width: `${percent()}%` }} />
-              </div>
+              <Show when={planned()}>
+                <div
+                  class="goal-banner__track"
+                  role="progressbar"
+                  aria-label="Plan task completion"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={percent()}
+                  aria-valuetext={`${done()} of ${todos().length} plan tasks completed. Goal acceptance is checked separately.`}
+                >
+                  <span class="goal-banner__track-fill" style={{ width: `${percent()}%` }} />
+                </div>
+              </Show>
               <div class="goal-banner__summary">
                 <div class="goal-banner__objective" data-expanded={props.expanded ? "" : undefined}>
                   {(viewing() ?? state()).objective}
@@ -211,59 +287,58 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                   )}
                 </Show>
               </div>
+              <Show when={props.expanded && archive()}>
+                <div class="goal-banner__details">
+                  <GoalReview review={viewing()!.review} historical />
+                  <GoalAudit goal={viewing()!} sessionID={props.sessionID} empty />
+                  <GoalCriteria criteria={viewing()!.criteria} />
+                  <GoalRevisions goal={viewing()!} sessionID={props.sessionID} />
+                  <GoalPlan goal={viewing()!} />
+                  <GoalReport goal={viewing()!} sessionID={props.sessionID} />
+                </div>
+              </Show>
               <Show when={props.expanded && !archive()}>
                 <div class="goal-banner__details">
-                  <Show when={state().blockedReason}>
-                    {(reason) => <div class="goal-banner__reason">Blocked: {reason()}</div>}
-                  </Show>
-                  {/* raya_change - goal audit log: for a stuck, blocked, or completed goal,
-                      show the last completion attempt requirement-by-requirement with the
-                      cited evidence and the exact rejection reason, instead of leaving that
-                      detail buried in chat narration. */}
-                  <Show when={state().auditAttempt}>
-                    {(attempt) => (
-                      <div class="goal-banner__audit" aria-label="Completion audit log">
-                        <div class="goal-banner__section-title">
-                          <span>Completion audit</span>
-                          <span
-                            class="goal-banner__audit-verdict"
-                            data-accepted={attempt().accepted ? "" : undefined}
-                          >
-                            {attempt().accepted ? "Passed" : "Rejected"}
-                          </span>
-                        </div>
-                        <Show when={!attempt().accepted && attempt().reason}>
-                          {(reason) => <div class="goal-banner__audit-reason">{reason()}</div>}
-                        </Show>
-                        <For each={attempt().requirements}>
-                          {(req) => (
-                            <div class="goal-banner__audit-req" data-passed={req.passed ? "" : undefined}>
-                              <div class="goal-banner__audit-req-head">
-                                <Icon name={req.passed ? "circle-check" : "circle"} size="small" />
-                                <span>{req.requirement}</span>
-                              </div>
-                              <For each={req.evidence}>
-                                {(ev) => (
-                                  <div class="goal-banner__audit-evidence">
-                                    <code>{ev.callID}</code>
-                                    <span>{ev.summary}</span>
-                                  </div>
-                                )}
-                              </For>
-                            </div>
-                          )}
-                        </For>
+                  <Show when={state().dispatch}>
+                    {(dispatch) => (
+                      <div class="goal-banner__reason" role="status" aria-label="Latest goal execution">
+                        {dispatch().phase === "queued"
+                          ? "Latest continuation: queued. Execution has not been confirmed."
+                          : dispatch().phase === "started"
+                            ? "Latest continuation: handed to the runtime. Its outcome is not yet confirmed."
+                            : dispatch().outcome === "error"
+                              ? "Latest continuation: ended with an error. Review the conversation for details."
+                              : dispatch().outcome === "interrupted"
+                                ? "Latest continuation: interrupted. Review any changes and tool results before continuing."
+                                : "Latest continuation: turn finished. Goal completion still depends on its acceptance checks."}
                       </div>
                     )}
                   </Show>
-                  <Show when={props.todos?.length}>
+                  <Show when={state().blockedReason}>
+                    {(reason) => <div class="goal-banner__reason">Blocked: {reason()}</div>}
+                  </Show>
+                  <GoalReview
+                    review={state().review}
+                    disabled={props.disabled || props.editing}
+                    error={props.editError}
+                    onAccept={state().status === "paused" ? props.onAccept : undefined}
+                  />
+                  <GoalAudit goal={state()} sessionID={props.sessionID} />
+                  <GoalCriteria criteria={state().criteria} />
+                  <GoalRevisions goal={state()} sessionID={props.sessionID} />
+                  <GoalPlan goal={state()} />
+                  <GoalReport goal={state()} sessionID={props.sessionID} />
+                  <Show when={!state().plan && todos().length}>
                     <div class="goal-banner__tasks" aria-label="Goal tasks">
                       <div class="goal-banner__section-title">Work plan</div>
                       <For each={props.todos}>
                         {(todo) => (
                           <div class="goal-banner__task" data-status={todo.status}>
                             <Icon name={todo.status === "completed" ? "circle-check" : "circle"} size="small" />
-                            <span>{todo.content}</span>
+                            <span>
+                              <span class="goal-banner__task-content">{todo.content}</span>
+                              <span class="goal-banner__task-status">{todo.status.replaceAll("_", " ")}</span>
+                            </span>
                           </div>
                         )}
                       </For>
@@ -294,19 +369,39 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                       ref={editor}
                       rows="6"
                       value={draft()}
+                      readOnly={props.saving}
                       onInput={(event) => setDraft(event.currentTarget.value)}
                       aria-describedby="goal-objective-help"
                     />
                     <div id="goal-objective-help">
-                      {state().status === "blocked"
-                        ? "Raya will resume from this revision."
-                        : "The current step keeps running. Your revision applies to the next step."}
+                      <p>{steering[state().status]}</p>
+                      <p>
+                        Changing the objective or acceptance criteria moves the current audit and attempt into earlier
+                        requirements. They will not satisfy the revised goal. Verification must cover the revised
+                        requirements.
+                      </p>
                     </div>
+                    <GoalCriteriaEditor
+                      value={criteria()}
+                      disabled={props.saving || props.disabled}
+                      onChange={setCriteria}
+                    />
+                    <Show when={invalid()}>
+                      <p role="status">Keep 1 to 20 criteria and fill in each description and verification method.</p>
+                    </Show>
+                    <Show when={props.editError}>
+                      <div role="alert">{props.editError}</div>
+                    </Show>
                     <div class="goal-banner__editor-actions">
-                      <Button size="small" variant="secondary" onClick={submit}>
-                        Update goal
+                      <Button size="small" variant="secondary" onClick={submit} disabled={disabled()}>
+                        {props.saving ? "Saving…" : "Update goal"}
                       </Button>
-                      <Button size="small" variant="ghost" onClick={() => props.onCancelEdit?.()}>
+                      <Button
+                        size="small"
+                        variant="ghost"
+                        onClick={() => props.onCancelEdit?.()}
+                        disabled={props.disabled || props.saving}
+                      >
                         Cancel
                       </Button>
                     </div>
@@ -316,13 +411,26 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                   <div class="goal-banner__discard" role="alert">
                     <span>Stop tracking this goal?</span>
                     <span class="goal-banner__discard-hint">
-                      Existing edits will remain available from the chat-level Review changes action.
+                      Already-running work may finish. Existing edits remain available from Review changes.
                     </span>
                     <div class="goal-banner__editor-actions">
-                      <Button size="small" variant="secondary" onClick={() => props.onStop?.()}>
+                      <Show when={props.stopError}>
+                        <span>{props.stopError}</span>
+                      </Show>
+                      <Button
+                        size="small"
+                        variant="secondary"
+                        disabled={props.disabled || !!props.stopError}
+                        onClick={() => props.onStop?.()}
+                      >
                         Stop goal
                       </Button>
-                      <Button size="small" variant="ghost" onClick={() => props.onCancelStop?.()}>
+                      <Button
+                        size="small"
+                        variant="ghost"
+                        disabled={props.disabled}
+                        onClick={() => props.onCancelStop?.()}
+                      >
                         Cancel
                       </Button>
                     </div>
@@ -334,35 +442,53 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                   Stop/Dismiss) only appear in the expanded card so the collapsed
                   goal carries no button chrome. */}
               <Show when={props.expanded && !archive()}>
-              <div class="goal-banner__actions">
-                <div class="goal-banner__actions-lead">
-                  <Button size="small" variant="secondary" onClick={() => props.onEdit?.()}>
-                    Steer
-                  </Button>
+                <div class="goal-banner__actions">
+                  <div class="goal-banner__actions-lead">
+                    <Show when={editable()}>
+                      <Button
+                        ref={trigger}
+                        size="small"
+                        variant="secondary"
+                        disabled={props.disabled || props.editing}
+                        onClick={() => props.onEdit?.()}
+                      >
+                        Steer
+                      </Button>
+                    </Show>
+                  </div>
+                  <div class="goal-banner__actions-run">
+                    <Show when={state().status === "active"}>
+                      <Button
+                        size="small"
+                        variant="secondary"
+                        disabled={props.disabled}
+                        onClick={() => props.onPause?.()}
+                      >
+                        Pause
+                      </Button>
+                    </Show>
+                    <Show when={state().status === "paused" || state().status === "blocked"}>
+                      <Button
+                        size="small"
+                        variant="secondary"
+                        disabled={props.disabled}
+                        onClick={() => props.onResume?.()}
+                      >
+                        Resume
+                      </Button>
+                    </Show>
+                    <Show when={state().status !== "complete"}>
+                      <Button size="small" variant="ghost" disabled={props.disabled} onClick={() => props.onClear?.()}>
+                        Stop goal
+                      </Button>
+                    </Show>
+                    <Show when={state().status === "complete"}>
+                      <Button size="small" variant="ghost" disabled={props.disabled} onClick={() => props.onClear?.()}>
+                        Dismiss goal
+                      </Button>
+                    </Show>
+                  </div>
                 </div>
-                <div class="goal-banner__actions-run">
-                  <Show when={state().status === "active"}>
-                    <Button size="small" variant="secondary" disabled={props.disabled} onClick={() => props.onPause?.()}>
-                      Pause
-                    </Button>
-                  </Show>
-                  <Show when={state().status === "paused" || state().status === "blocked"}>
-                    <Button size="small" variant="secondary" disabled={props.disabled} onClick={() => props.onResume?.()}>
-                      Resume
-                    </Button>
-                  </Show>
-                  <Show when={state().status !== "complete"}>
-                    <Button size="small" variant="ghost" onClick={() => props.onClear?.()}>
-                      Stop goal
-                    </Button>
-                  </Show>
-                  <Show when={state().status === "complete"}>
-                    <Button size="small" variant="ghost" disabled={props.disabled} onClick={() => props.onStop?.()}>
-                      Dismiss goal
-                    </Button>
-                  </Show>
-                </div>
-              </div>
               </Show>
             </>
           )}
@@ -381,7 +507,39 @@ export const GoalBanner: Component = () => {
   const [expanded, setExpanded] = createSignal(false)
   const [editing, setEditing] = createSignal(false)
   const [stopping, setStopping] = createSignal(false)
+  const [basis, setBasis] = createSignal<string>()
+  const [clearing, setClearing] = createSignal<{ requestID: string; intent: string }>()
+  const [stopError, setStopError] = createSignal<string>()
+  let deadline: ReturnType<typeof setTimeout> | undefined
+  const resetStop = () => {
+    clearTimeout(deadline)
+    setClearing(undefined)
+  }
+  const busy = () => !!pending() || !!clearing()
+  const [pending, setPending] = createSignal<{
+    requestID: string
+    objective: string
+    intent: string
+    status?: "active" | "paused"
+    criteria?: GoalState["criteria"]
+    accept?: true
+  }>()
+  const [failure, setFailure] = createSignal<string>()
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const reset = () => {
+    clearTimeout(timer)
+    setPending(undefined)
+  }
   const sid = () => session.currentSessionID()
+  const failed = (text: string, status?: "active" | "paused", accept?: true) => {
+    if (status || accept) {
+      setNotice(text)
+      const id = sid()
+      if (id) vscode.postMessage({ type: "goalGet", sessionID: id })
+    }
+    if (!status || editing())
+      setFailure(status ? `${text} Copy your draft, then cancel and reopen before saving it.` : text)
+  }
 
   createEffect(() => {
     const id = sid()
@@ -390,61 +548,220 @@ export const GoalBanner: Component = () => {
     setExpanded(false)
     setEditing(false)
     setStopping(false)
+    setBasis(undefined)
+    setStopError(undefined)
+    resetStop()
+    reset()
+    setFailure(undefined)
     if (id) vscode.postMessage({ type: "goalGet", sessionID: id })
   })
 
+  const consistent = (goal: GoalState, request: NonNullable<ReturnType<typeof pending>>) =>
+    goal.objective === request.objective &&
+    (request.criteria === undefined || equal(goal.criteria, request.criteria)) &&
+    !!goal.intent &&
+    (request.status === undefined || goal.status === request.status) &&
+    (!request.accept || (goal.status === "complete" && goal.review?.status === "accepted"))
+
+  const acknowledge = (message: GoalEditedMessage) => {
+    if (message.sessionID !== sid()) return
+    const request = pending()
+    if (!request || message.requestID !== request.requestID) return
+    reset()
+    if (message.error || !message.goal || !consistent(message.goal, request)) {
+      failed(message.error ?? "Could not confirm the requested goal change.", request.status, request.accept)
+      return
+    }
+    const current = goal()?.intent ?? "unset"
+    if (current !== request.intent && current !== message.goal.intent) {
+      failed(
+        "The goal changed while this update was being confirmed. Review the saved goal before trying again.",
+        request.status,
+        request.accept,
+      )
+      return
+    }
+    setGoal(message.goal)
+    if (!request.status) setEditing(false)
+    if (request.status && editing())
+      setFailure("The goal's status changed. Copy your draft, then cancel and reopen before saving it.")
+    setNotice(
+      request.accept
+        ? "Goal accepted."
+        : request.status === "paused"
+          ? "Goal paused."
+          : request.status === "active"
+            ? "Goal resumed."
+            : "Goal updated.",
+    )
+  }
+
+  const stopped = (message: GoalStoppedMessage) => {
+    const request = clearing()
+    if (message.sessionID !== sid() || !request || message.requestID !== request.requestID) return
+    resetStop()
+    const changed = goal() && (goal()?.intent ?? "unset") !== request.intent
+    if (message.error || !message.cleared || changed) {
+      const text =
+        message.error ?? "The goal changed while stopping was confirmed. Cancel and review the refreshed goal."
+      setStopError(text)
+      setNotice(text)
+    } else {
+      setStopping(false)
+      setBasis(undefined)
+      setGoal(undefined)
+      setNotice(
+        (message.worker === "interrupted"
+          ? "Goal tracking stopped and its worker was interrupted. External or background work may still finish."
+          : message.worker === "preserved"
+            ? "Goal tracking stopped. This request did not interrupt the parent worker."
+            : "Goal tracking stopped. The worker's outcome is not confirmed.") +
+          (message.background ? ` ${message.background}` : ""),
+      )
+    }
+    const id = sid()
+    if (id) vscode.postMessage({ type: "goalGet", sessionID: id })
+  }
+
   onMount(() => {
     const off = vscode.onMessage((message) => {
+      if (message.type === "goalStopResult") {
+        if (message.sessionID === sid() && !goal() && !editing() && !stopping()) setNotice(message.notice)
+        return
+      }
+      if (message.type === "goalStopped") {
+        stopped(message)
+        return
+      }
+      if (message.type === "goalEdited") {
+        acknowledge(message)
+        return
+      }
       if (message.type !== "goalState" || message.sessionID !== sid()) return
+      if (editing() && !message.goal) {
+        setFailure("Raya could not read the current goal. Copy your draft before closing the editor.")
+        reset()
+        return
+      }
       setGoal(message.goal)
       if (message.notice) setNotice(message.notice)
     })
     const show = (event: Event) => setNotice((event as CustomEvent<string>).detail)
     window.addEventListener("rayaGoalNotice", show)
     onCleanup(() => {
+      clearTimeout(timer)
+      resetStop()
       off()
       window.removeEventListener("rayaGoalNotice", show)
     })
   })
 
-  const act = (action: "pause" | "resume" | "clear" | "revise", objective?: string) => {
-    const id = sid()
-    if (id) vscode.postMessage({ type: "goalControl", sessionID: id, action, objective })
+  const revise = (
+    objective: string,
+    expectedIntent: string,
+    criteria?: GoalState["criteria"],
+    status?: "active" | "paused",
+    accept?: true,
+  ) => {
+    const sessionID = sid()
+    if (!sessionID || busy() || (!status && !accept && failure())) return
+    const requestID = crypto.randomUUID()
+    setPending({ requestID, objective, intent: expectedIntent, status, criteria, accept })
+    if (accept) setNotice("Checking evidence and recording acceptance...")
+    if (status) setNotice(status === "paused" ? "Pausing goal…" : "Resuming goal…")
+    timer = setTimeout(() => {
+      if (pending()?.requestID !== requestID) return
+      reset()
+      failed(
+        accept
+          ? "Acceptance has not been confirmed and may still finish. Review the refreshed goal before trying again."
+          : status
+            ? "The status change has not been confirmed and may still finish. Review the refreshed goal before trying again."
+            : "The update has not been confirmed and may still finish. Copy your draft, then cancel and reopen to review the saved goal.",
+        status,
+        accept,
+      )
+    }, 15_000)
+    vscode.postMessage({ type: "goalEdit", sessionID, requestID, objective, expectedIntent, status, criteria, accept })
   }
-
-  const revise = (objective: string) => {
-    act("revise", objective)
-    setEditing(false)
+  const transition = (status: "active" | "paused") => {
+    const current = goal()
+    if (!current || current.status === "complete" || current.status === status) return
+    revise(current.objective, current.intent ?? "unset", undefined, status)
   }
 
   const stop = () => {
-    act("clear")
-    setStopping(false)
-  } // raya_change - stopping goal tracking never accepts or discards session edits
+    const id = sid()
+    const current = goal()
+    if (!id || !current || busy() || stopError()) return
+    const intent = basis() ?? current.intent ?? "unset"
+    const requestID = crypto.randomUUID()
+    setClearing({ requestID, intent })
+    setNotice("Stopping goal tracking?")
+    deadline = setTimeout(() => {
+      if (clearing()?.requestID !== requestID) return
+      resetStop()
+      const text =
+        "Stopping has not been confirmed and may still finish. Cancel and review the refreshed goal before trying again."
+      setStopError(text)
+      setNotice(text)
+      vscode.postMessage({ type: "goalGet", sessionID: id })
+    }, 15_000)
+    vscode.postMessage({ type: "goalStop", sessionID: id, requestID, expectedIntent: intent })
+  }
 
   return (
     <GoalBannerView
+      sessionID={sid()}
       goal={goal()}
       notice={notice()}
       todos={session.todos()}
       expanded={expanded()}
       editing={editing()}
+      disabled={busy()}
+      stopError={stopError()}
+      saving={!!pending() && pending()?.status === undefined}
+      editError={failure()}
       confirmingStop={stopping()}
       onToggle={() => setExpanded((value) => !value)}
       onEdit={() => {
+        if (busy() || editing()) return
+        setFailure(undefined)
         setExpanded(true)
         setStopping(false)
         setEditing(true)
       }}
-      onCancelEdit={() => setEditing(false)}
+      onCancelEdit={() => {
+        if (busy()) return
+        setEditing(false)
+        setFailure(undefined)
+        const id = sid()
+        if (id) vscode.postMessage({ type: "goalGet", sessionID: id })
+      }}
+      onAccept={() => {
+        const current = goal()
+        if (!current || busy() || current.status !== "paused" || current.review?.status !== "pending") return
+        setFailure(undefined)
+        revise(current.objective, current.intent ?? "unset", undefined, undefined, true)
+      }}
       onRevise={revise}
       onStop={stop}
-      onCancelStop={() => setStopping(false)}
-      onPause={() => act("pause")}
-      onResume={() => act("resume")}
+      onCancelStop={() => {
+        if (busy()) return
+        setStopping(false)
+        setBasis(undefined)
+        setStopError(undefined)
+        const id = sid()
+        if (id) vscode.postMessage({ type: "goalGet", sessionID: id })
+      }}
+      onPause={() => transition("paused")}
+      onResume={() => transition("active")}
       onClear={() => {
+        if (busy()) return
         setExpanded(true)
         setEditing(false)
+        setBasis(goal()?.intent ?? "unset")
+        setStopError(undefined)
         setStopping(true)
       }}
       onDismissNotice={() => setNotice(undefined)}

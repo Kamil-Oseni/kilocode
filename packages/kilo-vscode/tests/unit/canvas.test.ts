@@ -1,7 +1,7 @@
 // raya_change - Milestone E render-from-data, live-refresh, and error-recovery tests
 import { afterAll, afterEach, describe, expect, it } from "bun:test"
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
-import { join } from "node:path"
+import { dirname, join } from "node:path"
 import { tmpdir } from "node:os"
 import { build, stop } from "esbuild"
 import { stop as stopWasm } from "esbuild-wasm"
@@ -27,6 +27,178 @@ afterEach(async () => {
 })
 
 describe("Raya canvas compiler", () => {
+  it.each(["saved", "unsaved"])("preserves %s edits made before a rendered candidate is promoted", async (kind) => {
+    const root = await temp()
+    const compiler = new CanvasCompiler(join(root, "bundles"))
+    const source = "export default function Report() { return <p>Original</p> }"
+    const first = await compiler.create(root, "promotion", source, { value: 1 })
+    await compiler.commit(first)
+    const next = await compiler.create(root, "promotion", "export default function Report() { return <p>New</p> }", {
+      value: 2,
+    })
+    if (kind === "saved") await writeFile(first.path, "manual edits made during render")
+    await compiler.commit(next, () => kind !== "unsaved")
+    expect(next.warning).toContain("local edits")
+    expect(await readFile(first.path, "utf8")).toBe(kind === "saved" ? "manual edits made during render" : source)
+    expect(JSON.parse(await readFile(compiler.data(root, "promotion"), "utf8"))).toEqual({ value: 1 })
+    const restored = await compiler.restore(root, "promotion")
+    expect(restored?.revision).toBe(next.revision)
+    expect(restored?.data).toEqual({ value: 2 })
+    expect(restored?.warning).toContain("differs from its editable source/data files")
+  })
+
+  it("rolls back a late failure after restart while retaining its inspectable draft", async () => {
+    const root = await temp()
+    const output = join(root, "bundles")
+    const compiler = new CanvasCompiler(output)
+    const first = await compiler.create(
+      root,
+      "rollback",
+      "export default function Report() { return <p>Previous</p> }",
+      { value: 1 },
+    )
+    await compiler.commit(first)
+    const next = await compiler.create(root, "rollback", "export default function Report() { return <p>Later</p> }", {
+      value: 2,
+    })
+    await compiler.commit(next)
+    const reopened = new CanvasCompiler(output)
+    expect((await reopened.restore(root, "rollback"))?.revision).toBe(next.revision)
+    const restored = await reopened.rollback({ ...next, status: "error", error: "late error" }, () => true)
+    expect(restored?.revision).toBe(first.revision)
+    expect(restored?.data).toEqual({ value: 1 })
+    expect(await readFile(first.path, "utf8")).toContain("Previous")
+    expect(JSON.parse(await readFile(compiler.data(root, "rollback"), "utf8"))).toEqual({ value: 1 })
+    expect(restored?.warning).toBeUndefined()
+    expect((await reopened.draft(next)).data).toEqual({ value: 2 })
+    expect((await new CanvasCompiler(output).restore(root, "rollback"))?.revision).toBe(first.revision)
+    const last = await reopened.create(root, "rollback", "export default function Report() { return <p>Newest</p> }", {
+      value: 3,
+    })
+    await reopened.commit(last)
+    await reopened.rollback(next, () => true)
+    expect((await reopened.restore(root, "rollback"))?.revision).toBe(last.revision)
+    await reopened.rollback(last, () => false)
+    expect((await reopened.restore(root, "rollback"))?.revision).toBe(last.revision)
+  })
+
+  it.each(["saved", "unsaved"])(
+    "preserves %s manual edits while rolling back the authoritative canvas",
+    async (kind) => {
+      const root = await temp()
+      const compiler = new CanvasCompiler(join(root, "bundles"))
+      const first = await compiler.create(
+        root,
+        "manual",
+        "export default function Report() { return <p>Earlier</p> }",
+        { value: 1 },
+      )
+      await compiler.commit(first)
+      const source = "export default function Report() { return <p>Later</p> }"
+      const next = await compiler.create(root, "manual", source, { value: 2 })
+      await compiler.commit(next)
+      if (kind === "saved") await writeFile(next.path, "manual source edits")
+      const restored = await compiler.rollback(
+        next,
+        () => true,
+        () => kind !== "unsaved",
+      )
+      expect(restored?.revision).toBe(first.revision)
+      expect(restored?.warning).toContain("Edited source/data files were retained")
+      expect(await readFile(next.path, "utf8")).toBe(kind === "saved" ? "manual source edits" : source)
+      expect(JSON.parse(await readFile(compiler.data(root, "manual"), "utf8"))).toEqual({ value: 2 })
+    },
+  )
+
+  it("rejects malformed saved records without overwriting the bundle or editable artifact", async () => {
+    const root = await temp()
+    const compiler = new CanvasCompiler(join(root, "bundles"))
+    const source = "export default function Report() { return <p>Saved</p> }"
+    const first = await compiler.create(root, "validated", source, { value: 1 })
+    await compiler.commit(first)
+    const manifest = join(dirname(first.bundle!), "validated.current.json")
+    const raw = await readFile(manifest, "utf8")
+    const saved = JSON.parse(raw)
+    const invalid = [
+      "",
+      "{",
+      "null",
+      "[]",
+      ...[
+        { ...saved, code: "" },
+        ...[
+          { data: null },
+          { data: [] },
+          { data: "invalid" },
+          { version: 0 },
+          { version: 1.5 },
+          { version: Number.MAX_SAFE_INTEGER + 1 },
+          { revision: "-".repeat(36) },
+          { name: "different" },
+          { status: "error" },
+        ].map((build) => ({ ...saved, build: { ...saved.build, ...build } })),
+      ].map((value) => JSON.stringify(value)),
+    ]
+    await writeFile(first.bundle!, "bundle sentinel")
+    for (const value of invalid) {
+      await writeFile(manifest, value)
+      await expect(compiler.restore(root, "validated")).rejects.toThrow("Saved canvas revision")
+      expect(await readFile(manifest, "utf8")).toBe(value)
+      expect(await readFile(first.bundle!, "utf8")).toBe("bundle sentinel")
+      expect(await readFile(first.path, "utf8")).toBe(source)
+    }
+    await writeFile(
+      manifest,
+      JSON.stringify({
+        ...saved,
+        build: { ...saved.build, path: "untrusted", bundle: "untrusted", error: "obsolete" },
+      }),
+    )
+    const restored = await compiler.restore(root, "validated")
+    expect(restored?.path).toBe(first.path)
+    expect(restored?.bundle).toBe(first.bundle)
+    expect(restored?.error).toBeUndefined()
+    expect(await readFile(first.bundle!, "utf8")).toBe(saved.code)
+  })
+
+  it("preserves a rendered revision across failed compilation and a compiler restart", async () => {
+    const root = await temp()
+    const output = join(root, "bundles")
+    const compiler = new CanvasCompiler(output)
+    const source = `export default function Report() { return <p>Saved result</p> }`
+    const first = await compiler.create(root, "durable", source, { value: 1 })
+    await compiler.commit(first)
+    const broken = await compiler.update(root, "durable", {
+      source: "export default function Broken( {",
+      data: { value: 2 },
+    })
+    expect(broken.status).toBe("error")
+    expect(await readFile(first.path, "utf8")).toBe(source)
+    expect(JSON.parse(await readFile(compiler.data(root, "durable"), "utf8"))).toEqual({ value: 1 })
+    const restored = await new CanvasCompiler(output).restore(root, "durable")
+    expect(restored?.revision).toBe(first.revision)
+    expect(restored?.data).toEqual({ value: 1 })
+    expect(await readFile(restored!.bundle!, "utf8")).toContain("Saved result")
+  })
+
+  it("does not promote runtime failures or superseded candidates", async () => {
+    const root = await temp()
+    const compiler = new CanvasCompiler(join(root, "bundles"))
+    const first = await compiler.create(root, "guarded", `export default function Report() { return <p>First</p> }`, {})
+    await compiler.commit(first)
+    const next = await compiler.update(root, "guarded", {
+      source: `export default function Report() { throw new Error("runtime"); }`,
+    })
+    await expect(compiler.commit({ ...next, status: "error", error: "runtime" })).rejects.toThrow()
+    expect((await compiler.restore(root, "guarded"))?.revision).toBe(first.revision)
+    const last = await compiler.update(root, "guarded", {
+      source: `export default function Report() { return <p>Last</p> }`,
+    })
+    await expect(compiler.commit(next)).rejects.toThrow("superseded")
+    await compiler.commit(last)
+    expect((await compiler.restore(root, "guarded"))?.revision).toBe(last.revision)
+  })
+
   it("renders a table from host-passed data", async () => {
     const root = await temp()
     const compiler = new CanvasCompiler(join(root, "bundles"))
@@ -71,6 +243,7 @@ export default function Report({ data }: Props) {
       { value: 1 },
     )
     const rendered: CanvasBuild[] = []
+    await compiler.commit(first)
     const refresh = new CanvasRefresh(compiler, async (build) => {
       rendered.push(build)
       return build

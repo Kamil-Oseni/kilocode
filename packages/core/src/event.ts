@@ -123,6 +123,8 @@ export interface PublishOptions {
   readonly location?: Location.Ref
   /** Local operational projection committed atomically with a new durable event. Not replayed or serialized. */
   readonly commit?: (seq: number) => Effect.Effect<void>
+  /** Validate local preconditions before projection, in the durable event transaction. Not replayed or serialized. */ // kilocode_change
+  readonly prepare?: (seq: number) => Effect.Effect<void> // kilocode_change
 }
 
 export interface Interface {
@@ -214,6 +216,7 @@ export const layerWith = (options?: LayerOptions) =>
           readonly strictOwner?: boolean
         },
         commit?: (seq: number) => Effect.Effect<void>,
+        prepare?: PublishOptions["prepare"], // kilocode_change
       ) {
         return Effect.gen(function* () {
           const durable = definition?.durable
@@ -320,6 +323,7 @@ export const layerWith = (options?: LayerOptions) =>
                             ...event,
                             durable: { aggregateID, seq, version: durable.version },
                           } as Payload
+                          if (prepare) yield* prepare(seq) // kilocode_change
                           for (const projector of list) {
                             yield* projector(committed)
                           }
@@ -369,9 +373,18 @@ export const layerWith = (options?: LayerOptions) =>
         })
       }
 
-      function publishEvent<D extends Definition>(definition: D, event: Payload<D>, commit?: PublishOptions["commit"]) {
+      // kilocode_change start - local validation precedes durable projection
+      function publishEvent<D extends Definition>(
+        definition: D,
+        event: Payload<D>,
+        commit?: PublishOptions["commit"],
+        prepare?: PublishOptions["prepare"],
+      ) {
+        // kilocode_change end
         return Effect.gen(function* () {
-          if (!definition?.durable && commit)
+          // kilocode_change start
+          if (!definition?.durable && (commit || prepare))
+            // kilocode_change end
             return yield* Effect.die(
               new InvalidDurableEventError({
                 type: event.type,
@@ -379,7 +392,7 @@ export const layerWith = (options?: LayerOptions) =>
               }),
             )
           if (definition?.durable) {
-            const committed = yield* commitDurableEvent(definition, event as Payload, undefined, commit)
+            const committed = yield* commitDurableEvent(definition, event as Payload, undefined, commit, prepare) // kilocode_change
             if (committed) {
               event = {
                 ...event,
@@ -437,6 +450,7 @@ export const layerWith = (options?: LayerOptions) =>
               data,
             } as Payload<D>,
             options?.commit,
+            options?.prepare, // kilocode_change
           )
         })
       }

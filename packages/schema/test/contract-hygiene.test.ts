@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { fileURLToPath } from "node:url" // kilocode_change - URL pathnames are not Windows filesystem paths
 import { Schema } from "effect"
 import { Agent } from "../src/agent"
 import { FileSystem } from "../src/filesystem"
@@ -54,9 +55,11 @@ describe("contract hygiene", () => {
   })
 
   test("current source avoids Any and mutable contract wrappers", async () => {
-    const files = [...new Bun.Glob("*.ts").scanSync(new URL("../src", import.meta.url).pathname)].filter(
+    // kilocode_change start - native Windows path, not a file URL pathname
+    const files = [...new Bun.Glob("*.ts").scanSync(fileURLToPath(new URL("../src", import.meta.url)))].filter(
       (file) => !file.endsWith("-v1.ts"),
     )
+    // kilocode_change end
     const source = await Promise.all(
       files.map((file) => Bun.file(new URL(`../src/${file}`, import.meta.url)).text()),
     ).then((values) => values.join("\n"))

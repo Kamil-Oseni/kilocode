@@ -1,5 +1,6 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer, Context, Schema } from "effect"
+import { ReviewGate } from "@/kilocode/session/review-gate" // kilocode_change - coordinate review and session deletion
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Config } from "@/config/config" // kilocode_change
@@ -12,6 +13,9 @@ import { SessionRunState } from "./run-state"
 import { SessionSummary } from "./summary"
 import { KiloSessionRevert } from "@/kilocode/session/revert" // kilocode_change
 import { RayaRevertNote } from "@/kilocode/session/revert-note" // kilocode_change
+import { ReviewConflict, verify, workspace } from "@/kilocode/session/review-revision" // kilocode_change - reject stale review actions
+import { boundaries } from "@/kilocode/session/review-boundaries" // kilocode_change - honor child-session acceptance during parent Undo
+import { receipt } from "@/kilocode/session/review-receipt" // kilocode_change - durable review retries
 
 export const RevertInput = Schema.Struct({
   sessionID: SessionID,
@@ -26,15 +30,19 @@ export interface Interface {
   // kilocode_change start - files-only discard: undo session file edits (all, or a
   // specific subset for per-edit Undo), keep the conversation
   readonly discardChanges: (input: {
+    requestID?: string
     sessionID: SessionID
     files?: readonly string[]
-  }) => Effect.Effect<Session.Info, Session.BusyError>
+    expected?: Readonly<Record<string, string>>
+  }) => Effect.Effect<Session.Info, Session.BusyError | ReviewConflict>
   // raya_change - Keep / Keep all: record a "kept boundary" so a later Undo only
   // rewinds edits made after this point, never the work the user just accepted.
   readonly keepChanges: (input: {
+    requestID?: string
     sessionID: SessionID
     files?: readonly string[]
-  }) => Effect.Effect<Session.Info, Session.BusyError>
+    expected?: Readonly<Record<string, string>>
+  }) => Effect.Effect<Session.Info, Session.BusyError | ReviewConflict>
   // kilocode_change end
   readonly cleanup: (session: Session.Info) => Effect.Effect<void>
 }
@@ -51,6 +59,7 @@ const layer = Layer.effect(
     const summary = yield* SessionSummary.Service
     const state = yield* SessionRunState.Service
     const config = yield* Config.Service // kilocode_change
+    const gate = yield* ReviewGate.Service // kilocode_change - shared with session deletion
 
     const revert = Effect.fn("SessionRevert.revert")(function* (input: RevertInput) {
       yield* state.assertNotBusy(input.sessionID)
@@ -170,12 +179,13 @@ const layer = Layer.effect(
     // turn (agent=auto → @coder/@designer/@generalist) makes its file edits inside
     // child sessions, which is where the "patch" parts land, so files-only
     // discard/keep must see them to match the workspace-wide review diff.
-    const gather = Effect.fn("SessionRevert.gather")(function* (sessionID: SessionID) {
+    const gather = Effect.fn("SessionRevert.gather")(function* (sessionID: SessionID, idle = false) {
       const all: SessionV1.WithParts[] = []
       const queue: SessionID[] = [sessionID]
       while (queue.length > 0) {
         const id = queue.shift()
         if (!id) break
+        if (idle) yield* state.assertNotBusy(id)
         const msgs = yield* sessions.messages({ sessionID: id }).pipe(Effect.orDie)
         for (const msg of msgs) all.push(msg)
         const kids = yield* sessions.children(id)
@@ -199,11 +209,22 @@ const layer = Layer.effect(
     const keepChanges = Effect.fn("SessionRevert.keepChanges")(function* (input: {
       sessionID: SessionID
       files?: readonly string[]
+      expected?: Readonly<Record<string, string>>
     }) {
       yield* state.assertNotBusy(input.sessionID)
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
-      const all = yield* gather(input.sessionID)
-      const want = input.files ? new Set(input.files.map((file) => file.replaceAll("\\", "/"))) : undefined
+      const files = input.expected
+        ? yield* verify(
+            yield* summary.diff({ sessionID: input.sessionID }),
+            input.expected,
+            session.directory,
+            input.files,
+          )
+        : input.files
+      if (input.expected && files?.length === 0) return session
+      const all = yield* gather(input.sessionID, !!input.expected)
+      if (input.expected) yield* workspace(snap, all, files ?? [], session.directory)
+      const want = files ? new Set(files.map((file) => file.replaceAll("\\", "/"))) : undefined
       const latest: Record<string, string> = {}
       for (const msg of all)
         for (const part of msg.parts)
@@ -214,12 +235,15 @@ const layer = Layer.effect(
               latest[norm] = msg.info.id // ascending order, so this settles on the max
             }
       if (Object.keys(latest).length === 0) return session
-      const prev = yield* storage
-        .read<Record<string, string>>(["session_kept", input.sessionID])
-        .pipe(Effect.catch(() => Effect.succeed({} as Record<string, string>)))
+      const prev = yield* storage.read<unknown>(["session_kept", input.sessionID]).pipe(
+        Effect.catchTag("NotFoundError", () => Effect.succeed({})),
+        Effect.flatMap(Schema.decodeUnknownEffect(Schema.Record(Schema.String, Schema.String))),
+        Effect.orDie,
+      )
       const merged = { ...prev }
-      for (const [file, id] of Object.entries(latest)) merged[file] = !merged[file] || id > merged[file]! ? id : merged[file]!
-      yield* storage.write(["session_kept", input.sessionID], merged).pipe(Effect.ignore)
+      for (const [file, id] of Object.entries(latest))
+        merged[file] = !merged[file] || id > merged[file]! ? id : merged[file]!
+      yield* storage.write(["session_kept", input.sessionID], merged).pipe(Effect.orDie)
       return session
     })
 
@@ -229,14 +253,30 @@ const layer = Layer.effect(
     const discardChanges = Effect.fn("SessionRevert.discardChanges")(function* (input: {
       sessionID: SessionID
       files?: readonly string[]
+      expected?: Readonly<Record<string, string>>
     }) {
       yield* state.assertNotBusy(input.sessionID)
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
-      const all = yield* gather(input.sessionID)
-      const kept = yield* storage
-        .read<Record<string, string>>(["session_kept", input.sessionID])
-        .pipe(Effect.catch(() => Effect.succeed({} as Record<string, string>)))
-      const result = yield* KiloSessionRevert.discardAll(snap, all, input.files ? [...input.files] : undefined, kept)
+      const files = input.expected
+        ? yield* verify(
+            yield* summary.diff({ sessionID: input.sessionID }),
+            input.expected,
+            session.directory,
+            input.files,
+          )
+        : input.files
+      if (input.expected && files?.length === 0) return session
+      const all = yield* gather(input.sessionID, !!input.expected)
+      const expected = input.expected ? yield* workspace(snap, all, files ?? [], session.directory) : undefined
+      const kept = yield* boundaries(storage, sessions, input.sessionID)
+      const result = yield* KiloSessionRevert.discardAll(
+        snap,
+        all,
+        files ? [...files] : undefined,
+        kept,
+        !!input.files?.length,
+        expected,
+      )
       if (result.files.length === 0) return session
       // kilocode_change - surface the undo to the model on its next turn so it re-reads
       // instead of trusting the now-stale edits still shown in the conversation history.
@@ -244,7 +284,7 @@ const layer = Layer.effect(
       // Discarding everything clears the review UI outright; a per-file undo leaves
       // other edits intact, so let the client re-poll the remaining diff instead.
       if (!input.files || input.files.length === 0) {
-        yield* storage.write(["session_diff", input.sessionID], []).pipe(Effect.ignore)
+        yield* storage.write(["session_diff", input.sessionID], []).pipe(Effect.orDie)
         yield* events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: [] })
       } else {
         // Per-file undo must drop that file from the stored review diff so chat
@@ -254,7 +294,7 @@ const layer = Layer.effect(
           .pipe(Effect.catch(() => Effect.succeed([] as Snapshot.FileDiff[])))
         const gone = new Set(result.files.map((file) => file.replaceAll("\\", "/")))
         const left = raw.filter((item) => !gone.has((item.file ?? "").replaceAll("\\", "/")))
-        yield* storage.write(["session_diff", input.sessionID], left).pipe(Effect.ignore)
+        yield* storage.write(["session_diff", input.sessionID], left).pipe(Effect.orDie)
         yield* events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: left })
       }
       // A prior partial revert boundary would otherwise keep a redo affordance alive.
@@ -305,7 +345,15 @@ const layer = Layer.effect(
       yield* sessions.clearRevert(sessionID)
     })
 
-    return Service.of({ revert, unrevert, discardChanges, keepChanges, cleanup }) // kilocode_change - discard/keep boundary
+    // kilocode_change start - read/modify/write kept boundaries and workspace restores must not overlap
+    return Service.of({
+      revert: (input) => gate.withPermits(1)(revert(input)),
+      unrevert: (input) => gate.withPermits(1)(unrevert(input)),
+      discardChanges: (input) => gate.withPermits(1)(receipt(storage, input, "undo", discardChanges(input), sessions.get(input.sessionID).pipe(Effect.orDie))),
+      keepChanges: (input) => gate.withPermits(1)(receipt(storage, input, "keep", keepChanges(input), sessions.get(input.sessionID).pipe(Effect.orDie))),
+      cleanup: (session) => gate.withPermits(1)(cleanup(session)),
+    })
+    // kilocode_change end
   }),
 )
 
@@ -320,6 +368,7 @@ export const node = LayerNode.make({
     SessionSummary.node,
     SessionRunState.node,
     Config.node, // kilocode_change
+    ReviewGate.node, // kilocode_change
   ],
 })
 

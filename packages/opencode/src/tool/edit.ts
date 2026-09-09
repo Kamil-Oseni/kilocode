@@ -23,6 +23,7 @@ import { ConfigValidation } from "../kilocode/config-validation" // kilocode_cha
 import * as EncodedIO from "../kilocode/tool/encoded-io" // kilocode_change
 import * as Encoding from "../kilocode/encoding" // kilocode_change
 import { assertMutablePath } from "../kilocode/agent-manager/protection" // kilocode_change
+import * as Artifact from "@/kilocode/goal/artifact" // kilocode_change
 
 const MAX_DIFF_CONTENT = 500_000 // kilocode_change
 
@@ -230,6 +231,7 @@ export const EditTool = Tool.define(
           return {
             metadata: {
               diagnostics: filterDiagnostics(diagnostics, [normalizedFilePath]), // kilocode_change
+              rayaRevision: yield* Artifact.capture(afs, filePath), // kilocode_change
               diff,
               filediff, // kilocode_change
             },

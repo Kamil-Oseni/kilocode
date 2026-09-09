@@ -1,12 +1,19 @@
 // raya_change - Milestone A goal HTTP persistence contract
 import { afterEach, describe, expect, test } from "bun:test"
-import { ConfigProvider, Layer } from "effect"
+import { ConfigProvider, Effect, Layer } from "effect"
 import { HttpRouter } from "effect/unstable/http"
 import path from "node:path"
 import * as Log from "@opencode-ai/core/util/log"
 import * as HttpApiServer from "@/server/routes/instance/httpapi/server"
 import { disposeAllInstances, tmpdir } from "../../fixture/fixture"
 import { resetDatabase } from "../../fixture/db"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Git } from "@/git"
+import { Storage } from "@/storage/storage"
+import { SessionID, MessageID } from "@/session/schema"
+import { receipts } from "@/kilocode/goal/stop-receipt"
 
 void Log.init({ print: false })
 
@@ -31,6 +38,149 @@ afterEach(async () => {
 })
 
 describe("goal HTTP API", () => {
+  test("stop history preserves requested and observed delegated attempts through the HTTP schema", async () => {
+    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    const handler = app()
+    const request = (method: string, route: string, body?: unknown) =>
+      handler(
+        new Request(new URL(route, "http://localhost"), {
+          method,
+          headers: { "content-type": "application/json", "x-kilo-directory": tmp.path },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        }),
+        HttpApiServer.context,
+      )
+    const created = await request("POST", "/session", {})
+    const session = (await created.json()) as { id: string }
+    const receipt = {
+      sessionID: SessionID.make(session.id),
+      intent: "saved-attempts",
+      phase: "cleared" as const,
+      at: 1,
+      operations: [
+        { id: "pending", jobID: "child", revision: "r1", at: 1, phase: "requested" as const },
+        {
+          id: "observed",
+          jobID: "shared",
+          revision: "r2",
+          messageID: MessageID.ascending(),
+          at: 1,
+          phase: "observed" as const,
+          observedAt: 2,
+          result: "accepted" as const,
+        },
+      ],
+    }
+    await Effect.runPromise(
+      Storage.Service.use((storage) => receipts(storage).save(receipt)).pipe(
+        Effect.provide(
+          LayerNode.compile(LayerNode.group([Storage.node, FSUtil.node, Git.node, CrossSpawnSpawner.node])),
+        ),
+      ),
+    )
+    const route = `/session/${session.id}/goal/stop`
+    const loaded = await request("GET", route)
+    expect(loaded.status).toBe(200)
+    expect(await loaded.json()).toEqual(receipt)
+    const replay = await request("POST", route, { expectedIntent: receipt.intent })
+    expect(replay.status).toBe(200)
+    expect(await replay.json()).toEqual(receipt)
+  }, 30_000)
+
+  test("conditionally saves a combined goal edit and rejects stale or invalid requests", async () => {
+    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    const handler = app()
+    const request = (method: string, route: string, body?: unknown) =>
+      handler(
+        new Request(new URL(route, "http://localhost"), {
+          method,
+          headers: { "content-type": "application/json", "x-kilo-directory": tmp.path },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        }),
+        HttpApiServer.context,
+      )
+    const session = await request("POST", "/session", {})
+    expect(session.status).toBe(200)
+    const data = (await session.json()) as { id: string }
+    const route = `/session/${data.id}/goal`
+    const created = await request("POST", route, { objective: "Original direction" })
+    expect(created.status).toBe(200)
+    const original = (await created.json()) as { intent: string }
+    const response = await request("PATCH", route, {
+      objective: "Reviewed direction",
+      status: "paused",
+      expectedIntent: original.intent,
+    })
+    expect(response.status).toBe(200)
+    const saved = (await response.json()) as { intent: string; objective: string; status: string }
+    expect(saved.objective).toBe("Reviewed direction")
+    expect(saved.status).toBe("paused")
+    expect(saved.intent).not.toBe(original.intent)
+    const persisted = await (await request("GET", route)).json()
+    expect(persisted).toMatchObject({ objective: saved.objective, status: saved.status, intent: saved.intent })
+    for (const patch of [
+      { objective: "Stale edit", status: "active", expectedIntent: original.intent },
+      { objective: "Stale no-version edit", expectedIntent: "unset" },
+    ]) {
+      expect((await request("PATCH", route, patch)).status).toBe(409)
+      expect(await (await request("GET", route)).json()).toEqual(persisted)
+    }
+    expect(
+      (await request("PATCH", route, { objective: "  ", status: "active", expectedIntent: saved.intent })).status,
+    ).toBe(400)
+    expect(await (await request("GET", route)).json()).toEqual(persisted)
+    const updated = await request("PATCH", route, { objective: "New paused direction", expectedIntent: saved.intent })
+    expect(updated.status).toBe(200)
+    expect(await updated.json()).toMatchObject({ objective: "New paused direction", status: "paused" })
+    const criteria = [{ id: "result", description: "Working result", verification: "Run checks", required: false }]
+    const basis = (await (await request("GET", route)).json()) as { intent: string }
+    expect((await request("PATCH", route, { criteria })).status).toBe(400)
+    expect((await request("PATCH", route, { criteria: [], expectedIntent: basis.intent })).status).toBe(400)
+    expect(
+      (
+        await request("PATCH", route, {
+          criteria: [{ ...criteria[0], required: "false" }],
+          expectedIntent: basis.intent,
+        })
+      ).status,
+    ).toBe(400)
+    const criteriaResponse = await request("PATCH", route, { criteria, expectedIntent: basis.intent })
+    expect(criteriaResponse.status).toBe(200)
+    expect(await criteriaResponse.json()).toMatchObject({
+      criteria,
+      objective: "New paused direction",
+      status: "paused",
+    })
+    expect(await (await request("GET", route)).json()).toMatchObject({
+      criteria,
+      revisions: [
+        { objective: "Original direction", source: "control" },
+        { objective: "Reviewed direction", source: "control" },
+        { objective: "New paused direction", source: "control" },
+      ],
+    })
+    expect((await request("PATCH", route, { criteria, expectedIntent: basis.intent })).status).toBe(409)
+    const latest = (await (await request("GET", route)).json()) as { intent: string }
+    for (const intent of [original.intent, saved.intent, "unset"]) {
+      expect((await request("DELETE", `${route}?expectedIntent=${encodeURIComponent(intent)}`)).status).toBe(409)
+      expect(await (await request("GET", route)).json()).toEqual(latest)
+    }
+    expect((await request("DELETE", `${route}?expectedIntent=`)).status).toBe(400)
+    expect(await (await request("GET", route)).json()).toEqual(latest)
+    expect((await request("POST", `${route}/stop`, { expectedIntent: "" })).status).toBe(400)
+    expect((await request("POST", `${route}/stop`, { expectedIntent: "stale" })).status).toBe(409)
+    expect((await request("GET", `${route}/stop`)).status).toBe(404)
+    const cleared = await request("POST", `${route}/stop`, { expectedIntent: latest.intent })
+    expect(cleared.status).toBe(200)
+    const receipt = await cleared.json()
+    expect(receipt).toMatchObject({ intent: latest.intent, phase: "finished", interrupted: false })
+    expect(receipt).toMatchObject({ background: { status: "checked", at: expect.any(Number), jobs: [] } })
+    expect(await (await request("GET", `${route}/stop`)).json()).toEqual(receipt)
+    expect(await (await request("POST", `${route}/stop`, { expectedIntent: latest.intent })).json()).toEqual(receipt)
+    expect((await request("GET", route)).status).toBe(404)
+    expect((await request("DELETE", `${route}?expectedIntent=${encodeURIComponent(latest.intent)}`)).status).toBe(200)
+  }, 30_000)
+
   test("creates, reloads, updates, and clears session goal state", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
     const request = (handler: ReturnType<typeof app>, method: string, route: string, body?: unknown) =>

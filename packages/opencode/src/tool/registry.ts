@@ -3,6 +3,7 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder" // ki
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { PlanExitTool } from "./plan"
 import { Session } from "@/session/session"
+import { SessionRunState } from "@/session/run-state" // kilocode_change
 import { QuestionTool } from "./question"
 // kilocode_change start
 import { SuggestTool } from "../kilocode/suggestion/tool"
@@ -126,6 +127,7 @@ const layer = Layer.effect(
     const flags = yield* RuntimeFlags.Service
     const mcp = yield* MCP.Service
     const sessions = yield* Session.Service
+    const runs = yield* SessionRunState.Service // kilocode_change
     const storage = Option.getOrUndefined(yield* Effect.serviceOption(Storage.Service)) // kilocode_change // raya_change - Milestone A goal storage
 
     const invalid = yield* InvalidTool
@@ -156,7 +158,7 @@ const layer = Layer.effect(
     const kiloToolInfos = yield* KiloToolRegistry.infos(
       manager,
       notebook,
-      storage ? { storage, sessions } : undefined,
+      storage ? { storage, sessions, runs } : undefined,
       browser, // kilocode_change // raya_change - Milestone F browser tools
       canvas, // kilocode_change // raya_change - Milestone E canvas tools
     ).pipe(Effect.provide(MemoryService.layer)) // kilocode_change // raya_change - Milestone A goal tools
@@ -527,6 +529,7 @@ export const node = LayerNode.suspend(() =>
       Agent.node,
       Skill.node,
       Session.node,
+      SessionRunState.node, // kilocode_change
       BackgroundJob.node,
       Provider.node,
       LSP.node,

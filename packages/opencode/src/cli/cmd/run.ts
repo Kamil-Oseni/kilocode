@@ -1038,7 +1038,8 @@ export const RunCommand = effectCmd({
             console.error(e)
             process.exitCode = 1
           })
-          async function finish() {
+          async function finish(failure?: unknown) { // kilocode_change
+            if (failure) process.exitCode = 1 // kilocode_change - use the terminal response for attached runs
             if (args.attach) return
             const error = await completed
             if (error) process.exitCode = 1
@@ -1069,7 +1070,7 @@ export const RunCommand = effectCmd({
               process.exitCode = 1
               return
             }
-            await finish()
+            await finish(result.data?.info.error) // kilocode_change
             return
           }
 
@@ -1086,7 +1087,7 @@ export const RunCommand = effectCmd({
             process.exitCode = 1
             return
           }
-          await finish()
+          await finish(result.data?.info.error) // kilocode_change
           return
         }
 

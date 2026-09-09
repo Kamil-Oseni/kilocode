@@ -4,6 +4,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { Effect } from "effect"
 import { sql } from "drizzle-orm"
 import { effectCmd } from "../effect-cmd"
+import { BackupsCommand } from "../../kilocode/cli/cmd/db-backups" // kilocode_change - recover pre-migration snapshots
 
 const QueryCommand = effectCmd({
   command: "$0 [query]",
@@ -57,7 +58,7 @@ export const DbCommand = effectCmd({
   describe: "database tools",
   instance: false,
   builder: (yargs: Argv) => {
-    return yargs.command(QueryCommand).command(PathCommand).demandCommand()
+    return yargs.command(QueryCommand).command(PathCommand).command(BackupsCommand).demandCommand() // kilocode_change
   },
   handler: Effect.fn("Cli.db")(function* () {}),
 })

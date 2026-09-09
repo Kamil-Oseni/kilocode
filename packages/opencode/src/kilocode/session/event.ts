@@ -19,6 +19,8 @@ export const KiloSessionEvent = {
     Schema.Struct({
       sessionID: SessionID,
       parentID: Schema.optional(SessionID),
+      messageID: Schema.optional(MessageID),
+      goalIntent: Schema.optional(Schema.String),
       reason: CloseReason,
     }),
   ),

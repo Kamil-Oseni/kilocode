@@ -343,8 +343,8 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
               yield* events.publish(Session.Event.Error, {
                 sessionID: ctx.params.sessionID,
                 error: busy // kilocode_change
-                    ? new NamedError.Unknown({ message: busyMessage }).toObject() // kilocode_change
-                    : new NamedError.Unknown({ message: Cause.pretty(cause) }).toObject(), // kilocode_change
+                  ? new NamedError.Unknown({ message: busyMessage }).toObject() // kilocode_change
+                  : new NamedError.Unknown({ message: Cause.pretty(cause) }).toObject(), // kilocode_change
               })
             })
           }),
@@ -390,9 +390,9 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       payload: typeof DiscardChangesPayload.Type
     }) {
       yield* requireSession(ctx.params.sessionID)
-      return yield* SessionError.mapBusy(
-        revertSvc.discardChanges({ sessionID: ctx.params.sessionID, files: ctx.payload.files }),
-      )
+      return yield* revertSvc
+        .discardChanges({ sessionID: ctx.params.sessionID, files: ctx.payload.files, expected: ctx.payload.expected, requestID: ctx.payload.requestID })
+        .pipe(Effect.catchTag("SessionBusyError", (error) => SessionError.mapBusy(Effect.fail(error))))
     })
     // raya_change - Keep / Keep all records the kept boundary for undo stepping
     const keepChanges = Effect.fn("SessionHttpApi.keepChanges")(function* (ctx: {
@@ -400,9 +400,9 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       payload: typeof DiscardChangesPayload.Type
     }) {
       yield* requireSession(ctx.params.sessionID)
-      return yield* SessionError.mapBusy(
-        revertSvc.keepChanges({ sessionID: ctx.params.sessionID, files: ctx.payload.files }),
-      )
+      return yield* revertSvc
+        .keepChanges({ sessionID: ctx.params.sessionID, files: ctx.payload.files, expected: ctx.payload.expected, requestID: ctx.payload.requestID })
+        .pipe(Effect.catchTag("SessionBusyError", (error) => SessionError.mapBusy(Effect.fail(error))))
     })
     // kilocode_change end
 

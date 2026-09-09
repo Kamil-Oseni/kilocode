@@ -48,6 +48,12 @@ const mockVscode = {
     workspaceFolders: [{ uri: { fsPath: "/repo" } }],
     textDocuments: [] as Array<unknown>,
     notebookDocuments: [] as Array<unknown>,
+    createFileSystemWatcher: () => ({
+      onDidChange: () => ({ dispose: noop }),
+      onDidCreate: () => ({ dispose: noop }),
+      onDidDelete: () => ({ dispose: noop }),
+      dispose: noop,
+    }),
     onDidOpenTextDocument: () => ({ dispose: noop }),
     onDidChangeTextDocument: () => ({ dispose: noop }),
     onDidSaveTextDocument: () => ({ dispose: noop }),
@@ -78,7 +84,17 @@ const mockVscode = {
   ThemeColor: class {
     constructor(public id: string) {}
   },
+  OverviewRulerLane: { Left: 1, Center: 2, Right: 4, Full: 7 },
+  CodeLens: class {
+    constructor(
+      public range: unknown,
+      public command?: unknown,
+    ) {}
+  },
   window: {
+    createTextEditorDecorationType: () => ({ dispose: noop }),
+    onDidChangeVisibleTextEditors: () => ({ dispose: noop }),
+    onDidChangeActiveTextEditor: () => ({ dispose: noop }),
     activeTextEditor: undefined,
     state: { focused: true },
     onDidChangeWindowState: () => ({ dispose: noop }),
@@ -91,6 +107,7 @@ const mockVscode = {
     showQuickPick: async () => undefined,
     showErrorMessage: async () => undefined,
     showWarningMessage: async () => undefined,
+    showInputBox: async () => undefined,
     createTerminal: () => ({ show: noop, sendText: noop, dispose: noop }),
     createOutputChannel: () => ({
       name: "",
@@ -117,6 +134,7 @@ const mockVscode = {
     executeCommand: async () => {},
   },
   languages: {
+    registerCodeLensProvider: () => ({ dispose: noop }),
     getDiagnostics: () => [],
     registerCodeActionsProvider: () => ({ dispose: noop }),
   },
@@ -184,6 +202,12 @@ const mockVscode = {
     constructor(public label: string) {}
   },
   TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+  RelativePattern: class {
+    constructor(
+      public base: unknown,
+      public pattern: string,
+    ) {}
+  },
   ViewColumn: { One: 1, Two: 2, Three: 3 },
 }
 

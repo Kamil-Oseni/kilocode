@@ -294,6 +294,8 @@ describe("tool.task", () => {
         stepCap: 4,
       })
       expect(seen?.agent).toBe("explore")
+      expect(result.metadata).toMatchObject({ childMessageID: seen?.messageID }) // kilocode_change - binds the actual child input
+      expect(typeof result.metadata.childMessageID).toBe("string") // kilocode_change
       const part = seen?.parts[0]
       expect(part?.type).toBe("text")
       if (part?.type !== "text") throw new Error("expected structured text brief")
@@ -750,12 +752,12 @@ describe("tool.task", () => {
       const tool = yield* TaskTool
       const def = yield* tool.init()
       const ready = defer<SessionPrompt.PromptInput>()
-      const cancelled = defer<SessionID>()
+      const cancelled = defer<{ sessionID: SessionID; messageID?: MessageID }>() // kilocode_change
       const abort = new AbortController()
       const promptOps: TaskPromptOps = {
-        cancel: (sessionID) =>
+        cancel: (sessionID, messageID) => // kilocode_change
           Effect.sync(() => {
-            cancelled.resolve(sessionID)
+            cancelled.resolve({ sessionID, messageID }) // kilocode_change
           }),
         resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
         prompt: (input) =>
@@ -787,7 +789,9 @@ describe("tool.task", () => {
 
       const input = yield* Effect.promise(() => ready.promise)
       abort.abort()
-      expect(yield* Effect.promise(() => cancelled.promise)).toBe(input.sessionID)
+      // kilocode_change start - cleanup names the same child input that was executed
+      expect(yield* Effect.promise(() => cancelled.promise)).toEqual({ sessionID: input.sessionID, messageID: input.messageID })
+      // kilocode_change end
 
       const exit = yield* Fiber.await(fiber)
       expect(Exit.isSuccess(exit)).toBe(true)
@@ -1250,7 +1254,8 @@ describe("tool.task", () => {
     }),
   )
 
-  background.instance("background task completion waits for running updates", () =>
+  for (const mode of ["completed", "cancelled"]) // kilocode_change - exercise normal and individually cancelled initial invocations
+  background.instance(`background task ${mode} initial invocation preserves running updates`, () => // kilocode_change
     Effect.gen(function* () {
       const jobs = yield* BackgroundJob.Service
       const { chat, assistant } = yield* seed()
@@ -1260,15 +1265,19 @@ describe("tool.task", () => {
       const second = defer<void>()
       const updated = defer<SessionPrompt.PromptInput>()
       const injected = defer<SessionPrompt.PromptInput>()
+      const received: SessionPrompt.PromptInput[] = [] // kilocode_change - verify recorded child identities against executed inputs
+      const cancelled: { sessionID: SessionID; messageID?: MessageID }[] = [] // kilocode_change
       let prompts = 0
       const promptOps: TaskPromptOps = {
         ...stubOps(),
+        cancel: (sessionID, messageID) => Effect.sync(() => { cancelled.push({ sessionID, messageID }) }), // kilocode_change
         prompt: (input) => {
           if (input.sessionID === chat.id) {
             injected.resolve(input)
             return Effect.succeed(reply(input, "done"))
           }
           prompts++
+          received.push(input) // kilocode_change
           if (prompts === 1) return Effect.promise(() => first.promise).pipe(Effect.as(reply(input, "first done")))
           updated.resolve(input)
           return Effect.promise(() => second.promise).pipe(Effect.as(reply(input, "second done")))
@@ -1280,6 +1289,7 @@ describe("tool.task", () => {
         agent: "build",
         abort: new AbortController().signal,
         extra: { promptOps },
+        callID: "first", // kilocode_change - identify each task admission independently
         messages: [],
         metadata: () => Effect.void,
         ask: () => Effect.void,
@@ -1294,6 +1304,7 @@ describe("tool.task", () => {
         },
         context,
       )
+      const observed = yield* jobs.get(started.metadata.sessionId) // kilocode_change - capture before extension admission
       const result = yield* def.execute(
         {
           description: "add investigation scope",
@@ -1301,16 +1312,40 @@ describe("tool.task", () => {
           subagent_type: "general",
           task_id: started.metadata.sessionId,
         },
-        context,
+        { ...context, callID: "second" }, // kilocode_change
       )
+
+      // kilocode_change start - real task starts and extensions preserve their source invocation
+      const origins = (yield* jobs.get(started.metadata.sessionId))?.origins
+      expect(origins).toMatchObject([
+        { sessionID: chat.id, messageID: assistant.id, callID: "first" },
+        { sessionID: chat.id, messageID: assistant.id, callID: "second" },
+      ])
+      expect(origins?.[0]?.childSessionID).toBe(started.metadata.sessionId)
+      expect(origins?.[0]?.childMessageID).toBe(received[0].messageID)
+      expect(started.metadata).toMatchObject({ childMessageID: origins?.[0]?.childMessageID })
+      expect(result.metadata).toMatchObject({ childMessageID: origins?.[1]?.childMessageID })
+      expect(origins?.[1]?.childSessionID).toBe(started.metadata.sessionId)
+      expect(typeof origins?.[1]?.childMessageID).toBe("string")
+      expect(origins?.[1]?.childMessageID).not.toBe(origins?.[0]?.childMessageID)
+      expect(yield* jobs.cancel(started.metadata.sessionId, observed!.revision)).toBeUndefined()
+      // kilocode_change end
 
       expect(result.metadata.sessionId).toBe(started.metadata.sessionId)
       expect(result.metadata.background).toBe(true)
       expect(result.output).toContain("Background task updated")
-      first.resolve()
+      // kilocode_change start - route exact invocation cleanup through the actual task wrapper
+      if (mode === "cancelled") {
+        const current = (yield* jobs.get(started.metadata.sessionId))!
+        expect(yield* jobs.cancelInput(started.metadata.sessionId, current.revision!, origins![0]!.childMessageID!)).toBe(true)
+        expect(cancelled).toEqual([{ sessionID: started.metadata.sessionId, messageID: received[0].messageID }])
+      }
+      if (mode === "completed") first.resolve()
+      // kilocode_change end
       expect((yield* jobs.get(started.metadata.sessionId))?.status).toBe("running")
       // kilocode_change start // raya_change start - task updates now carry structured briefs
       const update = yield* Effect.promise(() => updated.promise)
+      expect(origins?.[1]?.childMessageID).toBe(update.messageID) // kilocode_change - queued work uses its reserved identity
       expect(update.parts[0]?.type).toBe("text")
       if (update.parts[0]?.type !== "text") throw new Error("expected structured task update")
       expect(update.parts[0].text).toContain("Objective: also inspect cancellation")

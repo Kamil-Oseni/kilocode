@@ -106,7 +106,11 @@ export class OpenAIImages {
   }
 
   receive(event: Record<string, unknown>) {
-    if (event.type === "conversation.item.created" && event.item && typeof event.item === "object") {
+    if (
+      (event.type === "conversation.item.done" || event.type === "conversation.item.created") &&
+      event.item &&
+      typeof event.item === "object"
+    ) {
       const item = event.item as Record<string, unknown>
       if (typeof item.id !== "string" || item.type !== "message" || item.role !== "user") return false
       const entry = this.entries.get(item.id)

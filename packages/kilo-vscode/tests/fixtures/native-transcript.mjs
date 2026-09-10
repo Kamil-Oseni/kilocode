@@ -146,7 +146,7 @@ try {
       (requestId) => window.postMessage({ type: "speechOpenAIStopped", requestId }, "*"),
       request.requestId,
     )
-    await page.getByRole("button", { name: "Start voice", exact: true }).click()
+    await page.getByRole("button", { name: "Restart voice in this task", exact: true }).click()
     assert.equal(await meter.count(), 0)
     const next = await page.evaluate(() =>
       window.__composerMessages.filter((message) => message.type === "speechOpenAIStart").at(-1),

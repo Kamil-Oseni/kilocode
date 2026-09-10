@@ -44,8 +44,15 @@ globalThis.window = window
 globalThis.requestAnimationFrame = window.requestAnimationFrame.bind(window)
 globalThis.cancelAnimationFrame = window.cancelAnimationFrame.bind(window)
 const sent = []
+let immediate = false
 globalThis.acquireVsCodeApi = () => ({
-  postMessage: (msg) => sent.push(msg),
+  postMessage: (msg) => {
+    sent.push(msg)
+    if (immediate && msg.type === "speechOpenAIStop")
+      window.dispatchEvent(
+        new window.MessageEvent("message", { data: { type: "speechOpenAIStopped", requestId: msg.requestId } }),
+      )
+  },
   getState: () => undefined,
   setState: () => {},
 })
@@ -61,6 +68,7 @@ const { StreamPlayer } = await import("../../webview-ui/src/context/stream-playe
 const { DEFAULT_SPEECH_SETTINGS } = await import("../../src/shared/speech.ts")
 const starts = []
 const clients = []
+let closing
 let stopped = 0
 let legacy = 0
 let played = 0
@@ -79,6 +87,7 @@ OpenAIVoice.prototype.start = async function (input, exchange) {
 }
 OpenAIVoice.prototype.stop = async function () {
   stopped++
+  if (closing) await closing
   this.sink.status("off")
 }
 RealtimeVoice.prototype.start = async function () {
@@ -287,6 +296,66 @@ try {
     voice.transcript() === undefined && voice.status() === "off",
     "late old-parent transcript cannot appear in new task",
   )
+  send({ type: "speechOpenAIStopped", requestId: fifth.requestId })
+  setCurrent("session-a")
+  await tick()
+  voice.start("session-a")
+  await tick()
+  const sixth = sent.filter((item) => item.type === "speechOpenAIStart").at(-1)
+  ready(sixth.requestId)
+  await tick()
+  let release
+  closing = new Promise((resolve) => {
+    release = resolve
+  })
+  immediate = true
+  voice.stop()
+  immediate = false
+  await tick()
+  check(
+    voice.recovery()?.host === "ready" && !voice.recovery()?.ready,
+    "host acknowledgement cannot bypass pending local cleanup",
+  )
+  const attempts = starts.length
+  voice.restart()
+  check(starts.length === attempts, "restart cannot invoke media before local cleanup settles")
+  release()
+  await tick()
+  check(voice.recovery()?.ready, "both cleanup boundaries reactively enable explicit recovery")
+  check(starts.length === attempts, "completed cleanup never automatically restarts voice")
+  closing = undefined
+  voice.restart()
+  await tick()
+  const seventh = sent.filter((item) => item.type === "speechOpenAIStart").at(-1)
+  check(
+    starts.length === attempts + 1 && seventh.requestId !== sixth.requestId,
+    "explicit recovery starts a fresh call in the same parent",
+  )
+  ready(seventh.requestId)
+  await tick()
+  let reject
+  closing = new Promise((_resolve, fail) => {
+    reject = fail
+  })
+  voice.stop()
+  send({ type: "speechOpenAIStopped", requestId: seventh.requestId })
+  reject(new Error("local cleanup failed"))
+  await tick()
+  check(
+    voice.recovery()?.local === "failed" && voice.startBlocked(),
+    "local cleanup failure retains admission after host success",
+  )
+  setCurrent("session-b")
+  await tick()
+  setCurrent("session-a")
+  await tick()
+  check(
+    voice.recovery() === undefined && voice.startBlocked(),
+    "task navigation invalidates recovery without releasing unresolved cleanup",
+  )
+  voice.restart()
+  voice.start("session-a")
+  check(starts.length === attempts + 1, "neither recovery nor normal start bypasses failed cleanup")
   console.log(`OpenAI provider integration passed: ${checks} assertions; no microphone or provider connection.`)
 } finally {
   dispose()

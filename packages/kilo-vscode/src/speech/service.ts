@@ -10,6 +10,7 @@ import type { KiloConnectionService } from "../services/cli-backend/connection-s
 import { RealtimeBroker } from "./realtime-broker"
 import { voiceFallback } from "./fallback" // raya_change - explicit three-rung degradation
 import { OpenAIBroker } from "./openai-broker"
+import { loadVoiceContext } from "./openai-context"
 import type { SpeechKey } from "../shared/speech"
 
 type Post = (message: unknown) => void
@@ -127,23 +128,27 @@ export class SpeechService implements vscode.Disposable {
     }
     await this.openai.start(
       { requestID: input.requestId, sessionID: input.sessionID, sdp: input.sdp },
-      async () => {
+      async (signal) => {
         const settings = await this.settings.load()
         if (settings.voiceEngine !== "openai-realtime")
           throw new Error("OpenAI voice is not selected in Speech settings.")
         const key = await this.settings.key("openai")
         if (!key) throw new Error("OpenAI voice requires its own API key in Speech settings.")
         if (!/^[a-z][a-z0-9_-]{0,63}$/.test(settings.openaiVoice)) throw new Error("OpenAI voice name is invalid.")
-        await input.connection.getClientAsync(input.directory)
+        const client = await input.connection.getClientAsync(input.directory)
         const server = input.connection.getServerConfig()
         if (!server || !input.current()) throw new Error("The voice connection or workspace changed.")
+        const current = () => input.current() && input.connection.getServerConfig() === server
+        const context = await loadVoiceContext(client, input.sessionID, input.directory, signal, current)
+        if (!current()) throw new Error("The voice connection or workspace changed.")
         return {
           key,
           voice: settings.openaiVoice,
           backend: server.baseUrl,
           authorization: `Basic ${Buffer.from(`kilo:${server.password}`).toString("base64")}`,
           directory: input.directory,
-          current: input.current,
+          current,
+          context: context.text,
           usage: (usage) =>
             post({ type: "speechOpenAIUsage", requestId: input.requestId, sessionID: input.sessionID, usage }),
         }

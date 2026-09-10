@@ -14,6 +14,7 @@ function fixture() {
   const state = {
     mode: "normal",
     current: true,
+    context: JSON.stringify({ source: "saved_task_context", messages: [{ role: "user", text: "Historical task" }] }),
     ready: [] as string[],
     errors: [] as string[],
     requests: [] as {
@@ -26,6 +27,7 @@ function fixture() {
     }[],
     events: [] as Record<string, unknown>[],
     socket: undefined as ServerWebSocket<undefined> | undefined,
+    control: undefined as WebSocket | undefined,
     capability: "",
     pending: undefined as string | undefined,
     released: new Set<string>(),
@@ -150,12 +152,19 @@ function fixture() {
         if (event.type === "session.update" && state.mode !== "unconfirmed-config")
           socket.send(JSON.stringify({ type: "session.updated", session: event.session }))
         const item = event.item as Record<string, unknown> | undefined
+        if (event.type === "conversation.item.create" && String(item?.id).startsWith("raya_context_")) {
+          if (state.mode === "context-rejected") {
+            socket.send(JSON.stringify({ type: "error", error: { event_id: event.event_id, code: "invalid_request" } }))
+            return
+          }
+          if (state.mode !== "context-pending") socket.send(JSON.stringify({ type: "conversation.item.done", item }))
+        }
         if (event.type === "conversation.item.create" && item?.type === "function_call_output") {
           if (state.mode === "output-rejected") {
             socket.send(JSON.stringify({ type: "error", error: { event_id: event.event_id, code: "invalid_request" } }))
             return
           }
-          if (state.mode !== "output-pending") socket.send(JSON.stringify({ type: "conversation.item.created", item }))
+          if (state.mode !== "output-pending") socket.send(JSON.stringify({ type: "conversation.item.done", item }))
         }
       },
     },
@@ -168,7 +177,9 @@ function fixture() {
   const broker = new OpenAIBroker(request, (url, options) => {
     expect(url.startsWith("wss://api.openai.com/v1/realtime?")).toBe(true)
     const path = new URL(url)
-    return new WebSocket(`ws://127.0.0.1:${server.port}${path.pathname}${path.search}`, options)
+    const socket = new WebSocket(`ws://127.0.0.1:${server.port}${path.pathname}${path.search}`, options)
+    state.control = socket
+    return socket
   })
   return {
     state,
@@ -183,6 +194,7 @@ function fixture() {
           authorization: "Basic backend-only",
           directory: "C:/project",
           current: () => state.current,
+          context: state.context,
         }),
         (value) => state.ready.push(value),
         (value) => state.errors.push(value),
@@ -214,6 +226,85 @@ function completed(id = "call_1", request = "Inspect the workspace") {
     },
   }
 }
+
+test("saved task context requires exact completed acknowledgement and cannot replay historical work", async () => {
+  const f = fixture()
+  try {
+    f.state.mode = "context-pending"
+    const start = f.start()
+    await until(() => f.state.events.some((event) => String(event.event_id).startsWith("raya_context_")))
+    const event = f.state.events.find((event) => String(event.event_id).startsWith("raya_context_"))!
+    const item = event.item as Record<string, unknown>
+    f.send({ type: "conversation.item.done", item: { ...item, id: "foreign" } })
+    f.send({ type: "conversation.item.added", item })
+    f.send(completed())
+    f.send({
+      type: "session.updated",
+      session: f.state.events.find((event) => event.type === "session.update")!.session,
+    })
+    await Bun.sleep(30)
+    expect(f.state.ready).toEqual([])
+    expect(f.state.events.filter((event) => String(event.event_id).startsWith("raya_context_"))).toHaveLength(1)
+    expect(f.state.requests.some((request) => request.path.endsWith("/calls"))).toBe(false)
+    expect(f.state.events.some((event) => event.type === "response.create")).toBe(false)
+    expect(item.content).toEqual([{ type: "input_text", text: f.state.context }])
+    f.send({ type: "conversation.item.done", item })
+    await start
+    expect(f.state.ready).toEqual([sdp])
+    f.send({ type: "conversation.item.done", item })
+    await Bun.sleep(20)
+    expect(f.state.requests.some((request) => request.path.endsWith("/calls"))).toBe(false)
+    expect(f.state.events.some((event) => event.type === "response.create")).toBe(false)
+    expect(f.state.ready).toHaveLength(1)
+  } finally {
+    await f.close()
+  }
+})
+
+for (const mode of ["rejected", "mismatched", "cancelled", "disconnected", "timeout"]) {
+  test(`context ${mode} cannot activate voice or submit work`, async () => {
+    const f = fixture()
+    try {
+      f.state.mode = mode === "rejected" ? "context-rejected" : "context-pending"
+      const start = f.start()
+      await until(() => f.state.events.some((event) => String(event.event_id).startsWith("raya_context_")))
+      const item = f.state.events.find((event) => String(event.event_id).startsWith("raya_context_"))!.item as Record<
+        string,
+        unknown
+      >
+      if (mode === "mismatched")
+        f.send({
+          type: "conversation.item.done",
+          item: { ...item, content: [{ type: "input_text", text: "wrong context" }] },
+        })
+      if (mode === "cancelled") await f.broker.stop(input.requestID)
+      if (mode === "disconnected") f.state.control!.terminate()
+      await start
+      expect(f.state.ready).toEqual([])
+      expect(f.state.requests.some((request) => request.path.endsWith("/calls"))).toBe(false)
+      expect(f.state.events.some((event) => event.type === "response.create")).toBe(false)
+      expect(f.state.requests.some((request) => request.path.endsWith("/hangup"))).toBe(true)
+      expect(f.broker.active).toBe(false)
+      if (mode !== "cancelled") expect(f.state.errors).toHaveLength(1)
+    } finally {
+      await f.close()
+    }
+  }, 30_000)
+}
+
+test("oversized UTF-8 task context fails before creating a paid provider call", async () => {
+  const f = fixture()
+  try {
+    f.state.context = "🟢".repeat(5000)
+    await f.start()
+    expect(f.state.form).toBeUndefined()
+    expect(f.state.requests).toEqual([])
+    expect(f.state.ready).toEqual([])
+    expect(f.state.errors[0]).toContain("could not be confirmed")
+  } finally {
+    await f.close()
+  }
+})
 
 async function until(check: () => boolean) {
   const deadline = Date.now() + 3000
@@ -252,7 +343,11 @@ test("slow admitted work backgrounds without replay and final speech waits for u
       response: { ...completed("invented_work").response, id: "narration", metadata: response.metadata },
     })
     f.state.released.add("call_1")
-    await until(() => f.state.events.some((event) => event.type === "conversation.item.create"))
+    await until(() =>
+      f.state.events.some(
+        (event) => event.type === "conversation.item.create" && !String(event.event_id).startsWith("raya_context_"),
+      ),
+    )
     expect(f.state.events.filter((event) => event.type === "response.create")).toHaveLength(1)
     f.send({ type: "output_audio_buffer.stopped", response_id: "narration" })
     await until(() => f.state.events.filter((event) => event.type === "response.create").length === 2)
@@ -273,8 +368,14 @@ test("result speech requires the matching provider output acknowledgement", asyn
     f.state.mode = "output-pending"
     await f.start()
     f.send(completed())
-    await until(() => f.state.events.some((event) => event.type === "conversation.item.create"))
-    const output = f.state.events.find((event) => event.type === "conversation.item.create")!
+    await until(() =>
+      f.state.events.some(
+        (event) => event.type === "conversation.item.create" && !String(event.event_id).startsWith("raya_context_"),
+      ),
+    )
+    const output = f.state.events.find(
+      (event) => event.type === "conversation.item.create" && !String(event.event_id).startsWith("raya_context_"),
+    )!
     const item = output.item as Record<string, unknown>
     expect(item.id).toBe(output.event_id)
     expect(f.state.events.some((event) => event.type === "response.create")).toBe(false)
@@ -333,7 +434,9 @@ test("OpenAI host keeps credentials isolated, dispatches only completed tool cal
     f.send(completed())
     await until(() => f.state.events.some((event) => event.type === "response.create"))
     expect(f.state.requests.filter((request) => request.path.endsWith("/calls"))).toHaveLength(1)
-    const output = f.state.events.filter((event) => event.type === "conversation.item.create")
+    const output = f.state.events.filter(
+      (event) => event.type === "conversation.item.create" && !String(event.event_id).startsWith("raya_context_"),
+    )
     expect(output).toHaveLength(1)
     expect(JSON.stringify(output)).not.toContain("openai-only")
     expect(JSON.stringify(output)).not.toContain(f.state.capability)
@@ -358,7 +461,12 @@ test("multiple work outputs wait for active response and coalesce their audio co
     f.send({ type: "response.created", response: { id: "speaking" } })
     f.send(completed("call_1"))
     f.send(completed("call_2"))
-    await until(() => f.state.events.filter((event) => event.type === "conversation.item.create").length === 2)
+    await until(
+      () =>
+        f.state.events.filter(
+          (event) => event.type === "conversation.item.create" && !String(event.event_id).startsWith("raya_context_"),
+        ).length === 2,
+    )
     expect(f.state.events.filter((event) => event.type === "response.create")).toHaveLength(0)
     f.send({ type: "response.done", response: { id: "speaking", status: "completed", output: [] } })
     await until(() => f.state.events.some((event) => event.type === "response.create"))
@@ -379,7 +487,11 @@ test("one response with two work calls waits for each retained result before the
     f.send(response)
     await until(() => f.state.polls.includes("call_1"))
     expect(f.state.requests.filter((request) => request.path.endsWith("/calls"))).toHaveLength(1)
-    expect(f.state.events.filter((event) => event.type === "conversation.item.create")).toHaveLength(0)
+    expect(
+      f.state.events.filter(
+        (event) => event.type === "conversation.item.create" && !String(event.event_id).startsWith("raya_context_"),
+      ),
+    ).toHaveLength(0)
     f.state.released.add("call_1")
     await until(() =>
       f.state.requests.some((request) => request.path.endsWith("/calls") && request.body.callID === "call_2"),
@@ -389,7 +501,12 @@ test("one response with two work calls waits for each retained result before the
     ).toEqual(["call_1", "call_2"])
     expect(f.state.conflicts).toBe(0)
     f.state.released.add("call_2")
-    await until(() => f.state.events.filter((event) => event.type === "conversation.item.create").length === 2)
+    await until(
+      () =>
+        f.state.events.filter(
+          (event) => event.type === "conversation.item.create" && !String(event.event_id).startsWith("raya_context_"),
+        ).length === 2,
+    )
     expect(f.state.errors).toEqual([])
   } finally {
     await f.close()
@@ -412,7 +529,11 @@ test("ending voice fences queued work without cancelling the already-admitted pa
     expect(
       f.state.requests.filter((request) => request.path.endsWith("/calls")).map((request) => request.body.callID),
     ).toEqual(["call_1"])
-    expect(f.state.events.some((event) => event.type === "conversation.item.create")).toBe(false)
+    expect(
+      f.state.events.some(
+        (event) => event.type === "conversation.item.create" && !String(event.event_id).startsWith("raya_context_"),
+      ),
+    ).toBe(false)
     expect(f.state.requests.some((request) => request.path.endsWith("/cancel"))).toBe(false)
     expect(f.state.requests.some((request) => request.method === "DELETE")).toBe(true)
     expect(f.state.conflicts).toBe(0)
@@ -429,7 +550,11 @@ test("workspace changes and unrelated work receipts cannot publish or dispatch t
     await f.start()
     f.send(completed())
     await until(() => f.state.errors.length > 0)
-    expect(f.state.events.some((event) => event.type === "conversation.item.create")).toBe(false)
+    expect(
+      f.state.events.some(
+        (event) => event.type === "conversation.item.create" && !String(event.event_id).startsWith("raya_context_"),
+      ),
+    ).toBe(false)
     f.state.current = false
     f.send(completed("call_2"))
     await until(() => !f.broker.active)
@@ -495,6 +620,7 @@ test("stopping an in-flight configuration prevents a later call from starting", 
       authorization: "Basic backend-only",
       directory: "C:/project",
       current: () => true,
+      context: "Saved task context is empty.",
     })
     await Promise.all([start, stop])
     expect(f.state.requests).toEqual([])
@@ -560,7 +686,7 @@ test("image sharing waits for exact acknowledgement and only explicit work carri
     await Bun.sleep(25)
     expect(settled).toBe(false)
     const event = f.state.events.find((event) => event.event_id === "image_picture_1")!
-    f.send({ type: "conversation.item.created", item: event.item })
+    f.send({ type: "conversation.item.done", item: event.item })
     expect(await pending).toEqual({ status: "shared" })
     expect(await f.broker.share(input.requestID, "picture_1", picture)).toEqual({ status: "shared" })
     expect(f.state.requests.filter((request) => request.path.endsWith("/images"))).toHaveLength(1)
@@ -616,7 +742,11 @@ test("image validation and mismatched storage receipts prevent provider transmis
     expect(f.state.requests.some((request) => request.path.endsWith("/images"))).toBe(false)
     f.state.mode = "image-receipt"
     expect((await f.broker.share(input.requestID, "picture_1", picture)).status).toBe("failed")
-    expect(f.state.events.some((event) => event.type === "conversation.item.create")).toBe(false)
+    expect(
+      f.state.events.some(
+        (event) => event.type === "conversation.item.create" && !String(event.event_id).startsWith("raya_context_"),
+      ),
+    ).toBe(false)
   } finally {
     await f.close()
   }
@@ -660,6 +790,10 @@ test("voice readiness requires acknowledged semantic turn detection and interrup
     })
     await Bun.sleep(25)
     expect(f.state.ready).toEqual([])
+    f.send({ type: "session.updated", session: { ...session, instructions: "Different instructions" } })
+    await Bun.sleep(25)
+    expect(f.state.ready).toEqual([])
+    expect(f.state.events.some((event) => String(event.event_id).startsWith("raya_context_"))).toBe(false)
     f.send({ type: "session.updated", session })
     await start
     expect(f.state.ready).toEqual([sdp])

@@ -7,7 +7,7 @@ export const NativeVoiceControls: Component<{ end: () => void }> = (props) => {
   const voice = useVoice()
   const connected = () => voice.status() === "listening" || voice.status() === "speaking"
   return (
-    <Show when={voice.settings().voiceEngine === "openai-realtime" && voice.status() !== "off"}>
+    <Show when={voice.settings().voiceEngine === "openai-realtime" && voice.status() !== "off" && !voice.recovery()}>
       <div data-slot="native-voice-controls" role="group" aria-label="Voice controls">
         <span role="status">
           {voice.muted()

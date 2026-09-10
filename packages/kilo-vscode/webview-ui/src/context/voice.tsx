@@ -21,6 +21,7 @@ import { VoiceLoop } from "./voice-loop"
 import { RealtimeVoice, type RealtimeTranscript } from "./realtime-voice" // raya_change - native realtime thin client
 import { StreamPlayer } from "./stream-player" // raya_change - user-gesture-safe MiniMax audio sink
 import { VoiceEcho } from "./voice-echo" // raya_change - residual spoken-response exclusion
+import { createVoiceRecovery } from "./voice-recovery"
 import { createVoiceUsage } from "./voice-usage"
 import { createVoiceImages } from "./voice-images"
 import { OpenAIVoice } from "./openai-voice"
@@ -31,6 +32,9 @@ type VoiceStatus = "off" | "connecting" | "listening" | "thinking" | "speaking" 
 type VoiceContextValue = {
   settings: Accessor<SpeechState>
   playing: Accessor<boolean>
+  recovery: ReturnType<typeof createVoiceRecovery>["state"]
+  startBlocked: Accessor<boolean>
+  restart: () => void
   usage: ReturnType<typeof createVoiceUsage>["state"]
   image: ReturnType<typeof createVoiceImages>["state"]
   share: (imageID: string, data: string) => void
@@ -78,8 +82,16 @@ export const VoiceProvider: ParentComponent = (props) => {
   const state = { request: "", generation: 0, terminal: false }
   let call: { id: string; session: string } | undefined
   let pending: { id: string; resolve: (sdp: string) => void; reject: (error: Error) => void } | undefined
-  const closing = new Set<string>()
-  const legacy = () => settings().voiceEngine !== "openai-realtime" && !call && closing.size === 0
+  const recovery = createVoiceRecovery(
+    session.currentSessionID,
+    () => native.stop(),
+    () => {
+      if (!recovery.state()) return
+      setError("Microphone or audio cleanup failed. Restart Raya before trying voice again.")
+      setStatus("degraded")
+    },
+  )
+  const legacy = () => settings().voiceEngine !== "openai-realtime" && !call && !recovery.blocked()
   const echo = new VoiceEcho()
   const player = new StreamPlayer(
     () => {
@@ -162,15 +174,10 @@ export const VoiceProvider: ParentComponent = (props) => {
       pending = undefined
       waiting.reject(new Error("Voice connection cancelled."))
     }
+    recovery.close()
     if (current) {
-      if (closing.size >= 32) closing.delete(closing.values().next().value!)
-      closing.add(current.id)
       vscode.postMessage({ type: "speechOpenAIStop", requestId: current.id })
     }
-    void native.stop().catch(() => {
-      setError("Microphone or audio cleanup failed. End voice again before reconnecting.")
-      setStatus("degraded")
-    })
   }
 
   function failOpenAI(message: string) {
@@ -182,7 +189,7 @@ export const VoiceProvider: ParentComponent = (props) => {
   }
 
   function startOpenAI(id: string) {
-    if (call || closing.size) {
+    if (call || recovery.blocked()) {
       setError("Wait for the previous voice call to close before starting another.")
       return
     }
@@ -198,6 +205,7 @@ export const VoiceProvider: ParentComponent = (props) => {
     }
     const current = { id: crypto.randomUUID(), session: id }
     call = current
+    recovery.bind(current)
     usage.bind(current.id, id)
     state.generation++
     void native
@@ -226,15 +234,18 @@ export const VoiceProvider: ParentComponent = (props) => {
       return true
     }
     if (message.type === "speechOpenAIError") {
-      if (call?.id === message.requestId) failOpenAI(message.error)
-      if (closing.has(message.requestId)) {
+      if (call?.id === message.requestId) {
+        failOpenAI(message.error)
+        return true
+      }
+      if (recovery.fail(message.requestId) && recovery.state()) {
         setError(message.error)
         if (!call) setStatus("degraded")
       }
       return true
     }
     if (message.type !== "speechOpenAIStopped") return false
-    closing.delete(message.requestId)
+    recovery.acknowledge(message.requestId)
     return true
   }
   function demote(message: Extract<ExtensionMessage, { type: "speechRealtimeError" }>) {
@@ -293,7 +304,10 @@ export const VoiceProvider: ParentComponent = (props) => {
   const unsubscribe = vscode.onMessage((message: ExtensionMessage) => {
     if (openaiMessage(message)) return
     if (message.type === "speechSettingsLoaded") {
-      if (message.settings.voiceEngine !== settings().voiceEngine) stop()
+      if (message.settings.voiceEngine !== settings().voiceEngine) {
+        stop()
+        recovery.invalidate()
+      }
       setSettings(message.settings)
       loop.set(message.settings.voiceEngine === "openai-realtime" ? "off" : message.settings.mode)
       return
@@ -360,7 +374,10 @@ export const VoiceProvider: ParentComponent = (props) => {
   })
 
   const update = (patch: Partial<SpeechSettings>) => {
-    if (patch.voiceEngine && patch.voiceEngine !== settings().voiceEngine) stop()
+    if (patch.voiceEngine && patch.voiceEngine !== settings().voiceEngine) {
+      stop()
+      recovery.invalidate()
+    }
     const next = { ...settings(), ...patch }
     setSettings(next)
     vscode.postMessage({
@@ -405,18 +422,53 @@ export const VoiceProvider: ParentComponent = (props) => {
     loop.set(settings().voiceEngine === "openai-realtime" ? "off" : mode)
   }
 
-  createEffect(() => {
-    const id = session.currentSessionID()
-    if (!call || call.session === id) return
-    stop()
+  const start = (sessionID: string) => {
+    if (call || recovery.blocked()) {
+      setError("End the previous voice call and wait for cleanup before starting another.")
+      return
+    }
+    state.terminal = false
+    setCascade(false)
+    echo.clear()
+    player.unlock()
     setTranscript(undefined)
-    setError("Voice ended because you changed tasks. Work already started remains in its original conversation.")
+    setError(undefined)
+    setStatus("connecting")
+    update({ mode: "hands-free", autoSpeak: false })
+    if (settings().voiceEngine === "openai-realtime") {
+      startOpenAI(sessionID)
+      return
+    }
+    vscode.postMessage({ type: "speechRealtimeStart", sessionID })
+  }
+
+  createEffect((previous: string | undefined) => {
+    const id = session.currentSessionID()
+    if (call && call.session !== id) {
+      stop()
+      setTranscript(undefined)
+      setError("Voice ended because you changed tasks. Work already started remains in its original conversation.")
+      return id
+    }
+    if (previous !== undefined && previous !== id && settings().voiceEngine === "openai-realtime") {
+      setStatus("off")
+      setTranscript(undefined)
+      setError(undefined)
+    }
+    return id
   })
 
   return (
     <Context.Provider
       value={{
         settings,
+        recovery: recovery.state,
+        startBlocked: recovery.blocked,
+        restart: () => {
+          const value = recovery.state()
+          if (!value?.ready || value.session !== session.currentSessionID()) return
+          start(value.session)
+        },
         playing,
         image: images.state,
         share: images.share,
@@ -440,25 +492,7 @@ export const VoiceProvider: ParentComponent = (props) => {
         update,
         setKey: (kind, key) => vscode.postMessage({ type: "speechKeyUpdate", kind, key }),
         setMode,
-        start: (sessionID) => {
-          if (call || closing.size) {
-            setError("End the previous voice call and wait for cleanup before starting another.")
-            return
-          }
-          state.terminal = false
-          setCascade(false)
-          echo.clear()
-          player.unlock()
-          setTranscript(undefined)
-          setError(undefined)
-          setStatus("connecting")
-          update({ mode: "hands-free", autoSpeak: false })
-          if (settings().voiceEngine === "openai-realtime") {
-            startOpenAI(sessionID)
-            return
-          }
-          vscode.postMessage({ type: "speechRealtimeStart", sessionID })
-        },
+        start,
         listen: () => {
           player.unlock()
           loop.listen()

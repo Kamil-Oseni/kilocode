@@ -41,10 +41,12 @@ if (new URLSearchParams(location.search).has("native")) {
       },
       "*",
     )
+  window.__voiceStarts = 0
   window.__voiceStopped = 0
   window.__voiceMicrophone = false
   window.__workStops = 0
   OpenAIVoice.prototype.start = async function (input, exchange) {
+    window.__voiceStarts++
     window.__nativeTransport = this
     this.operation = {
       ...input,
@@ -66,6 +68,12 @@ if (new URLSearchParams(location.search).has("native")) {
   }
   OpenAIVoice.prototype.stop = async function () {
     window.__voiceStopped++
+    if (this.operation) this.operation.closed = true
+    if (window.__voiceHoldCleanup)
+      await new Promise((resolve, reject) => {
+        window.__releaseVoiceCleanup = resolve
+        window.__failVoiceCleanup = reject
+      })
     clearTimeout(this.operation?.interruption)
     this.operation = undefined
     window.__nativeEvent = () => {}

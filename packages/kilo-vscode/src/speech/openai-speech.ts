@@ -97,7 +97,7 @@ export class OpenAISpeech {
   event(event: Record<string, unknown>) {
     if (this.closed) return false
     this.audio(event)
-    if (event.type === "conversation.item.created") {
+    if (event.type === "conversation.item.done" || event.type === "conversation.item.created") {
       const item = record(event.item)
       if (item?.type === "function_call_output" && typeof item.id === "string") this.acknowledge(item)
     }

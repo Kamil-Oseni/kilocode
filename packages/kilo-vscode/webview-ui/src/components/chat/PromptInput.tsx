@@ -20,6 +20,7 @@ import { useVSCode } from "../../context/vscode"
 import { useConfig } from "../../context/config"
 import { useProvider } from "../../context/provider"
 import { useVoice } from "../../context/voice" // raya_change - Milestone H intelligent voice mode
+import { NativeVoiceRecovery } from "./NativeVoiceRecovery"
 import { NativeVoiceControls } from "./NativeVoiceControls"
 import { NativeVoiceUsage } from "./NativeVoiceUsage"
 import { VoiceTranscript } from "./VoiceTranscript"
@@ -1441,6 +1442,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       onDrop={imageAttach.handleDrop}
     >
       <NativeVoiceControls end={toggleVoice} />
+      <NativeVoiceRecovery />
       <Show when={session.cloudPreviewId()}>
         <Card variant="info" role="status" data-slot="cloud-continuation">
           <strong>Cloud preview</strong>
@@ -1784,7 +1786,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           <Show
             when={
               (voice.settings().voiceEngine === "openai-realtime" || canUseSpeech()) &&
-              !(voice.settings().voiceEngine === "openai-realtime" && voiceActive())
+              !(voice.settings().voiceEngine === "openai-realtime" && (voiceActive() || voice.recovery()))
             }
           >
             {/* raya_change - Milestone H keeps dictation on the mic and hands-free
@@ -1798,7 +1800,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 classList={{ "prompt-voice-orb--active": voiceActive() }}
                 aria-label={voiceLabel()}
                 aria-pressed={voiceActive()}
-                disabled={!voiceActive() && isDisabled()}
+                disabled={!voiceActive() && (isDisabled() || voice.startBlocked())}
                 onClick={toggleVoice}
               >
                 <span class="prompt-voice-orb__core" aria-hidden="true" />

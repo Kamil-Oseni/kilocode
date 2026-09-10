@@ -1,0 +1,13 @@
+[data-slot="native-voice-disclosure"],
+[data-slot="native-voice-recovery"] {
+  padding: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+[data-slot="native-voice-disclosure"] p,
+[data-slot="native-voice-recovery"] p {
+  margin: 4px 0 8px;
+  color: var(--text-weak);
+  font-size: var(--font-size-small);
+}

@@ -272,13 +272,6 @@
   border-color: var(--border-critical-base) !important;
 }
 
-/* Danger button (remove confirm) */
-
-.danger-btn {
-  color: var(--text-on-critical-base) !important;
-  border-color: var(--border-critical-base) !important;
-}
-
 /* Install modal */
 
 .install-modal-body {

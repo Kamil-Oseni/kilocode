@@ -85,6 +85,29 @@
     }
   }
 
+  /* Destructive intent shares native button behavior; host tokens own its appearance. */
+  &[data-intent="destructive"] {
+    background-color: var(--surface-critical-weak, var(--button-secondary-base));
+    color: var(--text-strong);
+    border: 1px solid var(--border-critical-base);
+
+    [data-slot="icon-svg"] {
+      color: currentColor;
+    }
+
+    &:hover:not(:disabled),
+    &:focus:not(:disabled),
+    &:focus-visible:not(:active),
+    &:active:not(:disabled) {
+      background-color: var(--surface-critical-base, var(--button-secondary-hover));
+      border-color: var(--border-critical-hover);
+    }
+
+    &:disabled {
+      background-color: var(--surface-critical-weak, var(--button-secondary-base));
+    }
+  }
+
   &[data-size="normal"] {
     min-height: 32px;
     padding: 6px 16px;
@@ -118,6 +141,34 @@
 
     &[data-icon] {
       padding: 4px 12px 4px 8px;
+    }
+  }
+}
+
+@media (forced-colors: active) {
+  [data-component="button"][data-intent="destructive"] {
+    background-color: ButtonFace;
+    color: ButtonText;
+    border-color: ButtonText;
+
+    &:hover:not(:disabled),
+    &:focus:not(:disabled),
+    &:focus-visible:not(:active),
+    &:active:not(:disabled) {
+      background-color: Highlight;
+      color: HighlightText;
+      border-color: Highlight;
+    }
+
+    &:focus-visible {
+      outline-color: Highlight;
+    }
+
+    &:disabled {
+      background-color: ButtonFace;
+      color: GrayText;
+      border-color: GrayText;
+      opacity: 1;
     }
   }
 }

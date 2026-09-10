@@ -8,13 +8,12 @@
 
 .dialog-confirm-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--raya-space-8, 8px);
 }
 
-/* raya_change - Eden confirm dialog: rounded surface + fully rounded buttons, and
-   a genuine destructive action (filled critical red) rather than primary blue for
-   an irreversible delete. */
+/* Confirmation dialog shape remains specific to the extension host. */
 [data-slot="dialog-content"] {
   border-radius: var(--raya-radius-lg, 14px);
 }
@@ -22,20 +21,10 @@
 .dialog-confirm-actions [data-component="button"] {
   border-radius: var(--raya-radius-pill, 999px);
   padding-inline: var(--raya-space-16, 16px);
-}
-
-.dialog-destructive-btn {
-  background: var(--vscode-errorForeground, #e5484d) !important;
-  color: #fff !important;
-  border: none !important;
-}
-
-.dialog-destructive-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--vscode-errorForeground, #e5484d) 84%, #000) !important;
-}
-
-.dialog-destructive-btn [data-slot="icon-svg"] {
-  color: #fff !important;
+  max-width: 100%;
+  height: auto;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .provider-connect-actions {

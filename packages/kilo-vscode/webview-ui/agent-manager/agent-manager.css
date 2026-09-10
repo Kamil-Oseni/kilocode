@@ -2735,17 +2735,16 @@ body.am-wt-dragging-active * {
 
 .am-confirm-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
 }
 
-.am-confirm-delete {
-  background: var(--surface-critical-strong) !important;
-  color: var(--text-on-brand-base) !important;
-}
-
-.am-confirm-delete:hover {
-  opacity: 0.9;
+.am-confirm-actions [data-component="button"] {
+  max-width: 100%;
+  height: auto;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 /* Keyboard shortcut hint inside buttons */

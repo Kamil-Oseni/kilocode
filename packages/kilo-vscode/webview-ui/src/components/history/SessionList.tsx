@@ -110,18 +110,15 @@ const SessionList: Component<SessionListProps> = (props) => {
     dialog.show(
       () => (
         <Dialog title={language.t("session.delete.title")} fit>
-          {/* raya_change - Eden confirm card: rounded surface, rounded buttons, and
-              a proper destructive (not primary-blue) action for a delete. */}
           <div class="dialog-confirm-body">
             <span>{language.t("session.delete.confirm", { name: name(s) })}</span>
             <div class="dialog-confirm-actions">
-              <Button variant="secondary" size="large" onClick={() => dialog.close()}>
+              <Button variant="secondary" size="large" onClick={() => dialog.close()} autofocus>
                 {language.t("common.cancel")}
               </Button>
               <Button
-                variant="ghost"
+                variant="destructive"
                 size="large"
-                class="dialog-destructive-btn"
                 onClick={() => {
                   session.deleteSession(s.id)
                   dialog.close()
@@ -228,8 +225,7 @@ const SessionList: Component<SessionListProps> = (props) => {
               {name(s)}
               <PresenceBadge
                 state={runPresence({
-                  busy:
-                    session.allStatusMap()[s.id]?.type === "busy" || session.allStatusMap()[s.id]?.type === "retry",
+                  busy: session.allStatusMap()[s.id]?.type === "busy" || session.allStatusMap()[s.id]?.type === "retry",
                   waiting:
                     session.permissions().some((item) => item.sessionID === s.id) ||
                     session.questions().some((item) => item.sessionID === s.id),

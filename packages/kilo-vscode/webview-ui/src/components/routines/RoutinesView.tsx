@@ -534,13 +534,12 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
             unfinished work first; restoration is not available.
           </span>
           <div class="dialog-confirm-actions">
-            <Button variant="secondary" size="large" onClick={() => dialog.close()}>
+            <Button variant="secondary" size="large" onClick={() => dialog.close()} autofocus>
               Keep
             </Button>
             <Button
-              variant="ghost"
+              variant="destructive"
               size="large"
-              class="dialog-destructive-btn"
               onClick={() => {
                 drop(ids)
                 dialog.close()

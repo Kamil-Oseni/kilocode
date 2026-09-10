@@ -26,10 +26,10 @@ export const RemoveDialog = (props: Props) => {
           {t("marketplace.remove.confirm", { type: typeName(), scope: t(`marketplace.scope.${props.scope}`) })}
         </span>
         <div class="dialog-confirm-actions">
-          <Button variant="secondary" onClick={props.onClose}>
+          <Button variant="secondary" onClick={props.onClose} autofocus>
             {t("marketplace.remove.cancel")}
           </Button>
-          <Button variant="primary" class="danger-btn" onClick={props.onConfirm}>
+          <Button variant="destructive" onClick={props.onConfirm}>
             {t("marketplace.remove.confirm.button")}
           </Button>
         </div>

@@ -1878,10 +1878,10 @@ const AgentManagerContent: Component = () => {
             </span>
           </div>
           <div class="am-confirm-actions">
-            <Button variant="ghost" size="large" onClick={() => dialog.close()}>
+            <Button variant="ghost" size="large" onClick={() => dialog.close()} autofocus>
               {t("agentManager.dialog.removeStaleWorktree.cancel")}
             </Button>
-            <Button variant="primary" size="large" class="am-confirm-delete" onClick={remove} autofocus>
+            <Button variant="destructive" size="large" onClick={remove}>
               {t("agentManager.dialog.removeStaleWorktree.confirm")}
             </Button>
           </div>

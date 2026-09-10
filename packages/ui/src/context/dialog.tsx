@@ -36,6 +36,7 @@ function init() {
   const hasPopover = () => !!document.querySelector('[data-component="popover-content"]')
 
   onCleanup(() => {
+    for (const item of stack()) item.dispose() // kilocode_change - dispose owned dialog roots when their provider is removed
     if (timer.current === undefined) return
     clearTimeout(timer.current)
     timer.current = undefined

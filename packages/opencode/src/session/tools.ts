@@ -1,6 +1,7 @@
 import { Agent } from "@/agent/agent"
 import { KiloSessionPrompt } from "@/kilocode/session/prompt" // kilocode_change
 import { MemoryMarker } from "@/kilocode/memory/marker" // kilocode_change
+import { CapabilityCatalog } from "@/kilocode/capability/catalog" // kilocode_change
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
@@ -75,12 +76,14 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const flags = yield* RuntimeFlags.Service
   const restricted = yield* SandboxPolicy.networkRestricted(input.session.id) // kilocode_change
   const sandboxed = (yield* SandboxPolicy.status(input.session.id)).enabled // kilocode_change
+  const catalog = CapabilityCatalog.bind(tools, restricted) // kilocode_change
   const context = (args: Record<string, unknown>, options: ToolExecutionOptions): Tool.Context => {
     const extra = {
       model: input.model,
       bypassAgentCheck: input.bypassAgentCheck,
       promptOps: input.promptOps,
       sandboxed, // kilocode_change
+      capabilities: catalog.inspect, // kilocode_change
       sandboxEscalation: false,
     }
     return {
@@ -198,6 +201,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         )
       },
     })
+    catalog.record(item, tools[item.id]) // kilocode_change
   }
 
   const hasMcpResourceServer = Object.values(yield* mcp.clients()).some(

@@ -10,6 +10,7 @@ import type { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import { SystemPrompt } from "../system"
 import { USER_AGENT } from "@/installation" // kilocode_change
+import { CapabilityCatalog } from "@/kilocode/capability/catalog" // kilocode_change
 import { Effect, Record } from "effect"
 import { jsonSchema, tool as aiTool, type ModelMessage, type Tool } from "ai"
 import type { Plugin } from "@/plugin"
@@ -265,7 +266,11 @@ function resolveTools(input: Pick<PrepareInput, "tools" | "agent" | "permission"
     Object.keys(input.tools),
     Permission.merge(input.agent.permission, input.permission ?? []),
   )
-  return Record.filter(input.tools, (_, k) => input.user.tools?.[k] !== false && !disabled.has(k))
+  // kilocode_change start - bind discovery to the final model-visible tool selection
+  return CapabilityCatalog.select(
+    Record.filter(input.tools, (_, k) => input.user.tools?.[k] !== false && !disabled.has(k)),
+  )
+  // kilocode_change end
 }
 
 export function hasToolCalls(messages: ModelMessage[]): boolean {

@@ -2,11 +2,12 @@
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import type * as vscode from "vscode"
-import { DEFAULT_SPEECH_SETTINGS, type SpeechSettings, type SpeechState } from "../shared/speech" // raya_change - node-free webview contract
+import { DEFAULT_SPEECH_SETTINGS, type SpeechSettings, type SpeechState, type SpeechKey } from "../shared/speech" // raya_change - node-free webview contract
 export { DEFAULT_SPEECH_SETTINGS, type SpeechSettings, type SpeechState, type VoiceMode } from "../shared/speech"
 
 const STATE = "raya.speech.settings"
 const REALTIME = "raya.speech.realtime.key"
+const OPENAI = "raya.speech.openai.key"
 const STT = "raya.speech.stt.key"
 const TTS = "raya.speech.tts.key"
 const MIRROR = ".raya/speech.local.json"
@@ -22,12 +23,13 @@ export class SpeechSettingsStore {
 
   async load(): Promise<SpeechState> {
     const settings = normalize(this.state.get<Partial<SpeechSettings>>(STATE))
-    const [realtime, stt, tts] = await Promise.all([
+    const [realtime, stt, tts, openai] = await Promise.all([
       this.secrets.get(REALTIME),
       this.secrets.get(STT),
       this.secrets.get(TTS),
+      this.secrets.get(OPENAI),
     ])
-    return { ...settings, hasRealtimeKey: !!realtime, hasSttKey: !!stt, hasTtsKey: !!tts }
+    return { ...settings, hasOpenAIKey: !!openai, hasRealtimeKey: !!realtime, hasSttKey: !!stt, hasTtsKey: !!tts }
   }
 
   async update(settings: Partial<SpeechSettings>): Promise<SpeechState> {
@@ -35,15 +37,16 @@ export class SpeechSettingsStore {
     return this.load()
   }
 
-  async setKey(kind: "realtime" | "stt" | "tts", key?: string): Promise<SpeechState> {
-    const name = kind === "realtime" ? REALTIME : kind === "stt" ? STT : TTS
+  async setKey(kind: SpeechKey, key?: string): Promise<SpeechState> {
+    const name = kind === "openai" ? OPENAI : kind === "realtime" ? REALTIME : kind === "stt" ? STT : TTS
     const value = key?.trim()
     if (value) await this.secrets.store(name, value)
     if (!value) await this.secrets.delete(name)
     return this.load()
   }
 
-  async key(kind: "realtime" | "stt" | "tts") {
+  async key(kind: SpeechKey) {
+    if (kind === "openai") return this.secrets.get(OPENAI)
     if (kind === "realtime") return this.secrets.get(REALTIME)
     return this.secrets.get(kind === "stt" ? STT : TTS)
   }
@@ -105,7 +108,13 @@ function normalize(input?: Partial<SpeechSettings>): SpeechSettings {
 // raya_change - keep native-engine validation separate from the legacy cascade normalization.
 function normalizeRealtime(input?: Partial<SpeechSettings>) {
   return {
-    voiceEngine: input?.voiceEngine === "cascade-v1" ? ("cascade-v1" as const) : ("qwen-realtime" as const),
+    voiceEngine:
+      input?.voiceEngine === "openai-realtime" ||
+      input?.voiceEngine === "cascade-v1" ||
+      input?.voiceEngine === "qwen-realtime"
+        ? input.voiceEngine
+        : DEFAULT_SPEECH_SETTINGS.voiceEngine,
+    openaiVoice: text(input?.openaiVoice, DEFAULT_SPEECH_SETTINGS.openaiVoice),
     realtimeEndpoint: text(input?.realtimeEndpoint, DEFAULT_SPEECH_SETTINGS.realtimeEndpoint),
     realtimeModel: text(input?.realtimeModel, DEFAULT_SPEECH_SETTINGS.realtimeModel),
     realtimeVoice: text(input?.realtimeVoice, DEFAULT_SPEECH_SETTINGS.realtimeVoice),

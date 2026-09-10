@@ -309,6 +309,16 @@ import type {
   KilocodeVoiceCloseResponses,
   KilocodeVoiceEventErrors,
   KilocodeVoiceEventResponses,
+  KilocodeVoiceOpenaiCallErrors,
+  KilocodeVoiceOpenaiCallResponses,
+  KilocodeVoiceOpenaiCancelErrors,
+  KilocodeVoiceOpenaiCancelResponses,
+  KilocodeVoiceOpenaiCloseErrors,
+  KilocodeVoiceOpenaiCloseResponses,
+  KilocodeVoiceOpenaiResultErrors,
+  KilocodeVoiceOpenaiResultResponses,
+  KilocodeVoiceOpenaiStartErrors,
+  KilocodeVoiceOpenaiStartResponses,
   KilocodeVoiceStartErrors,
   KilocodeVoiceStartResponses,
   KilocodeVoiceStateErrors,
@@ -385,6 +395,8 @@ import type {
   NotebookFailure,
   NotebookRequestId,
   NotebookResult,
+  OpenAiVoiceCallInput,
+  OpenAiVoiceStart,
   OutputFormat,
   Part as Part2,
   PartDeleteErrors,
@@ -10263,6 +10275,215 @@ export class SessionImport extends HeyApiClient {
   }
 }
 
+export class Openai extends HeyApiClient {
+  /**
+   * Bind an OpenAI realtime call to an existing Raya session
+   */
+  public start<ThrowOnError extends boolean = false>(
+    parameters?: {
+      "x-raya-voice-key"?: string
+      directory?: string
+      workspace?: string
+      openAiVoiceStart?: OpenAiVoiceStart
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "headers", key: "x-raya-voice-key" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "openAiVoiceStart", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeVoiceOpenaiStartResponses,
+      KilocodeVoiceOpenaiStartErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/voice/openai/session",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Admit one deduplicated voice work call
+   */
+  public call<ThrowOnError extends boolean = false>(
+    parameters: {
+      "x-raya-voice-key"?: string
+      id: string
+      directory?: string
+      workspace?: string
+      openAiVoiceCallInput?: OpenAiVoiceCallInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "headers", key: "x-raya-voice-key" },
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "openAiVoiceCallInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeVoiceOpenaiCallResponses,
+      KilocodeVoiceOpenaiCallErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/voice/openai/session/{id}/calls",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Inspect a retained voice work receipt
+   */
+  public result<ThrowOnError extends boolean = false>(
+    parameters: {
+      "x-raya-voice-key"?: string
+      id: string
+      callID: string
+      directory?: string
+      workspace?: string
+      generation: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "headers", key: "x-raya-voice-key" },
+            { in: "path", key: "id" },
+            { in: "path", key: "callID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "generation" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      KilocodeVoiceOpenaiResultResponses,
+      KilocodeVoiceOpenaiResultErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/voice/openai/session/{id}/calls/{callID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Cancel the exact Raya message owned by a voice call
+   */
+  public cancel<ThrowOnError extends boolean = false>(
+    parameters: {
+      "x-raya-voice-key"?: string
+      id: string
+      callID: string
+      directory?: string
+      workspace?: string
+      generation?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "headers", key: "x-raya-voice-key" },
+            { in: "path", key: "id" },
+            { in: "path", key: "callID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "generation" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeVoiceOpenaiCancelResponses,
+      KilocodeVoiceOpenaiCancelErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/voice/openai/session/{id}/calls/{callID}/cancel",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Close voice admission while preserving already-admitted Raya work
+   */
+  public close<ThrowOnError extends boolean = false>(
+    parameters: {
+      "x-raya-voice-key"?: string
+      id: string
+      directory?: string
+      workspace?: string
+      generation: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "headers", key: "x-raya-voice-key" },
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "generation" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      KilocodeVoiceOpenaiCloseResponses,
+      KilocodeVoiceOpenaiCloseErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/voice/openai/session/{id}",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Voice extends HeyApiClient {
   /**
    * Start a realtime voice session
@@ -10418,6 +10639,11 @@ export class Voice extends HeyApiClient {
         ...params.headers,
       },
     })
+  }
+
+  private _openai?: Openai
+  get openai(): Openai {
+    return (this._openai ??= new Openai({ client: this.client }))
   }
 }
 

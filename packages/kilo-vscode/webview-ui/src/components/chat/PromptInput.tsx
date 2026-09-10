@@ -1156,7 +1156,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const id = session.currentSessionID()
     if (id) {
       voice.start(id)
-      session.selectAgent("voice", id)
+      if (voice.settings().voiceEngine !== "openai-realtime") session.selectAgent("voice", id)
       return
     }
     voicePending.start = true
@@ -1167,7 +1167,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!voicePending.start || !id) return
     voicePending.start = false
     voice.start(id)
-    session.selectAgent("voice", id)
+    if (voice.settings().voiceEngine !== "openai-realtime") session.selectAgent("voice", id)
   })
   const voiceActive = () => voice.status() !== "off"
   const voiceLabel = () => {
@@ -1184,7 +1184,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     speech.cancel() // raya_change - orb ownership includes its background microphone capture
     voice.stop()
     voice.setMode("off")
-    session.selectAgent("auto", sid())
+    if (voice.settings().voiceEngine !== "openai-realtime") session.selectAgent("auto", sid())
   }
   // raya_change end
 
@@ -1663,14 +1663,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         </div>
       </Show>
       {/* raya_change - speculative voice transcript is visible but never copied into or submitted from the composer */}
-      <Show when={voiceActive()}>
+      <Show when={voiceActive() || voice.error()}>
         <div class="prompt-realtime-voice" role="status" aria-live="polite">
           <span class="prompt-realtime-voice__state">
             {voice.status()}
             {voice.aec() ? " · AEC" : ""}
           </span>
           <Show when={voice.transcript()?.text || voice.error()}>
-            <span class="prompt-realtime-voice__text">{voice.transcript()?.text || voice.error()}</span>
+            <span class="prompt-realtime-voice__text">{voice.error() || voice.transcript()?.text}</span>
           </Show>
         </div>
       </Show>
@@ -1745,6 +1745,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           </Show>
           <Show when={canUseSpeech()}>
             <SpeechToTextButton speech={speech} disabled={isDisabled()} start={startSpeech} label={language.t} />
+          </Show>
+          <Show when={voice.settings().voiceEngine === "openai-realtime" || canUseSpeech()}>
             {/* raya_change - Milestone H keeps dictation on the mic and hands-free
                 conversation on a distinct orb. The orb is a 2026 ElevenLabs-style
                 sphere: layered gradients + a slow flowing sheen, calm when idle and
@@ -1756,6 +1758,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 classList={{ "prompt-voice-orb--active": voiceActive() }}
                 aria-label={voiceLabel()}
                 aria-pressed={voiceActive()}
+                disabled={!voiceActive() && isDisabled()}
                 onClick={toggleVoice}
               >
                 <span class="prompt-voice-orb__core" aria-hidden="true" />

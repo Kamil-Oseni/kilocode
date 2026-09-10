@@ -5771,6 +5771,59 @@ export type MemoryApiServerError = {
   }
 }
 
+export type OpenAiVoiceStart = {
+  parentSessionID: string
+  providerCallID: string
+  requestID: string
+}
+
+export type OpenAiVoiceBinding = {
+  id: string
+  generation: string
+  parentSessionID: string
+  directory: string
+  providerCallID: string
+  model: "gpt-realtime-2.1"
+  status: "active" | "closing" | "closed"
+  createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  expiresAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+}
+
+export type OpenAiVoiceCallInput = {
+  generation: string
+  callID: string
+  function: "raya_work"
+  arguments: {
+    request: string
+  }
+  responseID?: string
+  itemID?: string
+}
+
+export type OpenAiVoiceCall = {
+  id: string
+  callID: string
+  messageID: string
+  parentSessionID: string
+  status: "accepted" | "running" | "completed" | "failed" | "cancelled" | "unknown"
+  createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  result?: {
+    text: string
+    assistantMessageID: string
+    evidence: Array<{
+      messageID: string
+      partID: string
+      tool: string
+      status: "pending" | "running" | "completed" | "error"
+    }>
+  }
+  error?: {
+    code: string
+    message: string
+  }
+}
+
 export type UnauthorizedError = {
   _tag: "UnauthorizedError"
   message: string
@@ -24488,6 +24541,219 @@ export type MemoryPurgeResponses = {
 }
 
 export type MemoryPurgeResponse = MemoryPurgeResponses[keyof MemoryPurgeResponses]
+
+export type KilocodeVoiceOpenaiStartData = {
+  body?: OpenAiVoiceStart
+  headers?: {
+    "x-raya-voice-key"?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/voice/openai/session"
+}
+
+export type KilocodeVoiceOpenaiStartErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeVoiceOpenaiStartError = KilocodeVoiceOpenaiStartErrors[keyof KilocodeVoiceOpenaiStartErrors]
+
+export type KilocodeVoiceOpenaiStartResponses = {
+  /**
+   * OpenAIVoiceBinding
+   */
+  200: OpenAiVoiceBinding
+}
+
+export type KilocodeVoiceOpenaiStartResponse =
+  KilocodeVoiceOpenaiStartResponses[keyof KilocodeVoiceOpenaiStartResponses]
+
+export type KilocodeVoiceOpenaiCallData = {
+  body?: OpenAiVoiceCallInput
+  headers?: {
+    "x-raya-voice-key"?: string
+  }
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/voice/openai/session/{id}/calls"
+}
+
+export type KilocodeVoiceOpenaiCallErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeVoiceOpenaiCallError = KilocodeVoiceOpenaiCallErrors[keyof KilocodeVoiceOpenaiCallErrors]
+
+export type KilocodeVoiceOpenaiCallResponses = {
+  /**
+   * OpenAIVoiceCall
+   */
+  200: OpenAiVoiceCall
+}
+
+export type KilocodeVoiceOpenaiCallResponse = KilocodeVoiceOpenaiCallResponses[keyof KilocodeVoiceOpenaiCallResponses]
+
+export type KilocodeVoiceOpenaiResultData = {
+  body?: never
+  headers?: {
+    "x-raya-voice-key"?: string
+  }
+  path: {
+    id: string
+    callID: string
+  }
+  query: {
+    directory?: string
+    workspace?: string
+    generation: string
+  }
+  url: "/kilocode/voice/openai/session/{id}/calls/{callID}"
+}
+
+export type KilocodeVoiceOpenaiResultErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeVoiceOpenaiResultError = KilocodeVoiceOpenaiResultErrors[keyof KilocodeVoiceOpenaiResultErrors]
+
+export type KilocodeVoiceOpenaiResultResponses = {
+  /**
+   * OpenAIVoiceCall
+   */
+  200: OpenAiVoiceCall
+}
+
+export type KilocodeVoiceOpenaiResultResponse =
+  KilocodeVoiceOpenaiResultResponses[keyof KilocodeVoiceOpenaiResultResponses]
+
+export type KilocodeVoiceOpenaiCancelData = {
+  body?: {
+    generation: string
+  }
+  headers?: {
+    "x-raya-voice-key"?: string
+  }
+  path: {
+    id: string
+    callID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/voice/openai/session/{id}/calls/{callID}/cancel"
+}
+
+export type KilocodeVoiceOpenaiCancelErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeVoiceOpenaiCancelError = KilocodeVoiceOpenaiCancelErrors[keyof KilocodeVoiceOpenaiCancelErrors]
+
+export type KilocodeVoiceOpenaiCancelResponses = {
+  /**
+   * OpenAIVoiceCall
+   */
+  200: OpenAiVoiceCall
+}
+
+export type KilocodeVoiceOpenaiCancelResponse =
+  KilocodeVoiceOpenaiCancelResponses[keyof KilocodeVoiceOpenaiCancelResponses]
+
+export type KilocodeVoiceOpenaiCloseData = {
+  body?: never
+  headers?: {
+    "x-raya-voice-key"?: string
+  }
+  path: {
+    id: string
+  }
+  query: {
+    directory?: string
+    workspace?: string
+    generation: string
+  }
+  url: "/kilocode/voice/openai/session/{id}"
+}
+
+export type KilocodeVoiceOpenaiCloseErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeVoiceOpenaiCloseError = KilocodeVoiceOpenaiCloseErrors[keyof KilocodeVoiceOpenaiCloseErrors]
+
+export type KilocodeVoiceOpenaiCloseResponses = {
+  /**
+   * OpenAIVoiceBinding
+   */
+  200: OpenAiVoiceBinding
+}
+
+export type KilocodeVoiceOpenaiCloseResponse =
+  KilocodeVoiceOpenaiCloseResponses[keyof KilocodeVoiceOpenaiCloseResponses]
 
 export type KilocodeVoiceStartData = {
   body?: {

@@ -4,6 +4,7 @@ import { handleSpeechToTextCancel, handleSpeechToTextStart, handleSpeechToTextSt
 import { prewarmSpeechCapture } from "../speech-to-text/capture"
 import type { SpeechService } from "../speech/service" // raya_change - Milestone H configured speech service
 import type { SpeechSettings } from "../speech/settings" // raya_change - Milestone H
+import type { SpeechKey } from "../shared/speech"
 
 type Msg = {
   type: string
@@ -14,7 +15,8 @@ type Msg = {
   format?: string // raya_change - Milestone H webview microphone capture
   text?: string // raya_change - Milestone H TTS
   settings?: SpeechSettings // raya_change - Milestone H settings
-  kind?: "realtime" | "stt" | "tts" // raya_change - Milestone H and native realtime secret keys
+  kind?: SpeechKey
+  sdp?: string
   key?: string // raya_change - Milestone H secret keys
   handsFree?: boolean // raya_change - Milestone H extension-host VAD fallback
   threshold?: number // raya_change - Milestone H extension-host VAD fallback
@@ -27,6 +29,7 @@ type Ctx = {
   dir: string
   post: (msg: unknown) => void
   speech?: SpeechService // raya_change - Milestone H
+  voiceScope?: (sessionID: string) => { directory: string; current: () => boolean } | undefined
 }
 
 export async function routeInputToolMessage(message: Msg, ctx: Ctx): Promise<boolean> {
@@ -87,6 +90,7 @@ export async function routeInputToolMessage(message: Msg, ctx: Ctx): Promise<boo
 
 // raya_change start - Milestone H configured STT, streaming TTS, and settings lifecycle
 async function routeSpeechMessage(message: Msg, ctx: Ctx): Promise<boolean> {
+  if (await routeOpenAI(message, ctx)) return true
   if (routeSpeechPlayback(message, ctx)) return true
   if (message.type === "speechSettingsRequest") {
     await ctx.speech?.state(ctx.post)
@@ -96,10 +100,7 @@ async function routeSpeechMessage(message: Msg, ctx: Ctx): Promise<boolean> {
     if (message.settings) await ctx.speech?.update(message.settings, ctx.dir, ctx.post)
     return true
   }
-  if (message.type === "speechKeyUpdate") {
-    if (message.kind) await ctx.speech?.key(message.kind, message.key, ctx.dir, ctx.post)
-    return true
-  }
+  if (await routeKey(message, ctx)) return true
   if (message.type === "speechRealtimeStart") {
     if (message.sessionID)
       await ctx.speech?.realtimeStart(
@@ -127,6 +128,46 @@ async function routeSpeechMessage(message: Msg, ctx: Ctx): Promise<boolean> {
     return true
   }
   return false
+}
+
+async function routeKey(message: Msg, ctx: Ctx) {
+  if (message.type !== "speechKeyUpdate") return false
+  if (
+    message.kind &&
+    ["openai", "realtime", "stt", "tts"].includes(message.kind) &&
+    (message.key === undefined || typeof message.key === "string")
+  )
+    await ctx.speech?.key(message.kind, message.key, ctx.dir, ctx.post)
+  return true
+}
+
+async function routeOpenAI(message: Msg, ctx: Ctx) {
+  if (message.type === "speechOpenAIStop") {
+    if (typeof message.requestId === "string") await ctx.speech?.openaiStop(message.requestId, ctx.post)
+    return true
+  }
+  if (message.type !== "speechOpenAIStart") return false
+  const scope = typeof message.sessionID === "string" ? ctx.voiceScope?.(message.sessionID) : undefined
+  if (!ctx.speech || !scope || typeof message.requestId !== "string" || typeof message.sdp !== "string") {
+    ctx.post({
+      type: "speechOpenAIError",
+      requestId: message.requestId,
+      error: "The voice session's workspace is unavailable or ambiguous. Reopen the task before starting voice.",
+    })
+    return true
+  }
+  await ctx.speech.openaiStart(
+    {
+      requestId: message.requestId,
+      sessionID: message.sessionID!,
+      sdp: message.sdp,
+      directory: scope.directory,
+      current: scope.current,
+      connection: ctx.connection,
+    },
+    ctx.post,
+  )
+  return true
 }
 
 function routeSpeechPlayback(message: Msg, ctx: Ctx) {

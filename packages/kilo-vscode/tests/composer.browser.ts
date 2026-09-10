@@ -1,6 +1,23 @@
 import AxeBuilder from "@axe-core/playwright"
 import { expect, test } from "@playwright/test"
 
+test("OpenAI voice admission preserves the task agent and displays missing-key recovery", async ({ page }) => {
+  await page.goto("/?theme=dark")
+  await page.getByRole("button", { name: "Select OpenAI preview without key", exact: true }).click()
+  const summary = page.locator('.composer-configuration [data-slot="collapsible-trigger"]')
+  await expect(summary).toContainText("Auto")
+  await page.getByRole("button", { name: "Start hands-free voice", exact: true }).click()
+  await expect(page.locator(".prompt-realtime-voice")).toContainText("Add your OpenAI API key")
+  await expect(summary).toContainText("Auto")
+  await expect(page.getByRole("button", { name: "Start hands-free voice", exact: true })).toBeVisible()
+  const sent = await page.evaluate(
+    () => (window as Window & { __composerMessages: { type: string }[] }).__composerMessages,
+  )
+  expect(sent.some((message) => message.type === "speechOpenAIStart" || message.type === "speechRealtimeStart")).toBe(
+    false,
+  )
+})
+
 for (const theme of ["light", "dark", "contrast"])
   for (const width of [320, 760]) {
     test(`${theme} outcome entry and real configuration controls at ${width}px`, async ({ page }, info) => {

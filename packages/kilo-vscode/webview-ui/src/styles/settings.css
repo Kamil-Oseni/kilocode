@@ -175,3 +175,24 @@
   white-space: normal;
   overflow-wrap: anywhere;
 }
+
+.speech-key-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.speech-live-status {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+.speech-status-error {
+  color: var(--vscode-errorForeground, var(--vscode-foreground));
+}
+.speech-settings [data-slot="settings-row-input"] {
+  min-width: 0;
+}

@@ -4,7 +4,7 @@ import { transformAsync } from "@babel/core"
 import { Window } from "happy-dom"
 
 plugin({
-  name: "routine-view-dom",
+  name: "realtime-provider-dom",
   setup(build) {
     build.onLoad({ filter: /\.tsx$/ }, async ({ path }) => {
       const result = await transformAsync(await Bun.file(path).text(), {
@@ -49,11 +49,14 @@ globalThis.acquireVsCodeApi = () => ({
   getState: () => undefined,
   setState: () => {},
 })
-const { createComponent } = await import("solid-js")
+const { createComponent, createSignal } = await import("solid-js")
+const [current] = createSignal("session-a")
+const { SessionContext } = await import("../../webview-ui/src/context/session.tsx")
 const { render } = await import("solid-js/web")
 const { VSCodeProvider } = await import("../../webview-ui/src/context/vscode.tsx")
 const { VoiceProvider, useVoice } = await import("../../webview-ui/src/context/voice.tsx")
 const { RealtimeVoice } = await import("../../webview-ui/src/context/realtime-voice.ts")
+const { DEFAULT_SPEECH_SETTINGS } = await import("../../src/shared/speech.ts")
 const failures = []
 let cleanup = 0
 // Drive only the transport boundary; all message routing and reactive state is production VoiceProvider.
@@ -71,10 +74,15 @@ const dispose = render(
   () =>
     createComponent(VSCodeProvider, {
       get children() {
-        return createComponent(VoiceProvider, {
+        return createComponent(SessionContext.Provider, {
+          value: { currentSessionID: current },
           get children() {
-            voice = useVoice()
-            return document.createElement("span")
+            return createComponent(VoiceProvider, {
+              get children() {
+                voice = useVoice()
+                return document.createElement("span")
+              },
+            })
           },
         })
       },
@@ -95,6 +103,20 @@ const ready = (id) =>
   })
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
 try {
+  send({
+    type: "speechSettingsLoaded",
+    settings: {
+      ...DEFAULT_SPEECH_SETTINGS,
+      voiceEngine: "qwen-realtime",
+      hasOpenAIKey: false,
+      hasRealtimeKey: true,
+      hasSttKey: false,
+      hasTtsKey: false,
+    },
+  })
+  await tick()
+  cleanup = 0
+  sent.length = 0
   ready("old")
   ready("new")
   failures[0](new Error("old secret transport error"))

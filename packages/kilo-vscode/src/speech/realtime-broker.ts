@@ -45,6 +45,10 @@ export class RealtimeBroker {
 
   constructor(private readonly timeout = 8_000) {}
 
+  get active() {
+    return !!this.claim
+  }
+
   async start(load: () => Promise<Config | Failure>, ready: (info: Session) => void): Promise<Result> {
     if (this.disposed) return failure("cancelled", "Voice is closed.")
     if (this.claim)

@@ -14,8 +14,10 @@ import { ServerContext, useServer } from "../../webview-ui/src/context/server"
 import { VoiceProvider } from "../../webview-ui/src/context/voice"
 import { PromptInput } from "../../webview-ui/src/components/chat/PromptInput"
 import { WelcomeEmptyState } from "../../webview-ui/src/components/chat/WelcomeEmptyState"
+import { DEFAULT_SPEECH_SETTINGS } from "../../src/shared/speech"
 
 const messages = []
+window.__composerMessages = messages
 window.acquireVsCodeApi = () => ({
   getState: () => undefined,
   setState: () => {},
@@ -93,21 +95,43 @@ function Fixture() {
         }}
       >
         <SessionContext.Provider value={session}>
-          <main style={{ padding: "12px", "max-width": "760px", margin: "auto" }}>
-            <WelcomeEmptyState />
-            <PromptInput boxId="fixture" />
-            <div aria-label="Fixture controls">
-              <button onClick={() => setConnected(!connected())}>Toggle connection</button>
-              <button onClick={() => setID(id() === "first" ? "second" : "first")}>Switch session</button>
-              <button onClick={() => setSelected({ providerID: "missing-provider", modelID: "missing-model" })}>
-                Unavailable model
-              </button>
-              <button onClick={() => setBusy(!busy())}>Toggle busy</button>
-            </div>
-            <output hidden data-sent>
-              {JSON.stringify(sent())}
-            </output>
-          </main>
+          <VoiceProvider>
+            <main style={{ padding: "12px", "max-width": "760px", margin: "auto" }}>
+              <WelcomeEmptyState />
+              <PromptInput boxId="fixture" />
+              <div aria-label="Fixture controls">
+                <button onClick={() => setConnected(!connected())}>Toggle connection</button>
+                <button onClick={() => setID(id() === "first" ? "second" : "first")}>Switch session</button>
+                <button onClick={() => setSelected({ providerID: "missing-provider", modelID: "missing-model" })}>
+                  Unavailable model
+                </button>
+                <button onClick={() => setBusy(!busy())}>Toggle busy</button>
+                <button
+                  onClick={() =>
+                    window.postMessage(
+                      {
+                        type: "speechSettingsLoaded",
+                        settings: {
+                          ...DEFAULT_SPEECH_SETTINGS,
+                          voiceEngine: "openai-realtime",
+                          hasOpenAIKey: false,
+                          hasRealtimeKey: false,
+                          hasSttKey: false,
+                          hasTtsKey: false,
+                        },
+                      },
+                      "*",
+                    )
+                  }
+                >
+                  Select OpenAI preview without key
+                </button>
+              </div>
+              <output hidden data-sent>
+                {JSON.stringify(sent())}
+              </output>
+            </main>
+          </VoiceProvider>
         </SessionContext.Provider>
       </ProviderContext.Provider>
     </ServerContext.Provider>
@@ -116,7 +140,7 @@ function Fixture() {
 render(
   () => (
     <StoryProviders noPadding config={{}}>
-      <VoiceProvider><Fixture /></VoiceProvider>
+      <Fixture />
     </StoryProviders>
   ),
   document.getElementById("root"),

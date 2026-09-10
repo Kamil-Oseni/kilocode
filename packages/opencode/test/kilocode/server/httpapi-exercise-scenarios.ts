@@ -84,6 +84,49 @@ const edit = {
 
 export const kiloScenarios: Scenario[] = [
   ...anacondaDesktopScenarios,
+  http.protected
+    .post("/kilocode/voice/openai/session", "voice.openai.start")
+    .at((ctx) => ({
+      path: "/kilocode/voice/openai/session",
+      headers: ctx.headers(),
+      body: { parentSessionID: "ses_voice_missing", providerCallID: "call_missing", requestID: "request_missing" },
+    }))
+    .status(401),
+  http.protected
+    .post("/kilocode/voice/openai/session/{id}/calls", "voice.openai.call")
+    .at((ctx) => ({
+      path: "/kilocode/voice/openai/session/missing/calls",
+      headers: ctx.headers(),
+      body: {
+        generation: "missing",
+        callID: "call_missing",
+        function: "raya_work",
+        arguments: { request: "Inspect the task" },
+      },
+    }))
+    .status(401),
+  http.protected
+    .get("/kilocode/voice/openai/session/{id}/calls/{callID}", "voice.openai.result")
+    .at((ctx) => ({
+      path: "/kilocode/voice/openai/session/missing/calls/missing?generation=missing",
+      headers: ctx.headers(),
+    }))
+    .status(401),
+  http.protected
+    .post("/kilocode/voice/openai/session/{id}/calls/{callID}/cancel", "voice.openai.cancel")
+    .at((ctx) => ({
+      path: "/kilocode/voice/openai/session/missing/calls/missing/cancel",
+      headers: ctx.headers(),
+      body: { generation: "missing" },
+    }))
+    .status(401),
+  http.protected
+    .delete("/kilocode/voice/openai/session/{id}", "voice.openai.close")
+    .at((ctx) => ({
+      path: "/kilocode/voice/openai/session/missing?generation=missing",
+      headers: ctx.headers(),
+    }))
+    .status(401),
   http.protected.get("/kilocode/capabilities", "capabilities.get").json(200, (value) => {
     object(value)
     check(value.version === 1, "capability manifest should report version 1")

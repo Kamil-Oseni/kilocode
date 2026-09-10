@@ -684,7 +684,7 @@ export interface SpeechSettingsUpdateMessage {
 
 export interface SpeechKeyUpdateMessage {
   type: "speechKeyUpdate"
-  kind: "realtime" | "stt" | "tts"
+  kind: import("../../../../src/shared/speech").SpeechKey
   key?: string
 }
 
@@ -707,6 +707,18 @@ export interface SpeechRealtimeStartMessage {
 
 export interface SpeechRealtimeStopMessage {
   type: "speechRealtimeStop"
+}
+
+export interface SpeechOpenAIStartMessage {
+  type: "speechOpenAIStart"
+  requestId: string
+  sessionID: string
+  sdp: string
+}
+
+export interface SpeechOpenAIStopMessage {
+  type: "speechOpenAIStop"
+  requestId: string
 }
 // raya_change end
 // raya_change end
@@ -1855,6 +1867,8 @@ export type WebviewMessage =
   | SpeechPlaybackCancelMessage // raya_change - Milestone H
   | SpeechRealtimeStartMessage // raya_change - realtime voice
   | SpeechRealtimeStopMessage // raya_change - realtime voice
+  | SpeechOpenAIStartMessage
+  | SpeechOpenAIStopMessage
   | RequestFileSearchMessage
   | RequestSessionSearchMessage
   | RequestFilePickerMessage

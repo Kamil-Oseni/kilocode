@@ -766,6 +766,23 @@ export interface SpeechRealtimeErrorMessage {
 export interface SpeechRealtimeStoppedMessage {
   type: "speechRealtimeStopped"
 }
+
+export interface SpeechOpenAIReadyMessage {
+  type: "speechOpenAIReady"
+  requestId: string
+  sdp: string
+}
+
+export interface SpeechOpenAIErrorMessage {
+  type: "speechOpenAIError"
+  requestId: string
+  error: string
+}
+
+export interface SpeechOpenAIStoppedMessage {
+  type: "speechOpenAIStopped"
+  requestId: string
+}
 // raya_change end
 // raya_change end
 
@@ -1751,6 +1768,9 @@ export type ExtensionMessage =
   | SpeechRealtimeReadyMessage // raya_change - realtime voice
   | SpeechRealtimeErrorMessage // raya_change - realtime voice
   | SpeechRealtimeStoppedMessage // raya_change - realtime voice
+  | SpeechOpenAIReadyMessage
+  | SpeechOpenAIErrorMessage
+  | SpeechOpenAIStoppedMessage
   | FileSearchResultMessage
   | SessionSearchResultMessage
   | FilePickerResultMessage

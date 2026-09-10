@@ -26,6 +26,7 @@ type Ctx = {
   cancelBackgroundJob: (jobID: string, sessionID: string, requestID: string) => Promise<void>
   backgroundSubagents: (sessionID: string) => Promise<void>
   speech?: SpeechService // raya_change - Milestone H configured speech bridge
+  voiceScope?: (sessionID: string) => { directory: string; current: () => boolean } | undefined
 }
 
 async function routeBackgroundMessage(
@@ -124,6 +125,7 @@ export async function routeEarlyMessage(
       dir: ctx.dir,
       post: ctx.post,
       speech: ctx.speech, // raya_change - Milestone H
+      voiceScope: ctx.voiceScope,
     }))
   )
 }

@@ -1,17 +1,28 @@
 // raya_change - Milestone H intelligent voice round-trip and streaming playback context
-import { createContext, createSignal, onCleanup, useContext, type Accessor, type ParentComponent } from "solid-js"
+import {
+  createContext,
+  createEffect,
+  createSignal,
+  onCleanup,
+  useContext,
+  type Accessor,
+  type ParentComponent,
+} from "solid-js"
 import type { ExtensionMessage } from "../types/messages"
 import {
   DEFAULT_SPEECH_SETTINGS,
   type SpeechSettings,
   type SpeechState,
   type VoiceMode,
+  type SpeechKey,
 } from "../../../src/shared/speech"
 import { useVSCode } from "./vscode"
 import { VoiceLoop } from "./voice-loop"
 import { RealtimeVoice, type RealtimeTranscript } from "./realtime-voice" // raya_change - native realtime thin client
 import { StreamPlayer } from "./stream-player" // raya_change - user-gesture-safe MiniMax audio sink
 import { VoiceEcho } from "./voice-echo" // raya_change - residual spoken-response exclusion
+import { OpenAIVoice } from "./openai-voice"
+import { useSession } from "./session"
 
 type VoiceStatus = "off" | "connecting" | "listening" | "thinking" | "speaking" | "degraded"
 
@@ -24,7 +35,7 @@ type VoiceContextValue = {
   cascade: Accessor<boolean>
   error: Accessor<string | undefined>
   update: (settings: Partial<SpeechSettings>) => void
-  setKey: (kind: "realtime" | "stt" | "tts", key?: string) => void
+  setKey: (kind: SpeechKey, key?: string) => void
   setMode: (mode: VoiceMode) => void
   start: (sessionID: string) => void
   listen: () => void
@@ -40,8 +51,10 @@ const Context = createContext<VoiceContextValue>()
 
 export const VoiceProvider: ParentComponent = (props) => {
   const vscode = useVSCode()
+  const session = useSession()
   const [settings, setSettings] = createSignal<SpeechState>({
     ...DEFAULT_SPEECH_SETTINGS,
+    hasOpenAIKey: false,
     hasRealtimeKey: false,
     hasSttKey: false,
     hasTtsKey: false,
@@ -53,12 +66,22 @@ export const VoiceProvider: ParentComponent = (props) => {
   const [error, setError] = createSignal<string | undefined>()
   const [cascade, setCascade] = createSignal(false)
   const state = { request: "", generation: 0, terminal: false }
+  let call: { id: string; session: string } | undefined
+  let pending: { id: string; resolve: (sdp: string) => void; reject: (error: Error) => void } | undefined
+  const closing = new Set<string>()
+  const legacy = () => settings().voiceEngine !== "openai-realtime" && !call && closing.size === 0
   const echo = new VoiceEcho()
-  const player = new StreamPlayer(() => {
-    setPlaying(false)
-    loop.done()
-    if (settings().mode === "hands-free" && cascade()) setStatus("listening")
-  }, setError)
+  const player = new StreamPlayer(
+    () => {
+      if (!legacy()) return
+      setPlaying(false)
+      loop.done()
+      if (settings().mode === "hands-free" && cascade()) setStatus("listening")
+    },
+    (message) => {
+      if (legacy()) setError(message)
+    },
+  )
   const loop = new VoiceLoop({
     listen: () => queueMicrotask(() => window.dispatchEvent(new CustomEvent("rayaVoiceListen"))),
     stop: () => {
@@ -69,6 +92,7 @@ export const VoiceProvider: ParentComponent = (props) => {
     },
   })
   function degrade(message: string) {
+    if (!legacy()) return
     setCascade(true)
     setError(message)
     setStatus("degraded")
@@ -78,16 +102,115 @@ export const VoiceProvider: ParentComponent = (props) => {
     queueMicrotask(() => window.dispatchEvent(new CustomEvent("rayaVoiceListen")))
   }
   const realtime = new RealtimeVoice({
-    status: setStatus,
-    transcript: setTranscript,
+    status: (value) => {
+      if (legacy()) setStatus(value)
+    },
+    transcript: (value) => {
+      if (legacy()) setTranscript(value)
+    },
     error: (message) => {
+      if (!legacy()) return
       setError(message)
       if (!state.terminal) vscode.postMessage({ type: "speechRealtimeStop" })
       state.terminal = true
     },
     fallback: degrade,
-    aec: setAec,
+    aec: (value) => {
+      if (legacy()) setAec(value)
+    },
   })
+  const native = new OpenAIVoice({
+    status: (value) => {
+      if (call) setStatus(value)
+    },
+    transcript: (value) => {
+      if (call) setTranscript(value)
+    },
+    aec: setAec,
+    notice: setError,
+    error: failOpenAI,
+  })
+
+  function stopOpenAI() {
+    const current = call
+    call = undefined
+    if (pending) {
+      const waiting = pending
+      pending = undefined
+      waiting.reject(new Error("Voice connection cancelled."))
+    }
+    if (current) {
+      if (closing.size >= 32) closing.delete(closing.values().next().value!)
+      closing.add(current.id)
+      vscode.postMessage({ type: "speechOpenAIStop", requestId: current.id })
+    }
+    void native.stop().catch(() => {
+      setError("Microphone or audio cleanup failed. End voice again before reconnecting.")
+      setStatus("degraded")
+    })
+  }
+
+  function failOpenAI(message: string) {
+    if (!call) return
+    setError(message)
+    setStatus("degraded")
+    setPlaying(false)
+    stopOpenAI()
+  }
+
+  function startOpenAI(id: string) {
+    if (call || closing.size) {
+      setError("Wait for the previous voice call to close before starting another.")
+      return
+    }
+    if (!settings().hasOpenAIKey) {
+      setError("Add your OpenAI API key in Speech settings before starting live voice.")
+      setStatus("off")
+      return
+    }
+    if (session.currentSessionID() !== id) {
+      setError("Open the voice task before starting its call.")
+      setStatus("off")
+      return
+    }
+    const current = { id: crypto.randomUUID(), session: id }
+    call = current
+    state.generation++
+    void native
+      .start(
+        { sessionID: id, requestID: current.id },
+        (sdp) =>
+          new Promise<string>((resolve, reject) => {
+            if (call !== current) return reject(new Error("Voice connection cancelled."))
+            pending = { id: current.id, resolve, reject }
+            vscode.postMessage({ type: "speechOpenAIStart", requestId: current.id, sessionID: id, sdp })
+          }),
+      )
+      .catch((error: unknown) => {
+        if (call === current) failOpenAI(error instanceof Error ? error.message : "OpenAI voice could not connect.")
+      })
+  }
+
+  function openaiMessage(message: ExtensionMessage) {
+    if (message.type === "speechOpenAIReady") {
+      if (call?.id !== message.requestId || pending?.id !== message.requestId) return true
+      const waiting = pending
+      pending = undefined
+      waiting.resolve(message.sdp)
+      return true
+    }
+    if (message.type === "speechOpenAIError") {
+      if (call?.id === message.requestId) failOpenAI(message.error)
+      if (closing.has(message.requestId)) {
+        setError(message.error)
+        if (!call) setStatus("degraded")
+      }
+      return true
+    }
+    if (message.type !== "speechOpenAIStopped") return false
+    closing.delete(message.requestId)
+    return true
+  }
   function demote(message: Extract<ExtensionMessage, { type: "speechRealtimeError" }>) {
     if (message.code === "busy") {
       setError(message.error)
@@ -106,18 +229,13 @@ export const VoiceProvider: ParentComponent = (props) => {
     setStatus("degraded")
   }
 
-  const unsubscribe = vscode.onMessage((message: ExtensionMessage) => {
-    if (message.type === "speechSettingsLoaded") {
-      setSettings(message.settings)
-      loop.set(message.settings.mode)
-      return
-    }
+  function playback(message: ExtensionMessage) {
     if (message.type === "speechPlaybackChunk") {
       if (message.text) echo.set(message.text)
       const starting = message.requestId !== state.request || !playing()
       // raya_change - extension-host Voice completion owns its generated playback request
       if (message.requestId !== state.request) {
-        if (settings().mode !== "hands-free") return
+        if (settings().mode !== "hands-free") return true
         player.reset()
         state.request = message.requestId
       }
@@ -129,21 +247,41 @@ export const VoiceProvider: ParentComponent = (props) => {
       if (starting && settings().mode === "hands-free" && cascade()) {
         queueMicrotask(() => window.dispatchEvent(new CustomEvent("rayaVoiceListen")))
       }
-      return
+      return true
     }
     if (message.type === "speechPlaybackDone") {
-      if (message.requestId !== state.request) return
+      if (message.requestId !== state.request) return true
       player.finish()
-      return
+      return true
     }
     if (message.type === "speechPlaybackError") {
-      if (message.requestId !== state.request) return
+      if (message.requestId !== state.request) return true
       console.error("[Kilo New] Speech playback failed:", message.error)
       setError(message.error)
       player.stop()
+      return true
+    }
+    return false
+  }
+
+  const unsubscribe = vscode.onMessage((message: ExtensionMessage) => {
+    if (openaiMessage(message)) return
+    if (message.type === "speechSettingsLoaded") {
+      if (message.settings.voiceEngine !== settings().voiceEngine) stop()
+      setSettings(message.settings)
+      loop.set(message.settings.voiceEngine === "openai-realtime" ? "off" : message.settings.mode)
       return
     }
+    if (!legacy() && (message.type.startsWith("speechRealtime") || message.type.startsWith("speechPlayback"))) {
+      if (message.type === "speechRealtimeReady") vscode.postMessage({ type: "speechRealtimeStop" })
+      return
+    }
+    if (playback(message)) return
     if (message.type === "speechRealtimeReady") {
+      if (call) {
+        vscode.postMessage({ type: "speechRealtimeStop" })
+        return
+      }
       setCascade(false)
       setError(undefined)
       const generation = ++state.generation
@@ -167,6 +305,7 @@ export const VoiceProvider: ParentComponent = (props) => {
       return
     }
     if (message.type === "speechRealtimeStopped") {
+      if (call) return
       setStatus(state.terminal ? "degraded" : "off")
       setTranscript(undefined)
     }
@@ -186,6 +325,7 @@ export const VoiceProvider: ParentComponent = (props) => {
   vscode.postMessage({ type: "speechSettingsRequest" })
   onCleanup(() => {
     unsubscribe()
+    stopOpenAI()
     state.generation++
     void realtime.stop().catch(() => console.error("[Kilo New] Voice cleanup failed during webview disposal."))
     vscode.postMessage({ type: "speechRealtimeStop" })
@@ -194,12 +334,14 @@ export const VoiceProvider: ParentComponent = (props) => {
   })
 
   const update = (patch: Partial<SpeechSettings>) => {
+    if (patch.voiceEngine && patch.voiceEngine !== settings().voiceEngine) stop()
     const next = { ...settings(), ...patch }
     setSettings(next)
     vscode.postMessage({
       type: "speechSettingsUpdate",
       settings: {
         voiceEngine: next.voiceEngine,
+        openaiVoice: next.openaiVoice,
         realtimeEndpoint: next.realtimeEndpoint,
         realtimeModel: next.realtimeModel,
         realtimeVoice: next.realtimeVoice,
@@ -222,6 +364,7 @@ export const VoiceProvider: ParentComponent = (props) => {
     setCascade(false)
     echo.clear()
     state.generation++
+    stopOpenAI()
     void realtime.stop().catch(() => {
       setError("Voice cleanup failed. Restart Raya before reconnecting.")
       setStatus("degraded")
@@ -233,8 +376,16 @@ export const VoiceProvider: ParentComponent = (props) => {
   }
   const setMode = (mode: VoiceMode) => {
     update(mode === "hands-free" ? { mode, autoSpeak: true } : { mode }) // raya_change - the orb always implies spoken output
-    loop.set(mode)
+    loop.set(settings().voiceEngine === "openai-realtime" ? "off" : mode)
   }
+
+  createEffect(() => {
+    const id = session.currentSessionID()
+    if (!call || call.session === id) return
+    stop()
+    setTranscript(undefined)
+    setError("Voice ended because you changed tasks. Work already started remains in its original conversation.")
+  })
 
   return (
     <Context.Provider
@@ -250,6 +401,10 @@ export const VoiceProvider: ParentComponent = (props) => {
         setKey: (kind, key) => vscode.postMessage({ type: "speechKeyUpdate", kind, key }),
         setMode,
         start: (sessionID) => {
+          if (call || closing.size) {
+            setError("End the previous voice call and wait for cleanup before starting another.")
+            return
+          }
           state.terminal = false
           setCascade(false)
           echo.clear()
@@ -258,6 +413,10 @@ export const VoiceProvider: ParentComponent = (props) => {
           setError(undefined)
           setStatus("connecting")
           update({ mode: "hands-free", autoSpeak: false })
+          if (settings().voiceEngine === "openai-realtime") {
+            startOpenAI(sessionID)
+            return
+          }
           vscode.postMessage({ type: "speechRealtimeStart", sessionID })
         },
         listen: () => {

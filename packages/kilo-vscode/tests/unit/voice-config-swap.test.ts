@@ -12,6 +12,8 @@ describe("voice configuration", () => {
     const store = new SpeechSettingsStore(state, secrets)
 
     await store.update({
+      voiceEngine: "openai-realtime",
+      openaiVoice: "marin",
       realtimeModel: "qwen-audio-3.0-realtime-flash",
       realtimeVoice: "longanlingxi",
       sttModel: "paraformer-zh-streaming",
@@ -25,6 +27,8 @@ describe("voice configuration", () => {
     expect(settings.sttModel).toBe("paraformer-zh-streaming")
     expect(settings.ttsModel).toBe("speech-2.8-hd")
     expect(settings.voice).toBe("Chinese_Lyrical")
+    expect(settings.voiceEngine).toBe("openai-realtime")
+    expect(settings.openaiVoice).toBe("marin")
   })
 
   it("keeps keys out of public settings and mirrors their separate roles only when enabled", async () => {
@@ -36,10 +40,12 @@ describe("voice configuration", () => {
       await store.setKey("stt", "stt-secret")
       await store.setKey("tts", "tts-secret")
       await store.setKey("realtime", "realtime-secret")
+      await store.setKey("openai", "openai-secret")
       const settings = await store.load()
       expect(settings.hasRealtimeKey).toBe(true)
       expect(settings.hasSttKey).toBe(true)
       expect(settings.hasTtsKey).toBe(true)
+      expect(settings.hasOpenAIKey).toBe(true)
       expect(JSON.stringify(settings)).not.toContain("secret")
 
       await store.sync(root)
@@ -52,6 +58,7 @@ describe("voice configuration", () => {
       expect(mirror).toContain("stt-secret")
       expect(mirror).toContain("tts-secret")
       expect(mirror).toContain("realtime-secret")
+      expect(mirror).not.toContain("openai-secret")
       expect(ignore).toContain(".raya/speech.local.json")
       await store.setKey("realtime", undefined)
       await store.sync(root)

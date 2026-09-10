@@ -1113,6 +1113,21 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           cancelBackgroundJob: (jobID, sessionID, requestID) => this.cancelBackgroundJob(jobID, sessionID, requestID),
           backgroundSubagents: (sessionID) => this.backgroundSubagents(sessionID),
           speech: this.speech, // raya_change - Milestone H
+          voiceScope: (sid) => {
+            if (!this.trackedSessionIds.has(sid) || this.routeSessionDirectory(sid) === null || !this.client) return
+            const directory = this.getWorkspaceDirectory(sid)
+            const generation = this.connectionGeneration
+            const client = this.client
+            return {
+              directory,
+              current: () =>
+                this.client === client &&
+                this.connectionGeneration === generation &&
+                this.trackedSessionIds.has(sid) &&
+                this.routeSessionDirectory(sid) !== null &&
+                sameDirectory(directory, this.getWorkspaceDirectory(sid)),
+            }
+          },
         })
       ) {
         return

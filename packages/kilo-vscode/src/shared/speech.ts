@@ -1,9 +1,12 @@
 // raya_change - Milestone H node-free speech contract shared with the webview
 export type VoiceMode = "off" | "push-to-talk" | "hands-free"
-export type VoiceEngine = "qwen-realtime" | "cascade-v1"
+export type VoiceEngine = "openai-realtime" | "qwen-realtime" | "cascade-v1"
+export type SpeechKey = "openai" | "realtime" | "stt" | "tts"
+export const OPENAI_VOICE_MODEL = "gpt-realtime-2.1"
 
 export type SpeechSettings = {
   voiceEngine: VoiceEngine
+  openaiVoice: string
   realtimeEndpoint: string
   realtimeModel: string
   realtimeVoice: string
@@ -21,6 +24,7 @@ export type SpeechSettings = {
 }
 
 export type SpeechState = SpeechSettings & {
+  hasOpenAIKey: boolean
   hasRealtimeKey: boolean
   hasSttKey: boolean
   hasTtsKey: boolean
@@ -28,6 +32,7 @@ export type SpeechState = SpeechSettings & {
 
 export const DEFAULT_SPEECH_SETTINGS: SpeechSettings = {
   voiceEngine: "qwen-realtime",
+  openaiVoice: "marin",
   realtimeEndpoint: "wss://dashscope-intl.aliyuncs.com/api-ws/v1/realtime",
   realtimeModel: "qwen-audio-3.0-realtime-plus",
   realtimeVoice: "longanqian",

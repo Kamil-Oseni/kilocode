@@ -967,10 +967,9 @@ export function addAuto(
   }
 }
 
-export function refreshAuto(agents: Parameters<typeof patchAgents>[0], model: { providerID: string; modelID: string }) {
+export function refreshAuto(agents: Parameters<typeof patchAgents>[0]) {
   const auto = agents.auto
   if (!auto) return
-  auto.model = model
   auto.prompt = RayaChief.prompt(
     Object.values(agents).filter((item) => item.mode !== "primary" && !item.hidden && !item.deprecated),
   )

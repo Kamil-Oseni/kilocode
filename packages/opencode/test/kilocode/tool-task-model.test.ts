@@ -1,7 +1,7 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { afterEach, beforeAll, describe, expect } from "bun:test"
-import { Effect } from "effect"
+import { Cause, Effect, Exit } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import fs from "fs/promises"
 import path from "path"
@@ -14,7 +14,6 @@ import { Config } from "../../src/config/config"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import * as CrossSpawnSpawner from "@opencode-ai/core/cross-spawn-spawner"
 import { Global } from "@opencode-ai/core/global"
-import { Instance } from "../../src/kilocode/instance"
 import { Session } from "../../src/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import type { SessionPrompt } from "../../src/session/prompt"
@@ -22,6 +21,7 @@ import { MessageID, PartID } from "../../src/session/schema"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { Provider } from "../../src/provider/provider"
+import { RayaToolModel } from "../../src/kilocode/chief/tool-model"
 import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
 import { Truncate } from "../../src/tool/truncate"
 import { ToolRegistry } from "../../src/tool/registry"
@@ -66,7 +66,7 @@ const sub = {
 }
 const subVariant = "deep"
 
-function custom(id: string, model: string, variants: string[] = []) {
+function custom(id: string, model: string, variants: string[] = [], toolcall = true) {
   return {
     name: id,
     id,
@@ -79,7 +79,7 @@ function custom(id: string, model: string, variants: string[] = []) {
         attachment: false,
         reasoning: variants.length > 0,
         temperature: false,
-        tool_call: true,
+        tool_call: toolcall,
         release_date: "2025-01-01",
         limit: { context: 100_000, output: 10_000 },
         cost: { input: 0, output: 0 },
@@ -92,11 +92,13 @@ function custom(id: string, model: string, variants: string[] = []) {
 }
 
 const catalog = {
+  enabled_providers: ["parent-provider", "saved-provider", "config-provider", "sub-provider", "blocked-provider"],
   provider: {
     "parent-provider": custom("parent-provider", "parent-model", [inherited, overrideVariant]),
     "saved-provider": custom("saved-provider", "saved-model", [savedVariant, overrideVariant]),
     "config-provider": custom("config-provider", "config-model", [cfgVariant, overrideVariant]),
     "sub-provider": custom("sub-provider", "sub-model", [subVariant, overrideVariant]),
+    "blocked-provider": custom("blocked-provider", "blocked-model", [], false),
   },
 }
 
@@ -207,7 +209,9 @@ function run(input: {
   state?: unknown
   client?: string
   variant?: string
-  config?: Pick<Config.Info, "subagent_model" | "subagent_variant" | "subagent_variant_overrides">
+  config?: Pick<Config.Info, "small_model" | "subagent_model" | "subagent_variant" | "subagent_variant_overrides">
+  workflow?: { model: typeof cfg; variant?: string }
+  resume?: boolean
 }) {
   return provideTmpdirInstance(
     () =>
@@ -220,24 +224,43 @@ function run(input: {
         const def = yield* tool.init()
         let seen: SessionPrompt.PromptInput | undefined
         const promptOps = stubOps({ onPrompt: (value) => (seen = value) })
+        const sessions = yield* Session.Service
+        const resumed = input.resume
+          ? yield* sessions.create({ parentID: chat.id, agent: input.agent, title: "Existing child" })
+          : undefined
+        if (resumed) yield* sessions.setMetadata({ sessionID: resumed.id, metadata: { retained: "keep" } })
+        const child = resumed ? yield* sessions.get(resumed.id) : undefined
+        const before = yield* sessions.get(chat.id)
 
-        const result = yield* def.execute(
-          {
-            description: `run ${input.agent}`,
-            prompt: input.objective ?? "inspect resolution",
-            subagent_type: input.objective ? undefined : input.agent, // raya_change
-          },
-          {
-            sessionID: chat.id,
-            messageID: assistant.id,
-            agent: "build",
-            abort: new AbortController().signal,
-            extra: { promptOps, bypassAgentCheck: true },
-            messages: [],
-            metadata: () => Effect.void,
-            ask: () => Effect.void,
-          },
-        )
+        const result = yield* def
+          .execute(
+            {
+              description: `run ${input.agent}`,
+              prompt: input.objective ?? "inspect resolution",
+              subagent_type: input.objective ? undefined : input.agent, // raya_change
+              task_id: child?.id,
+            },
+            {
+              sessionID: chat.id,
+              messageID: assistant.id,
+              agent: "build",
+              abort: new AbortController().signal,
+              extra: { promptOps, bypassAgentCheck: true, workflow: input.workflow },
+              messages: [],
+              metadata: () => Effect.void,
+              ask: () => Effect.void,
+            },
+          )
+          .pipe(
+            Effect.tapError(() =>
+              Effect.gen(function* () {
+                expect(seen).toBeUndefined()
+                expect((yield* sessions.children(chat.id)).map((item) => item.id)).toEqual(child ? [child.id] : [])
+                if (child) expect(yield* sessions.get(child.id)).toEqual(child)
+                expect((yield* sessions.get(chat.id)).metadata).toEqual(before.metadata)
+              }),
+            ),
+          )
 
         return {
           prompt: seen?.model,
@@ -264,7 +287,56 @@ function run(input: {
   )
 }
 
+function reject<A, E, R>(effect: Effect.Effect<A, E, R>, reason: "missing" | "unsupported" | "variant") {
+  return effect.pipe(
+    Effect.exit,
+    Effect.map((exit) => {
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        const error = Cause.squash(exit.cause)
+        expect(error).toBeInstanceOf(RayaToolModel.SelectionError)
+        expect(error).toMatchObject({ reason })
+      }
+    }),
+  )
+}
+
 describe("tool.task model resolution", () => {
+  it.live("unavailable saved picker model refuses instead of falling through to agent config", () =>
+    reject(
+      run({ agent: "pinned", state: { model: { pinned: { providerID: "missing", modelID: "saved" } } } }),
+      "missing",
+    ),
+  )
+
+  it.live("explicit workflow model is exact despite other compatible providers", () =>
+    reject(
+      run({
+        agent: "pinned",
+        workflow: {
+          model: { providerID: ProviderV2.ID.make("blocked-provider"), modelID: ModelV2.ID.make("blocked-model") },
+        },
+      }),
+      "unsupported",
+    ),
+  )
+
+  it.live("incompatible configured selection leaves an existing child unchanged", () =>
+    reject(
+      run({ agent: "worker", resume: true, config: { subagent_model: "blocked-provider/blocked-model" } }),
+      "unsupported",
+    ),
+  )
+
+  it.live("compatible explicit workflow selection retains its model and variant", () =>
+    run({ agent: "pinned", workflow: { model: sub, variant: subVariant } }).pipe(
+      Effect.map((result) => {
+        expect(result.prompt).toEqual(sub)
+        expect(result.variant).toBe(subVariant)
+      }),
+    ),
+  )
+
   // raya_change - Milestone D auto-routing preserves specialist model pins
   it.live("auto-selected specialist model beats the configured subagent default", () =>
     run({
@@ -449,74 +521,50 @@ describe("tool.task model resolution", () => {
     ),
   )
 
-  it.live("stale model-specific override preserves the resolved variant", () =>
-    run({
-      agent: "pinned",
-      variant: inherited,
-      config: { subagent_variant_overrides: { "config-provider/config-model": "gone" } },
-    }).pipe(
-      Effect.tap((result) =>
-        Effect.sync(() => {
-          expect(result.prompt).toEqual(cfg)
-          expect(result.variant).toEqual(cfgVariant)
-          expect(result.model).toEqual(cfg)
-          expect(result.metadataVariant).toEqual(cfgVariant)
-        }),
-      ),
+  it.live("stale model-specific override refuses without downgrading", () =>
+    reject(
+      run({
+        agent: "pinned",
+        variant: inherited,
+        config: { subagent_variant_overrides: { "config-provider/config-model": "gone" } },
+      }),
+      "variant",
     ),
   )
 
-  it.live("unavailable configured subagent model falls back to the parent model override", () =>
-    run({
-      agent: "worker",
-      variant: inherited,
-      config: {
-        subagent_model: "missing-provider/missing-model",
-        subagent_variant: subVariant,
-        subagent_variant_overrides: { "parent-provider/parent-model": overrideVariant },
-      },
-    }).pipe(
-      Effect.tap((result) =>
-        Effect.sync(() => {
-          expect(result.prompt).toEqual(parent)
-          expect(result.variant).toEqual(overrideVariant)
-          expect(result.model).toEqual(parent)
-          expect(result.metadataVariant).toEqual(overrideVariant)
-        }),
-      ),
+  it.live("unavailable subagent model refuses without applying a parent override", () =>
+    reject(
+      run({
+        agent: "worker",
+        variant: inherited,
+        config: {
+          subagent_model: "missing-provider/missing-model",
+          subagent_variant: subVariant,
+          subagent_variant_overrides: { "parent-provider/parent-model": overrideVariant },
+        },
+      }),
+      "missing",
     ),
   )
 
-  it.live("unavailable configured subagent model falls back to the parent model", () =>
-    run({
-      agent: "worker",
-      variant: inherited,
-      config: { subagent_model: "missing-provider/missing-model", subagent_variant: subVariant },
-    }).pipe(
-      Effect.tap((result) =>
-        Effect.sync(() => {
-          expect(result.prompt).toEqual(parent)
-          expect(result.variant).toEqual(inherited)
-          expect(result.model).toEqual(parent)
-          expect(result.metadataVariant).toEqual(inherited)
-        }),
-      ),
+  it.live("unavailable subagent model refuses before child creation", () =>
+    reject(
+      run({
+        agent: "worker",
+        variant: inherited,
+        config: { subagent_model: "missing-provider/missing-model", subagent_variant: subVariant },
+      }),
+      "missing",
     ),
   )
 
-  it.live("stale configured subagent variant is ignored without dropping its model", () =>
-    run({
-      agent: "worker",
-      config: { subagent_model: "sub-provider/sub-model", subagent_variant: "gone" },
-    }).pipe(
-      Effect.tap((result) =>
-        Effect.sync(() => {
-          expect(result.prompt).toEqual(sub)
-          expect(result.variant).toBeUndefined()
-          expect(result.model).toEqual(sub)
-          expect(result.metadataVariant).toBeUndefined()
-        }),
-      ),
+  it.live("stale subagent variant refuses before child creation", () =>
+    reject(
+      run({
+        agent: "worker",
+        config: { subagent_model: "sub-provider/sub-model", subagent_variant: "gone" },
+      }),
+      "variant",
     ),
   )
 

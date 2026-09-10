@@ -5,17 +5,14 @@ import { Permission } from "@/permission"
 import { guarded } from "../agent"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
-import * as Log from "@opencode-ai/core/util/log"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import type { Session } from "../../session/session"
 import type { Agent } from "../../agent/agent"
 import type { Config } from "../../config/config"
 import { Provider } from "../../provider/provider"
-import { RayaToolModel } from "@/kilocode/chief/tool-model" // raya_change - guarantee delegated subagents can call tools
+import { RayaToolModel } from "@/kilocode/chief/tool-model"
 import z from "zod"
-
-const log = Log.create({ service: "kilocode-task-model" })
 
 // raya_change start - Milestone D automatic Chief routing and bounded child runs
 const STEP_KEY = "raya.task.stepCap"
@@ -49,7 +46,17 @@ function profile(name: string) {
   if (name === "explore") return ["codebase", "find", "inspect", "locate", "map", "search", "where"]
   if (name === "scout") return ["dependency", "documentation", "external", "library", "package", "reference", "source"]
   if (name === "engineer")
-    return ["backpressure", "concurrent", "consensus", "deadlock", "latency", "multithreaded", "raft", "scheduler", "sharding"]
+    return [
+      "backpressure",
+      "concurrent",
+      "consensus",
+      "deadlock",
+      "latency",
+      "multithreaded",
+      "raft",
+      "scheduler",
+      "sharding",
+    ]
   return []
 }
 // raya_change end
@@ -103,14 +110,10 @@ export namespace KiloTask {
       ) ||
       /\b(?:list|enumerate|rank)\b.{0,80}\b(?:order|sequence|pages?)\b/i.test(input.request)
     ) {
-      return (
-        ranked.find((item) => item.item.name === "general" || item.item.name === "generalist")?.item ?? selected
-      )
+      return ranked.find((item) => item.item.name === "general" || item.item.name === "generalist")?.item ?? selected
     }
     if (ranked[0]!.score > 1) return selected
-    return (
-      ranked.find((item) => item.item.name === "general" || item.item.name === "generalist")?.item ?? selected
-    )
+    return ranked.find((item) => item.item.name === "general" || item.item.name === "generalist")?.item ?? selected
   }
 
   export function cap(value?: number) {
@@ -227,7 +230,7 @@ export namespace KiloTask {
 
   type Model = { providerID: ProviderV2.ID; modelID: ModelV2.ID }
   type Saved = Model & { variant?: string }
-  type Choice = { model: Model; variant?: string; sticky?: boolean; direct?: boolean }
+  type Choice = { model: Model; variant?: string; sticky?: boolean }
   type Workflow = { model: Model; variant?: string }
 
   function key(model: Model) {
@@ -263,8 +266,8 @@ export namespace KiloTask {
     }
   })
 
-  /** Resolve the task subagent model while discarding stale unavailable overrides. */
-  const resolveRaw = Effect.fn("KiloTask.resolveRaw")(function* (input: {
+  /** Preserve the highest-priority selected model; a missing or incompatible choice is not permission to replace it. */
+  export const resolveModel = Effect.fn("KiloTask.resolveModel")(function* (input: {
     name: string
     agent: Pick<Agent.Info, "model" | "variant">
     config: Pick<Config.Info, "small_model" | "subagent_model" | "subagent_variant" | "subagent_variant_overrides">
@@ -278,7 +281,7 @@ export namespace KiloTask {
     const fast = input.name === "generalist" ? parse(input.config.small_model ?? undefined) : undefined // raya_change
     const override = (model: Model) => input.config.subagent_variant_overrides?.[key(model)] ?? undefined
     const choices: Array<Choice | undefined> = [
-      input.workflow ? { ...input.workflow, direct: true } : undefined,
+      input.workflow,
       state
         ? {
             model: { providerID: state.providerID, modelID: state.modelID },
@@ -286,64 +289,17 @@ export namespace KiloTask {
             sticky: true,
           }
         : undefined,
-      input.agent.model ? { model: input.agent.model, variant: input.agent.variant, direct: true } : undefined,
+      input.agent.model ? { model: input.agent.model, variant: input.agent.variant } : undefined,
       fast ? { model: fast } : undefined, // raya_change - route trivial work through the user's swappable small model
       cfg ? { model: cfg, variant: input.config.subagent_variant ?? undefined } : undefined,
     ]
 
-    for (const choice of choices) {
-      if (!choice) continue
-      if (choice.direct) {
-        const value = override(choice.model)
-        if (!value) return { model: choice.model, variant: choice.variant }
-        const full = yield* input.provider.getModel(choice.model.providerID, choice.model.modelID)
-        const variant = full.variants?.[value] ? value : choice.variant
-        return { model: choice.model, variant }
-      }
-      const full = yield* input.provider.getModel(choice.model.providerID, choice.model.modelID).pipe(
-        Effect.catchTag("ProviderModelNotFoundError", (err) =>
-          Effect.sync(() => {
-            log.debug("skipping unavailable task subagent model", {
-              providerID: choice.model.providerID,
-              modelID: choice.model.modelID,
-              err,
-            })
-            return undefined
-          }),
-        ),
-      )
-      if (!full) continue
-      const fallback = choice.variant && full.variants?.[choice.variant] ? choice.variant : undefined
-      const value = override(choice.model)
-      const variant = value && full.variants?.[value] ? value : fallback
-      return {
-        model: choice.sticky && variant ? { ...choice.model, variant } : choice.model,
-        variant,
-      }
-    }
-
-    const value = override(input.parent)
-    if (!value) return { model: input.parent, variant: input.variant }
-    const full = yield* input.provider
-      .getModel(input.parent.providerID, input.parent.modelID)
-      .pipe(Effect.catchTag("ProviderModelNotFoundError", () => Effect.succeed(undefined)))
-    const variant = full?.variants?.[value] ? value : input.variant
-    return { model: input.parent, variant }
-  })
-
-  // Every delegated subagent needs native tool calls to do real work. Resolve the model as
-  // configured/routed, then upgrade to the best tool-capable model when the pick cannot call
-  // tools (e.g. a DeepSeek-configured specialist), dropping the now-meaningless variant.
-  export const resolveModel = Effect.fn("KiloTask.resolveModel")(function* (input: Parameters<typeof resolveRaw>[0]) {
-    const chosen = yield* resolveRaw(input)
-    const guard = yield* RayaToolModel.ensure(input.provider, chosen.model)
-    if (!guard.changed) return chosen
+    const choice: Choice = choices.find((item) => item !== undefined) ?? { model: input.parent, variant: input.variant }
+    const full = yield* RayaToolModel.ensure(input.provider, choice.model)
+    const variant = yield* RayaToolModel.variant(full, override(choice.model) ?? choice.variant)
     return {
-      model: {
-        providerID: ProviderV2.ID.make(guard.model.providerID),
-        modelID: ModelV2.ID.make(guard.model.modelID),
-      },
-      variant: undefined,
+      model: choice.sticky && variant ? { ...choice.model, variant } : choice.model,
+      variant,
     }
   })
 

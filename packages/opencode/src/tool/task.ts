@@ -182,7 +182,8 @@ export const TaskTool = Tool.define(
         /create_canvas|\/canvas\b|live, interactive canvas/i.test(
           [chief?.request, params.prompt, params.brief?.objective].filter(Boolean).join("\n"),
         )
-      const canvasRule = "You MUST call create_canvas as your first tool. Do NOT write .html/.htm files or open a browser for this artifact."
+      const canvasRule =
+        "You MUST call create_canvas as your first tool. Do NOT write .html/.htm files or open a browser for this artifact."
       const extras = canvas ? [canvasRule] : []
       const handoff = KiloTask.brief({
         prompt: chief?.request ?? params.prompt,
@@ -214,9 +215,7 @@ export const TaskTool = Tool.define(
       const nested = cfg.subagent_depth ?? 2 // kilocode_change - specialists may spawn one nested subagent by default
       if (depth >= nested) {
         return yield* Effect.fail(
-          new Error(
-            `Subagent depth limit reached (${nested}). Increase "subagent_depth" to allow nested subagents.`,
-          ),
+          new Error(`Subagent depth limit reached (${nested}). Increase "subagent_depth" to allow nested subagents.`),
         )
       }
 
@@ -238,6 +237,40 @@ export const TaskTool = Tool.define(
       }
       // kilocode_change start — reject primary agents; only subagent/all modes allowed
       KiloTask.validate(next, routed)
+      // kilocode_change end
+
+      // kilocode_change start - validate the parent message before creating or mutating a child
+      const msg = yield* MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }).pipe(
+        Effect.provideService(Database.Service, database),
+        Effect.orDie,
+      )
+      if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
+      // kilocode_change end
+
+      // kilocode_change start — preserve selected subagent models and refuse unavailable choices before child mutation
+      // raya_change start - Auto delegates from the user's selected model, never from Chief's cheap model
+      const chiefParent = RayaChief.parent(parent.metadata)
+      const parentModel = chiefParent
+        ? {
+            providerID: ProviderV2.ID.make(chiefParent.providerID),
+            modelID: ModelV2.ID.make(chiefParent.modelID),
+          }
+        : {
+            modelID: msg.info.modelID,
+            providerID: msg.info.providerID,
+          }
+      // raya_change end
+      const selected = yield* KiloTask.resolveModel({
+        name: next.name,
+        agent: next,
+        config: cfg,
+        parent: parentModel, // raya_change - Milestone B preserved user model
+        variant: chiefParent?.variant ?? msg.info.variant, // raya_change
+        workflow: chief ? undefined : KiloTask.workflow(ctx.extra), // kilocode_change // raya_change
+        provider,
+      })
+      const model = selected.model
+      const variant = selected.variant
       // kilocode_change end
 
       const canTask = depth + 1 < (cfg.subagent_depth ?? 2) // kilocode_change - honor upstream's opt-in depth limit
@@ -299,37 +332,6 @@ export const TaskTool = Tool.define(
       )
       // kilocode_change end
 
-      const msg = yield* MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }).pipe(
-        Effect.provideService(Database.Service, database),
-        Effect.orDie,
-      )
-      if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
-
-      // kilocode_change start — prefer valid subagent overrides, safely inheriting when overrides go stale
-      // raya_change start - Auto delegates from the user's selected model, never from Chief's cheap model
-      const chiefParent = RayaChief.parent(parent.metadata)
-      const parentModel = chiefParent
-        ? {
-            providerID: ProviderV2.ID.make(chiefParent.providerID),
-            modelID: ModelV2.ID.make(chiefParent.modelID),
-          }
-        : {
-            modelID: msg.info.modelID,
-            providerID: msg.info.providerID,
-          }
-      // raya_change end
-      const selected = yield* KiloTask.resolveModel({
-        name: next.name,
-        agent: next,
-        config: cfg,
-        parent: parentModel, // raya_change - Milestone B preserved user model
-        variant: chiefParent?.variant ?? msg.info.variant, // raya_change
-        workflow: chief ? undefined : KiloTask.workflow(ctx.extra), // kilocode_change // raya_change
-        provider,
-      })
-      const model = selected.model
-      const variant = selected.variant
-      // kilocode_change end
       // kilocode_change start
       // raya_change start - consume the already logged Chief decision exactly once
       if (chief) {
@@ -469,7 +471,9 @@ export const TaskTool = Tool.define(
             }),
         )
 
-      const backgroundRun = withCostPropagation(runTask().pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id, message)))) // kilocode_change
+      const backgroundRun = withCostPropagation(
+        runTask().pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id, message))),
+      ) // kilocode_change
       // kilocode_change end
 
       // kilocode_change start - retain the exact parent invocation for every admitted task run
@@ -526,7 +530,9 @@ export const TaskTool = Tool.define(
         ]),
         // kilocode_change - only the initial-background start needs its own cost bracket; the
         // foreground/promoted path below is already wrapped by the acquireUseRelease at the bottom of run()
-        run: runInBackground ? backgroundRun : runTask().pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id, message))), // kilocode_change
+        run: runInBackground
+          ? backgroundRun
+          : runTask().pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id, message))), // kilocode_change
       })
 
       function backgroundResult() {
@@ -584,7 +590,10 @@ export const TaskTool = Tool.define(
         (costBefore, exit) =>
           Effect.gen(function* () {
             if (Exit.hasInterrupts(exit))
-              yield* Effect.all([cancel, info.revision ? background.cancel(nextSession.id, info.revision) : Effect.void], { discard: true }) // kilocode_change
+              yield* Effect.all(
+                [cancel, info.revision ? background.cancel(nextSession.id, info.revision) : Effect.void],
+                { discard: true },
+              ) // kilocode_change
           }).pipe(
             Effect.ensuring(
               Effect.gen(function* () {

@@ -237,16 +237,42 @@ export async function materialize(store: string, snapshot: Snapshot) {
     return fail("invalid manifest identity")
   const directory = path.join(store, "runs", randomUUID())
   await folder(directory)
-  for (const file of snapshot.files) {
-    const blob = path.join(store, "blobs", file.digest)
-    if (!(await fs.lstat(blob)).isFile() || !same(await fs.realpath(blob), blob))
-      return fail("retained blob is redirected")
-    const data = await fs.readFile(blob)
-    if (hash(data) !== file.digest || data.length !== file.size)
-      return fail("retained blob does not match the manifest")
-    const output = target(directory, file.path)
-    await fs.mkdir(path.dirname(output), { recursive: true })
-    await fs.writeFile(output, data, { flag: "wx", mode: file.mode })
+  const parents = new Map<string, Promise<unknown>>()
+  let offset = 0
+  while (offset < snapshot.files.length) {
+    const batch: Array<(typeof snapshot.files)[number]> = []
+    let size = 0
+    // Bound both open work and buffered bytes. A larger supported file runs alone.
+    while (offset < snapshot.files.length && batch.length < 8) {
+      const file = snapshot.files[offset]
+      if (!Number.isSafeInteger(file.size) || file.size < 0 || file.size > 256 * 1024 * 1024)
+        return fail("unsupported retained file size")
+      if (batch.length && size + file.size > 32 * 1024 * 1024) break
+      batch.push(file)
+      size += file.size
+      offset++
+    }
+    const results = await Promise.allSettled(
+      batch.map(async (file) => {
+        const blob = path.join(store, "blobs", file.digest)
+        const stat = await fs.lstat(blob)
+        if (!stat.isFile() || !same(await fs.realpath(blob), blob)) fail("retained blob is redirected")
+        if (stat.size !== file.size || stat.size > 256 * 1024 * 1024)
+          fail("retained blob does not match the manifest")
+        const data = await fs.readFile(blob)
+        if (hash(data) !== file.digest || data.length !== file.size)
+          fail("retained blob does not match the manifest")
+        const output = target(directory, file.path)
+        const parent = path.dirname(output)
+        const creating = parents.get(parent) ?? fs.mkdir(parent, { recursive: true })
+        parents.set(parent, creating)
+        await creating
+        await fs.writeFile(output, data, { flag: "wx", mode: file.mode })
+      }),
+    )
+    // Drain started writes before rejecting so callers never observe writes after failure.
+    const failed = results.find((result) => result.status === "rejected")
+    if (failed?.status === "rejected") throw failed.reason
   }
   // Empty private Git metadata provides ignore-aware output inspection, without checkout hooks or filters.
   await git(directory, ["init", "--quiet", "--template="])

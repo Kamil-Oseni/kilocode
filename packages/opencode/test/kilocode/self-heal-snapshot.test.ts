@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test"
+import { createHash } from "node:crypto"
 import * as fs from "node:fs/promises"
 import path from "node:path"
 import os from "node:os"
-import { capture, materialize, unchanged } from "@/kilocode/self-heal/snapshot"
+import { capture, materialize, unchanged, type Snapshot } from "@/kilocode/self-heal/snapshot"
 import { checkout, git, lfs } from "./fixtures/self-heal-worktree"
 
 async function fixture(run: (root: string, source: Awaited<ReturnType<typeof checkout>>) => Promise<void>) {
@@ -176,4 +177,125 @@ test(
       expect(await fs.readdir(outside)).toEqual(["foreign.txt"])
     }),
   30_000,
+)
+
+function manifest(snapshot: Snapshot, files: Snapshot["files"]): Snapshot {
+  const data = { head: snapshot.head, files }
+  return { version: 1, digest: createHash("sha256").update(JSON.stringify(data)).digest("hex"), ...data }
+}
+
+async function observed(directory: string) {
+  const names = (await fs.readdir(directory, { recursive: true })).sort()
+  return Promise.all(
+    names.map(async (name) => {
+      const file = path.join(directory, name)
+      const stat = await fs.lstat(file)
+      return {
+        name,
+        size: stat.size,
+        modified: stat.mtimeMs,
+        digest: stat.isFile()
+          ? createHash("sha256")
+              .update(await fs.readFile(file))
+              .digest("hex")
+          : undefined,
+      }
+    }),
+  )
+}
+
+function rejected(value: Promise<unknown>) {
+  return value.then(
+    () => {
+      throw new Error("Expected operation to reject")
+    },
+    (error: unknown) => error,
+  )
+}
+
+async function quiescent(store: string) {
+  const runs = path.join(store, "runs")
+  const names = await fs.readdir(runs)
+  expect(names).toHaveLength(1)
+  const directory = path.join(runs, names[0])
+  expect(await rejected(fs.lstat(path.join(directory, ".git")))).toMatchObject({ code: "ENOENT" })
+  expect(await rejected(fs.lstat(path.join(directory, "later", "not-started.txt")))).toMatchObject({ code: "ENOENT" })
+  const before = await observed(directory)
+  // Observe real filesystem writes after rejection; this complements the worker-drain control-flow check.
+  await new Promise((resolve) => setTimeout(resolve, 100))
+  expect(await observed(directory)).toEqual(before)
+}
+
+test(
+  "materializes multiple batches with shared directories, reused blobs and a file larger than the batch byte budget",
+  () =>
+    fixture(async (root, source) => {
+      const directory = path.join(source.root, "shared", "nested")
+      await fs.mkdir(directory, { recursive: true })
+      for (let index = 0; index < 36; index++) {
+        const folder = path.join(directory, String(index % 3))
+        await fs.mkdir(folder, { recursive: true })
+        await fs.writeFile(path.join(folder, `${index}.txt`), index % 2 ? `unique ${index}` : "reused bytes")
+      }
+      await fs.writeFile(path.join(source.root, "large.bin"), Buffer.alloc(33 * 1024 * 1024, 0x64))
+      const store = path.join(root, "store")
+      const snapshot = await capture(source.root, store)
+      const result = await materialize(store, snapshot)
+      expect(snapshot.files.length).toBeGreaterThan(36)
+      for (const file of snapshot.files) {
+        const output = path.join(result, file.path)
+        const data = await fs.readFile(output)
+        expect(data.length).toBe(file.size)
+        expect(createHash("sha256").update(data).digest("hex")).toBe(file.digest)
+        expect((await fs.lstat(output)).isFile()).toBe(true)
+        expect(await fs.realpath(output)).toBe(output)
+      }
+      await unchanged(result, snapshot)
+      await fs.writeFile(path.join(result, "shared", "nested", "0", "0.txt"), "private edit")
+      expect(await fs.readFile(path.join(result, "shared", "nested", "2", "2.txt"), "utf8")).toBe("reused bytes")
+      expect(await fs.readFile(path.join(directory, "0", "0.txt"), "utf8")).toBe("reused bytes")
+      const original = snapshot.files.find((file) => file.path === "shared/nested/0/0.txt")
+      expect(original).toBeDefined()
+      expect(await fs.readFile(path.join(store, "blobs", original!.digest), "utf8")).toBe("reused bytes")
+    }),
+  60_000,
+)
+
+test(
+  "duplicate paths and corrupt blobs reject without starting later batches or leaving writes active",
+  () =>
+    fixture(async (root, source) => {
+      await fs.writeFile(path.join(source.root, "small.txt"), "original small bytes")
+      for (let index = 0; index < 6; index++)
+        await fs.writeFile(path.join(source.root, `large-${index}.bin`), Buffer.alloc(2 * 1024 * 1024, index + 1))
+      const retained = path.join(root, "retained")
+      const snapshot = await capture(source.root, retained)
+      const small = snapshot.files.find((file) => file.path === "small.txt")
+      const large = snapshot.files.filter((file) => file.path.startsWith("large-"))
+      expect(small).toBeDefined()
+      expect(large).toHaveLength(6)
+      const later = { ...small!, path: "later/not-started.txt" }
+      const duplicate = manifest(snapshot, [large[0], small!, small!, ...large.slice(1), later])
+      expect(await rejected(materialize(retained, duplicate))).toMatchObject({ code: "EEXIST" })
+      await quiescent(retained)
+
+      const corrupt = path.join(root, "corrupt")
+      await capture(source.root, corrupt)
+      const blob = path.join(corrupt, "blobs", small!.digest)
+      await fs.writeFile(blob, Buffer.alloc(small!.size, 0x78))
+      const invalid = manifest(snapshot, [small!, ...large, { ...small!, path: "sibling.txt" }, later])
+      expect(await rejected(materialize(corrupt, invalid))).toMatchObject({
+        message: expect.stringContaining("does not match"),
+      })
+      await quiescent(corrupt)
+
+      const runs = path.join(retained, "runs")
+      const before = new Set(await fs.readdir(runs))
+      const negative = manifest(snapshot, [{ ...small!, size: -1 }, ...large, later])
+      expect(await rejected(materialize(retained, negative))).toBeInstanceOf(Error)
+      const added = (await fs.readdir(runs)).filter((name) => !before.has(name))
+      expect(added.length).toBeLessThanOrEqual(1)
+      for (const name of added) expect(await fs.readdir(path.join(runs, name))).toEqual([])
+    }),
+  60_000,
 )

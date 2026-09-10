@@ -68,6 +68,12 @@ const testAllow: Record<string, { count: number; reason: string }> = {
     count: 11,
     reason: "real HTTP routine tests seed legacy/corrupt storage and run history through the server's shared runtime",
   },
+  "kilocode/config-repair.test.ts": {
+    count: 4,
+    reason:
+      "full application-runtime repair admission, session, config dependency setup and goal integration; " +
+      "verifies source preservation through managed dispatch alongside an ordinary-instance control",
+  },
   "tool/recall.test.ts": { count: 11, reason: "existing runtime integration test" },
 }
 

@@ -1,96 +1,95 @@
-// raya_change - keep goal work on native-tool-calling models while still routing intelligently
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { Provider } from "@/provider/provider"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 
-// Goal orchestration and every delegated subagent must be able to call tools natively. The
-// Auto/Chief turn that drives a goal is forced onto the configured small model (the session
-// prompt ignores the user's picker for the "auto" agent), and each routed specialist runs on
-// whatever KiloTask.resolveModel selects. If any of those land on a model that cannot call
-// tools (DeepSeek chat, some local models), the workflow silently breaks: chief_route / task /
-// get_goal / update_goal never dispatch and the goal stalls or auto-blocks.
-//
-// This does NOT pin everything to one model. Intelligent routing still happens: the Chief picks
-// the specialist, and the user's configured models are honored whenever they can call tools.
-// We only step in when the chosen model cannot — and then we pick the *best* available
-// tool-capable model rather than an arbitrary first match, ranking by recency then context size.
 export namespace RayaToolModel {
   type Ref = { providerID: string; modelID: string }
 
-  type ModelLike = {
-    id: ModelV2.ID
-    capabilities: { toolcall: boolean }
-    limit?: { context?: number }
-    release_date?: string
+  export class SelectionError extends Schema.TaggedErrorClass<SelectionError>()("RayaModelSelectionError", {
+    providerID: Schema.String,
+    modelID: Schema.String,
+    reason: Schema.Literals(["missing", "unsupported", "unknown", "variant"]),
+    variant: Schema.optional(Schema.String),
+  }) {
+    override get message() {
+      const model = `${this.providerID}/${this.modelID}`
+      if (this.reason === "missing")
+        return `Selected model ${model} is unavailable. Choose an available tool-capable model; Raya did not substitute another model or provider.`
+      if (this.reason === "variant")
+        return `Selected variant ${this.variant} is unavailable for ${model}. Choose an available variant; Raya did not downgrade the selection.`
+      return `Selected model ${model} ${this.reason === "unsupported" ? "does not support" : "has no recognized capability flag for"} native tool calls. Choose a tool-capable model; Raya did not substitute another model or provider.`
+    }
   }
 
-  const capable = (model: { capabilities: { toolcall: boolean } }) => model.capabilities.toolcall !== false
+  // These are normalized provider flags. Provider ingestion may default missing catalog
+  // metadata to true; this guard does not establish original metadata provenance or probe a model.
+  export const ensure = Effect.fn("RayaToolModel.ensure")(function* (provider: Provider.Interface, ref: Ref) {
+    const model = yield* provider
+      .getModel(ProviderV2.ID.make(ref.providerID), ModelV2.ID.make(ref.modelID))
+      .pipe(Effect.mapError(() => new SelectionError({ ...ref, reason: "missing" })))
+    if (model.capabilities.toolcall !== true)
+      return yield* new SelectionError({
+        ...ref,
+        reason: model.capabilities.toolcall === false ? "unsupported" : "unknown",
+      })
+    return model
+  })
 
-  // Higher is better. Prefer the more recently released model, then the larger context window,
-  // with a deterministic id tiebreak so the choice is stable across turns.
-  const better = (a: { providerID: string; model: ModelLike }, b: { providerID: string; model: ModelLike }) => {
-    const rel = (a.model.release_date ?? "").localeCompare(b.model.release_date ?? "")
-    if (rel !== 0) return rel > 0 ? a : b
-    const ctx = (a.model.limit?.context ?? 0) - (b.model.limit?.context ?? 0)
-    if (ctx !== 0) return ctx > 0 ? a : b
-    const id = `${a.providerID}/${a.model.id}`.localeCompare(`${b.providerID}/${b.model.id}`)
-    return id <= 0 ? a : b
+  export function variant(model: Provider.Model, value?: string) {
+    if (!value || value === "default" || Object.hasOwn(model.variants ?? {}, value)) return Effect.succeed(value)
+    return Effect.fail(
+      new SelectionError({ providerID: model.providerID, modelID: model.id, reason: "variant", variant: value }),
+    )
   }
 
-  // Best tool-capable model available anywhere, preferring the caller's choice, then the user's
-  // default, then the top-ranked tool-capable model across every configured provider.
-  const best = (provider: Provider.Interface, prefer?: Ref) =>
-    Effect.gen(function* () {
-      if (prefer) {
-        const current = yield* provider
-          .getModel(ProviderV2.ID.make(prefer.providerID), ModelV2.ID.make(prefer.modelID))
-          .pipe(Effect.option)
-        if (current._tag === "Some" && capable(current.value)) return prefer
-      }
+  export const resume = Effect.fn("RayaToolModel.resume")(function* (
+    provider: Provider.Interface,
+    ref: Ref & { variant?: string },
+  ) {
+    const model = yield* ensure(provider, ref)
+    yield* variant(model, ref.variant)
+    return model
+  })
 
-      const fallback = yield* provider.defaultModel().pipe(Effect.option)
-      if (fallback._tag === "Some") {
-        const model = yield* provider.getModel(fallback.value.providerID, fallback.value.modelID).pipe(Effect.option)
-        if (model._tag === "Some" && capable(model.value))
-          return { providerID: fallback.value.providerID, modelID: fallback.value.modelID } satisfies Ref
-      }
+  // Only application-selected defaults may use this compatibility fallback. Never cross
+  // the candidate's provider boundary. Recency/context are deterministic ties, not quality scores.
+  export const orchestration = Effect.fn("RayaToolModel.orchestration")(function* (
+    provider: Provider.Interface,
+    candidate: Ref,
+  ) {
+    const result = yield* ensure(provider, candidate).pipe(Effect.result)
+    if (result._tag === "Success") return result.success
+    const providers = yield* provider.list()
+    const models = Object.values(providers[ProviderV2.ID.make(candidate.providerID)]?.models ?? {})
+      .filter((model) => model.providerID === candidate.providerID && model.capabilities.toolcall === true)
+      .toSorted(
+        (a, b) =>
+          (b.release_date ?? "").localeCompare(a.release_date ?? "") ||
+          (b.limit.context ?? 0) - (a.limit.context ?? 0) ||
+          a.id.localeCompare(b.id),
+      )
+    const model = models[0]
+    if (!model) return yield* result.failure
+    return yield* ensure(provider, { providerID: model.providerID, modelID: model.id })
+  })
 
-      const providers = yield* provider.list()
-      let top: { providerID: string; model: ModelLike } | undefined
-      for (const info of Object.values(providers)) {
-        for (const model of Object.values(info.models)) {
-          if (!capable(model)) continue
-          const item = { providerID: info.id, model }
-          top = top ? better(top, item) : item
-        }
-      }
-      if (top) return { providerID: top.providerID, modelID: top.model.id } satisfies Ref
-      return prefer
-    })
-
-  // Orchestration model for the Auto/Chief turn: the configured candidate when it can call
-  // tools, otherwise the best tool-capable substitute (never returns undefined).
-  export function orchestration(provider: Provider.Interface, candidate: Ref) {
-    return Effect.gen(function* () {
-      const resolved = yield* best(provider, candidate)
-      return resolved ?? candidate
-    })
-  }
-
-  // Guard a resolved subagent model: keep it when it can call tools, otherwise upgrade to the
-  // best tool-capable model. `changed` lets callers drop a now-meaningless variant.
-  export function ensure(provider: Provider.Interface, model: Ref) {
-    return Effect.gen(function* () {
-      const current = yield* provider
-        .getModel(ProviderV2.ID.make(model.providerID), ModelV2.ID.make(model.modelID))
-        .pipe(Effect.option)
-      if (current._tag === "Some" && !capable(current.value)) {
-        const upgraded = yield* best(provider)
-        if (upgraded && (upgraded.providerID !== model.providerID || upgraded.modelID !== model.modelID))
-          return { model: upgraded, changed: true as const }
-      }
-      return { model, changed: false as const }
-    })
-  }
+  export const dispatch = Effect.fn("RayaToolModel.dispatch")(function* (
+    provider: Provider.Interface,
+    configured: (Ref & { variant?: string }) | undefined,
+    requested: Ref & { variant?: string },
+    selected?: string,
+  ) {
+    const model = yield* configured
+      ? ensure(provider, configured)
+      : requested.providerID !== ProviderV2.ID.kilo
+        ? ensure(provider, requested)
+        : orchestration(provider, { providerID: ProviderV2.ID.kilo, modelID: "kilo-auto/small" })
+    const same = model.providerID === requested.providerID && model.id === requested.modelID
+    const value = yield* variant(
+      model,
+      same ? (selected ?? configured?.variant ?? requested.variant) : configured?.variant,
+    )
+    return { model: { providerID: model.providerID, modelID: model.id }, variant: value }
+  })
 }

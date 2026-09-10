@@ -2359,5 +2359,153 @@ describe("session.llm.stream", () => {
     },
     60_000,
   )
+  const repair = testEffect(
+    AppNodeBuilder.build(LayerNode.group([LLM.node, Provider.node]), [
+      [RuntimeFlags.node, RuntimeFlags.layer({ experimentalNativeLlm: false })],
+    ]),
+  )
+  repair.instance(
+    "Auto name correction preserves call identity and final tool authority",
+    () =>
+      Effect.gen(function* () {
+        const fixture = loadFixture(alibabaQwenFixture.providerID, alibabaQwenFixture.modelID)
+        const model = yield* Provider.use.getModel(
+          ProviderV2.ID.make(alibabaQwenFixture.providerID),
+          ModelV2.ID.make(fixture.model.id),
+        )
+        const sessionID = SessionID.make("session-auto-correction")
+        const payload = { path: "./reports/Quarterly Summary.md", note: "Read only.\nKeep trailing spaces  " }
+        const denied = [{ permission: "read", pattern: "*", action: "deny" }] satisfies PermissionV1.Ruleset
+        for (const scenario of ["allowed", "agent", "session", "user", "schema", "json", "unknown"] as const) {
+          const id = `call-correction-${scenario}`
+          const name = scenario === "unknown" ? " NONEXISTENT " : " READ "
+          const input =
+            scenario === "json"
+              ? '{"path":'
+              : JSON.stringify(scenario === "schema" ? { ...payload, path: 42 } : payload)
+          const request = waitRequest(
+            "/chat/completions",
+            createEventResponse(
+              [
+                {
+                  id: `chatcmpl-${scenario}`,
+                  object: "chat.completion.chunk",
+                  choices: [
+                    {
+                      index: 0,
+                      delta: {
+                        role: "assistant",
+                        content: null,
+                        tool_calls: [{ index: 0, id, type: "function", function: { name, arguments: input } }],
+                      },
+                    },
+                  ],
+                },
+                {
+                  id: `chatcmpl-${scenario}`,
+                  object: "chat.completion.chunk",
+                  choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }],
+                },
+              ],
+              true,
+            ),
+          )
+          const agent = {
+            name: "auto",
+            mode: "primary",
+            options: {},
+            permission: scenario === "agent" ? denied : [],
+          } satisfies Agent.Info
+          const user = {
+            id: MessageID.make(`msg_correction-${scenario}`),
+            sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: agent.name,
+            model: { providerID: model.providerID, modelID: model.id },
+            tools: scenario === "user" ? { read: false } : undefined,
+          } satisfies SessionV1.User
+          const calls: Array<{ name: string; id: string; input: unknown }> = []
+          const events = yield* LLM.Service.use((service) =>
+            service
+              .stream({
+                user,
+                sessionID,
+                model,
+                agent,
+                permission: scenario === "session" ? denied : [],
+                system: [],
+                messages: [{ role: "user", content: "Read the report only. Do not modify files or delegate work." }],
+                retries: 0,
+                tools: {
+                  read: tool({
+                    description: "Read the requested report",
+                    inputSchema: z.object({ path: z.string(), note: z.string() }),
+                    execute: async (input, options) => {
+                      calls.push({ name: "read", id: options.toolCallId, input })
+                      return "Report contents"
+                    },
+                  }),
+                  task: tool({
+                    description: "Delegate work",
+                    inputSchema: z.object({}),
+                    execute: async (input, options) => {
+                      calls.push({ name: "task", id: options.toolCallId, input })
+                      return "Unexpected delegation"
+                    },
+                  }),
+                  chief_route: tool({
+                    description: "Route work",
+                    inputSchema: z.object({}),
+                    execute: async (input, options) => {
+                      calls.push({ name: "chief_route", id: options.toolCallId, input })
+                      return "Unexpected routing"
+                    },
+                  }),
+                },
+              })
+              .pipe(Stream.runCollect),
+          )
+          const capture = yield* Effect.promise(() => request)
+          const advertised = z
+            .object({ tools: z.array(z.object({ function: z.object({ name: z.string() }) })) })
+            .parse(capture.body)
+            .tools.map((item) => item.function.name)
+          expect(advertised.includes("read")).toBe(!["agent", "session", "user"].includes(scenario))
+          expect(advertised).toContain("task")
+          expect(advertised).toContain("chief_route")
+          expect(state.queue).toHaveLength(0)
+          expect(events.filter((event) => event.type === "provider-error")).toEqual([])
+          expect(events.filter((event) => event.type === "tool-call").every((event) => event.id === id)).toBe(true)
+          if (scenario === "allowed") {
+            expect(calls).toEqual([{ name: "read", id, input: payload }])
+            expect(events.filter((event) => event.type === "tool-call")).toEqual([
+              expect.objectContaining({ id, name: "read", input: payload }),
+            ])
+            expect(events.filter((event) => event.type === "tool-result")).toEqual([
+              expect.objectContaining({ id, name: "read" }),
+            ])
+            expect(events.filter((event) => event.type === "tool-error")).toEqual([])
+            continue
+          }
+          expect(calls).toEqual([])
+          expect(events.filter((event) => event.type === "tool-result")).toEqual([])
+          expect(events.filter((event) => event.type === "tool-error")).toEqual([
+            expect.objectContaining({ id, message: expect.any(String) }),
+          ])
+        }
+      }),
+    {
+      config: () => ({
+        enabled_providers: [alibabaQwenFixture.providerID],
+        provider: {
+          [alibabaQwenFixture.providerID]: {
+            options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
+          },
+        },
+      }),
+    },
+    60_000,
+  )
   // kilocode_change end
 })

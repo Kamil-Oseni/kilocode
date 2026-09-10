@@ -22,6 +22,7 @@ import { KiloReference } from "@/kilocode/reference/contains" // kilocode_change
 import { KiloReadObject } from "@/kilocode/tool/read-object" // kilocode_change
 import { KiloTask } from "@/kilocode/tool/task" // kilocode_change // raya_change - Milestone D child step ceiling
 import { RayaChief } from "@/kilocode/chief" // kilocode_change // raya_change - Milestone B Auto routing state
+import { RayaToolModel } from "@/kilocode/chief/tool-model" // kilocode_change
 import { isInterrupted } from "@/kilocode/effect/cause" // kilocode_change
 import * as SandboxPolicy from "@/kilocode/sandbox/policy" // kilocode_change
 import { CommandTimeout } from "@/kilocode/command-timeout" // kilocode_change
@@ -818,6 +819,37 @@ export const layer = Layer.effect(
       return yield* provider.defaultModel().pipe(Effect.orDie)
     })
 
+    // kilocode_change start - Auto selection failures use the existing session error channel
+    const select = (input: PromptInput, agent: Agent.Info, requested: Parameters<typeof RayaToolModel.dispatch>[2]) =>
+      RayaToolModel.dispatch(
+        provider,
+        agent.model ? { ...agent.model, variant: agent.variant } : undefined,
+        requested,
+        input.variant,
+      ).pipe(
+        Effect.tapError((error) =>
+          events.publish(Session.Event.Error, {
+            sessionID: input.sessionID,
+            error: new NamedError.Unknown({ message: error.message }).toObject(),
+          }),
+        ),
+        Effect.orDie,
+      )
+    // kilocode_change end
+
+    // kilocode_change start - continuation validates the persisted choice without selecting a replacement
+    const resume = (sessionID: SessionID, model: Parameters<typeof RayaToolModel.resume>[1]) =>
+      RayaToolModel.resume(provider, model).pipe(
+        Effect.tapError((error) =>
+          events.publish(Session.Event.Error, {
+            sessionID,
+            error: new NamedError.Unknown({ message: error.message }).toObject(),
+          }),
+        ),
+        Effect.orDie,
+      )
+    // kilocode_change end
+
     const createUserMessage = Effect.fn("SessionPrompt.createUserMessage")(function* (input: PromptInput) {
       const agentName = input.agent ?? (yield* sessions.get(input.sessionID).pipe(Effect.orDie)).agent // kilocode_change
       const ag = agentName ? yield* agents.get(agentName) : yield* agents.defaultInfo()
@@ -831,7 +863,10 @@ export const layer = Layer.effect(
       // kilocode_change start
       // raya_change start - Auto's own turn uses the cheap Chief model while preserving the user's model for its child
       const requested = input.model ?? (yield* currentModel(input.sessionID))
-      const model = ag.name === "auto" && ag.model ? ag.model : (input.model ?? ag.model ?? requested)
+      // kilocode_change start - refuse unsafe Auto selection before persisting a message or changing routing metadata
+      const selection = ag.name === "auto" ? yield* select(input, ag, requested) : undefined
+      const model = selection?.model ?? input.model ?? ag.model ?? requested
+      // kilocode_change end
       // raya_change end
       // kilocode_change end
       // kilocode_change start - retain the source session variant across Agent Manager's model-less fork handoff
@@ -843,10 +878,11 @@ export const layer = Layer.effect(
               .getModel(model.providerID, model.modelID)
               .pipe(Effect.catchIf(Provider.ModelNotFoundError.isInstance, () => Effect.succeed(undefined)))
           : undefined
-      const variant =
-        input.variant ??
-        (stored && "variant" in stored && typeof stored.variant === "string" ? stored.variant : undefined) ??
-        (ag.variant && full?.variants?.[ag.variant] ? ag.variant : undefined)
+      const variant = selection
+        ? selection.variant // kilocode_change - parent picker variants remain on the parent when Chief uses another model
+        : (input.variant ??
+          (stored && "variant" in stored && typeof stored.variant === "string" ? stored.variant : undefined) ??
+          (ag.variant && full?.variants?.[ag.variant] ? ag.variant : undefined))
       // kilocode_change end
 
       const info: SessionV1.User = {
@@ -1440,6 +1476,11 @@ export const layer = Layer.effect(
     const prompt: Interface["prompt"] = Effect.fn("SessionPrompt.prompt")(
       function* (input: PromptInput) {
         const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
+        // kilocode_change start - reject incompatible Auto choices before recovery can alter prior messages
+        const name = input.agent ?? session.agent
+        const agent = name ? yield* agents.get(name) : yield* agents.defaultInfo()
+        if (agent?.name === "auto") yield* select(input, agent, input.model ?? (yield* currentModel(input.sessionID)))
+        // kilocode_change end
         yield* revert.cleanup(session)
         // kilocode_change start - recover interrupted Kilo turns before accepting a follow-up
         yield* KiloSessionPrompt.recoverDanglingAssistant({ sessionID: input.sessionID, status, sessions })
@@ -1610,6 +1651,7 @@ export const layer = Layer.effect(
           break
         }
 
+        if (lastUser.agent === "auto") yield* resume(sessionID, lastUser.model) // kilocode_change - exact choice before any resumed dispatch
         step++
         if (step === 1)
           // kilocode_change start - log auto-title failures instead of silently ignoring them; a
@@ -1686,7 +1728,12 @@ export const layer = Layer.effect(
         }
         const live = yield* sessions.get(sessionID).pipe(Effect.orDie) // kilocode_change - raya_change: pick up raya.goal.open mid-turn
         const maxSteps = KiloTask.steps(agent.steps, live.metadata) // kilocode_change // raya_change
-        if (Number.isFinite(maxSteps) && step >= maxSteps && extras < 16 && live.metadata?.["raya.goal.open"] === true) {
+        if (
+          Number.isFinite(maxSteps) &&
+          step >= maxSteps &&
+          extras < 16 &&
+          live.metadata?.["raya.goal.open"] === true
+        ) {
           extras++
           step = 1
         }
@@ -1845,8 +1892,7 @@ export const layer = Layer.effect(
                 ? [
                     {
                       role: "user" as const,
-                      content:
-                        agent.name === "auto" && phase !== "done" ? RayaChief.lastStep : MAX_STEPS_PROMPT, // kilocode_change - raya_change: Auto's last step must still close the goal
+                      content: agent.name === "auto" && phase !== "done" ? RayaChief.lastStep : MAX_STEPS_PROMPT, // kilocode_change - raya_change: Auto's last step must still close the goal
                     },
                   ]
                 : []),
@@ -1991,6 +2037,9 @@ export const layer = Layer.effect(
     )(function* (input: LoopInput) {
       // kilocode_change start
       const session = yield* sessions.get(input.sessionID)
+      const pending = yield* sessions.findMessage(input.sessionID, (message) => message.info.role === "user")
+      if (Option.isSome(pending) && pending.value.info.role === "user" && pending.value.info.agent === "auto")
+        yield* resume(input.sessionID, pending.value.info.model)
       yield* KiloSessionPrompt.recoverDanglingAssistant({ sessionID: input.sessionID, status, sessions })
       yield* KiloSessionPrompt.recoverProviderFinishError({ sessionID: input.sessionID, status, sessions })
       const goalIntent = yield* goals(input.sessionID)

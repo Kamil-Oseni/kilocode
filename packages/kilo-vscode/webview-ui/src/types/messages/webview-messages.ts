@@ -322,11 +322,13 @@ export interface RequestGitRemoteUrlMessage {
 
 export interface RequestCloudSessionDataMessage {
   type: "requestCloudSessionData"
+  requestID: string
   sessionId: string
 }
 
 export interface ImportAndSendMessage {
   type: "importAndSend"
+  continuationID?: string
   cloudSessionId: string
   text: string
   messageID?: string

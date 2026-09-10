@@ -1,0 +1,22 @@
+# Cloud history continuation and recovery
+
+This bounded UX-05 slice clarifies cloud preview and the transition to a local execution session. Local/cloud rows still use authoritative metadata already supplied by their APIs; no project, status, or last-result labels are inferred from titles or timestamps.
+
+Opening cloud history or the session-ID dialog opens a read-only cloud preview. The composer identifies the destination supplied by the extension host and explains that sending creates a local copy and executes there. The webview returns an opaque continuation identity; it cannot choose a filesystem destination. English preview actions are renamed accurately; existing translations remain translation follow-up work.
+
+The host binds continuation identities to its SDK client, backend generation, and workspace directory. Preview responses carry request correlation. Import checks these bindings before dispatch and after asynchronous recovery-state persistence. A late import result records the known local copy but cannot adopt it or send after the backend, directory, or host local-session selection changes. Opening another cloud preview does not cancel an admitted send. Its imported result can update the host session, while the webview only promotes the copy when that original cloud preview is still active; another preview keeps its visible selection and draft. The prompt dispatch checks the binding again after gathering editor context.
+
+A synchronous reservation shared by every provider in the extension host prevents two views from concurrently importing the same cloud session into the same directory. A machine-local extension-state journal is written before import dispatch. Lost or unsuccessful acknowledgement is treated as uncertain, with no automatic replay. Reopening the preview or reloading the host does not erase the attempted import. Acknowledged success records the local session ID so subsequent previews can identify the known copy. Sending failures after a successful import restore the draft to that local session rather than attempting another import.
+
+Cloud drafts, review comments, images, messages, and selection survive an import failure. The composer retains its draft while import is pending and blocks another submission when pending, uncertain, or stale. Successful import and failed subsequent send are distinct outcomes. Recovery directs the user to Local history; known local IDs are displayed without asserting that the current backend can load them.
+
+## Deliberate limits
+
+- The journal is a conservative record of an attempt for a cloud session ID and destination. It has no expiry or reset UI and also prevents another copy when the remote cloud session later changes. Explicitly creating a new copy or clearing a resolved attempt needs a separate recovery workflow.
+- The record is machine-local and the reservation is extension-host-local. Neither is a database compare-and-swap across separate windows/processes. Cross-process exactly-once import requires a backend idempotency/query boundary.
+- The preview does not pin a cloud export revision. The remote transcript can change between preview and import.
+- The tests exercise real SDK HTTP requests and the production composer/correlation helper with deterministic provider state. They do not certify a real authenticated cloud account, full extension-host restart, deleted-worktree recovery, or every Agent Manager route.
+
+## Validation
+
+Focused HTTP and correlation tests cover captured destinations, changed workspace/backend generations, late results, storage failures, persisted known/uncertain outcomes, reopening another destination, and simultaneous views. The production composer fixture checks both light and dark themes at 420px, including attachment/draft retention and blocked duplicate submission. The final focused batch passed 15 tests and 52 assertions (native exit 0). Both light/dark browser cases passed (handle 15086, native exit 0), including clearing the composer on a local-copy identity transition and restoring a subsequent failed local send. Screenshots `.tmp/cloud-continuation-light.png` and `.tmp/cloud-continuation-dark.png` were visually inspected; the unbroken directory segment wraps without horizontal overflow. The browser uses the actual composer with deterministic session-provider state, not a real cloud account or full SessionProvider transition. Backend and correlation tests exercise their production implementations separately. The local fixture server was stopped after verification.

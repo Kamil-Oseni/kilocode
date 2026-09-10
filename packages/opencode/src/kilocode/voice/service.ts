@@ -6,6 +6,7 @@ import type { SessionPrompt } from "@/session/prompt"
 import type { Storage } from "@/storage/storage"
 import { VoiceReconstructor } from "./reconstructor"
 import { ContextItem, Failure, type Envelope, type Info, type Start, type State, VoiceSessionID } from "./protocol"
+import { post } from "./transport"
 
 type Entry = {
   info: typeof Info.Type
@@ -255,14 +256,4 @@ function delegationRequest(value: string) {
     return value // raya_change - malformed vendor arguments remain useful as plain delegation text.
   }
   return value
-}
-
-async function post(url: string, id: string, item: typeof ContextItem.Type) {
-  const response = await fetch(`${url.replace(/\/$/, "")}/v1/sessions/${id}/inject`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ item }),
-    signal: AbortSignal.timeout(1000),
-  })
-  if (!response.ok) throw new Error(`Media injection failed with status ${response.status}`)
 }

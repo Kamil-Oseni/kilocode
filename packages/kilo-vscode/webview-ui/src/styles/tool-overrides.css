@@ -13,6 +13,16 @@
   }
 }
 
+[data-component="task-tools"] > [data-slot="task-model-selection"] {
+  min-width: 0;
+  max-width: 100%;
+  padding: 8px 12px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: var(--kilo-font-size-12);
+  line-height: 1.5;
+}
+
 /* ============================================
    Background Process Tool
    ============================================ */
@@ -125,7 +135,9 @@ html[data-theme="kilo-vscode"]
   font-size: 0.82em;
   text-align: left;
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
 }
 
 .tool-group__summary:hover {

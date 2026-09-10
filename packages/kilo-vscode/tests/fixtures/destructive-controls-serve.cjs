@@ -2,7 +2,8 @@ const esbuild = require("esbuild")
 const path = require("node:path")
 const fs = require("node:fs")
 const babel = require("@babel/core")
-const dir = path.resolve(__dirname, "../../node_modules/.cache/destructive-controls-browser")
+const fixture = process.env.RAYA_UI_FIXTURE ?? "destructive-controls"
+const dir = path.resolve(__dirname, `../../node_modules/.cache/${fixture}-browser`)
 fs.mkdirSync(dir, { recursive: true })
 for (const theme of ["light", "dark"])
   fs.copyFileSync(
@@ -11,7 +12,7 @@ for (const theme of ["light", "dark"])
   )
 fs.writeFileSync(
   path.join(dir, "index.html"),
-  '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Actual Raya Destructive controls</title><link rel="stylesheet" href="/destructive-controls-entry.css"></head><body><div id="root"></div><script src="/destructive-controls-entry.js"></script></body></html>',
+  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Actual Raya Destructive controls</title><link rel="stylesheet" href="/${fixture}-entry.css"></head><body><div id="root"></div><script src="/${fixture}-entry.js"></script></body></html>`,
 )
 const solid = path.dirname(require.resolve("solid-js/package.json"))
 const aliases = {
@@ -21,7 +22,7 @@ const aliases = {
 }
 async function main() {
   const context = await esbuild.context({
-    entryPoints: [path.join(__dirname, "destructive-controls-entry.jsx")],
+    entryPoints: [path.join(__dirname, `${fixture}-entry.jsx`)],
     outdir: dir,
     bundle: true,
     platform: "browser",
@@ -61,7 +62,7 @@ async function main() {
     ],
   })
   await context.rebuild()
-  await context.serve({ host: "127.0.0.1", port: 5203, servedir: dir })
+  await context.serve({ host: "127.0.0.1", port: Number(process.env.RAYA_UI_PORT ?? 5203), servedir: dir })
 }
 main().catch((error) => {
   console.error(error)

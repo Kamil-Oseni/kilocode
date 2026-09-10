@@ -21,7 +21,7 @@ import { useVSCode } from "../../context/vscode"
 import { useWorktreeMode } from "../../context/worktree-mode"
 import { childID } from "../../context/session-utils"
 import { openSubagent } from "./open-subagent"
-import { taskAgent, taskResult, taskRunning, taskVisible } from "./task-tool-state" // raya_change
+import { taskAgent, taskModel, taskResult, taskRunning, taskVisible } from "./task-tool-state" // raya_change
 
 const TaskToolRenderer: Component<ToolProps> = (props) => {
   const i18n = useI18n()
@@ -185,6 +185,7 @@ const TaskToolRenderer: Component<ToolProps> = (props) => {
       >
         <div ref={viewport} onScroll={autoScroll.handleScroll} data-component="tool-output" data-scrollable>
           <div ref={content} data-component="task-tools">
+            <div data-slot="task-model-selection">{taskModel(props.partMetadata, props.metadata)}</div>
             <Show when={running() && childToolCount() === 0}>
               <div data-slot="task-tool-item" data-state="starting">
                 <span data-slot="task-tool-title">{language.t("session.messages.taskStarting")}</span>

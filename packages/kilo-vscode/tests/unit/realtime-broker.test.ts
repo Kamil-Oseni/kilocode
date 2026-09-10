@@ -48,6 +48,68 @@ function fixture(handle?: (request: Request) => Promise<Response | undefined>) {
   return { calls, config, close: () => server.stop(true) }
 }
 
+for (const status of [301, 302, 303, 307, 308]) {
+  for (const remote of [false, true]) {
+    for (const stage of ["backend", "media", "backend-cleanup", "media-cleanup"]) {
+      test(`broker refuses ${status} ${remote ? "other-port" : "same-origin"} redirect during ${stage}`, async () => {
+        const target = fixture()
+        const path = stage.startsWith("backend") ? "/kilocode/voice/session" : "/v1/sessions"
+        const cleanup = stage.endsWith("cleanup")
+        const expected = cleanup ? `${path}/rvs_test` : path
+        const site = fixture(async (request) => {
+          if (request.method !== (cleanup ? "DELETE" : "POST") || new URL(request.url).pathname !== expected)
+            return undefined
+          return new Response(null, {
+            status,
+            headers: { Location: `${remote ? target.config.backendURL : new URL(request.url).origin}/redirected` },
+          })
+        })
+        const broker = new RealtimeBroker()
+        const ready: string[] = []
+        try {
+          const result = await broker.start(
+            async () => site.config,
+            (info) => ready.push(info.id),
+          )
+          if (cleanup) {
+            expect(result).toMatchObject({ ok: true })
+            expect(await broker.stop()).toMatchObject({ code: "cleanup_failed" })
+            expect(broker.active).toBe(true)
+            const count = site.calls.length
+            expect(await broker.stop()).toMatchObject({ code: "cleanup_failed" })
+            expect(site.calls).toHaveLength(count)
+          }
+          if (!cleanup) {
+            expect(result).toMatchObject({
+              ok: false,
+              code: stage === "backend" ? "admission_unknown" : "setup_failed",
+            })
+            expect(ready).toEqual([])
+            expect(broker.active).toBe(stage === "backend")
+          }
+          expect(target.calls).toHaveLength(0)
+          expect(site.calls.filter((call) => call.path === "/redirected")).toHaveLength(0)
+          const requests = site.calls.filter(
+            (call) => call.path === expected && call.method === (cleanup ? "DELETE" : "POST"),
+          )
+          expect(requests).toHaveLength(1)
+          if (stage.startsWith("backend")) expect(requests[0]?.auth).toBe("Basic synthetic-secret")
+          if (stage === "media") {
+            expect(JSON.parse(requests[0]!.body)).toMatchObject({
+              backendAuthorization: "Basic synthetic-secret",
+              livekitToken: "media-secret",
+              engine: { key: "engine-secret" },
+            })
+          }
+        } finally {
+          site.close()
+          target.close()
+        }
+      })
+    }
+  }
+}
+
 test("broker claims before settings lookup and stop waits for pending media admission without publishing ready", async () => {
   const entered = gate()
   const resume = gate()

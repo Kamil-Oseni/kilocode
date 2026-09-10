@@ -19,6 +19,10 @@ test("cloud history reports correlated HTTP failures and forwards pagination wit
   const client = createKiloClient({ baseUrl: server.url.origin })
   const context = {
     client,
+    generation: 0,
+    continuations: new Map(),
+    claims: new Set<string>(),
+    journal: { get: () => undefined, update: async () => {} },
     currentSession: null,
     trackedSessionIds: new Set<string>(),
     connectionService: { recordMessageSessionId() {} },

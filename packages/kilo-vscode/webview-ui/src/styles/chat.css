@@ -31,3 +31,8 @@
 @import "./provider-usage.css";
 @import "./memory-provenance.css";
 @import "./high-contrast.css";
+
+/* Cloud continuation */
+[data-slot="cloud-continuation"] code {
+  overflow-wrap: anywhere;
+}

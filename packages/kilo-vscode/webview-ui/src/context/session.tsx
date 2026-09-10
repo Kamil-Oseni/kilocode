@@ -21,6 +21,7 @@ import { useLanguage } from "./language"
 import { createCostAlertHandler } from "./cost-alert"
 import { showToast } from "@kilocode/kilo-ui/toast"
 import type {
+  CloudSessionDataLoadedMessage,
   SessionInfo,
   SessionModelUsage,
   SessionUpdate,
@@ -85,6 +86,7 @@ import { reviewMetadata, type ReviewMessageData } from "../../../src/shared/revi
 import { activeUserMessageID, visibleMessages as filterVisibleMessages } from "./session-queue"
 import { clearSessionDraftDiscarded, deleteDraftsForSession } from "../utils/draft-store"
 import { createAbortState } from "./abort-state"
+import { createCloudContinuation } from "./session-cloud-continuation"
 import { clearIfOn, createCloudPrune } from "./session-cloud-prune"
 import { isSameSessionTree } from "./model-usage"
 import { createDraftAgentSeed, resolvePromptAgent } from "./session-agent"
@@ -296,6 +298,7 @@ interface SessionContextValue {
   unsyncSession: (sessionID: string, scope?: "task" | "inspector") => void
 
   // Cloud session preview
+  cloudContinuation?: Accessor<(CloudSessionDataLoadedMessage["continuation"] & { error?: string }) | undefined>
   cloudPreviewId: Accessor<string | null>
   selectCloudSession: (cloudSessionId: string) => void
   draftSessionID: Accessor<string | undefined>
@@ -457,6 +460,15 @@ export const SessionProvider: ParentComponent = (props) => {
 
   // Cloud session preview state
   const [cloudPreviewId, setCloudPreviewId] = createSignal<string | null>(null)
+  const cloud = createCloudContinuation({
+    loaded: (message) => handleCloudSessionDataLoaded(message.cloudSessionId, message.title, message.messages),
+    imported: (message) => handleCloudSessionImported(message.cloudSessionId, message.session),
+    failed: (message) => {
+      clearIfOn(cloudPreviewId, () => setLoading(false), message.cloudSessionId)
+      showToast({ variant: "error", title: language.t("session.cloud.import.failed"), description: message.error })
+    },
+  })
+  const cloudContinuation = () => cloud.get(cloudPreviewId())
   const [hiddenErrors, setHiddenErrors] = createSignal<Set<string>>(new Set())
 
   const [worktreeStats, setWorktreeStats] = createSignal<ReviewCounts | undefined>()
@@ -1212,48 +1224,10 @@ export const SessionProvider: ParentComponent = (props) => {
         break
 
       case "cloudSessionDataLoaded":
-        handleCloudSessionDataLoaded(message.cloudSessionId, message.title, message.messages)
-        break
-
       case "cloudSessionImported":
-        handleCloudSessionImported(message.cloudSessionId, message.session)
+      case "cloudSessionImportFailed":
+        cloud.receive(message)
         break
-
-      case "cloudSessionImportFailed": {
-        const failedKey = `cloud:${message.cloudSessionId}`
-        pruneCloudOrphans(failedKey)
-        setStore(
-          "sessions",
-          produce((sessions) => {
-            delete sessions[failedKey]
-          }),
-        )
-        setStore(
-          "messages",
-          produce((messages) => {
-            delete messages[failedKey]
-          }),
-        )
-        setStore(
-          "toolParts",
-          produce((toolParts) => {
-            delete toolParts[failedKey]
-          }),
-        )
-        // cloudPreviewId stores the raw cloud session id (see selectCloudSession),
-        // not the synthetic "cloud:<id>" key used for session/draft ids.
-        clearIfOn(cloudPreviewId, () => setLoading(false), message.cloudSessionId)
-        clearIfOn(cloudPreviewId, () => setCloudPreviewId(null), message.cloudSessionId)
-        clearIfOn(currentSessionID, () => setCurrentSessionID(undefined), failedKey)
-        clearIfOn(draftSessionID, () => setDraftSessionID(undefined), failedKey)
-        showToast({
-          variant: "error",
-          title: language.t("session.cloud.import.failed") ?? "Failed to import cloud session",
-          description: message.error,
-        })
-        console.error("[Kilo New] Cloud session import failed:", message.error)
-        break
-      }
     }
   }
 
@@ -2297,6 +2271,7 @@ export const SessionProvider: ParentComponent = (props) => {
       vscode.postMessage({
         type: "importAndSend",
         cloudSessionId: preview,
+        continuationID: cloud.send(preview),
         text,
         messageID,
         providerID,
@@ -2395,6 +2370,7 @@ export const SessionProvider: ParentComponent = (props) => {
       vscode.postMessage({
         type: "importAndSend",
         cloudSessionId: preview,
+        continuationID: cloud.send(preview),
         text: `/${command} ${args}`.trim(),
         messageID: Identifier.ascending("message"),
         providerID: effectiveProvider,
@@ -2703,7 +2679,8 @@ export const SessionProvider: ParentComponent = (props) => {
     setDraftSessionID(key)
     setUserClearedSession(false)
     setLoading(true)
-    vscode.postMessage({ type: "requestCloudSessionData", sessionId: cloudSessionId })
+    const requestID = cloud.request(cloudSessionId)
+    vscode.postMessage({ type: "requestCloudSessionData", sessionId: cloudSessionId, requestID })
   }
 
   function deleteSession(id: string) {
@@ -2825,7 +2802,9 @@ export const SessionProvider: ParentComponent = (props) => {
     return id ? (store.sessions[id]?.summary ?? undefined) : undefined
   })
 
-  const reviewStats = createMemo(() => gather(currentSessionID(), store.sessions, visible, getParts, diffStats(), worktreeStats()))
+  const reviewStats = createMemo(() =>
+    gather(currentSessionID(), store.sessions, visible, getParts, diffStats(), worktreeStats()),
+  )
 
   function revertSession(messageID: string, partID?: string) {
     const id = currentSessionID()
@@ -2864,7 +2843,11 @@ export const SessionProvider: ParentComponent = (props) => {
     const current = getParts(messageID)
     const part = current.find((item) => item.type === "text" && !item.synthetic)
     if (part?.type !== "text") return
-    setStore("parts", messageID, current.map((item) => (item.id === part.id ? { ...item, text } : item)))
+    setStore(
+      "parts",
+      messageID,
+      current.map((item) => (item.id === part.id ? { ...item, text } : item)),
+    )
     vscode.postMessage({ type: "updateQueuedMessage", sessionID, messageID, partID: part.id, text })
   }
   function syncSession(sessionID: string, parentSessionID = currentSessionID(), scope: "task" | "inspector" = "task") {
@@ -3057,7 +3040,8 @@ export const SessionProvider: ParentComponent = (props) => {
     revert,
     revertedCount,
     summary,
-    worktreeStats, reviewStats,
+    worktreeStats,
+    reviewStats,
     revertSession,
     unrevertSession,
     deleteQueuedMessage,
@@ -3084,6 +3068,7 @@ export const SessionProvider: ParentComponent = (props) => {
     syncSession,
     unsyncSession,
     cloudPreviewId,
+    cloudContinuation,
     selectCloudSession,
     draftSessionID,
     setDraftSessionID,

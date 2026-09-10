@@ -55,7 +55,12 @@ function Fixture() {
   const server = useServer()
   const provider = useProvider()
   const [connected, setConnected] = createSignal(true)
-  const [id, setID] = createSignal("first")
+  const [id, setID] = createSignal(new URLSearchParams(location.search).has("cloud") ? "cloud:fixture" : "first")
+  const [continuation, setContinuation] = createSignal({
+    id: "ticket",
+    directory: "C:/projects/a-very-long-unbroken-workspace-directory-name-for-narrow-history-recovery/recovery",
+    status: "preview",
+  })
   const [agent, setAgent] = createSignal("auto")
   const [selected, setSelected] = createSignal({ providerID: "kilo", modelID: "anthropic/claude-sonnet-4-6" })
   const [variant, setVariant] = createSignal()
@@ -64,7 +69,10 @@ function Fixture() {
   const session = {
     ...mockSessionValue(),
     currentSessionID: id,
+    cloudPreviewId: () => (id().startsWith("cloud:") ? "fixture" : null),
+    cloudContinuation: continuation,
     sessions: () => [
+      { id: "local-copy", title: "Local cloud copy", updatedAt: new Date().toISOString() },
       { id: "first", title: "First", updatedAt: new Date().toISOString() },
       { id: "second", title: "Second", updatedAt: new Date().toISOString() },
     ],
@@ -82,7 +90,10 @@ function Fixture() {
     hasModelOverride: () => false,
     status: () => (busy() ? "busy" : "idle"),
     abort: () => setBusy(false),
-    sendMessage: (...args) => setSent((prior) => [...prior, { args, agent: agent(), variant: variant() }]),
+    sendMessage: (...args) => {
+      setSent((prior) => [...prior, { args, agent: agent(), variant: variant() }])
+      if (id().startsWith("cloud:")) setContinuation((entry) => ({ ...entry, status: "pending" }))
+    },
   }
   return (
     <ServerContext.Provider
@@ -106,6 +117,35 @@ function Fixture() {
                   Unavailable model
                 </button>
                 <button onClick={() => setBusy(!busy())}>Toggle busy</button>
+                <button onClick={() => setID("local-copy")}>Acknowledge local copy</button>
+                <button
+                  onClick={() =>
+                    window.postMessage(
+                      {
+                        type: "sendMessageFailed",
+                        error: "Send failed after import",
+                        sessionID: "local-copy",
+                        draftID: "local-copy",
+                        text: sent()[0].args[0],
+                        files: sent()[0].args[3],
+                      },
+                      "*",
+                    )
+                  }
+                >
+                  Fail local copy send
+                </button>
+                <button
+                  onClick={() =>
+                    setContinuation((entry) => ({
+                      ...entry,
+                      status: "uncertain",
+                      error: "Import outcome unknown. Check Local history.",
+                    }))
+                  }
+                >
+                  Uncertain cloud import
+                </button>
                 <button
                   onClick={() =>
                     window.postMessage(

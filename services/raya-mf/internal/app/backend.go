@@ -49,7 +49,12 @@ func (b HTTPBackend) Event(ctx context.Context, event wire.Envelope) error {
 	if client == nil {
 		client = &http.Client{Timeout: 150 * time.Millisecond}
 	}
-	res, err := client.Do(req)
+	// kilocode_change start - callback credentials and event bodies stay at the configured destination
+	// Copy the client so a shared caller's redirect policy is not mutated.
+	local := *client
+	local.CheckRedirect = func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
+	res, err := local.Do(req)
+	// kilocode_change end
 	if err != nil {
 		return fmt.Errorf("send voice event: %w", err)
 	}

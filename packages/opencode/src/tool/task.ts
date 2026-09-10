@@ -360,6 +360,7 @@ export const TaskTool = Tool.define(
         selection?: "auto" | "explicit"
         stepCap?: number
         model: typeof model
+        provenance?: typeof selected.provenance // kilocode_change - actual selection, not the Chief proposal
         variant?: string
         background?: boolean
       } = {
@@ -370,6 +371,7 @@ export const TaskTool = Tool.define(
         selection: explicit ? "explicit" : "auto", // raya_change
         stepCap: limit, // raya_change
         model,
+        provenance: selected.provenance, // kilocode_change - retain the selection source for this invocation
         variant, // kilocode_change
         ...(runInBackground ? { background: true } : {}),
       }

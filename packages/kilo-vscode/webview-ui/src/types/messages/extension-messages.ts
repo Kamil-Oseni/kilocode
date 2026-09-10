@@ -430,6 +430,13 @@ export interface GitRemoteUrlLoadedMessage {
 
 export interface CloudSessionDataLoadedMessage {
   type: "cloudSessionDataLoaded"
+  requestID: string
+  continuation: {
+    id: string
+    directory: string
+    status: "preview" | "pending" | "uncertain" | "imported"
+    sessionID?: string
+  }
   cloudSessionId: string
   title: string
   messages: Message[]
@@ -437,12 +444,17 @@ export interface CloudSessionDataLoadedMessage {
 
 export interface CloudSessionImportedMessage {
   type: "cloudSessionImported"
+  continuationID?: string
   cloudSessionId: string
   session: SessionInfo
 }
 
 export interface CloudSessionImportFailedMessage {
   type: "cloudSessionImportFailed"
+  requestID?: string
+  continuationID?: string
+  status?: "preview" | "pending" | "uncertain" | "imported"
+  sessionID?: string
   cloudSessionId: string
   error: string
 }

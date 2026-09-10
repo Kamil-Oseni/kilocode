@@ -1,3 +1,4 @@
+import { Card } from "@kilocode/kilo-ui/card"
 /**
  * PromptInput component
  * Text input with send/abort buttons, ghost-text autocomplete, and @ file mention support
@@ -604,7 +605,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     canUseSpeechToText(config(), provider.authStates()) // raya_change - configured STT takes precedence
   const speechModel = () => voice.settings().sttModel || selectedSpeechToTextModel(config(), speechModels.models()) // raya_change - Milestone H
   const hasInput = () => text().trim().length > 0 || imageAttach.images().length > 0 || reviewComments().length > 0
+  const continuation = () => session.cloudContinuation?.()
+  const cloudBlocked = () =>
+    !!session.cloudPreviewId() && (!continuation() || continuation()!.status !== "preview" || !!continuation()!.error)
   const canSend = () =>
+    !cloudBlocked() &&
     !isDisabled() &&
     !terminal.pending() &&
     !git.pending() &&
@@ -1205,7 +1210,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       adjustHeight()
       return false
     }
-    if (isDisabled() || speech.active() || terminal.pending() || git.pending() || props.blocked?.()) return false
+    if (cloudBlocked() || isDisabled() || speech.active() || terminal.pending() || git.pending() || props.blocked?.())
+      return false
     const status = projectMemory.status()
     if (
       memory.kind === "operation" &&
@@ -1266,6 +1272,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
   // raya_change end
 
+  const blockedDraft = (message: string, images: number) =>
+    cloudBlocked() ||
+    (!message && images === 0) ||
+    isDisabled() ||
+    speech.active() ||
+    terminal.pending() ||
+    git.pending() ||
+    props.blocked?.()
+
   const sendDraft = async (draft: string) => {
     const memory = parseMemoryCommand(draft)
     if (memory) {
@@ -1316,15 +1331,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const review = pending.length > 0 ? formatReviewCommentsMarkdown(pending) : ""
     const message = draft && review ? `${review}\n\n${draft}` : draft || review
     const data = review ? { version: 1 as const, comments: pending } : undefined
-    if (
-      (!message && imgs.length === 0) ||
-      isDisabled() ||
-      speech.active() ||
-      terminal.pending() ||
-      git.pending() ||
-      props.blocked?.()
-    )
-      return
+    if (blockedDraft(message, imgs.length)) return
 
     const mentionFiles = mention.parseFileAttachments(draft)
     const imgFiles = imgs.map((img) => ({ mime: img.mime, url: img.dataUrl, filename: img.filename }))
@@ -1391,6 +1398,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       session.sendMessage(message, sel?.providerID, sel?.modelID, attachments, pendingId, context, data, origin ?? null)
     }
 
+    if (origin?.startsWith("cloud:")) {
+      saveDraft(key, text(), reviewComments(), imageAttach.images())
+      return
+    }
     drafts.delete(key)
     reviewDrafts.delete(key)
     imageDrafts.delete(key)
@@ -1425,6 +1436,35 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       onDragLeave={imageAttach.handleDragLeave}
       onDrop={imageAttach.handleDrop}
     >
+      <Show when={session.cloudPreviewId()}>
+        <Card variant="info" role="status" data-slot="cloud-continuation">
+          <strong>Cloud preview</strong>
+          <Show when={continuation()} fallback={<p>Loading the local continuation destination.</p>}>
+            {(entry) => (
+              <>
+                <p>
+                  Sending creates a local copy and runs your message in <code>{entry().directory}</code>.
+                </p>
+                <Show when={entry().status !== "preview"}>
+                  <p>
+                    {entry().status === "imported"
+                      ? "A local copy already exists. Open it from Local history to continue."
+                      : "Import pending or outcome unknown. Check Local history before creating another copy."}
+                  </p>
+                </Show>
+                <Show when={entry().sessionID}>
+                  <p>
+                    Local copy: <code>{entry().sessionID}</code>
+                  </p>
+                </Show>
+                <Show when={entry().error}>
+                  <p>{entry().error}</p>
+                </Show>
+              </>
+            )}
+          </Show>
+        </Card>
+      </Show>
       <input
         ref={uploadRef}
         class="prompt-file-input"

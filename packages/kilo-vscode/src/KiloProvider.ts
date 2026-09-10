@@ -140,6 +140,7 @@ import {
   handleRequestCloudSessionData,
   handleImportAndSend,
   type CloudSessionContext,
+  type CloudContinuation,
 } from "./kilo-provider/handlers/cloud-session"
 import {
   handlePermissionResponse,
@@ -338,6 +339,8 @@ type ContextRequestMessage =
   | { type: "requestFilePicker"; requestId: string }
   | { type: "requestFolderPicker"; requestId: string }
   | { type: "requestTerminalContext"; requestId: string; sessionID?: string; agentManagerContext?: string }
+
+const cloudClaims = new Set<string>()
 
 export class KiloProvider implements vscode.WebviewViewProvider, TelemetryPropertiesProvider {
   public static readonly viewType = "raya.SidebarProvider"
@@ -1525,7 +1528,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           })
           break
         case "requestCloudSessionData":
-          void handleRequestCloudSessionData(this.cloudSessionCtx, message.sessionId)
+          void handleRequestCloudSessionData(this.cloudSessionCtx, message.sessionId, message.requestID)
           break
         case "importAndSend": {
           const files = parseMessageFiles(message.files)
@@ -1542,6 +1545,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
             parseReview(message.review, message.text),
             typeof message.command === "string" ? message.command : undefined,
             typeof message.commandArgs === "string" ? message.commandArgs : undefined,
+            message.continuationID,
           )
           break
         }
@@ -4921,10 +4925,26 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
   // Cloud session handlers extracted to kilo-provider/handlers/cloud-session.ts
 
+  private readonly cloudContinuations = new Map<string, CloudContinuation>()
+
   private get cloudSessionCtx(): CloudSessionContext {
     const self = this
     return {
-      client: this.client,
+      get client() {
+        return self.connectionState === "connected" ? self.client : null
+      },
+      get generation() {
+        return self.connectionGeneration
+      },
+      continuations: this.cloudContinuations,
+      claims: cloudClaims,
+      journal: {
+        get: (key) => this.extensionContext?.globalState.get<{ sessionID?: string }>(`cloudContinuation:${key}`),
+        update: async (key, record) => {
+          if (!this.extensionContext) throw new Error("Extension storage is unavailable")
+          await this.extensionContext.globalState.update(`cloudContinuation:${key}`, record)
+        },
+      },
       get currentSession() {
         return self.currentSession
       },

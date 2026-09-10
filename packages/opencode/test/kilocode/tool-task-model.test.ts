@@ -204,7 +204,7 @@ function writeState(input: unknown) {
 }
 
 function run(input: {
-  agent: "pinned" | "worker"
+  agent: "pinned" | "worker" | "generalist"
   objective?: string // raya_change - exercise Chief auto-selection with model precedence
   state?: unknown
   client?: string
@@ -222,6 +222,8 @@ function run(input: {
         const { chat, assistant } = yield* seed(input.agent, input.variant)
         const tool = yield* TaskTool
         const def = yield* tool.init()
+        const part = PartID.ascending()
+        const receipts: unknown[] = []
         let seen: SessionPrompt.PromptInput | undefined
         const promptOps = stubOps({ onPrompt: (value) => (seen = value) })
         const sessions = yield* Session.Service
@@ -247,7 +249,24 @@ function run(input: {
               abort: new AbortController().signal,
               extra: { promptOps, bypassAgentCheck: true, workflow: input.workflow },
               messages: [],
-              metadata: () => Effect.void,
+              metadata: (value) =>
+                Effect.gen(function* () {
+                  receipts.push(value.metadata)
+                  yield* sessions.updatePart({
+                    id: part,
+                    sessionID: chat.id,
+                    messageID: assistant.id,
+                    type: "tool",
+                    tool: "task",
+                    callID: "selection-fixture",
+                    state: {
+                      status: "running",
+                      input: {},
+                      time: { start: Date.now() },
+                      metadata: value.metadata ?? {},
+                    },
+                  })
+                }).pipe(Effect.orDie),
               ask: () => Effect.void,
             },
           )
@@ -255,6 +274,7 @@ function run(input: {
             Effect.tapError(() =>
               Effect.gen(function* () {
                 expect(seen).toBeUndefined()
+                expect(receipts).toEqual([])
                 expect((yield* sessions.children(chat.id)).map((item) => item.id)).toEqual(child ? [child.id] : [])
                 if (child) expect(yield* sessions.get(child.id)).toEqual(child)
                 expect((yield* sessions.get(chat.id)).metadata).toEqual(before.metadata)
@@ -262,7 +282,23 @@ function run(input: {
             ),
           )
 
+        const retained = (yield* sessions.messages({ sessionID: chat.id }))
+          .flatMap((item) => item.parts)
+          .find((item) => item.id === part)
+        expect(retained?.type).toBe("tool")
+        if (retained?.type === "tool" && retained.state.status === "running") {
+          expect(retained.state.metadata?.provenance).toEqual(result.metadata.provenance)
+          expect(retained.state.metadata?.childMessageID).toBe(seen?.messageID)
+        }
+        const provenance = result.metadata.provenance
+        if (!provenance || !seen?.model)
+          throw new Error("Task did not publish provenance and dispatch a selected model")
+        expect(provenance.model).toEqual(seen.model)
+        expect(provenance.variant).toBe(seen?.variant)
+        expect(provenance.stage).toBe("selected")
+        expect(provenance.capability).toBe("normalized-provider-flag")
         return {
+          provenance,
           prompt: seen?.model,
           variant: seen?.variant,
           model: result.metadata.model,
@@ -652,3 +688,48 @@ describe("tool.task model resolution", () => {
     ),
   )
 })
+
+for (const item of [
+  {
+    input: { agent: "worker", workflow: { model: cfg, variant: cfgVariant } },
+    source: "workflow",
+    variant: "workflow",
+  },
+  {
+    input: {
+      agent: "worker",
+      state: { model: { worker: saved }, variant: { "saved-provider/saved-model": savedVariant } },
+    },
+    source: "saved-agent",
+    variant: "saved-agent",
+  },
+  { input: { agent: "pinned" }, source: "agent-config", variant: "agent-config" },
+  {
+    input: { agent: "generalist", config: { small_model: "config-provider/config-model" } },
+    source: "small-config",
+    variant: "none",
+  },
+  {
+    input: { agent: "worker", config: { subagent_model: "sub-provider/sub-model", subagent_variant: subVariant } },
+    source: "subagent-config",
+    variant: "subagent-config",
+  },
+  { input: { agent: "worker", variant: inherited }, source: "parent", variant: "parent" },
+  {
+    input: {
+      agent: "worker",
+      config: { subagent_variant_overrides: { "parent-provider/parent-model": overrideVariant } },
+    },
+    source: "parent",
+    variant: "model-override",
+  },
+] as const) {
+  it.live(`retains actual ${item.source}/${item.variant} selection provenance beside dispatched child identity`, () =>
+    run(item.input).pipe(
+      Effect.map((result) => {
+        expect(result.provenance.source).toBe(item.source)
+        expect(result.provenance.variantSource).toBe(item.variant)
+      }),
+    ),
+  )
+}

@@ -230,7 +230,17 @@ export namespace KiloTask {
 
   type Model = { providerID: ProviderV2.ID; modelID: ModelV2.ID }
   type Saved = Model & { variant?: string }
-  type Choice = { model: Model; variant?: string; sticky?: boolean }
+  type Source = "workflow" | "saved-agent" | "agent-config" | "small-config" | "subagent-config" | "parent"
+  type Choice = { model: Model; variant?: string; sticky?: boolean; source: Source }
+  type Provenance = {
+    version: 1
+    stage: "selected"
+    model: Model
+    variant?: string
+    source: Source
+    variantSource: Source | "model-override" | "none"
+    capability: "normalized-provider-flag"
+  }
   type Workflow = { model: Model; variant?: string }
 
   function key(model: Model) {
@@ -281,25 +291,43 @@ export namespace KiloTask {
     const fast = input.name === "generalist" ? parse(input.config.small_model ?? undefined) : undefined // raya_change
     const override = (model: Model) => input.config.subagent_variant_overrides?.[key(model)] ?? undefined
     const choices: Array<Choice | undefined> = [
-      input.workflow,
+      input.workflow ? { ...input.workflow, source: "workflow" } : undefined,
       state
         ? {
             model: { providerID: state.providerID, modelID: state.modelID },
             variant: state.variant,
             sticky: true,
+            source: "saved-agent",
           }
         : undefined,
-      input.agent.model ? { model: input.agent.model, variant: input.agent.variant } : undefined,
-      fast ? { model: fast } : undefined, // raya_change - route trivial work through the user's swappable small model
-      cfg ? { model: cfg, variant: input.config.subagent_variant ?? undefined } : undefined,
+      input.agent.model
+        ? { model: input.agent.model, variant: input.agent.variant, source: "agent-config" }
+        : undefined,
+      fast ? { model: fast, source: "small-config" } : undefined, // raya_change - route trivial work through the user's swappable small model
+      cfg ? { model: cfg, variant: input.config.subagent_variant ?? undefined, source: "subagent-config" } : undefined,
     ]
 
-    const choice: Choice = choices.find((item) => item !== undefined) ?? { model: input.parent, variant: input.variant }
+    const choice: Choice = choices.find((item) => item !== undefined) ?? {
+      model: input.parent,
+      variant: input.variant,
+      source: "parent",
+    }
     const full = yield* RayaToolModel.ensure(input.provider, choice.model)
-    const variant = yield* RayaToolModel.variant(full, override(choice.model) ?? choice.variant)
+    const configured = override(choice.model)
+    const variant = yield* RayaToolModel.variant(full, configured ?? choice.variant)
+    const provenance: Provenance = {
+      version: 1,
+      stage: "selected",
+      model: { providerID: choice.model.providerID, modelID: choice.model.modelID },
+      ...(variant === undefined ? {} : { variant }),
+      source: choice.source,
+      variantSource: variant === undefined ? "none" : configured !== undefined ? "model-override" : choice.source,
+      capability: "normalized-provider-flag",
+    }
     return {
       model: choice.sticky && variant ? { ...choice.model, variant } : choice.model,
       variant,
+      provenance,
     }
   })
 

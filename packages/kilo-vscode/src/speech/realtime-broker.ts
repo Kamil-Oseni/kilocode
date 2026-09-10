@@ -107,7 +107,7 @@ export class RealtimeBroker {
         throw new Error("backend admission unconfirmed")
       })
       if (!response.ok) {
-        claim.uncertain = response.status >= 500
+        claim.uncertain = (response.status >= 300 && response.status < 400) || response.status >= 500
         return await this.abandon(
           claim,
           failure("setup_failed", `Voice session admission failed (${response.status}).`),
@@ -202,7 +202,8 @@ export class RealtimeBroker {
   }
 
   private request(url: string, init: RequestInit) {
-    return fetch(url, { ...init, signal: AbortSignal.timeout(this.timeout) })
+    // Control requests carry credentials in headers and bodies. A redirect cannot authorize a new destination.
+    return fetch(url, { ...init, redirect: "manual", signal: AbortSignal.timeout(this.timeout) })
   }
 }
 

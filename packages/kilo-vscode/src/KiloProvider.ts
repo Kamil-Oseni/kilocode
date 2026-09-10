@@ -67,7 +67,7 @@ import { normalize, type SSEPayload, type SyncPayload, type WirePayload } from "
 import { slimInfo, slimPart, slimParts } from "./kilo-provider/slim-metadata"
 import { handleRoutineMessage as dispatchRoutine, reason } from "./kilo-provider/routines"
 import { RoutineRefresh } from "./kilo-provider/routine-refresh"
-import { editGoal, stopGoal, stopResult } from "./kilo-provider/goal"
+import { editGoal, start as startGoal, stopGoal, stopResult } from "./kilo-provider/goal"
 import { evidence as goalEvidence } from "./kilo-provider/goal-evidence"
 import { shouldNotify } from "./kilo-provider/presence-notify"
 import { parseMessageFiles, type MessageFile } from "./kilo-provider/message-files"
@@ -4472,7 +4472,24 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         this.postMessage({ type: "goalState", sessionID: sid, notice: command.notice })
         return
       }
-      const armed = command?.kind === "start" ? await this.armGoal(sid, dir, command.objective, messageID) : undefined
+      const client = this.client
+      const generation = this.connectionGeneration
+      const current = () =>
+        this.client === client &&
+        this.connectionGeneration === generation &&
+        this.routeSessionDirectory(sid) !== null &&
+        sameDirectory(dir, this.getWorkspaceDirectory(sid))
+      const armed =
+        command?.kind === "start"
+          ? await startGoal({
+              client,
+              sessionID: sid,
+              directory: dir,
+              objective: command.objective,
+              messageID,
+              current,
+            })
+          : undefined
       if (armed?.data) {
         this.postMessage({
           type: "goalState",
@@ -4508,8 +4525,12 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       await this.checkpoints.get(sid)
       await runWithMessageConfirmation(this.confirmations, messageID, "KiloProvider: Message request", () =>
         this.withRetry(
-          () =>
-            this.client!.session.promptAsync({
+          () => {
+            if (command?.kind === "start" && !current())
+              throw new Error(
+                "The goal's connection or workspace changed. Your task was not sent. Review the saved goal before retrying.",
+              )
+            return this.client!.session.promptAsync({
               sessionID: sid,
               directory: dir,
               messageID,
@@ -4519,7 +4540,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
               variant,
               editorContext,
               snapshotInitialization: this.opts.snapshotInitialization,
-            }),
+            })
+          },
           sid,
           messageID,
         ),
@@ -4540,26 +4562,6 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   // raya_change start - Milestone A persistent goal state and user controls
-  // A completed goal must archive and arm the next one. An active goal is steered
-  // instead of 400-ing the prompt. Either way the user message still sends.
-  private async armGoal(sessionID: string, directory: string, objective: string, messageID?: string) {
-    if (!this.client) return
-    try {
-      return await this.client.kilocode.goal.create(
-        { sessionID, directory, objective, messageID },
-        { throwOnError: true },
-      )
-    } catch (err) {
-      console.error("[Raya] goal.create failed; steering the active goal instead", err)
-      try {
-        return await this.client.kilocode.goal.update({ sessionID, directory, objective }, { throwOnError: true })
-      } catch (updateErr) {
-        console.error("[Raya] goal.update failed; sending the prompt without blocking", updateErr)
-        return undefined
-      }
-    }
-  }
-
   private async fetchAndSendGoal(sessionID: string, notice?: string): Promise<void> {
     if (!this.client) return
     const directory = this.getWorkspaceDirectory(sessionID)

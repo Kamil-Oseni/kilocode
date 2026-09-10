@@ -219,6 +219,34 @@ function confirmation(
   return matches(goal, objective, status, accept) && (criteria === undefined || equal(goal.criteria, criteria))
 }
 
+/** Goal creation already steers an existing goal on the server. Never replace a failed POST with another mutation. */
+export async function start(input: {
+  client: KiloClient | null | undefined
+  sessionID: string
+  directory: string
+  objective: string
+  messageID?: string
+  current: () => boolean
+}) {
+  const failure = "Goal tracking could not be confirmed. Your task was not sent. Review the saved goal before retrying."
+  if (!input.client || !input.current()) throw new Error(failure)
+  const result = await input.client.kilocode.goal
+    .create(
+      {
+        sessionID: input.sessionID,
+        directory: input.directory,
+        objective: input.objective.trim(),
+        messageID: input.messageID,
+      },
+      { throwOnError: true, signal: AbortSignal.timeout(30_000) },
+    )
+    .catch((cause: unknown) => {
+      throw new Error(failure, { cause })
+    })
+  if (!input.current() || !matches(result.data, input.objective.trim())) throw new Error(failure)
+  return result
+}
+
 function guidance(message: { status?: unknown; accept?: unknown }) {
   return message.status === undefined && !message.accept
     ? "Copy your draft, then cancel and reopen to review the saved goal."

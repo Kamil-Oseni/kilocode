@@ -674,8 +674,17 @@ export const dict = {
   "settings.language.title": "Language",
   "settings.aboutKiloCode.title": "About Raya",
 
+  "session.messages.outcome": "What would you like to get done?",
   "session.messages.welcome":
-    "Raya is an AI coding assistant. Ask it to build features, fix bugs, or explain your codebase.",
+    "Describe the result you need below. Attach relevant material or mention a file, and include what a useful result should cover.",
+  "composer.configuration.action": "Configure",
+  "composer.configuration.preferred": "Preferred model",
+  "composer.configuration.reasoning": "Reasoning",
+  "composer.configuration.help":
+    "Choose how Raya works and which model to use. Open the model picker for pricing and provider details. Auto may use other configured models for routed work. File access and approvals are configured separately.",
+  "composer.configuration.unset": "Model not selected",
+  "composer.configuration.choose": "Open Configure to choose a model.",
+  "composer.configuration.unavailable": "Selected model unavailable. Open Configure to check the model and provider.",
   "session.messages.scrollToBottom": "Scroll to bottom",
   "session.messages.initializing": "Initializing...",
   "session.messages.taskStarting": "Starting...",
@@ -744,7 +753,7 @@ export const dict = {
   "dialog.model.noProviders": "No providers",
 
   "prompt.placeholder.connecting": "Connecting to server...",
-  "prompt.placeholder.default": "Type a message, @ to mention files... (Enter to send, Shift+Enter for new line)",
+  "prompt.placeholder.default": "Describe the result you need. @ mentions files. Enter sends; Shift+Enter adds a line.",
   "prompt.placeholder.error": "Connection failed. Check the output panel or restart the extension.",
 
   "context.usage.sessionCost": "Session cost",

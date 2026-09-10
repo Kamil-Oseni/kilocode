@@ -1144,6 +1144,7 @@ export const ModelSelectorBase: Component<ModelSelectorBaseProps> = (props) => {
 // ---------------------------------------------------------------------------
 
 interface ModelSelectorProps {
+  trigger?: string
   sessionID?: Accessor<string | undefined>
 }
 
@@ -1153,15 +1154,20 @@ export const ModelSelector: Component<ModelSelectorProps> = (props) => {
 
   return (
     <ModelSelectorBase
+      trigger={props.trigger}
       value={session.selected(id())}
       onSelect={(providerID, modelID) => {
         session.selectModel(providerID, modelID, id())
       }}
       onPick={() => {
-        requestAnimationFrame(() => window.dispatchEvent(new CustomEvent("focusPrompt", { detail: { restore: true } })))
+        requestAnimationFrame(() =>
+          window.dispatchEvent(new CustomEvent("focusPrompt", { detail: { restore: true, source: props.trigger } })),
+        )
       }}
       onCancel={() => {
-        requestAnimationFrame(() => window.dispatchEvent(new CustomEvent("focusPrompt", { detail: { restore: true } })))
+        requestAnimationFrame(() =>
+          window.dispatchEvent(new CustomEvent("focusPrompt", { detail: { restore: true, source: props.trigger } })),
+        )
       }}
     />
   )

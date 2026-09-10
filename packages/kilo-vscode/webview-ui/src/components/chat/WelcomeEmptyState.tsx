@@ -32,6 +32,7 @@ export const WelcomeEmptyState: Component<WelcomeEmptyStateProps> = (props) => {
   return (
     <div class="message-list-empty">
       <KiloLogo />
+      <h1 class="welcome-outcome-title">{language.t("session.messages.outcome")}</h1>
       <p class="kilo-about-text">{language.t("session.messages.welcome")}</p>
       <Show when={recent().length > 0 && props.onSelectSession}>
         <div class="recent-sessions">

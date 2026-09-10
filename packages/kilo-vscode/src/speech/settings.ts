@@ -27,7 +27,7 @@ export class SpeechSettingsStore {
       this.secrets.get(STT),
       this.secrets.get(TTS),
     ])
-    return { ...settings, hasRealtimeKey: !!(realtime || stt), hasSttKey: !!stt, hasTtsKey: !!tts }
+    return { ...settings, hasRealtimeKey: !!realtime, hasSttKey: !!stt, hasTtsKey: !!tts }
   }
 
   async update(settings: Partial<SpeechSettings>): Promise<SpeechState> {
@@ -44,7 +44,7 @@ export class SpeechSettingsStore {
   }
 
   async key(kind: "realtime" | "stt" | "tts") {
-    if (kind === "realtime") return (await this.secrets.get(REALTIME)) ?? this.secrets.get(STT)
+    if (kind === "realtime") return this.secrets.get(REALTIME)
     return this.secrets.get(kind === "stt" ? STT : TTS)
   }
 

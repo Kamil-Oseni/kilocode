@@ -75,7 +75,9 @@ export const ThinkingSelectorBase: Component<ThinkingSelectorBaseProps> = (props
   }
 
   function refocus() {
-    requestAnimationFrame(() => window.dispatchEvent(new CustomEvent("focusPrompt", { detail: { restore: true } })))
+    requestAnimationFrame(() =>
+      window.dispatchEvent(new CustomEvent("focusPrompt", { detail: { restore: true, source: props.trigger } })),
+    )
   }
 
   function onOpen(val: boolean) {
@@ -218,6 +220,7 @@ export const ThinkingSelectorBase: Component<ThinkingSelectorBaseProps> = (props
 // ---------------------------------------------------------------------------
 
 interface ThinkingSelectorProps {
+  trigger?: string
   sessionID?: Accessor<string | undefined>
 }
 
@@ -229,6 +232,7 @@ export const ThinkingSelector: Component<ThinkingSelectorProps> = (props) => {
 
   return (
     <ThinkingSelectorBase
+      trigger={props.trigger}
       variants={session.variantList(id())}
       value={session.currentVariant(id())}
       onSelect={(value) => session.selectVariant(value, id())}

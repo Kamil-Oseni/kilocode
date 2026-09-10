@@ -25,7 +25,8 @@ const SpeechTab: Component = () => {
     <div style={{ display: "flex", "flex-direction": "column", gap: "16px" }}>
       <p style={{ margin: 0, color: "var(--vscode-descriptionForeground)", "font-size": "var(--kilo-font-size-12)" }}>
         Native hands-free voice uses LiveKit and Qwen Realtime. The configured STT and MiniMax stack is the first
-        degradation rung; text remains the final rung. Keys stay encrypted in VS Code Secret Storage.
+        degradation rung; text remains the final rung. Keys use VS Code Secret Storage unless you enable the separate
+        CLI speech mirror below.
       </p>
       <Card>
         <SettingsRow
@@ -59,8 +60,8 @@ const SpeechTab: Component = () => {
           title="Qwen realtime API key"
           description={
             settings().hasRealtimeKey
-              ? "A realtime key is available securely. When unset, Raya reuses the configured Qwen STT key."
-              : "No Qwen key is available."
+              ? "A separate realtime key is stored. Enter a replacement or clear it."
+              : "Add a Qwen realtime key. Transcription and synthesis keys are kept separate."
           }
         >
           <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
@@ -75,7 +76,7 @@ const SpeechTab: Component = () => {
               Save
             </Button>
             <Button variant="ghost" size="small" onClick={() => voice.setKey("realtime")}>
-              Reuse STT key
+              Clear
             </Button>
           </div>
         </SettingsRow>
@@ -146,9 +147,7 @@ const SpeechTab: Component = () => {
             </Button>
             <Show when={voice.error()}>
               {(error) => (
-                <span
-                  style={{ color: "var(--vscode-errorForeground)", "font-size": "var(--kilo-font-size-12)" }}
-                >
+                <span style={{ color: "var(--vscode-errorForeground)", "font-size": "var(--kilo-font-size-12)" }}>
                   {error()}
                 </span>
               )}
@@ -212,7 +211,7 @@ const SpeechTab: Component = () => {
         </SettingsRow>
         <SettingsRow
           title="CLI speech mirror"
-          description="Mirror speech credentials only to .raya/speech.local.json, with an enforced .gitignore entry."
+          description="Write a plaintext copy of speech credentials to .raya/speech.local.json for the CLI. Raya adds a .gitignore entry; this file is outside Secret Storage."
           last
         >
           <Switch checked={settings().cliMirror} onChange={(cliMirror) => voice.update({ cliMirror })} hideLabel>

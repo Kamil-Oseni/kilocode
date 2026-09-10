@@ -19,6 +19,7 @@ import { useVSCode } from "../../context/vscode"
 import { useConfig } from "../../context/config"
 import { useProvider } from "../../context/provider"
 import { useVoice } from "../../context/voice" // raya_change - Milestone H intelligent voice mode
+import { ComposerConfiguration } from "./ComposerConfiguration"
 import { ModelSelector } from "../shared/ModelSelector"
 import { ModeSwitcher } from "../shared/ModeSwitcher"
 import { SandboxButtonBase, SandboxTooltipContent } from "../shared/SandboxButton"
@@ -325,7 +326,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return hidden
     },
     undefined,
-    undefined,
+    boxKey(),
     [
       {
         name: "plan",
@@ -485,13 +486,31 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onCleanup(() => clearTimeout(timer))
   })
 
+  // A newer picker owns focus even while a previous picker finishes restoring it.
+  let restoration = 0
+  const pickers = ["openModePicker", "openModelPicker", "openVariantPicker"]
+  const supersede = (event: Event) => {
+    if (!(event instanceof CustomEvent) || event.detail?.source !== boxKey()) return
+    restoration++
+  }
+  for (const event of pickers) window.addEventListener(event, supersede, true)
+  onCleanup(() => {
+    restoration++
+    for (const event of pickers) window.removeEventListener(event, supersede, true)
+  })
+
   // Focus textarea when any part of the app requests it
   const onFocusPrompt = (event: Event) => {
+    if (event instanceof CustomEvent && event.detail?.source !== undefined && event.detail.source !== boxKey()) return
+    const generation = ++restoration
     const defer = () =>
-      event instanceof CustomEvent && event.detail?.deferFocusToQuestion && props.deferFocusToQuestion?.()
+      generation !== restoration ||
+      (event instanceof CustomEvent && event.detail?.deferFocusToQuestion && props.deferFocusToQuestion?.())
     const ownsFocus = () => {
       const active = document.activeElement
-      return active !== textareaRef && isTextControl(active)
+      return (
+        active !== textareaRef && (isTextControl(active) || !!active?.closest('[data-component="popover-content"]'))
+      )
     }
     const focus = () => {
       if (defer() || ownsFocus()) return
@@ -646,7 +665,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!target) return
     const comments = failed.review?.comments ?? []
     const images = (failed.files ?? [])
-      .filter((file) => file.mime.startsWith("image/") && file.url.startsWith("data:"))
+      .filter((file) => file.url.startsWith("data:"))
       .map((file) => ({
         id: crypto.randomUUID(),
         filename: file.filename ?? "image",
@@ -1657,23 +1676,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       </Show>
       <div class="prompt-input-hint">
         <div class="prompt-input-hint-selectors">
-          <ModeSwitcher sessionID={sid} />
-          <ModelSelector sessionID={sid} />
-          <ThinkingSelector sessionID={sid} />
-          <Show when={session.hasModelOverride(sid())}>
-            <Tooltip value={language.t("prompt.action.resetModel")} placement="top" openDelay={0}>
-              <Button
-                variant="ghost"
-                size="small"
-                onClick={() => session.clearModelOverride(sid())}
-                aria-label={language.t("prompt.action.resetModel")}
-              >
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z" />
-                </svg>
-              </Button>
-            </Tooltip>
-          </Show>
+          <ComposerConfiguration sessionID={sid} scope={boxKey()}>
+            <ModeSwitcher sessionID={sid} trigger={boxKey()} />
+            <ModelSelector sessionID={sid} trigger={boxKey()} />
+            <ThinkingSelector sessionID={sid} trigger={boxKey()} />
+            <Show when={session.hasModelOverride(sid())}>
+              <Tooltip value={language.t("prompt.action.resetModel")} placement="top" openDelay={0}>
+                <Button
+                  variant="ghost"
+                  size="small"
+                  onClick={() => session.clearModelOverride(sid())}
+                  aria-label={language.t("prompt.action.resetModel")}
+                >
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z" />
+                  </svg>
+                </Button>
+              </Tooltip>
+            </Show>
+          </ComposerConfiguration>
         </div>
         <div class="prompt-input-hint-actions">
           <Tooltip value={language.t("prompt.action.attach")} placement="top" openDelay={0}>

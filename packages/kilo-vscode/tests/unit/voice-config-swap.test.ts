@@ -27,7 +27,7 @@ describe("voice configuration", () => {
     expect(settings.voice).toBe("Chinese_Lyrical")
   })
 
-  it("keeps keys encrypted and mirrors them only for the CLI when enabled", async () => {
+  it("keeps keys out of public settings and mirrors their separate roles only when enabled", async () => {
     const root = await mkdtemp(join(tmpdir(), "raya-speech-"))
     const state = storage()
     const secrets = secret()
@@ -53,6 +53,12 @@ describe("voice configuration", () => {
       expect(mirror).toContain("tts-secret")
       expect(mirror).toContain("realtime-secret")
       expect(ignore).toContain(".raya/speech.local.json")
+      await store.setKey("realtime", undefined)
+      await store.sync(root)
+      const separated = JSON.parse(await readFile(join(root, ".raya/speech.local.json"), "utf8"))
+      expect(separated.realtime.key).toBeUndefined()
+      expect(separated.stt.key).toBe("stt-secret")
+      expect(separated.tts.key).toBe("tts-secret")
     } finally {
       await rm(root, { recursive: true, force: true })
     }

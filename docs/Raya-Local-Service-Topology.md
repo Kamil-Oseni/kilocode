@@ -27,6 +27,12 @@ The Go control server limits request headers to 32 KiB, header reading to five s
 
 These are HTTP transport limits, not a claim that every provider operation or cleanup routine terminates by the response deadline. The extension broker separately bounds its requests and retains uncertain cleanup ownership. The media companion must be rebuilt to apply these service changes; installing a VS Code snapshot alone does not replace a running companion container.
 
+### Speech credential roles
+
+Realtime voice, transcription and synthesis use separate SecretStorage entries. A missing realtime key no longer falls back to the transcription key: the configured realtime provider can differ from the transcription provider. Settings report realtime readiness only when its own key exists, and the optional CLI mirror preserves the same separation. Existing users who relied on the fallback must explicitly configure the realtime key; the transcription and synthesis keys remain stored.
+
+The regression uses in-memory storage adapters and synthetic credentials to test role separation, plus an actual temporary CLI-mirror file. It does not test VS Code's encryption implementation. Configurable endpoint authorization, mirror-file protection and the broader OpenAI transport migration remain separate work.
+
 ## Remaining acceptance work
 
 - Define and enforce the allowed media control deployment, including local native and container paths, service authentication and browser-origin handling.

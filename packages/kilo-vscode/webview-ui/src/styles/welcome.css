@@ -557,3 +557,13 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.welcome-outcome-title {
+  margin: 0;
+  max-width: 22rem;
+  font-family: "Instrument Serif", Georgia, serif;
+  font-size: clamp(24px, 5vw, 32px);
+  font-weight: 400;
+  line-height: 1.15;
+  color: var(--vscode-foreground);
+}

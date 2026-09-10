@@ -1,0 +1,123 @@
+import "@kilocode/kilo-ui/styles"
+import "../../webview-ui/src/styles/eden.css"
+import "../../webview-ui/src/styles/chat.css"
+import "../../webview-ui/src/styles/prompt-input.css"
+import "../../webview-ui/src/styles/welcome.css"
+import "../../webview-ui/preview/preview.css"
+import { createSignal } from "solid-js"
+import { render } from "solid-js/web"
+import { StoryProviders, mockSessionValue } from "../../webview-ui/src/stories/StoryProviders"
+import { ProviderContext, useProvider } from "../../webview-ui/src/context/provider"
+import { isModelValid } from "../../webview-ui/src/context/provider-utils"
+import { SessionContext } from "../../webview-ui/src/context/session"
+import { ServerContext, useServer } from "../../webview-ui/src/context/server"
+import { VoiceProvider } from "../../webview-ui/src/context/voice"
+import { PromptInput } from "../../webview-ui/src/components/chat/PromptInput"
+import { WelcomeEmptyState } from "../../webview-ui/src/components/chat/WelcomeEmptyState"
+
+const messages = []
+window.acquireVsCodeApi = () => ({
+  getState: () => undefined,
+  setState: () => {},
+  postMessage: (msg) => messages.push(msg),
+})
+const theme = new URLSearchParams(location.search).get("theme") ?? "dark"
+document.body.className =
+  theme === "light" ? "vscode-light" : theme === "contrast" ? "vscode-high-contrast" : "vscode-dark"
+document.documentElement.setAttribute("data-theme", "kilo-vscode")
+document.documentElement.style.colorScheme = theme === "light" ? "light" : "dark"
+document.body.classList.add(theme === "light" ? "pv-theme--light" : "pv-theme--dark")
+const colors =
+  theme === "light"
+    ? { background: "#f5f5f5", foreground: "#222222", weak: "#595959", focus: "#45557a" }
+    : theme === "contrast"
+      ? { background: "#000000", foreground: "#ffffff", weak: "#ffffff", focus: "#ffff00" }
+      : { background: "#1c1c1c", foreground: "#f1f1f1", weak: "#b8b8b8", focus: "#9ab0d6" }
+for (const [key, value] of Object.entries({
+  "editor-background": colors.background,
+  "sideBar-background": colors.background,
+  foreground: colors.foreground,
+  descriptionForeground: colors.weak,
+  "input-background": colors.background,
+  "input-foreground": colors.foreground,
+  "input-placeholderForeground": colors.weak,
+  "input-border": colors.weak,
+  focusBorder: colors.focus,
+  contrastBorder: theme === "contrast" ? colors.foreground : "transparent",
+}))
+  document.body.style.setProperty(`--vscode-${key}`, value)
+document.body.style.background = colors.background
+document.body.style.color = colors.foreground
+
+function Fixture() {
+  const server = useServer()
+  const provider = useProvider()
+  const [connected, setConnected] = createSignal(true)
+  const [id, setID] = createSignal("first")
+  const [agent, setAgent] = createSignal("auto")
+  const [selected, setSelected] = createSignal({ providerID: "kilo", modelID: "anthropic/claude-sonnet-4-6" })
+  const [variant, setVariant] = createSignal()
+  const [sent, setSent] = createSignal([])
+  const [busy, setBusy] = createSignal(false)
+  const session = {
+    ...mockSessionValue(),
+    currentSessionID: id,
+    sessions: () => [
+      { id: "first", title: "First", updatedAt: new Date().toISOString() },
+      { id: "second", title: "Second", updatedAt: new Date().toISOString() },
+    ],
+    agents: () => [
+      { name: "auto", displayName: "Auto", mode: "primary" },
+      { name: "plan", displayName: "Plan", mode: "primary" },
+    ],
+    selectedAgent: agent,
+    selectAgent: setAgent,
+    selected,
+    selectModel: (providerID, modelID) => setSelected({ providerID, modelID }),
+    variantList: () => ["low", "high"],
+    currentVariant: variant,
+    selectVariant: setVariant,
+    hasModelOverride: () => false,
+    status: () => (busy() ? "busy" : "idle"),
+    abort: () => setBusy(false),
+    sendMessage: (...args) => setSent((prior) => [...prior, { args, agent: agent(), variant: variant() }]),
+  }
+  return (
+    <ServerContext.Provider
+      value={{ ...server, isConnected: connected, connectionState: () => (connected() ? "connected" : "disconnected") }}
+    >
+      <ProviderContext.Provider
+        value={{
+          ...provider,
+          isModelValid: (selection) => isModelValid(provider.providers(), provider.connected(), selection),
+        }}
+      >
+        <SessionContext.Provider value={session}>
+          <main style={{ padding: "12px", "max-width": "760px", margin: "auto" }}>
+            <WelcomeEmptyState />
+            <PromptInput boxId="fixture" />
+            <div aria-label="Fixture controls">
+              <button onClick={() => setConnected(!connected())}>Toggle connection</button>
+              <button onClick={() => setID(id() === "first" ? "second" : "first")}>Switch session</button>
+              <button onClick={() => setSelected({ providerID: "missing-provider", modelID: "missing-model" })}>
+                Unavailable model
+              </button>
+              <button onClick={() => setBusy(!busy())}>Toggle busy</button>
+            </div>
+            <output hidden data-sent>
+              {JSON.stringify(sent())}
+            </output>
+          </main>
+        </SessionContext.Provider>
+      </ProviderContext.Provider>
+    </ServerContext.Provider>
+  )
+}
+render(
+  () => (
+    <StoryProviders noPadding config={{}}>
+      <VoiceProvider><Fixture /></VoiceProvider>
+    </StoryProviders>
+  ),
+  document.getElementById("root"),
+)

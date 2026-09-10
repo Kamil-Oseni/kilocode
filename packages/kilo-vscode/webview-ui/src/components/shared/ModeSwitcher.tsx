@@ -93,7 +93,9 @@ export const ModeSwitcherBase: Component<ModeSwitcherBaseProps> = (props) => {
     setOpen(false)
     if (slash) {
       slash = false
-      requestAnimationFrame(() => window.dispatchEvent(new CustomEvent("focusPrompt", { detail: { restore: true } })))
+      requestAnimationFrame(() =>
+        window.dispatchEvent(new CustomEvent("focusPrompt", { detail: { restore: true, source: props.trigger } })),
+      )
     }
   }
 
@@ -198,6 +200,7 @@ export const ModeSwitcherBase: Component<ModeSwitcherBaseProps> = (props) => {
 // ---------------------------------------------------------------------------
 
 interface ModeSwitcherProps {
+  trigger?: string
   sessionID?: Accessor<string | undefined>
 }
 
@@ -207,11 +210,14 @@ export const ModeSwitcher: Component<ModeSwitcherProps> = (props) => {
 
   return (
     <ModeSwitcherBase
+      trigger={props.trigger}
       agents={session.agents()}
       value={session.selectedAgent(id())}
       onSelect={(name) => {
         session.selectAgent(name, id())
-        requestAnimationFrame(() => window.dispatchEvent(new Event("focusPrompt")))
+        requestAnimationFrame(() =>
+          window.dispatchEvent(new CustomEvent("focusPrompt", { detail: { source: props.trigger } })),
+        )
       }}
     />
   )

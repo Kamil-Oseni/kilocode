@@ -1003,3 +1003,72 @@
     animation: none;
   }
 }
+
+/* Outcome entry remains primary; real configuration controls expand in place. */
+.prompt-input-hint:has(.composer-configuration) {
+  flex-wrap: wrap;
+}
+.prompt-input-hint-selectors:has(.composer-configuration) {
+  flex-basis: 100%;
+}
+.composer-configuration {
+  width: 100%;
+  min-width: 0;
+}
+.composer-configuration > [data-slot="collapsible-trigger"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--raya-space-8);
+  min-height: 32px;
+  height: auto;
+  cursor: pointer;
+  list-style: none;
+  border-radius: var(--raya-space-4);
+}
+.composer-configuration > [data-slot="collapsible-trigger"]:focus-visible {
+  outline: 2px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+}
+.composer-configuration-value {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.composer-configuration-action {
+  flex-shrink: 0;
+  color: var(--vscode-foreground);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.composer-configuration-body {
+  padding: var(--raya-space-8) 0;
+}
+.composer-configuration-body p {
+  margin: 0 0 var(--raya-space-8);
+  line-height: 1.5;
+  font-size: var(--kilo-font-size-12);
+}
+.composer-configuration-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--raya-space-8);
+}
+.composer-configuration-warning {
+  flex-basis: 100%;
+  color: var(--vscode-foreground);
+}
+
+.composer-configuration > [data-slot="collapsible-content"][hidden] {
+  display: none;
+}
+
+.composer-configuration-shell {
+  width: 100%;
+  min-width: 0;
+}
+.composer-configuration > [data-slot="collapsible-trigger"] {
+  text-align: left;
+}

@@ -1,10 +1,12 @@
-import { OpenAIUsage, OpenAIUsageInput, valid, fingerprint } from "./openai-usage"
+import { OpenAIUsageInput, valid, fingerprint } from "./openai-usage"
 import fs from "node:fs/promises"
 import { createHash, timingSafeEqual } from "node:crypto"
 import { Cause, Effect, Exit, Fiber, Schema, Scope, Semaphore } from "effect"
 import { MessageID, type SessionID } from "@/session/schema"
 import type { Session } from "@/session/session"
 import type { SessionPrompt } from "@/session/prompt"
+import type { Database } from "@opencode-ai/core/database/database"
+import * as Store from "./openai-store"
 import type { Storage } from "@/storage/storage"
 import type * as TaskWorker from "@/kilocode/session/task-worker"
 import {
@@ -22,16 +24,9 @@ type Binding = typeof OpenAIBinding.Type
 type Call = typeof OpenAICall.Type
 type Input = typeof OpenAICallInput.Type
 type Image = { receipt: typeof OpenAIImage.Type; data: string }
-type Stored = {
-  binding: Binding
-  owner: string
-  hash: string
-  requestID: string
-  calls: Record<string, { input: Input; receipt: Call }>
-  images?: Record<string, Image>
-  usage?: Record<string, typeof OpenAIUsage.Type>
-}
+type Stored = Store.Stored
 type Deps = {
+  database: Database.Interface
   storage: Storage.Interface
   sessions: { get: (id: SessionID) => Effect.Effect<Pick<Session.Info, "id" | "directory">, Session.NotFound> }
   prompts: Pick<SessionPrompt.Interface, "prompt">
@@ -44,7 +39,6 @@ export class VoiceError extends Schema.TaggedErrorClass<VoiceError>()("VoiceErro
 }) {}
 
 const digest = (value: string) => createHash("sha256").update(value).digest("hex")
-const key = (id: string) => ["raya_openai_voice", id]
 const pending = (call: Call) => call.status === "accepted" || call.status === "running"
 const refuse = (code: VoiceError["code"], message: string) => Effect.fail(new VoiceError({ code, message }))
 const canonical = (directory: string) => Effect.tryPromise(() => fs.realpath(directory)).pipe(Effect.orDie)
@@ -132,15 +126,13 @@ export const make = (deps: Deps) =>
             if (gate.refs === 0 && gates.get(id) === gate) gates.delete(id)
           }),
       )
-    const save = (stored: Stored) => deps.storage.replace(key(stored.binding.id), stored).pipe(Effect.orDie)
+    const store = Store.make(deps.database, deps.storage)
+    const save = (stored: Stored) =>
+      store
+        .replace(stored)
+        .pipe(Effect.mapError((error) => new VoiceError({ code: error.code, message: error.message })))
     const read = (id: string) =>
-      deps.storage
-        .read<Stored>(key(id))
-        .pipe(
-          Effect.catch((error) =>
-            error._tag === "NotFoundError" ? refuse("missing", "Voice binding not found.") : Effect.die(error),
-          ),
-        )
+      store.read(id).pipe(Effect.mapError((error) => new VoiceError({ code: error.code, message: error.message })))
     const load = (id: string, secret: string, directory: string, generation?: string) =>
       Effect.gen(function* () {
         if (!Schema.is(VoiceKey)(secret)) return yield* refuse("unauthorized", "Invalid voice capability.")
@@ -340,7 +332,12 @@ export const make = (deps: Deps) =>
                 expiresAt: now + 60 * 60 * 1000,
               },
             }
-            if (yield* deps.storage.create(key(id), stored).pipe(Effect.orDie)) return stored.binding
+            if (
+              yield* store
+                .create(stored)
+                .pipe(Effect.mapError((error) => new VoiceError({ code: error.code, message: error.message })))
+            )
+              return stored.binding
             const existing = yield* load(id, secret, dir)
             if (existing.requestID !== input.requestID || existing.binding.parentSessionID !== parent.id)
               return yield* refuse("conflict", "Provider call already has another binding.")

@@ -20,6 +20,7 @@ import * as SandboxInheritance from "@/kilocode/sandbox/inheritance"
 import * as SandboxPolicy from "@/kilocode/sandbox/policy"
 import { SandboxStore } from "@/kilocode/sandbox/store"
 import { ReviewGate } from "@/kilocode/session/review-gate"
+import { OpenAIRetention } from "@/kilocode/voice/openai-retention"
 import type { SessionID } from "@/session/schema"
 import { Session } from "@/session/session"
 import { SessionStatus } from "@/session/status"
@@ -38,6 +39,7 @@ const it = testEffect(
       Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces: false })),
       Layer.provide(AppNodeBuilder.build(BackgroundJob.node)),
       Layer.provide(AppNodeBuilder.build(ReviewGate.node)),
+      Layer.provide(AppNodeBuilder.build(OpenAIRetention.node)),
       Layer.provide(AppNodeBuilder.build(Database.node)),
       Layer.provide(AppNodeBuilder.build(EventV2Bridge.node)),
       Layer.provide(AppNodeBuilder.build(SessionV2.node, [[SessionExecution.node, SessionExecution.noopLayer]])), // kilocode_change

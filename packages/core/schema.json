@@ -1,9 +1,9 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "0238aa70-d3ce-494f-b01d-161d17b9406e",
+  "id": "099c675d-7356-458a-8fe6-9ae9e64a7ea2",
   "prevIds": [
-    "164ac8ee-9bd5-4705-ac7e-f02b8cd35f49"
+    "0238aa70-d3ce-494f-b01d-161d17b9406e"
   ],
   "ddl": [
     {
@@ -28,6 +28,10 @@
     },
     {
       "name": "raya_routine_occurrence",
+      "entityType": "tables"
+    },
+    {
+      "name": "raya_voice_binding",
       "entityType": "tables"
     },
     {
@@ -417,6 +421,36 @@
       "name": "time_updated",
       "entityType": "columns",
       "table": "raya_routine_occurrence"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "raya_voice_binding"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "session_id",
+      "entityType": "columns",
+      "table": "raya_voice_binding"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "data",
+      "entityType": "columns",
+      "table": "raya_voice_binding"
     },
     {
       "type": "integer",
@@ -1735,6 +1769,21 @@
     },
     {
       "columns": [
+        "session_id"
+      ],
+      "tableTo": "session",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_raya_voice_binding_session_id_session_id_fk",
+      "entityType": "fks",
+      "table": "raya_voice_binding"
+    },
+    {
+      "columns": [
         "active_account_id"
       ],
       "tableTo": "account",
@@ -2003,6 +2052,15 @@
         "id"
       ],
       "nameExplicit": false,
+      "name": "raya_voice_binding_pk",
+      "table": "raya_voice_binding",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
       "name": "account_state_pk",
       "table": "account_state",
       "entityType": "pks"
@@ -2207,6 +2265,20 @@
       "name": "raya_routine_occurrence_lease",
       "entityType": "indexes",
       "table": "raya_routine_occurrence"
+    },
+    {
+      "columns": [
+        {
+          "value": "session_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "raya_voice_binding_session_idx",
+      "entityType": "indexes",
+      "table": "raya_voice_binding"
     },
     {
       "columns": [

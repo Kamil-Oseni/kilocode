@@ -8,12 +8,18 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { Git } from "@/git"
+import { eq, sql } from "drizzle-orm"
+import { Database } from "@opencode-ai/core/database/database"
+import { RayaVoiceBindingTable as Table } from "@opencode-ai/core/kilocode/voice.sql"
+import { SessionTable } from "@opencode-ai/core/session/sql"
+import { NotFoundError } from "@/storage/storage"
+import * as Store from "@/kilocode/voice/openai-store"
 import { Storage } from "@/storage/storage"
 import { Runner } from "@/effect/runner"
 import { observe } from "@/kilocode/effect/observation"
 import * as Workers from "@/kilocode/session/task-worker"
 import { make } from "@/kilocode/voice/openai"
-import type { OpenAIBinding, OpenAICall, OpenAICallInput } from "@/kilocode/voice/openai-protocol"
+import type { OpenAICall, OpenAICallInput } from "@/kilocode/voice/openai-protocol"
 import type { SessionPrompt } from "@/session/prompt"
 import { MessageV2 } from "@/session/message-v2"
 import { MessageID, PartID, SessionID } from "@/session/schema"
@@ -59,7 +65,12 @@ it.live(
         expect(
           (yield* state.voice.get(state.binding.id, state.input.callID, state.binding.generation, secret, root)).status,
         ).toBe("cancelled")
-      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
     }),
   30_000,
 )
@@ -88,9 +99,32 @@ function answer(input: Prompt): MessageV2.WithParts {
   }
 }
 
+const retained = (id: string) =>
+  Effect.gen(function* () {
+    const database = yield* Database.Service
+    const storage = yield* Storage.Service
+    return yield* Store.make(database, storage).read(id).pipe(Effect.orDie)
+  })
+const replace = (value: Store.Stored) =>
+  Effect.gen(function* () {
+    const { db } = yield* Database.Service
+    yield* db.update(Table).set({ data: value }).where(eq(Table.id, value.binding.id)).run().pipe(Effect.orDie)
+  })
+
 const fixture = (root: string, work: SessionPrompt.Interface["prompt"] = (input) => Effect.succeed(answer(input))) =>
   Effect.gen(function* () {
     const storage = yield* Storage.Service
+    const database = yield* Database.Service
+    yield* database.db
+      .run(
+        sql`INSERT OR IGNORE INTO project (id, worktree, time_created, time_updated, sandboxes) VALUES ('voice-project', ${root}, 1, 1, '[]')`,
+      )
+      .pipe(Effect.orDie)
+    yield* database.db
+      .run(
+        sql`INSERT OR IGNORE INTO session (id, project_id, slug, directory, title, version, time_created, time_updated) VALUES (${session}, 'voice-project', 'voice', ${root}, 'Voice test', 'test', 1, 1)`,
+      )
+      .pipe(Effect.orDie)
     const runner = Runner.make<MessageV2.WithParts>(yield* Scope.Scope, {
       onInterrupt: Effect.die("test runtime cancelled"),
     })
@@ -101,7 +135,20 @@ const fixture = (root: string, work: SessionPrompt.Interface["prompt"] = (input)
     const calls: Prompt[] = []
     const deps = {
       storage,
-      sessions: { get: (id: SessionID) => Effect.succeed({ id, directory: root }) },
+      database,
+      sessions: {
+        get: (id: SessionID) =>
+          Effect.gen(function* () {
+            const row = yield* database.db
+              .select()
+              .from(SessionTable)
+              .where(eq(SessionTable.id, id))
+              .get()
+              .pipe(Effect.orDie)
+            if (!row) return yield* Effect.fail(new NotFoundError({ message: "Test parent missing" }))
+            return { id: SessionID.make(row.id), directory: row.directory }
+          }),
+      },
       workers,
       prompts: {
         prompt: (input: Prompt) =>
@@ -145,11 +192,12 @@ it.live(
       yield* Effect.gen(function* () {
         const gate = yield* Deferred.make<void>()
         const entered = yield* Deferred.make<void>()
-        const storage = yield* Storage.Service
+        const database = yield* Database.Service
+        const store = Store.make(database, yield* Storage.Service)
         const state = yield* fixture(root, (input) =>
           Effect.gen(function* () {
-            const keys = yield* storage.list(["raya_openai_voice"])
-            const stored = yield* storage.read<{ calls: Record<string, { receipt: typeof OpenAICall.Type }> }>(keys[0])
+            const rows = yield* database.db.select().from(Table).pipe(Effect.orDie)
+            const stored = yield* store.read(rows[0].id)
             expect(Object.values(stored.calls)[0].receipt.status).toBe("running")
             yield* Deferred.succeed(entered, undefined)
             yield* Deferred.await(gate)
@@ -188,10 +236,15 @@ it.live(
         expect(call.messageID).toBe(calls[0].messageID)
         expect((yield* state.voice.submit(state.binding.id, state.input, secret, root)).status).toBe("completed")
         expect(state.calls).toHaveLength(1)
-        const stored = yield* state.deps.storage.read(["raya_openai_voice", state.binding.id])
+        const stored = yield* retained(state.binding.id)
         expect(JSON.stringify(stored)).not.toContain(secret)
         expect(JSON.stringify(stored)).toContain(createHash("sha256").update(secret).digest("hex"))
-      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
     }),
   30_000,
 )
@@ -221,7 +274,12 @@ it.live(
         expect(
           Exit.isFailure(yield* state.voice.submit(state.binding.id, state.input, secret, root).pipe(Effect.exit)),
         ).toBe(true)
-      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
     }),
   30_000,
 )
@@ -256,7 +314,12 @@ it.live(
         expect(
           (yield* state.voice.get(state.binding.id, state.input.callID, state.binding.generation, secret, root)).result,
         ).toBeUndefined()
-      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
     }),
   30_000,
 )
@@ -285,7 +348,12 @@ it.live(
           true,
         )
         expect(state.calls).toHaveLength(1)
-      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
     }),
   30_000,
 )
@@ -324,7 +392,12 @@ it.live(
             state.voice.get(state.binding.id, state.input.callID, state.binding.generation, secret, root),
           )).status,
         ).toBe("completed")
-      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
     }),
   30_000,
 )
@@ -356,7 +429,12 @@ it.live(
         expect(state.calls).toHaveLength(1)
         yield* Deferred.succeed(release, undefined)
         yield* settled(state.voice.get(state.binding.id, state.input.callID, state.binding.generation, secret, root))
-      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
     }),
   30_000,
 )
@@ -378,12 +456,8 @@ it.live(
         )
         yield* state.voice.submit(state.binding.id, state.input, secret, root)
         yield* Deferred.await(entered)
-        yield* state.deps.storage.update<{ binding: typeof OpenAIBinding.Type }>(
-          ["raya_openai_voice", state.binding.id],
-          (stored) => {
-            stored.binding = { ...stored.binding, expiresAt: Date.now() - 1 }
-          },
-        )
+        const stored = yield* retained(state.binding.id)
+        yield* replace({ ...stored, binding: { ...stored.binding, expiresAt: Date.now() - 1 } })
         expect((yield* state.voice.start(state.start, secret, root)).status).toBe("closed")
         expect(
           Exit.isFailure(
@@ -399,7 +473,12 @@ it.live(
             state.voice.get(state.binding.id, state.input.callID, state.binding.generation, secret, root),
           )).status,
         ).toBe("completed")
-      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
     }),
   30_000,
 )
@@ -447,7 +526,12 @@ it.live(
         expect(call.result!.evidence).toHaveLength(64)
         expect(call.result!.evidence[0].tool).toBe("observed_1")
         expect(call.result!.evidence.every((part) => part.messageID === call.result!.assistantMessageID)).toBe(true)
-      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
     }),
   30_000,
 )
@@ -510,7 +594,12 @@ it.live(
               .pipe(Effect.exit),
           ),
         ).toBe(true)
-      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
     }),
   30_000,
 )
@@ -586,11 +675,9 @@ it.live(
               .pipe(Effect.exit),
           ),
         ).toBe(true)
-        const storage = yield* Storage.Service
-        const key = ["raya_openai_voice", state.binding.id]
-        const retained = yield* storage.read<{ images: Record<string, { data: string }> }>(key)
-        retained.images[createHash("sha256").update("image-0").digest("hex")].data = "corrupted"
-        yield* storage.replace(key, retained)
+        const value = yield* retained(state.binding.id)
+        const id = createHash("sha256").update("image-0").digest("hex")
+        yield* replace({ ...value, images: { ...value.images, [id]: { ...value.images![id], data: "corrupted" } } })
         expect(
           Exit.isFailure(
             yield* state.voice
@@ -612,7 +699,12 @@ it.live(
           true,
         )
         expect(state.calls).toEqual([])
-      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
     }),
   30_000,
 )
@@ -703,7 +795,12 @@ it.live(
         ).toBe(true)
         const restarted = yield* make(state.deps)
         expect((yield* restarted.usage(state.binding.id, input.generation, secret, root)).receipts).toHaveLength(3)
-      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
     }),
   30_000,
 )
@@ -758,11 +855,9 @@ it.live(
         ).toBe(true)
         expect((yield* state.voice.usage(state.binding.id, input.generation, secret, root)).receipts).toEqual([])
         yield* state.voice.meter(state.binding.id, input, secret, root)
-        const storage = yield* Storage.Service
-        const key = ["raya_openai_voice", state.binding.id]
-        const retained = yield* storage.read<{ usage: Record<string, typeof receipt> }>(key)
-        retained.usage.corrupted = receipt
-        yield* storage.replace(key, retained)
+        const value = yield* retained(state.binding.id)
+        const corrupted = { ...value, usage: { ...value.usage, corrupted: receipt } }
+        yield* replace(corrupted)
         expect(
           Exit.isFailure(yield* state.voice.usage(state.binding.id, input.generation, secret, root).pipe(Effect.exit)),
         ).toBe(true)
@@ -776,8 +871,194 @@ it.live(
               .pipe(Effect.exit),
           ),
         ).toBe(true)
-        expect((yield* storage.read<typeof retained>(key)).usage).toEqual(retained.usage)
-      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+        expect((yield* retained(state.binding.id)).usage).toEqual(corrupted.usage)
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
+    }),
+  30_000,
+)
+
+it.live(
+  "migrates legacy receipts once, preserves old ownership, and prefers SQL over a leftover JSON copy",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const state = yield* fixture(root)
+        yield* state.voice.stage(
+          state.binding.id,
+          { generation: state.binding.generation, id: "legacy-image", mime: "image/png", data: png },
+          secret,
+          root,
+        )
+        yield* state.voice.meter(
+          state.binding.id,
+          {
+            generation: state.binding.generation,
+            receipt: {
+              id: "legacy-usage",
+              kind: "response",
+              model: "gpt-realtime-2.1",
+              status: "reported",
+              tokens: { input: 2, output: 1, total: 3 },
+            },
+          },
+          secret,
+          root,
+        )
+        yield* state.voice.submit(state.binding.id, state.input, secret, root)
+        const call = yield* settled(
+          state.voice.get(state.binding.id, state.input.callID, state.binding.generation, secret, root),
+        )
+        const value = yield* retained(state.binding.id)
+        const key = ["raya_openai_voice", state.binding.id]
+        const db = state.deps.database.db
+        expect(yield* state.deps.storage.list(["raya_openai_voice"])).toEqual([])
+        yield* state.deps.storage.create(key, value)
+        yield* db.delete(Table).where(eq(Table.id, state.binding.id)).run().pipe(Effect.orDie)
+        const reopened = yield* make(state.deps)
+        expect(
+          yield* reopened.get(state.binding.id, state.input.callID, state.binding.generation, secret, root),
+        ).toEqual(call)
+        expect((yield* reopened.start(state.start, secret, root)).status).toBe("closed")
+        expect(yield* retained(state.binding.id)).toEqual(value)
+        expect(yield* state.deps.storage.list(["raya_openai_voice"])).toEqual([])
+        expect(
+          Exit.isFailure(
+            yield* reopened
+              .submit(state.binding.id, { ...state.input, callID: "replay" }, secret, root)
+              .pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        yield* state.deps.storage.create(key, { ...value, hash: "b".repeat(64) })
+        expect(
+          yield* reopened.get(state.binding.id, state.input.callID, state.binding.generation, secret, root),
+        ).toEqual(call)
+        expect(yield* state.deps.storage.list(["raya_openai_voice"])).toEqual([])
+        expect(state.calls).toHaveLength(1)
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
+    }),
+  30_000,
+)
+
+it.live(
+  "cascades retained voice data, rejects late replacement, and removes orphan legacy data",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const state = yield* fixture(root)
+        const value = yield* retained(state.binding.id)
+        const key = ["raya_openai_voice", state.binding.id]
+        const db = state.deps.database.db
+        const store = Store.make(state.deps.database, state.deps.storage)
+        yield* state.deps.storage.create(key, value)
+        yield* db.delete(SessionTable).where(eq(SessionTable.id, session)).run().pipe(Effect.orDie)
+        expect(yield* db.select().from(Table).pipe(Effect.orDie)).toEqual([])
+        expect(Exit.isFailure(yield* store.replace(value).pipe(Effect.exit))).toBe(true)
+        expect(
+          Exit.isFailure(
+            yield* state.voice.close(state.binding.id, state.binding.generation, secret, root).pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        expect(yield* state.deps.storage.list(["raya_openai_voice"])).toEqual([])
+        expect(yield* db.select().from(Table).pipe(Effect.orDie)).toEqual([])
+        expect(state.calls).toHaveLength(0)
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
+    }),
+  30_000,
+)
+
+it.live(
+  "a failed legacy SQL insert preserves valid data and cannot create an owner",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const state = yield* fixture(root)
+        const value = yield* retained(state.binding.id)
+        const db = state.deps.database.db
+        yield* state.deps.storage.create(["raya_openai_voice", state.binding.id], value)
+        yield* db.delete(Table).where(eq(Table.id, state.binding.id)).run().pipe(Effect.orDie)
+        // An actual SQLite trigger places deletion precisely after the adapter's parent lookup.
+        yield* db
+          .run(
+            sql`CREATE TRIGGER delete_voice_parent BEFORE INSERT ON raya_voice_binding BEGIN DELETE FROM session WHERE id = NEW.session_id; END`,
+          )
+          .pipe(Effect.orDie)
+        const result = yield* Store.make(state.deps.database, state.deps.storage)
+          .read(state.binding.id)
+          .pipe(Effect.exit)
+        expect(Exit.isFailure(result)).toBe(true)
+        expect(yield* db.select().from(Table).pipe(Effect.orDie)).toEqual([])
+        // SQLite rolls back the trigger's delete with the failed insert: retain the valid legacy record for repair.
+        expect(yield* state.deps.storage.read(["raya_openai_voice", state.binding.id])).toEqual(value)
+        expect(state.calls).toHaveLength(0)
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
+    }),
+  30_000,
+)
+
+it.live(
+  "a late admitted prompt result cannot recreate its deleted parent binding",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const entered = yield* Deferred.make<void>()
+        const release = yield* Deferred.make<void>()
+        const scope = yield* Scope.make()
+        const state = yield* fixture(root, (input) =>
+          Effect.gen(function* () {
+            yield* Deferred.succeed(entered, undefined)
+            yield* Deferred.await(release)
+            return answer(input)
+          }),
+        ).pipe(Effect.provideService(Scope.Scope, scope))
+        yield* state.voice.submit(state.binding.id, state.input, secret, root)
+        yield* Deferred.await(entered)
+        const saved = yield* retained(state.binding.id)
+        const db = state.deps.database.db
+        yield* db.delete(SessionTable).where(eq(SessionTable.id, session)).run().pipe(Effect.orDie)
+        yield* Deferred.succeed(release, undefined)
+        for (const _ of Array.from({ length: 200 })) {
+          if (!state.runner.busy) break
+          yield* Effect.sleep("10 millis")
+        }
+        expect(state.runner.busy).toBe(false)
+        yield* Effect.sleep("50 millis")
+        yield* Scope.close(scope, Exit.succeed(undefined))
+        expect(
+          Exit.isFailure(yield* Store.make(state.deps.database, state.deps.storage).replace(saved).pipe(Effect.exit)),
+        ).toBe(true)
+        expect(yield* db.select().from(Table).pipe(Effect.orDie)).toEqual([])
+        expect(yield* state.deps.storage.list(["raya_openai_voice"])).toEqual([])
+        expect(state.calls).toHaveLength(1)
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
     }),
   30_000,
 )

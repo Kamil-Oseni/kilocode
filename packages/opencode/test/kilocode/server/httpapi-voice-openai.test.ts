@@ -6,6 +6,9 @@ import { disposeAllInstances, tmpdir } from "../../fixture/fixture"
 import { resetDatabase } from "../../fixture/db"
 import { OpenAIBinding, OpenAIImage } from "@/kilocode/voice/openai-protocol"
 import { SessionID } from "@/session/schema"
+import path from "node:path"
+import { mkdir, writeFile, rm, access } from "node:fs/promises"
+import { Global } from "@opencode-ai/core/global"
 
 test("the shipped OpenAI voice routes require both configured server auth and the binding capability", async () => {
   await using dir = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
@@ -132,6 +135,46 @@ test("the shipped OpenAI voice routes require both configured server auth and th
     expect(Schema.decodeUnknownSync(OpenAIBinding)(await closed.json()).status).toBe("closed")
     expect((await request("POST", `${route}/calls`, call)).status).toBe(409)
     expect((await request("POST", `${route}/images`, image)).status).toBe(409)
+    const sibling = Schema.decodeUnknownSync(Schema.Struct({ id: SessionID }))(
+      await (await request("POST", "/session", {})).json(),
+    )
+    const separate = Schema.decodeUnknownSync(OpenAIBinding)(await (await request("POST", base, {
+      parentSessionID: sibling.id,
+      providerCallID: crypto.randomUUID(),
+      requestID: crypto.randomUUID(),
+    })).json())
+    const active = Schema.decodeUnknownSync(OpenAIBinding)(await (await request("POST", base, {
+      ...input,
+      providerCallID: crypto.randomUUID(),
+      requestID: crypto.randomUUID(),
+    })).json())
+    const legacy = path.join(Global.Path.data, "storage", "raya_openai_voice")
+    const owned = path.join(legacy, `legacy_${binding.id}.json`)
+    const unrelated = path.join(legacy, `legacy_${separate.id}.json`)
+    const corrupt = path.join(legacy, "corrupt_retention_test.json")
+    await mkdir(legacy, { recursive: true })
+    await writeFile(owned, JSON.stringify({ binding, images: { private: image.data } }))
+    await writeFile(unrelated, JSON.stringify({ binding: separate }))
+    await writeFile(corrupt, "invalid JSON")
+    try {
+      expect((await request("DELETE", `/session/${parent.id}`)).status).toBe(500)
+      expect((await request("GET", `/session/${parent.id}`)).status).toBe(200)
+      await rm(corrupt)
+      expect((await request("DELETE", `/session/${parent.id}`)).status).toBe(200)
+      expect((await request("GET", `/session/${parent.id}`)).status).toBe(404)
+      expect((await request("GET", `${route}/usage?generation=${binding.generation}`)).status).toBe(404)
+      expect((await request("POST", `${route}/usage`, usage)).status).toBe(404)
+      expect((await request("POST", `${route}/images`, image)).status).toBe(404)
+      expect((await request("POST", `${route}/calls`, call)).status).toBe(404)
+      expect((await request("DELETE", `${base}/${active.id}?generation=${active.generation}`)).status).toBe(404)
+      expect(await access(owned).then(() => true, () => false)).toBe(false)
+      expect(await access(unrelated).then(() => true, () => false)).toBe(true)
+      expect((await request("GET", `${base}/${separate.id}/usage?generation=${separate.generation}`)).status).toBe(200)
+      expect((await request("DELETE", `/session/${sibling.id}`)).status).toBe(200)
+      expect(await access(unrelated).then(() => true, () => false)).toBe(false)
+    } finally {
+      await Promise.all([owned, unrelated, corrupt].map((file) => rm(file, { force: true })))
+    }
   } finally {
     await app.dispose()
     await disposeAllInstances()

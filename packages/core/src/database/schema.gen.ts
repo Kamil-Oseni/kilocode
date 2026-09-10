@@ -70,6 +70,16 @@ export default {
         );
       `)
       // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(`
+        CREATE TABLE \`raya_voice_binding\` (
+          \`id\` text PRIMARY KEY,
+          \`session_id\` text NOT NULL,
+          \`data\` text NOT NULL,
+          CONSTRAINT \`fk_raya_voice_binding_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
+      // kilocode_change end
       yield* tx.run(`
         CREATE TABLE \`account_state\` (
           \`id\` integer PRIMARY KEY,
@@ -302,6 +312,9 @@ export default {
       yield* tx.run(
         `CREATE INDEX \`raya_routine_occurrence_lease\` ON \`raya_routine_occurrence\` (\`state\`,\`lease_until\`);`,
       )
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(`CREATE INDEX \`raya_voice_binding_session_idx\` ON \`raya_voice_binding\` (\`session_id\`);`)
       // kilocode_change end
       yield* tx.run(`CREATE UNIQUE INDEX \`event_aggregate_seq_idx\` ON \`event\` (\`aggregate_id\`,\`seq\`);`)
       yield* tx.run(`CREATE INDEX \`event_aggregate_type_seq_idx\` ON \`event\` (\`aggregate_id\`,\`type\`,\`seq\`);`)

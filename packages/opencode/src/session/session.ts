@@ -50,6 +50,7 @@ import { NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { AbsolutePath } from "@opencode-ai/core/schema" // kilocode_change
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ReviewGate } from "@/kilocode/session/review-gate" // kilocode_change - coordinate deletion with checkpoint mutations
+import { OpenAIRetention } from "@/kilocode/voice/openai-retention" // kilocode_change - erase legacy native voice records before task deletion
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 
@@ -600,7 +601,7 @@ export type Patch = Omit<Partial<Info>, "time" | "share" | "summary" | "revert" 
 export const layer: Layer.Layer<
   Service,
   never,
-  BackgroundJob.Service | RuntimeFlags.Service | Database.Service | EventV2Bridge.Service | ReviewGate.Service // kilocode_change
+  BackgroundJob.Service | RuntimeFlags.Service | Database.Service | EventV2Bridge.Service | ReviewGate.Service | OpenAIRetention.Service // kilocode_change
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -610,6 +611,7 @@ export const layer: Layer.Layer<
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
     const gate = yield* ReviewGate.Service // kilocode_change - shared review/deletion lifecycle boundary
+    const retention = yield* OpenAIRetention.Service // kilocode_change
 
     // kilocode_change start - inherited sandbox policy source
     const createNext = Effect.fn("Session.createNext")(function* (input: {
@@ -723,6 +725,7 @@ export const layer: Layer.Layer<
 
     const remove: Interface["remove"] = Effect.fnUntraced(function* (sessionID: SessionID) {
       const session = yield* get(sessionID)
+      yield* retention.remove(sessionID).pipe(Effect.orDie) // kilocode_change - fail before publishing deletion if legacy erasure fails
       try {
         // `remove` needs to work in all cases, such as broken sessions that
         // run cleanup without instance state.
@@ -764,6 +767,7 @@ export const layer: Layer.Layer<
         // kilocode_change end
       } catch (error) {
         yield* Effect.logError("failed to remove session", { sessionID, error })
+        return yield* Effect.die(error) // kilocode_change - preserve failure when descendant voice cleanup or deletion did not finish
       }
     })
 
@@ -1241,7 +1245,7 @@ export const fork = kiloSessionFork
 export const node = LayerNode.make({
   service: Service,
   layer,
-  deps: [BackgroundJob.node, RuntimeFlags.node, Database.node, EventV2Bridge.node, ReviewGate.node], // kilocode_change
+  deps: [BackgroundJob.node, RuntimeFlags.node, Database.node, EventV2Bridge.node, ReviewGate.node, OpenAIRetention.node], // kilocode_change
 })
 
 export * as Session from "./session"

@@ -43,5 +43,6 @@ export const migrations = (
     import("./migration/20260714141136_session-message-legacy-writer-compat"),
     import("./migration/20260908092112_kilocode-routine-occurrence"), // kilocode_change
     import("./migration/20260908124554_kilocode-routine-archive"), // kilocode_change
+    import("./migration/20260910044904_kilocode-voice-binding"), // kilocode_change
   ])
 ).map((module) => module.default) satisfies DatabaseMigration.Migration[]

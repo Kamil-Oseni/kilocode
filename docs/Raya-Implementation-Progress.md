@@ -4,9 +4,9 @@ Source of scope: [Comprehensive audit](Raya-Comprehensive-Audit.md). All section
 
 ## Current work
 
-Latest verified installed product checkpoint: 5a5708f7ad, pushed to origin/main. Native voice narration, interruption-safe captions and provider usage receipts passed recorded checks and the production snapshot workflow. Installed version: 7.4.23-snapshot+5a5708f7ad.kamil-oseni.1789014128425. Live voice/device acceptance, separate Go companion rebuild and post-reload workflows remain open.
+Latest verified installed product checkpoint: 9516ee3646, pushed to origin/main. Saved task context and explicit same-task native voice restart passed recorded checks and the production snapshot workflow. Installed version: 7.4.23-snapshot+9516ee3646.kamil-oseni.1789015347759. Live voice/device acceptance, separate Go companion rebuild and post-reload workflows remain open.
 
-Current checkpoint adds bounded saved task context on fresh voice calls and explicit same-task restart after both local and host cleanup. Provider context acknowledgement precedes readiness and never submits historical work. The voice architecture remains the experience reference; durable spoken snapshots, warm handoff, live device/provider acceptance and the full 39-requirement audit remain open.
+Current checkpoint adds parent-linked native voice retention, strict legacy-file cleanup, and update-only persistence that cannot recreate deleted bindings. Fresh/upgrade database, authenticated deletion, and service checks are being recorded below. Durable spoken snapshots, warm handoff, live device/provider acceptance and the full 39-requirement audit remain open.
 
 ## Findings and overhauls
 
@@ -2232,4 +2232,29 @@ Next source work follows the identified architecture: one correlated scheduler f
 - Explicit Restart voice in this task requires exact host release plus successful local media cleanup. Either completion order works; task changes invalidate the offer without releasing unresolved ownership. Starting/restarting discloses that saved context is shared and unsaved spoken dialogue may be missing. See [recovery](Raya-Native-Voice-Recovery.md).
 - Verification: actual SDK/HTTP context loader 9 tests / 150 assertions; actual broker/scheduler 36 / 829; final configuration-instruction gate 1 / 22; actual VoiceProvider 41 assertions and recovery state 22 assertions all passed. Actual composer recovery and transcript/usage regression passed narrow light/dark browser fixtures; ready and blocked screenshots inspected. Extension host/webview typechecks, lint, knip, Markdown and forbidden-marker checks passed. No backend endpoint or generated SDK change was needed.
 - Resolved verification failures: corrected a host callback signature; updated old work-result assertions to distinguish the new context item. Bun server-side WebSocket close/terminate spun the Windows fixture; the isolated actual ws-client disconnect passed, and the complete suite then passed including the real 20-second missing-ack deadline. Context cancellation fixture sequencing was corrected without weakening response bounds or increasing its deadline.
-- Delivery pending: latest verified installed checkpoint remains 5a5708f7ad. Full spoken continuity, warm handoff, live acoustic/semantic acceptance and all remaining audit requirements are still open. The existing SDK eagerly reads non-success response bodies; the context loader bounds successful streams while preserving configured transport, as documented.
+- Delivery verified: commit 9516ee3646ab9a5ebd1eb23f364bfd7ca183232c pushed to origin/main after normal cross-package/JetBrains hooks passed. Production snapshot workflow and independent installed-version/artifact checks exited 0. Full spoken continuity, warm handoff, live acoustic/semantic acceptance and all remaining audit requirements stay open. The existing SDK eagerly reads non-success response bodies; the context loader bounds successful streams while preserving configured transport, as documented.
+
+### Installed saved-context/recovery artifact
+
+- Installed: `eden.raya@7.4.23-snapshot+9516ee3646.kamil-oseni.1789015347759`.
+- VSIX: `C:/Users/User/AppData/Local/Temp/raya-vscode-snapshots/raya-vscode-snapshot-9516ee3646-kamil-oseni-1789015347759.vsix`.
+- SHA-256: `59B84C7DD08054877055E96AFAB7EDAE4F33B9BA5E1FB3664C172488A227999D`; 516,499,311 bytes, 427 entries; bundled CLI 228,384,768 bytes. Package identity, commit version, binary presence and absence of temporary/environment entries independently checked.
+- Push, production snapshot install and independent installed-extension query exited 0. Evidence logs remain local under `.tmp/voice-continuity-*`. No forced editor reload or Go companion rebuild.
+- Next continuity work must address retention first: source review found no parent-task deletion cleanup for existing native voice binding/image records. Add parent-linked deletion fencing before expanding durable transcript storage; generated assistant text and playback evidence must remain distinct, and transcript persistence must never execute work.
+
+
+## Native voice task-retention checkpoint - 2026-09-10
+
+Implemented parent-linked SQLite voice bindings, additive fresh/upgrade migration, lazy migration from legacy JSON, SQL-authoritative reads, and update-only receipt saves. Task deletion cascades binding contents (work receipts, staged images, usage) and late work cannot recreate them. Capability, generation, workspace and previous-owner fences remain intact; migration never dispatches work.
+
+The session lifecycle now erases exact-parent legacy records and recognized crash publication remnants before deleting the task. Unreadable or unidentified records fail deletion without logging record contents; another task's records survive. Recursive deletion failures propagate rather than reporting success. See [retention behavior and limits](Raya-Native-Voice-Retention.md).
+
+Validation:
+- Actual core database fresh/upgrade migration: 2 tests, 32 assertions; generator consistency and core typecheck passed.
+- Final native service and legacy cleanup suite: 19 tests, 138 assertions, native exit 0 (`.tmp/voice-retention-service-release.log`). Includes retained image/usage migration, old-owner fencing, immutable receipts, orphan cleanup, failed-insert preservation and admitted work completing after parent deletion.
+- Shipped authenticated HTTP plus cleanup suite: 3 tests, 57 assertions, native exit 0 (`.tmp/voice-retention-http.log`). Verified failed cleanup leaves parent retrievable, successful deletion removes active and closed bindings, subsequent writes fail, and unrelated records survive.
+- Existing session cleanup outside instance context: 1 targeted regression passed (`.tmp/voice-retention-session.log`).
+- Final CLI typecheck passed (`.tmp/voice-retention-typecheck-release.log`). Root lint passed with existing repository warnings and no errors; final scoped changed voice implementation/tests lint passed with zero warnings (`.tmp/voice-retention-final-scoped-lint.log`). Annotation, Promise-facade and Markdown guards passed.
+- Resolved verification failures: the first cleanup fixture lacked its real process-spawner dependency; the first CLI typecheck found a database dependency captured inside a prompt callback. Both were corrected and relevant checks passed. No failing check is being counted as a pass.
+
+Scope limits: logical deletion does not erase backups, SQLite recovery files or provider-held data; concurrent older binaries can still write the former JSON format. Recursive task and multi-file legacy deletion are not atomic. Age-based purge, durable spoken transcript history, warm handoff, paid-provider/microphone acceptance and full audit completion remain open. This checkpoint adds no HTTP schema and requires no SDK regeneration. Push and packaged installation receipts follow after delivery.

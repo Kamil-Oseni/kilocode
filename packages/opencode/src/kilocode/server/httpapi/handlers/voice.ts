@@ -1,4 +1,5 @@
 // raya_change - Realtime voice HTTP handlers backed by the existing Kilo session runtime.
+import { Database } from "@opencode-ai/core/database/database"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "@/server/routes/instance/httpapi/api"
@@ -25,7 +26,8 @@ export const voiceHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-voice",
     const storage = yield* Storage.Service
     const voice = RayaVoice.make({ sessions, prompts, storage })
     const workers = yield* TaskWorker.Service
-    const openai = yield* OpenAIVoice.make({ sessions, prompts, storage, workers })
+    const database = yield* Database.Service
+    const openai = yield* OpenAIVoice.make({ sessions, prompts, storage, workers, database })
 
     return handlers
       .handle("voiceOpenAIStart", (ctx) =>

@@ -1,4 +1,5 @@
 import { cancelled, owned } from "../../../src/shared/voice-interruption"
+import { NativeProjection } from "./native-projection"
 import type { RealtimeTranscript } from "./realtime-voice"
 
 type Status = "off" | "connecting" | "listening" | "speaking" | "degraded"
@@ -28,7 +29,7 @@ type Operation = {
   interruption?: ReturnType<typeof setTimeout>
   images: Set<string>
   cancellations: Set<string>
-  projection: Projection
+  projection: NativeProjection
 }
 
 /** Native media only. The trusted host owns authentication, tools and work dispatch. */
@@ -46,7 +47,7 @@ export class OpenAIVoice {
       answer: false,
       cancellations: new Set(),
       images: new Set(),
-      projection: new Projection(),
+      projection: new NativeProjection(),
     }
     this.operation = operation
     this.sink.status("connecting")
@@ -100,6 +101,8 @@ export class OpenAIVoice {
     const eventID = crypto.randomUUID()
     operation.cancellations.add(eventID)
     bound(operation.cancellations, 32)
+    const transcript = operation.projection.interrupt(responseID)
+    if (transcript) this.sink.transcript(transcript)
     operation.interrupted = responseID
     operation.clearing = responseID
     clearTimeout(operation.interruption)
@@ -240,6 +243,8 @@ export class OpenAIVoice {
 
   private output(operation: Operation, packet: Packet) {
     if (packet.type === "input_audio_buffer.speech_started") {
+      const transcript = operation.projection.interrupt(operation.output)
+      if (transcript) this.sink.transcript(transcript)
       this.sink.status("listening")
       return
     }
@@ -343,52 +348,6 @@ function parse(data: string): Packet | undefined {
       error instanceof SyntaxError ? "Invalid JSON" : "Invalid event",
     )
     return undefined
-  }
-}
-
-/** Bounded display projection; never executes function calls or submits transcript text. */
-class Projection {
-  private text = new Map<string, { text: string; truncated: boolean }>()
-  private done = new Set<string>()
-  private events = new Set<string>()
-
-  receive(packet: Packet): RealtimeTranscript | undefined {
-    const kinds = {
-      "conversation.item.input_audio_transcription.delta": ["input", false, "delta"],
-      "conversation.item.input_audio_transcription.completed": ["input", true, "transcript"],
-      "response.output_audio_transcript.delta": ["output", false, "delta"],
-      "response.output_audio_transcript.done": ["output", true, "transcript"],
-    } as const
-    if (!Object.hasOwn(kinds, packet.type)) return
-    const kind = kinds[packet.type as keyof typeof kinds]
-    if (typeof packet.item_id !== "string" || packet.item_id.length > 256) return
-    const value = packet[kind[2]]
-    if (typeof value !== "string") return
-    const key = `${kind[0]}:${packet.item_id}:${typeof packet.content_index === "number" ? packet.content_index : 0}`
-    if (this.done.has(key)) return
-    if (typeof packet.event_id === "string" && packet.event_id.length <= 256) {
-      if (this.events.has(packet.event_id)) return
-      this.events.add(packet.event_id)
-      bound(this.events, 256)
-    }
-    const prior = this.text.get(key)
-    const text = kind[1] ? value : (prior?.text ?? "") + value
-    const truncated = text.length > 8192 || (!kind[1] && prior?.truncated === true)
-    this.text.set(key, { text: text.slice(0, 8192), truncated })
-    if (this.text.size > 64) this.text.delete(this.text.keys().next().value!)
-    if (kind[1]) {
-      this.text.delete(key)
-      this.done.add(key)
-      bound(this.done, 256)
-    }
-    return {
-      type: packet.type,
-      item: packet.item_id,
-      turn: typeof packet.response_id === "string" && packet.response_id.length <= 256 ? packet.response_id : undefined,
-      text: text.slice(0, 8192),
-      stable: kind[1],
-      truncated,
-    }
   }
 }
 

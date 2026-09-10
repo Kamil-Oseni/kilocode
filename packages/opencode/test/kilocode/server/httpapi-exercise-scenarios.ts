@@ -101,6 +101,24 @@ export const kiloScenarios: Scenario[] = [
     }))
     .status(401),
   http.protected
+    .post("/kilocode/voice/openai/session/{id}/usage", "voice.openai.meter")
+    .at((ctx) => ({
+      path: "/kilocode/voice/openai/session/missing/usage",
+      headers: ctx.headers(),
+      body: {
+        generation: "missing",
+        receipt: { id: "response", kind: "response", model: "gpt-realtime-2.1", status: "missing" },
+      },
+    }))
+    .status(401),
+  http.protected
+    .get("/kilocode/voice/openai/session/{id}/usage", "voice.openai.usage")
+    .at((ctx) => ({
+      path: "/kilocode/voice/openai/session/missing/usage?generation=missing",
+      headers: ctx.headers(),
+    }))
+    .status(401),
+  http.protected
     .post("/kilocode/voice/openai/session/{id}/calls", "voice.openai.call")
     .at((ctx) => ({
       path: "/kilocode/voice/openai/session/missing/calls",

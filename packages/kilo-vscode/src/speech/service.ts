@@ -144,6 +144,8 @@ export class SpeechService implements vscode.Disposable {
           authorization: `Basic ${Buffer.from(`kilo:${server.password}`).toString("base64")}`,
           directory: input.directory,
           current: input.current,
+          usage: (usage) =>
+            post({ type: "speechOpenAIUsage", requestId: input.requestId, sessionID: input.sessionID, usage }),
         }
       },
       (sdp) => post({ type: "speechOpenAIReady", requestId: input.requestId, sdp }),

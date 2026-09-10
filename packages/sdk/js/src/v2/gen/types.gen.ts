@@ -5789,6 +5789,32 @@ export type OpenAiVoiceBinding = {
   expiresAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
 }
 
+export type OpenAiVoiceUsage = {
+  id: string
+  kind: "response" | "transcription"
+  model: "gpt-realtime-2.1" | "gpt-live-transcribe"
+  status: "reported" | "missing" | "invalid"
+  seconds?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  tokens?: {
+    input: number
+    output: number
+    total: number
+    cached?: number
+    inputText?: number
+    inputAudio?: number
+    inputImage?: number
+    cachedText?: number
+    cachedAudio?: number
+    cachedImage?: number
+    outputText?: number
+    outputAudio?: number
+  }
+}
+
+export type OpenAiVoiceUsageState = {
+  receipts: Array<OpenAiVoiceUsage>
+}
+
 export type OpenAiVoiceImageInput = {
   generation: string
   id: string
@@ -24597,6 +24623,94 @@ export type KilocodeVoiceOpenaiStartResponses = {
 
 export type KilocodeVoiceOpenaiStartResponse =
   KilocodeVoiceOpenaiStartResponses[keyof KilocodeVoiceOpenaiStartResponses]
+
+export type KilocodeVoiceOpenaiUsageData = {
+  body?: never
+  headers?: {
+    "x-raya-voice-key"?: string
+  }
+  path: {
+    id: string
+  }
+  query: {
+    directory?: string
+    workspace?: string
+    generation: string
+  }
+  url: "/kilocode/voice/openai/session/{id}/usage"
+}
+
+export type KilocodeVoiceOpenaiUsageErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeVoiceOpenaiUsageError = KilocodeVoiceOpenaiUsageErrors[keyof KilocodeVoiceOpenaiUsageErrors]
+
+export type KilocodeVoiceOpenaiUsageResponses = {
+  /**
+   * OpenAIVoiceUsageState
+   */
+  200: OpenAiVoiceUsageState
+}
+
+export type KilocodeVoiceOpenaiUsageResponse =
+  KilocodeVoiceOpenaiUsageResponses[keyof KilocodeVoiceOpenaiUsageResponses]
+
+export type KilocodeVoiceOpenaiMeterData = {
+  body?: {
+    generation: string
+    receipt: OpenAiVoiceUsage
+  }
+  headers?: {
+    "x-raya-voice-key"?: string
+  }
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/voice/openai/session/{id}/usage"
+}
+
+export type KilocodeVoiceOpenaiMeterErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeVoiceOpenaiMeterError = KilocodeVoiceOpenaiMeterErrors[keyof KilocodeVoiceOpenaiMeterErrors]
+
+export type KilocodeVoiceOpenaiMeterResponses = {
+  /**
+   * OpenAIVoiceUsage
+   */
+  200: OpenAiVoiceUsage
+}
+
+export type KilocodeVoiceOpenaiMeterResponse =
+  KilocodeVoiceOpenaiMeterResponses[keyof KilocodeVoiceOpenaiMeterResponses]
 
 export type KilocodeVoiceOpenaiImageData = {
   body?: OpenAiVoiceImageInput

@@ -317,10 +317,14 @@ import type {
   KilocodeVoiceOpenaiCloseResponses,
   KilocodeVoiceOpenaiImageErrors,
   KilocodeVoiceOpenaiImageResponses,
+  KilocodeVoiceOpenaiMeterErrors,
+  KilocodeVoiceOpenaiMeterResponses,
   KilocodeVoiceOpenaiResultErrors,
   KilocodeVoiceOpenaiResultResponses,
   KilocodeVoiceOpenaiStartErrors,
   KilocodeVoiceOpenaiStartResponses,
+  KilocodeVoiceOpenaiUsageErrors,
+  KilocodeVoiceOpenaiUsageResponses,
   KilocodeVoiceStartErrors,
   KilocodeVoiceStartResponses,
   KilocodeVoiceStateErrors,
@@ -400,6 +404,7 @@ import type {
   OpenAiVoiceCallInput,
   OpenAiVoiceImageInput,
   OpenAiVoiceStart,
+  OpenAiVoiceUsage,
   OutputFormat,
   Part as Part2,
   PartDeleteErrors,
@@ -10310,6 +10315,89 @@ export class Openai extends HeyApiClient {
       ThrowOnError
     >({
       url: "/kilocode/voice/openai/session",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Inspect retained voice usage receipts without treating missing usage as zero
+   */
+  public usage<ThrowOnError extends boolean = false>(
+    parameters: {
+      "x-raya-voice-key"?: string
+      id: string
+      directory?: string
+      workspace?: string
+      generation: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "headers", key: "x-raya-voice-key" },
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "generation" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      KilocodeVoiceOpenaiUsageResponses,
+      KilocodeVoiceOpenaiUsageErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/voice/openai/session/{id}/usage",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Retain an immutable provider-reported voice usage receipt
+   */
+  public meter<ThrowOnError extends boolean = false>(
+    parameters: {
+      "x-raya-voice-key"?: string
+      id: string
+      directory?: string
+      workspace?: string
+      generation?: string
+      receipt?: OpenAiVoiceUsage
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "headers", key: "x-raya-voice-key" },
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "generation" },
+            { in: "body", key: "receipt" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeVoiceOpenaiMeterResponses,
+      KilocodeVoiceOpenaiMeterErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/voice/openai/session/{id}/usage",
       ...options,
       ...params,
       headers: {

@@ -21,6 +21,7 @@ import { VoiceLoop } from "./voice-loop"
 import { RealtimeVoice, type RealtimeTranscript } from "./realtime-voice" // raya_change - native realtime thin client
 import { StreamPlayer } from "./stream-player" // raya_change - user-gesture-safe MiniMax audio sink
 import { VoiceEcho } from "./voice-echo" // raya_change - residual spoken-response exclusion
+import { createVoiceUsage } from "./voice-usage"
 import { createVoiceImages } from "./voice-images"
 import { OpenAIVoice } from "./openai-voice"
 import { useSession } from "./session"
@@ -30,6 +31,7 @@ type VoiceStatus = "off" | "connecting" | "listening" | "thinking" | "speaking" 
 type VoiceContextValue = {
   settings: Accessor<SpeechState>
   playing: Accessor<boolean>
+  usage: ReturnType<typeof createVoiceUsage>["state"]
   image: ReturnType<typeof createVoiceImages>["state"]
   share: (imageID: string, data: string) => void
   muted: Accessor<boolean>
@@ -58,6 +60,7 @@ const Context = createContext<VoiceContextValue>()
 export const VoiceProvider: ParentComponent = (props) => {
   const vscode = useVSCode()
   const session = useSession()
+  const usage = createVoiceUsage(session.currentSessionID)
   const [settings, setSettings] = createSignal<SpeechState>({
     ...DEFAULT_SPEECH_SETTINGS,
     hasOpenAIKey: false,
@@ -131,7 +134,12 @@ export const VoiceProvider: ParentComponent = (props) => {
       if (call) setStatus(value)
     },
     transcript: (value) => {
-      if (call) setTranscript(value)
+      if (!call) return
+      setTranscript((prior) => {
+        if (value.sequence !== undefined && prior?.sequence !== undefined && value.sequence < prior.sequence)
+          return prior
+        return value
+      })
     },
     aec: setAec,
     notice: setError,
@@ -190,6 +198,7 @@ export const VoiceProvider: ParentComponent = (props) => {
     }
     const current = { id: crypto.randomUUID(), session: id }
     call = current
+    usage.bind(current.id, id)
     state.generation++
     void native
       .start(
@@ -207,6 +216,7 @@ export const VoiceProvider: ParentComponent = (props) => {
   }
 
   function openaiMessage(message: ExtensionMessage) {
+    if (usage.receive(message)) return true
     if (images.receive(message)) return true
     if (message.type === "speechOpenAIReady") {
       if (call?.id !== message.requestId || pending?.id !== message.requestId) return true
@@ -423,6 +433,7 @@ export const VoiceProvider: ParentComponent = (props) => {
         },
         status,
         transcript,
+        usage: usage.state,
         aec,
         cascade,
         error,

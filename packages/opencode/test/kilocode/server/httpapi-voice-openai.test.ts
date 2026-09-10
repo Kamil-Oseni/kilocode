@@ -82,6 +82,35 @@ test("the shipped OpenAI voice routes require both configured server auth and th
     const messages = await request("GET", `/session/${parent.id}/message`)
     expect(messages.status).toBe(200)
     expect(await messages.json()).toEqual([])
+    const usage = {
+      generation: binding.generation,
+      receipt: {
+        id: "response_1",
+        kind: "response",
+        model: "gpt-realtime-2.1",
+        status: "reported",
+        tokens: { input: 4, output: 2, total: 6 },
+      },
+    }
+    expect((await request("POST", `${route}/usage`, usage, key, "")).status).toBe(401)
+    expect((await request("POST", `${route}/usage`, usage, "b".repeat(64))).status).toBe(401)
+    expect((await request("POST", `${route}/usage`, { ...usage, generation: "stale" })).status).toBe(409)
+    expect((await request("POST", `${route}/usage`, usage)).status).toBe(200)
+    expect((await request("POST", `${route}/usage`, usage)).status).toBe(200)
+    expect(
+      (await request("GET", `${route}/usage?generation=${binding.generation}`, undefined, "b".repeat(64))).status,
+    ).toBe(401)
+    expect(await (await request("GET", `${route}/usage?generation=${binding.generation}`)).json()).toEqual({
+      receipts: [usage.receipt],
+    })
+    expect(
+      (
+        await request("POST", `${route}/usage`, {
+          ...usage,
+          receipt: { ...usage.receipt, tokens: { input: 4, output: 2, total: 9 } },
+        })
+      ).status,
+    ).toBe(400)
     const call = {
       generation: binding.generation,
       callID: "call_test",

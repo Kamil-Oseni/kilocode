@@ -1,0 +1,19 @@
+[data-slot="native-voice-usage"] {
+  min-width: 0;
+  padding: 8px 12px;
+  overflow-wrap: anywhere;
+  font-size: var(--font-size-small);
+}
+
+[data-slot="native-voice-usage"] summary {
+  cursor: pointer;
+}
+
+[data-slot="native-voice-usage"] summary:focus-visible {
+  outline: 2px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+}
+
+[data-slot="native-voice-usage"] p {
+  margin: 6px 0;
+}

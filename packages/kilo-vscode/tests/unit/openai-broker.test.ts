@@ -126,6 +126,7 @@ function fixture() {
       if (request.method === "DELETE") return Response.json({ ...binding, status: "closed" })
       if (url.pathname.endsWith("/session"))
         return Response.json({ ...binding, parentSessionID: state.mode === "binding" ? "unrelated" : input.sessionID })
+      if (url.pathname.endsWith("/usage")) return Response.json(body.receipt)
       if (url.pathname.endsWith("/images")) {
         expect(body.generation).toBe(binding.generation)
         const bytes = Buffer.from(String(body.data), "base64")
@@ -148,6 +149,14 @@ function fixture() {
         state.events.push(event)
         if (event.type === "session.update" && state.mode !== "unconfirmed-config")
           socket.send(JSON.stringify({ type: "session.updated", session: event.session }))
+        const item = event.item as Record<string, unknown> | undefined
+        if (event.type === "conversation.item.create" && item?.type === "function_call_output") {
+          if (state.mode === "output-rejected") {
+            socket.send(JSON.stringify({ type: "error", error: { event_id: event.event_id, code: "invalid_request" } }))
+            return
+          }
+          if (state.mode !== "output-pending") socket.send(JSON.stringify({ type: "conversation.item.created", item }))
+        }
       },
     },
   })
@@ -213,6 +222,90 @@ async function until(check: () => boolean) {
     await Bun.sleep(10)
   }
 }
+
+test("slow admitted work backgrounds without replay and final speech waits for user and playback", async () => {
+  const f = fixture()
+  try {
+    f.state.mode = "pending"
+    await f.start()
+    f.send({ type: "input_audio_buffer.speech_started" })
+    f.send(completed())
+    await until(() => f.state.pending === "call_1")
+    await Bun.sleep(5100)
+    expect(f.state.events.some((event) => event.type === "response.create")).toBe(false)
+    expect(f.state.requests.filter((request) => request.path.endsWith("/calls"))).toHaveLength(1)
+    expect(f.state.requests.some((request) => request.path.endsWith("/cancel"))).toBe(false)
+    f.send({ type: "input_audio_buffer.speech_stopped" })
+    f.send({ type: "response.created", response: { id: "user_turn" } })
+    f.send({ type: "response.done", response: { id: "user_turn", status: "completed", output: [] } })
+    await until(() => f.state.events.some((event) => event.type === "response.create"))
+    const narration = f.state.events.find((event) => event.type === "response.create")!
+    const response = narration.response as Record<string, unknown>
+    expect(response).toMatchObject({ conversation: "none", tools: [], tool_choice: "none" })
+    expect(response.instructions).toContain("the user can keep talking")
+    expect(response.instructions).toContain("The work is running")
+    f.send({ type: "response.created", response: { id: "narration", metadata: response.metadata } })
+    f.send({ type: "output_audio_buffer.started", response_id: "narration" })
+    // Even a malformed provider response containing a tool is never work authority.
+    f.send({
+      type: "response.done",
+      response: { ...completed("invented_work").response, id: "narration", metadata: response.metadata },
+    })
+    f.state.released.add("call_1")
+    await until(() => f.state.events.some((event) => event.type === "conversation.item.create"))
+    expect(f.state.events.filter((event) => event.type === "response.create")).toHaveLength(1)
+    f.send({ type: "output_audio_buffer.stopped", response_id: "narration" })
+    await until(() => f.state.events.filter((event) => event.type === "response.create").length === 2)
+    expect(f.state.events.filter((event) => event.type === "response.create")[1].response).toMatchObject({
+      metadata: { raya_kind: "result" },
+    })
+    expect(f.state.requests.filter((request) => request.path.endsWith("/calls"))).toHaveLength(1)
+    expect(f.state.requests.some((request) => request.path.endsWith("/cancel"))).toBe(false)
+    expect(f.state.errors).toEqual([])
+  } finally {
+    await f.close()
+  }
+}, 15_000)
+
+test("result speech requires the matching provider output acknowledgement", async () => {
+  const f = fixture()
+  try {
+    f.state.mode = "output-pending"
+    await f.start()
+    f.send(completed())
+    await until(() => f.state.events.some((event) => event.type === "conversation.item.create"))
+    const output = f.state.events.find((event) => event.type === "conversation.item.create")!
+    const item = output.item as Record<string, unknown>
+    expect(item.id).toBe(output.event_id)
+    expect(f.state.events.some((event) => event.type === "response.create")).toBe(false)
+    f.send({ type: "conversation.item.created", item: { ...item, id: "unrelated" } })
+    f.send({ type: "conversation.item.created", item })
+    await until(() => f.state.events.some((event) => event.type === "response.create"))
+    f.send({ type: "conversation.item.created", item })
+    await Bun.sleep(20)
+    expect(f.state.events.filter((event) => event.type === "response.create")).toHaveLength(1)
+    expect(f.state.requests.filter((request) => request.path.endsWith("/calls"))).toHaveLength(1)
+  } finally {
+    await f.close()
+  }
+})
+
+test("rejected result delivery reports uncertainty without a continuation or work replay", async () => {
+  const f = fixture()
+  try {
+    f.state.mode = "output-rejected"
+    await f.start()
+    f.send(completed())
+    await until(() => f.state.errors.length > 0)
+    expect(f.state.errors).toHaveLength(1)
+    expect(f.state.errors[0]).toContain("could not receive a work result")
+    expect(f.state.events.some((event) => event.type === "response.create")).toBe(false)
+    expect(f.state.requests.filter((request) => request.path.endsWith("/calls"))).toHaveLength(1)
+    expect(f.state.requests.some((request) => request.path.endsWith("/cancel"))).toBe(false)
+  } finally {
+    await f.close()
+  }
+})
 
 test("OpenAI host keeps credentials isolated, dispatches only completed tool calls, deduplicates and closes admission", async () => {
   const f = fixture()

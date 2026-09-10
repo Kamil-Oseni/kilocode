@@ -69,3 +69,18 @@
   font-size: var(--font-size-small);
   margin: 4px 0;
 }
+
+[data-slot="voice-transcript"] {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+[data-slot="voice-transcript-caption"] {
+  display: block;
+  color: var(--text-weak);
+  font-size: var(--font-size-small);
+}
+
+[data-slot="voice-transcript"][data-partial="true"] .prompt-realtime-voice__text {
+  font-style: italic;
+}

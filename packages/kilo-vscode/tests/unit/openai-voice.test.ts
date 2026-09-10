@@ -17,6 +17,6 @@ test("native OpenAI transport owns local WebRTC media and fences late setup", as
     child.on("exit", resolve)
   }).finally(() => clearTimeout(timer))
   const output = Buffer.concat(chunks).toString()
-  expect(output).toContain("31 implementation assertions passed")
+  expect(output).toContain("35 implementation assertions passed")
   expect(code).toBe(0)
 }, 50_000)

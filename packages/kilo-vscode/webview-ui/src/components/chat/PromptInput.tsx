@@ -21,6 +21,8 @@ import { useConfig } from "../../context/config"
 import { useProvider } from "../../context/provider"
 import { useVoice } from "../../context/voice" // raya_change - Milestone H intelligent voice mode
 import { NativeVoiceControls } from "./NativeVoiceControls"
+import { NativeVoiceUsage } from "./NativeVoiceUsage"
+import { VoiceTranscript } from "./VoiceTranscript"
 import { ComposerConfiguration } from "./ComposerConfiguration"
 import { ModelSelector } from "../shared/ModelSelector"
 import { ModeSwitcher } from "../shared/ModeSwitcher"
@@ -1705,18 +1707,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           Send queues this instruction for Raya's next safe step. Stop interrupts the current step.
         </div>
       </Show>
-      {/* raya_change - speculative voice transcript is visible but never copied into or submitted from the composer */}
-      <Show when={voiceActive() || voice.error()}>
-        <div class="prompt-realtime-voice" role="status" aria-live="polite">
-          <span class="prompt-realtime-voice__state">
-            {voice.status()}
-            {voice.aec() ? " · AEC" : ""}
-          </span>
-          <Show when={voice.transcript()?.text || voice.error()}>
-            <span class="prompt-realtime-voice__text">{voice.error() || voice.transcript()?.text}</span>
-          </Show>
-        </div>
-      </Show>
+      <VoiceTranscript />
+      <NativeVoiceUsage />
       <div class="prompt-input-hint">
         <div class="prompt-input-hint-selectors">
           <ComposerConfiguration sessionID={sid} scope={boxKey()}>

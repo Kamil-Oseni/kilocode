@@ -108,7 +108,15 @@ try {
         () => check(exchanges.length === 1, "duplicate start rejected without exchange"),
       )
       await until(() => channel?.readyState === "open")
-      const send = (packet) => channel.send(JSON.stringify(packet))
+      const send = (packet) =>
+        channel.send(
+          JSON.stringify({
+            ...(packet.type.startsWith("response.output_audio_transcript")
+              ? { response_id: "generated_response" }
+              : {}),
+            ...packet,
+          }),
+        )
       send({ type: "output_audio_buffer.started", response_id: "response_speech" })
       await until(() => events.statuses.at(-1) === "speaking")
       send({ type: "input_audio_buffer.speech_started" })
@@ -174,6 +182,59 @@ try {
       check(
         events.transcripts[4].text.length === 8192 && events.transcripts[4].truncated,
         "display transcript bounded explicitly",
+      )
+      send({
+        type: "response.output_audio_transcript.done",
+        response_id: "interrupt_response",
+        item_id: "interrupted",
+        transcript: "Never claim these words were heard",
+      })
+      send({ type: "output_audio_buffer.started", response_id: "interrupt_response" })
+      await until(() => events.transcripts.at(-1)?.item === "interrupted")
+      voice.interrupt()
+      check(
+        events.transcripts.at(-1)?.interruption === "pending" && events.transcripts.at(-1)?.text === "",
+        "local interruption immediately hides generated words",
+      )
+      send({ type: "conversation.item.truncated", item_id: "interrupted", content_index: 0, audio_end_ms: 1250 })
+      await until(() => events.transcripts.at(-1)?.interruption === "confirmed")
+      check(
+        events.transcripts.at(-1)?.audioEndMs === 1250 && events.transcripts.at(-1)?.text === "",
+        "provider truncation confirms offset without inventing heard words",
+      )
+      send({ type: "output_audio_buffer.cleared", response_id: "interrupt_response" })
+      send({
+        type: "response.output_audio_transcript.done",
+        response_id: "interrupt_response",
+        item_id: "interrupted",
+        transcript: "late unheard final",
+      })
+      send({
+        type: "conversation.item.input_audio_transcription.completed",
+        item_id: "new_input",
+        transcript: "new input",
+      })
+      await until(() => events.transcripts.at(-1)?.item === "new_input")
+      const count = events.transcripts.length
+      send({ type: "conversation.item.truncated", item_id: "interrupted", content_index: 0, audio_end_ms: 1000 })
+      send({
+        type: "response.output_audio_transcript.done",
+        response_id: "vad_response",
+        item_id: "vad",
+        transcript: "generated ahead of playback",
+      })
+      send({ type: "output_audio_buffer.started", response_id: "vad_response" })
+      send({ type: "input_audio_buffer.speech_started" })
+      await until(
+        () => events.transcripts.at(-1)?.item === "vad" && events.transcripts.at(-1)?.interruption === "pending",
+      )
+      check(
+        events.transcripts.length === count + 2,
+        "old confirmation cannot replace newer input and VAD hides current generated output",
+      )
+      check(
+        channel.readyState === "open" && captures[0].getAudioTracks()[0].readyState === "live",
+        "transcript reconciliation preserves active native media",
       )
       check(voice.image("selected"), "image error registration belongs to the live native call")
       send({ type: "error", error: { code: "invalid_image", event_id: "image_selected" } })
@@ -273,7 +334,7 @@ try {
       for (const context of contexts) await context.close()
     }
   })
-  assert.equal(result.length, 31)
+  assert.equal(result.length, 35)
   console.log(
     `OpenAI native WebRTC: ${result.length} implementation assertions passed; local peers/synthetic audio only.`,
   )

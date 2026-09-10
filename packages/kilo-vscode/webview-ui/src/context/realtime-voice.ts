@@ -16,6 +16,13 @@ export type RealtimeTranscript = {
   text: string
   stable: boolean
   truncated?: boolean
+  direction?: "input" | "output"
+  content?: number
+  sequence?: number
+  interruption?: "pending" | "confirmed"
+  audioEndMs?: number
+  generation?: "completed" | "cancelled" | "incomplete" | "failed"
+  limited?: boolean
 }
 
 type Sink = {

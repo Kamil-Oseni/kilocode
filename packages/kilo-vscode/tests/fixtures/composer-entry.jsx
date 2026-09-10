@@ -11,6 +11,7 @@ import { ProviderContext, useProvider } from "../../webview-ui/src/context/provi
 import { isModelValid } from "../../webview-ui/src/context/provider-utils"
 import { SessionContext } from "../../webview-ui/src/context/session"
 import { ServerContext, useServer } from "../../webview-ui/src/context/server"
+import { NativeProjection } from "../../webview-ui/src/context/native-projection"
 import { OpenAIVoice } from "../../webview-ui/src/context/openai-voice"
 import { VoiceProvider } from "../../webview-ui/src/context/voice"
 import { PromptInput } from "../../webview-ui/src/components/chat/PromptInput"
@@ -45,21 +46,39 @@ if (new URLSearchParams(location.search).has("native")) {
   window.__workStops = 0
   OpenAIVoice.prototype.start = async function (input, exchange) {
     window.__nativeTransport = this
+    this.operation = {
+      ...input,
+      closed: false,
+      answer: true,
+      channel: { readyState: "open" },
+      audio: { muted: false },
+      cancellations: new Set(),
+      images: new Set(),
+      projection: new NativeProjection(),
+    }
+    const operation = this.operation
+    window.__nativeEvent = (packet) => {
+      if (this.current(operation)) this.receive(operation, JSON.stringify(packet))
+    }
     this.sink.status("connecting")
     await exchange("v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n")
     this.sink.status("listening")
   }
   OpenAIVoice.prototype.stop = async function () {
     window.__voiceStopped++
+    clearTimeout(this.operation?.interruption)
+    this.operation = undefined
+    window.__nativeEvent = () => {}
     this.sink.status("off")
   }
   OpenAIVoice.prototype.mute = function (value) {
     window.__voiceMicrophone = value
     return true
   }
+  const interrupt = OpenAIVoice.prototype.interrupt
   OpenAIVoice.prototype.interrupt = function () {
-    this.sink.status("listening")
-    return { responseID: "utterance", eventID: crypto.randomUUID() }
+    this.operation.output ??= "utterance"
+    return interrupt.call(this)
   }
   OpenAIVoice.prototype.image = function () {
     return true

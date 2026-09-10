@@ -1,3 +1,6 @@
+import { OpenAISpeech } from "./openai-speech"
+import { OpenAIUsage } from "./openai-usage"
+import type { VoiceUsage } from "../shared/voice-usage"
 import { OpenAIImages } from "./openai-images"
 import { cancelled } from "../shared/voice-interruption"
 import { createHash, randomBytes } from "node:crypto"
@@ -12,6 +15,7 @@ type Config = {
   authorization: string
   directory: string
   current: () => boolean
+  usage?: (state: VoiceUsage) => void
 }
 
 type Binding = {
@@ -35,13 +39,10 @@ type Claim = {
   blocked: boolean
   cancelled: boolean
   uncertain: boolean
-  output?: string
+  speech: OpenAISpeech
+  usage?: OpenAIUsage
   images: OpenAIImages
   cancellations: Set<string>
-  responding?: string
-  continuation?: string
-  pending: boolean
-  speaking: boolean
   config?: Config
   remote?: string
   binding?: Binding
@@ -121,8 +122,11 @@ export class OpenAIBroker {
       blocked: false,
       cancelled: false,
       uncertain: false,
-      pending: false,
-      speaking: false,
+      speech: new OpenAISpeech(
+        (event) => this.send(claim, event),
+        () => this.current(claim) && !claim.blocked,
+        failed,
+      ),
       opening: Promise.resolve(),
       failed,
     }
@@ -138,11 +142,11 @@ export class OpenAIBroker {
   interrupt(requestID: string, responseID: string, eventID: string) {
     const claim = this.claim
     if (!claim || claim.input.requestID !== requestID || !this.current(claim)) return
-    if (!identifier(responseID) || !identifier(eventID) || claim.output !== responseID) return
+    if (!identifier(responseID) || !identifier(eventID) || claim.speech.output !== responseID) return
     if (claim.cancellations.has(eventID)) return
     claim.cancellations.add(eventID)
     if (claim.cancellations.size > 32) claim.cancellations.delete(claim.cancellations.values().next().value!)
-    if (claim.responding === responseID)
+    if (claim.speech.generating(responseID))
       this.send(claim, { type: "response.cancel", response_id: responseID, event_id: eventID })
     this.send(claim, { type: "output_audio_buffer.clear", event_id: `${eventID}_clear` })
   }
@@ -245,6 +249,15 @@ export class OpenAIBroker {
       }),
     })
     claim.binding = admission(binding, claim)
+    claim.usage = new OpenAIUsage(
+      claim.abort.signal,
+      (receipt) =>
+        this.backend(claim, `/session/${encodeURIComponent(claim.binding!.id)}/usage`, {
+          method: "POST",
+          body: JSON.stringify({ generation: claim.binding!.generation, receipt }),
+        }),
+      (state) => claim.config?.usage?.(state),
+    )
     claim.uncertain = false
     this.assert(claim)
     await this.sideband(claim)
@@ -338,43 +351,16 @@ export class OpenAIBroker {
   }
 
   private event(claim: Claim, event: Record<string, unknown>) {
+    claim.usage?.receive(event)
     if (claim.images.receive(event)) return
-    if (event.type === "output_audio_buffer.started" && identifier(event.response_id)) claim.output = event.response_id
-    if (
-      ["output_audio_buffer.stopped", "output_audio_buffer.cleared"].includes(String(event.type)) &&
-      event.response_id === claim.output
-    )
-      claim.output = undefined
-    if (event.type === "input_audio_buffer.speech_started") claim.speaking = true
-    if (event.type === "input_audio_buffer.speech_stopped") claim.speaking = false
-    if (event.type === "response.created" && event.response && typeof event.response === "object") {
-      const response = event.response as Record<string, unknown>
-      if (identifier(response.id)) claim.responding = response.id
-      claim.continuation = undefined
-    }
-    if (event.type === "response.done") {
-      if (event.response && typeof event.response === "object") {
-        const response = event.response as Record<string, unknown>
-        if (response.id === claim.responding) claim.responding = undefined
-      }
-      this.completed(claim, event.response)
-      this.continue(claim)
-    }
-    if (event.type === "error") {
-      if (cancelled(event, claim.cancellations)) return
-      // Never repeat work to recover a rejected audio continuation.
-      claim.continuation = undefined
+    if (event.type === "error" && cancelled(event, claim.cancellations)) return
+    const handled = claim.speech.event(event)
+    if (event.type === "response.done" && !handled) this.completed(claim, event.response)
+    if (event.type === "error" && !handled)
       claim.failed(
         "OpenAI could not complete a voice response. Your work remains in the conversation; review it before retrying.",
       )
-    }
-  }
-
-  private continue(claim: Claim) {
-    if (!claim.pending || claim.responding || claim.continuation || claim.speaking || !this.current(claim)) return
-    claim.pending = false
-    claim.continuation = `raya_${randomBytes(12).toString("hex")}`
-    this.send(claim, { type: "response.create", event_id: claim.continuation })
+    claim.speech.flush()
   }
 
   private completed(claim: Claim, value: unknown) {
@@ -431,6 +417,7 @@ export class OpenAIBroker {
   private block(claim: Claim) {
     if (claim.blocked) return
     claim.blocked = true
+    claim.speech.finish()
     if (this.current(claim)) claim.failed("Voice work could not be confirmed. Review the conversation before retrying.")
   }
 
@@ -455,6 +442,7 @@ export class OpenAIBroker {
     }
     const binding = claim.binding!
     const path = `/session/${encodeURIComponent(binding.id)}/calls`
+    claim.speech.start(id)
     const initial = await this.backend(claim, path, {
       method: "POST",
       body: JSON.stringify({
@@ -467,11 +455,13 @@ export class OpenAIBroker {
       }),
     })
     const result = await this.result(claim, id, `${path}/${encodeURIComponent(id)}`, initial)
+    claim.speech.finish()
     this.output(claim, id, result)
   }
 
   private async result(claim: Claim, id: string, path: string, initial: Record<string, unknown>) {
     receipt(initial, claim, id)
+    claim.speech.observe(id, initial.status)
     let result = initial
     const deadline = Date.now() + 30 * 60_000
     while (result.status === "accepted" || result.status === "running") {
@@ -484,6 +474,7 @@ export class OpenAIBroker {
       await delay(claim.abort.signal)
       result = await this.backend(claim, path, { method: "GET" })
       receipt(result, claim, id, initial)
+      claim.speech.observe(id, result.status)
     }
     if (!["completed", "failed", "cancelled", "unknown"].includes(String(result.status)))
       throw new Error("Invalid voice work result")
@@ -491,12 +482,14 @@ export class OpenAIBroker {
   }
 
   private output(claim: Claim, id: string, result: unknown) {
+    const item = `raya_result_${randomBytes(12).toString("hex")}`
+    const output = JSON.stringify(result)
+    claim.speech.result(item, id, output)
     this.send(claim, {
       type: "conversation.item.create",
-      item: { type: "function_call_output", call_id: id, output: JSON.stringify(result) },
+      event_id: item,
+      item: { id: item, type: "function_call_output", call_id: id, output },
     })
-    claim.pending = true
-    this.continue(claim)
   }
 
   private async backend(claim: Claim, path: string, init: RequestInit, cleanup = false) {
@@ -535,6 +528,7 @@ export class OpenAIBroker {
 
   private async cleanup(claim: Claim): Promise<string | undefined> {
     claim.cancelled = true
+    claim.speech.close()
     clearInterval(claim.timer)
     claim.abort.abort()
     claim.socket?.terminate()

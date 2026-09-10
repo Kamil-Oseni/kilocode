@@ -616,3 +616,168 @@ it.live(
     }),
   30_000,
 )
+
+it.live(
+  "voice usage receipts are immutable, scoped, retained after closure and never dispatch work",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const state = yield* fixture(root)
+        const receipt = {
+          id: "response_1",
+          kind: "response" as const,
+          model: "gpt-realtime-2.1" as const,
+          status: "reported" as const,
+          tokens: { input: 12, output: 3, total: 15, cached: 4, inputText: 4, inputAudio: 8 },
+        }
+        const input = { generation: state.binding.generation, receipt }
+        expect(yield* state.voice.usage(state.binding.id, input.generation, secret, root)).toEqual({ receipts: [] })
+        expect(yield* state.voice.meter(state.binding.id, input, secret, root)).toEqual(receipt)
+        expect(
+          yield* state.voice.meter(
+            state.binding.id,
+            {
+              ...input,
+              receipt: {
+                ...receipt,
+                tokens: { total: 15, output: 3, input: 12, inputAudio: 8, inputText: 4, cached: 4 },
+              },
+            },
+            secret,
+            root,
+          ),
+        ).toEqual(receipt)
+        expect(
+          Exit.isFailure(
+            yield* state.voice
+              .meter(
+                state.binding.id,
+                { ...input, receipt: { ...receipt, tokens: { input: 13, output: 3, total: 16 } } },
+                secret,
+                root,
+              )
+              .pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        expect(
+          Exit.isFailure(
+            yield* state.voice
+              .meter(state.binding.id, { ...input, generation: "stale" }, secret, root)
+              .pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        expect(
+          Exit.isFailure(
+            yield* state.voice.usage(state.binding.id, input.generation, "b".repeat(64), root).pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        const missing = {
+          id: "transcript_1",
+          kind: "transcription" as const,
+          model: "gpt-live-transcribe" as const,
+          status: "missing" as const,
+        }
+        yield* state.voice.meter(state.binding.id, { ...input, receipt: missing }, secret, root)
+        const duration = {
+          id: "duration_1",
+          kind: "transcription" as const,
+          model: "gpt-live-transcribe" as const,
+          status: "reported" as const,
+          seconds: 2.75,
+        }
+        yield* state.voice.meter(state.binding.id, { ...input, receipt: duration }, secret, root)
+        expect(state.calls).toEqual([])
+        yield* state.voice.close(state.binding.id, input.generation, secret, root)
+        expect((yield* state.voice.usage(state.binding.id, input.generation, secret, root)).receipts).toEqual([
+          receipt,
+          missing,
+          duration,
+        ])
+        expect(
+          Exit.isFailure(
+            yield* state.voice
+              .meter(state.binding.id, { ...input, receipt: { ...receipt, id: "later" } }, secret, root)
+              .pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        const restarted = yield* make(state.deps)
+        expect((yield* restarted.usage(state.binding.id, input.generation, secret, root)).receipts).toHaveLength(3)
+      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+    }),
+  30_000,
+)
+
+it.live(
+  "voice usage rejects inconsistent counts and unknown reports cannot masquerade as measured zero",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const state = yield* fixture(root)
+        const receipt = {
+          id: "response_1",
+          kind: "response" as const,
+          model: "gpt-realtime-2.1" as const,
+          status: "reported" as const,
+          tokens: { input: 5, output: 2, total: 7 },
+        }
+        const input = { generation: state.binding.generation, receipt }
+        for (const tokens of [
+          { input: -1, output: 2, total: 1 },
+          { input: 5, output: 2, total: 9 },
+          { input: 5, output: 2, total: 7, cached: 6 },
+          { input: 5, output: 2, total: 7, inputAudio: 6 },
+          { input: 5, output: 2, total: 7, outputAudio: 3 },
+        ])
+          expect(
+            Exit.isFailure(
+              yield* state.voice
+                .meter(state.binding.id, { ...input, receipt: { ...receipt, tokens } }, secret, root)
+                .pipe(Effect.exit),
+            ),
+          ).toBe(true)
+        expect(
+          Exit.isFailure(
+            yield* state.voice
+              .meter(state.binding.id, { ...input, receipt: { ...receipt, status: "missing" } }, secret, root)
+              .pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        expect(
+          Exit.isFailure(
+            yield* state.voice
+              .meter(
+                state.binding.id,
+                { ...input, receipt: { ...receipt, model: "gpt-live-transcribe" } },
+                secret,
+                root,
+              )
+              .pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        expect((yield* state.voice.usage(state.binding.id, input.generation, secret, root)).receipts).toEqual([])
+        yield* state.voice.meter(state.binding.id, input, secret, root)
+        const storage = yield* Storage.Service
+        const key = ["raya_openai_voice", state.binding.id]
+        const retained = yield* storage.read<{ usage: Record<string, typeof receipt> }>(key)
+        retained.usage.corrupted = receipt
+        yield* storage.replace(key, retained)
+        expect(
+          Exit.isFailure(yield* state.voice.usage(state.binding.id, input.generation, secret, root).pipe(Effect.exit)),
+        ).toBe(true)
+        expect(Exit.isFailure(yield* state.voice.meter(state.binding.id, input, secret, root).pipe(Effect.exit))).toBe(
+          true,
+        )
+        expect(
+          Exit.isFailure(
+            yield* state.voice
+              .meter(state.binding.id, { ...input, receipt: { ...receipt, id: "new" } }, secret, root)
+              .pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        expect((yield* storage.read<typeof retained>(key)).usage).toEqual(retained.usage)
+      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+    }),
+  30_000,
+)

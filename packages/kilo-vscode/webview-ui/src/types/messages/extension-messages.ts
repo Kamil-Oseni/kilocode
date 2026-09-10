@@ -1,3 +1,4 @@
+import type { VoiceUsage } from "../../../../src/shared/voice-usage"
 import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@kilocode/sdk/v2/client"
 import type { DiffSourceCapabilities, DiffSourceDescriptor } from "../../../../src/diff/sources/types"
 import type { PartBatch, PartRemove, PartUpdate } from "../../../../src/shared/stream-messages"
@@ -1703,6 +1704,7 @@ export interface AgentManagerFocusContextRequestedMessage {
 }
 
 export type ExtensionMessage =
+  | { type: "speechOpenAIUsage"; requestId: string; sessionID: string; usage: VoiceUsage }
   | DocumentResultMessage
   | DocumentOpenMessage
   | AgentManagerFocusContextRequestedMessage

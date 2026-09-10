@@ -1,3 +1,4 @@
+import { OpenAIUsage, OpenAIUsageInput, valid, fingerprint } from "./openai-usage"
 import fs from "node:fs/promises"
 import { createHash, timingSafeEqual } from "node:crypto"
 import { Cause, Effect, Exit, Fiber, Schema, Scope, Semaphore } from "effect"
@@ -28,6 +29,7 @@ type Stored = {
   requestID: string
   calls: Record<string, { input: Input; receipt: Call }>
   images?: Record<string, Image>
+  usage?: Record<string, typeof OpenAIUsage.Type>
 }
 type Deps = {
   storage: Storage.Interface
@@ -46,6 +48,22 @@ const key = (id: string) => ["raya_openai_voice", id]
 const pending = (call: Call) => call.status === "accepted" || call.status === "running"
 const refuse = (code: VoiceError["code"], message: string) => Effect.fail(new VoiceError({ code, message }))
 const canonical = (directory: string) => Effect.tryPromise(() => fs.realpath(directory)).pipe(Effect.orDie)
+
+const ledger = (stored: Stored) =>
+  Effect.gen(function* () {
+    if (
+      stored.usage !== undefined &&
+      (stored.usage === null || typeof stored.usage !== "object" || Array.isArray(stored.usage))
+    )
+      return yield* refuse("conflict", "Retained provider usage is invalid.")
+    const entries = Object.entries(stored.usage ?? {})
+    if (
+      entries.length > 512 ||
+      entries.some(([key, receipt]) => !valid(receipt) || key !== digest(`${receipt.kind}:${receipt.id}`))
+    )
+      return yield* refuse("conflict", "Retained provider usage is invalid.")
+    return entries.map(([, receipt]) => receipt)
+  })
 
 const decode = (mime: (typeof OpenAIImage.Type)["mime"], data: string) => {
   if (data.length > 349528 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(data))
@@ -368,6 +386,37 @@ export const make = (deps: Deps) =>
           return image.receipt
         }).pipe(Effect.uninterruptible),
       )
+    const meter = (id: string, input: typeof OpenAIUsageInput.Type, secret: string, directory: string) =>
+      locked(
+        id,
+        Effect.gen(function* () {
+          const stored = yield* load(id, secret, directory, input.generation)
+          yield* active(stored)
+          if (!valid(input.receipt)) return yield* refuse("invalid", "Invalid provider usage receipt.")
+          yield* ledger(stored)
+          const index = digest(`${input.receipt.kind}:${input.receipt.id}`)
+          const prior = stored.usage?.[index]
+          if (prior) {
+            if (fingerprint(prior) !== fingerprint(input.receipt))
+              return yield* refuse("conflict", "Provider usage identity was reused with different counts.")
+            return prior
+          }
+          if (Object.keys(stored.usage ?? {}).length >= 512)
+            return yield* refuse("conflict", "Voice usage receipt limit reached.")
+          stored.usage = { ...stored.usage, [index]: input.receipt }
+          yield* save(stored)
+          return input.receipt
+        }).pipe(Effect.uninterruptible),
+      )
+    const usage = (id: string, generation: string, secret: string, directory: string) =>
+      locked(
+        id,
+        Effect.gen(function* () {
+          const stored = yield* load(id, secret, directory, generation)
+          const receipts = yield* ledger(stored)
+          return { receipts }
+        }),
+      )
     const submit = (id: string, input: Input, secret: string, directory: string) =>
       locked(
         id,
@@ -461,5 +510,5 @@ export const make = (deps: Deps) =>
           return stored.binding
         }),
       )
-    return { start, stage, submit, get, cancel, close }
+    return { start, stage, meter, usage, submit, get, cancel, close }
   })

@@ -1,3 +1,4 @@
+import { OpenAIUsage, OpenAIUsageInput, OpenAIUsageState } from "@/kilocode/voice/openai-usage"
 // raya_change - Realtime voice session and media-event API contracts.
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
@@ -31,6 +32,7 @@ export const VoicePaths = {
   binding: `${root}/openai/session/:id`,
   calls: `${root}/openai/session/:id/calls`,
   images: `${root}/openai/session/:id/images`,
+  usage: `${root}/openai/session/:id/usage`,
   call: `${root}/openai/session/:id/calls/:callID`,
   cancel: `${root}/openai/session/:id/calls/:callID/cancel`,
 } as const
@@ -57,6 +59,35 @@ export const VoiceApi = HttpApi.make("raya-voice").add(
         OpenApi.annotations({
           identifier: "kilocode.voice.openai.start",
           summary: "Bind an OpenAI realtime call to an existing Raya session",
+        }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.post("voiceOpenAIMeter", VoicePaths.usage, {
+        headers,
+        params: { id: VoiceID },
+        query: WorkspaceRoutingQuery,
+        payload: OpenAIUsageInput,
+        success: OpenAIUsage,
+        error: errors,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "kilocode.voice.openai.meter",
+          summary: "Retain an immutable provider-reported voice usage receipt",
+        }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.get("voiceOpenAIUsage", VoicePaths.usage, {
+        headers,
+        params: { id: VoiceID },
+        query: generation,
+        success: OpenAIUsageState,
+        error: errors,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "kilocode.voice.openai.usage",
+          summary: "Inspect retained voice usage receipts without treating missing usage as zero",
         }),
       ),
     )

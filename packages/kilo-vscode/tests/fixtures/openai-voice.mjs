@@ -93,6 +93,13 @@ try {
       await voice.start({ sessionID: "session-a", requestID: "request-a" }, exchange)
       check(events.statuses.at(-1) === "listening", "native peer and data channel establish listening")
       check(exchanges.length === 1, "one host exchange")
+      check(
+        voice.mute(true) &&
+          !captures[0].getAudioTracks()[0].enabled &&
+          captures[0].getAudioTracks()[0].readyState === "live",
+        "mute keeps owned microphone live but disables its audio",
+      )
+      check(voice.mute(false) && captures[0].getAudioTracks()[0].enabled, "unmute resumes the same owned microphone")
       check(events.aec.at(-1) === false, "synthetic stream does not claim acoustic echo cancellation")
       await voice.start({ sessionID: "session-b", requestID: "request-b" }, exchange).then(
         () => {
@@ -102,11 +109,37 @@ try {
       )
       await until(() => channel?.readyState === "open")
       const send = (packet) => channel.send(JSON.stringify(packet))
-      send({ type: "output_audio_buffer.started" })
+      send({ type: "output_audio_buffer.started", response_id: "response_speech" })
       await until(() => events.statuses.at(-1) === "speaking")
       send({ type: "input_audio_buffer.speech_started" })
       await until(() => events.statuses.at(-1) === "listening")
       check(true, "native buffer and VAD events project speaking/interruption")
+      send({ type: "output_audio_buffer.started", response_id: "response_speech" })
+      await until(() => events.statuses.at(-1) === "speaking")
+      const action = voice.interrupt()
+      check(
+        action?.responseID === "response_speech" && !!action.eventID && voice.operation.audio.muted,
+        "stop speaking silences only the owned utterance and returns correlated host control",
+      )
+      check(
+        voice.interrupt() === undefined &&
+          channel.readyState === "open" &&
+          captures[0].getAudioTracks()[0].readyState === "live",
+        "repeated speech stop does not close voice or microphone",
+      )
+      send({ type: "error", error: { code: "response_cancel_not_active", event_id: action.eventID } })
+      send({ type: "output_audio_buffer.started", response_id: "response_later" })
+      send({ type: "output_audio_buffer.started" })
+      send({ type: "conversation.item.input_audio_transcription.completed", item_id: "barrier", transcript: "barrier" })
+      await until(() => events.transcripts.at(-1)?.item === "barrier")
+      check(
+        events.errors.length === 0 && voice.operation.audio.muted,
+        "cancellation race is nonfatal and later or malformed events cannot unmute before clearance",
+      )
+      send({ type: "output_audio_buffer.cleared", response_id: "response_speech" })
+      await until(() => events.statuses.at(-1) === "speaking")
+      check(!voice.operation.audio.muted, "confirmed clearance allows later work-result speech without stopping work")
+      events.transcripts.length = 0
       send({
         type: "response.output_audio_transcript.delta",
         item_id: "assistant",
@@ -142,6 +175,8 @@ try {
         events.transcripts[4].text.length === 8192 && events.transcripts[4].truncated,
         "display transcript bounded explicitly",
       )
+      check(voice.image("selected"), "image error registration belongs to the live native call")
+      send({ type: "error", error: { code: "invalid_image", event_id: "image_selected" } })
       send({ type: "conversation.item.input_audio_transcription.failed", item_id: "missing" })
       await until(() => events.notices.length === 1)
       check(
@@ -152,6 +187,7 @@ try {
       )
       await voice.stop()
       check(events.statuses.at(-1) === "off", "explicit stop reports off")
+      check(!voice.mute(true) && voice.interrupt() === undefined, "inactive media controls cannot revive ended voice")
       check(
         captures[0].getTracks().every((track) => track.readyState === "ended"),
         "microphone track ended",
@@ -219,6 +255,15 @@ try {
       )
       check(events.errors.length === 1, "one inspectable transport failure")
       await voice.stop()
+      await voice.start({ sessionID: "session-a", requestID: "request-error" }, exchange)
+      await until(() => channel?.readyState === "open")
+      send({ type: "error", error: { code: "response_cancel_not_active", event_id: "unrelated" } })
+      await until(() => events.errors.length === 2)
+      check(
+        events.statuses.at(-1) === "degraded",
+        "unrelated cancellation errors remain fatal instead of being broadly ignored",
+      )
+      await voice.stop()
       return checks
     } finally {
       await voice.stop()
@@ -228,7 +273,7 @@ try {
       for (const context of contexts) await context.close()
     }
   })
-  assert.equal(result.length, 22)
+  assert.equal(result.length, 31)
   console.log(
     `OpenAI native WebRTC: ${result.length} implementation assertions passed; local peers/synthetic audio only.`,
   )

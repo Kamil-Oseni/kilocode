@@ -93,6 +93,14 @@ export const kiloScenarios: Scenario[] = [
     }))
     .status(401),
   http.protected
+    .post("/kilocode/voice/openai/session/{id}/images", "voice.openai.image")
+    .at((ctx) => ({
+      path: "/kilocode/voice/openai/session/missing/images",
+      headers: ctx.headers(),
+      body: { generation: "missing", id: "image", mime: "image/png", data: "invalid" },
+    }))
+    .status(401),
+  http.protected
     .post("/kilocode/voice/openai/session/{id}/calls", "voice.openai.call")
     .at((ctx) => ({
       path: "/kilocode/voice/openai/session/missing/calls",

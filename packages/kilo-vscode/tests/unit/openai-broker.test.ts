@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { expect, test } from "bun:test"
 import type { ServerWebSocket } from "bun"
 import WebSocket from "ws"
@@ -125,6 +126,16 @@ function fixture() {
       if (request.method === "DELETE") return Response.json({ ...binding, status: "closed" })
       if (url.pathname.endsWith("/session"))
         return Response.json({ ...binding, parentSessionID: state.mode === "binding" ? "unrelated" : input.sessionID })
+      if (url.pathname.endsWith("/images")) {
+        expect(body.generation).toBe(binding.generation)
+        const bytes = Buffer.from(String(body.data), "base64")
+        return Response.json({
+          id: body.id,
+          mime: body.mime,
+          bytes: bytes.length,
+          sha256: state.mode === "image-receipt" ? "wrong" : createHash("sha256").update(bytes).digest("hex"),
+        })
+      }
       if (url.pathname.includes("/calls")) return work(request, url, body)
       return new Response("unexpected", { status: 404 })
     },
@@ -135,7 +146,7 @@ function fixture() {
       message(socket, value) {
         const event = JSON.parse(String(value)) as Record<string, unknown>
         state.events.push(event)
-        if (event.type === "session.update")
+        if (event.type === "session.update" && state.mode !== "unconfirmed-config")
           socket.send(JSON.stringify({ type: "session.updated", session: event.session }))
       },
     },
@@ -208,6 +219,13 @@ test("OpenAI host keeps credentials isolated, dispatches only completed tool cal
   try {
     await f.start()
     expect(f.state.ready).toEqual([sdp])
+    expect(f.state.events.find((event) => event.type === "session.update")?.session).toMatchObject({
+      audio: {
+        input: {
+          turn_detection: { type: "semantic_vad", eagerness: "auto", interrupt_response: true, create_response: true },
+        },
+      },
+    })
     expect(f.state.form).toMatchObject({ model: OPENAI_VOICE_MODEL, tools: [], audio: { output: { voice: "marin" } } })
     const ignored = completed()
     ignored.response.status = "cancelled"
@@ -389,6 +407,169 @@ test("stopping an in-flight configuration prevents a later call from starting", 
     expect(f.state.requests).toEqual([])
     expect(f.state.ready).toEqual([])
     expect(f.broker.active).toBe(false)
+  } finally {
+    await f.close()
+  }
+})
+
+test("speech interruption targets the current output and preserves admitted work and later results", async () => {
+  const f = fixture()
+  try {
+    f.state.mode = "pending"
+    await f.start()
+    f.send(completed())
+    await until(() => f.state.pending === "call_1")
+    f.send({ type: "response.created", response: { id: "utterance" } })
+    f.send({ type: "output_audio_buffer.started", response_id: "utterance" })
+    f.broker.interrupt("other", "utterance", "unowned")
+    await until(() => {
+      f.broker.interrupt(input.requestID, "utterance", "interrupt_1")
+      return f.state.events.some((event) => event.type === "output_audio_buffer.clear")
+    })
+    expect(
+      f.state.events.filter((event) => ["response.cancel", "output_audio_buffer.clear"].includes(String(event.type))),
+    ).toEqual([
+      { type: "response.cancel", response_id: "utterance", event_id: "interrupt_1" },
+      { type: "output_audio_buffer.clear", event_id: "interrupt_1_clear" },
+    ])
+    f.send({ type: "error", error: { code: "response_cancel_not_active", event_id: "interrupt_1" } })
+    f.send({ type: "response.done", response: { id: "utterance", status: "cancelled", output: [] } })
+    f.send({ type: "output_audio_buffer.cleared", response_id: "utterance" })
+    f.state.released.add("call_1")
+    await until(() => f.state.events.some((event) => event.type === "response.create"))
+    expect(f.state.errors).toEqual([])
+    expect(f.state.requests.some((request) => request.method === "DELETE")).toBe(false)
+    expect(
+      f.state.requests.filter((request) => request.method === "POST" && request.path.endsWith("/calls")),
+    ).toHaveLength(1)
+    f.send({ type: "error", error: { code: "response_cancel_not_active", event_id: "unknown" } })
+    await until(() => f.state.errors.length === 1)
+  } finally {
+    await f.close()
+  }
+})
+
+const picture =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9i8AAAAASUVORK5CYII="
+
+test("image sharing waits for exact acknowledgement and only explicit work carries its reference", async () => {
+  const f = fixture()
+  try {
+    await f.start()
+    const pending = f.broker.share(input.requestID, "picture_1", picture)
+    await until(() => f.state.events.some((event) => event.event_id === "image_picture_1"))
+    expect(f.state.requests.filter((request) => request.path.endsWith("/images"))).toHaveLength(1)
+    expect(f.state.requests.some((request) => request.path.endsWith("/calls"))).toBe(false)
+    expect(f.state.events.some((event) => event.type === "response.create")).toBe(false)
+    let settled = false
+    void pending.then(() => (settled = true))
+    f.send({ type: "conversation.item.created", item: { id: "other", type: "message", role: "user" } })
+    await Bun.sleep(25)
+    expect(settled).toBe(false)
+    const event = f.state.events.find((event) => event.event_id === "image_picture_1")!
+    f.send({ type: "conversation.item.created", item: event.item })
+    expect(await pending).toEqual({ status: "shared" })
+    expect(await f.broker.share(input.requestID, "picture_1", picture)).toEqual({ status: "shared" })
+    expect(f.state.requests.filter((request) => request.path.endsWith("/images"))).toHaveLength(1)
+    const call = completed()
+    call.response.output[0].arguments = JSON.stringify({
+      request: "Describe the selected image",
+      images: ["picture_1"],
+    })
+    f.send(call)
+    await until(() => f.state.requests.some((request) => request.path.endsWith("/calls")))
+    expect(f.state.requests.find((request) => request.path.endsWith("/calls"))!.body.arguments).toEqual({
+      request: "Describe the selected image",
+      images: ["picture_1"],
+    })
+    expect(f.state.errors).toEqual([])
+  } finally {
+    await f.close()
+  }
+})
+
+test("image rejection is scoped to its event and unresolved delivery is never replayed", async () => {
+  const f = fixture()
+  try {
+    await f.start()
+    const pending = f.broker.share(input.requestID, "picture_1", picture)
+    await until(() => f.state.events.some((event) => event.event_id === "image_picture_1"))
+    f.send({ type: "error", error: { event_id: "image_picture_1", code: "invalid_image" } })
+    expect((await pending).status).toBe("failed")
+    expect(f.state.errors).toEqual([])
+    const uncertain = f.broker.share(input.requestID, "picture_2", picture)
+    await until(() => f.state.events.some((event) => event.event_id === "image_picture_2"))
+    await f.broker.stop(input.requestID)
+    expect((await uncertain).status).toBe("unknown")
+    expect(f.state.requests.filter((request) => request.path.endsWith("/images"))).toHaveLength(2)
+    expect(f.state.requests.some((request) => request.path.endsWith("/calls"))).toBe(false)
+  } finally {
+    await f.close()
+  }
+})
+
+test("image validation and mismatched storage receipts prevent provider transmission", async () => {
+  const f = fixture()
+  try {
+    await f.start()
+    for (const data of [
+      "https://invalid.test/image.png",
+      "data:image/png;base64,YQ==",
+      "data:image/svg+xml;base64,PHN2Zz4=",
+      `data:image/png;base64,${Buffer.alloc(262145).toString("base64")}`,
+    ])
+      expect((await f.broker.share(input.requestID, "picture_1", data)).status).toBe("failed")
+    expect((await f.broker.share("stale", "picture_1", picture)).status).toBe("failed")
+    expect(f.state.requests.some((request) => request.path.endsWith("/images"))).toBe(false)
+    f.state.mode = "image-receipt"
+    expect((await f.broker.share(input.requestID, "picture_1", picture)).status).toBe("failed")
+    expect(f.state.events.some((event) => event.type === "conversation.item.create")).toBe(false)
+  } finally {
+    await f.close()
+  }
+})
+
+test("maximum image acknowledgement fits the sideband and image IDs cannot change content", async () => {
+  const f = fixture()
+  try {
+    await f.start()
+    const bytes = Buffer.concat([
+      Buffer.from(picture.split(",")[1], "base64"),
+      Buffer.alloc(262144 - Buffer.from(picture.split(",")[1], "base64").length),
+    ])
+    const data = `data:image/png;base64,${bytes.toString("base64")}`
+    const pending = f.broker.share(input.requestID, "large", data)
+    await until(() => f.state.events.some((event) => event.event_id === "image_large"))
+    const event = f.state.events.find((event) => event.event_id === "image_large")!
+    f.send({ type: "conversation.item.created", item: event.item })
+    expect((await pending).status).toBe("shared")
+    expect((await f.broker.share(input.requestID, "large", picture)).status).toBe("failed")
+    expect(f.state.requests.filter((request) => request.path.endsWith("/images"))).toHaveLength(1)
+    expect(f.state.errors).toEqual([])
+  } finally {
+    await f.close()
+  }
+})
+
+test("voice readiness requires acknowledged semantic turn detection and interruption", async () => {
+  const f = fixture()
+  try {
+    f.state.mode = "unconfirmed-config"
+    const start = f.start()
+    await until(() => f.state.events.some((event) => event.type === "session.update"))
+    const session = f.state.events.find((event) => event.type === "session.update")!.session as Record<string, unknown>
+    f.send({
+      type: "session.updated",
+      session: {
+        ...session,
+        audio: { input: { turn_detection: { type: "server_vad", create_response: true, interrupt_response: true } } },
+      },
+    })
+    await Bun.sleep(25)
+    expect(f.state.ready).toEqual([])
+    f.send({ type: "session.updated", session })
+    await start
+    expect(f.state.ready).toEqual([sdp])
   } finally {
     await f.close()
   }

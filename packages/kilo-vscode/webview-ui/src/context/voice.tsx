@@ -21,6 +21,7 @@ import { VoiceLoop } from "./voice-loop"
 import { RealtimeVoice, type RealtimeTranscript } from "./realtime-voice" // raya_change - native realtime thin client
 import { StreamPlayer } from "./stream-player" // raya_change - user-gesture-safe MiniMax audio sink
 import { VoiceEcho } from "./voice-echo" // raya_change - residual spoken-response exclusion
+import { createVoiceImages } from "./voice-images"
 import { OpenAIVoice } from "./openai-voice"
 import { useSession } from "./session"
 
@@ -29,6 +30,11 @@ type VoiceStatus = "off" | "connecting" | "listening" | "thinking" | "speaking" 
 type VoiceContextValue = {
   settings: Accessor<SpeechState>
   playing: Accessor<boolean>
+  image: ReturnType<typeof createVoiceImages>["state"]
+  share: (imageID: string, data: string) => void
+  muted: Accessor<boolean>
+  mute: () => void
+  interrupt: () => void
   status: Accessor<VoiceStatus>
   transcript: Accessor<RealtimeTranscript | undefined>
   aec: Accessor<boolean>
@@ -59,6 +65,7 @@ export const VoiceProvider: ParentComponent = (props) => {
     hasSttKey: false,
     hasTtsKey: false,
   })
+  const [muted, setMuted] = createSignal(false)
   const [playing, setPlaying] = createSignal(false)
   const [status, setStatus] = createSignal<VoiceStatus>("off")
   const [transcript, setTranscript] = createSignal<RealtimeTranscript>()
@@ -131,7 +138,15 @@ export const VoiceProvider: ParentComponent = (props) => {
     error: failOpenAI,
   })
 
+  const images = createVoiceImages({
+    current: () => call,
+    register: (id) => native.image(id),
+    post: (message) => vscode.postMessage(message),
+  })
+
   function stopOpenAI() {
+    images.clear()
+    setMuted(false)
     const current = call
     call = undefined
     if (pending) {
@@ -192,6 +207,7 @@ export const VoiceProvider: ParentComponent = (props) => {
   }
 
   function openaiMessage(message: ExtensionMessage) {
+    if (images.receive(message)) return true
     if (message.type === "speechOpenAIReady") {
       if (call?.id !== message.requestId || pending?.id !== message.requestId) return true
       const waiting = pending
@@ -392,6 +408,19 @@ export const VoiceProvider: ParentComponent = (props) => {
       value={{
         settings,
         playing,
+        image: images.state,
+        share: images.share,
+        muted,
+        mute: () => {
+          if (!call) return
+          const value = !muted()
+          if (native.mute(value)) setMuted(value)
+        },
+        interrupt: () => {
+          if (!call) return
+          const action = native.interrupt()
+          if (action) vscode.postMessage({ type: "speechOpenAIInterrupt", requestId: call.id, ...action })
+        },
         status,
         transcript,
         aec,

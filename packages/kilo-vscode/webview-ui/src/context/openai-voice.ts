@@ -1,3 +1,4 @@
+import { cancelled, owned } from "../../../src/shared/voice-interruption"
 import type { RealtimeTranscript } from "./realtime-voice"
 
 type Status = "off" | "connecting" | "listening" | "speaking" | "degraded"
@@ -21,6 +22,12 @@ type Operation = {
   timer?: ReturnType<typeof setTimeout>
   cancel?: (error: Error) => void
   ready?: () => void
+  output?: string
+  interrupted?: string
+  clearing?: string
+  interruption?: ReturnType<typeof setTimeout>
+  images: Set<string>
+  cancellations: Set<string>
   projection: Projection
 }
 
@@ -33,7 +40,14 @@ export class OpenAIVoice {
   async start(input: { sessionID: string; requestID: string }, exchange: (sdp: string) => Promise<string>) {
     if (this.operation) throw new Error("Voice is already starting or active. Stop it before starting again.")
     if (!input.sessionID || !input.requestID) throw new Error("Voice requires an owned session and request.")
-    const operation: Operation = { ...input, closed: false, answer: false, projection: new Projection() }
+    const operation: Operation = {
+      ...input,
+      closed: false,
+      answer: false,
+      cancellations: new Set(),
+      images: new Set(),
+      projection: new Projection(),
+    }
     this.operation = operation
     this.sink.status("connecting")
     const cancelled = new Promise<never>((_resolve, reject) => {
@@ -53,6 +67,49 @@ export class OpenAIVoice {
         )
       throw error
     }
+  }
+
+  image(id: string) {
+    const operation = this.operation
+    if (
+      !operation ||
+      !this.current(operation) ||
+      operation.channel?.readyState !== "open" ||
+      !/^[a-zA-Z0-9_-]{1,100}$/.test(id)
+    )
+      return false
+    operation.images.add(`image_${id}`)
+    bound(operation.images, 32)
+    return true
+  }
+
+  mute(value: boolean) {
+    const operation = this.operation
+    if (!operation || !this.current(operation) || !operation.answer) return false
+    const tracks = operation.media?.getAudioTracks() ?? []
+    if (!tracks.length || tracks.some((track) => track.readyState !== "live")) return false
+    for (const track of tracks) track.enabled = !value
+    return true
+  }
+
+  interrupt() {
+    const operation = this.operation
+    if (!operation || !this.current(operation) || operation.channel?.readyState !== "open") return
+    const responseID = operation.output
+    if (!responseID || operation.interrupted === responseID) return
+    const eventID = crypto.randomUUID()
+    operation.cancellations.add(eventID)
+    bound(operation.cancellations, 32)
+    operation.interrupted = responseID
+    operation.clearing = responseID
+    clearTimeout(operation.interruption)
+    operation.interruption = setTimeout(() => {
+      if (this.current(operation) && operation.clearing)
+        this.sink.notice?.("Speech stop was not confirmed. End voice and reconnect if audio does not resume.")
+    }, 5000)
+    if (operation.audio) operation.audio.muted = true
+    this.sink.status("listening")
+    return { responseID, eventID }
   }
 
   async stop() {
@@ -161,20 +218,15 @@ export class OpenAIVoice {
   }
 
   private receive(operation: Operation, data: unknown) {
-    if (typeof data !== "string" || data.length > 262_144) return
+    if (typeof data !== "string" || data.length > 524_288) return
     const packet = parse(data)
     if (!packet) return
     if (packet.type === "error") {
+      if (cancelled(packet, operation.cancellations) || owned(packet, operation.images)) return
       this.fail(operation, "OpenAI reported a voice error. Reconnect or continue typing.")
       return
     }
-    if (packet.type === "output_audio_buffer.started") this.sink.status("speaking")
-    if (
-      ["output_audio_buffer.stopped", "output_audio_buffer.cleared", "input_audio_buffer.speech_started"].includes(
-        packet.type,
-      )
-    )
-      this.sink.status("listening")
+    this.output(operation, packet)
     if (packet.type === "conversation.item.input_audio_transcription.failed") {
       const message =
         "Voice input transcription failed. Audio may still be connected; do not treat the transcript as complete."
@@ -184,6 +236,37 @@ export class OpenAIVoice {
     }
     const transcript = operation.projection.receive(packet)
     if (transcript) this.sink.transcript(transcript)
+  }
+
+  private output(operation: Operation, packet: Packet) {
+    if (packet.type === "input_audio_buffer.speech_started") {
+      this.sink.status("listening")
+      return
+    }
+    const id = packet.response_id
+    if (typeof id !== "string" || !/^[a-zA-Z0-9_-]{1,128}$/.test(id)) return
+    if (packet.type === "output_audio_buffer.started") {
+      if (id === operation.interrupted) return
+      operation.output = id
+      if (operation.clearing) return
+      if (operation.audio) operation.audio.muted = false
+      this.sink.status("speaking")
+      return
+    }
+    if (!["output_audio_buffer.stopped", "output_audio_buffer.cleared"].includes(packet.type)) return
+    const cleared = id === operation.clearing
+    if (cleared) {
+      operation.clearing = undefined
+      clearTimeout(operation.interruption)
+    }
+    if (id === operation.output) {
+      operation.output = undefined
+      this.sink.status("listening")
+      return
+    }
+    if (!cleared || !operation.output) return
+    if (operation.audio) operation.audio.muted = false
+    this.sink.status("speaking")
   }
 
   private fail(operation: Operation, message: string) {
@@ -198,6 +281,7 @@ export class OpenAIVoice {
   }
 
   private release(operation: Operation) {
+    clearTimeout(operation.interruption)
     clearTimeout(operation.timer)
     operation.timer = undefined
     operation.ready?.()

@@ -122,7 +122,6 @@ const state = (patch = {}) =>
     type: "speechSettingsLoaded",
     settings: {
       ...DEFAULT_SPEECH_SETTINGS,
-      voiceEngine: "openai-realtime",
       hasOpenAIKey: true,
       hasRealtimeKey: true,
       hasSttKey: true,
@@ -133,6 +132,12 @@ const state = (patch = {}) =>
   })
 const ready = (requestId) => send({ type: "speechOpenAIReady", requestId, sdp: "local-answer" })
 try {
+  check(voice.settings().voiceEngine === "openai-realtime", "unconfigured provider starts with the OpenAI default")
+  check(starts.length === 0 && legacy === 0, "initial default never starts a media transport")
+  state({ voiceEngine: "qwen-realtime", mode: "off" })
+  await tick()
+  check(voice.settings().voiceEngine === "qwen-realtime", "loaded explicit legacy selection replaces initial default")
+  check(starts.length === 0 && legacy === 0, "loading a saved engine never starts recording")
   state({ hasOpenAIKey: false })
   voice.start("session-a")
   await tick()
@@ -253,14 +258,12 @@ try {
   const fifth = sent.filter((item) => item.type === "speechOpenAIStart").at(-1)
   ready(fifth.requestId)
   await tick()
-  clients
-    .at(-1)
-    .sink.transcript({
-      type: "response.output_audio_transcript.done",
-      item: "old-parent",
-      text: "Old task transcript",
-      stable: true,
-    })
+  clients.at(-1).sink.transcript({
+    type: "response.output_audio_transcript.done",
+    item: "old-parent",
+    text: "Old task transcript",
+    stable: true,
+  })
   check(voice.transcript()?.text === "Old task transcript", "owned transcript displayed before navigation")
   setCurrent("session-b")
   await tick()
@@ -273,14 +276,12 @@ try {
     "navigation closes original parent call",
   )
   ready(fifth.requestId)
-  clients
-    .at(-1)
-    .sink.transcript({
-      type: "response.output_audio_transcript.done",
-      item: "late-parent",
-      text: "Late old task transcript",
-      stable: true,
-    })
+  clients.at(-1).sink.transcript({
+    type: "response.output_audio_transcript.done",
+    item: "late-parent",
+    text: "Late old task transcript",
+    stable: true,
+  })
   await tick()
   check(
     voice.transcript() === undefined && voice.status() === "off",

@@ -16,6 +16,9 @@ type Msg = {
   text?: string // raya_change - Milestone H TTS
   settings?: SpeechSettings // raya_change - Milestone H settings
   kind?: SpeechKey
+  imageID?: string
+  responseID?: string
+  eventID?: string
   sdp?: string
   key?: string // raya_change - Milestone H secret keys
   handsFree?: boolean // raya_change - Milestone H extension-host VAD fallback
@@ -141,7 +144,24 @@ async function routeKey(message: Msg, ctx: Ctx) {
   return true
 }
 
+async function routeImage(message: Msg, ctx: Ctx) {
+  if (message.type !== "speechOpenAIImage") return false
+  if (typeof message.requestId === "string" && typeof message.imageID === "string" && typeof message.data === "string")
+    await ctx.speech?.openaiImage(message.requestId, message.imageID, message.data, ctx.post)
+  return true
+}
+
 async function routeOpenAI(message: Msg, ctx: Ctx) {
+  if (await routeImage(message, ctx)) return true
+  if (message.type === "speechOpenAIInterrupt") {
+    if (
+      typeof message.requestId === "string" &&
+      typeof message.responseID === "string" &&
+      typeof message.eventID === "string"
+    )
+      ctx.speech?.openaiInterrupt(message.requestId, message.responseID, message.eventID)
+    return true
+  }
   if (message.type === "speechOpenAIStop") {
     if (typeof message.requestId === "string") await ctx.speech?.openaiStop(message.requestId, ctx.post)
     return true

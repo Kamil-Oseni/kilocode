@@ -1,3 +1,5 @@
+import { OpenAIImages } from "./openai-images"
+import { cancelled } from "../shared/voice-interruption"
 import { createHash, randomBytes } from "node:crypto"
 import WebSocket from "ws"
 import { OPENAI_VOICE_MODEL } from "../shared/speech"
@@ -33,6 +35,9 @@ type Claim = {
   blocked: boolean
   cancelled: boolean
   uncertain: boolean
+  output?: string
+  images: OpenAIImages
+  cancellations: Set<string>
   responding?: string
   continuation?: string
   pending: boolean
@@ -63,7 +68,15 @@ const tool = {
     "Run the user's requested work in their existing Raya conversation with its current permissions and goals.",
   parameters: {
     type: "object",
-    properties: { request: { type: "string", maxLength: 8000 } },
+    properties: {
+      request: { type: "string", maxLength: 8000 },
+      images: {
+        type: "array",
+        items: { type: "string", pattern: "^[a-zA-Z0-9_-]{1,128}$" },
+        maxItems: 4,
+        uniqueItems: true,
+      },
+    },
     required: ["request"],
     additionalProperties: false,
   },
@@ -102,6 +115,8 @@ export class OpenAIBroker {
       capability: randomBytes(32).toString("hex"),
       abort: new AbortController(),
       calls: new Map(),
+      images: new OpenAIImages(),
+      cancellations: new Set(),
       queue: Promise.resolve(),
       blocked: false,
       cancelled: false,
@@ -118,6 +133,48 @@ export class OpenAIBroker {
       if (!cancelled || cleanup) failed(cleanup ?? message(error))
     })
     await claim.opening
+  }
+
+  interrupt(requestID: string, responseID: string, eventID: string) {
+    const claim = this.claim
+    if (!claim || claim.input.requestID !== requestID || !this.current(claim)) return
+    if (!identifier(responseID) || !identifier(eventID) || claim.output !== responseID) return
+    if (claim.cancellations.has(eventID)) return
+    claim.cancellations.add(eventID)
+    if (claim.cancellations.size > 32) claim.cancellations.delete(claim.cancellations.values().next().value!)
+    if (claim.responding === responseID)
+      this.send(claim, { type: "response.cancel", response_id: responseID, event_id: eventID })
+    this.send(claim, { type: "output_audio_buffer.clear", event_id: `${eventID}_clear` })
+  }
+
+  async share(requestID: string, imageID: string, data: string) {
+    const claim = this.claim
+    if (!claim || claim.input.requestID !== requestID || !this.current(claim) || !claim.binding)
+      return { status: "failed" as const, error: "Start voice in this conversation before sharing an image." }
+    return claim.images.share(
+      imageID,
+      data,
+      claim.abort.signal,
+      async (image) => {
+        const separator = image.data.indexOf(",")
+        const receipt = await this.backend(claim, `/session/${encodeURIComponent(claim.binding!.id)}/images`, {
+          method: "POST",
+          body: JSON.stringify({
+            generation: claim.binding!.generation,
+            id: image.id,
+            mime: image.data.slice(5, image.data.indexOf(";")),
+            data: image.data.slice(separator + 1),
+          }),
+        })
+        this.assert(claim)
+        return receipt
+      },
+      (event) => {
+        this.assert(claim)
+        if (claim.socket?.readyState !== WebSocket.OPEN) throw new Error("Voice image transport closed")
+        this.send(claim, event)
+      },
+    )
   }
 
   async stop(requestID?: string) {
@@ -209,7 +266,7 @@ export class OpenAIBroker {
     const socket = this.connect(`wss://api.openai.com/v1/realtime?call_id=${encodeURIComponent(claim.remote!)}`, {
       headers: { Authorization: `Bearer ${claim.config!.key}` },
       handshakeTimeout: 15_000,
-      maxPayload: limit,
+      maxPayload: 524_288,
       perMessageDeflate: false,
     })
     claim.socket = socket
@@ -234,7 +291,12 @@ export class OpenAIBroker {
             audio: {
               input: {
                 transcription: { model: "gpt-live-transcribe", delay: "low" },
-                turn_detection: { type: "server_vad", interrupt_response: true, create_response: true },
+                turn_detection: {
+                  type: "semantic_vad",
+                  eagerness: "auto",
+                  interrupt_response: true,
+                  create_response: true,
+                },
               },
             },
           },
@@ -242,7 +304,7 @@ export class OpenAIBroker {
       })
       socket.on("message", (data) => {
         if (!this.validate(claim)) return
-        const event = object(data.toString())
+        const event = object(data.toString(), 524_288)
         if (!event) return
         if (event.type === "session.updated" && configured(event.session)) {
           ready = true
@@ -276,6 +338,13 @@ export class OpenAIBroker {
   }
 
   private event(claim: Claim, event: Record<string, unknown>) {
+    if (claim.images.receive(event)) return
+    if (event.type === "output_audio_buffer.started" && identifier(event.response_id)) claim.output = event.response_id
+    if (
+      ["output_audio_buffer.stopped", "output_audio_buffer.cleared"].includes(String(event.type)) &&
+      event.response_id === claim.output
+    )
+      claim.output = undefined
     if (event.type === "input_audio_buffer.speech_started") claim.speaking = true
     if (event.type === "input_audio_buffer.speech_stopped") claim.speaking = false
     if (event.type === "response.created" && event.response && typeof event.response === "object") {
@@ -292,6 +361,7 @@ export class OpenAIBroker {
       this.continue(claim)
     }
     if (event.type === "error") {
+      if (cancelled(event, claim.cancellations)) return
       // Never repeat work to recover a rejected audio continuation.
       claim.continuation = undefined
       claim.failed(
@@ -373,7 +443,12 @@ export class OpenAIBroker {
       typeof args.request !== "string" ||
       !args.request.trim() ||
       args.request.length > 8000 ||
-      Object.keys(args).length !== 1
+      Object.keys(args).some((key) => key !== "request" && key !== "images") ||
+      (args.images !== undefined &&
+        (!Array.isArray(args.images) ||
+          args.images.length > 4 ||
+          !args.images.every(identifier) ||
+          new Set(args.images).size !== args.images.length))
     ) {
       this.output(claim, id, { status: "failed", error: "Unsupported voice work request. No work was started." })
       return
@@ -522,8 +597,8 @@ function location(value: string | null) {
   return match[1]
 }
 
-function object(value: string): Record<string, unknown> | undefined {
-  if (value.length > limit) return
+function object(value: string, maximum = limit): Record<string, unknown> | undefined {
+  if (value.length > maximum) return
   try {
     const parsed: unknown = JSON.parse(value)
     return parsed && typeof parsed === "object" && !Array.isArray(parsed)
@@ -537,7 +612,16 @@ function object(value: string): Record<string, unknown> | undefined {
 function configured(value: unknown) {
   if (!value || typeof value !== "object") return false
   const session = value as Record<string, unknown>
+  if (!session.audio || typeof session.audio !== "object") return false
+  const audio = session.audio as Record<string, unknown>
+  if (!audio.input || typeof audio.input !== "object") return false
+  const input = audio.input as Record<string, unknown>
+  if (!input.turn_detection || typeof input.turn_detection !== "object") return false
+  const turn = input.turn_detection as Record<string, unknown>
   return (
+    turn.type === "semantic_vad" &&
+    turn.create_response === true &&
+    turn.interrupt_response === true &&
     Array.isArray(session.tools) &&
     session.tools.some((item) => item && typeof item === "object" && item.name === "raya_work")
   )

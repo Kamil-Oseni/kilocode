@@ -6,6 +6,42 @@ import { tmpdir } from "node:os"
 import { SpeechSettingsStore } from "../../src/speech/settings"
 
 describe("voice configuration", () => {
+  it("defaults absent and invalid engine values to OpenAI without inferring a provider from stored keys", async () => {
+    for (const value of [undefined, {}, { voiceEngine: "unknown" }, { voiceEngine: null }, { mode: "off" }]) {
+      const state = storage()
+      if (value !== undefined) await state.update("raya.speech.settings", value)
+      const store = new SpeechSettingsStore(state, secret())
+      await store.setKey("realtime", "legacy-only")
+      await store.setKey("stt", "dictation-only")
+      const settings = await store.load()
+      expect(settings.voiceEngine).toBe("openai-realtime")
+      expect(settings.hasOpenAIKey).toBe(false)
+      expect(await store.key("openai")).toBeUndefined()
+      expect(settings.cliMirror).toBe(false)
+      if (value?.mode === "off") expect(settings.mode).toBe("off")
+      expect(state.get("raya.speech.settings")).toEqual(value)
+    }
+  })
+
+  it("preserves every valid saved engine through unrelated edits and key changes", async () => {
+    for (const engine of ["qwen-realtime", "cascade-v1", "openai-realtime"] as const) {
+      const state = storage()
+      await state.update("raya.speech.settings", { voiceEngine: engine, mode: "off", realtimeVoice: "saved-voice" })
+      const store = new SpeechSettingsStore(state, secret())
+      expect((await store.load()).voiceEngine).toBe(engine)
+      await store.setKey("openai", "openai-only")
+      await store.update({ vadSilenceMs: 1200 })
+      expect(await store.load()).toMatchObject({
+        voiceEngine: engine,
+        mode: "off",
+        realtimeVoice: "saved-voice",
+        hasOpenAIKey: true,
+      })
+      await store.setKey("openai")
+      expect((await store.load()).voiceEngine).toBe(engine)
+    }
+  })
+
   it("swaps realtime, STT, and TTS models without code changes", async () => {
     const state = storage()
     const secrets = secret()

@@ -19,11 +19,26 @@ export const OpenAIBinding = Schema.Struct({
   createdAt: Schema.Number,
   expiresAt: Schema.Number,
 }).annotate({ identifier: "OpenAIVoiceBinding" })
+export const OpenAIImage = Schema.Struct({
+  id: VoiceID,
+  mime: Schema.Literals(["image/jpeg", "image/png", "image/webp"]),
+  bytes: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(262144)),
+  sha256: VoiceKey,
+}).annotate({ identifier: "OpenAIVoiceImage" })
+export const OpenAIImageInput = Schema.Struct({
+  generation: VoiceID,
+  id: VoiceID,
+  mime: OpenAIImage.fields.mime,
+  data: Schema.String.check(Schema.isMaxLength(349528)),
+}).annotate({ identifier: "OpenAIVoiceImageInput" })
 export const OpenAICallInput = Schema.Struct({
   generation: VoiceID,
   callID: VoiceID,
   function: Schema.Literal("raya_work"),
-  arguments: Schema.Struct({ request: Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(8000)) }),
+  arguments: Schema.Struct({
+    request: Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(8000)),
+    images: Schema.optional(Schema.Array(VoiceID).check(Schema.isMaxLength(4))),
+  }),
   responseID: Schema.optional(VoiceID),
   itemID: Schema.optional(VoiceID),
 }).annotate({ identifier: "OpenAIVoiceCallInput" })
@@ -35,6 +50,7 @@ export const OpenAICall = Schema.Struct({
   status: Schema.Literals(["accepted", "running", "completed", "failed", "cancelled", "unknown"]),
   createdAt: Schema.Number,
   updatedAt: Schema.Number,
+  images: Schema.optional(Schema.Array(OpenAIImage).check(Schema.isMaxLength(4))),
   result: Schema.optional(
     Schema.Struct({
       text: Schema.String.check(Schema.isMaxLength(12000)),

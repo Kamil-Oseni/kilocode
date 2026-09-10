@@ -718,6 +718,20 @@ export interface SpeechOpenAIStartMessage {
   sdp: string
 }
 
+export interface SpeechOpenAIImageMessage {
+  type: "speechOpenAIImage"
+  requestId: string
+  imageID: string
+  data: string
+}
+
+export interface SpeechOpenAIInterruptMessage {
+  type: "speechOpenAIInterrupt"
+  requestId: string
+  responseID: string
+  eventID: string
+}
+
 export interface SpeechOpenAIStopMessage {
   type: "speechOpenAIStop"
   requestId: string
@@ -1871,6 +1885,8 @@ export type WebviewMessage =
   | SpeechRealtimeStopMessage // raya_change - realtime voice
   | SpeechOpenAIStartMessage
   | SpeechOpenAIStopMessage
+  | SpeechOpenAIInterruptMessage
+  | SpeechOpenAIImageMessage
   | RequestFileSearchMessage
   | RequestSessionSearchMessage
   | RequestFilePickerMessage

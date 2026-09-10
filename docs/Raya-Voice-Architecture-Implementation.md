@@ -1,0 +1,20 @@
+# Applying the voice architecture to the current Raya extension
+
+The user identified [Raya-Voice-Architecture.md](Raya-Voice-Architecture.md) as the reference for the seamless voice experience. Sections 1.6, 2.5, 2.9, 4.6, 5.1, 6.7 and 7 distinguish concrete conversation requirements from a model selection alone.
+
+The current extension connects browser WebRTC directly to OpenAI, with a trusted extension-host sideband and the existing CLI as the asynchronous work runtime. Audio does not flow through the CLI or wait for workspace work. The document's Go/LiveKit/NestJS deployment describes a different topology; those components are not evidence that the extension's direct path meets its timing or recovery objectives.
+
+| Architecture requirement | Current implementation | Remaining acceptance or implementation |
+|---|---|---|
+| Native speech with asynchronous reasoning | OpenAI owns native audio; `raya_work` dispatches through the existing parent conversation and permission handling | Measure conversational continuity during long work; add bounded, truthful narration |
+| Semantic turn completion | Host requests `semantic_vad` with default `auto` eagerness and native interruption | Live hesitation, self-correction and background-noise corpus; no latency claim from configuration alone |
+| Correct interruption | Distinct microphone mute, stop-speaking and end-voice controls; targeted cancellation and WebRTC output-buffer clear | Measure cessation at the speaker; verify provider truncation acknowledgements and retained transcript agreement under loss and races |
+| One conversation across surfaces | Work uses the current parent session; selected images can be referenced by immutable binding-owned IDs | Durable voice transcript reconciliation and reconnect continuity |
+| Narration while work runs | Final retained work results return to voice without blocking microphone transport | Elapsed-time narration ladder, suppression during user speech, supersession and duplicate prevention; never invent progress or results |
+| Session continuity | Ownership and uncertain admission prevent accidental replay | Semantic snapshots, warm handoff, context compaction and recovery without duplicate actions |
+| Swappable engine contract | Saved engine selection remains available and explicit choices survive the default change | Equivalent interruption, snapshot and recovery conformance across engines |
+| Measurable quality and cost | Local boundary and rendered-client tests cover implemented behavior | Real-device p50/p95 timing, provider usage receipts, spending reservations and deterministic audio replay |
+
+The semantic VAD configuration follows the current [OpenAI VAD documentation](https://developers.openai.com/api/docs/guides/realtime-vad). It keeps provider-default eagerness instead of adding unmeasured silence thresholds. Direct WebRTC buffer clearing is a provider-managed operation; it does not establish the custom media-frontend playout accuracy specified in section 4.6.
+
+Next implementation order is truthful asynchronous narration, interruption/transcript reconciliation, and session continuity with retained accounting. The numeric objectives in the architecture remain targets until measured against actual audio and devices. The document's financial product, residency, provider pricing and infrastructure statements are not silently treated as verified facts or as newly implemented capabilities of this coding extension.

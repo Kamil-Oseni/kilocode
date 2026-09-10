@@ -26,14 +26,15 @@ const SpeechTab: Component = () => {
   return (
     <div class="speech-settings" style={{ display: "flex", "flex-direction": "column", gap: "16px" }}>
       <p style={{ margin: 0, color: "var(--vscode-descriptionForeground)", "font-size": "var(--kilo-font-size-12)" }}>
-        OpenAI live voice connects directly over WebRTC when you start a call. Work stays in the current conversation.
-        Ending voice releases audio; admitted work continues until you stop it in the conversation. Dictation remains a
-        separate draft-entry action. OpenAI failures never silently switch to another provider.
+        OpenAI is the default for new voice setups and connects directly over WebRTC when you start a call. Work stays
+        in the current conversation. Ending voice releases audio; admitted work continues until you stop it in the
+        conversation. Dictation remains a separate draft-entry action. OpenAI failures never silently switch to another
+        provider.
       </p>
       <Card>
         <SettingsRow
           title="Voice engine"
-          description="Choose a voice provider explicitly. Changing this selection ends the current call; it does not start recording."
+          description="Saved provider choices are preserved. Changing this selection ends the current call; it does not start recording."
         >
           <Select
             options={ENGINES}

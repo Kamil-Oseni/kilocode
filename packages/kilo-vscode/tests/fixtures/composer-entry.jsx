@@ -11,6 +11,7 @@ import { ProviderContext, useProvider } from "../../webview-ui/src/context/provi
 import { isModelValid } from "../../webview-ui/src/context/provider-utils"
 import { SessionContext } from "../../webview-ui/src/context/session"
 import { ServerContext, useServer } from "../../webview-ui/src/context/server"
+import { OpenAIVoice } from "../../webview-ui/src/context/openai-voice"
 import { VoiceProvider } from "../../webview-ui/src/context/voice"
 import { PromptInput } from "../../webview-ui/src/components/chat/PromptInput"
 import { WelcomeEmptyState } from "../../webview-ui/src/components/chat/WelcomeEmptyState"
@@ -23,6 +24,47 @@ window.acquireVsCodeApi = () => ({
   setState: () => {},
   postMessage: (msg) => messages.push(msg),
 })
+if (new URLSearchParams(location.search).has("native")) {
+  window.__configureVoice = () =>
+    window.postMessage(
+      {
+        type: "speechSettingsLoaded",
+        settings: {
+          ...DEFAULT_SPEECH_SETTINGS,
+          voiceEngine: "openai-realtime",
+          hasOpenAIKey: true,
+          hasRealtimeKey: false,
+          hasSttKey: false,
+          hasTtsKey: false,
+        },
+      },
+      "*",
+    )
+  window.__voiceStopped = 0
+  window.__voiceMicrophone = false
+  window.__workStops = 0
+  OpenAIVoice.prototype.start = async function (input, exchange) {
+    window.__nativeTransport = this
+    this.sink.status("connecting")
+    await exchange("v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n")
+    this.sink.status("listening")
+  }
+  OpenAIVoice.prototype.stop = async function () {
+    window.__voiceStopped++
+    this.sink.status("off")
+  }
+  OpenAIVoice.prototype.mute = function (value) {
+    window.__voiceMicrophone = value
+    return true
+  }
+  OpenAIVoice.prototype.interrupt = function () {
+    this.sink.status("listening")
+    return { responseID: "utterance", eventID: crypto.randomUUID() }
+  }
+  OpenAIVoice.prototype.image = function () {
+    return true
+  }
+}
 const theme = new URLSearchParams(location.search).get("theme") ?? "dark"
 document.body.className =
   theme === "light" ? "vscode-light" : theme === "contrast" ? "vscode-high-contrast" : "vscode-dark"
@@ -89,7 +131,10 @@ function Fixture() {
     selectVariant: setVariant,
     hasModelOverride: () => false,
     status: () => (busy() ? "busy" : "idle"),
-    abort: () => setBusy(false),
+    abort: () => {
+      window.__workStops = (window.__workStops ?? 0) + 1
+      setBusy(false)
+    },
     sendMessage: (...args) => {
       setSent((prior) => [...prior, { args, agent: agent(), variant: variant() }])
       if (id().startsWith("cloud:")) setContinuation((entry) => ({ ...entry, status: "pending" }))

@@ -779,6 +779,14 @@ export interface SpeechRealtimeStoppedMessage {
   type: "speechRealtimeStopped"
 }
 
+export interface SpeechOpenAIImageResultMessage {
+  type: "speechOpenAIImageResult"
+  requestId: string
+  imageID: string
+  status: "shared" | "unknown" | "failed"
+  error?: string
+}
+
 export interface SpeechOpenAIReadyMessage {
   type: "speechOpenAIReady"
   requestId: string
@@ -1780,6 +1788,7 @@ export type ExtensionMessage =
   | SpeechRealtimeReadyMessage // raya_change - realtime voice
   | SpeechRealtimeErrorMessage // raya_change - realtime voice
   | SpeechRealtimeStoppedMessage // raya_change - realtime voice
+  | SpeechOpenAIImageResultMessage
   | SpeechOpenAIReadyMessage
   | SpeechOpenAIErrorMessage
   | SpeechOpenAIStoppedMessage

@@ -20,6 +20,7 @@ import { useVSCode } from "../../context/vscode"
 import { useConfig } from "../../context/config"
 import { useProvider } from "../../context/provider"
 import { useVoice } from "../../context/voice" // raya_change - Milestone H intelligent voice mode
+import { NativeVoiceControls } from "./NativeVoiceControls"
 import { ComposerConfiguration } from "./ComposerConfiguration"
 import { ModelSelector } from "../shared/ModelSelector"
 import { ModeSwitcher } from "../shared/ModeSwitcher"
@@ -1176,9 +1177,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
   const voiceActive = () => voice.status() !== "off"
   const voiceLabel = () => {
-    if (!voiceActive()) return "Start hands-free voice"
+    if (!voiceActive())
+      return voice.settings().voiceEngine === "openai-realtime" ? "Start voice" : "Start hands-free voice"
     const transcript = voice.transcript()?.text.trim()
-    return transcript ? `Stop hands-free voice — ${transcript}` : `Stop hands-free voice — ${voice.status()}`
+    return transcript ? `End voice — ${transcript}` : `End voice — ${voice.status()}`
   }
   const toggleVoice = () => {
     if (!voiceActive()) {
@@ -1436,6 +1438,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       onDragLeave={imageAttach.handleDragLeave}
       onDrop={imageAttach.handleDrop}
     >
+      <NativeVoiceControls end={toggleVoice} />
       <Show when={session.cloudPreviewId()}>
         <Card variant="info" role="status" data-slot="cloud-continuation">
           <strong>Cloud preview</strong>
@@ -1786,7 +1789,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           <Show when={canUseSpeech()}>
             <SpeechToTextButton speech={speech} disabled={isDisabled()} start={startSpeech} label={language.t} />
           </Show>
-          <Show when={voice.settings().voiceEngine === "openai-realtime" || canUseSpeech()}>
+          <Show
+            when={
+              (voice.settings().voiceEngine === "openai-realtime" || canUseSpeech()) &&
+              !(voice.settings().voiceEngine === "openai-realtime" && voiceActive())
+            }
+          >
             {/* raya_change - Milestone H keeps dictation on the mic and hands-free
                 conversation on a distinct orb. The orb is a 2026 ElevenLabs-style
                 sphere: layered gradients + a slow flowing sheen, calm when idle and
@@ -1839,13 +1847,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               </Tooltip>
             }
           >
-            <Tooltip value={language.t("prompt.action.stop")} placement="top" openDelay={0}>
-              <Button
-                variant="ghost"
-                size="small"
-                onClick={() => session.abort()}
-                aria-label={language.t("prompt.action.stop")}
-              >
+            <Tooltip value="Stop work" placement="top" openDelay={0}>
+              <Button variant="ghost" size="small" onClick={() => session.abort()} aria-label="Stop work">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <rect x="3" y="3" width="10" height="10" rx="1" />
                 </svg>

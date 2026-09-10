@@ -315,6 +315,8 @@ import type {
   KilocodeVoiceOpenaiCancelResponses,
   KilocodeVoiceOpenaiCloseErrors,
   KilocodeVoiceOpenaiCloseResponses,
+  KilocodeVoiceOpenaiImageErrors,
+  KilocodeVoiceOpenaiImageResponses,
   KilocodeVoiceOpenaiResultErrors,
   KilocodeVoiceOpenaiResultResponses,
   KilocodeVoiceOpenaiStartErrors,
@@ -396,6 +398,7 @@ import type {
   NotebookRequestId,
   NotebookResult,
   OpenAiVoiceCallInput,
+  OpenAiVoiceImageInput,
   OpenAiVoiceStart,
   OutputFormat,
   Part as Part2,
@@ -10307,6 +10310,49 @@ export class Openai extends HeyApiClient {
       ThrowOnError
     >({
       url: "/kilocode/voice/openai/session",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Stage one immutable image for a bound voice call without starting work
+   */
+  public image<ThrowOnError extends boolean = false>(
+    parameters: {
+      "x-raya-voice-key"?: string
+      id: string
+      directory?: string
+      workspace?: string
+      openAiVoiceImageInput?: OpenAiVoiceImageInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "headers", key: "x-raya-voice-key" },
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "openAiVoiceImageInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeVoiceOpenaiImageResponses,
+      KilocodeVoiceOpenaiImageErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/voice/openai/session/{id}/images",
       ...options,
       ...params,
       headers: {

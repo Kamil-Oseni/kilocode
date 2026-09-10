@@ -15,5 +15,5 @@ test("OpenAI VoiceProvider correlates admission, settings changes and late bridg
     new Response(child.stderr).text(),
   ]).finally(() => clearTimeout(timer))
   expect(code, stdout + stderr).toBe(0)
-  expect(stdout).toContain("OpenAI provider integration passed: 29 assertions")
+  expect(stdout).toContain("OpenAI provider integration passed: 33 assertions")
 }, 30_000)

@@ -36,6 +36,19 @@ export const voiceHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-voice",
           Effect.catchTag("NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
         ),
       )
+      .handle("voiceOpenAIImage", (ctx) =>
+        Effect.gen(function* () {
+          return yield* openai.stage(
+            ctx.params.id,
+            ctx.payload,
+            ctx.headers["x-raya-voice-key"] ?? "",
+            yield* InstanceState.directory,
+          )
+        }).pipe(
+          Effect.catchTag("VoiceError", (error) => Effect.fail(failure(error))),
+          Effect.catchTag("NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+        ),
+      )
       .handle("voiceOpenAICall", (ctx) =>
         Effect.gen(function* () {
           return yield* openai.submit(

@@ -15,6 +15,8 @@ import {
   OpenAICall,
   OpenAICallInput,
   OpenAIGeneration,
+  OpenAIImage,
+  OpenAIImageInput,
   OpenAIStart,
   VoiceID,
 } from "@/kilocode/voice/openai-protocol"
@@ -28,6 +30,7 @@ export const VoicePaths = {
   openai: `${root}/openai/session`,
   binding: `${root}/openai/session/:id`,
   calls: `${root}/openai/session/:id/calls`,
+  images: `${root}/openai/session/:id/images`,
   call: `${root}/openai/session/:id/calls/:callID`,
   cancel: `${root}/openai/session/:id/calls/:callID/cancel`,
 } as const
@@ -54,6 +57,21 @@ export const VoiceApi = HttpApi.make("raya-voice").add(
         OpenApi.annotations({
           identifier: "kilocode.voice.openai.start",
           summary: "Bind an OpenAI realtime call to an existing Raya session",
+        }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.post("voiceOpenAIImage", VoicePaths.images, {
+        headers,
+        params: { id: VoiceID },
+        query: WorkspaceRoutingQuery,
+        payload: OpenAIImageInput,
+        success: OpenAIImage,
+        error: errors,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "kilocode.voice.openai.image",
+          summary: "Stage one immutable image for a bound voice call without starting work",
         }),
       ),
     )

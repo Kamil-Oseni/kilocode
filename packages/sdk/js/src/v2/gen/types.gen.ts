@@ -5789,12 +5789,27 @@ export type OpenAiVoiceBinding = {
   expiresAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
 }
 
+export type OpenAiVoiceImageInput = {
+  generation: string
+  id: string
+  mime: "image/jpeg" | "image/png" | "image/webp"
+  data: string
+}
+
+export type OpenAiVoiceImage = {
+  id: string
+  mime: "image/jpeg" | "image/png" | "image/webp"
+  bytes: number
+  sha256: string
+}
+
 export type OpenAiVoiceCallInput = {
   generation: string
   callID: string
   function: "raya_work"
   arguments: {
     request: string
+    images?: Array<string>
   }
   responseID?: string
   itemID?: string
@@ -5808,6 +5823,7 @@ export type OpenAiVoiceCall = {
   status: "accepted" | "running" | "completed" | "failed" | "cancelled" | "unknown"
   createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
   updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  images?: Array<OpenAiVoiceImage>
   result?: {
     text: string
     assistantMessageID: string
@@ -24581,6 +24597,48 @@ export type KilocodeVoiceOpenaiStartResponses = {
 
 export type KilocodeVoiceOpenaiStartResponse =
   KilocodeVoiceOpenaiStartResponses[keyof KilocodeVoiceOpenaiStartResponses]
+
+export type KilocodeVoiceOpenaiImageData = {
+  body?: OpenAiVoiceImageInput
+  headers?: {
+    "x-raya-voice-key"?: string
+  }
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/voice/openai/session/{id}/images"
+}
+
+export type KilocodeVoiceOpenaiImageErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeVoiceOpenaiImageError = KilocodeVoiceOpenaiImageErrors[keyof KilocodeVoiceOpenaiImageErrors]
+
+export type KilocodeVoiceOpenaiImageResponses = {
+  /**
+   * OpenAIVoiceImage
+   */
+  200: OpenAiVoiceImage
+}
+
+export type KilocodeVoiceOpenaiImageResponse =
+  KilocodeVoiceOpenaiImageResponses[keyof KilocodeVoiceOpenaiImageResponses]
 
 export type KilocodeVoiceOpenaiCallData = {
   body?: OpenAiVoiceCallInput

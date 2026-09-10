@@ -31,7 +31,7 @@ export type SpeechState = SpeechSettings & {
 }
 
 export const DEFAULT_SPEECH_SETTINGS: SpeechSettings = {
-  voiceEngine: "qwen-realtime",
+  voiceEngine: "openai-realtime",
   openaiVoice: "marin",
   realtimeEndpoint: "wss://dashscope-intl.aliyuncs.com/api-ws/v1/realtime",
   realtimeModel: "qwen-audio-3.0-realtime-plus",

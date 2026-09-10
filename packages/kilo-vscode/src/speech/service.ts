@@ -151,6 +151,15 @@ export class SpeechService implements vscode.Disposable {
     )
   }
 
+  async openaiImage(requestId: string, imageID: string, data: string, post: Post) {
+    const result = await this.openai.share(requestId, imageID, data)
+    post({ type: "speechOpenAIImageResult", requestId, imageID, ...result })
+  }
+
+  openaiInterrupt(requestId: string, responseID: string, eventID: string) {
+    this.openai.interrupt(requestId, responseID, eventID)
+  }
+
   async openaiStop(requestId: string, post: Post) {
     const error = await this.openai.stop(requestId)
     post(error ? { type: "speechOpenAIError", requestId, error } : { type: "speechOpenAIStopped", requestId })

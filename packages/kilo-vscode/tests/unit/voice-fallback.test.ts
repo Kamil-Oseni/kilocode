@@ -8,6 +8,8 @@ describe("voice failure ladder", () => {
     expect(
       voiceFallback({
         ...DEFAULT_SPEECH_SETTINGS,
+        voiceEngine: "qwen-realtime",
+        hasOpenAIKey: false,
         sttEndpoint: "https://example.test/v1/audio/transcriptions",
         hasRealtimeKey: true,
         hasSttKey: true,
@@ -20,6 +22,8 @@ describe("voice failure ladder", () => {
     expect(
       voiceFallback({
         ...DEFAULT_SPEECH_SETTINGS,
+        voiceEngine: "qwen-realtime",
+        hasOpenAIKey: false,
         hasRealtimeKey: false,
         hasSttKey: false,
         hasTtsKey: false,

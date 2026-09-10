@@ -37839,6 +37839,112 @@
         ]
       }
     },
+    "/kilocode/voice/openai/session/{id}/images": {
+      "post": {
+        "tags": ["raya-voice"],
+        "operationId": "kilocode.voice.openai.image",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+            },
+            "required": true
+          },
+          {
+            "name": "x-raya-voice-key",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OpenAIVoiceImage",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenAIVoiceImage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_Conflict"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Stage one immutable image for a bound voice call without starting work",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenAIVoiceImageInput"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.voice.openai.image({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/kilocode/voice/openai/session/{id}/calls": {
       "post": {
         "tags": ["raya-voice"],
@@ -62747,6 +62853,53 @@
         ],
         "additionalProperties": false
       },
+      "OpenAIVoiceImageInput": {
+        "type": "object",
+        "properties": {
+          "generation": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+          },
+          "mime": {
+            "type": "string",
+            "enum": ["image/jpeg", "image/png", "image/webp"]
+          },
+          "data": {
+            "type": "string",
+            "maxLength": 349528
+          }
+        },
+        "required": ["generation", "id", "mime", "data"],
+        "additionalProperties": false
+      },
+      "OpenAIVoiceImage": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+          },
+          "mime": {
+            "type": "string",
+            "enum": ["image/jpeg", "image/png", "image/webp"]
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 262144
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": ["id", "mime", "bytes", "sha256"],
+        "additionalProperties": false
+      },
       "OpenAIVoiceCallInput": {
         "type": "object",
         "properties": {
@@ -62769,6 +62922,14 @@
                 "type": "string",
                 "pattern": "\\S",
                 "maxLength": 8000
+              },
+              "images": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                },
+                "maxItems": 4
               }
             },
             "required": ["request"],
@@ -62854,6 +63015,13 @@
                 "enum": ["Infinity", "-Infinity", "NaN"]
               }
             ]
+          },
+          "images": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OpenAIVoiceImage"
+            },
+            "maxItems": 4
           },
           "result": {
             "type": "object",

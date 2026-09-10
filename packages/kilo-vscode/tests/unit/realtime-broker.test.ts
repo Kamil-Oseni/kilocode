@@ -43,7 +43,11 @@ function fixture(handle?: (request: Request) => Promise<Response | undefined>) {
     backendURL: server.url.origin,
     auth: "Basic synthetic-secret",
     key: "engine-secret",
-    settings: { ...DEFAULT_SPEECH_SETTINGS, mediaFrontendURL: server.url.origin },
+    settings: {
+      ...DEFAULT_SPEECH_SETTINGS,
+      voiceEngine: "qwen-realtime" as const,
+      mediaFrontendURL: server.url.origin,
+    },
   }
   return { calls, config, close: () => server.stop(true) }
 }

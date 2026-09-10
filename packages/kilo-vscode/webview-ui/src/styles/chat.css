@@ -36,3 +36,36 @@
 [data-slot="cloud-continuation"] code {
   overflow-wrap: anywhere;
 }
+
+/* Native voice controls */
+[data-slot="native-voice-controls"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+}
+[data-slot="native-voice-controls"] [role="status"] {
+  flex-basis: 100%;
+  color: var(--text-weak);
+  font-size: var(--font-size-small);
+}
+
+/* Native voice image selection */
+[data-slot="native-voice-image"] {
+  flex-basis: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+[data-slot="native-voice-image"] img {
+  display: block;
+  max-width: 100%;
+  max-height: 160px;
+  object-fit: contain;
+  margin: 8px 0;
+}
+[data-slot="native-voice-image"] p {
+  color: var(--text-weak);
+  font-size: var(--font-size-small);
+  margin: 4px 0;
+}

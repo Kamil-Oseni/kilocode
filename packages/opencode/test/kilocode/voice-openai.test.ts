@@ -451,3 +451,168 @@ it.live(
     }),
   30_000,
 )
+
+const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a6p8AAAAASUVORK5CYII="
+
+it.live(
+  "stages immutable bound images without work and dispatches only their verified bytes",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const state = yield* fixture(root)
+        const input = { generation: state.binding.generation, id: "image-one", mime: "image/png" as const, data: png }
+        const uploads = yield* Effect.all(
+          [
+            state.voice.stage(state.binding.id, input, secret, root),
+            state.voice.stage(state.binding.id, input, secret, root),
+          ],
+          { concurrency: "unbounded" },
+        )
+        expect(uploads[0]).toEqual(uploads[1])
+        expect(uploads[0]).toEqual({
+          id: input.id,
+          mime: input.mime,
+          bytes: Buffer.from(png, "base64").length,
+          sha256: createHash("sha256").update(Buffer.from(png, "base64")).digest("hex"),
+        })
+        expect(state.calls).toEqual([])
+        const altered = Buffer.from(png, "base64")
+        altered[30] ^= 1
+        expect(
+          Exit.isFailure(
+            yield* state.voice
+              .stage(state.binding.id, { ...input, data: altered.toString("base64") }, secret, root)
+              .pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        const request = {
+          ...state.input,
+          arguments: { request: "Inspect this explicitly attached image", images: [input.id] },
+        }
+        const accepted = yield* state.voice.submit(state.binding.id, request, secret, root)
+        const result = yield* settled(
+          state.voice.get(state.binding.id, request.callID, state.binding.generation, secret, root),
+        )
+        expect(result.status).toBe("completed")
+        expect(result.images).toEqual([uploads[0]])
+        expect(state.calls[0]?.messageID).toBe(accepted.messageID)
+        expect(state.calls[0]?.parts).toEqual([
+          { type: "text", text: request.arguments.request },
+          { type: "file", mime: "image/png", url: `data:image/png;base64,${png}` },
+        ])
+        yield* state.voice.submit(state.binding.id, request, secret, root)
+        expect(state.calls.length).toBe(1)
+        expect(
+          Exit.isFailure(
+            yield* state.voice
+              .submit(state.binding.id, { ...request, arguments: { ...request.arguments, images: [] } }, secret, root)
+              .pipe(Effect.exit),
+          ),
+        ).toBe(true)
+      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+    }),
+  30_000,
+)
+
+it.live(
+  "image staging enforces format, capacity, owner and selection boundaries with actual storage",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      const other = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const state = yield* fixture(root)
+        const input = { generation: state.binding.generation, id: "image-one", mime: "image/png" as const, data: png }
+        for (const data of ["", png + "\n", png.replace(/=$/, ""), "!!!!", Buffer.alloc(262145).toString("base64")])
+          expect(
+            Exit.isFailure(
+              yield* state.voice.stage(state.binding.id, { ...input, data }, secret, root).pipe(Effect.exit),
+            ),
+          ).toBe(true)
+        for (const mime of ["image/jpeg", "image/webp"] as const)
+          expect(
+            Exit.isFailure(
+              yield* state.voice.stage(state.binding.id, { ...input, mime }, secret, root).pipe(Effect.exit),
+            ),
+          ).toBe(true)
+        expect(
+          Exit.isFailure(yield* state.voice.stage(state.binding.id, input, "b".repeat(64), root).pipe(Effect.exit)),
+        ).toBe(true)
+        expect(
+          Exit.isFailure(
+            yield* state.voice
+              .stage(state.binding.id, { ...input, generation: "stale" }, secret, root)
+              .pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        expect(Exit.isFailure(yield* state.voice.stage(state.binding.id, input, secret, other).pipe(Effect.exit))).toBe(
+          true,
+        )
+        for (const id of Array.from({ length: 8 }, (_, i) => `image-${i}`))
+          yield* state.voice.stage(state.binding.id, { ...input, id }, secret, root)
+        expect(Exit.isFailure(yield* state.voice.stage(state.binding.id, input, secret, root).pipe(Effect.exit))).toBe(
+          true,
+        )
+        yield* state.voice.stage(state.binding.id, { ...input, id: "image-0" }, secret, root)
+        expect(state.calls).toEqual([])
+        for (const ids of [
+          ["missing"],
+          ["image-0", "image-0"],
+          ["image-0", "image-1", "image-2", "image-3", "image-4"],
+        ])
+          expect(
+            Exit.isFailure(
+              yield* state.voice
+                .submit(
+                  state.binding.id,
+                  { ...state.input, arguments: { request: "Check", images: ids } },
+                  secret,
+                  root,
+                )
+                .pipe(Effect.exit),
+            ),
+          ).toBe(true)
+        const second = yield* state.voice.start({ ...state.start, providerCallID: crypto.randomUUID() }, secret, root)
+        expect(
+          Exit.isFailure(
+            yield* state.voice
+              .submit(
+                second.id,
+                { ...state.input, generation: second.generation, arguments: { request: "Check", images: ["image-0"] } },
+                secret,
+                root,
+              )
+              .pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        const storage = yield* Storage.Service
+        const key = ["raya_openai_voice", state.binding.id]
+        const retained = yield* storage.read<{ images: Record<string, { data: string }> }>(key)
+        retained.images[createHash("sha256").update("image-0").digest("hex")].data = "corrupted"
+        yield* storage.replace(key, retained)
+        expect(
+          Exit.isFailure(
+            yield* state.voice
+              .submit(
+                state.binding.id,
+                { ...state.input, arguments: { request: "Check", images: ["image-0"] } },
+                secret,
+                root,
+              )
+              .pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        const restarted = yield* make(state.deps)
+        expect(Exit.isFailure(yield* restarted.stage(state.binding.id, input, secret, root).pipe(Effect.exit))).toBe(
+          true,
+        )
+        yield* state.voice.close(state.binding.id, state.binding.generation, secret, root)
+        expect(Exit.isFailure(yield* state.voice.stage(state.binding.id, input, secret, root).pipe(Effect.exit))).toBe(
+          true,
+        )
+        expect(state.calls).toEqual([])
+      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+    }),
+  30_000,
+)

@@ -4,7 +4,7 @@ import { HttpRouter } from "effect/unstable/http"
 import * as HttpApiServer from "@/server/routes/instance/httpapi/server"
 import { disposeAllInstances, tmpdir } from "../../fixture/fixture"
 import { resetDatabase } from "../../fixture/db"
-import { OpenAIBinding } from "@/kilocode/voice/openai-protocol"
+import { OpenAIBinding, OpenAIImage } from "@/kilocode/voice/openai-protocol"
 import { SessionID } from "@/session/schema"
 
 test("the shipped OpenAI voice routes require both configured server auth and the binding capability", async () => {
@@ -63,6 +63,25 @@ test("the shipped OpenAI voice routes require both configured server auth and th
     expect(binding.model).toBe("gpt-realtime-2.1")
     expect(JSON.stringify(binding)).not.toContain(key)
     const route = `${base}/${binding.id}`
+    const image = {
+      generation: binding.generation,
+      id: "image-one",
+      mime: "image/png",
+      data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a6p8AAAAASUVORK5CYII=",
+    }
+    expect((await request("POST", `${route}/images`, image, key, "")).status).toBe(401)
+    expect((await request("POST", `${route}/images`, image, "b".repeat(64))).status).toBe(401)
+    expect((await request("POST", `${route}/images`, { ...image, generation: "stale" })).status).toBe(409)
+    expect((await request("POST", `${route}/images`, { ...image, data: "invalid" })).status).toBe(400)
+    const staged = await request("POST", `${route}/images`, image)
+    expect(staged.status).toBe(200)
+    const receipt = Schema.decodeUnknownSync(OpenAIImage)(await staged.json())
+    expect(receipt.id).toBe(image.id)
+    expect(receipt.bytes).toBe(Buffer.from(image.data, "base64").length)
+    expect(JSON.stringify(receipt)).not.toContain(image.data)
+    const messages = await request("GET", `/session/${parent.id}/message`)
+    expect(messages.status).toBe(200)
+    expect(await messages.json()).toEqual([])
     const call = {
       generation: binding.generation,
       callID: "call_test",
@@ -83,6 +102,7 @@ test("the shipped OpenAI voice routes require both configured server auth and th
     expect(closed.status).toBe(200)
     expect(Schema.decodeUnknownSync(OpenAIBinding)(await closed.json()).status).toBe("closed")
     expect((await request("POST", `${route}/calls`, call)).status).toBe(409)
+    expect((await request("POST", `${route}/images`, image)).status).toBe(409)
   } finally {
     await app.dispose()
     await disposeAllInstances()

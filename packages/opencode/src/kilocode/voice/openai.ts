@@ -6,17 +6,28 @@ import type { Session } from "@/session/session"
 import type { SessionPrompt } from "@/session/prompt"
 import type { Storage } from "@/storage/storage"
 import type * as TaskWorker from "@/kilocode/session/task-worker"
-import { OpenAIBinding, OpenAICall, OpenAICallInput, OpenAIStart, VoiceKey } from "./openai-protocol"
+import {
+  OpenAIBinding,
+  OpenAICall,
+  OpenAICallInput,
+  OpenAIStart,
+  OpenAIImage,
+  OpenAIImageInput,
+  VoiceID,
+  VoiceKey,
+} from "./openai-protocol"
 
 type Binding = typeof OpenAIBinding.Type
 type Call = typeof OpenAICall.Type
 type Input = typeof OpenAICallInput.Type
+type Image = { receipt: typeof OpenAIImage.Type; data: string }
 type Stored = {
   binding: Binding
   owner: string
   hash: string
   requestID: string
   calls: Record<string, { input: Input; receipt: Call }>
+  images?: Record<string, Image>
 }
 type Deps = {
   storage: Storage.Interface
@@ -35,6 +46,52 @@ const key = (id: string) => ["raya_openai_voice", id]
 const pending = (call: Call) => call.status === "accepted" || call.status === "running"
 const refuse = (code: VoiceError["code"], message: string) => Effect.fail(new VoiceError({ code, message }))
 const canonical = (directory: string) => Effect.tryPromise(() => fs.realpath(directory)).pipe(Effect.orDie)
+
+const decode = (mime: (typeof OpenAIImage.Type)["mime"], data: string) => {
+  if (data.length > 349528 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(data))
+    return undefined
+  const bytes = Buffer.from(data, "base64")
+  if (!bytes.length || bytes.length > 262144 || bytes.toString("base64") !== data) return undefined
+  const signature =
+    mime === "image/jpeg"
+      ? bytes.length >= 4 &&
+        bytes.subarray(0, 3).equals(Buffer.from([255, 216, 255])) &&
+        bytes.subarray(-2).equals(Buffer.from([255, 217]))
+      : mime === "image/png"
+        ? bytes.length >= 33 &&
+          bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) &&
+          bytes.readUInt32BE(8) === 13 &&
+          bytes.toString("ascii", 12, 16) === "IHDR"
+        : mime === "image/webp" &&
+          bytes.length >= 20 &&
+          bytes.toString("ascii", 0, 4) === "RIFF" &&
+          bytes.readUInt32LE(4) === bytes.length - 8 &&
+          bytes.toString("ascii", 8, 12) === "WEBP" &&
+          ["VP8 ", "VP8L", "VP8X"].includes(bytes.toString("ascii", 12, 16))
+  return signature ? bytes : undefined
+}
+
+const images = (stored: Stored, ids: Input["arguments"]["images"]) =>
+  Effect.gen(function* () {
+    if (ids && (ids.length > 4 || new Set(ids).size !== ids.length || ids.some((id) => !Schema.is(VoiceID)(id))))
+      return yield* refuse("invalid", "Select at most four distinct staged image IDs.")
+    const selected: Image[] = []
+    for (const id of ids ?? []) {
+      const image = stored.images?.[digest(id)]
+      if (!image) return yield* refuse("missing", "Image is not staged in this voice binding.")
+      if (!Schema.is(OpenAIImage)(image.receipt) || image.receipt.id !== id || typeof image.data !== "string")
+        return yield* refuse("conflict", "Retained image metadata is invalid.")
+      const bytes = decode(image.receipt.mime, image.data)
+      if (
+        !bytes ||
+        bytes.length !== image.receipt.bytes ||
+        createHash("sha256").update(bytes).digest("hex") !== image.receipt.sha256
+      )
+        return yield* refuse("conflict", "Retained image bytes do not match their receipt.")
+      selected.push(image)
+    }
+    return selected
+  })
 
 /** A server-scoped owner. Retained intents are never adopted or replayed by another owner. */
 export const make = (deps: Deps) =>
@@ -120,8 +177,11 @@ export const make = (deps: Deps) =>
             const call = stored.calls[digest(callID)]
             if (!call || call.receipt.status !== "accepted") return undefined
             call.receipt = { ...call.receipt, status: "running", updatedAt: Date.now() }
+            const selected = yield* images(stored, call.input.arguments.images)
+            if (JSON.stringify(selected.map((image) => image.receipt)) !== JSON.stringify(call.receipt.images ?? []))
+              return yield* refuse("conflict", "Selected image receipts changed before dispatch.")
             yield* save(stored)
-            return call
+            return { ...call, images: selected }
           }),
         )
         if (!admitted) return
@@ -130,7 +190,14 @@ export const make = (deps: Deps) =>
           .prompt({
             sessionID: call.parentSessionID,
             messageID: call.messageID,
-            parts: [{ type: "text", text: admitted.input.arguments.request }],
+            parts: [
+              { type: "text", text: admitted.input.arguments.request },
+              ...admitted.images.map((image) => ({
+                type: "file" as const,
+                mime: image.receipt.mime,
+                url: `data:${image.receipt.mime};base64,${image.data}`,
+              })),
+            ],
           })
           .pipe(Effect.exit)
         if (Exit.isFailure(result)) {
@@ -263,6 +330,44 @@ export const make = (deps: Deps) =>
           }),
         )
       })
+    const stage = (id: string, input: typeof OpenAIImageInput.Type, secret: string, directory: string) =>
+      locked(
+        id,
+        Effect.gen(function* () {
+          const stored = yield* load(id, secret, directory, input.generation)
+          yield* active(stored)
+          if (!Schema.is(OpenAIImageInput)(input)) return yield* refuse("invalid", "Invalid image staging payload.")
+          const parent = yield* deps.sessions.get(stored.binding.parentSessionID)
+          if ((yield* canonical(parent.directory)) !== stored.binding.directory)
+            return yield* refuse("conflict", "Parent directory changed.")
+          const bytes = decode(input.mime, input.data)
+          if (!bytes)
+            return yield* refuse(
+              "invalid",
+              "Image must be canonical base64 with a matching JPEG, PNG or WebP signature, at most 256 KiB.",
+            )
+          const image: Image = {
+            data: input.data,
+            receipt: {
+              id: input.id,
+              mime: input.mime,
+              bytes: bytes.length,
+              sha256: createHash("sha256").update(bytes).digest("hex"),
+            },
+          }
+          const prior = stored.images?.[digest(input.id)]
+          if (prior) {
+            if (prior.data !== image.data || JSON.stringify(prior.receipt) !== JSON.stringify(image.receipt))
+              return yield* refuse("conflict", "Image ID already names different retained bytes.")
+            return prior.receipt
+          }
+          if (Object.keys(stored.images ?? {}).length >= 8)
+            return yield* refuse("conflict", "Voice binding image limit reached.")
+          stored.images = { ...stored.images, [digest(input.id)]: image }
+          yield* save(stored)
+          return image.receipt
+        }).pipe(Effect.uninterruptible),
+      )
     const submit = (id: string, input: Input, secret: string, directory: string) =>
       locked(
         id,
@@ -273,6 +378,7 @@ export const make = (deps: Deps) =>
           if (prior) {
             if (
               prior.input.arguments.request !== input.arguments.request ||
+              JSON.stringify(prior.input.arguments.images ?? []) !== JSON.stringify(input.arguments.images ?? []) ||
               prior.input.function !== input.function ||
               prior.input.responseID !== input.responseID ||
               prior.input.itemID !== input.itemID
@@ -287,6 +393,7 @@ export const make = (deps: Deps) =>
           const parent = yield* deps.sessions.get(stored.binding.parentSessionID)
           if ((yield* canonical(parent.directory)) !== stored.binding.directory)
             return yield* refuse("conflict", "Parent directory changed.")
+          const selected = yield* images(stored, input.arguments.images)
           const now = Date.now()
           const call: Call = {
             id: crypto.randomUUID(),
@@ -294,6 +401,7 @@ export const make = (deps: Deps) =>
             messageID: MessageID.ascending(),
             parentSessionID: parent.id,
             status: "accepted",
+            ...(selected.length ? { images: selected.map((image) => image.receipt) } : {}),
             createdAt: now,
             updatedAt: now,
           }
@@ -353,5 +461,5 @@ export const make = (deps: Deps) =>
           return stored.binding
         }),
       )
-    return { start, submit, get, cancel, close }
+    return { start, stage, submit, get, cancel, close }
   })

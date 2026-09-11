@@ -2604,7 +2604,7 @@ Next: leftover Live acceptance cases, then leftover RDM-06 UI/lifecycle cases.
 
 ## 2026-09-11: Live append bounds and busy-queue steering
 
-Status: verified locally and unshipped. Installed product is still d4e5384528.
+Status: verified locally, committed as 5d7b978226, and installed in the snapshot below.
 
 Live commentary, thinking and instruction appends split at 500 Unicode scalars. A fifth chunk is refused. Overflow directs the user to the task conversation. Completed results are no longer sliced to 1000 characters. A busy Live call acknowledges a later delegation without a second POST. User speech after a queued request's offset requires clarification instead of dispatch.
 
@@ -2612,7 +2612,15 @@ Changed files: packages/kilo-vscode/src/speech/live-append.ts, packages/kilo-vsc
 
 Commands (packages/kilo-vscode): bun test tests/unit/live-append.test.ts tests/unit/live-context.test.ts tests/unit/live-broker.test.ts tests/unit/live-commands.test.ts --timeout 60000 -> 18 pass / 0 fail / 376 expect / exit 0 (packages/kilo-vscode/.tmp/live-append-busy-queue.log). bun run check-types -> exit 0. eslint on touched files -> exit 0.
 
-Next: commit, push, and snapshot:install. Remaining: packaged microphone/acoustic acceptance, provider-switch/disposal, and leftover RDM-06 UI/lifecycle cases.
+Next: leftover Live microphone/provider-switch cases or leftover RDM-06 UI/lifecycle.
+
+## 2026-09-11: Snapshot install 5d7b978226
+
+Status: committed, pushed and installed as 5d7b978226. Live appends honor the 500-token bound; busy later delegations wait without a second call.
+
+Installed eden.raya@7.4.23-snapshot+5d7b978226.kamil-oseni.1789160589728. VSIX C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-5d7b978226-kamil-oseni-1789160589728.vsix; SHA-256 837F2BF46EA53D3A1874A87ECFA72C3B41549416EDD66575C2B61EC290226E64; 517020721 bytes, 431 entries. CLI binary already present.
+
+Next: leftover Live microphone/provider-switch cases or leftover RDM-06 UI/lifecycle.
 
 
 

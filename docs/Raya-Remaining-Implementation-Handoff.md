@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Installed product is `d4e5384528`. New voice setups default to GPT-Live 1 (`openai-live` / `gpt-live-1`) over the Live API; saved Realtime, Qwen and cascade selections stay. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, delegated cost attribution, and the Friday accounting E2E are installed. Live append token bounds and busy-queue steering are verified locally and unshipped. Remaining Live work is packaged microphone/acoustic acceptance and provider-switch/disposal. RDM-06 leftover busy-recipient/denial/timeout/inspectable-chain UI and lifecycle cases remain. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Installed product is `5d7b978226`. New voice setups default to GPT-Live 1 (`openai-live` / `gpt-live-1`) over the Live API; saved Realtime, Qwen and cascade selections stay. Live appends split at the 500-token bound; busy-queue later delegations are acknowledged and later speech requires clarification. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, delegated cost attribution, and the Friday accounting E2E are installed. Remaining Live work is packaged microphone/acoustic acceptance and provider-switch/disposal. RDM-06 leftover busy-recipient/denial/timeout/inspectable-chain UI and lifecycle cases remain. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-11. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `d4e5384528` is committed, pushed and installed. New voice setups default to GPT-Live 1; the Live API is the production engine. Realtime remains an explicit compatibility path.
+**Latest delivered product:** checkpoint `5d7b978226` is committed, pushed and installed. New voice setups default to GPT-Live 1; Live appends honor the 500-token bound; busy-queue later delegations wait without a second call. Realtime remains an explicit compatibility path.
 
 ## Scope and reading order
 
@@ -1324,7 +1324,7 @@ Next executable step: leftover Live acceptance cases, then leftover RDM-06 UI/li
 
 ## 2026-09-11: Live append bounds and busy-queue steering
 
-**States:** verified locally and unshipped. Installed product is still `d4e5384528`. This closes the Live append token-bound and busy-queue steering leftovers. It does not close packaged microphone/acoustic acceptance or provider-switch/disposal.
+**States:** verified locally, committed as `5d7b978226`, and installed in the snapshot below. This closes the Live append token-bound and busy-queue steering leftovers. It does not close packaged microphone/acoustic acceptance or provider-switch/disposal.
 
 GPT-Live commentary, thinking and instruction appends now split on Unicode scalars at the documented 500-token bound (each scalar treated as at most one token). A fifth chunk is refused; overflow points the user to the task conversation instead of inventing the rest. Completed work is no longer sliced to 1000 characters. While backend work is busy, a later delegation is acknowledged with `session.thinking.append` and is not dispatched as a second call. If the user speaks after that queued request's offset, dequeue asks for clarification instead of repeating or replacing finished work.
 
@@ -1334,4 +1334,14 @@ Commands (cwd `packages/kilo-vscode`): `bun test tests/unit/live-append.test.ts 
 
 Remaining: packaged microphone/acoustic acceptance, provider-switch/disposal, and leftover RDM-06 UI/lifecycle cases.
 
-Next executable step: commit, push, and snapshot:install this Live append/queue increment, then leftover Live microphone/provider-switch cases or leftover RDM-06 UI/lifecycle.
+Next executable step: leftover Live microphone/provider-switch cases or leftover RDM-06 UI/lifecycle.
+
+## 2026-09-11: Snapshot install `5d7b978226`
+
+**States:** committed, pushed and installed as `5d7b978226`. Live appends honor the 500-token bound; busy later delegations wait without a second call.
+
+Installed `eden.raya@7.4.23-snapshot+5d7b978226.kamil-oseni.1789160589728`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-5d7b978226-kamil-oseni-1789160589728.vsix`; SHA-256 `837F2BF46EA53D3A1874A87ECFA72C3B41549416EDD66575C2B61EC290226E64`; 517020721 bytes, 431 entries. CLI binary already present (`bin\kilo.exe`, 218MB reported). Includes GPT-Live 1 as the default voice engine, 500-scalar append splitting, and busy-queue clarification. Realtime remains an explicit compatibility path.
+
+Remaining: packaged microphone/acoustic acceptance, provider-switch/disposal, and leftover RDM-06 UI/lifecycle cases.
+
+Next executable step: leftover Live microphone/provider-switch cases or leftover RDM-06 UI/lifecycle.

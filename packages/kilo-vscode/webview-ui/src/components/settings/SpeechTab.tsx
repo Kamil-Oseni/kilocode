@@ -6,10 +6,11 @@ import { TextField } from "@kilocode/kilo-ui/text-field"
 import { Select } from "@kilocode/kilo-ui/select"
 import { createSignal, Show, type Component } from "solid-js"
 import { useVoice } from "../../context/voice"
-import { OPENAI_VOICE_MODEL, type VoiceEngine } from "../../../../src/shared/speech"
+import { OPENAI_LIVE_MODEL, OPENAI_VOICE_MODEL, type VoiceEngine } from "../../../../src/shared/speech"
 import SettingsRow from "./SettingsRow"
 
 const ENGINES: Array<{ value: VoiceEngine; label: string }> = [
+  { value: "openai-live", label: "OpenAI GPT-Live 1 (preview)" },
   { value: "openai-realtime", label: "OpenAI Realtime (preview)" },
   { value: "qwen-realtime", label: "Legacy Qwen Realtime (experimental)" },
   { value: "cascade-v1", label: "Configured STT → Raya → MiniMax (cascade-v1)" },
@@ -48,12 +49,12 @@ const SpeechTab: Component = () => {
             triggerProps={{ "aria-label": "Voice engine" }}
           />
         </SettingsRow>
-        <Show when={settings().voiceEngine === "openai-realtime"}>
+        <Show when={["openai-realtime", "openai-live"].includes(settings().voiceEngine)}>
           <SettingsRow
             title="OpenAI model"
             description="Native speech-to-speech voice with work handled by the current Raya conversation."
           >
-            <span>{OPENAI_VOICE_MODEL}</span>
+            <span>{settings().voiceEngine === "openai-live" ? OPENAI_LIVE_MODEL : OPENAI_VOICE_MODEL}</span>
           </SettingsRow>
           <SettingsRow title="OpenAI voice" description="OpenAI voice name; the initial voice is marin.">
             <TextField
@@ -67,7 +68,7 @@ const SpeechTab: Component = () => {
             description={
               settings().hasOpenAIKey
                 ? "An OpenAI key is stored in VS Code Secret Storage. It is never copied to the CLI speech mirror."
-                : "Add a key with access to the realtime model. Legacy voice and transcription keys are not reused."
+                : "Add a key with access to the selected voice model. Legacy voice and transcription keys are not reused."
             }
           >
             <div class="speech-key-fields">
@@ -235,7 +236,7 @@ const SpeechTab: Component = () => {
             </Button>
           </div>
         </SettingsRow>
-        <Show when={settings().voiceEngine !== "openai-realtime"}>
+        <Show when={!["openai-realtime", "openai-live"].includes(settings().voiceEngine)}>
           <SettingsRow
             title="Test voice output"
             description="Play a short phrase through the configured MiniMax stream."

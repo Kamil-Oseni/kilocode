@@ -1165,7 +1165,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const id = session.currentSessionID()
     if (id) {
       voice.start(id)
-      if (voice.settings().voiceEngine !== "openai-realtime") session.selectAgent("voice", id)
+      if (!["openai-realtime", "openai-live"].includes(voice.settings().voiceEngine)) session.selectAgent("voice", id)
       return
     }
     voicePending.start = true
@@ -1176,12 +1176,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!voicePending.start || !id) return
     voicePending.start = false
     voice.start(id)
-    if (voice.settings().voiceEngine !== "openai-realtime") session.selectAgent("voice", id)
+    if (!["openai-realtime", "openai-live"].includes(voice.settings().voiceEngine)) session.selectAgent("voice", id)
   })
   const voiceActive = () => voice.status() !== "off"
   const voiceLabel = () => {
     if (!voiceActive())
-      return voice.settings().voiceEngine === "openai-realtime" ? "Start voice" : "Start hands-free voice"
+      return ["openai-realtime", "openai-live"].includes(voice.settings().voiceEngine) ? "Start voice" : "Start hands-free voice"
     const transcript = voice.transcript()?.text.trim()
     return transcript ? `End voice — ${transcript}` : `End voice — ${voice.status()}`
   }
@@ -1194,7 +1194,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     speech.cancel() // raya_change - orb ownership includes its background microphone capture
     voice.stop()
     voice.setMode("off")
-    if (voice.settings().voiceEngine !== "openai-realtime") session.selectAgent("auto", sid())
+    if (!["openai-realtime", "openai-live"].includes(voice.settings().voiceEngine)) session.selectAgent("auto", sid())
   }
   // raya_change end
 
@@ -1785,8 +1785,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           </Show>
           <Show
             when={
-              (voice.settings().voiceEngine === "openai-realtime" || canUseSpeech()) &&
-              !(voice.settings().voiceEngine === "openai-realtime" && (voiceActive() || voice.recovery()))
+              (["openai-realtime", "openai-live"].includes(voice.settings().voiceEngine) || canUseSpeech()) &&
+              !(["openai-realtime", "openai-live"].includes(voice.settings().voiceEngine) && (voiceActive() || voice.recovery()))
             }
           >
             {/* raya_change - Milestone H keeps dictation on the mic and hands-free

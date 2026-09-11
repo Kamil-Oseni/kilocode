@@ -4,7 +4,7 @@ import type { ExtensionMessage, WebviewMessage } from "../types/messages"
 type ImageState = {
   requestId: string
   imageID: string
-  status: "pending" | "shared" | "unknown" | "failed"
+  status: "pending" | "shared" | "staged" | "unknown" | "failed"
   error?: string
 }
 

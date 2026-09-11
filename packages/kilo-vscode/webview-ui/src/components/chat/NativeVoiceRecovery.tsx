@@ -9,7 +9,7 @@ export const NativeVoiceRecovery: Component = () => {
   const server = useServer()
   return (
     <>
-      <Show when={voice.settings().voiceEngine === "openai-realtime" && voice.status() === "off" && !voice.recovery()}>
+      <Show when={["openai-realtime", "openai-live"].includes(voice.settings().voiceEngine) && voice.status() === "off" && !voice.recovery()}>
         <div data-slot="native-voice-disclosure">
           <p>Starting voice shares recent saved task context with OpenAI. Unsaved spoken context may be missing.</p>
           <Show when={voice.startBlocked()}>
@@ -17,7 +17,7 @@ export const NativeVoiceRecovery: Component = () => {
           </Show>
         </div>
       </Show>
-      <Show when={voice.settings().voiceEngine === "openai-realtime" && voice.recovery()}>
+      <Show when={["openai-realtime", "openai-live"].includes(voice.settings().voiceEngine) && voice.recovery()}>
         {(recovery) => (
           <div data-slot="native-voice-recovery" role="group" aria-label="Restart voice">
             <p>

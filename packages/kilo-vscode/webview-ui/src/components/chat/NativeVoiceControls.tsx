@@ -7,7 +7,7 @@ export const NativeVoiceControls: Component<{ end: () => void }> = (props) => {
   const voice = useVoice()
   const connected = () => voice.status() === "listening" || voice.status() === "speaking"
   return (
-    <Show when={voice.settings().voiceEngine === "openai-realtime" && voice.status() !== "off" && !voice.recovery()}>
+    <Show when={["openai-realtime", "openai-live"].includes(voice.settings().voiceEngine) && voice.status() !== "off" && !voice.recovery()}>
       <div data-slot="native-voice-controls" role="group" aria-label="Voice controls">
         <span role="status">
           {voice.muted()
@@ -21,9 +21,13 @@ export const NativeVoiceControls: Component<{ end: () => void }> = (props) => {
         <Button variant="ghost" size="small" disabled={!connected()} aria-pressed={voice.muted()} onClick={voice.mute}>
           {voice.muted() ? "Unmute microphone" : "Mute microphone"}
         </Button>
-        <Button variant="ghost" size="small" disabled={voice.status() !== "speaking"} onClick={voice.interrupt}>
+        <Button variant="ghost" size="small" disabled={voice.live() ? !connected() || voice.silenced() : voice.status() !== "speaking"} onClick={voice.interrupt}>
           Stop speaking
         </Button>
+        <Show when={voice.live() && voice.silenced()}>
+          <span role="status">Voice audio muted. Work continues.</span>
+          <Button variant="ghost" size="small" onClick={voice.resume}>Resume voice audio</Button>
+        </Show>
         <Button variant="ghost" size="small" onClick={props.end}>
           End voice
         </Button>

@@ -13,6 +13,7 @@ import { SessionContext } from "../../webview-ui/src/context/session"
 import { ServerContext, useServer } from "../../webview-ui/src/context/server"
 import { NativeProjection } from "../../webview-ui/src/context/native-projection"
 import { OpenAIVoice } from "../../webview-ui/src/context/openai-voice"
+import { LiveVoice } from "../../webview-ui/src/context/live-voice"
 import { VoiceProvider } from "../../webview-ui/src/context/voice"
 import { PromptInput } from "../../webview-ui/src/components/chat/PromptInput"
 import { WelcomeEmptyState } from "../../webview-ui/src/components/chat/WelcomeEmptyState"
@@ -89,6 +90,64 @@ if (new URLSearchParams(location.search).has("native")) {
     return interrupt.call(this)
   }
   OpenAIVoice.prototype.image = function () {
+    return true
+  }
+}
+if (new URLSearchParams(location.search).has("live")) {
+  window.__configureVoice = () =>
+    window.postMessage(
+      {
+        type: "speechSettingsLoaded",
+        settings: {
+          ...DEFAULT_SPEECH_SETTINGS,
+          voiceEngine: "openai-live",
+          hasOpenAIKey: true,
+          hasRealtimeKey: false,
+          hasSttKey: false,
+          hasTtsKey: false,
+        },
+      },
+      "*",
+    )
+  window.__voiceStarts = 0
+  window.__voiceStopped = 0
+  window.__voiceMicrophone = false
+  window.__workStops = 0
+  LiveVoice.prototype.start = async function (input, exchange) {
+    window.__voiceStarts++
+    window.__liveTransport = this
+    this.operation = { id: input.requestID, closed: false, started: false, muted: false, audio: { muted: false } }
+    this.sink.status("connecting")
+    await exchange("v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n")
+  }
+  LiveVoice.prototype.started = function (id) {
+    if (!this.operation || this.operation.id !== id || this.operation.closed) return
+    this.operation.started = true
+    this.sink.status("listening")
+  }
+  LiveVoice.prototype.stop = async function () {
+    window.__voiceStopped++
+    if (this.operation) this.operation.closed = true
+    if (window.__voiceHoldCleanup)
+      await new Promise((resolve, reject) => {
+        window.__releaseVoiceCleanup = resolve
+        window.__failVoiceCleanup = reject
+      })
+    this.operation = undefined
+    this.sink.status("off")
+  }
+  LiveVoice.prototype.finalized = function () {
+    if (window.__releaseVoiceCleanup) window.__releaseVoiceCleanup()
+  }
+  LiveVoice.prototype.mute = function (value) {
+    if (!this.operation || this.operation.closed) return false
+    this.operation.muted = value
+    window.__voiceMicrophone = value
+    return true
+  }
+  LiveVoice.prototype.silence = function (value) {
+    if (!this.operation || this.operation.closed) return false
+    this.operation.audio.muted = value
     return true
   }
 }

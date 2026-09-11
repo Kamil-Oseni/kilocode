@@ -1,4 +1,4 @@
-import { Show, type Component } from "solid-js"
+import { For, Show, type Component } from "solid-js"
 import { useVoice } from "../../context/voice"
 
 export const VoiceTranscript: Component = () => {
@@ -35,7 +35,17 @@ export const VoiceTranscript: Component = () => {
           {voice.status()}
           {voice.aec() ? " · AEC" : ""}
         </span>
-        <Show when={caption()}>
+        <Show when={voice.live() && voice.captions()}>
+          {(value) => <div data-slot="live-transcript">
+            <span>Live captions; generated words do not confirm audio playback.</span>
+            <Show when={value().incomplete || value().limited}><span role="status">Caption coverage is incomplete{value().limited ? "; display limit reached" : ""}.</span></Show>
+            <Show when={value().fragments.length > 64}><span>Showing the latest 64 caption fragments; this is not the full retained history.</span></Show>
+            <For each={value().fragments.slice(-64)}>{(fragment) => <div data-speaker={fragment.speaker}>
+              <strong>{fragment.speaker === "user" ? "You" : "Raya"}: </strong><span>{fragment.text}</span>
+            </div>}</For>
+          </div>}
+        </Show>
+        <Show when={!voice.live() && caption()}>
           <span data-slot="voice-transcript-caption">{caption()}</span>
         </Show>
         <Show when={voice.error()}>

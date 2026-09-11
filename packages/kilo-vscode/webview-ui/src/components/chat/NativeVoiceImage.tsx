@@ -44,13 +44,16 @@ export const NativeVoiceImage: Component = () => {
       <Button variant="ghost" size="small" disabled={blocked()} onClick={() => input?.click()}>
         {loading() ? "Preparing image" : "Choose image for voice"}
       </Button>
+      <Show when={voice.live()}>
+        <p>Images go to Raya work and its vision model, not GPT-Live.</p>
+      </Show>
       <Show when={draft()}>
         {(image) => (
           <>
             <img src={image().data} alt={`Selected image: ${image().name}`} />
             <span>{image().name}</span>
             <p>
-              Sharing sends this image to OpenAI and retains it with voice/work context. End voice does not delete it.
+              {voice.live() ? "Sharing retains this image for Raya work and its vision model; GPT-Live receives no image. End voice does not delete it." : "Sharing sends this image to OpenAI and retains it with voice/work context. End voice does not delete it."}
             </p>
             <Button
               variant="secondary"
@@ -67,6 +70,8 @@ export const NativeVoiceImage: Component = () => {
                     ? "Sharing image"
                     : state().status === "shared"
                       ? "Image shared. Sharing does not start work."
+                      : state().status === "staged"
+                        ? "Image staged for Raya work. Sharing does not start work."
                       : state().status === "unknown"
                         ? "Sharing outcome unknown. This image will not be sent again automatically."
                         : "Image sharing failed. Choose the image again for a new attempt."}{" "}

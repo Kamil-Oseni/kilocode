@@ -24,6 +24,9 @@ import { VoiceEcho } from "./voice-echo" // raya_change - residual spoken-respon
 import { createVoiceRecovery } from "./voice-recovery"
 import { createVoiceUsage } from "./voice-usage"
 import { createVoiceImages } from "./voice-images"
+import { LiveVoice } from "./live-voice"
+import type { LiveContext } from "../../../src/shared/live-context"
+import type { LiveUsage } from "../../../src/shared/live-usage"
 import { OpenAIVoice } from "./openai-voice"
 import { useSession } from "./session"
 
@@ -38,6 +41,11 @@ type VoiceContextValue = {
   usage: ReturnType<typeof createVoiceUsage>["state"]
   image: ReturnType<typeof createVoiceImages>["state"]
   share: (imageID: string, data: string) => void
+  live: Accessor<boolean>
+  captions: Accessor<ReturnType<LiveContext["snapshot"]> | undefined>
+  duration: Accessor<LiveUsage | undefined>
+  silenced: Accessor<boolean>
+  resume: () => void
   muted: Accessor<boolean>
   mute: () => void
   interrupt: () => void
@@ -72,6 +80,9 @@ export const VoiceProvider: ParentComponent = (props) => {
     hasSttKey: false,
     hasTtsKey: false,
   })
+  const [captions, setCaptions] = createSignal<ReturnType<LiveContext["snapshot"]>>()
+  const [duration, setDuration] = createSignal<LiveUsage>()
+  const [silenced, setSilenced] = createSignal(false)
   const [muted, setMuted] = createSignal(false)
   const [playing, setPlaying] = createSignal(false)
   const [status, setStatus] = createSignal<VoiceStatus>("off")
@@ -80,18 +91,20 @@ export const VoiceProvider: ParentComponent = (props) => {
   const [error, setError] = createSignal<string | undefined>()
   const [cascade, setCascade] = createSignal(false)
   const state = { request: "", generation: 0, terminal: false }
-  let call: { id: string; session: string } | undefined
+  let call: { id: string; session: string; engine: "live" | "realtime" } | undefined
   let pending: { id: string; resolve: (sdp: string) => void; reject: (error: Error) => void } | undefined
+  const latest = { mute: "", speak: "" }
+  let transport: OpenAIVoice | LiveVoice
   const recovery = createVoiceRecovery(
     session.currentSessionID,
-    () => native.stop(),
+    () => transport.stop(),
     () => {
       if (!recovery.state()) return
       setError("Microphone or audio cleanup failed. Restart Raya before trying voice again.")
       setStatus("degraded")
     },
   )
-  const legacy = () => settings().voiceEngine !== "openai-realtime" && !call && !recovery.blocked()
+  const legacy = () => !["openai-realtime", "openai-live"].includes(settings().voiceEngine) && !call && !recovery.blocked()
   const echo = new VoiceEcho()
   const player = new StreamPlayer(
     () => {
@@ -158,15 +171,27 @@ export const VoiceProvider: ParentComponent = (props) => {
     error: failOpenAI,
   })
 
+  const live = new LiveVoice({
+    status: (value) => { if (call?.engine === "live") setStatus(value) },
+    captions: (value) => { if (call?.engine === "live") setCaptions(value) },
+    aec: setAec,
+    error: failOpenAI,
+  })
+  transport = native
+
   const images = createVoiceImages({
     current: () => call,
-    register: (id) => native.image(id),
+    register: (id) => call?.engine === "live" || native.image(id),
     post: (message) => vscode.postMessage(message),
   })
 
   function stopOpenAI() {
     images.clear()
     setMuted(false)
+    setSilenced(false)
+    setCaptions(undefined)
+    latest.mute = ""
+    latest.speak = ""
     const current = call
     call = undefined
     if (pending) {
@@ -203,19 +228,25 @@ export const VoiceProvider: ParentComponent = (props) => {
       setStatus("off")
       return
     }
-    const current = { id: crypto.randomUUID(), session: id }
+    const current = { id: crypto.randomUUID(), session: id, engine: settings().voiceEngine === "openai-live" ? "live" as const : "realtime" as const }
+    transport = current.engine === "live" ? live : native
+    setCaptions(undefined)
+    setDuration(undefined)
+    setSilenced(false)
+    latest.mute = ""
+    latest.speak = ""
     call = current
     recovery.bind(current)
     usage.bind(current.id, id)
     state.generation++
-    void native
+    void transport
       .start(
         { sessionID: id, requestID: current.id },
         (sdp) =>
           new Promise<string>((resolve, reject) => {
             if (call !== current) return reject(new Error("Voice connection cancelled."))
             pending = { id: current.id, resolve, reject }
-            vscode.postMessage({ type: "speechOpenAIStart", requestId: current.id, sessionID: id, sdp })
+            vscode.postMessage({ type: "speechOpenAIStart", requestId: current.id, sessionID: id, sdp, engine: current.engine === "live" ? "live" : undefined })
           }),
       )
       .catch((error: unknown) => {
@@ -224,6 +255,28 @@ export const VoiceProvider: ParentComponent = (props) => {
   }
 
   function openaiMessage(message: ExtensionMessage) {
+    if (message.type === "speechLiveStarted") {
+      live.started(message.requestId)
+      return true
+    }
+    if (message.type === "speechLiveUsage") {
+      if ((call?.id === message.requestId || recovery.state()?.id === message.requestId) && session.currentSessionID() === message.sessionID)
+        setDuration(message.usage)
+      return true
+    }
+    if (message.type === "speechLiveControlResult") {
+      if (call?.id !== message.requestId) return true
+      if (message.eventID !== latest.mute && message.eventID !== latest.speak) return true
+      if (message.status === "accepted") {
+        if (message.eventID === latest.mute) latest.mute = ""
+        if (message.eventID === latest.speak) latest.speak = ""
+        return true
+      }
+      if (message.eventID === latest.mute) latest.mute = ""
+      if (message.eventID === latest.speak) latest.speak = ""
+      setError(message.error ?? "Voice control was not confirmed. End voice and reconnect if needed.")
+      return true
+    }
     if (usage.receive(message)) return true
     if (images.receive(message)) return true
     if (message.type === "speechOpenAIReady") {
@@ -245,6 +298,7 @@ export const VoiceProvider: ParentComponent = (props) => {
       return true
     }
     if (message.type !== "speechOpenAIStopped") return false
+    live.finalized(message.requestId)
     recovery.acknowledge(message.requestId)
     return true
   }
@@ -307,9 +361,12 @@ export const VoiceProvider: ParentComponent = (props) => {
       if (message.settings.voiceEngine !== settings().voiceEngine) {
         stop()
         recovery.invalidate()
+        setCaptions(undefined)
+        setDuration(undefined)
+        setSilenced(false)
       }
       setSettings(message.settings)
-      loop.set(message.settings.voiceEngine === "openai-realtime" ? "off" : message.settings.mode)
+      loop.set(["openai-realtime", "openai-live"].includes(message.settings.voiceEngine) ? "off" : message.settings.mode)
       return
     }
     if (!legacy() && (message.type.startsWith("speechRealtime") || message.type.startsWith("speechPlayback"))) {
@@ -377,6 +434,9 @@ export const VoiceProvider: ParentComponent = (props) => {
     if (patch.voiceEngine && patch.voiceEngine !== settings().voiceEngine) {
       stop()
       recovery.invalidate()
+      setCaptions(undefined)
+      setDuration(undefined)
+      setSilenced(false)
     }
     const next = { ...settings(), ...patch }
     setSettings(next)
@@ -419,7 +479,7 @@ export const VoiceProvider: ParentComponent = (props) => {
   }
   const setMode = (mode: VoiceMode) => {
     update(mode === "hands-free" ? { mode, autoSpeak: true } : { mode }) // raya_change - the orb always implies spoken output
-    loop.set(settings().voiceEngine === "openai-realtime" ? "off" : mode)
+    loop.set(["openai-realtime", "openai-live"].includes(settings().voiceEngine) ? "off" : mode)
   }
 
   const start = (sessionID: string) => {
@@ -435,7 +495,7 @@ export const VoiceProvider: ParentComponent = (props) => {
     setError(undefined)
     setStatus("connecting")
     update({ mode: "hands-free", autoSpeak: false })
-    if (settings().voiceEngine === "openai-realtime") {
+    if (["openai-realtime", "openai-live"].includes(settings().voiceEngine)) {
       startOpenAI(sessionID)
       return
     }
@@ -447,12 +507,18 @@ export const VoiceProvider: ParentComponent = (props) => {
     if (call && call.session !== id) {
       stop()
       setTranscript(undefined)
+      setCaptions(undefined)
+      setDuration(undefined)
+      setSilenced(false)
       setError("Voice ended because you changed tasks. Work already started remains in its original conversation.")
       return id
     }
-    if (previous !== undefined && previous !== id && settings().voiceEngine === "openai-realtime") {
+    if (previous !== undefined && previous !== id && ["openai-realtime", "openai-live"].includes(settings().voiceEngine)) {
       setStatus("off")
       setTranscript(undefined)
+      setCaptions(undefined)
+      setDuration(undefined)
+      setSilenced(false)
       setError(undefined)
     }
     return id
@@ -472,14 +538,32 @@ export const VoiceProvider: ParentComponent = (props) => {
         playing,
         image: images.state,
         share: images.share,
+        live: () => settings().voiceEngine === "openai-live",
+        captions,
+        duration,
+        silenced,
+        resume: () => { if (call?.engine === "live" && live.silence(false)) setSilenced(false) },
         muted,
         mute: () => {
           if (!call) return
           const value = !muted()
-          if (native.mute(value)) setMuted(value)
+          if (transport.mute(value)) setMuted(value)
+          if (call.engine === "live") {
+            const eventID = crypto.randomUUID()
+            latest.mute = eventID
+            vscode.postMessage({ type: "speechLiveControl", requestId: call.id, eventID, action: value ? "mute" : "unmute" })
+          }
         },
         interrupt: () => {
           if (!call) return
+          if (call.engine === "live") {
+            live.silence(true)
+            setSilenced(true)
+            const eventID = crypto.randomUUID()
+            latest.speak = eventID
+            vscode.postMessage({ type: "speechLiveControl", requestId: call.id, eventID, action: "stop_speaking" })
+            return
+          }
           const action = native.interrupt()
           if (action) vscode.postMessage({ type: "speechOpenAIInterrupt", requestId: call.id, ...action })
         },

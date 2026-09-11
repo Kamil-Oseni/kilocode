@@ -5,7 +5,16 @@ import "./NativeVoiceUsage.css"
 export const NativeVoiceUsage: Component = () => {
   const voice = useVoice()
   return (
-    <Show when={voice.usage()}>
+    <>
+    <Show when={voice.duration()}>
+      {(value) => <details data-slot="live-voice-usage">
+        <summary>{value().seconds === undefined ? "Live voice duration unavailable" : `Live voice: ${value().seconds!.toFixed(1)} seconds reported`}</summary>
+        <p>Provider voice duration is separate from work-model and tool usage. This is not an invoice total or a spending cap.</p>
+        <p>{value().recorded ? "Duration receipt saved." : "Duration receipt is not confirmed saved."}</p>
+        <Show when={!value().final || value().incomplete}><p role="status">The provider duration record is incomplete. Unreported usage is not zero.</p></Show>
+      </details>}
+    </Show>
+    <Show when={!voice.live() && voice.usage()}>
       {(usage) => (
         <details data-slot="native-voice-usage">
           <summary>
@@ -39,5 +48,6 @@ export const NativeVoiceUsage: Component = () => {
         </details>
       )}
     </Show>
+    </>
   )
 }

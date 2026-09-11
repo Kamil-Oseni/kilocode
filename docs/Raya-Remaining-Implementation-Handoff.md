@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Permission canonical comparison is delivered: committed, pushed and installed as `8b01e72311`. LiveBroker loopback fixtures are committed as `43e7bc7116`. Live duration/delegation SQL store tests pass locally and are unshipped. Next executable step is remaining host races/image bounds, then SDK regeneration and WebRTC/UI fixtures. RDM-01-06 remain unimplemented. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Permission canonical comparison is delivered: committed, pushed and installed as `8b01e72311`. LiveBroker fixtures `43e7bc7116` and Live SQL duration/delegation `c3c7f6ae93` are committed and unshipped. Host image four-attempt/hash-reuse and LiveContext selection tests pass locally. Next: SDK regeneration, then WebRTC/UI fixtures. RDM-01-06 remain unimplemented. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -644,7 +644,7 @@ Continue implementing Raya in C:\Users\User\Desktop\raya. Read AGENTS.md, docs/R
 
 I authorize root plus two subagents, normal periodic commits/pushes to origin/main, and snapshot builds/reinstallation outside the sandbox without asking again. Do not force push, bypass hooks or force reload VS Code. Batch broad testing at coherent checkpoints, but verify relevant contracts before calling features working. If repeated attempts fail, document the exact cause and next approach, move to independent work and revisit.
 
-First inspect current git/process state against the handoff. Preserve uncommitted Live UI/service files. LiveBroker loopback fixtures and Live SQL duration/delegation tests are the latest verified local increments; do not package Live. Next: remaining host image four-attempt/hash-reuse cases, SDK regeneration, then WebRTC/UI fixtures. Keep Raya task ownership, permissions, durable receipts and execution authority. Do not replay historical text as new work or claim generated captions prove heard audio.
+First inspect current git/process state against the handoff. Preserve uncommitted Live UI/service files. LiveBroker loopback fixtures, Live SQL duration/delegation tests, and host image/context tests are the latest verified local increments; do not package Live. Next: SDK regeneration, then WebRTC/UI fixtures. Keep Raya task ownership, permissions, durable receipts and execution authority. Do not replay historical text as new work or claim generated captions prove heard audio.
 
 Defer new Codex-derived implementation until existing Raya work, including GPT-Live and all 39 requirements, is complete. Use the deferred research document later; do not start a new porting track now. Keep the 39-requirement ledger honest. When I warn that credits are near $10, promptly update the full remaining-work handoff, settle the current work and provide an updated continuation prompt.
 ```
@@ -859,7 +859,7 @@ type LiveUsage = { seconds?: number; final: boolean; recorded: boolean; incomple
 
 `ready` delivers SDP after trusted attachment; `started` is a separate matching-provider event callback. Do not merge them into one wait. The broker reserves ownership before loading config and marks potentially admitted remote work uncertain before mutation. It stages images only in Raya storage, polls existing durable work receipts, and never cancels admitted task work merely because voice ends.
 
-**Coordinator API and bounds:** `receive(unknown)` returns ignored/transcript/delegation/invalid/limit; `snapshot()` returns copied fragments plus incomplete/limited; `gap()` invalidates automatic context use; `select(delegationID)` returns a retained immutable selection or undefined. Fragment fields: id, speaker user/assistant, text, start/end timestamp, arrival sequence, optional client command ID. Bounds currently chosen by Raya: 16 KiB per delta, 256 KiB cumulative text, 4096 fragments, 4224 event identities, 128 delegation identities; no eviction that silently forgets duplicate identities. Normalized known-field fingerprints now avoid the original arbitrary-extra-field memory risk, but this correction has no tests.
+**Coordinator API and bounds:** `receive(unknown)` returns ignored/transcript/delegation/invalid/limit; `snapshot()` returns copied fragments plus incomplete/limited; `gap()` invalidates automatic context use; `select(delegationID)` returns a retained immutable selection or undefined. Fragment fields: id, speaker user/assistant, text, start/end timestamp, arrival sequence, optional client command ID. Bounds currently chosen by Raya: 16 KiB per delta, 256 KiB cumulative text, 4096 fragments, 4224 event identities, 128 delegation identities; no eviction that silently forgets duplicate identities. Normalized known-field fingerprints now avoid the original arbitrary-extra-field memory risk. Host unit tests cover duplicate ignore, conflicting identity invalidation, consumed-sequence refusal, client-command exclusion, gap blocking, and non-client target ignore.
 
 Selection uses received fragments whose start is at/before the provider offset, keeps crossing fragments intact, selects at most 32 and 6000 serialized characters, and requires fresh nonempty user evidence without client-command correlation. Already consumed user sequences cannot alone trigger new work. All selection envelopes carry `incomplete: true` because there is no completeness watermark; internal `incomplete` instead means known corruption/gap and blocks selection. Rename or clarify these two meanings if necessary rather than accidentally rejecting all selections or presenting them as complete. Test offset overlap, late fragments, repeated text under different IDs, command echoes, conflicting identity, capacity exhaustion, repeated selection and corruption.
 
@@ -880,14 +880,14 @@ Selection uses received fragments whose start is at/before the provider offset, 
 4. Strengthen completed-work result validation to match existing Realtime broker identity/status checks before commentary. **Partial:** completed results now require text, assistant message identity and evidence; failed status is narrated as a status string. Remaining: stale results after task/owner change and permission waits; still slices successful text to 1000 characters.
 5. Audit append limits: character counts do not prove the provider's token cap. Use a defensible bounded representation or refuse/split according to verified protocol semantics, with tests for long non-ASCII content. Never replay an uncertain append just to obtain an acknowledgement.
 6. Test LiveCommands correlation against exact error shapes, late acknowledgement, duplicate command IDs, conflicting reuse and timeout. **Partial:** reuse, wrong-type ignore, provider error, close-unknown and send-failure are covered. Remaining: late acknowledgement after timeout, 256-command cap, and output silence as a local media fact.
-7. Test image staging: immutable ID/hash, uncertain/failure retention, four-attempt bound, no native image upload, no work from staging alone, correct selected images attached to later work. **Partial:** share before started fails; staging posts only to Raya storage; later delegation includes selected image IDs. Remaining: hash reuse, four-attempt bound, unknown/failure retention and vision permission/model checks.
+7. Test image staging: immutable ID/hash, uncertain/failure retention, four-attempt bound, no native image upload, no work from staging alone, correct selected images attached to later work. **Verified locally:** same-ID retry, hash reuse, four-attempt cap, invalid bytes never POSTed, mismatched receipt retained as unknown. Remaining: vision permission/model checks.
 8. Test delegation queue and steering while work is busy. Current queue waits behind polling; selection occurs when dequeued using the provider offset. Define whether newer user corrections revise queued work or require clarification, and fence stale results. Do not claim seamless concurrent steering from serialized happy-path execution.
 9. Test conflicting duplicate session.closed events. **Partial:** a later different event ID marks host usage incomplete and does not POST a second duration. Remaining: same-event retry vs conflict, backend immutability under a changed receipt, and UI presentation of incomplete settlement.
 10. Add actual backend runtime/DB/API tests for model mismatch, invalid/duplicate context, replay cursor, immutable receipts, deletion cascades, late writes and permission boundaries. **Partial:** service-layer SQL tests cover duration immutability after close, Realtime model mismatch, consumed-sequence refusal and liveCursor advance. Remaining: parent-deletion/late-write duration, HTTP contract tests, SDK regeneration, Realtime/retention re-run after SDK, and WebRTC/UI acceptance.
 
 **Validation receipts at freeze:** historical; superseded for broker fixtures by `.tmp/live-broker-tests.log`. WebRTC/UI/backend SQL tests still absent. Do not package Live. Permission remains the last installed product; see section 3.
 
-**Next executable step:** Live duration/delegation SQL tests pass 4/27 assertions (`.tmp/voice-live-store-tests.log`). Next: remaining host image four-attempt/hash-reuse cases, SDK regeneration, then WebRTC/UI fixtures. Do not change the default engine or package Live.
+**Next executable step:** Live image identity/four-attempt/unknown-receipt and LiveContext selection tests pass (`.tmp/live-image-context-tests.log`). Next: SDK regeneration for Live duration/delegation HTTP endpoints, then WebRTC/UI fixtures. Do not change the default engine or package Live.
 
 ### Local backup and final stop receipt
 
@@ -1027,3 +1027,17 @@ Commands (`packages/opencode`): `bun test ./test/kilocode/voice-live.test.ts --t
 Remaining: parent-deletion/late-write duration cases, HTTP/SDK regeneration, WebRTC/UI fixtures, and RDM-01-06. Do not snapshot:install.
 
 Next executable step: remaining Live host image four-attempt/hash-reuse cases and SDK regeneration. Do not change the default engine or package Live.
+
+## 2026-09-11: Live image bounds and context selection
+
+**States:** host image identity/four-attempt/unknown-receipt and LiveContext selection verified locally; Live remains unshipped. Product checkpoint remains `8b01e72311`.
+
+Same image ID with the same bytes is idempotent; a different payload reusing that ID is refused. Four staging attempts are retained; a fifth is refused. Invalid image URLs never POST. A mismatched storage receipt is retained as unknown and does not emit thinking or dispatch work. LiveContext selects fresh user evidence once, ignores client-correlated fragments, blocks selection after a gap, and treats conflicting delegation offsets as invalid.
+
+Changed files: `packages/kilo-vscode/tests/unit/live-broker.test.ts`, `packages/kilo-vscode/tests/unit/live-context.test.ts`.
+
+Commands (`packages/kilo-vscode`): `bun test tests/unit/live-broker.test.ts tests/unit/live-context.test.ts tests/unit/live-commands.test.ts --timeout 30000` -> 14 pass / 0 fail / 309 assertions / exit 0 (`.tmp/live-image-context-tests.log`). `bun run check-types` -> exit 0 (`.tmp/live-image-host-types.log`). Root oxlint: 23 warnings / 0 errors / exit 0 (`.tmp/live-image-context-lint.log`).
+
+Remaining: SDK regeneration, WebRTC/UI fixtures, service/message routing, and RDM-01-06. Do not snapshot:install.
+
+Next executable step: regenerate the SDK for Live duration/delegation HTTP endpoints. Do not change the default engine or package Live.

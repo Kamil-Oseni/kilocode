@@ -93,7 +93,7 @@ function fixture(startup = 12_000) {
           id: body.id,
           mime: body.mime,
           bytes: bytes.length,
-          sha256: createHash("sha256").update(bytes).digest("hex"),
+          sha256: state.mode === "image-receipt" ? "wrong" : createHash("sha256").update(bytes).digest("hex"),
         })
       }
       if (url.pathname.includes("/calls")) {
@@ -379,6 +379,68 @@ test("a later conflicting session.closed does not post a second duration", async
     await until(() => f.state.usage.some((item) => item.recorded && item.incomplete))
     expect(f.state.requests.filter((item) => item.path.endsWith("/duration"))).toHaveLength(1)
     await until(() => !f.broker.active)
+  } finally {
+    await f.close()
+  }
+})
+
+test("image identity cannot change and four attempts are retained without dispatching work", async () => {
+  const png = "data:image/png;base64,aaaa"
+  const other = "data:image/png;base64,bbbb"
+  const f = fixture()
+  try {
+    await f.start()
+    f.send(started())
+    await until(() => f.state.started === 1)
+    const first = f.broker.share(input.requestID, "img_1", png)
+    await until(() => f.state.requests.some((item) => item.path.endsWith("/images")))
+    expect(await first).toEqual({ status: "staged" })
+    expect(await f.broker.share(input.requestID, "img_1", png)).toEqual({ status: "staged" })
+    expect(f.state.requests.filter((item) => item.path.endsWith("/images"))).toHaveLength(1)
+    expect(await f.broker.share(input.requestID, "img_1", other)).toEqual({
+      status: "failed",
+      error: "Image identity was reused.",
+    })
+    expect(f.state.requests.filter((item) => item.path.endsWith("/images"))).toHaveLength(1)
+    expect(f.state.requests.some((item) => item.path.includes("/calls"))).toBe(false)
+    for (const id of ["img_2", "img_3", "img_4"]) {
+      const share = f.broker.share(input.requestID, id, png)
+      await until(
+        () => f.state.requests.filter((item) => item.path.endsWith("/images") && item.body.id === id).length === 1,
+      )
+      expect(await share).toEqual({ status: "staged" })
+    }
+    expect(await f.broker.share(input.requestID, "img_5", png)).toEqual({
+      status: "failed",
+      error: "This call already has four image attempts. Start a fresh call to select more.",
+    })
+    expect(f.state.requests.filter((item) => item.path.endsWith("/images"))).toHaveLength(4)
+  } finally {
+    await f.close()
+  }
+})
+
+test("a mismatched Live image receipt is retained as unknown and invalid bytes never reach storage", async () => {
+  const f = fixture()
+  try {
+    await f.start()
+    f.send(started())
+    await until(() => f.state.started === 1)
+    for (const data of [
+      "https://invalid.test/image.png",
+      "data:image/svg+xml;base64,PHN2Zz4=",
+      "data:image/png;base64,YQ==",
+    ])
+      expect((await f.broker.share(input.requestID, "bad_1", data)).status).toBe("failed")
+    expect(f.state.requests.some((item) => item.path.endsWith("/images"))).toBe(false)
+    f.state.mode = "image-receipt"
+    expect((await f.broker.share(input.requestID, "img_1", "data:image/png;base64,aaaa")).status).toBe("unknown")
+    expect(await f.broker.share(input.requestID, "img_1", "data:image/png;base64,aaaa")).toMatchObject({
+      status: "unknown",
+    })
+    expect(f.state.requests.filter((item) => item.path.endsWith("/images"))).toHaveLength(1)
+    expect(f.state.requests.some((item) => item.path.includes("/calls"))).toBe(false)
+    expect(f.state.events.some((event) => event.type === "session.thinking.append")).toBe(false)
   } finally {
     await f.close()
   }

@@ -4,7 +4,7 @@ Source of scope: [Comprehensive audit](Raya-Comprehensive-Audit.md). All section
 
 ## Current work
 
-Latest verified installed product checkpoint: 8b01e72311, pushed to origin/main. Pending-approval policy snapshot is the last installed product. LiveBroker loopback fixtures are verified locally and unshipped. Live voice/device acceptance, separate Go companion rebuild and post-reload workflows remain open.
+Latest verified installed product checkpoint: 8b01e72311, pushed to origin/main. Pending-approval policy snapshot is the last installed product. LiveBroker, Live SQL duration/delegation, and host image/context tests are verified locally and unshipped. Live voice/device acceptance, separate Go companion rebuild and post-reload workflows remain open.
 
 Current checkpoint delivers parent-linked native voice retention, strict legacy-file cleanup, and update-only persistence that cannot recreate deleted bindings. Recorded local checks, push hooks and snapshot installation passed. Durable spoken snapshots, warm handoff, live device/provider acceptance and the full 39-requirement audit remain open.
 
@@ -2353,3 +2353,15 @@ Changed files: packages/opencode/src/kilocode/voice/openai.ts, packages/opencode
 Commands (packages/opencode): bun test ./test/kilocode/voice-live.test.ts --timeout 30000 -> 4 pass / 0 fail / 27 assertions / exit 0 (.tmp/voice-live-store-tests.log). bun test ./test/kilocode/voice-openai.test.ts --timeout 30000 -> 17 pass / 131 assertions / exit 0 (.tmp/voice-openai-regression.log). bun run typecheck -> exit 0 (.tmp/voice-live-store-types.log). Root oxlint: 0 errors (.tmp/voice-live-store-lint.log).
 
 Do not snapshot:install. Next: remaining Live host image bounds, SDK regeneration, then WebRTC/UI fixtures.
+
+## 2026-09-11: Live image bounds and context selection (OVR-01)
+
+Status: verified locally, unshipped. Installed product is still 8b01e72311.
+
+Live image IDs cannot change content, four staging attempts are retained, invalid bytes never reach storage, and a mismatched receipt stays unknown without dispatching work. LiveContext selects fresh user evidence once, ignores command echoes, blocks selection after a gap, and rejects conflicting delegation offsets.
+
+Changed files: packages/kilo-vscode/tests/unit/live-broker.test.ts, packages/kilo-vscode/tests/unit/live-context.test.ts.
+
+Commands (packages/kilo-vscode): bun test tests/unit/live-broker.test.ts tests/unit/live-context.test.ts tests/unit/live-commands.test.ts --timeout 30000 -> 14 pass / 0 fail / 309 assertions / exit 0 (.tmp/live-image-context-tests.log). bun run check-types -> exit 0 (.tmp/live-image-host-types.log). Root oxlint: 23 warnings / 0 errors / exit 0 (.tmp/live-image-context-lint.log).
+
+Do not snapshot:install. Next: SDK regeneration, then WebRTC/UI fixtures.

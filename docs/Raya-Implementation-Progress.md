@@ -4,7 +4,7 @@ Source of scope: [Comprehensive audit](Raya-Comprehensive-Audit.md). All section
 
 ## Current work
 
-Latest verified installed product checkpoint: 932b20497e, pushed to origin/main. Parent-linked native voice retention and task deletion passed recorded checks and the production snapshot workflow. Installed version: 7.4.23-snapshot+932b20497e.kamil-oseni.1789017037691. Live voice/device acceptance, separate Go companion rebuild and post-reload workflows remain open.
+Latest verified installed product checkpoint: e74508a063, pushed to origin/main. Diagnostic transport and support-contract delivery remain the last installed product. Permission canonical comparison is verified locally and not yet installed. Live voice/device acceptance, separate Go companion rebuild and post-reload workflows remain open.
 
 Current checkpoint delivers parent-linked native voice retention, strict legacy-file cleanup, and update-only persistence that cannot recreate deleted bindings. Recorded local checks, push hooks and snapshot installation passed. Durable spoken snapshots, warm handoff, live device/provider acceptance and the full 39-requirement audit remain open.
 
@@ -15,7 +15,7 @@ Current checkpoint delivers parent-linked native voice retention, strict legacy-
 | PR-01 — Establish an outcome-led default experience | In progress | Outcome-focused Welcome and secondary configuration disclosure use the real mode/model/reasoning selectors. Six Chromium theme/width cases and 163 prompt regressions pass, including scoped shortcuts, rapid-picker focus, and failed-send text/file recovery. Screenshots inspected; remaining surface redesign, forced-color icon contrast and moderated first-success acceptance remain open. |
 | PR-02 — Make completion an inspectable agreement | In progress | Existing editable criteria, retained evidence and human review are now presented as separate guarantees. Optional exact-command bindings require the saved command, explicit normalized directory and successful eligible evidence. Backend contract tests and package types pass; combined result/editor views and broader semantic acceptance remain open. |
 | PR-03 — Make routine scheduling explicit before activation | In progress | Structured creation/editing, absolute date controls, explicit timezone, backend occurrence preview and version-checked confirmation implemented. Real view DOM interactions verified; migration review and full live UI verification remain open. |
-| PR-04 — Define a routine's authority in capabilities, not its persona | In progress | Brief routines now deny unlisted permission categories; saved tool wildcards cannot enable shell, browser actions or delegation. Creation/access review explains broad full access and the lack of OS confinement. Targeted policy, scheduler and rendered view tests pass. Per-path/service grants, trusted-plugin confinement and full dispatch acceptance remain open. |
+| PR-04 — Define a routine's authority in capabilities, not its persona | In progress | Brief routines now deny unlisted permission categories; saved tool wildcards cannot enable shell, browser actions or delegation. Creation/access review explains broad full access and the lack of OS confinement. Targeted policy, scheduler and rendered view tests pass. Pending approvals now refuse after unrelated restrictive policy changes; explicit saved allow/deny rules remain valid (verified locally, not installed). Per-path/service grants, trusted-plugin confinement and full dispatch acceptance remain open. |
 | PR-05 — Make spending understandable and bounded where needed | In progress | Provenance-aware model cost views are installed; exact-window/project usage summary copy and retry controls are implemented with focused tests. Cross-child budget reservations, overrides and full billing coverage remain open. |
 | PR-06 — Publish a supported-client and feature matrix | In progress | Source-backed client/platform/feature matrix and README entry point added. Company support ownership, non-Windows rollout and full client acceptance remain open. |
 | EN-01 — Gate destructive session migration on an explicit upgrade policy | In progress | Transactional recovery archive and CLI export verified; deployed-version lineage and rollout policy remain open. |
@@ -2273,3 +2273,47 @@ See [Remaining implementation handoff](Raya-Remaining-Implementation-Handoff.md)
 ### Diagnostic transport and support contract checkpoint preparation
 
 EN-13: extension telemetry now clears disconnected endpoints, cancels pending requests, bounds capture concurrency, applies a deadline, refuses redirects and uses content-free errors. Actual HTTP boundary and utility tests: 13 pass, 25 assertions; host/webview typecheck and extension lint terminal 0. Awaited transport settlement fixes the earlier Bun test teardown spin. Receiver consent ordering and final outbound acceptance remain open. Recorder binary-secret tests: 37 pass, 185 assertions; recorder types pass. PR-06: executable support contract and pinned release-note generation; 7 tests, 26 assertions, support/annotation guards pass. Independent integration review found no blocking issues. Source remains pending checkpoint delivery; see handoff for full remaining scope.
+
+
+### Delivered diagnostic/support checkpoint e74508a063
+
+Committed and pushed e74508a063d50d9f64e5b1d70e68357b58cafabf to origin/main. Normal push checks: 29 cross-package tasks and JetBrains pass. Snapshot production SDK check reported no drift; CLI version/models/sandbox worker smoke checks, extension validation, packaging and installation pass. Installed eden.raya@7.4.23-snapshot+e74508a063.kamil-oseni.1789086796122. VSIX SHA-256 D78CFCBBB30E8026A2CA95A699355F55B4AF5F22512DF0D60205182B41E8AEB2; 516590133 bytes, 427 entries, CLI 228474880 bytes. Independent archive and installed-identity checks pass; no forced reload. Logs: .tmp/diagnostics-support-{push,snapshot-install,snapshot-verification,installed-extension}.log. All delivery handles terminal 0. Full 39-requirement implementation remains ongoing.
+
+
+### User-requested credit stop / next-agent handoff
+
+User requested wrap-up at approximately $30 remaining and continuation by another agent. Last pushed/installed checkpoint remains e74508a063. New local permission and GPT-Live work is NOT ready to ship: permission isolated suite still has one legitimate saved-allow regression (7 pass/1 fail); Live has only a webview typecheck pass and no runtime/SDK validation. Both workers frozen; no owned live handles. Read the Stopped-work runbook and frozen host/backend contracts in Raya-Remaining-Implementation-Handoff.md before continuing. Next agent must update handoff/progress per coherent change with exact files, tests, failures, commit/push/install evidence and next steps for next-week review. Implementation stopped by user; goal status is not marked complete or blocked.
+
+
+## 2026-09-10: Codex research only; implementation priority unchanged
+
+Saved [deferred Codex research](Raya-Codex-Research-Deferred.md): 18 source-grounded agent/runtime, browser/computer-use and UI/UX candidates, with current Raya comparisons, implementation recipes and acceptance criteria. These are future candidates, not additions to the current goal. The next agent must finish the existing 39 requirements and GPT-Live voice first, following the remaining-implementation handoff. Continue updating the handoff and this log after every coherent implementation step with exact files, commits, commands, outcomes, limitations and next action. No product implementation, builds, installs or pushes were performed for this research. The frozen WIP remains unverified as previously recorded.
+
+
+## 2026-09-10: Routines clarified as persistent agent DMs
+
+**Status: implementation requirement recorded; no product code changed or acceptance claimed.** The user wants a dedicated routines messenger, using the attached dark two-pane worker-inbox image as interaction reference and Raya's own visual direction. This expands current OVR-05 and related scheduling/authority/UX requirements, not the deferred Codex backlog. Finish it with the existing audit and GPT-Live work before new Codex-derived additions.
+
+Implementation work for the next agent:
+
+1. Build a searchable worker conversation list with avatars, previews, unread/attention state and a persistent conversation pane. Put scheduled reports, user follow-ups, artifacts and clear run/delegation states in that pane. Preserve per-conversation drafts, scroll and read position, including narrow-layout and accessible keyboard behavior.
+2. Separate stable worker/conversation identity from schedule, occurrence and execution session. Reuse existing runtime/session infrastructure and durable ownership. Publish reports idempotently into the same conversation across recurring runs and restarts. Hide explicitly routine-owned execution sessions from default regular-chat history while retaining inspectable history; never guess ownership from titles or delete old sessions.
+3. Make the accounting-every-Friday journey work end to end: report arrives in the accounting worker DM, the user asks about that report there, and the following report arrives in the same place. Preserve evidence and report context. Define queued/busy behavior and distinguish one-off questions from permanent schedule/instruction changes.
+4. Support authorized worker-to-worker requests and correlated responses, including a Chief of Staff obtaining Accounting input and returning a sourced summary. Use durable queues, exact parent/request/recipient identities, bounded delegation, policy intersection, company isolation, cancellation and attributable costs. A worker's persona is not a grant of authority. A visual delegation card without real execution does not satisfy this requirement.
+5. Migrate existing routines additively, preserving schedules, permissions, outputs and history. Add backend contracts and regenerate SDK as needed, then integrate existing output/access review and notification links into the DM flow. Do not build a second chat or orchestration engine.
+6. Verify scheduler-to-report-to-follow-up, history separation, restart/replay, busy workers, actual cross-worker responses, permission denial, cancellation and UI accessibility. Record real persistence/API/UI evidence; screenshots alone are insufficient.
+
+The full implementation sequence, contract requirements and returning-reviewer checklist are in [the handoff's Routines direction section](Raya-Remaining-Implementation-Handoff.md#routines-direction-agent-dm-inbox-and-company-delegation), RDM-01 through RDM-06. Maintain those subcriteria under the existing 39 parent IDs. Update BOTH documents after every coherent implementation step with files/commits, exact checks and exits, artifacts, limitations, delivery state and next action. The long-term intent is company-operating agents that collaborate; the required first working scope is assignment, scheduled report, in-place follow-up and tracked cross-worker delegation.
+
+
+## 2026-09-11: Pending-approval policy snapshot (PR-04)
+
+Status: verified locally; not committed, pushed or installed in this paragraph. Live WIP remains unshipped.
+
+A pending bash approval is now snapped against permission/agent/tools/sandbox authority. Unrelated deny after the prompt, during reply publication, through saveAlwaysRules, or through allowEverything cannot dispatch the retained continuation. Saving echo* allow still releases that request once, because scalar ask and the merged object form are compared as canonical [permission, pattern, action] tuples rather than JSON property order.
+
+Changed files: packages/opencode/src/kilocode/permission/policy.ts, packages/opencode/src/permission/index.ts, packages/opencode/src/kilocode/permission/drain.ts, packages/opencode/test/kilocode/permission-policy.test.ts, .changeset/raya-pending-permission-policy.md.
+
+Commands (packages/opencode unless noted): bun test ./test/kilocode/permission-policy.test.ts --timeout 30000 -> 12 pass / 0 fail / 37 assertions / exit 0 (.tmp/permission-policy-isolated.log). bun test ./test/kilocode/permission/next.always-rules.test.ts --timeout 30000 -> 22 pass / 0 fail / 35 assertions / exit 0 (.tmp/permission-always-rules.log). bun test ./test/kilocode/server/permission-allow-everything.test.ts --timeout 30000 -> 3 pass / 15 assertions / exit 0 (.tmp/permission-allow-everything.log). bun run typecheck -> exit 0 (.tmp/permission-policy-types.log). Root bun run lint on those four files: 15 warnings / 0 errors / exit 0 (.tmp/permission-policy-lint.log). bun run script/check-opencode-annotations.ts --worktree and bun run script/check-opencode-promise-facades.ts both exit 0.
+
+No live handles. Next executable step: commit and push this permission slice, stash Live/telemetry files, run snapshot:install, restore WIP, then continue GPT-Live contract tests. Do not mark PR-04 or the 39-item goal complete.

@@ -26,10 +26,12 @@ export function drainCovered(
   approved: Permission.Ruleset,
   publishReply: PublishReply,
   exclude?: string,
+  current: (entry: PendingEntry) => Effect.Effect<boolean> = () => Effect.succeed(true),
 ): Effect.Effect<void> {
   return Effect.gen(function* () {
     for (const [id, entry] of pending) {
       if (id === exclude) continue
+      if (!(yield* current(entry))) continue
       // Never auto-resolve config file edit permissions
       const skill = ConfigProtection.globalSkillPattern(entry.info)
       if (ConfigProtection.isRequest(entry.info) && !skill) continue
@@ -56,7 +58,7 @@ export function drainCovered(
         yield* Deferred.fail(entry.deferred, new Permission.RejectedError())
       } else {
         yield* publishReply({ sessionID: entry.info.sessionID, requestID: entry.info.id, reply: "always" })
-        yield* Deferred.succeed(entry.deferred, undefined)
+        if (yield* current(entry)) yield* Deferred.succeed(entry.deferred, undefined)
       }
     }
   })

@@ -1,6 +1,14 @@
 # Raya remaining implementation and agent handoff
 
-Updated 2026-09-10. This is a continuation guide, not a completion certificate.
+> **CURRENT STATUS (2026-09-11):** The pending-approval policy regression is verified locally and is the next product checkpoint. Last pushed/installed product remains `e74508a063` until this permission slice is committed, pushed and installed with Live WIP isolated. GPT-Live and RDM-01-06 remain unfinished. Codex-derived work stays deferred.
+
+> **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
+
+> **LATEST PRIORITY:** Continue the already-started Raya work, including GPT-Live 1, and finish the existing 39-requirement scope before taking on new Codex-derived additions. See [Codex research and deferred backlog](Raya-Codex-Research-Deferred.md). The permission canonical-comparison fix is verified locally; deliver that checkpoint without packaging Live. Keep updating this handoff and the progress ledger during implementation.
+
+Updated 2026-09-11. This is a continuation guide, not a completion certificate.
+
+**Latest delivered product:** checkpoint `e74508a063d50d9f64e5b1d70e68357b58cafabf` is committed, pushed and installed. Permission-policy work below is verified locally and not yet shipped. Earlier checkpoint/dirty-batch descriptions are historical context; use the latest dated update for current work.
 
 ## Scope and reading order
 
@@ -608,7 +616,7 @@ The inspected [app-server source documentation](https://github.com/openai/codex/
 2. **Worker ownership (EN-02, OVR-03, OVR-06).** Inspect Codex's implementation behind the documented internal-worker lifecycle, then compare Raya goal/routine/delegation ownership. Add owner-controlled shutdown and durable fencing where missing. Test concurrent stop/archive/delete against active children and restart recovery; avoid introducing a second competing orchestration runtime.
 3. **Artifact associations (EN-04, EN-06, OVR-08).** Adapt the identity and lifecycle pattern to task artifacts: canonical identity, idempotent association, bounded pagination, explicit association removal distinct from deleting an underlying file, and parent-deletion exclusion. First inventory existing Raya artifact tables and receipts so this extends their contracts. Test duplicate creation, absent removal, queued mutation during parent deletion and UI event ordering.
 4. **Typed recovery (UX-03, EN-07).** Inventory errors crossing CLI/SDK/host/webview boundaries. Introduce a closed error classification where clients currently inspect message text; preserve private diagnostic detail only in the appropriate local diagnostic channel. Regenerate SDK for public contract changes and verify each recovery action against actual state.
-5. **Broader source inspection, still pending.** Pin and inspect actual Codex core execution, app-server protocol generation, sandbox/approval boundaries, tool dispatch, compaction/resume, rollout persistence, skills discovery and eval/test infrastructure. For each candidate record exact source commit/path, Raya counterpart, measured gap, proposed change, license obligations and an acceptance test. Do not infer private Codex desktop or hosted architecture from public CLI sources. Prioritize durable lifecycle and permission correctness over importing a second agent framework.
+5. **Broader source inspection, still pending.** Pin and inspect actual Codex core execution, app-server protocol generation, sandbox/approval boundaries, tool dispatch, compaction/resume, rollout persistence, skills discovery and eval/test infrastructure. For each candidate record exact source commit/path, Raya counterpart, measured gap, proposed change, license obligations and an acceptance test. Public CLI/app-server source proves those components only; documented desktop/browser behavior can guide Raya UX, but do not claim its uninspected implementation is open source or identical to the CLI. See the deferred research document for the evidence boundary. Prioritize durable lifecycle and permission correctness over importing a second agent framework.
 
 ## Verification and delivery instructions
 
@@ -638,7 +646,7 @@ I authorize root plus two subagents, normal periodic commits/pushes to origin/ma
 
 First inspect current git/process state against the handoff. Finish the pending telemetry transport fixture and recorder/support-contract batch, then deliver a verified checkpoint. Prioritize the requested GPT-Live 1 migration using current official OpenAI docs and the actual client-delegation contract; it is not a Realtime model-name replacement. Keep Raya task ownership, permissions, durable receipts and execution authority. Do not replay historical text as new work or claim generated captions prove heard audio.
 
-Continue the source-backed Codex architecture adaptation review recorded in the handoff. Pin source commits and map candidate patterns to existing Raya code before porting; preserve licensing and avoid importing a competing runtime. Keep the 39-requirement ledger honest. When I warn that credits are near $10, promptly update the full remaining-work handoff, settle the current work and provide an updated continuation prompt.
+Defer new Codex-derived implementation until existing Raya work, including GPT-Live and all 39 requirements, is complete. Use the deferred research document later; do not start a new porting track now. Keep the 39-requirement ledger honest. When I warn that credits are near $10, promptly update the full remaining-work handoff, settle the current work and provide an updated continuation prompt.
 ```
 
 ## Latest continuation update
@@ -679,3 +687,311 @@ Raya's `packages/opencode/src/permission/index.ts` captures rulesets for pending
 Acceptance: unchanged-policy approval succeeds; hard deny or permission revocation while waiting prevents dispatch; cancelled requests ignore late replies; no authority expands through policy churn. Exercise actual permission service and tool dispatch with a Kilo-owned regression. This is a race candidate needing reproduction, not a demonstrated exploit.
 
 Existing Raya TaskWorker exact-message cancellation, owner fencing, deferred cleanup and native voice parent-linked SQL already address much of the lifecycle overlap; do not replace them with a duplicate worker framework. Review source copying against pinned [LICENSE](https://github.com/openai/codex/blob/9e22e74e8dcab53f8bf1799c0eed1f9834c32f1a/LICENSE) and [NOTICE](https://github.com/openai/codex/blob/9e22e74e8dcab53f8bf1799c0eed1f9834c32f1a/NOTICE). Preserve applicable Apache-2.0 attribution/modification notices and any relevant third-party notices; prefer independent implementations of patterns.
+
+## Latest delivered state and next active work
+
+Checkpoint `e74508a063d50d9f64e5b1d70e68357b58cafabf` is pushed to origin/main and installed as `eden.raya@7.4.23-snapshot+e74508a063.kamil-oseni.1789086796122`. Artifact: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-e74508a063-kamil-oseni-1789086796122.vsix`. SHA-256 `D78CFCBBB30E8026A2CA95A699355F55B4AF5F22512DF0D60205182B41E8AEB2`; 516590133 bytes, 427 entries, CLI 228474880 bytes. Push checks passed 29 cross-package tasks plus JetBrains. SDK output did not drift. Production CLI smoke checks, extension checks, packaging/install and independent archive/installed-identity verification all passed. Handles 40716 and 9862 are terminal 0. No forced reload.
+
+The recorder/support/telemetry batch above is delivered. Root is cleaning two return-style lint warnings in telemetry methods without changing transport behavior; this follow-up is not yet part of the installed checkpoint. Root owns this handoff/progress and forthcoming Live host integration.
+
+**Confirmed next correctness fix:** an ignored actual-service harness reproduced the approval-policy race in both default Config.updateGlobal and dispose:false: fresh policy is deny, fresh asks reject, but approving the old pending request releases its protected continuation. Corrected reproduction: 2 expected failures, 8 assertions, exit 1, `.tmp/permission-policy-probe-assembled.log`. Initial harness failure was missing Config export and is not evidence. Worker repair_review now owns a narrow permission policy helper/index hook and real regression. Preserve legitimate always approval, including its own policy writes; final checks must cover all release paths and policy changes during reply publication. No generic worker-runtime replacement.
+
+**Live next slice:** implement the actual host adapter/backend admission alongside the shared context coordinator and webview transport. Exact provider transcript fields are event_id, delta, integer start_ms/end_ms and optional client_event_id; preserve arrival order and opaque IDs, including zero-length timestamp intervals. Deduplicate identical event payloads, fail closed for conflicting identity, retain application-command provenance, and do not infer transcript completeness or playback. Worker history_recovery supplied the contract; agree file ownership before implementation. Source: [sideband reference](https://developers.openai.com/api/reference/resources/live/sideband-websocket). No Live adapter implementation is delivered yet.
+
+For continuation, replace the prompt's old instruction to finish the telemetry fixture with: inspect the latest state, finish the active approval-policy fix and telemetry warning cleanup, then prioritize the production-integrated GPT-Live migration. Preserve the full 39-requirement scope and standing push/install authorization.
+
+## Stopped-work runbook for the next agent
+
+### 1. Establish the exact baseline before editing
+
+The user requested this stop at approximately $30 credit balance. The next agent may continue under the standing implementation/push/install authorization in a separate run. The returning primary agent will review this work next week after quota reset. Do not interpret this handoff as permission to mark the 39-item goal complete.
+
+1. Work only in `C:\Users\User\Desktop\raya`. Read root/touched-package AGENTS.md and the comprehensive audit. Inspect `git status --short`, `git diff --stat`, and the exact files below before changing anything. The clean delivered baseline was `e74508a063d50d9f64e5b1d70e68357b58cafabf`; the installed extension still corresponds to that checkpoint. Do not mistake the current working tree for the installed build.
+2. Preserve all local edits. They include both useful implementation and known failing work. Do not reset/clean the tree or reinstall this WIP. Separate the approval fix from Live integration for review and checkpointing; shared backend files changed by the Live worker may be in CLI typecheck scope even when validating permission work.
+3. Read the newest stop notes before the historical sections. All prior 39 requirement recipes remain applicable. Existing tests and earlier installed checkpoints prove only their documented slices, not the new Live path.
+4. Verify tool/process state afresh; tool session IDs belong to the previous run and may not be resumable. No paid GPT-Live call, acoustic acceptance or microphone-device acceptance has been performed. Do not infer provider account access from documentation availability.
+
+### 2. Current root-owned WIP and exact next steps
+
+**Telemetry warning cleanup:** `src/services/telemetry/telemetry-proxy.ts` now makes instance capture/setEnabled async and awaits the already failure-contained transport, eliminating mixed return styles. Its 13 targeted boundary/utility tests pass (`.tmp/telemetry-return-style-tests.log`, terminal 0). This small follow-up is local, not in the installed checkpoint. Run scoped lint/typecheck once alongside the next package validation; preserve optional caller settlement.
+
+**Live media transport:** `packages/kilo-vscode/webview-ui/src/context/live-voice.ts` is newly written and has no runtime test yet. It uses actual RTCPeerConnection/media APIs, an independent shared LiveContext for display, disabled microphone until host startup, and no client data-channel command writes. `start` negotiates SDP; `started(requestID)` acknowledges trusted startup; `mute` gates capture; `silence` controls local output; `stop` silences immediately and waits for host finalization or a 12-second cleanup timeout; `finalized(requestID)` releases media after the host settles final usage.
+
+Implement/verify this in order:
+
+1. Build a real local Chromium WebRTC peer fixture patterned on `tests/fixtures/openai-voice.mjs` and its Bun wrapper `tests/unit/openai-voice.test.ts`. Use synthetic audio only for device-independent testing; retain real peer negotiation and data channels. Exercise the production LiveVoice class, not copied test logic. No Live fixture has been added yet.
+2. Prove microphone tracks stay disabled before BOTH host `session.started` and local answer/peer/channel readiness. Audit `mute(false)`: its current condition checks started/answer but should also respect local connected readiness. Test host-start before SDP, after SDP, after disconnect and for an old request ID. Consider a single readiness predicate used by connected/mute rather than inconsistent checks.
+3. Prove closure during microphone acquisition, SDP exchange and connection setup stops late tracks and never resurrects the call. Check failed getUserMedia, failed peer setup, timer expiry, channel close/error and output play rejection. `fail` currently delegates cleanup through sink.error to VoiceProvider; verify that contract is always honored and errors cannot repeat indefinitely before closure. Do not leave a bare transport owning resources after a caller failure.
+4. Exercise `stop`/`finalized` ordering, repeated stop, wrong-request finalization, media cleanup exceptions and the timeout path. Local audio must silence immediately; host must retain sideband long enough to record session.closed duration. A timeout must leave host cleanup uncertain and block restart through existing recovery ownership. Confirm late host usage is still displayed for the stopped task, without leaking to another task.
+5. Test malformed/oversized packets, duplicate/conflicting transcript IDs, interleaving input/output, truncated display and missing coverage. The UI currently renders only the latest 64 fragments even though the coordinator retains more; explicitly label that display truncation rather than implying it is full history. Never infer heard words, complete turns or authoritative user intent from displayed captions.
+6. Test stop-speaking as local mute plus trusted steering. Explicit Resume voice audio is required. Caption arrival, provider command acknowledgement or delegated work completion must not unmute audio automatically. The current UI disables repeated stop while silenced. Check actual remote audio remains muted until Resume.
+
+**Host service/message integration:** root edited `src/speech/service.ts`, `src/services/input-tools.ts`, `src/shared/speech.ts`, `src/speech/settings.ts`, and both `webview-ui/src/types/messages/{extension-messages,webview-messages}.ts`.
+
+- New engine value is `openai-live`; the default remains `openai-realtime` while validation is incomplete. Keep saved engine choices. Do not globally replace the Realtime model constant. The new `OPENAI_LIVE_MODEL` is used in settings.
+- Existing speechOpenAIStart optionally carries `engine: "live"`; SpeechService routes it to LiveBroker only when saved settings select Live. Existing OpenAI ready/error/stopped messages are reused. New messages are speechLiveStarted, speechLiveUsage, speechLiveControl and speechLiveControlResult. Verify full routing through the real input-tools service and webview message union; untrusted message payloads need runtime validation as well as TypeScript.
+- `liveStart` loads the same bounded saved context and captures server identity/directory/current-task checks. It passes `started()` and duration callbacks to the trusted broker. Verify no credential or broker context enters the webview.
+- `openaiStop` invokes both brokers with the request ID and uses a reported error if either fails. Ensure each broker ignores mismatched IDs and never stops another active call. Verify lifecycle during provider switch, backend restart and host disposal.
+- Image sharing selects the active broker. Live returns `staged`, now added to image state/message unions. UI explicitly says images go to Raya work/its vision model, not GPT-Live. Prove sharing alone cannot admit work; check exact staging identity, retained bounds, retries, task deletion and later selection by delegation.
+- Review CLI speech mirror/fallback/config validation for the new engine; do not only inspect the settings dropdown. Ensure native Live does not accidentally trigger cascade voice or switch the main task agent.
+
+**VoiceProvider/UI integration:** root edited `webview-ui/src/context/voice.tsx`, `voice-images.ts`, settings SpeechTab and chat NativeVoiceControls/Image/Recovery/Usage, VoiceTranscript and PromptInput.
+
+- A selected transport (Realtime or Live) is retained through recovery; cleanup must not choose a transport from newly changed settings. The call records engine and owner identity. Start/reset clears Live captions/duration/silence state. Ensure task switches also clear/hide duration and captions: current code needs an explicit review because older cleanup paths mainly clear Realtime transcript state.
+- Live startup messages unlock the local transport; duration updates accept only matching call/recovery and parent task. Existing recovery requires both host acknowledgement and local cleanup. Test asynchronous ordering with actual provider messages and close events, not only a fake sink.
+- Add correlated control state if necessary: current UI sends random event IDs and reports failures for the active request but does not retain a full outstanding-control map. A delayed failure for an older mute command must not overwrite the interpretation of a newer successful command. Local mute remains distinct from provider acknowledgement.
+- VoiceTranscript renders independent speaker fragments and coverage warnings. NativeVoiceUsage separates reported duration from delegated token/tool costs. Verify no previous Realtime totals leak into a Live display, and duration does not leak when changing tasks or providers.
+- PromptInput and recovery guards were broadened to both native engines to preserve the main task agent and normal Start/End behavior. Run existing composer/voice browser regressions to catch differences in task selection, disabled controls, retained drafts and recovery.
+- Add a concise changeset for the completed Live feature when ready; none has been created for Live WIP yet. Do not publish it as complete before the acceptance matrix passes.
+
+**Current root validation:** `bun run --cwd packages/kilo-vscode check-types:webview` passed, terminal 0, `.tmp/live-ui-wrap-types.log`. This is static webview checking only. Earlier combined package check `.tmp/live-ui-types-initial.log` failed on live-broker nullable/shadowed identifiers and interrupted the webview check; the worker is settling those errors separately. No Live browser/host/backend runtime test has passed yet. Formatting, lint/knip, source links, SDK regeneration and complete package tests remain required after source stabilizes.
+
+### 3. Permission-policy patch — verified locally, not yet shipped
+
+Worker-owned files are `packages/opencode/src/permission/index.ts`, `packages/opencode/src/kilocode/permission/policy.ts`, `packages/opencode/src/kilocode/permission/drain.ts`, `packages/opencode/test/kilocode/permission-policy.test.ts`, and `.changeset/raya-pending-permission-policy.md`.
+
+The clean-baseline race was demonstrated through the actual Config and Permission services: while an old request waits under ask, Config.updateGlobal changes bash to deny; fresh requests reject, but replying once to the old request releases its protected continuation. Both default updateGlobal and dispose:false reproduce. Log `.tmp/permission-policy-probe-assembled.log`: two intended regression failures, eight assertions. The first ignored probe was a fixture assembly failure and is not evidence.
+
+**2026-09-11 fix:** rule comparison now uses canonical `[permission, pattern, action]` tuples, so scalar `ask` and the merged object form `{ "*": "ask", "echo *": "allow" }` are the same authority. Only service-authored saved rules are treated as expected differences. Unrelated restrictive updates, username-only edits, publication-time deny, cancellation plus late reply, and sibling saved-deny drain are covered by actual Permission/Config tests. **Isolated suite: 12 pass, 0 fail, 37 assertions, terminal 0, `.tmp/permission-policy-isolated.log`.** Individual related suites also passed: always-rules 22/0/35 exit 0 (`.tmp/permission-always-rules.log`); allow-everything 3 pass/15 assertions exit 0 (`.tmp/permission-allow-everything.log`). CLI typecheck exit 0 (`.tmp/permission-policy-types.log`); scoped oxlint 15 warnings/0 errors exit 0 (`.tmp/permission-policy-lint.log`); annotations and Effect facade guards exit 0. No live permission handles. This slice is not yet committed, pushed or installed. Do not package it with unfinished Live files.
+
+### 4. Mandatory next-agent reporting and next-week review contract
+
+**Update this handoff as you implement, not only when you stop.** The returning agent must be able to determine exactly what you changed, why it is correct, what remains uncertain and where to resume.
+
+For each coherent feature or attempted fix, add a dated entry with:
+
+- Requirement IDs and original acceptance criteria addressed; list which criteria remain open. Use explicit states: planned, implemented/unverified, verified locally, delivered, blocked/revisit. Do not upgrade a whole requirement because one narrow test passes.
+- Exact changed files and main functions/contracts, rationale and any new schema/config/default. Include source citations and pinned Codex commit when adapting external patterns.
+- Exact verification command, working directory, isolated-state setup, terminal exit code, assertions/test count and log/artifact location. Distinguish existing baseline failures from new failures. Record stopped or timed-out processes honestly. UI work needs actual rendered evidence and interaction results, not only types or screenshot existence.
+- Failed approaches, the concrete failure and next diagnostic. After repeated failures move to independent work only with a reproducible revisit recipe; do not silently delete failing tests or weaken acceptance.
+- Commit hash, branch, push state, installed version, artifact SHA-256 and verification evidence. A commit does not mean pushed; a packaged archive does not mean installed; installed does not prove activation after reload or user workflow success.
+- Live handles at handoff, exact next edit/check and any decisions requiring user input. Record no live handles explicitly when settled. Keep all secrets and real user content out of handoff/log excerpts.
+
+Update the 39-row progress ledger using bytes-preserving edits. Preserve its mixed encoding. Update the current-status paragraph at the top of this handoff and the continuation prompt whenever the next step changes; do not leave contradictory historical instructions as the apparent current plan.
+
+**Returning primary agent review next week:** compare git history/diff against e74508a063 and subsequent delivered hashes; read each new entry; independently rerun the smallest high-risk regression for permission, lifecycle or accounting changes; inspect SDK generation and schema migrations; run the actual UI/browser acceptance for touched surfaces; verify installed artifact identity; sample the original audit criteria rather than relying on the new agent's summary. Check especially stale authority, duplicate work, task deletion, late completion, usage provenance and whether captions/audio claims exceed evidence. Continue from the first unverified or failed criterion, not from whichever feature has the most recent commit.
+
+### 5. Delivery procedure after fixing the WIP
+
+Do not push/reinstall the current failing tree. Finish one coherent slice and review its exact staged files. Run relevant package tests/types/lint and affected guards, regenerate SDK for the Live endpoint/schema additions, extract source links for new source URLs, and check Markdown tables. Use ordinary conventional commits and normal pushes; no hook bypass or force push. Reuse the snapshot helper only after inspecting its path validation and isolated build setup; verify actual artifact hashes and installed identity. Record each delivery immediately in this handoff/progress. If Live is not ready, isolate its unfinished changes before delivering the permission fix; do not accidentally package an unverified selectable engine.
+
+### 6. Replacement continuation prompt
+
+```text
+Continue Raya in C:\Users\User\Desktop\raya. Read AGENTS.md and docs/Raya-Remaining-Implementation-Handoff.md, beginning with the current-status banners and the 2026-09-11 permission update; then read the comprehensive audit, progress ledger and voice architecture. The scope is all 39 requirements plus RDM-01-06. Last verified pushed/installed checkpoint is e74508a063d50d9f64e5b1d70e68357b58cafabf until a later permission snapshot is recorded. Permission canonical comparison is verified locally; Live integration remains UNFINISHED. Preserve Live WIP; do not ship it as verified.
+
+If the permission checkpoint is not yet pushed/installed, isolate Live files, commit/push/install only the permission slice, then continue GPT-Live host/backend/media/UI acceptance. GPT-Live 1 requires its own adapter and exact current official contract; no model-string substitution, history replay as new work, or generated-caption claims about heard audio. Keep parent ownership, existing permissions and durable receipts.
+
+I authorize root plus two workers, normal periodic commits/pushes to origin/main and verified snapshot installation without asking again. Do not bypass hooks, force push or force reload VS Code. Batch broad checks at coherent checkpoints, but test actual high-risk boundaries before claiming they work. If repeated attempts fail, document the concrete cause and revisit steps before switching to independent work.
+
+Finish existing Raya work and GPT-Live first. New Codex-derived features are explicitly deferred to a later phase; see Raya-Codex-Research-Deferred.md.
+
+MANDATORY: update the handoff and progress ledger as you implement each coherent slice, with exact files, requirement IDs, tests/exit codes, failures, commits/push/install receipts and next steps. Preserve the progress file's mixed encoding using bytes-preserving edits. The original agent returns next week and needs to independently review your work. Follow the reporting/review contract in the handoff. Keep this prompt and top current-status section accurate. Do not mark the 39-item goal complete until every acceptance criterion is satisfied or explicitly resolved with the user.
+```
+
+### Working-tree inventory at stop
+
+```text
+ M docs/Raya-Implementation-Progress.md
+ M docs/Raya-Remaining-Implementation-Handoff.md
+ M packages/kilo-vscode/src/services/input-tools.ts
+ M packages/kilo-vscode/src/services/telemetry/telemetry-proxy.ts
+ M packages/kilo-vscode/src/shared/speech.ts
+ M packages/kilo-vscode/src/speech/service.ts
+ M packages/kilo-vscode/src/speech/settings.ts
+ M packages/kilo-vscode/webview-ui/src/components/chat/NativeVoiceControls.tsx
+ M packages/kilo-vscode/webview-ui/src/components/chat/NativeVoiceImage.tsx
+ M packages/kilo-vscode/webview-ui/src/components/chat/NativeVoiceRecovery.tsx
+ M packages/kilo-vscode/webview-ui/src/components/chat/NativeVoiceUsage.tsx
+ M packages/kilo-vscode/webview-ui/src/components/chat/PromptInput.tsx
+ M packages/kilo-vscode/webview-ui/src/components/chat/VoiceTranscript.tsx
+ M packages/kilo-vscode/webview-ui/src/components/settings/SpeechTab.tsx
+ M packages/kilo-vscode/webview-ui/src/context/voice-images.ts
+ M packages/kilo-vscode/webview-ui/src/context/voice.tsx
+ M packages/kilo-vscode/webview-ui/src/types/messages/extension-messages.ts
+ M packages/kilo-vscode/webview-ui/src/types/messages/webview-messages.ts
+ M packages/opencode/src/kilocode/permission/drain.ts
+ M packages/opencode/src/kilocode/server/httpapi/groups/voice.ts
+ M packages/opencode/src/kilocode/server/httpapi/handlers/voice.ts
+ M packages/opencode/src/kilocode/voice/openai-protocol.ts
+ M packages/opencode/src/kilocode/voice/openai-store.ts
+ M packages/opencode/src/kilocode/voice/openai.ts
+ M packages/opencode/src/permission/index.ts
+?? .changeset/raya-pending-permission-policy.md
+?? packages/kilo-vscode/src/shared/live-context.ts
+?? packages/kilo-vscode/src/shared/live-usage.ts
+?? packages/kilo-vscode/src/speech/live-broker.ts
+?? packages/kilo-vscode/src/speech/live-commands.ts
+?? packages/kilo-vscode/webview-ui/src/context/live-voice.ts
+?? packages/opencode/src/kilocode/permission/policy.ts
+?? packages/opencode/src/kilocode/voice/live-protocol.ts
+?? packages/opencode/test/kilocode/permission-policy.test.ts
+```
+
+### 7. Frozen Live host/backend implementation ? exact contracts and unresolved risks
+
+Both workers are now frozen and report **no live owned handles**. The Live worker fixed only obvious nullable guards and an identifier-shadowing error before stopping; it did not rerun host types. The independent root webview typecheck passed, but full host/CLI compilation of the final WIP is unknown. Do not claim the Live implementation compiles or works until freshly verified.
+
+**Owned source inventory:** shared `live-context.ts`/`live-usage.ts`; host `speech/live-broker.ts`/`live-commands.ts`; backend `kilocode/voice/live-protocol.ts`; modified `openai-protocol.ts`, `openai-store.ts`, `openai.ts`, and voice HTTP group/handler. All paths are under packages/kilo-vscode/src or packages/opencode/src as shown in the working-tree inventory above. These changes have no Live tests, no Live changeset, no SDK regeneration and no delivered snapshot.
+
+**LiveBroker API consumed by SpeechService:**
+
+```ts
+get active(): boolean
+start(
+  input: { requestID: string; sessionID: string; sdp: string },
+  load: (signal: AbortSignal) => Promise<{
+    key: string; voice: string; backend: string; authorization: string;
+    directory: string; current: () => boolean; context: string;
+    started: () => void; usage?: (state: LiveUsage) => void;
+  }>,
+  ready: (answer: { sdp: string; providerSessionID: string }) => void,
+  failed: (message: string) => void,
+): Promise<void>
+stop(requestID?: string): Promise<string | undefined>
+dispose(): Promise<string | undefined>
+control(requestID: string, eventID: string, action: "mute" | "unmute" | "stop_speaking"):
+  Promise<{ status: "accepted" | "unknown" | "failed"; error?: string }>
+share(requestID: string, imageID: string, data: string):
+  Promise<{ status: "staged" | "unknown" | "failed"; error?: string }>
+type LiveUsage = { seconds?: number; final: boolean; recorded: boolean; incomplete: boolean }
+```
+
+`ready` delivers SDP after trusted attachment; `started` is a separate matching-provider event callback. Do not merge them into one wait. The broker reserves ownership before loading config and marks potentially admitted remote work uncertain before mutation. It stages images only in Raya storage, polls existing durable work receipts, and never cancels admitted task work merely because voice ends.
+
+**Coordinator API and bounds:** `receive(unknown)` returns ignored/transcript/delegation/invalid/limit; `snapshot()` returns copied fragments plus incomplete/limited; `gap()` invalidates automatic context use; `select(delegationID)` returns a retained immutable selection or undefined. Fragment fields: id, speaker user/assistant, text, start/end timestamp, arrival sequence, optional client command ID. Bounds currently chosen by Raya: 16 KiB per delta, 256 KiB cumulative text, 4096 fragments, 4224 event identities, 128 delegation identities; no eviction that silently forgets duplicate identities. Normalized known-field fingerprints now avoid the original arbitrary-extra-field memory risk, but this correction has no tests.
+
+Selection uses received fragments whose start is at/before the provider offset, keeps crossing fragments intact, selects at most 32 and 6000 serialized characters, and requires fresh nonempty user evidence without client-command correlation. Already consumed user sequences cannot alone trigger new work. All selection envelopes carry `incomplete: true` because there is no completeness watermark; internal `incomplete` instead means known corruption/gap and blocks selection. Rename or clarify these two meanings if necessary rather than accidentally rejecting all selections or presenting them as complete. Test offset overlap, late fragments, repeated text under different IDs, command echoes, conflicting identity, capacity exhaustion, repeated selection and corruption.
+
+**Backend changes currently written:**
+
+- Existing `POST /kilocode/voice/openai/session` accepts optional model `gpt-realtime-2.1 | gpt-live-1`; omission retains Realtime. Existing binding identity must not switch model. Provider session IDs are bounded opaque strings.
+- New `POST /kilocode/voice/live/session/:id/calls` accepts `{generation, context:{version:1,delegation,offset,fragments,incomplete:true,omitted}, images?:string[]}`. Existing capability header, owner/generation/directory checks and parent scope remain required. A deterministic internal call ID is `liv_` plus the first 48 hex characters of SHA-256 of the provider delegation ID.
+- The backend validates context size, fragment order/identity/timing and fresh user evidence; prompt text explicitly labels transcript uncertainty, application correlation and generated-but-unheard assistant context. It then uses the existing retained work runner and call status/cancel endpoints. Audit that normalizing to a prompt does not erase immutable original-context evidence or allow a different payload for an existing delegation ID.
+- `liveCursor` prevents admission under a new delegation ID using only consumed user sequence. Its stored schema currently uses a generic number: tighten to finite safe nonnegative integer. Confirm it advances only with the same durable admission and cannot lose new user input after an ambiguous failure. Test restart and concurrent admissions against actual SQL state.
+- New `POST /kilocode/voice/live/session/:id/duration` accepts `{generation,receipt:{id:providerFinalEventID,model:"gpt-live-1",seconds}}`. Final duration is immutable: identical retry succeeds, changed receipt fails. It can be saved after closing admission, without reopening work. Verify model/current-owner checks on closed bindings, FK parent deletion, UPDATE-only refusal after deletion and no resurrection of old records.
+- The store adds optional duration/liveCursor fields. Preserve legacy JSON migration and old Realtime bindings; test old persisted records and existing retention/deletion suites. These endpoint/schema changes require the normal root SDK generator before delivery; do not hand-edit generated SDK.
+
+**Host/backend review priorities, in exact order:**
+
+1. Run extension host and CLI types to establish the final baseline after last guard fixes. Format/lint only touched files, respecting existing complexity caps through cohesive helpers. Do not increase ratchets to hide new complexity. Root webview type result alone does not validate host/backend.
+2. Implement real HTTP/WebSocket loopback fixtures for broker startup/attachment. Prove browser mutation commands are forbidden (`allowed_client_events: []`), SDP can be applied before started, and missing started has a bounded cleanup path. Current broker relies partly on webview/service timeout after attachment: add an independently bounded trusted-host timeout so an absent UI cannot leave an indefinite paid call.
+3. Exercise start/stop/disconnect/session.closed races and await all cleanup promises. Confirm final usage can arrive before/after stop and that binding closure does not cancel task work. Lost creation or admission acknowledgement must retain uncertainty; add a query/idempotency recovery boundary rather than blind retries or releasing ownership.
+4. Strengthen completed-work result validation to match existing Realtime broker identity/status checks before commentary. Current implementation slices result text to 1000 characters; validate type/meaning and prevent incomplete or failed results being narrated as successful. Test stale results after task/owner change and permission waits.
+5. Audit append limits: character counts do not prove the provider's token cap. Use a defensible bounded representation or refuse/split according to verified protocol semantics, with tests for long non-ASCII content. Never replay an uncertain append just to obtain an acknowledgement.
+6. Test LiveCommands correlation against exact error shapes, late acknowledgement, duplicate command IDs, conflicting reuse and timeout. Unknown outcomes are retained; verify no retry sends the same mutation again. Output silence is a separate local media fact, not a command-ack fact.
+7. Test image staging: immutable ID/hash, uncertain/failure retention, four-attempt bound, no native image upload, no work from staging alone, correct selected images attached to later work. Check permission/model capability before vision work.
+8. Test delegation queue and steering while work is busy. Current queue waits behind polling; selection occurs when dequeued using the provider offset. Define whether newer user corrections revise queued work or require clarification, and fence stale results. Do not claim seamless concurrent steering from serialized happy-path execution.
+9. Test conflicting duplicate session.closed events. Current host returns early after first final event; backend immutability alone does not surface a conflicting later provider event. Record incomplete/conflict state without double billing or overwriting the first receipt.
+10. Add actual backend runtime/DB/API tests for model mismatch, invalid/duplicate context, replay cursor, immutable receipts, deletion cascades, late writes and permission boundaries. Then regenerate SDK, run existing Realtime/retention regressions and the root source-link extractor. Complete root's real WebRTC/UI acceptance before changing the default or packaging Live.
+
+**Validation receipts at freeze:** no Live unit/broker/browser/backend tests exist or passed; no current Live lint/Knip/SDK generation pass. `.tmp/live-ui-types-initial.log` failed before the worker's final trivial guard fixes. `.tmp/live-ui-wrap-types.log` is a genuine webview-only pass, terminal 0. Telemetry return-style follow-up has its own 13-test pass. Treat Live as implemented/unverified. Permission is now verified locally; see section 3.
+
+**Next executable step:** commit only the permission files and these docs, push to origin/main, stash remaining Live/telemetry WIP, run `snapshot:install`, restore the stash, then start Live host/CLI types and contract tests. Do not change the default engine or package Live.
+
+### Local backup and final stop receipt
+
+All 34 currently changed/new files were backed up to `.tmp/raya-credit-stop-wip.zip` with a SHA-256 manifest and baseline commit. This is a local WIP backup, not a verified release and not pushed to origin. The current workspace remains the primary continuation source. The detailed stop document and latest unfinished source are local; the remote installed checkpoint remains e74508a063. Both workers and all root-owned check handles are stopped/terminal. The handoff covers all 39 unique requirement IDs and all local Markdown links resolve. No further implementation will run in this turn. Use the app goal Pause control to pause automatic goal execution; the agent tools cannot set a paused status.
+
+
+### 2026-09-10: Research addendum and final priority
+
+Read [Codex research: deferred implementation backlog](Raya-Codex-Research-Deferred.md) for the requested public-source comparison. It contains 18 bounded candidates and explains the distinction between public CLI/app-server code, documented desktop behavior and unverified private internals. **Continue the existing 39 requirements and GPT-Live voice first. Do not start these Codex-derived additions during that work.** Re-evaluate gaps after the existing work is complete; some may already be resolved. The research does not change the frozen WIP release status or authorize shipping its known failures.
+
+The implementing agent must update this handoff and the progress log continuously: exact files/commits, behavior, test commands and exit codes, evidence paths, remaining limitations, delivery state and next executable step. The returning reviewer must be able to reproduce acceptance and distinguish implementation from actual verification. For any later Codex work, also maintain the per-item review template in the research document.
+
+
+## Routines direction: agent DM inbox and company delegation
+
+**Latest user requirement, 2026-09-10. Status: specified, not implemented or verified by this documentation update.** This is current Raya implementation scope under OVR-05, with PR-03/04, EN-02/03, UX and UI dependencies. It is not a deferred Codex enhancement. Finish it alongside the existing audit and GPT-Live work, before the deferred Codex backlog. Earlier routine acceptance criteria are incomplete without this experience. The 39 parent requirement IDs remain unchanged; the subcriteria below expand OVR-05.
+
+### Product outcome and visual reference
+
+Routines should feel like direct messages with persistent workers, not a list of scheduled jobs that sends the user into ordinary chat history. The user's reference image shows a dark two-pane messenger: searchable worker list on the left, avatar/name/last-message preview/time/unread indication, selected worker conversation on the right, incoming/outgoing bubbles and inline file cards. Use that interaction hierarchy with Raya's own typography, spacing, colors, components and accessibility conventions; do not copy Grok or iMessage branding or imply either is an integration dependency. The reference is attached to the conversation, not stored as a repository asset; this description preserves its implementation intent.
+
+Example acceptance journey: the user assigns an accounting worker to review accounts every Friday. Its recurring reports arrive in that worker's routine conversation. The user asks why expenses increased, receives an answer grounded in the relevant report, asks for a breakdown, and finds the following Friday's report in the same conversation. They never need to hunt through regular chats. A Chief of Staff can request input from that accounting worker and other authorized workers, receive their replies, and deliver a consolidated update with links to the underlying reports.
+
+The long-term product intent is to delegate operating work to agents that can help run companies and collaborate with other routine agents. For this increment, deliver the working chain of assignment, scheduled execution, report, follow-up and inter-agent delegation. Do not treat a visual mockup or an autonomous-company marketing label as fulfillment. Scheduling a read-only accounting review does not implicitly authorize payments or other unrelated actions.
+
+### RDM-01: Dedicated inbox and conversation UI
+
+- Make the routines surface an inbox of persistent worker/routine conversations. Show name, role, latest message, time, unread count and concise state: scheduled, running, waiting on another worker, needs input, paused or failed. Keep operational state separate from unread state.
+- The conversation header identifies the worker and its company/workspace, with next scheduled run and accessible schedule/access/pause controls. Put deeper configuration and run history in a details pane rather than replacing the conversation with a settings form.
+- Render user messages, worker replies, scheduled reports, requests for a decision, delegation updates and artifacts in one ordered timeline. Distinguish report occurrences with date/run labels. Collapse noisy tool activity behind inspectable run details. Clearly attribute messages from other workers; they must not impersonate the user or the conversation owner.
+- Provide a persistent composer, explicit sending/queued/failed states, retry without duplicate admission, attachments using existing supported controls, and draft preservation per conversation. A follow-up must work inside routines; a link to a normal chat is insufficient.
+- Search/filter workers and conversations, preserve selection and scroll position, support unread/needs-attention filters, and avoid stealing focus when a report arrives. Narrow views switch between list and conversation with a clear back action. Keyboard navigation, visible focus, screen-reader labels, contrast and reduced motion are acceptance requirements.
+
+### RDM-02: Durable worker, conversation and execution identities
+
+1. Inspect existing routine/task, company, session and occurrence schemas before choosing names or adding tables. Define the stable worker identity separately from a schedule, a conversation, and a run. One worker may eventually own multiple assignments: do not make its identity a display name or the ID of its latest execution. For migration, an existing routine may map to one stable worker/conversation without requiring an organization designer first.
+2. Persist conversation membership/scope and explicit links to routine, run/occurrence, execution session, message/artifact and delegation identities. A scheduled occurrence creates execution work and publishes into the persistent conversation; it must not replace the conversation every Friday. Do not reuse an unbounded transcript as the entire model context: retrieve relevant reports/messages and disclose unavailable evidence.
+3. Reuse existing session/runtime and durable occurrence ownership. Create the minimum metadata/read model needed for the routines inbox, not a second competing chat engine. Locate authoritative ownership before adding any webview cache.
+4. Add durable ordered message delivery and idempotent publication keyed to the actual source event/run. Reconnect, restart, duplicate completion and replay must not publish duplicate reports. Report content and attachments need durable provenance, and late results must remain attached to their original run.
+5. Persist read position and drafts in an appropriately scoped store; unread reconciliation must not depend only on whether the current webview happened to receive an event. Aggregate list summaries and paginate conversations instead of loading every run/transcript for every row.
+6. Mark routine-owned execution sessions explicitly. Exclude them from the default regular-chat list while keeping them inspectable through run details or an explicit routine-session filter. Never delete history just to hide it. Ordinary user chats remain ordinary chats; do not classify by title or guess at legacy ownership.
+
+### RDM-03: Reports and interactive follow-up
+
+1. Publish scheduled and manually requested results into the same worker conversation, with occurrence date, outcome, concise findings, evidence/artifacts and next decision. Show failed/partial/blocked runs honestly. Keep an incomplete run from appearing as a successful report.
+2. Route user messages to the selected worker and company/workspace with the relevant conversation and report context. Resolve phrases such as 'that Friday report' through explicit reply/report references where possible; ask for clarification if ambiguous rather than selecting another company's data.
+3. Define admission while that worker is already busy: show whether the message is queued for a safe boundary or answered separately. Preserve authoritative request identity, drafts on rejection and exactly one accepted action after retry. Reuse existing queue semantics; do not implement an undisclosed abort/replay.
+4. Distinguish a question about a report, a request to run now, and a proposed change to the recurring instructions/schedule. A one-off chat message must not silently rewrite future assignments. Show a concrete persistent change before applying it using existing mutation/conflict handling.
+5. Make notification clicks open the exact conversation/report. Provide a conversation-level unread model and retain run-level technical details for inspection. Preserve existing output review, conflict comparison and access review within this flow.
+
+### RDM-04: Worker-to-worker delegation and company coordination
+
+1. Add an explicit authorized delegation request containing sender/recipient worker IDs, company/workspace scope, parent run, correlation ID, objective, permitted context/artifact references, deadline/cancellation behavior, budget and expected result. Reuse existing task/delegation transport and ownership where possible.
+2. Deliver work to the recipient through a durable, bounded queue. A worker may receive both its scheduled work and another worker's request; serialize or arbitrate using authoritative ownership. Never create a duplicate worker merely because it is busy. A delegated request is distinct from changing the recipient's recurring job.
+3. Record accepted/running/needs-input/completed/failed/cancelled states and a durable response linked to the exact request. Return the answer to the requesting worker and show an understandable delegation card in the relevant conversations. Retrying transport must not repeat the actual accounting review or external action.
+4. Apply the intersection of requesting authority, recipient capabilities, company/workspace boundary and current policy. Passing a task must not bypass read-only restrictions or grant broader access. Pass only necessary context; ordinary worker messages and retrieved reports cannot grant permissions. Route requests for additional authority to the user with attributable scope.
+5. Prevent self-delegation loops and cycles through lineage, bounded depth/fan-out, deadlines and deduplication. Define cancellation propagation and what happens when a recipient is paused, archived, unavailable or awaiting approval. Preserve a completed child result even if the parent stops, without restarting the parent automatically.
+6. Attribute costs and outcomes to child requests and the parent/company without double counting. A coordinating worker's final report links to contributing workers/results and distinguishes confirmed findings from pending input. Do not fabricate a consensus or a worker reply that has not arrived.
+7. Provide an inspectable delegation chain and user controls to stop outstanding work. A minimal Chief of Staff -> Accounting -> response -> consolidated report flow is required runtime acceptance; a full org-chart editor and arbitrary business autonomy are not prerequisites for this first working flow.
+
+### RDM-05: Migration and implementation order
+
+1. Read package AGENTS.md, then trace [RoutinesView](../packages/kilo-vscode/webview-ui/src/components/routines/RoutinesView.tsx), [host routines bridge](../packages/kilo-vscode/src/kilo-provider/routines.ts), [task schemas](../packages/opencode/src/kilocode/task/index.ts), [runner](../packages/opencode/src/kilocode/task/runner.ts), scheduler/owner/queue/recovery, and existing session-list/delegation/company paths. Record existing contracts and the precise missing pieces in this handoff.
+2. Implement additive durable identity/linkage and migration first. Preserve schedules, timezone, occurrence history, permissions, outputs and archived state. Backfill only from authoritative links; leave ambiguous legacy sessions recoverable. Test migration repeatability before altering list filters.
+3. Extend backend query/command/event contracts for inbox summaries, paginated messages, send/read state and correlated report publication. Regenerate the SDK after server changes. Add actual persistence/API tests before composing the new UI.
+4. Build the inbox and conversation on existing Raya components; integrate reports and follow-up end to end, then settings/run details and notification deep links. Use the current output/access editors rather than duplicating their mutation logic.
+5. Add cross-worker requests/responses on existing task foundations after single-worker delivery is reliable. Verify authority, lifecycle and cost attribution at the runtime boundary, then expose delegation cards and inspection.
+6. Run the smallest affected package type/lint/tests and required repository guards, then real UI acceptance. Record changed files, exact commands/exits and evidence paths continuously in BOTH this handoff and the progress log. Mark implemented, runtime-verified, visually accepted, committed, pushed and installed separately. Preserve the existing frozen WIP safeguards and GPT-Live priority; this document-only change does not certify that WIP.
+
+### RDM-06: Required acceptance and returning-reviewer checklist
+
+- Friday accounting scenario: create assignment with explicit timezone; trigger a controlled due occurrence through the real scheduler/runtime; receive one durable report; ask a contextual follow-up in routines; inspect its evidence; receive another occurrence in the same conversation. Do not wait a real week or fake a success event as the sole test.
+- Separation: multiple workers and ordinary chats coexist; default regular history contains no newly classified routine execution sessions. Routine history and old execution details remain recoverable. Inbox selection and unread state survive reload.
+- Concurrency/recovery: message while busy, duplicate send/completion, reconnect, backend replacement, crash between result persistence and publication, stale responses after navigation, and cancellation each preserve identity and produce no duplicate execution/report.
+- Delegation: coordinating worker obtains a real subordinate result and reports it with provenance. Test busy recipient, denial, read-only restrictions, cross-company access, cycle/fan-out bounds, timeout, duplicate replies and parent cancellation. Inspect real runtime records, not only mocked UI cards.
+- Lifecycle: schedule edits, pause/archive/delete during execution and recipient unavailability have defined UI and durable outcomes. Historical reports remain accurately attributed after worker rename or reassignment.
+- UI: use the reference's messenger hierarchy in Raya's own design; verify light/dark themes, narrow/wide layout, long report/file cards, empty/loading/stale/error states, keyboard and screen-reader navigation. New reports do not pull the reader away from an older report or overwrite a draft.
+- Performance: record workload size, request count and rendering behavior for a large inbox/history; retain bounded refresh/pagination. Set and document an explicit test budget before claiming responsiveness, rather than claiming improvement from component structure alone.
+- Reviewer: inspect schema/migration and authoritative event flow first, then reproduce single-worker and delegation journeys. Reject 'done' if the UI only deep-links to regular chat, reports still mix into ordinary history, follow-ups lose run context, or delegation bypasses the recipient's policy. Record remaining limitations and the next executable step before handoff.
+
+## 2026-09-11: Permission canonical comparison (PR-04)
+
+**States:** implemented and verified locally; not committed, pushed or installed in this paragraph. Live remains implemented/unverified and unshipped.
+
+Requirement: a pending approval must not release after an unrelated restrictive policy change, while an explicit saved allow for `echo*` must still release once. Publication-time deny, allowEverything, and saved-rule escapes remain blocked.
+
+Changed files: `packages/opencode/src/kilocode/permission/policy.ts` (`tuple`/`compatible`/`capture`), `packages/opencode/src/permission/index.ts` (narrow policy snapshot hooks), `packages/opencode/src/kilocode/permission/drain.ts` (current-policy drain gate), `packages/opencode/test/kilocode/permission-policy.test.ts`, `.changeset/raya-pending-permission-policy.md`.
+
+Rationale: Config merge promotes scalar `bash: "ask"` to `{ "*": "ask" }` when saving `{ "echo *": "allow" }`. `fromConfig` builds those rules with different property insertion order, so `JSON.stringify` of Rule objects was not an equality test. Comparison now uses ordered canonical tuples. Expected differences are only rules accepted through `saveAlwaysRules`, not every new allow.
+
+Verification (cwd `packages/opencode` unless noted; normal bunfig preload):
+
+| Command | Result | Log |
+|---|---|---|
+| `bun test ./test/kilocode/permission-policy.test.ts --timeout 30000` | 12 pass, 0 fail, 37 assertions, exit 0 | `.tmp/permission-policy-isolated.log` |
+| `bun test ./test/kilocode/permission/next.always-rules.test.ts --timeout 30000` | 22 pass, 0 fail, 35 assertions, exit 0 | `.tmp/permission-always-rules.log` |
+| `bun test ./test/kilocode/server/permission-allow-everything.test.ts --timeout 30000` | 3 pass, 0 fail, 15 assertions, exit 0 | `.tmp/permission-allow-everything.log` |
+| `bun run typecheck` | exit 0 | `.tmp/permission-policy-types.log` |
+| root `bun run lint` on the four permission files | 15 warnings, 0 errors, exit 0 | `.tmp/permission-policy-lint.log` |
+| `bun run script/check-opencode-annotations.ts --worktree` | exit 0 | `.tmp/permission-policy-annotations.log` |
+| `bun run script/check-opencode-promise-facades.ts` | exit 0 | `.tmp/permission-policy-facades.log` |
+
+Failed approach: the previous comparator stringified raw Rule objects, so legitimate saved-allow failed while deny races passed. Tightening expected-differences to saved rules only keeps unrelated concurrent allows from being ignored.
+
+Remaining limitations: no public HTTP/SDK change; Windows OS confinement and per-path grants remain open under PR-04. Live/telemetry files are still dirty and must be stashed before `snapshot:install`. No live handles.
+
+Next: commit/push this slice, isolate Live, install the snapshot, record identity, then resume GPT-Live contract tests.

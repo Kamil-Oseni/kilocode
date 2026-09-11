@@ -15,6 +15,7 @@ import { SessionID } from "@/session/schema" // kilocode_change - used by AllowE
 // kilocode_change start
 import { ConfigProtection } from "@/kilocode/permission/config-paths"
 import { KiloHeadless } from "@/kilocode/permission/headless"
+import * as Policy from "@/kilocode/permission/policy" // kilocode_change
 import { drainCovered } from "@/kilocode/permission/drain"
 import { ReadPermission } from "@/kilocode/permission/read"
 import { AgentManagerPermission } from "@/kilocode/permission/agent-manager" // kilocode_change
@@ -89,6 +90,7 @@ interface PendingEntry {
   ruleset: Ruleset
   hardRuleset?: Ruleset
   saved?: boolean
+  policy: Effect.Success<ReturnType<typeof Policy.capture>>
   // kilocode_change end
   deferred: Deferred.Deferred<void, RejectedError | CorrectedError>
 }
@@ -184,7 +186,30 @@ const layer = Layer.effect(
       }),
     )
 
+    // kilocode_change start - stale policy cannot release a retained approval
+    const current = (entry: PendingEntry) =>
+      Effect.gen(function* () {
+        if (yield* entry.policy.current()) return true
+        const s = yield* InstanceState.get(state)
+        s.pending.delete(entry.info.id)
+        yield* Deferred.fail(
+          entry.deferred,
+          new CorrectedError({
+            feedback:
+              "Permission policy changed while approval was pending. Review the current policy before retrying.",
+          }),
+        )
+        yield* events.publish(Event.Replied, {
+          sessionID: entry.info.sessionID,
+          requestID: entry.info.id,
+          reply: "reject",
+        })
+        return false
+      })
+    // kilocode_change end
+
     const ask = Effect.fn("Permission.ask")(function* (input: AskInput) {
+      const policy = yield* Policy.capture(config, fromConfig) // kilocode_change - observe policy before evaluating the request
       const { approved, pending } = yield* InstanceState.get(state)
       // kilocode_change start
       const { ruleset, hardRuleset, ...request } = input
@@ -270,7 +295,7 @@ const layer = Layer.effect(
       yield* Effect.logInfo("asking", { id, permission: info.permission, patterns: info.patterns })
 
       const deferred = yield* Deferred.make<void, RejectedError | CorrectedError>()
-      pending.set(id, { info, ruleset, hardRuleset, deferred }) // kilocode_change
+      pending.set(id, { info, ruleset, hardRuleset, deferred, policy }) // kilocode_change
       yield* events.publish(Event.Asked, info) // kilocode_change - was bus.publish
       // kilocode_change start - was `return yield* Effect.ensuring(...)`; report the manual decision to callers
       yield* Effect.ensuring(
@@ -304,6 +329,7 @@ const layer = Layer.effect(
       }
       // kilocode_change end
 
+      if (input.reply !== "reject" && !(yield* current(existing))) return // kilocode_change
       pending.delete(input.requestID)
       yield* events.publish(Event.Replied, {
         sessionID: existing.info.sessionID,
@@ -332,6 +358,7 @@ const layer = Layer.effect(
         return
       }
 
+      if (!(yield* current(existing))) return // kilocode_change - publication can await a concurrent policy update
       yield* Deferred.succeed(existing.deferred, undefined)
       if (input.reply === "once") return
 
@@ -350,8 +377,12 @@ const layer = Layer.effect(
         }
       }
 
-      yield* drainCovered(pending as unknown as Map<string, PendingEntry>, approved, (data) =>
-        Effect.asVoid(events.publish(Event.Replied, data)),
+      yield* drainCovered(
+        pending as unknown as Map<string, PendingEntry>,
+        approved,
+        (data) => Effect.asVoid(events.publish(Event.Replied, data)),
+        undefined,
+        (entry) => current(entry as PendingEntry),
       ) // kilocode_change - drain publishes replies through the same EventV2Bridge channel
 
       if (!existing.saved) {
@@ -380,6 +411,7 @@ const layer = Layer.effect(
       const existing = s.pending.get(input.requestID)
       if (!existing) return yield* new NotFoundError({ requestID: input.requestID })
 
+      if (!(yield* current(existing))) return
       if (ConfigProtection.isRequest(existing.info) && !ConfigProtection.isGlobalSkillRequest(existing.info)) return
 
       const skill = ConfigProtection.globalSkillPattern(existing.info)
@@ -400,6 +432,7 @@ const layer = Layer.effect(
 
       if (newRules.length > 0) {
         yield* config.updateGlobal({ permission: toConfig(newRules) }, { dispose: false })
+        for (const entry of s.pending.values()) entry.policy.accept(newRules)
       }
 
       // kilocode_change - drain publishes replies through the same EventV2Bridge channel (was DeniedError)
@@ -408,6 +441,7 @@ const layer = Layer.effect(
         s.approved,
         (data) => Effect.asVoid(events.publish(Event.Replied, data)),
         input.requestID as unknown as string,
+        (entry) => current(entry as PendingEntry),
       )
     })
 
@@ -433,27 +467,28 @@ const layer = Layer.effect(
       if (input.requestID) {
         const entry = s.pending.get(input.requestID)
         const ok = entry ? covered(entry, s.approved, s.session[entry.info.sessionID] ?? []) : false
-        if (entry && ok && (!input.sessionID || entry.info.sessionID === input.sessionID)) {
+        if (entry && ok && (!input.sessionID || entry.info.sessionID === input.sessionID) && (yield* current(entry))) {
           s.pending.delete(input.requestID)
           yield* events.publish(Event.Replied, {
             sessionID: entry.info.sessionID,
             requestID: entry.info.id,
             reply: "once",
           })
-          yield* Deferred.succeed(entry.deferred, undefined)
+          if (yield* current(entry)) yield* Deferred.succeed(entry.deferred, undefined)
         }
       }
 
       for (const [id, entry] of s.pending) {
         if (input.sessionID && entry.info.sessionID !== input.sessionID) continue
         if (!covered(entry, s.approved, s.session[entry.info.sessionID] ?? [])) continue
+        if (!(yield* current(entry))) continue
         s.pending.delete(id)
         yield* events.publish(Event.Replied, {
           sessionID: entry.info.sessionID,
           requestID: entry.info.id,
           reply: "once",
         })
-        yield* Deferred.succeed(entry.deferred, undefined)
+        if (yield* current(entry)) yield* Deferred.succeed(entry.deferred, undefined)
       }
     })
 

@@ -4,6 +4,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { Storage } from "@/storage/storage"
 import { SessionID } from "@/session/schema"
+import { RayaTask } from "@/kilocode/task"
 import { RayaTaskDelegation } from "@/kilocode/task/delegation"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
@@ -218,8 +219,12 @@ test("stopping a parent cancels live descendants without rewriting assignments",
       expect(halted).toEqual([parent.sessionID!, child.sessionID!])
       expect((yield* runner.stop(parent.id)).state).toBe("cancelled")
       expect((yield* RayaTaskDelegation.make(database).get(child.id)).state).toBe("cancelled")
+      expect((yield* runner.tasks.runsFor(books.id)).some(RayaTask.pending)).toBe(false)
+      expect((yield* runner.tasks.runsFor(legal.id)).some(RayaTask.pending)).toBe(false)
+      expect((yield* runner.tasks.runsFor(books.id)).at(-1)?.blockedReason).toBe("Stopped by the user.")
+      expect(yield* runner.tasks.remove(books.id)).toBe(true)
+      expect(yield* runner.tasks.remove(legal.id)).toBe(true)
       expect((yield* runner.tasks.get(chief.id)).objective).toBe("Coordinate Friday close.")
-      expect((yield* runner.tasks.get(books.id)).objective).toBe("Reconcile receipts.")
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })

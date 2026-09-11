@@ -1441,3 +1441,15 @@ Installed `eden.raya@7.4.23-snapshot+75471436ab.kamil-oseni.1789166470101`. VSIX
 Remaining: leftover RDM-06 schedule-edit-during-execution UI, leftover recipient-unavailability copy beyond pause/archive, themes/a11y/performance/reviewer, packaged microphone/acoustic acceptance, and provider-switch/disposal.
 
 Next executable step: leftover RDM-06 lifecycle UI, or leftover Live microphone/provider-switch.
+
+## 2026-09-11: Stop settles child runs
+
+**States:** verified locally, not yet committed. Stopping a delegated request now marks its child run as error immediately, so the worker can be removed without waiting for the session to settle. Schedule-edit-during-execution UI, leftover recipient-unavailability copy, themes, performance, and reviewer journey remain open.
+
+Changed files: `packages/opencode/src/kilocode/task/runner.ts`, `packages/opencode/test/kilocode/task/delegation-runner.test.ts`, `.changeset/raya-routine-stop-settle.md`.
+
+Commands (cwd `packages/opencode`): `bun test ./test/kilocode/task/delegation-runner.test.ts --timeout 60000` -> 4 pass / 0 fail / 41 expect / exit 0. `bun run typecheck` -> exit 0. oxlint on the two files: 12 existing warnings / 0 errors.
+
+Remaining: leftover RDM-06 schedule-edit-during-execution UI, leftover recipient-unavailability copy beyond pause/archive, themes/a11y/performance/reviewer, packaged microphone/acoustic acceptance, and provider-switch/disposal.
+
+Next executable step: leftover RDM-06 lifecycle UI, or leftover Live microphone/provider-switch.

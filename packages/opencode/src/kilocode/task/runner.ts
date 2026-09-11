@@ -139,6 +139,13 @@ export namespace RayaTaskRunner {
     const inbox = input.database ? RayaTaskInbox.make(input.database) : undefined
     const errands = input.database ? RayaTaskDelegation.make(input.database) : undefined
     const LATE = "This request timed out. It was not completed."
+    const drop = (id: string, sid: SessionID | undefined, rid: string | undefined, reason: string) =>
+      Effect.gen(function* () {
+        const history = yield* tasks.runsFor(id)
+        const run = history.find((row) => (rid && row.id === rid) || (sid && row.sessionID === sid))
+        if (!run || !RayaTask.pending(run)) return
+        yield* tasks.transition(run, { ...run, status: "error", blockedReason: reason })
+      }).pipe(Effect.catch((err) => Effect.sync(() => log.error("delegated run drop failed", { err }))))
     const lapse = Effect.fn("RayaTaskRunner.lapse")(function* (from: number) {
       if (!errands) return
       const rows = yield* errands.overdue(from)
@@ -153,6 +160,7 @@ export namespace RayaTaskRunner {
             Effect.sync(() => log.error("delegation timeout failed", { err })),
           ),
         )
+        yield* drop(row.recipientID, row.sessionID, row.childRunID, LATE)
         if (!row.sessionID || !input.halt) continue
         yield* input.halt(row.sessionID).pipe(
           Effect.catch((err) => Effect.sync(() => log.error("timed out session stop failed", { err }))),
@@ -490,6 +498,7 @@ export namespace RayaTaskRunner {
       }
       const listed = [row, ...kids]
       for (const item of listed) {
+        yield* drop(item.recipientID, item.sessionID, item.childRunID, "Stopped by the user.")
         if (!item.sessionID || !input.halt) continue
         yield* input.halt(item.sessionID).pipe(
           Effect.catch((err) => Effect.sync(() => log.error("delegated session stop failed", { err }))),

@@ -2702,5 +2702,15 @@ Installed eden.raya@7.4.23-snapshot+75471436ab.kamil-oseni.1789166470101. VSIX C
 
 Next: leftover RDM-06 lifecycle UI, or leftover Live microphone/provider-switch.
 
+## 2026-09-11: Stop settles child runs
+
+Status: verified locally, not yet committed. Stopping a delegated request marks its child run as error immediately so the worker can be removed without waiting for the session to settle.
+
+Changed files: packages/opencode/src/kilocode/task/runner.ts, packages/opencode/test/kilocode/task/delegation-runner.test.ts, .changeset/raya-routine-stop-settle.md.
+
+Commands (packages/opencode): bun test ./test/kilocode/task/delegation-runner.test.ts --timeout 60000 -> 4 pass / 0 fail / 41 expect / exit 0. bun run typecheck -> exit 0. oxlint: 12 existing warnings / 0 errors.
+
+Next: leftover RDM-06 lifecycle UI, or leftover Live microphone/provider-switch.
+
 
 

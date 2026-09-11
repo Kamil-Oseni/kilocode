@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Installed product is `bf4218eece`. Voice engine-switch/disposal serialization is verified locally and not yet committed. Schedule-edit-during-execution UI and paused-recipient copy are installed. New voice setups default to GPT-Live 1 (`openai-live` / `gpt-live-1`) over the Live API; saved Realtime, Qwen and cascade selections stay. Live appends split at the 500-token bound; busy-queue later delegations are acknowledged and later speech requires clarification. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, delegated cost attribution, Friday accounting E2E, busy-recipient queued/started plus paused-worker denial, overdue-request timeout expiry, inspectable request chains, rename/archive conversation attribution, and stop-settle of child runs are installed. Remaining Live work is packaged microphone/acoustic acceptance. Remaining RDM-06 work is themes/a11y/performance/reviewer. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Installed product is `fd1882194a`. Voice engine-switch/disposal serialization is installed. Schedule-edit-during-execution UI and paused-recipient copy are installed. New voice setups default to GPT-Live 1 (`openai-live` / `gpt-live-1`) over the Live API; saved Realtime, Qwen and cascade selections stay. Live appends split at the 500-token bound; busy-queue later delegations are acknowledged and later speech requires clarification. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, delegated cost attribution, Friday accounting E2E, busy-recipient queued/started plus paused-worker denial, overdue-request timeout expiry, inspectable request chains, rename/archive conversation attribution, and stop-settle of child runs are installed. Remaining Live work is packaged microphone/acoustic acceptance. Remaining RDM-06 work is themes/a11y/performance/reviewer. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-11. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `bf4218eece` is committed, pushed and installed. Editing a schedule while a run is active keeps that run; paused workers cannot start a new request until they are enabled. Realtime remains an explicit compatibility path.
+**Latest delivered product:** checkpoint `fd1882194a` is committed, pushed and installed. Changing the saved voice engine waits until an active call is released. Realtime remains an explicit compatibility path.
 
 ## Scope and reading order
 
@@ -1488,11 +1488,21 @@ Next executable step: leftover RDM-06 themes/a11y/performance/reviewer, or lefto
 
 ## 2026-09-11: Voice engine switch and disposal
 
-**States:** verified locally, not yet committed. Changing the saved voice engine waits until an active Live, OpenAI, or Qwen call is released. A mismatched stop does not end another engine's call. Host disposal closes brokers in order and refuses later starts.
+**States:** verified locally, committed as `fd1882194a`, and installed in the snapshot below. Changing the saved voice engine waits until an active Live, OpenAI, or Qwen call is released. A mismatched stop does not end another engine's call. Host disposal closes brokers in order and refuses later starts.
 
 Changed files: `packages/kilo-vscode/src/speech/service.ts`, `packages/kilo-vscode/tests/unit/speech-engine-switch.test.ts`, `.changeset/raya-voice-engine-switch.md`.
 
 Commands (cwd `packages/kilo-vscode`): `bun test tests/unit/speech-engine-switch.test.ts tests/unit/live-speech-routing.test.ts --timeout 30000` -> 5 pass / 0 fail / 30 expect / exit 0. `bun run check-types` -> exit 0. eslint on `service.ts` and the switch test -> exit 0. `bun run check-kilocode-change` -> no forbidden markers / exit 0.
+
+Remaining: leftover RDM-06 themes/a11y/performance/reviewer and packaged microphone/acoustic acceptance.
+
+Next executable step: leftover RDM-06 themes/a11y/performance/reviewer, or leftover Live microphone acceptance.
+
+## 2026-09-11: Snapshot install `fd1882194a`
+
+**States:** committed, pushed and installed as `fd1882194a`. Changing the saved voice engine waits until an active call is released. Host disposal refuses later starts.
+
+Installed `eden.raya@7.4.23-snapshot+fd1882194a.kamil-oseni.1789170968855`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-fd1882194a-kamil-oseni-1789170968855.vsix`; SHA-256 `81816917C91BC7B16CEC97A52B89D3A7CAFFFBF1F760137D292A02E10D7399F9`; 517053245 bytes, 431 entries. CLI binary already present; not rebuilt.
 
 Remaining: leftover RDM-06 themes/a11y/performance/reviewer and packaged microphone/acoustic acceptance.
 

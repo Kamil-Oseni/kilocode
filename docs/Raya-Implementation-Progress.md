@@ -2740,11 +2740,19 @@ Next: leftover RDM-06 themes/a11y/performance/reviewer, or leftover Live microph
 
 ## 2026-09-11: Voice engine switch and disposal
 
-Status: verified locally, not yet committed. Changing the saved voice engine waits until an active Live call is released. A mismatched stop leaves that call. Host disposal closes brokers in order and refuses later starts.
+Status: verified locally, committed as fd1882194a, and installed in the snapshot below. Changing the saved voice engine waits until an active Live call is released. A mismatched stop leaves that call. Host disposal closes brokers in order and refuses later starts.
 
 Changed files: packages/kilo-vscode/src/speech/service.ts, packages/kilo-vscode/tests/unit/speech-engine-switch.test.ts, .changeset/raya-voice-engine-switch.md.
 
 Commands (packages/kilo-vscode): bun test tests/unit/speech-engine-switch.test.ts tests/unit/live-speech-routing.test.ts --timeout 30000 -> 5 pass / 0 fail / 30 expect / exit 0. bun run check-types -> exit 0. eslint service.ts and the switch test -> exit 0. bun run check-kilocode-change -> exit 0.
+
+Next: leftover RDM-06 themes/a11y/performance/reviewer, or leftover Live microphone acceptance.
+
+## 2026-09-11: Snapshot install fd1882194a
+
+Status: committed, pushed and installed as fd1882194a. Changing the saved voice engine waits until an active call is released. Host disposal refuses later starts.
+
+Installed eden.raya@7.4.23-snapshot+fd1882194a.kamil-oseni.1789170968855. VSIX C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-fd1882194a-kamil-oseni-1789170968855.vsix; SHA-256 81816917C91BC7B16CEC97A52B89D3A7CAFFFBF1F760137D292A02E10D7399F9; 517053245 bytes, 431 entries. CLI binary already present; not rebuilt.
 
 Next: leftover RDM-06 themes/a11y/performance/reviewer, or leftover Live microphone acceptance.
 

@@ -1016,7 +1016,7 @@ Remaining: HTTP/SDK regeneration, WebRTC/UI fixtures, service/message routing, i
 
 ## 2026-09-11: Live duration and delegation store tests
 
-**States:** Live SQL duration/delegation contracts verified locally; Live remains unshipped. Product checkpoint remains `8b01e72311`.
+**States:** Live SQL duration/delegation contracts verified locally, committed as `c3c7f6ae93`; Live remains unshipped. Product checkpoint remains `8b01e72311`.
 
 Live bindings can retain a final `gpt-live-1` duration after close without reopening work. Identical retries succeed; a changed receipt or a Realtime binding is refused. Client delegation admits one immutable call ID per provider delegation, labels prompt text as imperfect transcript evidence, refuses a later delegation that only repeats consumed user sequence, and advances `liveCursor` only with new user evidence. Closing admission keeps duration writable and refuses new work. `liveCursor` is now a finite safe nonnegative integer in the retained payload schema.
 

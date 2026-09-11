@@ -2344,7 +2344,7 @@ Default engine remains openai-realtime. Service/UI/backend Live wiring is still 
 
 ## 2026-09-11: Live duration and delegation store tests (OVR-01)
 
-Status: verified locally, unshipped. Installed product is still 8b01e72311.
+Status: verified locally and committed as c3c7f6ae93, unshipped. Installed product is still 8b01e72311.
 
 Live duration can be saved after close, is immutable, and never dispatches work. Live delegation admits once per provider ID, refuses consumed user sequence, and advances liveCursor only with new user evidence. Closing admission keeps duration writable. Existing Realtime voice regressions still pass.
 

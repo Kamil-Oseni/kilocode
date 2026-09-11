@@ -2449,3 +2449,15 @@ Changed files: packages/opencode/src/kilocode/task/inbox.ts, packages/opencode/s
 Commands (packages/opencode): bun test ./test/kilocode/task/inbox.test.ts ./test/kilocode/task/inbox-report.test.ts ./test/kilocode/task.test.ts --timeout 60000 -> 65 pass / 0 fail / 611 expect / exit 0 (.tmp/routine-inbox-report-tests.log). bun run typecheck -> exit 0 (.tmp/routine-inbox-report-types.log).
 
 Do not snapshot:install. Next: RDM conversation UI.
+
+## 2026-09-11: Routine inbox conversation UI (OVR-05 / RDM-01)
+
+Status: verified locally and committed as efb574bebd, unshipped. Installed product is still 8b01e72311.
+
+The routines surface now shows a two-pane worker inbox. Unread stays separate from operational state. Follow-ups persist without starting a run; retry reuses the same source; drafts survive a later report.
+
+Changed files: packages/kilo-vscode/src/kilo-provider/routines.ts, packages/kilo-vscode/src/kilo-provider/routine-refresh.ts, packages/kilo-vscode/src/KiloProvider.ts, packages/kilo-vscode/webview-ui/src/types/messages/webview-messages.ts, packages/kilo-vscode/webview-ui/src/types/messages/extension-messages.ts, packages/kilo-vscode/webview-ui/src/components/routines/RoutinesView.tsx, packages/kilo-vscode/webview-ui/src/components/routines/Inbox.tsx, packages/kilo-vscode/webview-ui/src/styles/routines.css, packages/kilo-vscode/tests/unit/routines-inbox.test.ts, packages/kilo-vscode/tests/unit/routines-inbox-view.test.ts, packages/kilo-vscode/tests/fixtures/routine-inbox-view.mjs, packages/kilo-vscode/tests/unit/routine-refresh.test.ts, packages/kilo-vscode/tests/fixtures/routine-edit-view.mjs, .changeset/raya-routine-inbox-ui.md.
+
+Commands (packages/kilo-vscode): bun test tests/unit/routines-inbox.test.ts tests/unit/routines-inbox-view.test.ts tests/unit/routine-refresh.test.ts tests/unit/routine-refresh-view.test.ts tests/unit/routines-edit-view.test.ts tests/unit/routines-access.test.ts --timeout 120000 -> 11 pass / 0 fail / 181 expect / exit 0 (.tmp/routine-inbox-ui-tests.log). bun run check-types -> exit 0. bun run check-types:webview -> exit 0.
+
+Do not snapshot:install. Next: follow-up dispatch.

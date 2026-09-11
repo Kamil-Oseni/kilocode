@@ -17,9 +17,10 @@ import { RayaTaskInbox, posted, type Record as Note } from "./inbox"
 import {
   RayaTaskDelegation,
   ceiling,
+  credited,
   prompt,
+  Invalid,
   type Conflict,
-  type Invalid,
   type Request as Ask,
   type Record as Errand,
 } from "./delegation"
@@ -137,17 +138,28 @@ export namespace RayaTaskRunner {
     const restore = input.database ? recovery({ ...input, database: input.database }) : undefined
     const inbox = input.database ? RayaTaskInbox.make(input.database) : undefined
     const errands = input.database ? RayaTaskDelegation.make(input.database) : undefined
-    const retain = (run: RayaTask.Run) => {
+    const retain = Effect.fn("RayaTaskRunner.retain")(function* (run: RayaTask.Run) {
       const item = posted(run)
-      if (!inbox || !item) return Effect.void
-      return inbox.publish(item).pipe(
+      if (!inbox || !item) return
+      const kids = errands ? yield* errands.byRun(run.id) : []
+      const names = new Map<string, string>()
+      for (const kid of kids) {
+        if (names.has(kid.recipientID)) continue
+        const found = yield* tasks.get(kid.recipientID).pipe(
+          Effect.catchTag("RayaTask.NotFoundError", () => Effect.succeed(undefined)),
+        )
+        names.set(kid.recipientID, found?.name ?? kid.recipientID)
+      }
+      const extra = credited(kids, (id) => names.get(id) ?? id)
+      const body = extra.length ? [item.body, ...extra].join("\n").slice(0, 8000) : item.body
+      yield* inbox.publish({ ...item, body }).pipe(
         Effect.catch((error) =>
           typeof error === "object" && error !== null && "_tag" in error && error._tag === "RayaTaskInbox.Conflict"
             ? Effect.void
             : Effect.die(error),
         ),
       )
-    }
+    })
 
     const seed = Effect.fn("RayaTaskRunner.seed")(function* (item: RayaTask.Agent) {
       const memory = yield* tasks.recall(item.id)
@@ -422,6 +434,11 @@ export namespace RayaTaskRunner {
         })
       const sender = yield* tasks.get(input.senderID)
       const recipient = yield* tasks.get(input.recipientID)
+      if (input.parentRunID) {
+        const history = yield* tasks.runsFor(sender.id)
+        if (!history.some((run) => run.id === input.parentRunID))
+          return yield* new Invalid({ message: "The parent run was not found for this worker." })
+      }
       const admitted = yield* errands.admit(input, sender, recipient)
       if ((yield* busy(recipient.id)) || admitted.record.state !== "queued") return admitted.record
       const taken = yield* errands.take(recipient.id)

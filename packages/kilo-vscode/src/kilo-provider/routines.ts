@@ -271,6 +271,7 @@ async function pass(ctx: Ctx) {
       senderID: String(msg.agentID),
       recipientID: String(msg.recipientID),
       objective: text,
+      ...(token(msg.parentRunID) ? { parentRunID: String(msg.parentRunID) } : {}),
     },
     { throwOnError: true },
   )

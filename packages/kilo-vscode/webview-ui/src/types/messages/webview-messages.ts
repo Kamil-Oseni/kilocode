@@ -232,6 +232,7 @@ export interface RoutineDelegateMessage {
   recipientID: string
   source: string
   objective: string
+  parentRunID?: string
 }
 
 export interface RoutineDelegateCancelMessage {

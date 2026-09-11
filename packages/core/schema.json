@@ -1,9 +1,9 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "8628647d-d95f-429c-b7f4-4d27aaad5f41",
+  "id": "39062738-382b-4893-97c2-e22a9f109c9b",
   "prevIds": [
-    "8accccd4-9fdd-4641-a3b2-147350c6f8b9"
+    "8628647d-d95f-429c-b7f4-4d27aaad5f41"
   ],
   "ddl": [
     {
@@ -525,7 +525,7 @@
       "table": "raya_routine_delegation"
     },
     {
-      "type": "integer",
+      "type": "real",
       "notNull": false,
       "autoincrement": false,
       "default": null,
@@ -2641,6 +2641,20 @@
       "where": null,
       "origin": "manual",
       "name": "raya_routine_delegation_parent",
+      "entityType": "indexes",
+      "table": "raya_routine_delegation"
+    },
+    {
+      "columns": [
+        {
+          "value": "parent_run_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "raya_routine_delegation_run",
       "entityType": "indexes",
       "table": "raya_routine_delegation"
     },

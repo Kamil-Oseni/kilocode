@@ -163,16 +163,44 @@ function cards(row: Record, sender: RayaTask.Agent, recipient: RayaTask.Agent): 
   ]
 }
 
+export function billed(row: Pick<Record, "cost">) {
+  const amount = row.cost
+  if (typeof amount !== "number" || !Number.isFinite(amount) || amount < 0)
+    return "Child cost was not recorded. No amount was invented."
+  return `Child cost $${amount}. This amount is not added to the requesting worker's standing-job total.`
+}
+
+export function credited(kids: readonly Record[], name?: (id: string) => string) {
+  if (!kids.length) return [] as string[]
+  const lines = ["Contributing worker requests. Their costs are not added to this run's total."]
+  for (const row of kids) {
+    const who = name?.(row.recipientID) ?? row.recipientID
+    if (row.state === "completed") {
+      lines.push(`${who}: completed. ${billed(row)}`)
+      continue
+    }
+    if (row.state === "queued" || row.state === "accepted" || row.state === "running" || row.state === "needs_input") {
+      lines.push(`${who}: ${row.state}. No completed reply yet. This is not a completed worker result.`)
+      continue
+    }
+    lines.push(
+      `${who}: ${row.state}. ${row.reason || "No completed worker reply."} This is not a completed worker reply.`,
+    )
+  }
+  return lines
+}
+
 export function replied(row: Record, recipient: RayaTask.Agent): Publish | undefined {
   if (row.state === "queued" || row.state === "accepted" || row.state === "running") return
   const findings = row.response?.trim()
   const lines =
     row.state === "completed"
-      ? [`Reply from ${recipient.name}.`, findings || "No written reply was saved. This is not invented success."]
+      ? [`Reply from ${recipient.name}.`, findings || "No written reply was saved. This is not invented success.", billed(row)]
       : [
           `Delegation ${row.state} (${recipient.name}).`,
           row.reason || findings || "No written reply was saved.",
           "This is not a completed worker reply.",
+          billed(row),
         ]
   const body = lines.join("\n").slice(0, 8000)
   if (!body.trim()) return
@@ -367,8 +395,9 @@ export namespace RayaTaskDelegation {
       reason?: string,
     ) {
       const prior = yield* get(id)
+      const amount = typeof cost === "number" && Number.isFinite(cost) && cost >= 0 ? cost : undefined
       if (prior.state === "completed" || prior.state === "failed" || prior.state === "cancelled") {
-        if (prior.state === state && prior.response === response && prior.cost === cost && prior.reason === reason)
+        if (prior.state === state && prior.response === response && prior.cost === amount && prior.reason === reason)
           return prior
         return yield* new Conflict({ message: "This delegation already has a different result." })
       }
@@ -378,7 +407,7 @@ export namespace RayaTaskDelegation {
         .set({
           state,
           response: response ?? null,
-          cost: cost ?? null,
+          cost: amount ?? null,
           reason: reason ?? null,
           time_updated: now,
         })
@@ -423,6 +452,16 @@ export namespace RayaTaskDelegation {
       const row = yield* db.select().from(Delegation).where(eq(Delegation.session_id, sessionID)).get().pipe(Effect.orDie)
       return row ? decode(row) : undefined
     })
-    return { admit, take, attach, finish, get, lookup, chain, descendants, stop, queued, bySession }
+    const byRun = Effect.fn("RayaTaskDelegation.byRun")(function* (parentRunID: string) {
+      const rows = yield* db
+        .select()
+        .from(Delegation)
+        .where(eq(Delegation.parent_run_id, parentRunID))
+        .orderBy(asc(Delegation.time_created), asc(Delegation.id))
+        .all()
+        .pipe(Effect.orDie)
+      return rows.map(decode)
+    })
+    return { admit, take, attach, finish, get, lookup, chain, descendants, stop, queued, bySession, byRun }
   }
 }

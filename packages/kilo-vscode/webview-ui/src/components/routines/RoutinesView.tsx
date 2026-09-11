@@ -122,6 +122,12 @@ function latest(item: Agent, book: Record<string, Run[]>) {
   return select(book[item.id] ?? [])
 }
 
+function held(item: Agent, book: Record<string, Run[]>) {
+  const run = latest(item, book)
+  if (!run) return
+  if (run.status === "running" || (run.status === "blocked" && run.blockedReason === "waiting on you")) return run.id
+}
+
 function folder(path: string) {
   const parts = path.replaceAll("\\", "/").split("/").filter(Boolean)
   return parts.at(-1) ?? path
@@ -891,6 +897,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                   box={boxes()[item.id]}
                   workspace={item.dir ? folder(item.dir) : undefined}
                   workers={others(item.id, agents())}
+                  runID={held(item, runs())}
                   onBack={() => setChosen()}
                 />
               )}

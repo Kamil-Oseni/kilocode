@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { Effect, Exit } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { SessionID } from "@/session/schema"
-import { RayaTaskDelegation, ceiling, replied, scope, type Request } from "@/kilocode/task/delegation"
+import { RayaTaskDelegation, billed, credited, ceiling, replied, scope, type Request } from "@/kilocode/task/delegation"
 import type { RayaTask } from "@/kilocode/task"
 
 const agent = (id: string, role: string, extra?: Partial<RayaTask.Agent>): RayaTask.Agent => ({
@@ -70,6 +70,53 @@ test("posted replies do not invent a completed worker result", () => {
   )
   expect(done?.kind).toBe("delegation")
   expect(done?.body).toContain("not invented success")
+  expect(done?.body).toContain("Child cost was not recorded. No amount was invented.")
+  const priced = replied(
+    {
+      id: "rdl_1",
+      source: "dlg_1",
+      senderID: "chief",
+      recipientID: "books",
+      objective: "Review receipts",
+      depth: 1,
+      state: "completed",
+      cost: 1.5,
+      time: 1,
+    },
+    books,
+  )
+  expect(priced?.body).toContain("Child cost $1.5")
+  expect(priced?.body).toContain("not added to the requesting worker's standing-job total")
+  expect(billed({ cost: Number.NaN })).toContain("No amount was invented")
+  const notes = credited(
+    [
+      {
+        id: "rdl_done",
+        source: "dlg_done",
+        senderID: "chief",
+        recipientID: "books",
+        objective: "Review receipts",
+        depth: 1,
+        state: "completed",
+        cost: 1.5,
+        time: 1,
+      },
+      {
+        id: "rdl_wait",
+        source: "dlg_wait",
+        senderID: "chief",
+        recipientID: "legal",
+        objective: "Confirm policy",
+        depth: 1,
+        state: "queued",
+        time: 2,
+      },
+    ],
+    (id) => (id === "books" ? "Accounting" : "Legal"),
+  )
+  expect(notes[0]).toContain("not added to this run's total")
+  expect(notes.some((line) => line.includes("Accounting: completed") && line.includes("$1.5"))).toBe(true)
+  expect(notes.some((line) => line.includes("Legal: queued") && line.includes("not a completed worker result"))).toBe(true)
 })
 
 test("delegation admits once, refuses loops, and queues without duplicating a busy worker", async () => {
@@ -164,6 +211,38 @@ test("stopping a request keeps a completed child and does not rewrite the parent
       expect(kept.state).toBe("completed")
       expect((yield* store.stop(child.record.id, extra, "Stopped by the user.")).state).toBe("completed")
       expect(kept.response).toBe("Named missing receipts.")
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
+test("child cost is stored as a real amount and listed on the parent run without adding it", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const store = RayaTaskDelegation.make(yield* Database.Service)
+      const chief = agent("chief", "generalist")
+      const books = agent("books", "accountant")
+      const extra = agent("legal", "reviewer")
+      const first = yield* store.admit(
+        request("dlg_cost", chief.id, books.id, { parentRunID: "occ_parent" }),
+        chief,
+        books,
+      )
+      const taken = yield* store.take(books.id)
+      yield* store.attach(taken!.id, "run_books", SessionID.make("ses_books"))
+      const done = yield* store.finish(taken!.id, "completed", books, "Travel receipts are missing.", 1.5)
+      expect(done.cost).toBe(1.5)
+      expect((yield* store.get(taken!.id)).cost).toBe(1.5)
+      expect((yield* store.finish(taken!.id, "completed", books, "Travel receipts are missing.", 1.5)).cost).toBe(1.5)
+      const waiting = yield* store.admit(
+        request("dlg_pending", chief.id, extra.id, { parentRunID: "occ_parent" }),
+        chief,
+        extra,
+      )
+      expect(waiting.record.state).toBe("queued")
+      const kids = yield* store.byRun("occ_parent")
+      expect(kids.map((item) => item.id)).toEqual([first.record.id, waiting.record.id])
+      expect(kids[0]?.cost).toBe(1.5)
+      expect(kids[1]?.cost).toBeUndefined()
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })

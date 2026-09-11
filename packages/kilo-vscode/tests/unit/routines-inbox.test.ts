@@ -190,6 +190,64 @@ test("routine delegate posts the same source on retry and refreshes inbox summar
   })
 })
 
+test("routine delegate forwards a parent run id when the sender has outstanding work", async () => {
+  const messages: unknown[] = []
+  let payload: Record<string, unknown> | undefined
+  const client = createKiloClient({
+    baseUrl: "http://localhost:4096",
+    fetch: async (input, init) => {
+      const request = new Request(input, init)
+      const url = new URL(request.url)
+      if (url.pathname.endsWith("/delegate") && request.method === "POST") {
+        payload = (await request.json()) as Record<string, unknown>
+        return Response.json({
+          id: "rdl_1",
+          source: "dlg:parent",
+          senderID: "chief",
+          recipientID: "books",
+          parentRunID: "occ_parent",
+          objective: "Review Friday expenses.",
+          state: "queued",
+        })
+      }
+      if (url.pathname.endsWith("/agent-inbox") && request.method === "GET")
+        return Response.json([
+          {
+            agentID: "chief",
+            conversationID: "rcv_chief",
+            name: "Chief of Staff",
+            role: "briefer",
+            unread: 0,
+            state: "running",
+          },
+        ])
+      return new Response("missing", { status: 404 })
+    },
+  })
+  await handleRoutineMessage({
+    client,
+    directory: "workspace",
+    post: (msg: unknown) => messages.push(msg),
+    message: {
+      type: "routineDelegate",
+      requestID: "dlg1",
+      agentID: "chief",
+      recipientID: "books",
+      source: "dlg:parent",
+      objective: "Review Friday expenses.",
+      parentRunID: "occ_parent",
+    },
+  })
+  expect(payload).toEqual({
+    source: "dlg:parent",
+    senderID: "chief",
+    recipientID: "books",
+    objective: "Review Friday expenses.",
+    parentRunID: "occ_parent",
+  })
+  expect(messages[0]).toMatchObject({ type: "routineDelegated", requestID: "dlg1" })
+})
+
 test("routine delegate cancel posts the request id and refreshes inbox summaries", async () => {
   const messages: unknown[] = []
   let path = ""

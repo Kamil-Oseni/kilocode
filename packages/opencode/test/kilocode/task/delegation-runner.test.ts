@@ -1,10 +1,11 @@
 import { expect, test } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Exit } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { Storage } from "@/storage/storage"
 import { SessionID } from "@/session/schema"
 import { RayaTaskDelegation } from "@/kilocode/task/delegation"
+import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
 
@@ -219,6 +220,107 @@ test("stopping a parent cancels live descendants without rewriting assignments",
       expect((yield* RayaTaskDelegation.make(database).get(child.id)).state).toBe("cancelled")
       expect((yield* runner.tasks.get(chief.id)).objective).toBe("Coordinate Friday close.")
       expect((yield* runner.tasks.get(books.id)).objective).toBe("Reconcile receipts.")
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
+test("parent run cost stays independent of a completed child request", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const runner = RayaTaskRunner.make({
+        database,
+        storage,
+        sessions: {
+          create: () => Effect.sync(() => session("ses_books")),
+          get: () => Effect.die("unused"),
+          messages: ({ sessionID }) =>
+            Effect.succeed([
+              {
+                info: {
+                  role: "assistant",
+                  cost: sessionID === SessionID.make("ses_chief") ? 2 : 1.5,
+                },
+                parts: [],
+              },
+            ] as never),
+          children: () => Effect.succeed([]),
+        },
+      })
+      const inbox = RayaTaskInbox.make(database)
+      const store = RayaTaskDelegation.make(database)
+      const chief = yield* runner.tasks.create({
+        name: "Chief of Staff",
+        role: "generalist",
+        objective: "Coordinate Friday close.",
+        access: "brief",
+        enabled: true,
+        schedule: { kind: "manual" },
+      })
+      const books = yield* runner.tasks.create({
+        name: "Accounting",
+        role: "accountant",
+        objective: "Reconcile receipts.",
+        capabilities: ["accounting"],
+        access: "full",
+        enabled: true,
+        schedule: { kind: "manual" },
+      })
+      const now = Date.now()
+      const parent = SessionID.make("ses_chief")
+      yield* runner.tasks.record({ id: "occ_parent", agentID: chief.id, sessionID: parent, at: now, status: "running" })
+      const child = yield* runner.delegate({
+        source: "dlg_cost",
+        senderID: chief.id,
+        recipientID: books.id,
+        parentRunID: "occ_parent",
+        objective: "List missing Friday receipts.",
+      })
+      expect(child.parentRunID).toBe("occ_parent")
+      expect(
+        Exit.isFailure(
+          yield* runner
+            .delegate({
+              source: "dlg_missing",
+              senderID: chief.id,
+              recipientID: books.id,
+              parentRunID: "occ_missing",
+              objective: "List missing Friday receipts.",
+            })
+            .pipe(Effect.exit),
+        ),
+      ).toBe(true)
+      yield* storage.write(["raya", "goal", child.sessionID!], {
+        objective: "Reconcile receipts.",
+        status: "complete",
+        createdAt: now,
+        updatedAt: now,
+        usage: { turns: 1, continuations: 0, toolCalls: 1 },
+        progress: [],
+        audit: { summary: "Travel receipts are missing.", verifiedAt: now, requirements: [] },
+      })
+      yield* runner.settle(child.sessionID!)
+      expect((yield* store.get(child.id)).cost).toBe(1.5)
+      yield* storage.write(["raya", "goal", parent], {
+        objective: "Coordinate Friday close.",
+        status: "complete",
+        createdAt: now,
+        updatedAt: now,
+        usage: { turns: 1, continuations: 0, toolCalls: 1 },
+        progress: [],
+        audit: { summary: "Friday close used the accounting reply.", verifiedAt: now, requirements: [] },
+      })
+      yield* runner.settle(parent)
+      const run = (yield* runner.tasks.runsFor(chief.id)).find((item) => item.id === "occ_parent")
+      expect(run?.outcome?.cost).toBe(2)
+      expect(run?.outcome?.cost).not.toBe(3.5)
+      const report = (yield* inbox.page(chief.id)).messages.find((item) => item.source === "report:occ_parent")
+      expect(report?.body).toContain("Friday close used the accounting reply.")
+      expect(report?.body).toContain("Accounting: completed")
+      expect(report?.body).toContain("Child cost $1.5")
+      expect(report?.body).toContain("not added to this run's total")
+      expect(report?.body).not.toContain("consensus")
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })

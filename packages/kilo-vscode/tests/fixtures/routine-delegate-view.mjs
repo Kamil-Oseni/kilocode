@@ -169,6 +169,7 @@ try {
   assert.equal(first.agentID, chief.id)
   assert.equal(first.recipientID, books.id)
   assert.equal(first.objective, "Review Friday expenses.")
+  assert.equal(first.parentRunID, undefined)
   emit({
     type: "routineDelegated",
     requestID: first.requestID,
@@ -281,7 +282,37 @@ try {
   })
   assert.match(root.textContent, /Asked you/)
   assert.match(root.textContent, /Request from Chief of Staff/)
-  console.log("routine-delegate-view: 22 assertions passed")
+  button("Back").click()
+  person("Chief of Staff").click()
+  await new Promise((resolve) => setImmediate(resolve))
+  const reopen = sent.findLast((msg) => msg.type === "routineInboxPage")
+  emit({
+    type: "routineInboxPage",
+    requestID: reopen.requestID,
+    agentID: chief.id,
+    messages: [],
+  })
+  emit({
+    type: "routineRuns",
+    agentID: chief.id,
+    runs: [
+      {
+        id: "occ_parent",
+        agentID: chief.id,
+        at: 1,
+        sessionID: "ses_chief",
+        status: "running",
+      },
+    ],
+  })
+  const area2 = root.querySelector("textarea[aria-label='Ask another worker']")
+  area2.value = "Need the missing receipts."
+  area2.dispatchEvent(new window.Event("input", { bubbles: true }))
+  button("Ask Books").click()
+  const linked = sent.findLast((msg) => msg.type === "routineDelegate")
+  assert.equal(linked.parentRunID, "occ_parent")
+  assert.equal(linked.objective, "Need the missing receipts.")
+  console.log("routine-delegate-view: 25 assertions passed")
 } finally {
   dispose()
   root.remove()

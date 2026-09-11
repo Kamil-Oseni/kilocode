@@ -655,7 +655,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     })
     const agentDelegate = Effect.fn("KilocodeHttpApi.agentDelegate")(function* (ctx: {
       params: { agentID: string }
-      payload: { source: string; senderID: string; recipientID: string; objective: string }
+      payload: { source: string; senderID: string; recipientID: string; objective: string; parentRunID?: string }
     }) {
       yield* owned(ctx.params.agentID)
       yield* owned(ctx.payload.recipientID)

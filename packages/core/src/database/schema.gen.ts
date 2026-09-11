@@ -82,7 +82,7 @@ export default {
           \`child_run_id\` text,
           \`session_id\` text,
           \`response\` text,
-          \`cost\` integer,
+          \`cost\` real,
           \`reason\` text,
           \`time_created\` integer NOT NULL,
           \`time_updated\` integer NOT NULL
@@ -363,6 +363,9 @@ export default {
       // kilocode_change end
       // kilocode_change start
       yield* tx.run(`CREATE INDEX \`raya_routine_delegation_parent\` ON \`raya_routine_delegation\` (\`parent_id\`);`)
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(`CREATE INDEX \`raya_routine_delegation_run\` ON \`raya_routine_delegation\` (\`parent_run_id\`);`)
       // kilocode_change end
       // kilocode_change start
       yield* tx.run(

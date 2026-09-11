@@ -2543,3 +2543,16 @@ Status: committed, pushed and installed as 153189583a. Live is packaged but not 
 Installed eden.raya@7.4.23-snapshot+153189583a.kamil-oseni.1789155622428. VSIX C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-153189583a-kamil-oseni-1789155622428.vsix; SHA-256 19D83A8D47588B87723577CE1BA318B7E035D30A091A78D3686A84BC2BCC0A81; 519935769 bytes, 432 entries, CLI 228771840 bytes.
 
 Next: cost-attribution review, then RDM-06 Friday accounting E2E.
+
+## 2026-09-11: Delegated cost attribution (RDM-04.6)
+
+Status: verified locally and unshipped. Installed product is still 153189583a.
+
+Child request cost is stored as a real amount. The requester's standing-job total is not increased by child costs. Coordinating reports list contributing workers and distinguish completed replies from pending input. Missing cost is not invented. Asks during outstanding work may attach the parent run.
+
+Changed files: packages/core/src/kilocode/routine.sql.ts, packages/core/src/database/migration/20260911194749_kilocode-routine-delegation-cost.ts, packages/core/src/database/migration.gen.ts, packages/core/src/database/schema.gen.ts, packages/core/schema.json, packages/opencode/src/kilocode/task/delegation.ts, packages/opencode/src/kilocode/task/runner.ts, packages/opencode/src/kilocode/server/httpapi/handlers/kilocode.ts, packages/opencode/test/kilocode/task/delegation.test.ts, packages/opencode/test/kilocode/task/delegation-runner.test.ts, packages/kilo-vscode/src/kilo-provider/routines.ts, packages/kilo-vscode/webview-ui/src/components/routines/Inbox.tsx, packages/kilo-vscode/webview-ui/src/components/routines/RoutinesView.tsx, packages/kilo-vscode/webview-ui/src/types/messages/webview-messages.ts, packages/kilo-vscode/tests/unit/routines-inbox.test.ts, packages/kilo-vscode/tests/fixtures/routine-delegate-view.mjs, .changeset/raya-routine-delegate-cost.md.
+
+Commands (packages/opencode): bun test ./test/kilocode/task/delegation.test.ts ./test/kilocode/task/delegation-runner.test.ts ./test/kilocode/server/httpapi-routine-delegate.test.ts --timeout 60000 -> 9 pass / 0 fail / 97 expect / exit 0 (.tmp/routine-delegate-cost-runtime.log). bun run typecheck -> exit 0. packages/kilo-vscode bun test ./tests/unit/routines-inbox.test.ts ./tests/unit/routines-delegate-view.test.ts ./tests/unit/routines-inbox-view.test.ts --timeout 90000 -> 6 pass / 0 fail / 19 expect / exit 0 (.tmp/routine-delegate-cost-ui-tests.log). bun run typecheck -> exit 0.
+
+Next: commit, push, and snapshot:install. Remaining: RDM-06 Friday accounting E2E.
+

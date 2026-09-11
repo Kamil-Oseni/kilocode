@@ -91,7 +91,7 @@ export function status(state: Box["state"]) {
   return "Scheduled"
 }
 
-const Pass: Component<{ agentID: string; workers: Peer[]; onDone?: () => void }> = (props) => {
+const Pass: Component<{ agentID: string; workers: Peer[]; runID?: string; onDone?: () => void }> = (props) => {
   const vscode = useVSCode()
   const [ask, setAsk] = createSignal("")
   const [phase, setPhase] = createSignal<"idle" | "sending" | "failed">("idle")
@@ -143,6 +143,7 @@ const Pass: Component<{ agentID: string; workers: Peer[]; onDone?: () => void }>
       recipientID,
       source,
       objective: body,
+      ...(props.runID ? { parentRunID: props.runID } : {}),
     })
   }
 
@@ -192,6 +193,7 @@ export const Inbox: Component<{
   box?: Box
   workspace?: string
   workers?: Peer[]
+  runID?: string
   onBack?: () => void
 }> = (props) => {
   const vscode = useVSCode()
@@ -427,7 +429,7 @@ export const Inbox: Component<{
         </Button>
       </form>
       <Show when={props.workers && props.workers.length > 0}>
-        <Pass agentID={props.agentID} workers={props.workers!} onDone={() => { wait = false; load() }} />
+        <Pass agentID={props.agentID} workers={props.workers!} runID={props.runID} onDone={() => { wait = false; load() }} />
       </Show>
     </div>
   )

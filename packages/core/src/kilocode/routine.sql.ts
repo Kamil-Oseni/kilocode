@@ -1,4 +1,4 @@
-import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core"
+import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core"
 
 export const RayaRoutineCursorTable = sqliteTable(
   "raya_routine_cursor",
@@ -90,7 +90,7 @@ export const RayaRoutineDelegationTable = sqliteTable(
     child_run_id: text(),
     session_id: text(),
     response: text(),
-    cost: integer(),
+    cost: real(),
     reason: text(),
     time_created: integer().notNull(),
     time_updated: integer().notNull(),
@@ -99,5 +99,6 @@ export const RayaRoutineDelegationTable = sqliteTable(
     uniqueIndex("raya_routine_delegation_source").on(table.source),
     index("raya_routine_delegation_recipient").on(table.recipient_id, table.state, table.time_created),
     index("raya_routine_delegation_parent").on(table.parent_id),
+    index("raya_routine_delegation_run").on(table.parent_run_id),
   ],
 )

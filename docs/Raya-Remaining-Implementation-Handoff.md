@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Installed product is `153189583a`. Live host/CLI contracts are packaged; the default engine remains `openai-realtime`. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, and stop-outstanding-delegation are installed. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Installed product is `153189583a`. Live host/CLI contracts are packaged; the default engine remains `openai-realtime`. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, and delegated cost attribution are implemented; cost attribution is verified locally and not yet installed. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -1246,6 +1246,20 @@ Next executable step: attribute delegated costs to the child request and parent/
 
 Installed `eden.raya@7.4.23-snapshot+153189583a.kamil-oseni.1789155622428`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-153189583a-kamil-oseni-1789155622428.vsix`; SHA-256 `19D83A8D47588B87723577CE1BA318B7E035D30A091A78D3686A84BC2BCC0A81`; 519935769 bytes, 432 entries, CLI 228771840 bytes. Includes stop/cancel for outstanding worker-to-worker requests. Default engine is still `openai-realtime`.
 
-Remaining: cost-attribution review and RDM-06 Friday accounting E2E. Do not change the default engine.
+Remaining: commit, push, and snapshot:install this cost attribution, then RDM-06 Friday accounting E2E. Do not change the default engine.
 
-Next executable step: attribute delegated costs without double counting, then run the Friday accounting E2E.
+Next executable step: commit, push, and snapshot:install delegated cost attribution, then run the Friday accounting E2E.
+
+## 2026-09-11: Delegated cost attribution (RDM-04.6)
+
+**States:** RDM-04.6 verified locally and unshipped. Installed product is still `153189583a`. Live remains not the default engine.
+
+Child request cost is stored as a real amount on the delegation record. The requesting worker's standing-job total stays the cost of that worker's own session. A coordinating report lists contributing requests and distinguishes completed replies from pending input. Missing cost is stated as not recorded; no amount is invented. A conversation ask during outstanding work may attach the parent run; idle conversation asks stay on the child request only.
+
+Changed files: `packages/core/src/kilocode/routine.sql.ts`, `packages/core/src/database/migration/20260911194749_kilocode-routine-delegation-cost.ts`, `packages/core/src/database/migration.gen.ts`, `packages/core/src/database/schema.gen.ts`, `packages/core/schema.json`, `packages/opencode/src/kilocode/task/delegation.ts`, `packages/opencode/src/kilocode/task/runner.ts`, `packages/opencode/src/kilocode/server/httpapi/handlers/kilocode.ts`, `packages/opencode/test/kilocode/task/delegation.test.ts`, `packages/opencode/test/kilocode/task/delegation-runner.test.ts`, `packages/kilo-vscode/src/kilo-provider/routines.ts`, `packages/kilo-vscode/webview-ui/src/components/routines/Inbox.tsx`, `packages/kilo-vscode/webview-ui/src/components/routines/RoutinesView.tsx`, `packages/kilo-vscode/webview-ui/src/types/messages/webview-messages.ts`, `packages/kilo-vscode/tests/unit/routines-inbox.test.ts`, `packages/kilo-vscode/tests/fixtures/routine-delegate-view.mjs`, `.changeset/raya-routine-delegate-cost.md`.
+
+Commands (cwd `packages/opencode`): `bun test ./test/kilocode/task/delegation.test.ts ./test/kilocode/task/delegation-runner.test.ts ./test/kilocode/server/httpapi-routine-delegate.test.ts --timeout 60000` -> 9 pass / 0 fail / 97 expect / exit 0 (`.tmp/routine-delegate-cost-runtime.log`). `bun run typecheck` -> exit 0. Cwd `packages/kilo-vscode`: `bun test ./tests/unit/routines-inbox.test.ts ./tests/unit/routines-delegate-view.test.ts ./tests/unit/routines-inbox-view.test.ts --timeout 90000` -> 6 pass / 0 fail / 19 expect / exit 0 (`.tmp/routine-delegate-cost-ui-tests.log`). `bun run typecheck` -> exit 0. eslint on changed files -> exit 0. Cwd `packages/core`: `bun run typecheck` -> exit 0. Root `bun run script/check-opencode-annotations.ts --worktree` -> exit 0.
+
+Remaining after install: RDM-06 Friday accounting E2E, then leftover busy-recipient/denial/timeout/inspectable-chain UI and lifecycle cases. Do not change the default engine.
+
+Next executable step: commit, push, and snapshot:install, then run the Friday accounting E2E.

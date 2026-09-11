@@ -2341,3 +2341,15 @@ Changed files: packages/kilo-vscode/src/speech/live-broker.ts, packages/kilo-vsc
 Commands (packages/kilo-vscode unless noted): bun test tests/unit/live-broker.test.ts tests/unit/live-commands.test.ts --timeout 30000 -> 9 pass / 0 fail / 198 assertions / exit 0 (.tmp/live-broker-tests.log). bun run check-types -> exit 0 (.tmp/live-host-types.log). Root oxlint on those six files: 24 warnings / 0 errors / exit 0 (.tmp/live-broker-lint.log).
 
 Default engine remains openai-realtime. Service/UI/backend Live wiring is still uncommitted WIP. Do not snapshot:install. Next: backend duration/delegation store tests against actual SQL.
+
+## 2026-09-11: Live duration and delegation store tests (OVR-01)
+
+Status: verified locally, unshipped. Installed product is still 8b01e72311.
+
+Live duration can be saved after close, is immutable, and never dispatches work. Live delegation admits once per provider ID, refuses consumed user sequence, and advances liveCursor only with new user evidence. Closing admission keeps duration writable. Existing Realtime voice regressions still pass.
+
+Changed files: packages/opencode/src/kilocode/voice/openai.ts, packages/opencode/src/kilocode/voice/openai-store.ts, packages/opencode/src/kilocode/voice/openai-protocol.ts, packages/opencode/src/kilocode/server/httpapi/groups/voice.ts, packages/opencode/src/kilocode/server/httpapi/handlers/voice.ts, packages/opencode/test/kilocode/voice-live.test.ts.
+
+Commands (packages/opencode): bun test ./test/kilocode/voice-live.test.ts --timeout 30000 -> 4 pass / 0 fail / 27 assertions / exit 0 (.tmp/voice-live-store-tests.log). bun test ./test/kilocode/voice-openai.test.ts --timeout 30000 -> 17 pass / 131 assertions / exit 0 (.tmp/voice-openai-regression.log). bun run typecheck -> exit 0 (.tmp/voice-live-store-types.log). Root oxlint: 0 errors (.tmp/voice-live-store-lint.log).
+
+Do not snapshot:install. Next: remaining Live host image bounds, SDK regeneration, then WebRTC/UI fixtures.

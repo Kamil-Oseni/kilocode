@@ -7,6 +7,7 @@ import { SessionID } from "@/session/schema"
 import type { Storage } from "@/storage/storage"
 import { OpenAIBinding, OpenAICall, OpenAICallInput, OpenAIImage, VoiceID, VoiceKey } from "./openai-protocol"
 import { OpenAIUsage } from "./openai-usage"
+import { LiveDuration } from "./live-protocol"
 
 const Payload = Schema.Struct({
   binding: OpenAIBinding,
@@ -16,6 +17,10 @@ const Payload = Schema.Struct({
   calls: Schema.Record(Schema.String, Schema.Struct({ input: OpenAICallInput, receipt: OpenAICall })),
   images: Schema.optional(Schema.Record(Schema.String, Schema.Struct({ receipt: OpenAIImage, data: Schema.String }))),
   usage: Schema.optional(Schema.Record(Schema.String, OpenAIUsage)),
+  duration: Schema.optional(LiveDuration),
+  liveCursor: Schema.optional(
+    Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER)),
+  ),
 })
 export type Stored = {
   binding: typeof OpenAIBinding.Type
@@ -25,6 +30,8 @@ export type Stored = {
   calls: Record<string, { input: typeof OpenAICallInput.Type; receipt: typeof OpenAICall.Type }>
   images?: Record<string, { receipt: typeof OpenAIImage.Type; data: string }>
   usage?: Record<string, typeof OpenAIUsage.Type>
+  duration?: typeof LiveDuration.Type
+  liveCursor?: number
 }
 
 export class BindingError extends Schema.TaggedErrorClass<BindingError>()("VoiceBindingError", {

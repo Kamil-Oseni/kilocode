@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Permission canonical comparison is delivered: committed, pushed and installed as `8b01e72311`. LiveBroker HTTP/WebSocket loopback fixtures pass locally (startup, host timeout, duration, work receipts, conflicting `session.closed`). Live remains unfinished and unshipped; do not change the default engine or package Live. Next executable step is backend duration/delegation store tests. RDM-01-06 remain unimplemented. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Permission canonical comparison is delivered: committed, pushed and installed as `8b01e72311`. LiveBroker loopback fixtures are committed as `43e7bc7116`. Live duration/delegation SQL store tests pass locally and are unshipped. Next executable step is remaining host races/image bounds, then SDK regeneration and WebRTC/UI fixtures. RDM-01-06 remain unimplemented. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -644,7 +644,7 @@ Continue implementing Raya in C:\Users\User\Desktop\raya. Read AGENTS.md, docs/R
 
 I authorize root plus two subagents, normal periodic commits/pushes to origin/main, and snapshot builds/reinstallation outside the sandbox without asking again. Do not force push, bypass hooks or force reload VS Code. Batch broad testing at coherent checkpoints, but verify relevant contracts before calling features working. If repeated attempts fail, document the exact cause and next approach, move to independent work and revisit.
 
-First inspect current git/process state against the handoff. Preserve uncommitted Live UI/service/backend files. LiveBroker loopback fixtures are the latest verified local increment; do not package Live. Next: backend duration/delegation store tests against actual SQL, then remaining host races, LiveCommands timeout, image four-attempt bounds, SDK regeneration and WebRTC/UI fixtures. Keep Raya task ownership, permissions, durable receipts and execution authority. Do not replay historical text as new work or claim generated captions prove heard audio.
+First inspect current git/process state against the handoff. Preserve uncommitted Live UI/service files. LiveBroker loopback fixtures and Live SQL duration/delegation tests are the latest verified local increments; do not package Live. Next: remaining host image four-attempt/hash-reuse cases, SDK regeneration, then WebRTC/UI fixtures. Keep Raya task ownership, permissions, durable receipts and execution authority. Do not replay historical text as new work or claim generated captions prove heard audio.
 
 Defer new Codex-derived implementation until existing Raya work, including GPT-Live and all 39 requirements, is complete. Use the deferred research document later; do not start a new porting track now. Keep the 39-requirement ledger honest. When I warn that credits are near $10, promptly update the full remaining-work handoff, settle the current work and provide an updated continuation prompt.
 ```
@@ -883,11 +883,11 @@ Selection uses received fragments whose start is at/before the provider offset, 
 7. Test image staging: immutable ID/hash, uncertain/failure retention, four-attempt bound, no native image upload, no work from staging alone, correct selected images attached to later work. **Partial:** share before started fails; staging posts only to Raya storage; later delegation includes selected image IDs. Remaining: hash reuse, four-attempt bound, unknown/failure retention and vision permission/model checks.
 8. Test delegation queue and steering while work is busy. Current queue waits behind polling; selection occurs when dequeued using the provider offset. Define whether newer user corrections revise queued work or require clarification, and fence stale results. Do not claim seamless concurrent steering from serialized happy-path execution.
 9. Test conflicting duplicate session.closed events. **Partial:** a later different event ID marks host usage incomplete and does not POST a second duration. Remaining: same-event retry vs conflict, backend immutability under a changed receipt, and UI presentation of incomplete settlement.
-10. Add actual backend runtime/DB/API tests for model mismatch, invalid/duplicate context, replay cursor, immutable receipts, deletion cascades, late writes and permission boundaries. Then regenerate SDK, run existing Realtime/retention regressions and the root source-link extractor. Complete root's real WebRTC/UI acceptance before changing the default or packaging Live.
+10. Add actual backend runtime/DB/API tests for model mismatch, invalid/duplicate context, replay cursor, immutable receipts, deletion cascades, late writes and permission boundaries. **Partial:** service-layer SQL tests cover duration immutability after close, Realtime model mismatch, consumed-sequence refusal and liveCursor advance. Remaining: parent-deletion/late-write duration, HTTP contract tests, SDK regeneration, Realtime/retention re-run after SDK, and WebRTC/UI acceptance.
 
 **Validation receipts at freeze:** historical; superseded for broker fixtures by `.tmp/live-broker-tests.log`. WebRTC/UI/backend SQL tests still absent. Do not package Live. Permission remains the last installed product; see section 3.
 
-**Next executable step:** LiveBroker loopback fixtures pass 7 tests plus 2 LiveCommands tests (`.tmp/live-broker-tests.log`). Next: backend duration/delegation store tests against actual SQL (`liveCursor`, immutable duration, model mismatch, deletion). Do not change the default engine or package Live.
+**Next executable step:** Live duration/delegation SQL tests pass 4/27 assertions (`.tmp/voice-live-store-tests.log`). Next: remaining host image four-attempt/hash-reuse cases, SDK regeneration, then WebRTC/UI fixtures. Do not change the default engine or package Live.
 
 ### Local backup and final stop receipt
 
@@ -1012,6 +1012,18 @@ Changed files: `packages/kilo-vscode/src/speech/live-broker.ts`, `packages/kilo-
 
 Commands (`packages/kilo-vscode` unless noted): `bun test tests/unit/live-broker.test.ts tests/unit/live-commands.test.ts --timeout 30000` -> 9 pass / 0 fail / 198 assertions / exit 0 (`.tmp/live-broker-tests.log`). `bun run check-types` -> exit 0 (`.tmp/live-host-types.log`). Root oxlint on the six Live files: 24 warnings / 0 errors / exit 0 (`.tmp/live-broker-lint.log`).
 
-Remaining: backend SQL duration/cursor tests, SDK regeneration, WebRTC/UI fixtures, service/message routing, image four-attempt and hash-reuse cases, append token bounds, busy-queue steering, and RDM-01-06. Do not snapshot:install.
+Remaining: HTTP/SDK regeneration, WebRTC/UI fixtures, service/message routing, image four-attempt and hash-reuse cases, append token bounds, busy-queue steering, and RDM-01-06. Do not snapshot:install.
 
-Next executable step: backend duration/delegation store tests against actual SQL. Do not change the default engine or package Live.
+## 2026-09-11: Live duration and delegation store tests
+
+**States:** Live SQL duration/delegation contracts verified locally; Live remains unshipped. Product checkpoint remains `8b01e72311`.
+
+Live bindings can retain a final `gpt-live-1` duration after close without reopening work. Identical retries succeed; a changed receipt or a Realtime binding is refused. Client delegation admits one immutable call ID per provider delegation, labels prompt text as imperfect transcript evidence, refuses a later delegation that only repeats consumed user sequence, and advances `liveCursor` only with new user evidence. Closing admission keeps duration writable and refuses new work. `liveCursor` is now a finite safe nonnegative integer in the retained payload schema.
+
+Changed files: `packages/opencode/src/kilocode/voice/openai.ts`, `packages/opencode/src/kilocode/voice/openai-store.ts`, `packages/opencode/src/kilocode/voice/openai-protocol.ts`, `packages/opencode/src/kilocode/server/httpapi/groups/voice.ts`, `packages/opencode/src/kilocode/server/httpapi/handlers/voice.ts`, `packages/opencode/test/kilocode/voice-live.test.ts`.
+
+Commands (`packages/opencode`): `bun test ./test/kilocode/voice-live.test.ts --timeout 30000` -> 4 pass / 0 fail / 27 assertions / exit 0 (`.tmp/voice-live-store-tests.log`). `bun test ./test/kilocode/voice-openai.test.ts --timeout 30000` -> 17 pass / 0 fail / 131 assertions / exit 0 (`.tmp/voice-openai-regression.log`). `bun run typecheck` -> exit 0 (`.tmp/voice-live-store-types.log`). Root oxlint on the six files: 0 errors (`.tmp/voice-live-store-lint.log`).
+
+Remaining: parent-deletion/late-write duration cases, HTTP/SDK regeneration, WebRTC/UI fixtures, and RDM-01-06. Do not snapshot:install.
+
+Next executable step: remaining Live host image four-attempt/hash-reuse cases and SDK regeneration. Do not change the default engine or package Live.

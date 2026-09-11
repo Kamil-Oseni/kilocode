@@ -1,4 +1,5 @@
 import { OpenAIUsage, OpenAIUsageInput, OpenAIUsageState } from "@/kilocode/voice/openai-usage"
+import { LiveCall, LiveDuration, LiveMeter } from "@/kilocode/voice/live-protocol"
 // raya_change - Realtime voice session and media-event API contracts.
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
@@ -35,6 +36,8 @@ export const VoicePaths = {
   usage: `${root}/openai/session/:id/usage`,
   call: `${root}/openai/session/:id/calls/:callID`,
   cancel: `${root}/openai/session/:id/calls/:callID/cancel`,
+  live: `${root}/live/session/:id/calls`,
+  duration: `${root}/live/session/:id/duration`,
 } as const
 
 const headers = { "x-raya-voice-key": Schema.optional(Schema.String) }
@@ -48,6 +51,36 @@ const generation = Schema.Struct({ ...WorkspaceRoutingQueryFields, generation: V
 
 export const VoiceApi = HttpApi.make("raya-voice").add(
   HttpApiGroup.make("raya-voice")
+    .add(
+      HttpApiEndpoint.post("voiceLiveCall", VoicePaths.live, {
+        headers,
+        params: { id: VoiceID },
+        query: WorkspaceRoutingQuery,
+        payload: LiveCall,
+        success: OpenAICall,
+        error: errors,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "kilocode.voice.live.call",
+          summary: "Admit one immutable Live delegation using observed transcript context",
+        }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.post("voiceLiveDuration", VoicePaths.duration, {
+        headers,
+        params: { id: VoiceID },
+        query: WorkspaceRoutingQuery,
+        payload: LiveMeter,
+        success: LiveDuration,
+        error: errors,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "kilocode.voice.live.duration",
+          summary: "Retain final provider-reported Live voice duration",
+        }),
+      ),
+    )
     .add(
       HttpApiEndpoint.post("voiceOpenAIStart", VoicePaths.openai, {
         headers,

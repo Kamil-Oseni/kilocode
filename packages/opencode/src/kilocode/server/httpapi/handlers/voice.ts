@@ -30,6 +30,29 @@ export const voiceHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-voice",
     const openai = yield* OpenAIVoice.make({ sessions, prompts, storage, workers, database })
 
     return handlers
+      .handle("voiceLiveCall", (ctx) =>
+        Effect.gen(function* () {
+          return yield* openai.delegate(
+            ctx.params.id,
+            ctx.payload,
+            ctx.headers["x-raya-voice-key"] ?? "",
+            yield* InstanceState.directory,
+          )
+        }).pipe(
+          Effect.catchTag("VoiceError", (error) => Effect.fail(failure(error))),
+          Effect.catchTag("NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+        ),
+      )
+      .handle("voiceLiveDuration", (ctx) =>
+        Effect.gen(function* () {
+          return yield* openai.duration(
+            ctx.params.id,
+            ctx.payload,
+            ctx.headers["x-raya-voice-key"] ?? "",
+            yield* InstanceState.directory,
+          )
+        }).pipe(Effect.catchTag("VoiceError", (error) => Effect.fail(failure(error)))),
+      )
       .handle("voiceOpenAIStart", (ctx) =>
         Effect.gen(function* () {
           return yield* openai.start(ctx.payload, ctx.headers["x-raya-voice-key"] ?? "", yield* InstanceState.directory)

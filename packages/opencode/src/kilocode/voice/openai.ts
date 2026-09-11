@@ -1,4 +1,5 @@
 import { OpenAIUsageInput, valid, fingerprint } from "./openai-usage"
+import { LiveCall, LiveMeter, prompt as livePrompt, valid as liveValid } from "./live-protocol"
 import fs from "node:fs/promises"
 import { createHash, timingSafeEqual } from "node:crypto"
 import { Cause, Effect, Exit, Fiber, Schema, Scope, Semaphore } from "effect"
@@ -326,7 +327,7 @@ export const make = (deps: Deps) =>
                 parentSessionID: parent.id,
                 directory: dir,
                 providerCallID: input.providerCallID,
-                model: "gpt-realtime-2.1",
+                model: input.model ?? "gpt-realtime-2.1",
                 status: "active",
                 createdAt: now,
                 expiresAt: now + 60 * 60 * 1000,
@@ -339,7 +340,11 @@ export const make = (deps: Deps) =>
             )
               return stored.binding
             const existing = yield* load(id, secret, dir)
-            if (existing.requestID !== input.requestID || existing.binding.parentSessionID !== parent.id)
+            if (
+              existing.requestID !== input.requestID ||
+              existing.binding.parentSessionID !== parent.id ||
+              existing.binding.model !== (input.model ?? "gpt-realtime-2.1")
+            )
               return yield* refuse("conflict", "Provider call already has another binding.")
             return visible(existing)
           }),
@@ -414,12 +419,14 @@ export const make = (deps: Deps) =>
           return { receipts }
         }),
       )
-    const submit = (id: string, input: Input, secret: string, directory: string) =>
+    const submit = (id: string, input: Input, secret: string, directory: string, cursor?: number) =>
       locked(
         id,
         Effect.gen(function* () {
           const stored = yield* load(id, secret, directory, input.generation)
           yield* active(stored)
+          if (stored.binding.model !== (cursor === undefined ? "gpt-realtime-2.1" : "gpt-live-1"))
+            return yield* refuse("conflict", "Voice admission protocol does not match the binding.")
           const prior = stored.calls[digest(input.callID)]
           if (prior) {
             if (
@@ -432,6 +439,8 @@ export const make = (deps: Deps) =>
               return yield* refuse("conflict", "Function call ID was reused with different input.")
             return prior.receipt
           }
+          if (cursor !== undefined && cursor <= (stored.liveCursor ?? 0))
+            return yield* refuse("conflict", "No new live request context is available.")
           if (Object.keys(stored.calls).length >= 64)
             return yield* refuse("conflict", "Voice binding call limit reached; start a new voice connection.")
           if (Object.values(stored.calls).some((call) => pending(call.receipt)))
@@ -452,10 +461,51 @@ export const make = (deps: Deps) =>
             updatedAt: now,
           }
           stored.calls[digest(input.callID)] = { input, receipt: call }
+          if (cursor !== undefined) stored.liveCursor = cursor
           // Persist before scheduling. A crash between these steps remains an unknown intent, never replayed.
           yield* save(stored)
           yield* run(id, input.callID).pipe(Effect.interruptible, Effect.forkIn(scope))
           return call
+        }).pipe(Effect.uninterruptible),
+      )
+    const delegate = (id: string, input: typeof LiveCall.Type, secret: string, directory: string) =>
+      Effect.gen(function* () {
+        if (!liveValid(input)) return yield* refuse("invalid", "Live delegation context is invalid or incomplete.")
+        const cursor = Math.max(
+          ...input.context.fragments
+            .filter((part) => part.speaker === "user" && !part.client && part.text.trim())
+            .map((part) => part.sequence),
+        )
+        return yield* submit(
+          id,
+          {
+            generation: input.generation,
+            callID: `liv_${digest(input.context.delegation).slice(0, 48)}`,
+            function: "raya_work",
+            arguments: { request: livePrompt(input), ...(input.images ? { images: input.images } : {}) },
+          },
+          secret,
+          directory,
+          cursor,
+        )
+      })
+    const duration = (id: string, input: typeof LiveMeter.Type, secret: string, directory: string) =>
+      locked(
+        id,
+        Effect.gen(function* () {
+          if (!Schema.is(LiveMeter)(input) || !Number.isFinite(input.receipt.seconds))
+            return yield* refuse("invalid", "Invalid Live duration receipt.")
+          const stored = yield* load(id, secret, directory, input.generation)
+          if (stored.owner !== owner || stored.binding.model !== "gpt-live-1")
+            return yield* refuse("conflict", "Live duration belongs to another voice binding.")
+          if (stored.duration) {
+            if (JSON.stringify(stored.duration) !== JSON.stringify(input.receipt))
+              return yield* refuse("conflict", "Final Live duration is immutable.")
+            return stored.duration
+          }
+          stored.duration = input.receipt
+          yield* save(stored)
+          return input.receipt
         }).pipe(Effect.uninterruptible),
       )
     const get = (id: string, callID: string, generation: string, secret: string, directory: string) =>
@@ -507,5 +557,5 @@ export const make = (deps: Deps) =>
           return stored.binding
         }),
       )
-    return { start, stage, meter, usage, submit, get, cancel, close }
+    return { start, stage, meter, usage, submit, delegate, duration, get, cancel, close }
   })

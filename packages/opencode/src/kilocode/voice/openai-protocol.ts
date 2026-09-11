@@ -5,16 +5,17 @@ export const VoiceID = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_-]{1,12
 export const VoiceKey = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/))
 export const OpenAIStart = Schema.Struct({
   parentSessionID: SessionID,
-  providerCallID: VoiceID,
+  providerCallID: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256), Schema.isPattern(/^\S+$/)),
   requestID: VoiceID,
+  model: Schema.optional(Schema.Literals(["gpt-realtime-2.1", "gpt-live-1"])),
 }).annotate({ identifier: "OpenAIVoiceStart" })
 export const OpenAIBinding = Schema.Struct({
   id: VoiceID,
   generation: VoiceID,
   parentSessionID: SessionID,
   directory: Schema.String,
-  providerCallID: VoiceID,
-  model: Schema.Literal("gpt-realtime-2.1"),
+  providerCallID: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256), Schema.isPattern(/^\S+$/)),
+  model: Schema.Literals(["gpt-realtime-2.1", "gpt-live-1"]),
   status: Schema.Literals(["active", "closing", "closed"]),
   createdAt: Schema.Number,
   expiresAt: Schema.Number,

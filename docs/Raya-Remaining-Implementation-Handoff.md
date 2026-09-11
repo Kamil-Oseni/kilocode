@@ -1,14 +1,14 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** The pending-approval policy regression is verified locally and is the next product checkpoint. Last pushed/installed product remains `e74508a063` until this permission slice is committed, pushed and installed with Live WIP isolated. GPT-Live and RDM-01-06 remain unfinished. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Permission canonical comparison is delivered: committed, pushed and installed as `8b01e72311`. Live WIP was stashed during install and restored; it remains unfinished and unshipped. Next executable step is GPT-Live host/CLI types and contract tests. RDM-01-06 remain unimplemented. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
-> **LATEST PRIORITY:** Continue the already-started Raya work, including GPT-Live 1, and finish the existing 39-requirement scope before taking on new Codex-derived additions. See [Codex research and deferred backlog](Raya-Codex-Research-Deferred.md). The permission canonical-comparison fix is verified locally; deliver that checkpoint without packaging Live. Keep updating this handoff and the progress ledger during implementation.
+> **LATEST PRIORITY:** Continue GPT-Live 1 and the remaining 39-requirement scope before Codex-derived additions. See [Codex research and deferred backlog](Raya-Codex-Research-Deferred.md). Keep updating this handoff and the progress ledger during implementation.
 
 Updated 2026-09-11. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `e74508a063d50d9f64e5b1d70e68357b58cafabf` is committed, pushed and installed. Permission-policy work below is verified locally and not yet shipped. Earlier checkpoint/dirty-batch descriptions are historical context; use the latest dated update for current work.
+**Latest delivered product:** checkpoint `8b01e7231172ad8916065bcef2e7dc78cb5ec76a` is committed, pushed and installed. Live/telemetry files in the working tree are unfinished and were not packaged.
 
 ## Scope and reading order
 
@@ -19,9 +19,9 @@ Status excerpts below are historical records, not a fresh certification of every
 ## Checkpoint and standing authorization
 
 - Workspace: `C:\Users\User\Desktop\raya`; PowerShell; branch `main`; origin `https://github.com/Kamil-Oseni/kilocode.git`.
-- Last verified pushed product checkpoint: `932b20497e4c88b9965861ef713265bbe028256d`, native voice task retention.
-- Installed: `eden.raya@7.4.23-snapshot+932b20497e.kamil-oseni.1789017037691`.
-- VSIX: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-932b20497e-kamil-oseni-1789017037691.vsix`; SHA-256 `74E6A11F16F7388C286590F83F0D350C262051DBE996652C8FAE8D2F8A8CF66F`.
+- Last verified pushed product checkpoint: `8b01e7231172ad8916065bcef2e7dc78cb5ec76a`, pending-approval policy snapshot.
+- Installed: `eden.raya@7.4.23-snapshot+8b01e72311.kamil-oseni.1789091821099`.
+- VSIX: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-8b01e72311-kamil-oseni-1789091821099.vsix`; SHA-256 `446FC10C1FAA687194561707B5A49F55671FCD68B45ABCE07DD84121D85F9DE7`.
 - The user authorizes two parallel workers plus root, batched checks, periodic normal commits/pushes to `origin/main`, and `snapshot:install` outside the sandbox. Do not ask again. No force push, hook bypass or forced VS Code reload.
 - At approximately $10 remaining, as reported by the user, stop opening broad work, settle current processes, update this handoff and give the continuation prompt below. Do not invent a credit balance.
 
@@ -752,7 +752,7 @@ Worker-owned files are `packages/opencode/src/permission/index.ts`, `packages/op
 
 The clean-baseline race was demonstrated through the actual Config and Permission services: while an old request waits under ask, Config.updateGlobal changes bash to deny; fresh requests reject, but replying once to the old request releases its protected continuation. Both default updateGlobal and dispose:false reproduce. Log `.tmp/permission-policy-probe-assembled.log`: two intended regression failures, eight assertions. The first ignored probe was a fixture assembly failure and is not evidence.
 
-**2026-09-11 fix:** rule comparison now uses canonical `[permission, pattern, action]` tuples, so scalar `ask` and the merged object form `{ "*": "ask", "echo *": "allow" }` are the same authority. Only service-authored saved rules are treated as expected differences. Unrelated restrictive updates, username-only edits, publication-time deny, cancellation plus late reply, and sibling saved-deny drain are covered by actual Permission/Config tests. **Isolated suite: 12 pass, 0 fail, 37 assertions, terminal 0, `.tmp/permission-policy-isolated.log`.** Individual related suites also passed: always-rules 22/0/35 exit 0 (`.tmp/permission-always-rules.log`); allow-everything 3 pass/15 assertions exit 0 (`.tmp/permission-allow-everything.log`). CLI typecheck exit 0 (`.tmp/permission-policy-types.log`); scoped oxlint 15 warnings/0 errors exit 0 (`.tmp/permission-policy-lint.log`); annotations and Effect facade guards exit 0. No live permission handles. This slice is not yet committed, pushed or installed. Do not package it with unfinished Live files.
+**2026-09-11 delivery:** committed `8b01e7231172ad8916065bcef2e7dc78cb5ec76a`, pushed to origin/main with normal hooks (29 cross-package typecheck tasks + JetBrains, exit 0). Live/telemetry WIP was stashed, `snapshot:install` exit 0, stash restored. Installed `eden.raya@7.4.23-snapshot+8b01e72311.kamil-oseni.1789091821099`. VSIX SHA-256 `446FC10C1FAA687194561707B5A49F55671FCD68B45ABCE07DD84121D85F9DE7`; 571767000 bytes, 442 entries, CLI 228484608 bytes. Archive has no live-broker, `.tmp`, or `.env` entries. Logs: `.tmp/permission-policy-isolated.log`, `.tmp/permission-always-rules.log`, `.tmp/permission-allow-everything.log`, `.tmp/permission-policy-types.log`, `.tmp/permission-policy-lint.log`, `.tmp/permission-policy-annotations.log`, `.tmp/permission-policy-facades.log`, `.tmp/permission-policy-snapshot-install.log`, `.tmp/permission-policy-snapshot-verification.log`, `.tmp/permission-policy-installed-extension.log`. No forced reload. PR-04 per-path grants and Live acceptance remain open.
 
 ### 4. Mandatory next-agent reporting and next-week review contract
 
@@ -778,9 +778,9 @@ Do not push/reinstall the current failing tree. Finish one coherent slice and re
 ### 6. Replacement continuation prompt
 
 ```text
-Continue Raya in C:\Users\User\Desktop\raya. Read AGENTS.md and docs/Raya-Remaining-Implementation-Handoff.md, beginning with the current-status banners and the 2026-09-11 permission update; then read the comprehensive audit, progress ledger and voice architecture. The scope is all 39 requirements plus RDM-01-06. Last verified pushed/installed checkpoint is e74508a063d50d9f64e5b1d70e68357b58cafabf until a later permission snapshot is recorded. Permission canonical comparison is verified locally; Live integration remains UNFINISHED. Preserve Live WIP; do not ship it as verified.
+Continue Raya in C:\Users\User\Desktop\raya. Read AGENTS.md and docs/Raya-Remaining-Implementation-Handoff.md, beginning with the current-status banners and the 2026-09-11 permission update; then read the comprehensive audit, progress ledger and voice architecture. The scope is all 39 requirements plus RDM-01-06. Last verified pushed/installed checkpoint is 8b01e7231172ad8916065bcef2e7dc78cb5ec76a. Permission canonical comparison is delivered. Live integration remains UNFINISHED in the working tree; preserve it and do not ship it as verified.
 
-If the permission checkpoint is not yet pushed/installed, isolate Live files, commit/push/install only the permission slice, then continue GPT-Live host/backend/media/UI acceptance. GPT-Live 1 requires its own adapter and exact current official contract; no model-string substitution, history replay as new work, or generated-caption claims about heard audio. Keep parent ownership, existing permissions and durable receipts.
+Start GPT-Live host/CLI types and contract tests from the frozen host/backend order. GPT-Live 1 requires its own adapter and exact current official contract; no model-string substitution, history replay as new work, or generated-caption claims about heard audio. Keep parent ownership, existing permissions and durable receipts.
 
 I authorize root plus two workers, normal periodic commits/pushes to origin/main and verified snapshot installation without asking again. Do not bypass hooks, force push or force reload VS Code. Batch broad checks at coherent checkpoints, but test actual high-risk boundaries before claiming they work. If repeated attempts fail, document the concrete cause and revisit steps before switching to independent work.
 
@@ -887,7 +887,7 @@ Selection uses received fragments whose start is at/before the provider offset, 
 
 **Validation receipts at freeze:** no Live unit/broker/browser/backend tests exist or passed; no current Live lint/Knip/SDK generation pass. `.tmp/live-ui-types-initial.log` failed before the worker's final trivial guard fixes. `.tmp/live-ui-wrap-types.log` is a genuine webview-only pass, terminal 0. Telemetry return-style follow-up has its own 13-test pass. Treat Live as implemented/unverified. Permission is now verified locally; see section 3.
 
-**Next executable step:** commit only the permission files and these docs, push to origin/main, stash remaining Live/telemetry WIP, run `snapshot:install`, restore the stash, then start Live host/CLI types and contract tests. Do not change the default engine or package Live.
+**Next executable step:** restored Live WIP is the current work. Establish host and CLI type errors once, then add Live HTTP/WebSocket/WebRTC contract tests in the frozen order. Do not change the default engine or package Live.
 
 ### Local backup and final stop receipt
 
@@ -970,7 +970,7 @@ The long-term product intent is to delegate operating work to agents that can he
 
 ## 2026-09-11: Permission canonical comparison (PR-04)
 
-**States:** implemented and verified locally; not committed, pushed or installed in this paragraph. Live remains implemented/unverified and unshipped.
+**States:** implemented, verified locally, committed, pushed and installed as `8b01e72311`. Live remains implemented/unverified and unshipped.
 
 Requirement: a pending approval must not release after an unrelated restrictive policy change, while an explicit saved allow for `echo*` must still release once. Publication-time deny, allowEverything, and saved-rule escapes remain blocked.
 
@@ -992,6 +992,8 @@ Verification (cwd `packages/opencode` unless noted; normal bunfig preload):
 
 Failed approach: the previous comparator stringified raw Rule objects, so legitimate saved-allow failed while deny races passed. Tightening expected-differences to saved rules only keeps unrelated concurrent allows from being ignored.
 
-Remaining limitations: no public HTTP/SDK change; Windows OS confinement and per-path grants remain open under PR-04. Live/telemetry files are still dirty and must be stashed before `snapshot:install`. No live handles.
+Remaining limitations: no public HTTP/SDK change; Windows OS confinement and per-path grants remain open under PR-04. Live/telemetry files are restored in the working tree and were not packaged. No live handles. VS Code was not force-reloaded.
 
-Next: commit/push this slice, isolate Live, install the snapshot, record identity, then resume GPT-Live contract tests.
+Delivery: commit `8b01e7231172ad8916065bcef2e7dc78cb5ec76a` on `origin/main`. Installed `eden.raya@7.4.23-snapshot+8b01e72311.kamil-oseni.1789091821099`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-8b01e72311-kamil-oseni-1789091821099.vsix`; SHA-256 `446FC10C1FAA687194561707B5A49F55671FCD68B45ABCE07DD84121D85F9DE7`; 571767000 bytes, 442 entries, CLI 228484608 bytes. Push hooks: 29 typecheck tasks exit 0, JetBrains typecheck exit 0. `snapshot:install` exit 0.
+
+Next executable step: establish host/CLI type errors for the restored Live WIP once, then add Live contract tests in the frozen host/backend order. Do not change the default engine or package Live.

@@ -237,6 +237,7 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
         search: ctx.query.search,
         limit: limit + 1,
         archived: ctx.query.archived,
+        kind: ctx.query.kind, // kilocode_change
       })
       // kilocode_change start - resolve worktree folder name for each session
       const result = sorted

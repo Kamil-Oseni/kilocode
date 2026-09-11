@@ -1171,6 +1171,7 @@ export class Session extends HeyApiClient {
       search?: string
       limit?: number
       archived?: boolean | "true" | "false"
+      kind?: "chat" | "routine" | "all"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1190,6 +1191,7 @@ export class Session extends HeyApiClient {
             { in: "query", key: "search" },
             { in: "query", key: "limit" },
             { in: "query", key: "archived" },
+            { in: "query", key: "kind" },
           ],
         },
       ],
@@ -4347,7 +4349,7 @@ export class Session2 extends HeyApiClient {
   /**
    * List sessions
    *
-   * Get a list of all Kilo sessions, sorted by most recently updated.
+   * Get ordinary Kilo sessions, sorted by most recently updated. Routine execution sessions are omitted unless kind=routine or kind=all.
    */
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -4359,6 +4361,7 @@ export class Session2 extends HeyApiClient {
       start?: number
       search?: string
       limit?: number
+      kind?: "chat" | "routine" | "all"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -4375,6 +4378,7 @@ export class Session2 extends HeyApiClient {
             { in: "query", key: "start" },
             { in: "query", key: "search" },
             { in: "query", key: "limit" },
+            { in: "query", key: "kind" },
           ],
         },
       ],

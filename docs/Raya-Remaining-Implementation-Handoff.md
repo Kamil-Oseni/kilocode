@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Permission canonical comparison is delivered: committed, pushed and installed as `8b01e72311`. LiveBroker fixtures through Live HTTP contracts are committed and unshipped. Routine inbox persistence, report publication, conversation UI and follow-up dispatch are verified locally and unshipped. Next: RDM-02.6 session-list exclusion, then RDM-04. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Permission canonical comparison is delivered: committed, pushed and installed as `8b01e72311`. LiveBroker fixtures through Live HTTP contracts are committed and unshipped. Routine inbox persistence, report publication, conversation UI, follow-up dispatch and session-list exclusion are verified locally and unshipped. Next: RDM-04 worker-to-worker delegation. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -903,7 +903,7 @@ The implementing agent must update this handoff and the progress log continuousl
 
 ## Routines direction: agent DM inbox and company delegation
 
-**Latest user requirement, 2026-09-10. Status: identity/persistence/API, report publication, conversation UI and follow-up dispatch are verified locally; worker-to-worker delegation is not implemented.** This is current Raya implementation scope under OVR-05, with PR-03/04, EN-02/03, UX and UI dependencies. It is not a deferred Codex enhancement. Finish it alongside the existing audit and GPT-Live work, before the deferred Codex backlog. Earlier routine acceptance criteria are incomplete without this experience. The 39 parent requirement IDs remain unchanged; the subcriteria below expand OVR-05.
+**Latest user requirement, 2026-09-10. Status: identity/persistence/API, report publication, conversation UI, follow-up dispatch and session-list exclusion are verified locally; worker-to-worker delegation is not implemented.** This is current Raya implementation scope under OVR-05, with PR-03/04, EN-02/03, UX and UI dependencies. It is not a deferred Codex enhancement. Finish it alongside the existing audit and GPT-Live work, before the deferred Codex backlog. Earlier routine acceptance criteria are incomplete without this experience. The 39 parent requirement IDs remain unchanged; the subcriteria below expand OVR-05.
 
 ### Product outcome and visual reference
 
@@ -1164,6 +1164,20 @@ Changed files: `packages/opencode/src/kilocode/task/inbox.ts`, `packages/opencod
 
 Commands (cwd `packages/opencode` unless noted): `bun test ./test/kilocode/task/inbox-followup.test.ts ./test/kilocode/task/inbox.test.ts ./test/kilocode/task/inbox-report.test.ts --timeout 30000` -> 6 pass / 0 fail / 69 expect / exit 0 (`.tmp/routine-followup-unit.log`). `bun test ./test/kilocode/server/httpapi-routine-inbox.test.ts --timeout 60000` -> 1 pass / 0 fail / 34 expect / exit 0 (`.tmp/routine-followup-http.log`). Combined re-run of follow-up, inbox and HTTP tests -> 6 pass / 0 fail / 90 expect / exit 0 (`.tmp/routine-followup-tests.log`). `bun test ./test/kilocode/task.test.ts --timeout 60000` -> 61 pass / 0 fail / 565 expect / exit 0. `bun run typecheck` -> exit 0 (`.tmp/routine-followup-types.log`). From `packages/kilo-vscode`: `bun test tests/unit/routines-inbox.test.ts tests/unit/routines-inbox-view.test.ts --timeout 120000` -> 2 pass / 0 fail / 7 expect / exit 0 (`.tmp/routine-followup-ui.log`); `bun run check-types` and `bun run check-types:webview` -> exit 0. Root `bun run script/check-opencode-annotations.ts --worktree` -> exit 0. Root `bun ./script/generate.ts` -> exit 0.
 
-Remaining: RDM-02.6 execution-session exclusion from default regular-chat lists, and RDM-04 worker-to-worker delegation. Busy-queue visibility in the composer is still inferred from operational state after refresh, not a dedicated queued badge. Do not snapshot:install.
+Remaining: RDM-04 worker-to-worker delegation. Busy-queue visibility in the composer is still inferred from operational state after refresh, not a dedicated queued badge. Do not snapshot:install.
 
-Next executable step: exclude routine-owned execution sessions from the default regular-chat list while keeping them inspectable through run details. Do not change the default engine or package Live.
+Next executable step: add authorized worker-to-worker delegation with tracked responses. Do not change the default engine or package Live.
+
+## 2026-09-11: Routine execution sessions excluded from default chat lists
+
+**States:** RDM-02.6 session-list exclusion verified locally; Live remains unshipped. Product checkpoint remains `8b01e72311`.
+
+Default `/session` and experimental session lists omit sessions marked with `rayaRoutine` metadata. Ordinary chats stay listed even if their title looks like a worker name. Routine execution sessions remain readable by id for run details, and `kind=routine` or `kind=all` lists them explicitly. History is not deleted.
+
+Changed files: `packages/opencode/src/kilocode/session/index.ts`, `packages/opencode/src/session/session.ts`, `packages/opencode/src/server/routes/instance/httpapi/groups/session.ts`, `packages/opencode/src/server/routes/instance/httpapi/handlers/session.ts`, `packages/opencode/src/server/routes/instance/httpapi/groups/experimental.ts`, `packages/opencode/src/server/routes/instance/httpapi/handlers/experimental.ts`, `packages/opencode/test/kilocode/session-list.test.ts`, `packages/opencode/test/kilocode/server/httpapi-session-list.test.ts`, `packages/sdk/openapi.json`, `packages/sdk/js/src/v2/gen/sdk.gen.ts`, `packages/sdk/js/src/v2/gen/types.gen.ts`, `.changeset/raya-routine-session-list.md`.
+
+Commands (cwd `packages/opencode`): `bun test ./test/kilocode/session-list.test.ts ./test/kilocode/server/httpapi-session-list.test.ts ./test/server/session-list.test.ts --timeout 60000` -> 15 pass / 0 fail / 47 expect / exit 0 (`.tmp/routine-session-list-tests.log`). `bun test ./test/server/experimental-session-list.test.ts --timeout 60000` -> 4 pass / 0 fail / 22 expect / exit 0. `bun run typecheck` -> exit 0 (`.tmp/routine-session-list-types.log`). Root `bun run script/check-opencode-annotations.ts --worktree` -> exit 0. Root `bun ./script/generate.ts` -> exit 0.
+
+Remaining: RDM-04 worker-to-worker delegation. Do not snapshot:install.
+
+Next executable step: add authorized worker-to-worker delegation with tracked responses. Do not change the default engine or package Live.

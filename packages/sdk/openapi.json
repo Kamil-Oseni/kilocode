@@ -1903,6 +1903,15 @@
               ]
             },
             "required": false
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["chat", "routine", "all"]
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -6127,6 +6136,15 @@
               "type": "number"
             },
             "required": false
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["chat", "routine", "all"]
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -6155,7 +6173,7 @@
             }
           }
         },
-        "description": "Get a list of all Kilo sessions, sorted by most recently updated.",
+        "description": "Get ordinary Kilo sessions, sorted by most recently updated. Routine execution sessions are omitted unless kind=routine or kind=all.",
         "summary": "List sessions",
         "x-codeSamples": [
           {

@@ -79,6 +79,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
         start: ctx.query.start,
         search: ctx.query.search,
         limit: ctx.query.limit,
+        kind: ctx.query.kind, // kilocode_change
       })
     })
 

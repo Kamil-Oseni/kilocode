@@ -37,6 +37,7 @@ export const ListQuery = Schema.Struct({
   start: Schema.optional(Schema.NumberFromString),
   search: Schema.optional(Schema.String),
   limit: Schema.optional(Schema.NumberFromString),
+  kind: Schema.optional(Schema.Literals(["chat", "routine", "all"])), // kilocode_change
 })
 export const DiffQuery = Schema.Struct({
   ...WorkspaceRoutingQueryFields,
@@ -140,7 +141,8 @@ export const SessionApi = HttpApi.make("session")
           OpenApi.annotations({
             identifier: "session.list",
             summary: "List sessions",
-            description: "Get a list of all Kilo sessions, sorted by most recently updated.", // kilocode_change
+            description:
+              "Get ordinary Kilo sessions, sorted by most recently updated. Routine execution sessions are omitted unless kind=routine or kind=all.", // kilocode_change
           }),
         ),
         HttpApiEndpoint.get("status", SessionPaths.status, {

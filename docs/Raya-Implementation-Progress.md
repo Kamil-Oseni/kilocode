@@ -2473,3 +2473,15 @@ Changed files: packages/opencode/src/kilocode/task/inbox.ts, packages/opencode/s
 Commands (packages/opencode): bun test ./test/kilocode/task/inbox-followup.test.ts ./test/kilocode/task/inbox.test.ts ./test/kilocode/server/httpapi-routine-inbox.test.ts --timeout 60000 -> 6 pass / 0 fail / 90 expect / exit 0 (.tmp/routine-followup-tests.log). bun run typecheck -> exit 0 (.tmp/routine-followup-types.log). packages/kilo-vscode bun test tests/unit/routines-inbox.test.ts tests/unit/routines-inbox-view.test.ts --timeout 120000 -> 2 pass / 0 fail / 7 expect / exit 0.
 
 Do not snapshot:install. Next: RDM-02.6 session-list exclusion.
+
+## 2026-09-11: Routine execution sessions excluded from default chat lists (OVR-05 / RDM-02.6)
+
+Status: verified locally and unshipped. Installed product is still 8b01e72311.
+
+Default chat history omits sessions marked with rayaRoutine metadata. They remain readable by id and listable with kind=routine or kind=all. Ordinary chats are not classified by title.
+
+Changed files: packages/opencode/src/kilocode/session/index.ts, packages/opencode/src/session/session.ts, packages/opencode/src/server/routes/instance/httpapi/groups/session.ts, packages/opencode/src/server/routes/instance/httpapi/handlers/session.ts, packages/opencode/src/server/routes/instance/httpapi/groups/experimental.ts, packages/opencode/src/server/routes/instance/httpapi/handlers/experimental.ts, packages/opencode/test/kilocode/session-list.test.ts, packages/opencode/test/kilocode/server/httpapi-session-list.test.ts, packages/sdk/openapi.json, packages/sdk/js/src/v2/gen/sdk.gen.ts, packages/sdk/js/src/v2/gen/types.gen.ts, .changeset/raya-routine-session-list.md.
+
+Commands (packages/opencode): bun test ./test/kilocode/session-list.test.ts ./test/kilocode/server/httpapi-session-list.test.ts ./test/server/session-list.test.ts --timeout 60000 -> 15 pass / 0 fail / 47 expect / exit 0 (.tmp/routine-session-list-tests.log). bun test ./test/server/experimental-session-list.test.ts --timeout 60000 -> 4 pass / 0 fail / 22 expect / exit 0. bun run typecheck -> exit 0 (.tmp/routine-session-list-types.log).
+
+Do not snapshot:install. Next: RDM-04 worker-to-worker delegation.

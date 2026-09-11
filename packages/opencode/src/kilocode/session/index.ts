@@ -6,7 +6,7 @@ import { Instance, type InstanceContext } from "@/kilocode/instance"
 import { EffectBridge } from "@/effect/bridge"
 import { Session } from "@/session/session"
 import { MessageID, SessionID } from "@/session/schema"
-import { and, desc, eq, gte, inArray, isNull, like, lt, or, type SQL } from "drizzle-orm"
+import { and, desc, eq, gte, inArray, isNull, like, lt, or, sql, type SQL } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProjectV2 } from "@opencode-ai/core/project"
@@ -164,6 +164,15 @@ export namespace KiloSession {
       or(eq(SessionTable.project_id, input.projectID), eq(SessionTable.directory, dir)),
       eq(SessionTable.directory, dir),
     ].filter((item): item is SQL => item !== undefined)
+  }
+
+  export type Kind = "chat" | "routine" | "all"
+
+  /** Default chat lists omit marked routine execution sessions. They stay readable by id. */
+  export function owned(kind: Kind = "chat") {
+    if (kind === "all") return
+    if (kind === "routine") return sql`json_extract(${SessionTable.metadata}, '$.rayaRoutine') is not null`
+    return sql`json_extract(${SessionTable.metadata}, '$.rayaRoutine') is null`
   }
 
   // ---------------------------------------------------------------------------
@@ -349,6 +358,7 @@ export namespace KiloSession {
     search?: string
     limit?: number
     archived?: boolean
+    kind?: Kind
   }) {
     return Effect.gen(function* () {
       const { db } = yield* Database.Service
@@ -380,6 +390,8 @@ export namespace KiloSession {
       if (input.cursor) conditions.push(lt(SessionTable.time_updated, input.cursor))
       if (input.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
       if (!input.archived) conditions.push(isNull(SessionTable.time_archived))
+      const ownership = owned(input.kind)
+      if (ownership) conditions.push(ownership)
 
       const limit = input.limit ?? 100
       const sorted = [...dirs].sort((a, b) => b.length - a.length)

@@ -13320,6 +13320,7 @@ export type ExperimentalSessionListData = {
     search?: string
     limit?: number
     archived?: boolean | "true" | "false"
+    kind?: "chat" | "routine" | "all"
   }
   url: "/experimental/session"
 }
@@ -15131,6 +15132,7 @@ export type SessionListData = {
     start?: number
     search?: string
     limit?: number
+    kind?: "chat" | "routine" | "all"
   }
   url: "/session"
 }

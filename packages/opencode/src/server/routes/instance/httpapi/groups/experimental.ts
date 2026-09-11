@@ -96,6 +96,7 @@ export const SessionListQuery = Schema.Struct({
   search: Schema.optional(Schema.String),
   limit: Schema.optional(Schema.NumberFromString),
   archived: Schema.optional(QueryBoolean),
+  kind: Schema.optional(Schema.Literals(["chat", "routine", "all"])), // kilocode_change
 })
 // kilocode_change start
 export const WorktreeDiffQuery = Schema.Struct({

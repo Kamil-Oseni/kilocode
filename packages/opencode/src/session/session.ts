@@ -324,6 +324,7 @@ export type ListInput = {
   start?: number
   search?: string
   limit?: number
+  kind?: KiloSession.Kind // kilocode_change - default regular lists omit routine-owned execution sessions
 }
 
 export type GlobalListInput = {
@@ -332,6 +333,7 @@ export type GlobalListInput = {
   directory?: string
   directories?: string[]
   currentDirectory?: string
+  kind?: KiloSession.Kind
   // kilocode_change end
   roots?: boolean
   start?: number
@@ -1206,6 +1208,10 @@ function listByProject(
   if (input.search) {
     conditions.push(like(SessionTable.title, `%${input.search}%`))
   }
+  // kilocode_change start - omit marked routine execution sessions from default chat lists
+  const ownership = KiloSession.owned(input.kind)
+  if (ownership) conditions.push(ownership)
+  // kilocode_change end
 
   const limit = input.limit ?? 100
 
@@ -1234,6 +1240,7 @@ export function listGlobal(input?: {
   search?: string
   limit?: number
   archived?: boolean
+  kind?: KiloSession.Kind
 }) {
   return KiloSession.listGlobal<GlobalInfo>({ ...input, fromRow })
 }

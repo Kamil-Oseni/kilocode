@@ -73,4 +73,41 @@ describe("Kilo Session.list", () => {
         expect(list.map((item) => item.id)).toContain(session.id)
       }),
   )
+
+  it.instance(
+    "omits marked routine execution sessions from the default chat list",
+    () =>
+      Effect.gen(function* () {
+        yield* seedProject
+        const ctx = yield* InstanceRef
+        if (!ctx) return yield* Effect.die(new Error("missing test instance"))
+        const sessions = yield* Session.Service
+        const chat = yield* sessions.create({ title: "Accounts review" })
+        const work = yield* sessions.create({
+          title: "Accounts",
+          metadata: {
+            rayaRoutine: {
+              version: 1,
+              agentID: "agt_books",
+              runID: "run_1",
+              scheduleVersion: 1,
+              trigger: { kind: "manual" },
+            },
+          },
+        })
+        const listed = (yield* sessions.list({ directory: ctx.directory })).map((item) => item.id)
+        expect(listed).toContain(chat.id)
+        expect(listed).not.toContain(work.id)
+        expect((yield* sessions.get(work.id)).id).toBe(work.id)
+        const only = (yield* sessions.list({ directory: ctx.directory, kind: "routine" })).map((item) => item.id)
+        expect(only).toContain(work.id)
+        expect(only).not.toContain(chat.id)
+        const all = (yield* sessions.list({ directory: ctx.directory, kind: "all" })).map((item) => item.id)
+        expect(all).toContain(chat.id)
+        expect(all).toContain(work.id)
+        const global = (yield* Session.listGlobal({ directory: ctx.directory, roots: true })).map((item) => item.id)
+        expect(global).toContain(chat.id)
+        expect(global).not.toContain(work.id)
+      }),
+  )
 })

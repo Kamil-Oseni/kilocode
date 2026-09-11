@@ -196,7 +196,47 @@ try {
   })
   assert.match(root.textContent, /You/)
   assert.equal(root.querySelector("textarea[aria-label='Message this worker']").value, "")
-  console.log("routine-inbox-view: 16 assertions passed")
+  emit({
+    type: "routineInbox",
+    requestID: request.requestID,
+    viewID: request.viewID,
+    refreshID: 1,
+    items: [
+      {
+        agentID: agent.id,
+        conversationID: "rcv_1",
+        name: agent.name,
+        role: agent.role,
+        latest: { id: "rmg_3", agentID: agent.id, kind: "report", source: "report:occ2", body: "The next Friday close found the travel receipts.", time: 3 },
+        unread: 1,
+        state: "scheduled",
+      },
+    ],
+  })
+  await new Promise((resolve) => setImmediate(resolve))
+  const again = sent.findLast((msg) => msg.type === "routineInboxPage")
+  emit({
+    type: "routineInboxPage",
+    requestID: again.requestID,
+    agentID: agent.id,
+    messages: [
+      note,
+      { id: "rmg_user", agentID: agent.id, kind: "user", source: retry.source, body: retry.body, time: 2 },
+      {
+        id: "rmg_3",
+        agentID: agent.id,
+        kind: "report",
+        source: "report:occ2",
+        body: "The next Friday close found the travel receipts.",
+        time: 3,
+      },
+    ],
+  })
+  assert.match(root.textContent, /Friday expenses increased in travel/)
+  assert.match(root.textContent, /Why did expenses increase/)
+  assert.match(root.textContent, /The next Friday close found the travel receipts/)
+  assert.match(root.textContent, /Does not change the assignment/)
+  console.log("routine-inbox-view: 20 assertions passed")
 } finally {
   dispose()
   root.remove()

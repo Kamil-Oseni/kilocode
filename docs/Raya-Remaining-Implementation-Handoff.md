@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Installed product is `e22ecc09cd`. Live host/CLI contracts are packaged; the default engine remains `openai-realtime`. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, and delegated cost attribution are installed. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Installed product is `e22ecc09cd`. Live host/CLI contracts are packaged; the default engine remains `openai-realtime`. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, delegated cost attribution, and the Friday accounting E2E are implemented; the Friday E2E is verified locally and not yet installed. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -1270,6 +1270,20 @@ Next executable step: run the Friday accounting E2E.
 
 Installed `eden.raya@7.4.23-snapshot+e22ecc09cd.kamil-oseni.1789157400180`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-e22ecc09cd-kamil-oseni-1789157400180.vsix`; SHA-256 `3796EE106468055EA522DE0B0903BAB91575FAFB4C107B387AB04BF27FD974A2`; 517016892 bytes, 431 entries, CLI 228785664 bytes. Includes delegated cost attribution without double counting. Default engine is still `openai-realtime`.
 
-Remaining: RDM-06 Friday accounting E2E, then leftover busy-recipient/denial/timeout/inspectable-chain UI and lifecycle cases. Do not change the default engine.
+Remaining: commit, push, and snapshot:install this Friday accounting E2E, then leftover busy-recipient/denial/timeout/inspectable-chain UI and lifecycle cases. Do not change the default engine.
 
-Next executable step: run the Friday accounting E2E.
+Next executable step: commit, push, and snapshot:install the Friday accounting E2E.
+
+## 2026-09-11: Friday accounting E2E (RDM-06)
+
+**States:** RDM-06 Friday scenario verified locally and unshipped. Installed product is still `e22ecc09cd`. Live remains not the default engine. This does not close the rest of RDM-06.
+
+An accountant assignment with an explicit `America/New_York` Friday 6pm calendar is started by the real scheduler tick within the 60-second catch-up window. A due tick before the occurrence creates no run. The first occurrence publishes one durable inbox report with inspectable criterion evidence. A contextual follow-up uses that report, does not rewrite the assignment, and does not invent figures. After the follow-up settles, the next Friday occurrence publishes into the same conversation. The conversation surface keeps both occurrence reports and the follow-up visible.
+
+Changed files: `packages/opencode/test/kilocode/task/friday-accounting.test.ts`, `packages/kilo-vscode/tests/fixtures/routine-inbox-view.mjs`.
+
+Commands (cwd `packages/opencode`): `bun test ./test/kilocode/task/friday-accounting.test.ts ./test/kilocode/task/inbox-followup.test.ts ./test/kilocode/task/inbox-report.test.ts --timeout 60000` -> 4 pass / 0 fail / 72 expect / exit 0 (`.tmp/routine-friday-accounting-runtime.log`). `bun run typecheck` -> exit 0. Cwd `packages/kilo-vscode`: `bun test ./tests/unit/routines-inbox-view.test.ts --timeout 90000` -> 1 pass / 0 fail / 1 expect / exit 0 (`.tmp/routine-friday-accounting-ui-tests.log`).
+
+Remaining after install: busy-recipient, denial, timeout, inspectable chain in UI, and lifecycle rename/archive cases. Do not change the default engine.
+
+Next executable step: commit, push, and snapshot:install, then the leftover RDM-06 UI/lifecycle cases.

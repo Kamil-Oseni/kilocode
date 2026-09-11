@@ -2564,4 +2564,17 @@ Installed eden.raya@7.4.23-snapshot+e22ecc09cd.kamil-oseni.1789157400180. VSIX C
 
 Next: RDM-06 Friday accounting E2E.
 
+## 2026-09-11: Friday accounting E2E (RDM-06)
+
+Status: verified locally and unshipped. Installed product is still e22ecc09cd.
+
+An accountant assignment with an explicit New York Friday 6pm calendar is started by the real scheduler tick. The first occurrence publishes one durable report with inspectable evidence. A follow-up uses that report without rewriting the assignment. The next Friday occurrence arrives in the same conversation. This does not close the rest of RDM-06.
+
+Changed files: packages/opencode/test/kilocode/task/friday-accounting.test.ts, packages/kilo-vscode/tests/fixtures/routine-inbox-view.mjs.
+
+Commands (packages/opencode): bun test ./test/kilocode/task/friday-accounting.test.ts ./test/kilocode/task/inbox-followup.test.ts ./test/kilocode/task/inbox-report.test.ts --timeout 60000 -> 4 pass / 0 fail / 72 expect / exit 0 (.tmp/routine-friday-accounting-runtime.log). bun run typecheck -> exit 0. packages/kilo-vscode bun test ./tests/unit/routines-inbox-view.test.ts --timeout 90000 -> 1 pass / 0 fail / 1 expect / exit 0 (.tmp/routine-friday-accounting-ui-tests.log).
+
+Next: commit, push, and snapshot:install. Remaining: leftover RDM-06 UI/lifecycle cases.
+
+
 

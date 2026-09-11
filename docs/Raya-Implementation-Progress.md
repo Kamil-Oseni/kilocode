@@ -2624,7 +2624,7 @@ Next: leftover Live microphone/provider-switch cases or leftover RDM-06 UI/lifec
 
 ## 2026-09-11: Routine delegation queued, started, and paused denial
 
-Status: verified locally and unshipped. Installed product is still 5d7b978226.
+Status: verified locally, committed as 506f944e64, and installed in the snapshot below.
 
 Queued asks publish that the request has not started. Starting the child run adds a Work started card. A paused recipient stores a failed record, publishes a denial reply, and the ask form keeps the draft.
 
@@ -2632,7 +2632,15 @@ Changed files: packages/opencode/src/kilocode/task/delegation.ts, packages/openc
 
 Commands (packages/opencode): bun test ./test/kilocode/task/delegation.test.ts ./test/kilocode/task/delegation-runner.test.ts ./test/kilocode/server/httpapi-routine-delegate.test.ts --timeout 60000 -> 9 pass / 0 fail / 102 expect / exit 0. bun run typecheck -> exit 0. Commands (packages/kilo-vscode): bun test ./tests/unit/routines-inbox.test.ts ./tests/unit/routines-delegate-view.test.ts --timeout 90000 -> 5 pass / 0 fail / 18 expect / exit 0. bun run typecheck -> exit 0. eslint Inbox.tsx -> exit 0.
 
-Next: commit, push, and snapshot:install. Remaining: timeout, inspectable chain in UI, lifecycle rename/archive, packaged microphone/acoustic acceptance, and provider-switch/disposal.
+Next: leftover RDM-06 timeout/inspectable-chain/lifecycle, or leftover Live microphone/provider-switch.
+
+## 2026-09-11: Snapshot install 506f944e64
+
+Status: committed, pushed and installed as 506f944e64. Asks to another worker show queued versus started; a paused worker keeps the draft with a denial.
+
+Installed eden.raya@7.4.23-snapshot+506f944e64.kamil-oseni.1789161518503. VSIX C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-506f944e64-kamil-oseni-1789161518503.vsix; SHA-256 EC441FB364A5AFA0ECB556C04BCE5F7242DD38610BC4F76CEAF2DF3DC48A2609; 519959343 bytes, 432 entries. CLI binary rebuilt.
+
+Next: leftover RDM-06 timeout/inspectable-chain/lifecycle, or leftover Live microphone/provider-switch.
 
 
 

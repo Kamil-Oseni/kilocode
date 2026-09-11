@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Installed product is `5d7b978226`. New voice setups default to GPT-Live 1 (`openai-live` / `gpt-live-1`) over the Live API; saved Realtime, Qwen and cascade selections stay. Live appends split at the 500-token bound; busy-queue later delegations are acknowledged and later speech requires clarification. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, delegated cost attribution, and the Friday accounting E2E are installed. Busy-recipient queued/started cards and paused-worker denial are verified locally and unshipped. Remaining Live work is packaged microphone/acoustic acceptance and provider-switch/disposal. Remaining RDM-06 work is timeout, inspectable chain in UI, and lifecycle rename/archive. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Installed product is `506f944e64`. New voice setups default to GPT-Live 1 (`openai-live` / `gpt-live-1`) over the Live API; saved Realtime, Qwen and cascade selections stay. Live appends split at the 500-token bound; busy-queue later delegations are acknowledged and later speech requires clarification. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, delegated cost attribution, Friday accounting E2E, and busy-recipient queued/started plus paused-worker denial are installed. Remaining Live work is packaged microphone/acoustic acceptance and provider-switch/disposal. Remaining RDM-06 work is timeout, inspectable chain in UI, and lifecycle rename/archive. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-11. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `5d7b978226` is committed, pushed and installed. New voice setups default to GPT-Live 1; Live appends honor the 500-token bound; busy-queue later delegations wait without a second call. Realtime remains an explicit compatibility path.
+**Latest delivered product:** checkpoint `506f944e64` is committed, pushed and installed. New voice setups default to GPT-Live 1. Live appends honor the 500-token bound. Asks to another worker show queued versus started, and a paused worker keeps the draft with a denial. Realtime remains an explicit compatibility path.
 
 ## Scope and reading order
 
@@ -1348,7 +1348,7 @@ Next executable step: leftover Live microphone/provider-switch cases or leftover
 
 ## 2026-09-11: Routine delegation queued, started, and paused denial
 
-**States:** verified locally and unshipped. Installed product is still `5d7b978226`. This closes busy-recipient queued-versus-started cards and paused-worker denial in the conversation. It does not close timeout, inspectable chain in UI, or lifecycle rename/archive.
+**States:** verified locally, committed as `506f944e64`, and installed in the snapshot below. This closes busy-recipient queued-versus-started cards and paused-worker denial in the conversation. It does not close timeout, inspectable chain in UI, or lifecycle rename/archive.
 
 A queued ask publishes that the request has not started. Starting the child run adds a separate "Work started" card so the conversation can distinguish waiting from started work. A paused recipient stores a failed record, publishes a denial reply, and the ask form keeps the draft instead of treating the record as success.
 
@@ -1358,4 +1358,14 @@ Commands (cwd `packages/opencode`): `bun test ./test/kilocode/task/delegation.te
 
 Remaining: timeout, inspectable chain in UI, lifecycle rename/archive, packaged microphone/acoustic acceptance, and provider-switch/disposal.
 
-Next executable step: commit, push, and snapshot:install this queued/denial increment, then leftover RDM-06 timeout/chain/lifecycle or leftover Live microphone/provider-switch.
+Next executable step: leftover RDM-06 timeout/inspectable-chain/lifecycle, or leftover Live microphone/provider-switch.
+
+## 2026-09-11: Snapshot install `506f944e64`
+
+**States:** committed, pushed and installed as `506f944e64`. Asks to another worker show queued versus started; a paused worker keeps the draft with a denial.
+
+Installed `eden.raya@7.4.23-snapshot+506f944e64.kamil-oseni.1789161518503`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-506f944e64-kamil-oseni-1789161518503.vsix`; SHA-256 `EC441FB364A5AFA0ECB556C04BCE5F7242DD38610BC4F76CEAF2DF3DC48A2609`; 519959343 bytes, 432 entries. CLI binary rebuilt. Includes GPT-Live 1 as the default voice engine, 500-scalar append splitting, busy-queue clarification, and queued/started/paused delegation cards. Realtime remains an explicit compatibility path.
+
+Remaining: timeout, inspectable chain in UI, lifecycle rename/archive, packaged microphone/acoustic acceptance, and provider-switch/disposal.
+
+Next executable step: leftover RDM-06 timeout/inspectable-chain/lifecycle, or leftover Live microphone/provider-switch.

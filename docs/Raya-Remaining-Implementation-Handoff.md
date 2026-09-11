@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Installed product is `683a82b837`. Live host/CLI contracts are packaged in this snapshot; the default engine remains `openai-realtime`. Routine inbox, follow-up dispatch and session-list exclusion are installed. RDM-04 runtime is pushed as `35eb802178`. Routines UI to start and inspect a delegation is verified locally and unshipped. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Installed product is `ad316af1d1`. Live host/CLI contracts are packaged; the default engine remains `openai-realtime`. Routine inbox, follow-up dispatch, session-list exclusion, and RDM-04 start/inspect UI are installed. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-11. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `683a82b837` is committed, pushed and installed. Live is packaged in this snapshot; the default engine remains `openai-realtime`.
+**Latest delivered product:** checkpoint `ad316af1d1` is committed, pushed and installed. Live is packaged in this snapshot; the default engine remains `openai-realtime`.
 
 ## Scope and reading order
 
@@ -1204,7 +1204,7 @@ Next executable step: expose delegation cards and a Chief-to-Accounting action o
 
 ## 2026-09-11: Routines UI for worker-to-worker delegation
 
-**States:** RDM-04 start/inspect UI verified locally; Live remains not the default engine. Product checkpoint remains `683a82b837`. Runtime commit `35eb802178` is pushed and not yet installed.
+**States:** RDM-04 start/inspect UI verified locally, committed as `ad316af1d1`, and installed in the snapshot below. Live remains not the default engine.
 
 A worker conversation can ask another roster worker. The host calls `POST /kilocode/agent/:agentID/delegate` with a stable source, then refreshes inbox summaries. Retry reuses the same source. The sender conversation shows "Asked another worker"; the recipient conversation shows "Asked you". Copy states that neither assignment is rewritten.
 
@@ -1214,4 +1214,14 @@ Commands (cwd `packages/kilo-vscode`): `bun test ./tests/unit/routines-inbox.tes
 
 Remaining after this checkpoint: explicit cancel/stop controls, cost-attribution review, busy-recipient/denial/timeout UI cases, inspectable chain in UI, and RDM-06 Friday accounting E2E. Do not change the default engine.
 
-Next executable step: commit, push, and `snapshot:install` so one install covers RDM-04 runtime plus this UI.
+Next executable step: add user controls to stop outstanding delegated work, then cost attribution and the Friday accounting E2E.
+
+## 2026-09-11: Snapshot install `ad316af1d1`
+
+**States:** committed, pushed and installed as `ad316af1d1`. Live remains not the default engine.
+
+Installed `eden.raya@7.4.23-snapshot+ad316af1d1.kamil-oseni.1789153704041`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-ad316af1d1-kamil-oseni-1789153704041.vsix`; SHA-256 `2F91ACCC1FE22E8B8E7AAC4421B78331AA6BB2379A2791A856E4A165349C38CC`; 519920967 bytes, 432 entries, CLI 228761600 bytes. Includes RDM-04 runtime `35eb802178` and routines start/inspect UI. Default engine is still `openai-realtime`. First CLI compile hit EPERM moving `kilo.exe`; the snapshot retried via the active bun runtime and completed.
+
+Remaining: explicit cancel/stop, cost-attribution review, and RDM-06 Friday accounting E2E. Do not change the default engine.
+
+Next executable step: add user controls to stop outstanding delegated work.

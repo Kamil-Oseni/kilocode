@@ -2515,3 +2515,11 @@ Changed files: packages/kilo-vscode/src/kilo-provider/routines.ts, packages/kilo
 Commands (packages/kilo-vscode): bun test ./tests/unit/routines-inbox.test.ts ./tests/unit/routines-delegate-view.test.ts ./tests/unit/routines-inbox-view.test.ts --timeout 90000 -> 4 pass / 0 fail / 13 expect / exit 0 (.tmp/routine-delegate-ui-tests.log). bun run typecheck -> exit 0 (.tmp/routine-delegate-ui-types.log). eslint on changed files -> exit 0 (.tmp/routine-delegate-ui-lint.log).
 
 Next: commit, push, and snapshot:install this UI with the already-pushed RDM-04 runtime. Remaining after install: explicit cancel/stop, cost-attribution review, and RDM-06 Friday accounting E2E.
+
+## 2026-09-11: Snapshot install ad316af1d1
+
+Status: committed, pushed and installed as ad316af1d1. Live is packaged but not the default engine.
+
+Installed eden.raya@7.4.23-snapshot+ad316af1d1.kamil-oseni.1789153704041. VSIX C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-ad316af1d1-kamil-oseni-1789153704041.vsix; SHA-256 2F91ACCC1FE22E8B8E7AAC4421B78331AA6BB2379A2791A856E4A165349C38CC; 519920967 bytes, 432 entries, CLI 228761600 bytes. Includes RDM-04 runtime 35eb802178 and the routines start/inspect UI.
+
+Next: add cancel/stop for outstanding delegated work, then cost-attribution review and RDM-06 Friday accounting E2E.

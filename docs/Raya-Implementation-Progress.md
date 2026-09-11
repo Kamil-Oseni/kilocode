@@ -2437,3 +2437,15 @@ Changed files: packages/core/src/kilocode/routine.sql.ts, packages/core/src/data
 Commands (packages/opencode): bun test ./test/kilocode/task/inbox.test.ts ./test/kilocode/server/httpapi-routine-inbox.test.ts --timeout 60000 -> 3 pass / 0 fail / 48 expect / exit 0 (.tmp/routine-inbox-tests.log). Root oxlint: 0 warnings / 0 errors / exit 0. Root bun ./script/generate.ts -> exit 0.
 
 Do not snapshot:install. Next: publish occurrence reports into the inbox.
+
+## 2026-09-11: Routine inbox report publication (OVR-05 / RDM-03)
+
+Status: verified locally and committed as 9532fff643, unshipped. Installed product is still 8b01e72311.
+
+Settlement and park now publish one durable inbox message per run source. Active goals stay silent. Empty completions are labelled as missing findings. Waiting-on-you is a decision; a later completion is a second report. Timer occurrence ids that cannot be inbox tokens are hashed.
+
+Changed files: packages/opencode/src/kilocode/task/inbox.ts, packages/opencode/src/kilocode/task/runner.ts, packages/opencode/test/kilocode/task/inbox.test.ts, packages/opencode/test/kilocode/task/inbox-report.test.ts, .changeset/raya-routine-inbox-reports.md.
+
+Commands (packages/opencode): bun test ./test/kilocode/task/inbox.test.ts ./test/kilocode/task/inbox-report.test.ts ./test/kilocode/task.test.ts --timeout 60000 -> 65 pass / 0 fail / 611 expect / exit 0 (.tmp/routine-inbox-report-tests.log). bun run typecheck -> exit 0 (.tmp/routine-inbox-report-types.log).
+
+Do not snapshot:install. Next: RDM conversation UI.

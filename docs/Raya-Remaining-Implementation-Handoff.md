@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Permission canonical comparison is delivered: committed, pushed and installed as `8b01e72311`. LiveBroker fixtures through Live HTTP contracts are committed and unshipped. Routine inbox identity, unread/draft persistence and HTTP follow-ups are verified locally and unshipped. Next: publish occurrence reports into the inbox, then RDM conversation UI. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Permission canonical comparison is delivered: committed, pushed and installed as `8b01e72311`. LiveBroker fixtures through Live HTTP contracts are committed and unshipped. Routine inbox persistence, HTTP follow-ups and settle/park report publication are verified locally and unshipped. Next: RDM conversation UI, then follow-up dispatch. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -644,7 +644,7 @@ Continue implementing Raya in C:\Users\User\Desktop\raya. Read AGENTS.md, docs/R
 
 I authorize root plus two subagents, normal periodic commits/pushes to origin/main, and snapshot builds/reinstallation outside the sandbox without asking again. Do not force push, bypass hooks or force reload VS Code. Batch broad testing at coherent checkpoints, but verify relevant contracts before calling features working. If repeated attempts fail, document the exact cause and next approach, move to independent work and revisit.
 
-First inspect current git/process state against the handoff. Preserve remaining uncommitted telemetry and Codex-deferred files. Live HTTP contracts and the routine inbox persistence/API are the latest verified local increments; do not package Live. Next: publish occurrence reports into the inbox, then RDM conversation UI. Keep Raya task ownership, permissions, durable receipts and execution authority. Do not replay historical text as new work or claim generated captions prove heard audio.
+First inspect current git/process state against the handoff. Preserve remaining uncommitted telemetry and Codex-deferred files. Live HTTP contracts and routine inbox report publication are the latest verified local increments; do not package Live. Next: RDM conversation UI, then follow-up dispatch. Keep Raya task ownership, permissions, durable receipts and execution authority. Do not replay historical text as new work or claim generated captions prove heard audio.
 
 Defer new Codex-derived implementation until existing Raya work, including GPT-Live and all 39 requirements, is complete. Use the deferred research document later; do not start a new porting track now. Keep the 39-requirement ledger honest. When I warn that credits are near $10, promptly update the full remaining-work handoff, settle the current work and provide an updated continuation prompt.
 ```
@@ -1125,3 +1125,17 @@ Commands (packages/opencode): `bun test ./test/kilocode/task/inbox.test.ts ./tes
 Remaining: occurrence report publication, follow-up dispatch, inbox UI, and RDM-04 delegation. Do not snapshot:install.
 
 Next executable step: publish scheduled occurrence results into the same worker conversation. Do not change the default engine or package Live.
+
+## 2026-09-11: Routine inbox report publication
+
+**States:** Routine inbox report publication committed as `9532fff643`; Live remains unshipped. Product checkpoint remains `8b01e72311`.
+
+`settle` and `park` now publish into the same worker conversation. Running goals do not publish. Complete runs post `report:<run.id>` with honest findings; an empty summary is labelled as missing findings, not invented success. Waiting-on-you posts `need:<run.id>` as a decision, not a completed report. A later completion of that run posts a second message. Timer occurrence ids with brackets are hashed into a valid source and omitted from `occurrenceID`. Identical retries keep the first receipt; a missing database skips publication without failing settlement.
+
+Changed files: `packages/opencode/src/kilocode/task/inbox.ts`, `packages/opencode/src/kilocode/task/runner.ts`, `packages/opencode/test/kilocode/task/inbox.test.ts`, `packages/opencode/test/kilocode/task/inbox-report.test.ts`, `.changeset/raya-routine-inbox-reports.md`.
+
+Commands (packages/opencode): `bun test ./test/kilocode/task/inbox.test.ts ./test/kilocode/task/inbox-report.test.ts ./test/kilocode/task.test.ts --timeout 60000` -> 65 pass / 0 fail / 611 expect / exit 0 (`.tmp/routine-inbox-report-tests.log`). `bun run typecheck` -> exit 0 (`.tmp/routine-inbox-report-types.log`).
+
+Remaining: inbox UI, follow-up dispatch, and RDM-04 delegation. Do not snapshot:install.
+
+Next executable step: RDM conversation UI on the routines surface. Do not change the default engine or package Live.

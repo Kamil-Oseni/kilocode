@@ -67,7 +67,7 @@ test("a mutation during an active read is acknowledged once and requests one tra
     await Promise.all([pending, mutation])
     expect(mutations).toBe(1)
     expect(cycles).toBe(2)
-    expect(reads).toBe(6)
+    expect(reads).toBe(8)
     expect(messages.filter((msg) => msg.refresh === "complete")).toHaveLength(2)
   } finally {
     blocked.release()
@@ -104,6 +104,7 @@ test("real SDK HTTP refresh burst is bounded, partial histories remain explicit,
           return Response.json(Array.from({ length: 40 }, (_, i) => ({ id: `agent-${i}` })))
         }
         if (url.pathname.endsWith("/agent-templates")) return Response.json([])
+        if (url.pathname.endsWith("/agent-inbox")) return Response.json([])
         const id = url.pathname.split("/").at(-2)!
         if (cycle === 2 && id === "agent-7") return new Response("unavailable", { status: 503 })
         return Response.json([{ id: `run-${id}`, agentID: id, status: "complete", at: cycle }])
@@ -124,7 +125,7 @@ test("real SDK HTTP refresh burst is bounded, partial histories remain explicit,
     const comparison = refresh.request("comparison")
     blocked.release()
     await Promise.all([first, ...requests, comparison])
-    expect(calls).toHaveLength(84)
+    expect(calls).toHaveLength(86)
     expect(maximum).toBeLessThanOrEqual(2)
     expect(cycle).toBe(2)
     expect(messages.filter((msg) => msg.requestID === "view" && msg.refresh === "partial")).toHaveLength(1)
@@ -145,7 +146,7 @@ test("real SDK HTTP refresh burst is bounded, partial histories remain explicit,
       message: { type: "routineUpdate", agentID: "agent-0", enabled: false },
     })
     expect(calls.filter((call) => call.startsWith("PATCH"))).toHaveLength(1)
-    expect(calls).toHaveLength(127)
+    expect(calls).toHaveLength(130)
     const saved = messages.findIndex((msg) => msg.saved === true)
     const loading = messages.findIndex((msg) => msg.refreshID === 3 && msg.refresh === "loading")
     expect(saved).toBeGreaterThan(-1)

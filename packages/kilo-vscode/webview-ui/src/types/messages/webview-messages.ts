@@ -195,6 +195,35 @@ export interface RoutineRemoveMessage {
   agentID?: string
   agentIDs?: string[]
 }
+
+export interface RoutineInboxPageMessage {
+  type: "routineInboxPage"
+  requestID: string
+  agentID: string
+  cursor?: string
+}
+
+export interface RoutineInboxSendMessage {
+  type: "routineInboxSend"
+  requestID: string
+  agentID: string
+  source: string
+  body: string
+}
+
+export interface RoutineInboxReadMessage {
+  type: "routineInboxRead"
+  requestID: string
+  agentID: string
+  at: number
+}
+
+export interface RoutineInboxDraftMessage {
+  type: "routineInboxDraft"
+  requestID: string
+  agentID: string
+  draft: string | null
+}
 // raya_change end
 
 export interface RequestBackgroundJobsMessage {
@@ -1803,6 +1832,10 @@ export type WebviewMessage =
   | RoutineSnapshotRequestMessage
   | RoutineArchiveRequestMessage
   | RoutineRemoveMessage
+  | RoutineInboxPageMessage
+  | RoutineInboxSendMessage
+  | RoutineInboxReadMessage
+  | RoutineInboxDraftMessage
   | RequestBackgroundJobsMessage
   | CancelBackgroundJobMessage
   | BackgroundSubagentsMessage

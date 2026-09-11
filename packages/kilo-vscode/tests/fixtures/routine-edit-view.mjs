@@ -475,7 +475,7 @@ try {
   assert.equal(document.activeElement, button("Review runs"))
   emit({ type: "routineState", agents: [{ ...agent, execution: { state: "recovery" } }] })
   assert.equal(button("Needs review").disabled, true)
-  assert.equal(root.querySelector(".routines-identity").disabled, true)
+  assert.equal(root.querySelector(".routines-identity").disabled, false)
   assert.doesNotMatch(root.textContent, /No saved goal is available/)
   assert.equal(sent.filter((msg) => msg.type === "routineRun").length, 0)
   emit({ type: "routineState", agents: [agent] })

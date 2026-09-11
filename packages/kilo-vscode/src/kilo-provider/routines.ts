@@ -106,6 +106,10 @@ function reply(type: string) {
   if (type === "routineSnapshot") return "routineSnapshot"
   if (type === "routineForecast") return "routineForecast"
   if (type === "routineScheduleUpdate") return "routineScheduleUpdated"
+  if (type === "routineInboxPage") return "routineInboxPage"
+  if (type === "routineInboxSend") return "routineInboxSent"
+  if (type === "routineInboxRead") return "routineInboxRead"
+  if (type === "routineInboxDraft") return "routineInboxDraft"
   return "routineState"
 }
 
@@ -133,7 +137,11 @@ function owned(type: string) {
     type === "routineRuns" ||
     type === "routineSnapshot" ||
     type === "routineArchive" ||
-    type === "routineRemove"
+    type === "routineRemove" ||
+    type === "routineInboxPage" ||
+    type === "routineInboxSend" ||
+    type === "routineInboxRead" ||
+    type === "routineInboxDraft"
   )
 }
 
@@ -164,6 +172,87 @@ async function history(kilo: Kilo, dir: string, post: (msg: unknown) => void, it
   }
 }
 
+function token(value: unknown) {
+  return typeof value === "string" && /^[a-zA-Z0-9_.:-]{1,128}$/.test(value)
+}
+
+async function summaries(ctx: Ctx) {
+  const listed = await ctx.kilo.inbox({ directory: ctx.dir }, { throwOnError: true }).catch((err: unknown) => {
+    ctx.post({ type: "routineInbox", requestID: ctx.message.requestID, error: reason(err) })
+    return undefined
+  })
+  if (!listed) return
+  if (!Array.isArray(listed.data)) {
+    ctx.post({
+      type: "routineInbox",
+      requestID: ctx.message.requestID,
+      error: "The routine inbox could not be read.",
+    })
+    return
+  }
+  ctx.post({ type: "routineInbox", requestID: ctx.message.requestID, items: listed.data })
+}
+
+async function page(ctx: Ctx) {
+  const msg = ctx.message
+  if (!token(msg.requestID) || !token(msg.agentID))
+    throw new Error("Reload the routine conversation before reading it.")
+  const cursor = msg.cursor === undefined ? undefined : String(msg.cursor)
+  if (cursor !== undefined && (cursor.length < 1 || cursor.length > 256))
+    throw new Error("This inbox page cursor is invalid.")
+  const result = await ctx.kilo.inbox2.page(
+    {
+      directory: ctx.dir,
+      agentID: String(msg.agentID),
+      ...(cursor ? { cursor } : {}),
+    },
+    { throwOnError: true },
+  )
+  ctx.post({
+    type: "routineInboxPage",
+    requestID: msg.requestID,
+    agentID: msg.agentID,
+    messages: result.data?.messages,
+    next: result.data?.next,
+  })
+}
+
+async function send(ctx: Ctx) {
+  const msg = ctx.message
+  if (!token(msg.requestID) || !token(msg.agentID) || !token(msg.source))
+    throw new Error("Reload the conversation before sending again.")
+  const text = typeof msg.body === "string" ? msg.body : ""
+  if (!text.trim() || text.length > 8000) throw new Error("Write a follow-up before sending.")
+  const result = await ctx.kilo.inbox2.send(
+    { directory: ctx.dir, agentID: String(msg.agentID), source: String(msg.source), body: text },
+    { throwOnError: true },
+  )
+  ctx.post({ type: "routineInboxSent", requestID: msg.requestID, agentID: msg.agentID, message: result.data })
+}
+
+async function seen(ctx: Ctx) {
+  const msg = ctx.message
+  if (!token(msg.requestID) || !token(msg.agentID) || !Number.isSafeInteger(msg.at) || Number(msg.at) < 0)
+    throw new Error("Reload the conversation before marking it read.")
+  const result = await ctx.kilo.inbox2.read(
+    { directory: ctx.dir, agentID: String(msg.agentID), at: Number(msg.at) },
+    { throwOnError: true },
+  )
+  ctx.post({ type: "routineInboxRead", requestID: msg.requestID, agentID: msg.agentID, at: result.data?.at })
+}
+
+async function scribble(ctx: Ctx) {
+  const msg = ctx.message
+  if (!token(msg.requestID) || !token(msg.agentID)) throw new Error("Reload the conversation before saving a draft.")
+  const draft = msg.draft === null || msg.draft === undefined ? null : String(msg.draft)
+  if (draft !== null && draft.length > 8000) throw new Error("Inbox drafts are limited to 8000 characters.")
+  const result = await ctx.kilo.inbox2.draft(
+    { directory: ctx.dir, agentID: String(msg.agentID), draft: draft ?? "" },
+    { throwOnError: true },
+  )
+  ctx.post({ type: "routineInboxDraft", requestID: msg.requestID, agentID: msg.agentID, draft: result.data?.draft ?? null })
+}
+
 async function list(ctx: Ctx) {
   if (ctx.refresh)
     return ctx.refresh(
@@ -175,6 +264,7 @@ async function list(ctx: Ctx) {
     ctx.kilo.templates({ directory: ctx.dir }, { throwOnError: true }),
   ])
   ctx.post({ type: "routineState", requestID: ctx.message.requestID, agents: agents.data, templates: templates.data })
+  await summaries(ctx)
   await history(ctx.kilo, ctx.dir, ctx.post, (agents.data ?? []) as Listed[])
 }
 
@@ -438,6 +528,22 @@ export async function handleRoutineMessage(input: {
       await forecast(ctx)
       return true
     }
+    if (type === "routineInboxPage") {
+      await page(ctx)
+      return true
+    }
+    if (type === "routineInboxSend") {
+      await send(ctx)
+      return true
+    }
+    if (type === "routineInboxRead") {
+      await seen(ctx)
+      return true
+    }
+    if (type === "routineInboxDraft") {
+      await scribble(ctx)
+      return true
+    }
     if (type === "routineList") {
       await list(ctx)
       return true
@@ -481,5 +587,6 @@ async function refresh(ctx: Ctx) {
   }
   const agents = await ctx.kilo.list({ directory: ctx.dir }, { throwOnError: true })
   ctx.post({ type: "routineState", agents: agents.data, saved: true })
+  await summaries(ctx)
   await history(ctx.kilo, ctx.dir, ctx.post, (agents.data ?? []) as Listed[])
 }

@@ -99,15 +99,22 @@ export class RoutineRefresh {
       const results = await Promise.allSettled([
         kilo.list({ directory: scope.directory }, options),
         kilo.templates({ directory: scope.directory }, options),
+        kilo.inbox({ directory: scope.directory }, options),
       ])
       if (!valid()) return
       if (controller.signal.aborted) throw new Error("Refresh deadline exceeded")
-      const [roster, catalog] = results
+      const [roster, catalog, box] = results
       if (roster.status === "rejected" || catalog.status === "rejected") throw new Error("Roster unavailable")
       const agents = roster.value
       const templates = catalog.value
       if (!Array.isArray(agents.data) || !Array.isArray(templates.data)) throw new Error("Invalid roster")
       post({ type: "routineState", agents: agents.data, templates: templates.data })
+      if (box.status === "fulfilled" && Array.isArray(box.value.data)) post({ type: "routineInbox", items: box.value.data })
+      else
+        post({
+          type: "routineInbox",
+          error: "Inbox could not be refreshed. Previously loaded conversations are retained.",
+        })
       const failed: string[] = []
       for (const item of agents.data) {
         if (!valid()) return

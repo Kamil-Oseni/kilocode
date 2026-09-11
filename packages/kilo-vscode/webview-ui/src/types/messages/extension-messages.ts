@@ -281,6 +281,48 @@ export interface RoutineStartedMessage {
   sessionID: string
   agentID?: string
 }
+
+export interface RoutineInboxMessage {
+  type: "routineInbox"
+  requestID?: string
+  viewID?: string
+  refreshID?: number
+  items?: unknown[]
+  error?: string
+}
+
+export interface RoutineInboxPageResultMessage {
+  type: "routineInboxPage"
+  requestID: string
+  agentID: string
+  messages?: unknown[]
+  next?: string
+  error?: string
+}
+
+export interface RoutineInboxSentMessage {
+  type: "routineInboxSent"
+  requestID: string
+  agentID: string
+  message?: unknown
+  error?: string
+}
+
+export interface RoutineInboxReadResultMessage {
+  type: "routineInboxRead"
+  requestID: string
+  agentID: string
+  at?: number
+  error?: string
+}
+
+export interface RoutineInboxDraftResultMessage {
+  type: "routineInboxDraft"
+  requestID: string
+  agentID: string
+  draft?: string | null
+  error?: string
+}
 // raya_change end
 
 // Wire shape lives in src/shared/stream-messages.ts; narrow `part` to the
@@ -1733,6 +1775,11 @@ export type ExtensionMessage =
   | RoutineOutputUpdatedMessage
   | RoutineArchiveMessage
   | RoutineStartedMessage
+  | RoutineInboxMessage
+  | RoutineInboxPageResultMessage
+  | RoutineInboxSentMessage
+  | RoutineInboxReadResultMessage
+  | RoutineInboxDraftResultMessage
   | PartUpdatedMessage
   | PartsUpdatedMessage
   | PartRemovedMessage

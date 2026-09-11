@@ -19,6 +19,7 @@ import { Archive } from "./Archive"
 import { AccessReview } from "./AccessReview"
 import { OutputEditor } from "./OutputEditor"
 import { OutputReview } from "./OutputReview"
+import { Inbox, status, type Box } from "./Inbox"
 import { Output } from "../../../../src/shared/routine-output"
 
 type Schedule =
@@ -126,14 +127,6 @@ function folder(path: string) {
   return parts.at(-1) ?? path
 }
 
-function meta(item: Agent) {
-  const when = item.nextRun ? `Next ${new Date(item.nextRun).toLocaleString()}` : whenLabel(item.schedule)
-  const pause = item.enabled ? "" : "Paused · "
-  const brief = item.access === "brief" || (!item.access && item.role === "briefer") ? " · Read and report" : ""
-  const write = item.dir ? ` · ${folder(item.dir)}` : ""
-  return `${pause}${item.role} · ${when}${brief}${write}`
-}
-
 interface RoutinesViewProps {
   onBack?: () => void
   onOpenSession?: (id: string) => void
@@ -187,6 +180,10 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const [refreshing, setRefreshing] = createSignal(false)
   const [freshness, setFreshness] = createSignal("Waiting to refresh routines.")
   const [stale, setStale] = createSignal<Record<string, string>>({})
+  const [boxes, setBoxes] = createSignal<Record<string, Box>>({})
+  const [chosen, setChosen] = createSignal<string>()
+  const [query, setQuery] = createSignal("")
+  const [attention, setAttention] = createSignal<"all" | "unread" | "needs">("all")
   let correlation = crypto.randomUUID()
   let revision = 0
   let dirty = false
@@ -235,6 +232,8 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     setLoaded(true)
     setAgents(items)
     if (reviewed() && section() !== "output" && !items.some((item) => item.id === reviewed()?.id)) dismiss()
+    const id = chosen()
+    if (id && !items.some((item) => item.id === id)) setChosen()
     if (items.some((item) => inspected(item.id))) return
     if (root?.querySelector(".routines-instructions")?.contains(document.activeElement)) return close()
     setInspection(undefined)
@@ -299,9 +298,11 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
       setAgents([])
       setRuns({})
       setStale({})
+      setBoxes({})
+      setChosen()
       load()
     }
-    if ((msg.type === "routineState" || msg.type === "routineRuns") && msg.refreshID !== undefined) {
+    if ((msg.type === "routineState" || msg.type === "routineRuns" || msg.type === "routineInbox") && msg.refreshID !== undefined) {
       if (msg.viewID !== correlation || msg.requestID !== correlation || msg.refreshID < revision) return false
       revision = msg.refreshID
     }
@@ -359,11 +360,22 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     if (msg.templates) setTemplates(msg.templates as Template[])
   }
 
+  const boxed = (msg: Extract<ExtensionMessage, { type: "routineInbox" }>) => {
+    if (msg.error) return
+    if (!Array.isArray(msg.items)) return
+    const next: Record<string, Box> = {}
+    for (const item of msg.items as Box[]) {
+      if (item?.agentID) next[item.agentID] = item
+    }
+    setBoxes(next)
+  }
+
   const unsub = vscode.onMessage((msg: ExtensionMessage) => {
     if (!refresh(msg)) return
     if (msg.type === "routineForecast") receive(msg)
     if (msg.type === "routineScheduleUpdated") updated(msg)
     if (msg.type === "routineState") received(msg)
+    if (msg.type === "routineInbox") boxed(msg)
     if (msg.type === "folderPickerResult" && msg.requestId === wait() && msg.path) {
       setDir(msg.path)
       setWait("")
@@ -566,6 +578,20 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
 
   const empty = createMemo(() => agents().length === 0)
   const vacant = createMemo(() => empty() && loaded())
+  const shown = createMemo(() => {
+    const text = query().trim().toLowerCase()
+    const filter = attention()
+    return agents().filter((item) => {
+      const box = boxes()[item.id]
+      if (filter === "unread" && !(box?.unread)) return false
+      if (filter === "needs" && box?.state !== "needs_input" && box?.state !== "failed" && box?.state !== "waiting")
+        return false
+      if (!text) return true
+      const hay = `${item.name} ${item.role} ${item.objective} ${box?.latest?.body ?? ""}`.toLowerCase()
+      return hay.includes(text)
+    })
+  })
+  const worker = createMemo(() => agents().find((item) => item.id === chosen()))
   const roleOpt = createMemo(() => roles.find((item) => item.id === role()) ?? roles[0])
   const workOpt = createMemo(() => work.find((item) => item.id === access()) ?? work[0])
 
@@ -601,7 +627,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
           </Button>
         </Show>
       </div>
-      <div class="routines-body">
+      <div class="routines-body" data-pane={screen() === "roster" ? "inbox" : undefined}>
         <Show when={error()}>
           <p class="routines-error" role="alert">
             {error()}
@@ -624,8 +650,41 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
               <Button onClick={() => setScreen("assign")}>Assign a routine</Button>
             </div>
           </Show>
+          <Show when={!vacant()}>
+            <div class="routines-toolbar">
+              <label class="routines-field">
+                Search workers
+                <input
+                  value={query()}
+                  placeholder="Name, role, or message"
+                  onInput={(event) => setQuery(event.currentTarget.value)}
+                />
+              </label>
+              <div class="routines-filters" role="group" aria-label="Inbox filters">
+                <Button size="small" variant={attention() === "all" ? "primary" : "ghost"} onClick={() => setAttention("all")}>
+                  All
+                </Button>
+                <Button
+                  size="small"
+                  variant={attention() === "unread" ? "primary" : "ghost"}
+                  onClick={() => setAttention("unread")}
+                >
+                  Unread
+                </Button>
+                <Button
+                  size="small"
+                  variant={attention() === "needs" ? "primary" : "ghost"}
+                  onClick={() => setAttention("needs")}
+                >
+                  Needs attention
+                </Button>
+              </div>
+            </div>
+          </Show>
+          <div class="routines-inbox" data-open={chosen() ? "true" : undefined}>
+            <div class="routines-people">
           <ul class="routines-list">
-            <For each={agents()}>
+            <For each={shown()}>
               {(item) => {
                 const run = () => latest(item, runs())
                 const summary = () => run()?.outcome?.summary
@@ -640,20 +699,30 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                   (command() === "open" && !canOpen())
                 const resume = () => (!item.enabled ? `${panel}-${item.id}-resume` : undefined)
                 const on = () => !!picked()[item.id]
+                const box = () => boxes()[item.id]
                 return (
                   <li
                     class="routines-row"
                     data-presence={presence()}
                     data-paused={item.enabled ? undefined : "true"}
                     data-picked={on() ? "true" : undefined}
+                    data-current={chosen() === item.id ? "true" : undefined}
                   >
                     <Checkbox hideLabel checked={on()} onChange={(value) => mark(item.id, value)}>
                       Select {item.name}
                     </Checkbox>
-                    <button type="button" class="routines-identity" disabled={!canOpen()} onClick={() => open(item)}>
+                    <button
+                      type="button"
+                      class="routines-identity"
+                      aria-current={chosen() === item.id ? "true" : undefined}
+                      onClick={() => setChosen(item.id)}
+                    >
                       <span class="routines-name">{item.name}</span>
-                      <span class="routines-meta">{meta(item)}</span>
-                      <span class="routines-job">{item.objective}</span>
+                      <span class="routines-meta">
+                        {item.role} · {status(box()?.state ?? (item.enabled ? "scheduled" : "paused"))}
+                        <Show when={box()?.unread}>{(n) => <> · {n()} unread</>}</Show>
+                      </span>
+                      <span class="routines-job">{box()?.latest?.body ?? item.objective}</span>
                       <Show when={stale()[item.id]}>
                         <span class="routines-note" role="status">
                           History may be stale: {stale()[item.id]}
@@ -749,6 +818,23 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
               }}
             </For>
           </ul>
+            </div>
+            <Show when={worker()} keyed>
+              {(item) => (
+                <Inbox
+                  agentID={item.id}
+                  name={item.name}
+                  role={item.role}
+                  box={boxes()[item.id]}
+                  workspace={item.dir ? folder(item.dir) : undefined}
+                  onBack={() => setChosen()}
+                />
+              )}
+            </Show>
+            <Show when={!worker()}>
+              <p class="routines-empty routines-thread">Select a worker to read reports and follow up in this conversation.</p>
+            </Show>
+          </div>
           <Show when={reviewed()} keyed>
             {(item) => (
               <Show when={section() === "output"} fallback={<AccessReview item={item} onClose={dismiss} />}>

@@ -435,3 +435,118 @@
     animation: none;
   }
 }
+
+.routines-body[data-pane="inbox"] {
+  overflow: hidden;
+}
+
+.routines-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--raya-space-8);
+  align-items: end;
+  margin-bottom: var(--raya-space-8);
+}
+
+.routines-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--raya-space-8);
+}
+
+.routines-inbox {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(14rem, 20rem) minmax(0, 1fr);
+  gap: var(--raya-space-8);
+}
+
+.routines-people {
+  min-height: 0;
+  overflow: auto;
+}
+
+.routines-thread {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border-weak, var(--vscode-widget-border));
+  padding-left: var(--raya-space-12);
+}
+
+.routines-thread-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--raya-space-8);
+  margin-bottom: var(--raya-space-8);
+}
+
+.routines-thread-identity {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.routines-thread-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--raya-space-12);
+}
+
+.routines-line {
+  display: flex;
+  flex-direction: column;
+  gap: var(--raya-space-4);
+  max-width: 85%;
+}
+
+.routines-line[data-kind="user"] {
+  align-self: flex-end;
+}
+
+.routines-line[data-kind="report"],
+.routines-line[data-kind="decision"],
+.routines-line[data-kind="delegation"] {
+  max-width: 100%;
+  border-left: 2px solid var(--text-weak, var(--vscode-descriptionForeground));
+  padding-left: var(--raya-space-8);
+}
+
+.routines-line-meta {
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-size: var(--kilo-font-size-12);
+}
+
+.routines-line-body {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.routines-composer {
+  margin-top: var(--raya-space-8);
+}
+
+.routines-row[data-current="true"] {
+  background: var(--surface-raised, var(--vscode-list-hoverBackground));
+}
+
+@media (max-width: 42rem) {
+  .routines-inbox {
+    grid-template-columns: 1fr;
+  }
+  .routines-inbox[data-open] .routines-people {
+    display: none;
+  }
+  .routines-inbox:not([data-open]) .routines-thread {
+    display: none;
+  }
+  .routines-thread {
+    border-left: 0;
+    padding-left: 0;
+  }
+}

@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Installed product is `75471436ab`. New voice setups default to GPT-Live 1 (`openai-live` / `gpt-live-1`) over the Live API; saved Realtime, Qwen and cascade selections stay. Live appends split at the 500-token bound; busy-queue later delegations are acknowledged and later speech requires clarification. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, delegated cost attribution, Friday accounting E2E, busy-recipient queued/started plus paused-worker denial, overdue-request timeout expiry, inspectable request chains, and rename/archive conversation attribution are installed. Remaining Live work is packaged microphone/acoustic acceptance and provider-switch/disposal. Remaining RDM-06 work is leftover lifecycle UI (schedule-edit-during-execution, leftover recipient-unavailability copy, themes/a11y/performance/reviewer). Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Installed product is `54093915e1`. New voice setups default to GPT-Live 1 (`openai-live` / `gpt-live-1`) over the Live API; saved Realtime, Qwen and cascade selections stay. Live appends split at the 500-token bound; busy-queue later delegations are acknowledged and later speech requires clarification. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, delegated cost attribution, Friday accounting E2E, busy-recipient queued/started plus paused-worker denial, overdue-request timeout expiry, inspectable request chains, and rename/archive conversation attribution are installed. Stopping a delegated request now settles its child run so the worker can be removed. Remaining Live work is packaged microphone/acoustic acceptance and provider-switch/disposal. Remaining RDM-06 work is leftover lifecycle UI (schedule-edit-during-execution, leftover recipient-unavailability copy, themes/a11y/performance/reviewer). Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-11. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `75471436ab` is committed, pushed and installed. Historical routine reports stay attributed after rename and remain readable in the archive. Realtime remains an explicit compatibility path.
+**Latest delivered product:** checkpoint `54093915e1` is committed, pushed and installed. Stopping a delegated request settles the child run so the worker can be removed without waiting for the session to finish. Realtime remains an explicit compatibility path.
 
 ## Scope and reading order
 
@@ -1444,11 +1444,21 @@ Next executable step: leftover RDM-06 lifecycle UI, or leftover Live microphone/
 
 ## 2026-09-11: Stop settles child runs
 
-**States:** verified locally, not yet committed. Stopping a delegated request now marks its child run as error immediately, so the worker can be removed without waiting for the session to settle. Schedule-edit-during-execution UI, leftover recipient-unavailability copy, themes, performance, and reviewer journey remain open.
+**States:** verified locally, committed as `54093915e1`, and installed in the snapshot below. Stopping a delegated request now marks its child run as error immediately, so the worker can be removed without waiting for the session to settle. Schedule-edit-during-execution UI, leftover recipient-unavailability copy, themes, performance, and reviewer journey remain open.
 
 Changed files: `packages/opencode/src/kilocode/task/runner.ts`, `packages/opencode/test/kilocode/task/delegation-runner.test.ts`, `.changeset/raya-routine-stop-settle.md`.
 
 Commands (cwd `packages/opencode`): `bun test ./test/kilocode/task/delegation-runner.test.ts --timeout 60000` -> 4 pass / 0 fail / 41 expect / exit 0. `bun run typecheck` -> exit 0. oxlint on the two files: 12 existing warnings / 0 errors.
+
+Remaining: leftover RDM-06 schedule-edit-during-execution UI, leftover recipient-unavailability copy beyond pause/archive, themes/a11y/performance/reviewer, packaged microphone/acoustic acceptance, and provider-switch/disposal.
+
+Next executable step: leftover RDM-06 lifecycle UI, or leftover Live microphone/provider-switch.
+
+## 2026-09-11: Snapshot install `54093915e1`
+
+**States:** committed, pushed and installed as `54093915e1`. Stopping a delegated request settles the child run so the worker can be removed.
+
+Installed `eden.raya@7.4.23-snapshot+54093915e1.kamil-oseni.1789167625919`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-54093915e1-kamil-oseni-1789167625919.vsix`; SHA-256 `AA1D5411460C78D3B2528113D307AF2DF6F790572442F13C54BF640B1C74E021`; 519984830 bytes, 432 entries. CLI binary rebuilt.
 
 Remaining: leftover RDM-06 schedule-edit-during-execution UI, leftover recipient-unavailability copy beyond pause/archive, themes/a11y/performance/reviewer, packaged microphone/acoustic acceptance, and provider-switch/disposal.
 

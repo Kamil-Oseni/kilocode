@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Installed product is `8619b866fb`. New voice setups default to GPT-Live 1 (`openai-live` / `gpt-live-1`) over the Live API; saved Realtime, Qwen and cascade selections stay. Live appends split at the 500-token bound; busy-queue later delegations are acknowledged and later speech requires clarification. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, delegated cost attribution, Friday accounting E2E, busy-recipient queued/started plus paused-worker denial, overdue-request timeout expiry, and inspectable request chains are installed. Remaining Live work is packaged microphone/acoustic acceptance and provider-switch/disposal. Remaining RDM-06 work is lifecycle rename/archive. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Installed product is `75471436ab`. New voice setups default to GPT-Live 1 (`openai-live` / `gpt-live-1`) over the Live API; saved Realtime, Qwen and cascade selections stay. Live appends split at the 500-token bound; busy-queue later delegations are acknowledged and later speech requires clarification. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, delegated cost attribution, Friday accounting E2E, busy-recipient queued/started plus paused-worker denial, overdue-request timeout expiry, inspectable request chains, and rename/archive conversation attribution are installed. Remaining Live work is packaged microphone/acoustic acceptance and provider-switch/disposal. Remaining RDM-06 work is leftover lifecycle UI (schedule-edit-during-execution, leftover recipient-unavailability copy, themes/a11y/performance/reviewer). Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-11. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `8619b866fb` is committed, pushed and installed. The conversation can inspect stored parent and follow-on worker requests instead of leaving the chain in the database only. Realtime remains an explicit compatibility path.
+**Latest delivered product:** checkpoint `75471436ab` is committed, pushed and installed. Historical routine reports stay attributed after rename and remain readable in the archive. Realtime remains an explicit compatibility path.
 
 ## Scope and reading order
 
@@ -1420,13 +1420,23 @@ Next executable step: leftover RDM-06 lifecycle rename/archive, or leftover Live
 
 ## 2026-09-11: Lifecycle rename and archive attribution
 
-**States:** verified locally, not yet committed. This keeps historical reports on the same worker after rename and still readable after removal. It does not close schedule-edit-during-execution UI, leftover recipient-unavailability copy, themes, performance, or reviewer journey.
+**States:** verified locally, committed as `75471436ab`, and installed in the snapshot below. This keeps historical reports on the same worker after rename and still readable after removal. It does not close schedule-edit-during-execution UI, leftover recipient-unavailability copy, themes, performance, or reviewer journey.
 
 Renaming a worker updates the live conversation list name. Messages stay keyed by stable `agentID`, so the original report body remains. Removal is refused while delegated work is live. After a successful removal, GET conversation still returns the retained messages; send and delegate stay 404. The archive view loads that conversation in place and does not rewrite a draft. A paused worker with an active execution still shows as running. Stopping a live HTTP-started child run can still leave that run pending, so delete after cancel may fail with unfinished runs until the session settles.
 
 Changed files: `packages/opencode/src/kilocode/task/delegation.ts`, `packages/opencode/src/kilocode/task/index.ts`, `packages/opencode/src/kilocode/server/httpapi/handlers/kilocode.ts`, `packages/opencode/test/kilocode/task/inbox.test.ts`, `packages/opencode/test/kilocode/task.test.ts`, `packages/opencode/test/kilocode/server/httpapi-routine-inbox.test.ts`, `packages/kilo-vscode/src/kilo-provider/routines.ts`, `packages/kilo-vscode/webview-ui/src/types/messages/extension-messages.ts`, `packages/kilo-vscode/webview-ui/src/components/routines/Archive.tsx`, `packages/kilo-vscode/tests/unit/routines-archive.test.ts`, `packages/kilo-vscode/tests/fixtures/routine-edit-view.mjs`, `.changeset/raya-routine-lifecycle-archive.md`.
 
 Commands (cwd `packages/opencode`): `bun test ./test/kilocode/task/inbox.test.ts ./test/kilocode/task.test.ts ./test/kilocode/server/httpapi-routine-inbox.test.ts --timeout 90000` -> first run 66 pass / 1 fail (live-delete-after-cancel poll); HTTP rerun 2 pass / 0 fail / 46 expect / exit 0 after isolating idle archive from live child runs. `bun run typecheck` -> exit 0. Commands (cwd `packages/kilo-vscode`): `bun test tests/unit/routines-archive.test.ts tests/unit/routines-edit-view.test.ts --timeout 90000` -> 2 pass / 0 fail / 11 expect / exit 0; host retest after extract 1 pass / 0 fail / 10 expect / exit 0. `bun run check-types` -> exit 0. eslint on `routines.ts` and `Archive.tsx` -> exit 0 after extracting `retained`. Root `bun run script/check-opencode-promise-facades.ts` and `bun run script/check-opencode-annotations.ts --worktree` -> exit 0. oxlint on six opencode files: 21 existing warnings / 0 errors.
+
+Remaining: leftover RDM-06 schedule-edit-during-execution UI, leftover recipient-unavailability copy beyond pause/archive, themes/a11y/performance/reviewer, packaged microphone/acoustic acceptance, and provider-switch/disposal.
+
+Next executable step: leftover RDM-06 lifecycle UI, or leftover Live microphone/provider-switch.
+
+## 2026-09-11: Snapshot install `75471436ab`
+
+**States:** committed, pushed and installed as `75471436ab`. Historical routine reports stay attributed after rename and remain readable in the archive.
+
+Installed `eden.raya@7.4.23-snapshot+75471436ab.kamil-oseni.1789166470101`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-75471436ab-kamil-oseni-1789166470101.vsix`; SHA-256 `8A8D8D483536CC7F1B10FE84FEB0BEFAFF95882C0DD9E696E8166BD95F2C0A75`; 519982782 bytes, 432 entries. CLI binary rebuilt.
 
 Remaining: leftover RDM-06 schedule-edit-during-execution UI, leftover recipient-unavailability copy beyond pause/archive, themes/a11y/performance/reviewer, packaged microphone/acoustic acceptance, and provider-switch/disposal.
 

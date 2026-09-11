@@ -2584,5 +2584,15 @@ Installed eden.raya@7.4.23-snapshot+c67a5b309b.kamil-oseni.1789158414726. VSIX C
 
 Next: leftover RDM-06 UI/lifecycle cases. This does not close the rest of RDM-06.
 
+## 2026-09-11: GPT-Live 1 default engine
+
+Status: verified locally and unshipped. Installed product is still c67a5b309b.
+
+New setups default to openai-live / gpt-live-1 over the Live API. Saved Realtime, Qwen and cascade selections stay. Late Live command acknowledgements after timeout stay unknown. A 257th command is refused. LiveVoice linger timeout releases media without a host finalized event.
+
+Commands (packages/kilo-vscode): bun test tests/unit/live-commands.test.ts tests/unit/voice-config-swap.test.ts tests/unit/live-speech-routing.test.ts tests/unit/speech-default-settings.test.ts tests/unit/openai-provider.test.ts --timeout 60000 -> 12 pass / 0 fail / 102 expect / exit 0. bun test tests/unit/live-voice.test.ts --timeout 90000 -> 1 pass / 0 fail / 2 expect / exit 0.
+
+Next: commit, push, and snapshot:install. Remaining: leftover Live acceptance and RDM-06 UI/lifecycle cases.
+
 
 

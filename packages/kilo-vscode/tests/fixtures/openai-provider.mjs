@@ -131,6 +131,7 @@ const state = (patch = {}) =>
     type: "speechSettingsLoaded",
     settings: {
       ...DEFAULT_SPEECH_SETTINGS,
+      voiceEngine: "openai-realtime",
       hasOpenAIKey: true,
       hasRealtimeKey: true,
       hasSttKey: true,
@@ -141,7 +142,7 @@ const state = (patch = {}) =>
   })
 const ready = (requestId) => send({ type: "speechOpenAIReady", requestId, sdp: "local-answer" })
 try {
-  check(voice.settings().voiceEngine === "openai-realtime", "unconfigured provider starts with the OpenAI default")
+  check(voice.settings().voiceEngine === "openai-live", "unconfigured provider starts with the GPT-Live default")
   check(starts.length === 0 && legacy === 0, "initial default never starts a media transport")
   state({ voiceEngine: "qwen-realtime", mode: "off" })
   await tick()

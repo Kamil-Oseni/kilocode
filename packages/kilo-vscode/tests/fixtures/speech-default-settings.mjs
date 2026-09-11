@@ -127,10 +127,10 @@ const button = (name) => {
 try {
   await load()
   check(
-    root.querySelector('[aria-label="Voice engine"]')?.textContent.includes("OpenAI Realtime"),
-    "actual engine selector shows OpenAI by default",
+    root.querySelector('[aria-label="Voice engine"]')?.textContent.includes("GPT-Live 1"),
+    "actual engine selector shows GPT-Live 1 by default",
   )
-  check(root.textContent.includes("gpt-realtime-2.1"), "settings display the existing native model")
+  check(root.textContent.includes("gpt-live-1"), "settings display the Live API model")
   check(root.textContent.includes("Add a key with access"), "missing dedicated key has actionable guidance")
   check(voice.settings().hasOpenAIKey === false, "empty storage reports no OpenAI secret")
   const input = root.querySelector('input[aria-label="OpenAI API key"]')

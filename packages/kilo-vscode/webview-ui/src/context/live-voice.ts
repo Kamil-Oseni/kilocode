@@ -30,7 +30,10 @@ type Operation = {
 export class LiveVoice {
   private operation?: Operation
 
-  constructor(private readonly sink: Sink) {}
+  constructor(
+    private readonly sink: Sink,
+    private readonly linger = 12_000,
+  ) {}
 
   async start(input: { requestID: string; sessionID: string }, exchange: (sdp: string) => Promise<string>) {
     if (this.operation) throw new Error("End the previous voice call before starting another.")
@@ -114,7 +117,7 @@ export class LiveVoice {
         if (failed) reject(new Error("Live voice media cleanup failed. Restart Raya before reconnecting."))
         else resolve()
       }
-      operation.timer = setTimeout(operation.finish, 12_000)
+      operation.timer = setTimeout(operation.finish, this.linger)
     })
     return operation.closing
   }

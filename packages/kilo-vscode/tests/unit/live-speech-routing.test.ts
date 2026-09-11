@@ -67,6 +67,16 @@ test("Live start routes through input-tools only when the saved engine is openai
     {
       type: "speechOpenAIError",
       requestId: "request_1",
+      error: "GPT-Live requires an OpenAI API key in Speech settings.",
+    },
+  ])
+  await speech.update({ voiceEngine: "openai-realtime" }, root, () => {})
+  posts.length = 0
+  await send({ type: "speechOpenAIStart", requestId: "request_1", sessionID: "session_1", sdp, engine: "live" })
+  expect(posts).toEqual([
+    {
+      type: "speechOpenAIError",
+      requestId: "request_1",
       error: "GPT-Live voice is not selected in Speech settings.",
     },
   ])

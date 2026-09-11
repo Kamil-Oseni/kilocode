@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Installed product is `c67a5b309b`. Live host/CLI contracts are packaged; the default engine remains `openai-realtime`. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, delegated cost attribution, and the Friday accounting E2E are implemented and installed. RDM-06 leftover busy-recipient/denial/timeout/inspectable-chain UI and lifecycle cases remain. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Installed product is `c67a5b309b`. Uncommitted GPT-Live 1 is now the default voice engine (`openai-live` / `gpt-live-1`) and is verified locally, not yet installed. Saved Realtime, Qwen and cascade selections are preserved. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, delegated cost attribution, and the Friday accounting E2E remain installed. RDM-06 leftover busy-recipient/denial/timeout/inspectable-chain UI and lifecycle cases remain. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -1297,3 +1297,17 @@ Installed `eden.raya@7.4.23-snapshot+c67a5b309b.kamil-oseni.1789158414726`. VSIX
 Remaining: leftover busy-recipient, denial, timeout, inspectable chain in UI, and lifecycle rename/archive cases. Do not change the default engine.
 
 Next executable step: leftover RDM-06 UI/lifecycle cases.
+
+## 2026-09-11: GPT-Live 1 default engine
+
+**States:** GPT-Live 1 default verified locally and unshipped. Installed product is still `c67a5b309b`. This does not close Live microphone/acoustic acceptance, busy-queue steering, append token bounds, or provider-switch disposal.
+
+New setups use `openai-live` and `POST /v1/live/sessions` with `gpt-live-1`. Absent or invalid engine values adopt Live. Saved `openai-realtime`, `qwen-realtime` and `cascade-v1` values stay. Speech settings show `gpt-live-1`. LiveCommands ignore a late acknowledgement after timeout and refuse a 257th command. LiveVoice releases local media after an injectable linger when the host never sends `finalized`.
+
+Changed files: `packages/kilo-vscode/src/shared/speech.ts`, `packages/kilo-vscode/src/speech/live-commands.ts`, `packages/kilo-vscode/webview-ui/src/context/live-voice.ts`, `packages/kilo-vscode/webview-ui/src/components/settings/SpeechTab.tsx`, `docs/Raya-OpenAI-Voice-Default.md`, `.changeset/raya-gpt-live-default.md`, plus matching unit/fixture/browser tests.
+
+Commands (cwd `packages/kilo-vscode`): `bun test tests/unit/live-commands.test.ts tests/unit/voice-config-swap.test.ts tests/unit/live-speech-routing.test.ts tests/unit/speech-default-settings.test.ts tests/unit/openai-provider.test.ts --timeout 60000` -> 12 pass / 0 fail / 102 expect / exit 0. `bun test tests/unit/live-voice.test.ts --timeout 90000` -> 1 pass / 0 fail / 2 expect / exit 0. `bun test tests/unit/live-voice-ui.test.ts tests/unit/live-broker.test.ts tests/unit/live-commands.test.ts --timeout 90000` -> 13 pass / 0 fail. `bun run check-types` and `bun run check-types:webview` -> exit 0. eslint on touched files -> exit 0.
+
+Remaining: packaged microphone/acoustic acceptance, busy-queue steering, append token bounds, provider-switch/disposal, and leftover RDM-06 UI/lifecycle cases.
+
+Next executable step: commit, push, and snapshot:install this GPT-Live default.

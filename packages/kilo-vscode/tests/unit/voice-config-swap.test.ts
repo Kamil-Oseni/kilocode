@@ -14,7 +14,7 @@ describe("voice configuration", () => {
       await store.setKey("realtime", "legacy-only")
       await store.setKey("stt", "dictation-only")
       const settings = await store.load()
-      expect(settings.voiceEngine).toBe("openai-realtime")
+      expect(settings.voiceEngine).toBe("openai-live")
       expect(settings.hasOpenAIKey).toBe(false)
       expect(await store.key("openai")).toBeUndefined()
       expect(settings.cliMirror).toBe(false)
@@ -24,7 +24,7 @@ describe("voice configuration", () => {
   })
 
   it("preserves every valid saved engine through unrelated edits and key changes", async () => {
-    for (const engine of ["qwen-realtime", "cascade-v1", "openai-realtime"] as const) {
+    for (const engine of ["qwen-realtime", "cascade-v1", "openai-realtime", "openai-live"] as const) {
       const state = storage()
       await state.update("raya.speech.settings", { voiceEngine: engine, mode: "off", realtimeVoice: "saved-voice" })
       const store = new SpeechSettingsStore(state, secret())

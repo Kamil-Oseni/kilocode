@@ -306,6 +306,22 @@ try {
         "failed setup releases microphone",
       )
       await voice.stop()
+
+      const linger = new Voice.LiveVoice(sink, 50)
+      const held = linger.start({ sessionID: "session-a", requestID: "request-linger" }, after)
+      await until(() => channel?.readyState === "open")
+      linger.started("request-linger")
+      await held
+      const lingerClose = linger.stop()
+      const track = captures.at(-2).getAudioTracks()[0]
+      check(track.readyState === "live" && !track.enabled, "linger stop silences capture before host finalization")
+      check(events.statuses.at(-1) === "listening", "linger wait retains local media until timeout")
+      await lingerClose
+      check(
+        events.statuses.at(-1) === "off" && captures.at(-2).getTracks().every((item) => item.readyState === "ended"),
+        "linger timeout releases media without a host finalized event",
+      )
+
       return checks
     } finally {
       await voice.stop()
@@ -316,7 +332,7 @@ try {
       for (const context of contexts) await context.close()
     }
   })
-  assert.equal(result.length, 37)
+  assert.equal(result.length, 40)
   console.log(`Live native WebRTC: ${result.length} implementation assertions passed; local peers/synthetic audio only.`)
 } finally {
   await browser.close()

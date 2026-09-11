@@ -12,7 +12,6 @@ const messages = []
 let captures = 0
 const settings = {
   ...DEFAULT_SPEECH_SETTINGS,
-  voiceEngine: "openai-realtime",
   hasOpenAIKey: false,
   hasRealtimeKey: false,
   hasSttKey: false,

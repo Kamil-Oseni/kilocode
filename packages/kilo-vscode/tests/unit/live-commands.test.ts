@@ -43,4 +43,29 @@ test("LiveCommands treats a send failure as failed rather than unknown", async (
     status: "failed",
     error: "Voice command could not be sent.",
   })
+  expect(commands.receive({ type: "session.input_audio.muted", client_event_id: "mute_1" })).toBe(false)
+})
+
+test("LiveCommands ignores a late acknowledgement after timeout and refuses a 257th command", async () => {
+  const sent: Record<string, unknown>[] = []
+  const commands = new LiveCommands((event) => {
+    sent.push(event)
+  }, 20)
+  const first = commands.append("mute_1", "session.input_audio.mute")
+  expect(await first).toEqual({
+    status: "unknown",
+    error: "Voice command acceptance was not confirmed.",
+  })
+  expect(commands.receive({ type: "session.input_audio.muted", client_event_id: "mute_1" })).toBe(false)
+  expect(await first).toEqual({
+    status: "unknown",
+    error: "Voice command acceptance was not confirmed.",
+  })
+  for (const index of Array.from({ length: 255 }, (_, i) => i + 2)) commands.append(`mute_${index}`, "session.input_audio.mute")
+  expect(await commands.append("mute_257", "session.input_audio.mute")).toEqual({
+    status: "failed",
+    error: "Voice command limit reached. End voice before starting a fresh call.",
+  })
+  expect(sent).toHaveLength(256)
+  commands.close()
 })

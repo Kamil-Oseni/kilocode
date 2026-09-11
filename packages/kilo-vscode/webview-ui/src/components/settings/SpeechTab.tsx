@@ -10,8 +10,8 @@ import { OPENAI_LIVE_MODEL, OPENAI_VOICE_MODEL, type VoiceEngine } from "../../.
 import SettingsRow from "./SettingsRow"
 
 const ENGINES: Array<{ value: VoiceEngine; label: string }> = [
-  { value: "openai-live", label: "OpenAI GPT-Live 1 (preview)" },
-  { value: "openai-realtime", label: "OpenAI Realtime (preview)" },
+  { value: "openai-live", label: "OpenAI GPT-Live 1" },
+  { value: "openai-realtime", label: "OpenAI Realtime (compatibility)" },
   { value: "qwen-realtime", label: "Legacy Qwen Realtime (experimental)" },
   { value: "cascade-v1", label: "Configured STT → Raya → MiniMax (cascade-v1)" },
 ]
@@ -27,9 +27,9 @@ const SpeechTab: Component = () => {
   return (
     <div class="speech-settings" style={{ display: "flex", "flex-direction": "column", gap: "16px" }}>
       <p style={{ margin: 0, color: "var(--vscode-descriptionForeground)", "font-size": "var(--kilo-font-size-12)" }}>
-        OpenAI is the default for new voice setups and connects directly over WebRTC when you start a call. Work stays
-        in the current conversation. Ending voice releases audio; admitted work continues until you stop it in the
-        conversation. Dictation remains a separate draft-entry action. OpenAI failures never silently switch to another
+        GPT-Live 1 is the default for new voice setups and connects over the OpenAI Live API when you start a call. Work
+        stays in the current conversation. Ending voice releases audio; admitted work continues until you stop it in
+        the conversation. Dictation remains a separate draft-entry action. OpenAI failures never silently switch to another
         provider.
       </p>
       <Card>

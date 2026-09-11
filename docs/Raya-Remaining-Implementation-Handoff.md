@@ -1044,7 +1044,7 @@ Next executable step: regenerate the SDK for Live duration/delegation HTTP endpo
 
 ## 2026-09-11: Live SDK regeneration
 
-**States:** generated SDK includes Live call/duration; Live remains unshipped. Product checkpoint remains `8b01e72311`.
+**States:** generated SDK includes Live call/duration, committed as `cf4812731c`; Live remains unshipped. Product checkpoint remains `8b01e72311`.
 
 `packages/sdk/js` now generates `KilocodeVoiceLiveCall` and `KilocodeVoiceLiveDuration` plus `client.voice.live.call` / `duration` against `/kilocode/voice/live/session/{id}/calls` and `/duration`. OpenAI start bindings include optional model `gpt-live-1`. Generated OpenAPI number unions still mention NaN/Infinity; the backend continues to reject non-finite seconds.
 

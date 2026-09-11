@@ -2368,7 +2368,7 @@ Do not snapshot:install. Next: SDK regeneration, then WebRTC/UI fixtures.
 
 ## 2026-09-11: Live SDK regeneration (OVR-01)
 
-Status: verified locally, unshipped. Installed product is still 8b01e72311.
+Status: verified locally and committed as cf4812731c, unshipped. Installed product is still 8b01e72311.
 
 The generated SDK now includes Live delegation and duration endpoints under client.voice.live. Default voice engine remains openai-realtime.
 

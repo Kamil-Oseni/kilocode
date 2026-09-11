@@ -2332,7 +2332,7 @@ Restored Live WIP compiles: packages/kilo-vscode bun run check-types exit 0 (.tm
 
 ## 2026-09-11: LiveBroker loopback fixtures (OVR-01)
 
-Status: verified locally, unshipped. Installed product is still 8b01e72311.
+Status: verified locally and committed as 43e7bc7116, unshipped. Installed product is still 8b01e72311.
 
 Trusted-host LiveBroker now has HTTP/WebSocket loopback coverage: forbidden browser mutation events, SDP before session.started, host timeout hangup/DELETE for a missing started event, duration posted once, conflicting later session.closed marked incomplete, image staging without work dispatch, validated completed commentary, and failed work narrated as a status. LiveCommands cover acknowledgement, identity reuse, provider errors, close-unknown and send failure.
 

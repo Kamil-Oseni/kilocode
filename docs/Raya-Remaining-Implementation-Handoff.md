@@ -1004,7 +1004,7 @@ After restoring stashed Live WIP, `bun run check-types` in `packages/kilo-vscode
 
 ## 2026-09-11: LiveBroker loopback fixtures
 
-**States:** LiveBroker HTTP/WebSocket fixtures verified locally; Live remains unshipped. Product checkpoint remains `8b01e72311`.
+**States:** LiveBroker HTTP/WebSocket fixtures verified locally, committed as `43e7bc7116`; Live remains unshipped. Product checkpoint remains `8b01e72311`.
 
 Trusted-host `LiveBroker` now uses a real loopback provider/backend peer. Creation forbids browser mutation events (`allowed_client_events: []`), delivers SDP before `session.started`, and closes an unstarted paid call through an injectable host timeout plus `session.close`/hangup/DELETE. Mute/share wait for started. `session.closed` duration is posted once without reopening work; a later conflicting closed event marks usage incomplete without a second duration POST. Staging an image does not dispatch work; later client delegation narrates only a completed result that includes text, assistant message identity and evidence. Failed work is spoken as a status, not as success. LiveCommands correlate mute/commentary acknowledgement, reject identity reuse, keep unknown close outcomes and do not retry a failed send.
 

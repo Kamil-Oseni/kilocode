@@ -99,33 +99,31 @@ export class LiveContext {
   }
 
   private append(value: Record<string, unknown>): "ignored" | "transcript" | "invalid" | "limit" {
-    if (
-      typeof value.delta !== "string" ||
-      !offset(value.start_ms) ||
-      !offset(value.end_ms) ||
-      value.end_ms < value.start_ms
-    )
+    const eventID = value.event_id
+    const start = value.start_ms
+    const end = value.end_ms
+    if (typeof value.delta !== "string" || !id(eventID) || !offset(start) || !offset(end) || end < start)
       return this.invalid()
     const bytes = new TextEncoder().encode(value.delta).length
     if (bytes > 16384) return this.limit()
     const fingerprint = JSON.stringify([
       value.type,
-      value.event_id,
+      eventID,
       value.delta,
-      value.start_ms,
-      value.end_ms,
+      start,
+      end,
       value.client_event_id ?? null,
     ])
-    const blocked = this.retain(value.event_id, fingerprint, this.bytes + bytes > 262144)
+    const blocked = this.retain(eventID, fingerprint, this.bytes + bytes > 262144)
     if (blocked) return blocked
     if (this.fragments.length >= 4096 || this.bytes + bytes > 262144) return this.limit()
     this.bytes += bytes
     this.fragments.push({
-      id: value.event_id,
+      id: eventID,
       speaker: value.type === "session.input_transcript.delta" ? "user" : "assistant",
       text: value.delta,
-      start: value.start_ms,
-      end: value.end_ms,
+      start,
+      end,
       sequence: ++this.sequence,
       ...(typeof value.client_event_id === "string" ? { client: value.client_event_id } : {}),
     })
@@ -133,8 +131,10 @@ export class LiveContext {
   }
 
   private created(value: Record<string, unknown>): "ignored" | "delegation" | "invalid" | "limit" {
+    const eventID = value.event_id
     const delegation = record(value.delegation) ? value.delegation : undefined
     if (
+      !id(eventID) ||
       !offset(value.offset_ms) ||
       !delegation ||
       !id(delegation.id) ||
@@ -144,13 +144,13 @@ export class LiveContext {
       return this.invalid()
     const fingerprint = JSON.stringify([
       value.type,
-      value.event_id,
+      eventID,
       value.offset_ms,
       delegation.id,
       delegation.target,
       value.client_event_id ?? null,
     ])
-    const blocked = this.retain(value.event_id, fingerprint, false)
+    const blocked = this.retain(eventID, fingerprint, false)
     if (blocked) return blocked
     return this.delegate(value)
   }

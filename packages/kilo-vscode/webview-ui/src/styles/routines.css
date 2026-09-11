@@ -531,6 +531,11 @@
   margin-top: var(--raya-space-8);
 }
 
+.routines-delegate {
+  padding-top: var(--raya-space-8);
+  border-top: 1px solid var(--border-weak, var(--vscode-widget-border));
+}
+
 .routines-row[data-current="true"] {
   background: var(--surface-raised, var(--vscode-list-hoverBackground));
 }

@@ -323,6 +323,14 @@ export interface RoutineInboxDraftResultMessage {
   draft?: string | null
   error?: string
 }
+
+export interface RoutineDelegatedMessage {
+  type: "routineDelegated"
+  requestID: string
+  agentID: string
+  record?: unknown
+  error?: string
+}
 // raya_change end
 
 // Wire shape lives in src/shared/stream-messages.ts; narrow `part` to the
@@ -1780,6 +1788,7 @@ export type ExtensionMessage =
   | RoutineInboxSentMessage
   | RoutineInboxReadResultMessage
   | RoutineInboxDraftResultMessage
+  | RoutineDelegatedMessage
   | PartUpdatedMessage
   | PartsUpdatedMessage
   | PartRemovedMessage

@@ -127,6 +127,10 @@ function folder(path: string) {
   return parts.at(-1) ?? path
 }
 
+function others(id: string, roster: Agent[]) {
+  return roster.filter((item) => item.id !== id)
+}
+
 function heading(editing: boolean, screen: "roster" | "assign") {
   if (editing) return "Edit schedule"
   if (screen === "assign") return "Assign a routine"
@@ -886,6 +890,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                   role={item.role}
                   box={boxes()[item.id]}
                   workspace={item.dir ? folder(item.dir) : undefined}
+                  workers={others(item.id, agents())}
                   onBack={() => setChosen()}
                 />
               )}

@@ -224,6 +224,15 @@ export interface RoutineInboxDraftMessage {
   agentID: string
   draft: string | null
 }
+
+export interface RoutineDelegateMessage {
+  type: "routineDelegate"
+  requestID: string
+  agentID: string
+  recipientID: string
+  source: string
+  objective: string
+}
 // raya_change end
 
 export interface RequestBackgroundJobsMessage {
@@ -1836,6 +1845,7 @@ export type WebviewMessage =
   | RoutineInboxSendMessage
   | RoutineInboxReadMessage
   | RoutineInboxDraftMessage
+  | RoutineDelegateMessage
   | RequestBackgroundJobsMessage
   | CancelBackgroundJobMessage
   | BackgroundSubagentsMessage

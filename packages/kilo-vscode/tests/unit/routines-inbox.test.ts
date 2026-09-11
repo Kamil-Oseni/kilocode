@@ -101,3 +101,91 @@ test("routine inbox page send read and draft keep request identity and retry the
   })
   expect(payload).toEqual({ source: "user:retry", body: "Why?" })
 })
+
+test("routine delegate posts the same source on retry and refreshes inbox summaries", async () => {
+  const calls: Request[] = []
+  const messages: unknown[] = []
+  let payload: Record<string, unknown> | undefined
+  const record = {
+    id: "rdl_1",
+    source: "dlg:retry",
+    senderID: "chief",
+    recipientID: "books",
+    objective: "Review Friday expenses.",
+    state: "queued",
+  }
+  const client = createKiloClient({
+    baseUrl: "http://localhost:4096",
+    fetch: async (input, init) => {
+      const request = new Request(input, init)
+      calls.push(request)
+      const url = new URL(request.url)
+      if (url.pathname.endsWith("/delegate") && request.method === "POST") {
+        payload = (await request.json()) as Record<string, unknown>
+        return Response.json(record)
+      }
+      if (url.pathname.endsWith("/agent-inbox") && request.method === "GET")
+        return Response.json([
+          {
+            agentID: "chief",
+            conversationID: "rcv_chief",
+            name: "Chief of Staff",
+            role: "briefer",
+            unread: 0,
+            state: "scheduled",
+          },
+        ])
+      return new Response("missing", { status: 404 })
+    },
+  })
+  const post = (msg: unknown) => messages.push(msg)
+  await handleRoutineMessage({
+    client,
+    directory: "workspace",
+    post,
+    message: {
+      type: "routineDelegate",
+      requestID: "dlg1",
+      agentID: "chief",
+      recipientID: "books",
+      source: "dlg:retry",
+      objective: "Review Friday expenses.",
+    },
+  })
+  expect(payload).toEqual({
+    source: "dlg:retry",
+    senderID: "chief",
+    recipientID: "books",
+    objective: "Review Friday expenses.",
+  })
+  expect(calls.some((item) => new URL(item.url).pathname.endsWith("/agent/chief/delegate"))).toBe(true)
+  expect(messages.filter((msg) => (msg as { type?: string }).type === "routineDelegated").at(-1)).toMatchObject({
+    type: "routineDelegated",
+    requestID: "dlg1",
+    agentID: "chief",
+    record,
+  })
+  expect(messages.at(-1)).toMatchObject({
+    type: "routineInbox",
+    requestID: "dlg1",
+    items: [{ agentID: "chief" }],
+  })
+  await handleRoutineMessage({
+    client: null,
+    directory: "workspace",
+    post,
+    message: {
+      type: "routineDelegate",
+      requestID: "offline",
+      agentID: "chief",
+      recipientID: "books",
+      source: "dlg:retry",
+      objective: "Review Friday expenses.",
+    },
+  })
+  expect(messages.at(-1)).toMatchObject({
+    type: "routineDelegated",
+    requestID: "offline",
+    error: "Raya is not connected.",
+  })
+})

@@ -26,14 +26,24 @@ export type Box = {
   draft?: string
 }
 
+type Peer = {
+  id: string
+  name: string
+  role: string
+}
+
 function stamp(at: number) {
   return new Date(at).toLocaleString()
 }
 
-function kind(value: Note["kind"]) {
+function kind(value: Note["kind"], source?: string) {
   if (value === "report") return "Report"
   if (value === "decision") return "Needs a decision"
-  if (value === "delegation") return "Delegation"
+  if (value === "delegation") {
+    if (source?.startsWith("sent:")) return "Asked another worker"
+    if (source?.startsWith("reply:")) return "Answer from another worker"
+    return "Asked you"
+  }
   if (value === "worker") return "Worker"
   return "You"
 }
@@ -47,12 +57,107 @@ export function status(state: Box["state"]) {
   return "Scheduled"
 }
 
+const Pass: Component<{ agentID: string; workers: Peer[]; onDone?: () => void }> = (props) => {
+  const vscode = useVSCode()
+  const [ask, setAsk] = createSignal("")
+  const [phase, setPhase] = createSignal<"idle" | "sending" | "failed">("idle")
+  const [error, setError] = createSignal("")
+  let source = `dlg:${crypto.randomUUID()}`
+  let sendID = ""
+  let seen = ""
+
+  const reset = (id: string) => {
+    seen = id
+    source = `dlg:${crypto.randomUUID()}`
+    setAsk("")
+    setPhase("idle")
+    setError("")
+  }
+
+  createEffect(() => {
+    const id = props.agentID
+    if (id !== seen) reset(id)
+  })
+
+  const receive = (msg: ExtensionMessage) => {
+    if (msg.type !== "routineDelegated" || msg.requestID !== sendID || msg.agentID !== props.agentID) return
+    if (msg.error) {
+      setPhase("failed")
+      setError(msg.error)
+      return
+    }
+    source = `dlg:${crypto.randomUUID()}`
+    setAsk("")
+    setPhase("idle")
+    setError("")
+    props.onDone?.()
+  }
+
+  const unsub = vscode.onMessage(receive)
+  onCleanup(unsub)
+
+  const submit = (recipientID: string) => {
+    const body = ask().trim()
+    if (!body || phase() === "sending") return
+    setPhase("sending")
+    setError("")
+    sendID = crypto.randomUUID()
+    vscode.postMessage({
+      type: "routineDelegate",
+      requestID: sendID,
+      agentID: props.agentID,
+      recipientID,
+      source,
+      objective: body,
+    })
+  }
+
+  return (
+    <form
+      class="routines-composer routines-delegate"
+      onSubmit={(event) => {
+        event.preventDefault()
+      }}
+    >
+      <label class="routines-field">
+        Ask another worker
+        <textarea
+          value={ask()}
+          rows={3}
+          aria-label="Ask another worker"
+          placeholder="What should they answer?"
+          onInput={(event) => setAsk(event.currentTarget.value)}
+        />
+      </label>
+      <p class="routines-hint">Asks another worker for a tracked result. Does not change either assignment.</p>
+      <Show when={error()}>
+        <p class="routines-error" role="alert">
+          {error()}
+        </p>
+      </Show>
+      <For each={props.workers}>
+        {(item) => (
+          <Button
+            type="button"
+            size="small"
+            disabled={phase() === "sending" || !ask().trim()}
+            onClick={() => submit(item.id)}
+          >
+            {phase() === "sending" ? "Asking" : phase() === "failed" ? `Retry ask ${item.name}` : `Ask ${item.name}`}
+          </Button>
+        )}
+      </For>
+    </form>
+  )
+}
+
 export const Inbox: Component<{
   agentID: string
   name: string
   role: string
   box?: Box
   workspace?: string
+  workers?: Peer[]
   onBack?: () => void
 }> = (props) => {
   const vscode = useVSCode()
@@ -231,7 +336,7 @@ export const Inbox: Component<{
           {(item) => (
             <article class="routines-line" data-kind={item.kind} data-source={item.source}>
               <span class="routines-line-meta">
-                {kind(item.kind)} · {stamp(item.time)}
+                {kind(item.kind, item.source)} · {stamp(item.time)}
               </span>
               <p class="routines-line-body">{item.body}</p>
             </article>
@@ -265,6 +370,9 @@ export const Inbox: Component<{
           {phase() === "sending" ? "Asking this worker" : phase() === "failed" ? "Retry follow-up" : "Send"}
         </Button>
       </form>
+      <Show when={props.workers && props.workers.length > 0}>
+        <Pass agentID={props.agentID} workers={props.workers!} onDone={() => { wait = false; load() }} />
+      </Show>
     </div>
   )
 }

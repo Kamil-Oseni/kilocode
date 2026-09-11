@@ -2503,3 +2503,15 @@ Changed files: packages/core/src/kilocode/routine.sql.ts, packages/core/src/data
 Commands (packages/opencode): bun test ./test/kilocode/task/delegation.test.ts ./test/kilocode/task/delegation-runner.test.ts ./test/kilocode/server/httpapi-routine-delegate.test.ts ./test/kilocode/task/inbox-followup.test.ts --timeout 60000 -> 7 pass / 0 fail / 74 expect / exit 0. bun run typecheck -> exit 0.
 
 Do not snapshot:install. Next: routines UI for starting and inspecting a delegation.
+
+## 2026-09-11: Routine delegation UI (RDM-04)
+
+Status: verified locally and unshipped. Installed product is still 683a82b837.
+
+A worker conversation can ask another roster worker. Retry reuses the same source. The sender conversation shows the asked card; the recipient conversation shows the request. Neither assignment is rewritten.
+
+Changed files: packages/kilo-vscode/src/kilo-provider/routines.ts, packages/kilo-vscode/src/KiloProvider.ts, packages/kilo-vscode/webview-ui/src/types/messages/webview-messages.ts, packages/kilo-vscode/webview-ui/src/types/messages/extension-messages.ts, packages/kilo-vscode/webview-ui/src/components/routines/Inbox.tsx, packages/kilo-vscode/webview-ui/src/components/routines/RoutinesView.tsx, packages/kilo-vscode/webview-ui/src/styles/routines.css, packages/kilo-vscode/tests/unit/routines-inbox.test.ts, packages/kilo-vscode/tests/unit/routines-delegate-view.test.ts, packages/kilo-vscode/tests/fixtures/routine-delegate-view.mjs, .changeset/raya-routine-delegate-ui.md.
+
+Commands (packages/kilo-vscode): bun test ./tests/unit/routines-inbox.test.ts ./tests/unit/routines-delegate-view.test.ts ./tests/unit/routines-inbox-view.test.ts --timeout 90000 -> 4 pass / 0 fail / 13 expect / exit 0 (.tmp/routine-delegate-ui-tests.log). bun run typecheck -> exit 0 (.tmp/routine-delegate-ui-types.log). eslint on changed files -> exit 0 (.tmp/routine-delegate-ui-lint.log).
+
+Next: commit, push, and snapshot:install this UI with the already-pushed RDM-04 runtime. Remaining after install: explicit cancel/stop, cost-attribution review, and RDM-06 Friday accounting E2E.

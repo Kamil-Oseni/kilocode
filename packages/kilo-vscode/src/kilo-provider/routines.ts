@@ -110,6 +110,7 @@ function reply(type: string) {
   if (type === "routineInboxSend") return "routineInboxSent"
   if (type === "routineInboxRead") return "routineInboxRead"
   if (type === "routineInboxDraft") return "routineInboxDraft"
+  if (type === "routineDelegate") return "routineDelegated"
   return "routineState"
 }
 
@@ -141,7 +142,8 @@ function owned(type: string) {
     type === "routineInboxPage" ||
     type === "routineInboxSend" ||
     type === "routineInboxRead" ||
-    type === "routineInboxDraft"
+    type === "routineInboxDraft" ||
+    type === "routineDelegate"
   )
 }
 
@@ -251,6 +253,27 @@ async function scribble(ctx: Ctx) {
     { throwOnError: true },
   )
   ctx.post({ type: "routineInboxDraft", requestID: msg.requestID, agentID: msg.agentID, draft: result.data?.draft ?? null })
+}
+
+async function pass(ctx: Ctx) {
+  const msg = ctx.message
+  if (!token(msg.requestID) || !token(msg.agentID) || !token(msg.source) || !token(msg.recipientID))
+    throw new Error("Reload the conversation before asking another worker.")
+  const text = typeof msg.objective === "string" ? msg.objective : ""
+  if (!text.trim() || text.length > 8000) throw new Error("Write what the other worker should answer.")
+  const result = await ctx.kilo.delegate.create(
+    {
+      directory: ctx.dir,
+      agentID: String(msg.agentID),
+      source: String(msg.source),
+      senderID: String(msg.agentID),
+      recipientID: String(msg.recipientID),
+      objective: text,
+    },
+    { throwOnError: true },
+  )
+  ctx.post({ type: "routineDelegated", requestID: msg.requestID, agentID: msg.agentID, record: result.data })
+  await summaries(ctx)
 }
 
 async function list(ctx: Ctx) {
@@ -479,6 +502,7 @@ const routes: Record<string, (ctx: Ctx) => Promise<void>> = {
   routineInboxSend: send,
   routineInboxRead: seen,
   routineInboxDraft: scribble,
+  routineDelegate: pass,
   routineList: list,
   routineCreate: create,
   routineUpdate: update,

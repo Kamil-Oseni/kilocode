@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Installed product is `683a82b837`. Live host/CLI contracts are packaged in this snapshot; the default engine remains `openai-realtime`. Routine inbox, follow-up dispatch and session-list exclusion are installed. RDM-04 worker-to-worker delegation is verified locally and unshipped. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Installed product is `683a82b837`. Live host/CLI contracts are packaged in this snapshot; the default engine remains `openai-realtime`. Routine inbox, follow-up dispatch and session-list exclusion are installed. RDM-04 runtime is pushed as `35eb802178`. Routines UI to start and inspect a delegation is verified locally and unshipped. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -1198,6 +1198,20 @@ Changed files: `packages/core/src/kilocode/routine.sql.ts`, `packages/core/src/d
 
 Commands (cwd `packages/opencode`): `bun test ./test/kilocode/task/delegation.test.ts ./test/kilocode/task/delegation-runner.test.ts ./test/kilocode/server/httpapi-routine-delegate.test.ts ./test/kilocode/task/inbox-followup.test.ts --timeout 60000` -> 7 pass / 0 fail / 74 expect / exit 0. `bun run typecheck` -> exit 0. Root `bun run script/check-opencode-annotations.ts --worktree` -> exit 0. Root `bun ./script/generate.ts` -> exit 0.
 
-Remaining: UI to start/inspect a delegation from routines, explicit cancel/stop controls, and cost-attribution review. Do not snapshot:install.
+Remaining: UI to start/inspect a delegation from routines, explicit cancel/stop controls, and cost-attribution review. Do not snapshot:install until the UI increment is included.
 
 Next executable step: expose delegation cards and a Chief-to-Accounting action on the routines surface. Do not change the default engine.
+
+## 2026-09-11: Routines UI for worker-to-worker delegation
+
+**States:** RDM-04 start/inspect UI verified locally; Live remains not the default engine. Product checkpoint remains `683a82b837`. Runtime commit `35eb802178` is pushed and not yet installed.
+
+A worker conversation can ask another roster worker. The host calls `POST /kilocode/agent/:agentID/delegate` with a stable source, then refreshes inbox summaries. Retry reuses the same source. The sender conversation shows "Asked another worker"; the recipient conversation shows "Asked you". Copy states that neither assignment is rewritten.
+
+Changed files: `packages/kilo-vscode/src/kilo-provider/routines.ts`, `packages/kilo-vscode/src/KiloProvider.ts`, `packages/kilo-vscode/webview-ui/src/types/messages/webview-messages.ts`, `packages/kilo-vscode/webview-ui/src/types/messages/extension-messages.ts`, `packages/kilo-vscode/webview-ui/src/components/routines/Inbox.tsx`, `packages/kilo-vscode/webview-ui/src/components/routines/RoutinesView.tsx`, `packages/kilo-vscode/webview-ui/src/styles/routines.css`, `packages/kilo-vscode/tests/unit/routines-inbox.test.ts`, `packages/kilo-vscode/tests/unit/routines-delegate-view.test.ts`, `packages/kilo-vscode/tests/fixtures/routine-delegate-view.mjs`, `.changeset/raya-routine-delegate-ui.md`.
+
+Commands (cwd `packages/kilo-vscode`): `bun test ./tests/unit/routines-inbox.test.ts ./tests/unit/routines-delegate-view.test.ts ./tests/unit/routines-inbox-view.test.ts --timeout 90000` -> 4 pass / 0 fail / 13 expect / exit 0 (`.tmp/routine-delegate-ui-tests.log`). `bun run typecheck` -> exit 0 (`.tmp/routine-delegate-ui-types.log`). eslint on changed files -> exit 0 (`.tmp/routine-delegate-ui-lint.log`).
+
+Remaining after this checkpoint: explicit cancel/stop controls, cost-attribution review, busy-recipient/denial/timeout UI cases, inspectable chain in UI, and RDM-06 Friday accounting E2E. Do not change the default engine.
+
+Next executable step: commit, push, and `snapshot:install` so one install covers RDM-04 runtime plus this UI.

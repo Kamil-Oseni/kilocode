@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Installed product is `c67a5b309b`. Uncommitted GPT-Live 1 is now the default voice engine (`openai-live` / `gpt-live-1`) and is verified locally, not yet installed. Saved Realtime, Qwen and cascade selections are preserved. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, delegated cost attribution, and the Friday accounting E2E remain installed. RDM-06 leftover busy-recipient/denial/timeout/inspectable-chain UI and lifecycle cases remain. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Installed product is `d4e5384528`. New voice setups default to GPT-Live 1 (`openai-live` / `gpt-live-1`) over the Live API; saved Realtime, Qwen and cascade selections stay. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, delegated cost attribution, and the Friday accounting E2E are installed. Remaining Live work is packaged microphone/acoustic acceptance, busy-queue steering, append token bounds, and provider-switch/disposal. RDM-06 leftover busy-recipient/denial/timeout/inspectable-chain UI and lifecycle cases remain. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-11. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `c67a5b309b` is committed, pushed and installed. Live is packaged in this snapshot; the default engine remains `openai-realtime`.
+**Latest delivered product:** checkpoint `d4e5384528` is committed, pushed and installed. New voice setups default to GPT-Live 1; the Live API is the production engine. Realtime remains an explicit compatibility path.
 
 ## Scope and reading order
 
@@ -1300,7 +1300,7 @@ Next executable step: leftover RDM-06 UI/lifecycle cases.
 
 ## 2026-09-11: GPT-Live 1 default engine
 
-**States:** GPT-Live 1 default verified locally and unshipped. Installed product is still `c67a5b309b`. This does not close Live microphone/acoustic acceptance, busy-queue steering, append token bounds, or provider-switch disposal.
+**States:** GPT-Live 1 default verified locally, committed as `d4e5384528`, and installed in the snapshot below. This does not close Live microphone/acoustic acceptance, busy-queue steering, append token bounds, or provider-switch disposal.
 
 New setups use `openai-live` and `POST /v1/live/sessions` with `gpt-live-1`. Absent or invalid engine values adopt Live. Saved `openai-realtime`, `qwen-realtime` and `cascade-v1` values stay. Speech settings show `gpt-live-1`. LiveCommands ignore a late acknowledgement after timeout and refuse a 257th command. LiveVoice releases local media after an injectable linger when the host never sends `finalized`.
 
@@ -1310,4 +1310,14 @@ Commands (cwd `packages/kilo-vscode`): `bun test tests/unit/live-commands.test.t
 
 Remaining: packaged microphone/acoustic acceptance, busy-queue steering, append token bounds, provider-switch/disposal, and leftover RDM-06 UI/lifecycle cases.
 
-Next executable step: commit, push, and snapshot:install this GPT-Live default.
+Next executable step: leftover Live acceptance cases, then leftover RDM-06 UI/lifecycle cases.
+
+## 2026-09-11: Snapshot install `d4e5384528`
+
+**States:** committed, pushed and installed as `d4e5384528`. New voice setups default to GPT-Live 1.
+
+Installed `eden.raya@7.4.23-snapshot+d4e5384528.kamil-oseni.1789159781902`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-d4e5384528-kamil-oseni-1789159781902.vsix`; SHA-256 `4D18A6523DDA25F823028EAC8844FE4AB845FF4B7C0340B268092F6725AFD30F`; 517019282 bytes, 431 entries, CLI 228785664 bytes. Includes GPT-Live 1 as the default voice engine over the Live API. Realtime remains an explicit compatibility path.
+
+Remaining: packaged microphone/acoustic acceptance, busy-queue steering, append token bounds, provider-switch/disposal, and leftover RDM-06 UI/lifecycle cases.
+
+Next executable step: leftover Live acceptance cases, then leftover RDM-06 UI/lifecycle cases.

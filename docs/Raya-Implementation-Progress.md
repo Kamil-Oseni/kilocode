@@ -2586,13 +2586,21 @@ Next: leftover RDM-06 UI/lifecycle cases. This does not close the rest of RDM-06
 
 ## 2026-09-11: GPT-Live 1 default engine
 
-Status: verified locally and unshipped. Installed product is still c67a5b309b.
+Status: verified locally, committed as d4e5384528, and installed in the snapshot below.
 
 New setups default to openai-live / gpt-live-1 over the Live API. Saved Realtime, Qwen and cascade selections stay. Late Live command acknowledgements after timeout stay unknown. A 257th command is refused. LiveVoice linger timeout releases media without a host finalized event.
 
 Commands (packages/kilo-vscode): bun test tests/unit/live-commands.test.ts tests/unit/voice-config-swap.test.ts tests/unit/live-speech-routing.test.ts tests/unit/speech-default-settings.test.ts tests/unit/openai-provider.test.ts --timeout 60000 -> 12 pass / 0 fail / 102 expect / exit 0. bun test tests/unit/live-voice.test.ts --timeout 90000 -> 1 pass / 0 fail / 2 expect / exit 0.
 
-Next: commit, push, and snapshot:install. Remaining: leftover Live acceptance and RDM-06 UI/lifecycle cases.
+Next: leftover Live acceptance cases, then leftover RDM-06 UI/lifecycle cases.
+
+## 2026-09-11: Snapshot install d4e5384528
+
+Status: committed, pushed and installed as d4e5384528. New voice setups default to GPT-Live 1.
+
+Installed eden.raya@7.4.23-snapshot+d4e5384528.kamil-oseni.1789159781902. VSIX C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-d4e5384528-kamil-oseni-1789159781902.vsix; SHA-256 4D18A6523DDA25F823028EAC8844FE4AB845FF4B7C0340B268092F6725AFD30F; 517019282 bytes, 431 entries, CLI 228785664 bytes.
+
+Next: leftover Live acceptance cases, then leftover RDM-06 UI/lifecycle cases.
 
 
 

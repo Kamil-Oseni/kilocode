@@ -495,6 +495,19 @@ async function snapshot(ctx: Ctx) {
   ctx.post({ ...base, snapshot: result.data })
 }
 
+async function retained(ctx: Ctx, id: string) {
+  const runs = await ctx.kilo.runs({ directory: ctx.dir, agentID: id }, { throwOnError: true })
+  if (
+    !runs.data ||
+    runs.data.some((run) => run.agentID !== id || typeof run.at !== "number" || !Number.isFinite(run.at))
+  )
+    throw new Error("The retained runs could not be verified for this routine.")
+  const inbox = await ctx.kilo.inbox2.page({ directory: ctx.dir, agentID: id }, { throwOnError: true })
+  if (!inbox.data?.messages || inbox.data.messages.some((item) => item.agentID !== id))
+    throw new Error("The retained conversation could not be verified for this routine.")
+  return { runs: runs.data, messages: inbox.data.messages }
+}
+
 async function archive(ctx: Ctx) {
   const msg = ctx.message
   if (typeof msg.requestID !== "string" || !msg.requestID || msg.requestID.length > 256)
@@ -518,13 +531,7 @@ async function archive(ctx: Ctx) {
   }
   if (!result.data.items.some((item) => item.definition.id === msg.agentID))
     throw new Error("This routine is no longer in the archive. Refresh the list.")
-  const runs = await ctx.kilo.runs({ directory: ctx.dir, agentID: String(msg.agentID) }, { throwOnError: true })
-  if (
-    !runs.data ||
-    runs.data.some((run) => run.agentID !== msg.agentID || typeof run.at !== "number" || !Number.isFinite(run.at))
-  )
-    throw new Error("The retained runs could not be verified for this routine.")
-  ctx.post({ ...base, runs: runs.data })
+  ctx.post({ ...base, ...(await retained(ctx, String(msg.agentID))) })
 }
 
 const routes: Record<string, (ctx: Ctx) => Promise<void>> = {

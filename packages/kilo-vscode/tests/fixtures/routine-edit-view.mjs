@@ -625,7 +625,7 @@ try {
     const interrupted = sent.findLast((msg) => msg.type === "routineArchive")
     archive.open = false
     archive.dispatchEvent(new window.Event("toggle"))
-    emit({ type: "routineArchive", requestID: interrupted.requestID, agentID: "archived", runs: [] })
+    emit({ type: "routineArchive", requestID: interrupted.requestID, agentID: "archived", runs: [], messages: [] })
     assert.doesNotMatch(archive.textContent, /No retained run history/)
     archive.open = true
     archive.dispatchEvent(new window.Event("toggle"))
@@ -633,14 +633,14 @@ try {
     assert.notEqual(selected.requestID, interrupted.requestID)
     assert.equal(selected.agentID, "archived")
     assert.equal(archive.querySelector("script"), null)
-    emit({ type: "routineArchive", requestID: selected.requestID, agentID: "another", runs: [] })
+    emit({ type: "routineArchive", requestID: selected.requestID, agentID: "another", runs: [], messages: [] })
     assert.match(archive.textContent, /Loading archive/)
     emit({ type: "routineArchive", requestID: selected.requestID, agentID: "archived", error: "Archive unavailable" })
     assert.match(archive.textContent, /Archive unavailable/)
     button("Retry archive").click()
     const retry = sent.findLast((msg) => msg.type === "routineArchive")
     assert.notEqual(retry.requestID, selected.requestID)
-    emit({ type: "routineArchive", requestID: selected.requestID, agentID: "archived", runs: [] })
+    emit({ type: "routineArchive", requestID: selected.requestID, agentID: "archived", runs: [], messages: [] })
     assert.match(archive.textContent, /Loading archive/)
     emit({
       type: "routineArchive",
@@ -656,8 +656,20 @@ try {
           outcome: { summary: "Saved result" },
         },
       ],
+      messages: [
+        {
+          id: "rmg_friday",
+          agentID: "archived",
+          kind: "report",
+          source: "report:occ_1",
+          body: "Friday receipts are missing.",
+          time: 1234,
+        },
+      ],
     })
     const starts = sent.filter((msg) => msg.type === "routineRun" || msg.type === "routineCreate").length
+    assert.match(archive.textContent, /Friday receipts are missing/)
+    assert.match(archive.textContent, /Report/)
     button("Review retained runs").click()
     assert.match(archive.textContent, /Saved result/)
     assert.match(archive.textContent, /Criterion outcomes were not recorded/)

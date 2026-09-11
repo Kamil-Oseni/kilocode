@@ -272,6 +272,7 @@ export interface RoutineArchiveMessage {
   archive?: import("@kilocode/sdk/v2/client").KilocodeRoutineArchiveResponse["items"]
   next?: string
   runs?: import("@kilocode/sdk/v2/client").KilocodeRoutineRunsResponse
+  messages?: import("@kilocode/sdk/v2/client").KilocodeRoutineInboxPageResponse["messages"]
   error?: string
   recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
 }

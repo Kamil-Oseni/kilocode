@@ -11,6 +11,8 @@ import { Storage } from "@/storage/storage"
 import { Permission } from "@/permission"
 import { SessionID } from "@/session/schema"
 import { RayaTask } from "@/kilocode/task"
+import { RayaTaskDelegation } from "@/kilocode/task/delegation"
+import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
 import { next } from "@/kilocode/task/cron"
 import { PlanArtifact } from "@/kilocode/plan-artifact"
@@ -1476,6 +1478,67 @@ describe("RayaTask store", () => {
     expect(await Effect.runPromise(tasks.recall(agent.id))).toBe("Retained role context")
     const exit = await Effect.runPromiseExit(tasks.get(agent.id))
     expect(exit._tag).toBe("Failure")
+  })
+
+  test("rename keeps reports on the same worker and removal waits for outstanding delegated requests", async () => {
+    const storage = memory()
+    const tasks = RayaTask.make({ storage, database })
+    const inbox = RayaTaskInbox.make(database)
+    const store = RayaTaskDelegation.make(database)
+    const chief = await Effect.runPromise(
+      tasks.create({ name: "Chief of Staff", role: "generalist", objective: "Coordinate Friday close", schedule: { kind: "manual" } }),
+    )
+    const books = await Effect.runPromise(
+      tasks.create({
+        name: "Books",
+        role: "accountant",
+        objective: "Review accounts",
+        capabilities: ["accounting"],
+        schedule: { kind: "manual" },
+      }),
+    )
+    const report = await Effect.runPromise(
+      inbox.publish({
+        agentID: books.id,
+        source: "report:occ_rename",
+        kind: "report",
+        body: "Friday receipts are missing.",
+        occurrenceID: "occ_rename",
+      }),
+    )
+    const renamed = await Effect.runPromise(tasks.update(books.id, { name: "Accounting" }))
+    expect(renamed.name).toBe("Accounting")
+    expect(renamed.id).toBe(books.id)
+    const listed = await Effect.runPromise(inbox.summaries([renamed], new Map()))
+    expect(listed[0].name).toBe("Accounting")
+    expect(listed[0].agentID).toBe(books.id)
+    expect(listed[0].latest?.id).toBe(report.id)
+    expect(listed[0].latest?.body).toBe("Friday receipts are missing.")
+    const page = await Effect.runPromise(inbox.page(books.id))
+    expect(page.messages.some((item) => item.agentID === books.id && item.body === report.body)).toBe(true)
+    const admitted = await Effect.runPromise(
+      store.admit(
+        {
+          source: "dlg_held",
+          senderID: chief.id,
+          recipientID: books.id,
+          objective: "List missing Friday receipts.",
+        },
+        chief,
+        books,
+      ),
+    )
+    expect(admitted.record.state).toBe("queued")
+    expect((await Effect.runPromise(store.held(books.id))).map((item) => item.id)).toEqual([admitted.record.id])
+    expect((await Effect.runPromise(store.held(chief.id))).map((item) => item.id)).toEqual([admitted.record.id])
+    expect(await Effect.runPromise(tasks.remove(books.id).pipe(Effect.flip))).toMatchObject({
+      _tag: "RayaTask.GuardError",
+      message: "This routine has outstanding delegated requests. Stop them before removing it.",
+    })
+    expect(await Effect.runPromise(tasks.get(books.id))).toMatchObject({ id: books.id, name: "Accounting" })
+    await Effect.runPromise(store.stop(admitted.record.id, books, "Stopped by the user."))
+    expect(await Effect.runPromise(tasks.remove(books.id))).toBe(true)
+    expect((await Effect.runPromise(inbox.page(books.id))).messages.some((item) => item.body === report.body)).toBe(true)
   })
 
   test.each(["generalist", "coder", "reviewer", "accountant", "inbox", "custom"])(

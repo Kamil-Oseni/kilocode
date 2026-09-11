@@ -2682,5 +2682,17 @@ Installed eden.raya@7.4.23-snapshot+8619b866fb.kamil-oseni.1789164260348. VSIX C
 
 Next: leftover RDM-06 lifecycle rename/archive, or leftover Live microphone/provider-switch.
 
+## 2026-09-11: Lifecycle rename and archive attribution
+
+Status: verified locally, not yet committed. Historical reports stay on the same worker after rename and remain readable in the archive. Outstanding delegated work blocks removal.
+
+A renamed worker keeps its agentID. Inbox summaries use the new name. Removal fails while a live delegated request exists. After removal, GET conversation still returns retained messages and POST is 404. The archive view shows those bodies in place. A paused worker with an active execution still shows as running. Stopping a live HTTP-started child run can still leave that run pending.
+
+Changed files: packages/opencode/src/kilocode/task/delegation.ts, packages/opencode/src/kilocode/task/index.ts, packages/opencode/src/kilocode/server/httpapi/handlers/kilocode.ts, packages/opencode/test/kilocode/task/inbox.test.ts, packages/opencode/test/kilocode/task.test.ts, packages/opencode/test/kilocode/server/httpapi-routine-inbox.test.ts, packages/kilo-vscode/src/kilo-provider/routines.ts, packages/kilo-vscode/webview-ui/src/types/messages/extension-messages.ts, packages/kilo-vscode/webview-ui/src/components/routines/Archive.tsx, packages/kilo-vscode/tests/unit/routines-archive.test.ts, packages/kilo-vscode/tests/fixtures/routine-edit-view.mjs, .changeset/raya-routine-lifecycle-archive.md.
+
+Commands (packages/opencode): bun test ./test/kilocode/task/inbox.test.ts ./test/kilocode/task.test.ts ./test/kilocode/server/httpapi-routine-inbox.test.ts --timeout 90000 -> 66 pass / 1 fail on the first HTTP poll; HTTP rerun 2 pass / 0 fail / 46 expect / exit 0. bun run typecheck -> exit 0. Commands (packages/kilo-vscode): bun test tests/unit/routines-archive.test.ts tests/unit/routines-edit-view.test.ts --timeout 90000 -> 2 pass / 0 fail / 11 expect / exit 0. bun run check-types -> exit 0. eslint on routines.ts and Archive.tsx -> exit 0.
+
+Next: leftover RDM-06 lifecycle UI, or leftover Live microphone/provider-switch.
+
 
 

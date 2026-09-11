@@ -592,6 +592,16 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     })
     const owned = (id: string) =>
       runner.tasks.get(id).pipe(Effect.catchTag("RayaTask.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))))
+    const remembered = Effect.fn("KilocodeHttpApi.remembered")(function* (id: string) {
+      const found = yield* runner.tasks.get(id).pipe(Effect.catchTag("RayaTask.NotFoundError", () => Effect.succeed(undefined)))
+      if (found) return
+      const archived = yield* runner.tasks.page({ agentID: id }).pipe(
+        Effect.catchTag("RayaTask.GuardError", (err) =>
+          Effect.fail(new InvalidRequestError({ message: err.message, kind: err.kind, field: err.field })),
+        ),
+      )
+      if (!archived.items.some((item) => item.definition.id === id)) return yield* new HttpApiError.NotFound({})
+    })
     const agentInbox = Effect.fn("KilocodeHttpApi.agentInbox")(function* () {
       const agents = yield* runner.preview(Date.now())
       const runs = new Map<string, RayaTask.Run | undefined>()
@@ -605,7 +615,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       params: { agentID: string }
       query: { cursor?: string; limit?: number }
     }) {
-      yield* owned(ctx.params.agentID)
+      yield* remembered(ctx.params.agentID)
       return yield* inbox.page(ctx.params.agentID, ctx.query.cursor, ctx.query.limit ?? 50).pipe(
         Effect.catchTag("RayaTaskInbox.Invalid", (err) => Effect.fail(new InvalidRequestError({ message: err.message }))),
       )

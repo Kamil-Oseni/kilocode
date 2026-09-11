@@ -15,6 +15,19 @@ test("archive requests use read-only generated APIs and correlate list, history 
           items: [{ version: 1, archivedAt: 1234, definition: { id: "removed", name: "Removed" } }],
           next: "removed",
         })
+      if (new URL(request.url).pathname.endsWith("/inbox"))
+        return Response.json({
+          messages: [
+            {
+              id: "rmg_1",
+              agentID: "removed",
+              kind: "report",
+              source: "report:occ_1",
+              body: "Friday receipts are missing.",
+              time: 1234,
+            },
+          ],
+        })
       return Response.json([{ id: "run", agentID: "removed", sessionID: "session", at: 1234, status: "complete" }])
     },
   })
@@ -25,7 +38,7 @@ test("archive requests use read-only generated APIs and correlate list, history 
       post: (msg) => messages.push(msg),
       message: { type: "routineArchive", requestID: agentID ?? "list", agentID },
     })
-  expect(calls.map((request) => request.method)).toEqual(["GET", "GET", "GET", "GET"])
+  expect(calls.map((request) => request.method)).toEqual(["GET", "GET", "GET", "GET", "GET"])
   expect(calls.every((request) => new URL(request.url).searchParams.get("directory") === "workspace")).toBe(true)
   expect(new URL(calls[1].url).searchParams.get("agentID")).toBe("removed")
   expect(messages[0]).toMatchObject({
@@ -39,6 +52,7 @@ test("archive requests use read-only generated APIs and correlate list, history 
     requestID: "removed",
     agentID: "removed",
     runs: [{ id: "run" }],
+    messages: [{ id: "rmg_1", agentID: "removed", body: "Friday receipts are missing." }],
   })
   expect(messages[2]).toMatchObject({
     type: "routineArchive",

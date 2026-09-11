@@ -24,6 +24,7 @@ const agent = (id: string, enabled = true, execution?: RayaTask.Agent["execution
 test("routine inbox state stays separate from unread", () => {
   expect(status(agent("a", false))).toBe("paused")
   expect(status(agent("a", true, { state: "active" }))).toBe("running")
+  expect(status(agent("a", false, { state: "active" }))).toBe("running")
   expect(status(agent("a", true, { state: "recovery" }))).toBe("failed")
   expect(status(agent("a"), { id: "run", agentID: "a", at: 1, sessionID: SessionID.make("ses_test"), status: "blocked", blockedReason: "waiting on you" })).toBe(
     "needs_input",
@@ -134,6 +135,12 @@ test("routine inbox publication is idempotent, unread ignores user messages, and
       expect(yield* inbox.draft("agt_1", "")).toBeNull()
       const page = yield* inbox.page("agt_1")
       expect(page.messages.map((item) => item.source)).toEqual(["user_1", "report:occ_1"])
+      const renamed = yield* inbox.summaries([{ ...agent("agt_1"), name: "Accounting", role: "accountant" }], new Map())
+      expect(renamed[0].name).toBe("Accounting")
+      expect(renamed[0].agentID).toBe("agt_1")
+      expect(renamed[0].latest?.body).toBe(report.body)
+      expect(renamed[0].latest?.agentID).toBe("agt_1")
+      expect((yield* inbox.page("agt_1")).messages.find((item) => item.kind === "report")?.body).toBe(report.body)
       const db = (yield* Database.Service).db
       yield* db.delete(Conversation).where(eq(Conversation.agent_id, "agt_1")).run()
       expect(yield* db.get(sql`SELECT count(*) AS n FROM raya_routine_message WHERE agent_id = 'agt_1'`)).toEqual({

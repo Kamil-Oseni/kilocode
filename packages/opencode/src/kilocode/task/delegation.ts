@@ -513,6 +513,16 @@ export namespace RayaTaskDelegation {
         .pipe(Effect.orDie)
       return rows.map(decode)
     })
-    return { admit, take, attach, finish, get, lookup, chain, tree, descendants, stop, queued, overdue, bySession, byRun }
+    const held = Effect.fn("RayaTaskDelegation.held")(function* (id: string) {
+      const rows = yield* db
+        .select()
+        .from(Delegation)
+        .where(and(inArray(Delegation.state, [...live]), or(eq(Delegation.sender_id, id), eq(Delegation.recipient_id, id))))
+        .orderBy(asc(Delegation.time_created), asc(Delegation.id))
+        .all()
+        .pipe(Effect.orDie)
+      return rows.map(decode)
+    })
+    return { admit, take, attach, finish, get, lookup, chain, tree, descendants, stop, queued, overdue, bySession, byRun, held }
   }
 }

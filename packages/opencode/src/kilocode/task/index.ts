@@ -874,6 +874,13 @@ export namespace RayaTask {
         return yield* new GuardError({
           message: "This routine has scheduled work awaiting recovery. Resolve it before removing it.",
         })
+      if (deps.database) {
+        const { RayaTaskDelegation } = yield* Effect.promise(() => import("./delegation"))
+        if ((yield* RayaTaskDelegation.make(deps.database).held(id)).length)
+          return yield* new GuardError({
+            message: "This routine has outstanding delegated requests. Stop them before removing it.",
+          })
+      }
       return { found, remaining: items.filter((item) => item.id !== id) }
     })
 

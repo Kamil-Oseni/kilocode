@@ -2389,3 +2389,15 @@ Changed files: packages/kilo-vscode/webview-ui/src/context/live-voice.ts, packag
 Commands (packages/kilo-vscode): bun test tests/unit/live-voice.test.ts --timeout 50000 -> 1 pass / 0 fail / 2 expect / exit 0 (.tmp/live-webrtc-tests.log). bun run check-types -> exit 0 (.tmp/live-webrtc-types.log). bun run check-types:webview -> exit 0 (.tmp/live-webrtc-webview-types.log). Root oxlint: 2 warnings / 0 errors / exit 0 (.tmp/live-webrtc-lint.log).
 
 Do not snapshot:install. Next: host speech service routing.
+
+## 2026-09-11: Live host speech routing (OVR-01)
+
+Status: verified locally and committed as c2be6ece9f, unshipped. Installed product is still 8b01e72311.
+
+Live start is admitted only when the webview asks for engine live and Speech settings are openai-live. Untrusted control and oversized SDP payloads are rejected at input-tools. Posted host errors do not include secrets. The CLI speech mirror still omits the OpenAI key.
+
+Changed files: packages/kilo-vscode/src/services/input-tools.ts, packages/kilo-vscode/src/speech/service.ts, packages/kilo-vscode/src/speech/settings.ts, packages/kilo-vscode/src/speech/live-broker.ts, packages/kilo-vscode/webview-ui/src/types/messages/extension-messages.ts, packages/kilo-vscode/webview-ui/src/types/messages/webview-messages.ts, packages/kilo-vscode/tests/unit/live-speech-routing.test.ts.
+
+Commands (packages/kilo-vscode): bun test tests/unit/live-speech-routing.test.ts tests/unit/live-broker.test.ts --timeout 30000 -> 12 pass / 0 fail / 283 expect / exit 0 (.tmp/live-speech-routing-tests.log). bun run check-types -> exit 0 (.tmp/live-routing-types.log). bun run check-types:webview -> exit 0 (.tmp/live-routing-webview-types.log). Root oxlint: 11 warnings / 0 errors / exit 0 (.tmp/live-routing-lint.log).
+
+Do not snapshot:install. Next: VoiceProvider/UI integration.

@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Permission canonical comparison is delivered: committed, pushed and installed as `8b01e72311`. LiveBroker fixtures, SQL duration/delegation, host image/context tests, SDK Live call/duration methods, and Live WebRTC peer/microphone fixtures are committed and unshipped. Next: host speech service/message routing. RDM-01-06 remain unimplemented. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Permission canonical comparison is delivered: committed, pushed and installed as `8b01e72311`. LiveBroker fixtures, SQL duration/delegation, host image/context tests, SDK Live methods, Live WebRTC peer fixtures, and host speech routing through `input-tools` are committed and unshipped. Next: VoiceProvider/UI integration. RDM-01-06 remain unimplemented. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -644,7 +644,7 @@ Continue implementing Raya in C:\Users\User\Desktop\raya. Read AGENTS.md, docs/R
 
 I authorize root plus two subagents, normal periodic commits/pushes to origin/main, and snapshot builds/reinstallation outside the sandbox without asking again. Do not force push, bypass hooks or force reload VS Code. Batch broad testing at coherent checkpoints, but verify relevant contracts before calling features working. If repeated attempts fail, document the exact cause and next approach, move to independent work and revisit.
 
-First inspect current git/process state against the handoff. Preserve uncommitted Live UI/service files. LiveBroker fixtures, SQL duration/delegation, host image/context tests, SDK Live methods and Live WebRTC peer fixtures are the latest verified local increments; do not package Live. Next: host speech service/message routing. Keep Raya task ownership, permissions, durable receipts and execution authority. Do not replay historical text as new work or claim generated captions prove heard audio.
+First inspect current git/process state against the handoff. Preserve uncommitted Live UI files. LiveBroker fixtures, SQL duration/delegation, host image/context tests, SDK Live methods, Live WebRTC peer fixtures and host speech routing are the latest verified local increments; do not package Live. Next: VoiceProvider/UI integration. Keep Raya task ownership, permissions, durable receipts and execution authority. Do not replay historical text as new work or claim generated captions prove heard audio.
 
 Defer new Codex-derived implementation until existing Raya work, including GPT-Live and all 39 requirements, is complete. Use the deferred research document later; do not start a new porting track now. Keep the 39-requirement ledger honest. When I warn that credits are near $10, promptly update the full remaining-work handoff, settle the current work and provide an updated continuation prompt.
 ```
@@ -726,7 +726,7 @@ Implement/verify this in order:
 5. Test malformed/oversized packets, duplicate/conflicting transcript IDs, interleaving input/output, truncated display and missing coverage. The UI currently renders only the latest 64 fragments even though the coordinator retains more; explicitly label that display truncation rather than implying it is full history. Never infer heard words, complete turns or authoritative user intent from displayed captions.
 6. Test stop-speaking as local mute plus trusted steering. Explicit Resume voice audio is required. Caption arrival, provider command acknowledgement or delegated work completion must not unmute audio automatically. The current UI disables repeated stop while silenced. Check actual remote audio remains muted until Resume.
 
-**Host service/message integration:** root edited `src/speech/service.ts`, `src/services/input-tools.ts`, `src/shared/speech.ts`, `src/speech/settings.ts`, and both `webview-ui/src/types/messages/{extension-messages,webview-messages}.ts`.
+**Host service/message integration:** `speechOpenAIStart` with `engine: "live"` routes through the real `routeInputToolMessage` into SpeechService, and only LiveBroker runs when saved settings are `openai-live`. Untrusted request/session/event IDs, oversized SDP and unknown control actions are rejected at the host boundary. Posted errors never include the OpenAI key or backend password. `openaiStop` stops both brokers. CLI mirror still omits the OpenAI key. Native Live skips cascade MiniMax replies. Remaining: VoiceProvider/UI integration, provider-switch/disposal races with a live paid session, and HTTP contract tests.
 
 - New engine value is `openai-live`; the default remains `openai-realtime` while validation is incomplete. Keep saved engine choices. Do not globally replace the Realtime model constant. The new `OPENAI_LIVE_MODEL` is used in settings.
 - Existing speechOpenAIStart optionally carries `engine: "live"`; SpeechService routes it to LiveBroker only when saved settings select Live. Existing OpenAI ready/error/stopped messages are reused. New messages are speechLiveStarted, speechLiveUsage, speechLiveControl and speechLiveControlResult. Verify full routing through the real input-tools service and webview message union; untrusted message payloads need runtime validation as well as TypeScript.
@@ -1066,6 +1066,20 @@ Changed files: `packages/kilo-vscode/webview-ui/src/context/live-voice.ts`, `pac
 
 Commands (packages/kilo-vscode): `bun test tests/unit/live-voice.test.ts --timeout 50000` -> 1 pass / 0 fail / 2 expect / exit 0 (`.tmp/live-webrtc-tests.log`). `bun run check-types` -> exit 0 (`.tmp/live-webrtc-types.log`). `bun run check-types:webview` -> exit 0 (`.tmp/live-webrtc-webview-types.log`). Root oxlint: 2 warnings / 0 errors / exit 0 (`.tmp/live-webrtc-lint.log`).
 
-Remaining: host service/message routing, HTTP contract tests, and RDM-01-06. Do not snapshot:install.
+Remaining: VoiceProvider/UI integration, HTTP contract tests, and RDM-01-06. Do not snapshot:install.
 
-Next executable step: host speech service routing through `input-tools` and the webview message unions. Do not change the default engine or package Live.
+Next executable step: VoiceProvider/UI integration for Live captions, duration, controls and recovery. Do not change the default engine or package Live.
+
+## 2026-09-11: Live host speech routing
+
+**States:** host speech routing committed as `c2be6ece9f`; Live remains unshipped. Product checkpoint remains `8b01e72311`.
+
+`routeInputToolMessage` now validates Live start/control/image/stop payloads and forwards `engine: "live"` to SpeechService. LiveBroker is used only when saved settings are `openai-live`. Unknown control actions post `speechLiveControlResult` failed. Configuration errors from Live start are returned to the webview without keys or backend passwords. CLI mirror still omits the OpenAI key. Native Live does not speak cascade replies.
+
+Changed files: `packages/kilo-vscode/src/services/input-tools.ts`, `packages/kilo-vscode/src/speech/service.ts`, `packages/kilo-vscode/src/speech/settings.ts`, `packages/kilo-vscode/src/speech/live-broker.ts`, `packages/kilo-vscode/webview-ui/src/types/messages/extension-messages.ts`, `packages/kilo-vscode/webview-ui/src/types/messages/webview-messages.ts`, `packages/kilo-vscode/tests/unit/live-speech-routing.test.ts`.
+
+Commands (packages/kilo-vscode): `bun test tests/unit/live-speech-routing.test.ts tests/unit/live-broker.test.ts --timeout 30000` -> 12 pass / 0 fail / 283 expect / exit 0 (`.tmp/live-speech-routing-tests.log`). `bun run check-types` -> exit 0 (`.tmp/live-routing-types.log`). `bun run check-types:webview` -> exit 0 (`.tmp/live-routing-webview-types.log`). Root oxlint: 11 warnings / 0 errors / exit 0 (`.tmp/live-routing-lint.log`).
+
+Remaining: VoiceProvider/UI integration, HTTP contract tests, and RDM-01-06. Do not snapshot:install.
+
+Next executable step: VoiceProvider/UI integration. Do not change the default engine or package Live.

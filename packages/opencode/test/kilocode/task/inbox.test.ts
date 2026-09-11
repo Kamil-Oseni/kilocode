@@ -5,6 +5,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { RayaRoutineConversationTable as Conversation } from "@opencode-ai/core/kilocode/routine.sql"
 import { RayaTaskInbox, status } from "@/kilocode/task/inbox"
 import type { RayaTask } from "@/kilocode/task"
+import { SessionID } from "@/session/schema"
 
 const agent = (id: string, enabled = true, execution?: RayaTask.Agent["execution"]): RayaTask.Agent => ({
   id,
@@ -24,7 +25,7 @@ test("routine inbox state stays separate from unread", () => {
   expect(status(agent("a", false))).toBe("paused")
   expect(status(agent("a", true, { state: "active" }))).toBe("running")
   expect(status(agent("a", true, { state: "recovery" }))).toBe("failed")
-  expect(status(agent("a"), { id: "run", agentID: "a", at: 1, sessionID: "ses_test", status: "blocked", blockedReason: "waiting on you" })).toBe(
+  expect(status(agent("a"), { id: "run", agentID: "a", at: 1, sessionID: SessionID.make("ses_test"), status: "blocked", blockedReason: "waiting on you" })).toBe(
     "needs_input",
   )
   expect(status(agent("a"))).toBe("scheduled")

@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gt, lt, ne, or } from "drizzle-orm"
+import { and, count, desc, eq, gt, ne, sql } from "drizzle-orm"
 import { createHash } from "node:crypto"
 import { Effect, Schema } from "effect"
 import type { Database } from "@opencode-ai/core/database/database"
@@ -119,7 +119,8 @@ export namespace RayaTaskInbox {
         .values({ agent_id: agentID, id, read_at: 0, time_updated: now })
         .onConflictDoNothing()
         .run()
-      const row = yield* db.select().from(Conversation).where(eq(Conversation.agent_id, agentID)).get()
+        .pipe(Effect.orDie)
+      const row = yield* db.select().from(Conversation).where(eq(Conversation.agent_id, agentID)).get().pipe(Effect.orDie)
       if (!row) return yield* Effect.die(new Error("Routine conversation could not be created."))
       return row
     })
@@ -127,19 +128,22 @@ export namespace RayaTaskInbox {
       const value = yield* Schema.decodeUnknownEffect(Publish)(input).pipe(
         Effect.mapError(() => new Invalid({ message: "Routine inbox messages need a stable source and non-empty body." })),
       )
-      return yield* db.transaction(
-        (tx) =>
-          Effect.gen(function* () {
+      return yield* db
+        .transaction(
+          (tx) =>
+            Effect.gen(function* () {
             yield* tx
               .insert(Conversation)
               .values({ agent_id: value.agentID, id: key(value.agentID), read_at: 0, time_updated: Date.now() })
               .onConflictDoNothing()
               .run()
+              .pipe(Effect.orDie)
             const prior = yield* tx
               .select()
               .from(Message)
               .where(and(eq(Message.agent_id, value.agentID), eq(Message.source, value.source)))
               .get()
+              .pipe(Effect.orDie)
             if (prior) {
               const saved = decode(prior)
               if (
@@ -162,15 +166,22 @@ export namespace RayaTaskInbox {
               session_id: value.sessionID ?? null,
               time_created: now,
             }
-            yield* tx.insert(Message).values(row).run()
+            yield* tx.insert(Message).values(row).run().pipe(Effect.orDie)
             yield* tx
               .update(Conversation)
               .set({ time_updated: now })
               .where(eq(Conversation.agent_id, value.agentID))
               .run()
+              .pipe(Effect.orDie)
             return decode(row)
           }),
         { behavior: "immediate" },
+      ).pipe(
+        Effect.catch((error) =>
+          typeof error === "object" && error !== null && "_tag" in error && error._tag === "RayaTaskInbox.Conflict"
+            ? Effect.fail(error as Conflict)
+            : Effect.die(error),
+        ),
       )
     })
     const page = Effect.fn("RayaTaskInbox.page")(function* (agentID: string, cursor?: string, limit = 50) {
@@ -179,22 +190,27 @@ export namespace RayaTaskInbox {
       yield* ensure(agentID)
       const parsed = marker(cursor)
       if (!parsed.ok) return yield* new Invalid({ message: "This inbox page cursor is invalid." })
-      const bound =
-        "id" in parsed
-          ? or(lt(Message.time_created, parsed.time), and(eq(Message.time_created, parsed.time), lt(Message.id, parsed.id)))
-          : undefined
-      const rows = yield* db
-        .select()
-        .from(Message)
-        .where(and(eq(Message.agent_id, agentID), bound))
+      const rows = yield* ("id" in parsed
+        ? db
+            .select()
+            .from(Message)
+            .where(
+              and(
+                eq(Message.agent_id, agentID),
+                sql`(${Message.time_created} < ${parsed.time} or (${Message.time_created} = ${parsed.time} and ${Message.id} < ${parsed.id}))`,
+              ),
+            )
+        : db.select().from(Message).where(eq(Message.agent_id, agentID))
+      )
         .orderBy(desc(Message.time_created), desc(Message.id))
         .limit(limit + 1)
         .all()
+        .pipe(Effect.orDie)
       const extra = rows.length > limit
       const slice = rows.slice(0, limit).reverse()
       return {
         messages: slice.map(decode),
-        ...(extra && slice[0] ? { next: `${slice[0].time}:${slice[0].id}` } : {}),
+        ...(extra && slice[0] ? { next: `${slice[0].time_created}:${slice[0].id}` } : {}),
       }
     })
     const read = Effect.fn("RayaTaskInbox.read")(function* (agentID: string, at: number) {
@@ -208,6 +224,7 @@ export namespace RayaTaskInbox {
         .set({ read_at: at, time_updated: Date.now() })
         .where(eq(Conversation.agent_id, agentID))
         .run()
+        .pipe(Effect.orDie)
       return at
     })
     const draft = Effect.fn("RayaTaskInbox.draft")(function* (agentID: string, text: string | null) {
@@ -221,6 +238,7 @@ export namespace RayaTaskInbox {
         .set({ draft: saved, time_updated: Date.now() })
         .where(eq(Conversation.agent_id, agentID))
         .run()
+        .pipe(Effect.orDie)
       return saved
     })
     const unread = Effect.fn("RayaTaskInbox.unread")(function* (agentID: string, at: number) {
@@ -229,6 +247,7 @@ export namespace RayaTaskInbox {
         .from(Message)
         .where(and(eq(Message.agent_id, agentID), ne(Message.kind, "user"), gt(Message.time_created, at)))
         .get()
+        .pipe(Effect.orDie)
       return row?.n ?? 0
     })
     const latest = Effect.fn("RayaTaskInbox.latest")(function* (agentID: string) {
@@ -239,6 +258,7 @@ export namespace RayaTaskInbox {
         .orderBy(desc(Message.time_created), desc(Message.id))
         .limit(1)
         .get()
+        .pipe(Effect.orDie)
       return row ? decode(row) : undefined
     })
     const summaries = Effect.fn("RayaTaskInbox.summaries")(function* (

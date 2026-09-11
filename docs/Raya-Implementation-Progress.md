@@ -2413,3 +2413,15 @@ Changed files: packages/kilo-vscode/webview-ui/src/context/voice.tsx, packages/k
 Commands (packages/kilo-vscode): bun test tests/unit/live-voice-ui.test.ts --timeout 130000 -> 1 pass / 0 fail / 2 expect / exit 0 (.tmp/live-voice-ui-tests.log). bun run check-types:webview -> exit 0 (.tmp/live-ui-webview-types.log). Root oxlint: 9 warnings / 0 errors / exit 0 (.tmp/live-ui-lint.log).
 
 Do not snapshot:install. Next: HTTP contract tests, then RDM-01-06.
+
+## 2026-09-11: Live HTTP contracts (OVR-01)
+
+Status: verified locally and committed as f293a93bf2, unshipped. Installed product is still 8b01e72311.
+
+Live call and duration HTTP routes require server auth and the voice capability. Invalid context is 400, consumed sequence is 409, and duration is immutable after the first matching receipt. Deleting the parent session returns 404 for later Live writes; a sibling Live binding can still record duration.
+
+Changed files: packages/opencode/test/kilocode/server/httpapi-voice-live.test.ts.
+
+Commands (packages/opencode): bun test ./test/kilocode/server/httpapi-voice-live.test.ts --timeout 60000 -> 1 pass / 0 fail / 43 expect / exit 0 (.tmp/live-http-tests.log). Root oxlint: 0 warnings / 0 errors / exit 0 (.tmp/live-http-lint.log).
+
+Do not snapshot:install. Next: RDM-01-06.

@@ -49,14 +49,14 @@ export class TelemetryProxy {
   /**
    * Capture with optional transport settlement. Enriches with provider properties, then POSTs to CLI.
    */
-  capture(event: TelemetryEventName, properties?: Record<string, unknown>) {
+  async capture(event: TelemetryEventName, properties?: Record<string, unknown>) {
     if (!this.isVSCodeTelemetryEnabled()) return
     const connection = this.connection
     if (!connection || this.pending.size >= 32) return
     try {
       const payload = JSON.stringify(buildTelemetryPayload(event, properties, this.provider?.getTelemetryProperties()))
       if (this.connection !== connection || !this.isVSCodeTelemetryEnabled()) return
-      return this.send(connection, "capture", payload)
+      await this.send(connection, "capture", payload)
     } catch {
       console.error("[Raya] Telemetry event preparation failed.")
     }
@@ -68,10 +68,10 @@ export class TelemetryProxy {
    * VS Code telemetry consent leaves the CLI's PostHog client stuck on its
    * spawn-time state until the process restarts.
    */
-  setEnabled(enabled: boolean) {
+  async setEnabled(enabled: boolean) {
     const connection = this.connection
     if (!connection) return
-    return this.send(connection, "setEnabled", JSON.stringify({ enabled }))
+    await this.send(connection, "setEnabled", JSON.stringify({ enabled }))
   }
 
   private async send(

@@ -2425,3 +2425,15 @@ Changed files: packages/opencode/test/kilocode/server/httpapi-voice-live.test.ts
 Commands (packages/opencode): bun test ./test/kilocode/server/httpapi-voice-live.test.ts --timeout 60000 -> 1 pass / 0 fail / 43 expect / exit 0 (.tmp/live-http-tests.log). Root oxlint: 0 warnings / 0 errors / exit 0 (.tmp/live-http-lint.log).
 
 Do not snapshot:install. Next: RDM-01-06.
+
+## 2026-09-11: Routine inbox persistence (OVR-05 / RDM-02)
+
+Status: verified locally and committed as 270517a5a8, unshipped. Installed product is still 8b01e72311.
+
+Roster workers now have one durable conversation each. Inbox HTTP list/page/send/read/draft persist unread, drafts and idempotent user follow-ups without starting a run. Duplicate source keys with a different body are rejected. Conversation deletion cascades messages.
+
+Changed files: packages/core/src/kilocode/routine.sql.ts, packages/core/src/database/migration/20260911033250_kilocode-routine-inbox.ts, packages/core/src/database/migration.gen.ts, packages/core/src/database/schema.gen.ts, packages/core/schema.json, packages/opencode/src/kilocode/task/inbox.ts, packages/opencode/src/kilocode/server/httpapi/groups/kilocode.ts, packages/opencode/src/kilocode/server/httpapi/handlers/kilocode.ts, packages/opencode/test/kilocode/task/inbox.test.ts, packages/opencode/test/kilocode/server/httpapi-routine-inbox.test.ts, packages/sdk/js/src/v2/gen/sdk.gen.ts, packages/sdk/js/src/v2/gen/types.gen.ts, packages/sdk/openapi.json, .changeset/raya-routine-inbox.md.
+
+Commands (packages/opencode): bun test ./test/kilocode/task/inbox.test.ts ./test/kilocode/server/httpapi-routine-inbox.test.ts --timeout 60000 -> 3 pass / 0 fail / 48 expect / exit 0 (.tmp/routine-inbox-tests.log). Root oxlint: 0 warnings / 0 errors / exit 0. Root bun ./script/generate.ts -> exit 0.
+
+Do not snapshot:install. Next: publish occurrence reports into the inbox.

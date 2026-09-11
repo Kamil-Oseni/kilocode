@@ -2484,4 +2484,22 @@ Changed files: packages/opencode/src/kilocode/session/index.ts, packages/opencod
 
 Commands (packages/opencode): bun test ./test/kilocode/session-list.test.ts ./test/kilocode/server/httpapi-session-list.test.ts ./test/server/session-list.test.ts --timeout 60000 -> 15 pass / 0 fail / 47 expect / exit 0 (.tmp/routine-session-list-tests.log). bun test ./test/server/experimental-session-list.test.ts --timeout 60000 -> 4 pass / 0 fail / 22 expect / exit 0. bun run typecheck -> exit 0 (.tmp/routine-session-list-types.log).
 
-Do not snapshot:install. Next: RDM-04 worker-to-worker delegation.
+## 2026-09-11: Snapshot install 683a82b837
+
+Status: committed, pushed and installed as 683a82b837. Live is packaged but not the default engine.
+
+Installed eden.raya@7.4.23-snapshot+683a82b837.kamil-oseni.1789151453866. VSIX C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-683a82b837-kamil-oseni-1789151453866.vsix; SHA-256 1F56B9C6D9E3FFBCC655AE41A39043CD69A60BC34EFEF36233C9DFC2ECB372BA; 516848111 bytes, 430 entries, CLI 228634112 bytes. Production lint complexity splits are 35aa42ef81 and 683a82b837. Telemetry settlement is a0024a4f77.
+
+Next: RDM-04 worker-to-worker delegation.
+
+## 2026-09-11: Worker-to-worker delegation (RDM-04)
+
+Status: verified locally and unshipped. Installed product is still 683a82b837.
+
+A roster worker can send a tracked request to another roster worker. Chief of Staff to Accounting starts one overlay run, keeps both assignments, refuses loops and paused recipients, and queues when the recipient is busy. Replies do not invent success.
+
+Changed files: packages/core/src/kilocode/routine.sql.ts, packages/core/src/database/migration/20260911183445_kilocode-routine-delegation.ts, packages/opencode/src/kilocode/task/delegation.ts, packages/opencode/src/kilocode/task/runner.ts, packages/opencode/src/kilocode/server/httpapi/groups/kilocode.ts, packages/opencode/src/kilocode/server/httpapi/handlers/kilocode.ts, packages/opencode/test/kilocode/task/delegation.test.ts, packages/opencode/test/kilocode/task/delegation-runner.test.ts, packages/opencode/test/kilocode/server/httpapi-routine-delegate.test.ts, packages/sdk/openapi.json, packages/sdk/js/src/v2/gen/sdk.gen.ts, .changeset/raya-routine-delegation.md.
+
+Commands (packages/opencode): bun test ./test/kilocode/task/delegation.test.ts ./test/kilocode/task/delegation-runner.test.ts ./test/kilocode/server/httpapi-routine-delegate.test.ts ./test/kilocode/task/inbox-followup.test.ts --timeout 60000 -> 7 pass / 0 fail / 74 expect / exit 0. bun run typecheck -> exit 0.
+
+Do not snapshot:install. Next: routines UI for starting and inspecting a delegation.

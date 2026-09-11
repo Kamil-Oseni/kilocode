@@ -35,6 +35,7 @@ import { Storage } from "@/storage/storage" // raya_change - Milestone A durable
 import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal operations
 import { RayaTask } from "@/kilocode/task"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
+import { RayaTaskDelegation } from "@/kilocode/task/delegation"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
 import { templates as agentTemplates } from "@/kilocode/task/templates"
@@ -94,6 +95,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     const database = yield* Database.Service
     const runner = RayaTaskRunner.make({ storage, sessions, database })
     const inbox = RayaTaskInbox.make(database)
+    const errands = RayaTaskDelegation.make(database)
     const checkpoints = RayaCheckpoint.make({ storage, snapshots }) // raya_change - named workspace checkpoints
     const designSystem = RayaDesignSystem.make({ storage }) // raya_change - owner design-system lock
     const healing = RayaSelfHeal.make(storage) // raya_change - one backlog shared across sessions and projects
@@ -646,6 +648,34 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       )
       return { draft }
     })
+    const agentDelegate = Effect.fn("KilocodeHttpApi.agentDelegate")(function* (ctx: {
+      params: { agentID: string }
+      payload: { source: string; senderID: string; recipientID: string; objective: string }
+    }) {
+      yield* owned(ctx.params.agentID)
+      yield* owned(ctx.payload.recipientID)
+      return yield* runner
+        .delegate({ ...ctx.payload, senderID: ctx.params.agentID })
+        .pipe(
+          Effect.catchTag("RayaTask.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+          Effect.catchTag("RayaTask.GuardError", (err) =>
+            Effect.fail(new InvalidRequestError({ message: err.message, kind: err.kind, field: err.field })),
+          ),
+          Effect.catchTag("RayaTaskDelegation.Invalid", (err) => Effect.fail(new InvalidRequestError({ message: err.message }))),
+          Effect.catchTag("RayaTaskDelegation.Conflict", () => Effect.fail(new HttpApiError.Conflict({}))),
+        )
+    })
+    const agentDelegateGet = Effect.fn("KilocodeHttpApi.agentDelegateGet")(function* (ctx: {
+      params: { agentID: string; id: string }
+    }) {
+      yield* owned(ctx.params.agentID)
+      const row = yield* errands.get(ctx.params.id).pipe(
+        Effect.catchTag("RayaTaskDelegation.Invalid", (err) => Effect.fail(new InvalidRequestError({ message: err.message }))),
+      )
+      if (row.senderID !== ctx.params.agentID && row.recipientID !== ctx.params.agentID)
+        return yield* new HttpApiError.NotFound({})
+      return row
+    })
 
     // raya_change start - owner design-system lock
     const designSystemGet = Effect.fn("KilocodeHttpApi.designSystemGet")(function* () {
@@ -785,6 +815,8 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .handle("agentInboxSend", agentInboxSend)
         .handle("agentInboxRead", agentInboxRead)
         .handle("agentInboxDraft", agentInboxDraft)
+        .handle("agentDelegate", agentDelegate)
+        .handle("agentDelegateGet", agentDelegateGet)
         .handle("designSystemGet", designSystemGet)
         .handle("designSystemSet", designSystemSet)
         .handle("selfHealCreate", selfHealCreate)

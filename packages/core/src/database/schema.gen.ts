@@ -64,6 +64,33 @@ export default {
       // kilocode_change end
       // kilocode_change start
       yield* tx.run(`
+        CREATE TABLE \`raya_routine_delegation\` (
+          \`id\` text PRIMARY KEY,
+          \`source\` text NOT NULL,
+          \`sender_id\` text NOT NULL,
+          \`recipient_id\` text NOT NULL,
+          \`parent_id\` text,
+          \`parent_run_id\` text,
+          \`workspace\` text,
+          \`objective\` text NOT NULL,
+          \`expected\` text,
+          \`context\` text,
+          \`deadline\` integer,
+          \`budget\` integer,
+          \`depth\` integer NOT NULL,
+          \`state\` text NOT NULL,
+          \`child_run_id\` text,
+          \`session_id\` text,
+          \`response\` text,
+          \`cost\` integer,
+          \`reason\` text,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL
+        );
+      `)
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(`
         CREATE TABLE \`raya_routine_message\` (
           \`id\` text PRIMARY KEY,
           \`agent_id\` text NOT NULL,
@@ -323,6 +350,19 @@ export default {
       yield* tx.run(
         `CREATE INDEX \`raya_routine_archive_order\` ON \`raya_routine_archive\` ("archived_at" desc,\`id\`);`,
       )
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(
+        `CREATE UNIQUE INDEX \`raya_routine_delegation_source\` ON \`raya_routine_delegation\` (\`source\`);`,
+      )
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(
+        `CREATE INDEX \`raya_routine_delegation_recipient\` ON \`raya_routine_delegation\` (\`recipient_id\`,\`state\`,\`time_created\`);`,
+      )
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(`CREATE INDEX \`raya_routine_delegation_parent\` ON \`raya_routine_delegation\` (\`parent_id\`);`)
       // kilocode_change end
       // kilocode_change start
       yield* tx.run(

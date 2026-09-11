@@ -22489,6 +22489,135 @@ export type KilocodeRoutineInboxDraftResponses = {
 export type KilocodeRoutineInboxDraftResponse =
   KilocodeRoutineInboxDraftResponses[keyof KilocodeRoutineInboxDraftResponses]
 
+export type KilocodeRoutineDelegateCreateData = {
+  body?: {
+    source: string
+    senderID: string
+    recipientID: string
+    parentID?: string
+    parentRunID?: string
+    objective: string
+    expected?: string
+    context?: string
+    deadline?: number
+    budget?: number
+  }
+  path: {
+    agentID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/agent/{agentID}/delegate"
+}
+
+export type KilocodeRoutineDelegateCreateErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeRoutineDelegateCreateError =
+  KilocodeRoutineDelegateCreateErrors[keyof KilocodeRoutineDelegateCreateErrors]
+
+export type KilocodeRoutineDelegateCreateResponses = {
+  /**
+   * Tracked worker-to-worker request
+   */
+  200: {
+    id: string
+    source: string
+    senderID: string
+    recipientID: string
+    parentID?: string
+    parentRunID?: string
+    workspace?: string
+    objective: string
+    expected?: string
+    context?: string
+    deadline?: number
+    budget?: number
+    depth: number
+    state: "queued" | "accepted" | "running" | "needs_input" | "completed" | "failed" | "cancelled"
+    childRunID?: string
+    sessionID?: string
+    response?: string
+    cost?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    reason?: string
+    time: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+}
+
+export type KilocodeRoutineDelegateCreateResponse =
+  KilocodeRoutineDelegateCreateResponses[keyof KilocodeRoutineDelegateCreateResponses]
+
+export type KilocodeRoutineDelegateGetData = {
+  body?: never
+  path: {
+    agentID: string
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/agent/{agentID}/delegate/{id}"
+}
+
+export type KilocodeRoutineDelegateGetErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeRoutineDelegateGetError = KilocodeRoutineDelegateGetErrors[keyof KilocodeRoutineDelegateGetErrors]
+
+export type KilocodeRoutineDelegateGetResponses = {
+  /**
+   * Tracked worker-to-worker request
+   */
+  200: {
+    id: string
+    source: string
+    senderID: string
+    recipientID: string
+    parentID?: string
+    parentRunID?: string
+    workspace?: string
+    objective: string
+    expected?: string
+    context?: string
+    deadline?: number
+    budget?: number
+    depth: number
+    state: "queued" | "accepted" | "running" | "needs_input" | "completed" | "failed" | "cancelled"
+    childRunID?: string
+    sessionID?: string
+    response?: string
+    cost?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    reason?: string
+    time: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+}
+
+export type KilocodeRoutineDelegateGetResponse =
+  KilocodeRoutineDelegateGetResponses[keyof KilocodeRoutineDelegateGetResponses]
+
 export type KilocodeDesignSystemGetData = {
   body?: never
   path?: never

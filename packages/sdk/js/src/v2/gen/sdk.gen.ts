@@ -261,6 +261,10 @@ import type {
   KilocodeRoutineArchiveResponses,
   KilocodeRoutineCreateErrors,
   KilocodeRoutineCreateResponses,
+  KilocodeRoutineDelegateCreateErrors,
+  KilocodeRoutineDelegateCreateResponses,
+  KilocodeRoutineDelegateGetErrors,
+  KilocodeRoutineDelegateGetResponses,
   KilocodeRoutineEventErrors,
   KilocodeRoutineEventResponses,
   KilocodeRoutineForecastErrors,
@@ -9056,6 +9060,107 @@ export class Inbox extends HeyApiClient {
   }
 }
 
+export class Delegate extends HeyApiClient {
+  /**
+   * Ask another roster worker for a tracked result
+   *
+   * Admit one authorized request to a recipient worker without rewriting either standing assignment. Busy recipients are queued; retries reuse the same source.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters: {
+      agentID: string
+      directory?: string
+      workspace?: string
+      source?: string
+      senderID?: string
+      recipientID?: string
+      parentID?: string
+      parentRunID?: string
+      objective?: string
+      expected?: string
+      context?: string
+      deadline?: number
+      budget?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "agentID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "source" },
+            { in: "body", key: "senderID" },
+            { in: "body", key: "recipientID" },
+            { in: "body", key: "parentID" },
+            { in: "body", key: "parentRunID" },
+            { in: "body", key: "objective" },
+            { in: "body", key: "expected" },
+            { in: "body", key: "context" },
+            { in: "body", key: "deadline" },
+            { in: "body", key: "budget" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeRoutineDelegateCreateResponses,
+      KilocodeRoutineDelegateCreateErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/agent/{agentID}/delegate",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Inspect one tracked worker-to-worker request
+   *
+   * Return the durable request, current state, and linked child run when present.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      agentID: string
+      id: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "agentID" },
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      KilocodeRoutineDelegateGetResponses,
+      KilocodeRoutineDelegateGetErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/agent/{agentID}/delegate/{id}",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Routine extends HeyApiClient {
   /**
    * Preview a routine schedule
@@ -9674,6 +9779,11 @@ export class Routine extends HeyApiClient {
   private _inbox?: Inbox
   get inbox2(): Inbox {
     return (this._inbox ??= new Inbox({ client: this.client }))
+  }
+
+  private _delegate?: Delegate
+  get delegate(): Delegate {
+    return (this._delegate ??= new Delegate({ client: this.client }))
   }
 }
 

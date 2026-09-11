@@ -14,6 +14,15 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { RayaTask } from "."
 import { RayaTaskInbox, posted, type Record as Note } from "./inbox"
+import {
+  RayaTaskDelegation,
+  ceiling,
+  prompt,
+  type Conflict,
+  type Invalid,
+  type Request as Ask,
+  type Record as Errand,
+} from "./delegation"
 import { claim } from "./claim"
 import { inspect, recover } from "./recovery"
 import { poll } from "./poll"
@@ -103,6 +112,9 @@ export namespace RayaTaskRunner {
     tick: (from: number) => Effect.Effect<void>
     fire: (id: string) => Effect.Effect<RayaTask.Run, RayaTask.GuardError | RayaTask.NotFoundError>
     ask: (id: string, question: string) => Effect.Effect<RayaTask.Run, RayaTask.GuardError | RayaTask.NotFoundError>
+    delegate: (
+      input: Ask,
+    ) => Effect.Effect<Errand, RayaTask.GuardError | RayaTask.NotFoundError | Invalid | Conflict>
     settle: (sessionID: SessionID) => Effect.Effect<void>
     park: (sessionID: SessionID, waiting: boolean) => Effect.Effect<void>
     revive: () => Effect.Effect<void>
@@ -122,6 +134,7 @@ export namespace RayaTaskRunner {
     const schedule = input.database ? scheduler({ ...input, database: input.database }) : undefined
     const restore = input.database ? recovery({ ...input, database: input.database }) : undefined
     const inbox = input.database ? RayaTaskInbox.make(input.database) : undefined
+    const errands = input.database ? RayaTaskDelegation.make(input.database) : undefined
     const retain = (run: RayaTask.Run) => {
       const item = posted(run)
       if (!inbox || !item) return Effect.void
@@ -205,14 +218,15 @@ export namespace RayaTaskRunner {
       )
     })
 
-    const fire = Effect.fn("RayaTaskRunner.fire")((id: string, trigger?: Trigger, note?: string) =>
+    const fire = Effect.fn("RayaTaskRunner.fire")(
+      (id: string, trigger?: Trigger, note?: string, opts?: { follow?: boolean; view?: Pick<RayaTask.Agent, "role" | "access" | "tools"> }) =>
       tasks.enforce(id).pipe(
         Effect.andThen(recoverable(id)),
         Effect.andThen(
           claim(
             input.storage,
             id,
-            check(id, trigger, !!note),
+            check(id, trigger, opts?.follow ?? !!note),
             (selected, owner) =>
               Effect.gen(function* () {
                 const item = selected.item
@@ -253,7 +267,7 @@ export namespace RayaTaskRunner {
                             providerID: ProviderV2.ID.make(item.model.providerID),
                             id: ModelV2.ID.make(item.model.id),
                           },
-                    permission: RayaTask.rules(item),
+                    permission: RayaTask.rules(opts?.view ?? item),
                   }),
                 )
                 yield* owner.link(created.id)
@@ -351,7 +365,97 @@ export namespace RayaTaskRunner {
       const note = brief(item, reports, question)
       const last = (yield* tasks.runsFor(id)).at(-1)
       if (last && RayaTask.pending(last)) return yield* steer(last, note)
-      return yield* fire(id, undefined, note)
+      return yield* fire(id, undefined, note, { follow: true })
+    })
+
+    const start = Effect.fn("RayaTaskRunner.startErrand")(function* (taken: Errand) {
+      if (!errands)
+        return yield* new RayaTask.GuardError({
+          kind: "unavailable",
+          message: "The delegation store is unavailable.",
+        })
+      const sender = yield* tasks.get(taken.senderID)
+      const recipient = yield* tasks.get(taken.recipientID)
+      const note = prompt(sender, recipient, {
+        source: taken.source,
+        senderID: taken.senderID,
+        recipientID: taken.recipientID,
+        objective: taken.objective,
+        expected: taken.expected,
+        context: taken.context,
+      })
+      const run = yield* fire(recipient.id, undefined, note, {
+        follow: false,
+        view: ceiling(sender, recipient),
+      }).pipe(
+        Effect.catch((err) =>
+          Effect.gen(function* () {
+            yield* errands.finish(
+              taken.id,
+              "failed",
+              recipient,
+              undefined,
+              undefined,
+              err instanceof Error ? err.message : "Delegated work could not start.",
+            )
+            return yield* Effect.fail(err)
+          }),
+        ),
+      )
+      return yield* errands.attach(taken.id, run.id, run.sessionID)
+    })
+
+    const busy = Effect.fn("RayaTaskRunner.busy")(function* (id: string) {
+      const last = (yield* tasks.runsFor(id)).at(-1)
+      if (last && RayaTask.pending(last)) return true
+      if (schedule && (yield* schedule.active(id)).length) return true
+      return false
+    })
+
+    const delegate = Effect.fn("RayaTaskRunner.delegate")(function* (input: Ask) {
+      if (!errands)
+        return yield* new RayaTask.GuardError({
+          kind: "unavailable",
+          message: "The delegation store is unavailable.",
+        })
+      const sender = yield* tasks.get(input.senderID)
+      const recipient = yield* tasks.get(input.recipientID)
+      const admitted = yield* errands.admit(input, sender, recipient)
+      if ((yield* busy(recipient.id)) || admitted.record.state !== "queued") return admitted.record
+      const taken = yield* errands.take(recipient.id)
+      if (!taken) return admitted.record
+      const started = yield* start(taken)
+      if (taken.id === admitted.record.id) return started
+      return yield* errands.get(admitted.record.id)
+    })
+
+    const close = Effect.fn("RayaTaskRunner.closeErrand")(function* (run: RayaTask.Run) {
+      if (!errands) return
+      const row = yield* errands.bySession(run.sessionID)
+      if (!row) return
+      const recipient = yield* tasks.get(row.recipientID)
+      const state =
+        run.status === "complete"
+          ? ("completed" as const)
+          : run.status === "blocked" && run.blockedReason === WAIT
+            ? ("needs_input" as const)
+            : run.status === "blocked" || run.status === "error"
+              ? ("failed" as const)
+              : undefined
+      if (!state) return
+      yield* errands.finish(row.id, state, recipient, run.outcome?.summary, run.outcome?.cost, run.blockedReason).pipe(
+        Effect.catch((error) =>
+          typeof error === "object" && error !== null && "_tag" in error && error._tag === "RayaTaskDelegation.Conflict"
+            ? Effect.void
+            : Effect.die(error),
+        ),
+      )
+      if (yield* busy(recipient.id)) return
+      const taken = yield* errands.take(recipient.id)
+      if (!taken) return
+      yield* start(taken).pipe(
+        Effect.catch((err) => Effect.sync(() => log.error("delegated follow-on failed", { err }))),
+      )
     })
 
     const settle = Effect.fn("RayaTaskRunner.settle")(function* (sessionID: SessionID) {
@@ -361,7 +465,10 @@ export namespace RayaTaskRunner {
         const run = history.findLast((entry) => entry.sessionID === sessionID && entry.status === "running")
         if (!run) {
           const done = history.findLast((entry) => entry.sessionID === sessionID && entry.status !== "running")
-          if (done) yield* retain(done)
+          if (done) {
+            yield* retain(done)
+            yield* close(done)
+          }
           continue
         }
         const goal = yield* goals.get(sessionID)
@@ -421,7 +528,10 @@ export namespace RayaTaskRunner {
         if (changed && schedule && (status === "complete" || status === "blocked"))
           yield* schedule.settle({ ...run, status, blockedReason: goal?.blockedReason })
         const latest = (yield* tasks.runsFor(item.id)).find((entry) => entry.id === run.id)
-        if (latest) yield* retain(latest)
+        if (latest) {
+          yield* retain(latest)
+          yield* close(latest)
+        }
       }
     })
 
@@ -582,6 +692,7 @@ export namespace RayaTaskRunner {
       preview,
       fire: fire as Runner["fire"],
       ask: ask as Runner["ask"],
+      delegate: delegate as Runner["delegate"],
       settle: settle as Runner["settle"],
       park: park as Runner["park"],
       revive: revive as Runner["revive"],

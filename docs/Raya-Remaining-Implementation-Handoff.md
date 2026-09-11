@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Permission canonical comparison is delivered: committed, pushed and installed as `8b01e72311`. LiveBroker fixtures through Live HTTP contracts are committed and unshipped. Routine inbox persistence, report publication, conversation UI, follow-up dispatch and session-list exclusion are verified locally and unshipped. Next: RDM-04 worker-to-worker delegation. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Installed product is `683a82b837`. Live host/CLI contracts are packaged in this snapshot; the default engine remains `openai-realtime`. Routine inbox, follow-up dispatch and session-list exclusion are installed. RDM-04 worker-to-worker delegation is verified locally and unshipped. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-11. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `8b01e7231172ad8916065bcef2e7dc78cb5ec76a` is committed, pushed and installed. Live/telemetry files in the working tree are unfinished and were not packaged.
+**Latest delivered product:** checkpoint `683a82b837` is committed, pushed and installed. Live is packaged in this snapshot; the default engine remains `openai-realtime`.
 
 ## Scope and reading order
 
@@ -1178,6 +1178,26 @@ Changed files: `packages/opencode/src/kilocode/session/index.ts`, `packages/open
 
 Commands (cwd `packages/opencode`): `bun test ./test/kilocode/session-list.test.ts ./test/kilocode/server/httpapi-session-list.test.ts ./test/server/session-list.test.ts --timeout 60000` -> 15 pass / 0 fail / 47 expect / exit 0 (`.tmp/routine-session-list-tests.log`). `bun test ./test/server/experimental-session-list.test.ts --timeout 60000` -> 4 pass / 0 fail / 22 expect / exit 0. `bun run typecheck` -> exit 0 (`.tmp/routine-session-list-types.log`). Root `bun run script/check-opencode-annotations.ts --worktree` -> exit 0. Root `bun ./script/generate.ts` -> exit 0.
 
-Remaining: RDM-04 worker-to-worker delegation. Do not snapshot:install.
+Remaining: RDM-04 worker-to-worker delegation.
 
-Next executable step: add authorized worker-to-worker delegation with tracked responses. Do not change the default engine or package Live.
+Next executable step: add authorized worker-to-worker delegation with tracked responses. Do not change the default engine.
+
+## 2026-09-11: Snapshot install `683a82b837`
+
+**States:** committed, pushed and installed as `683a82b837`. Live remains not the default engine.
+
+Installed `eden.raya@7.4.23-snapshot+683a82b837.kamil-oseni.1789151453866`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-683a82b837-kamil-oseni-1789151453866.vsix`; SHA-256 `1F56B9C6D9E3FFBCC655AE41A39043CD69A60BC34EFEF36233C9DFC2ECB372BA`; 516848111 bytes, 430 entries, CLI 228634112 bytes. Production lint required splitting Live and routines handlers under the complexity cap (`35aa42ef81`, `683a82b837`). Telemetry transport settlement is `a0024a4f77`. Default engine is still `openai-realtime`.
+
+## 2026-09-11: Worker-to-worker delegation store and Chief-to-Accounting flow
+
+**States:** RDM-04 request/response runtime verified locally; Live remains not the default engine. Product checkpoint remains `683a82b837`.
+
+A roster worker can ask another roster worker for a tracked result. The request is durable and idempotent on source. Self-delegation, workspace-crossing, cycles, depth above 3 and more than 4 outstanding children are refused. A paused recipient fails without being enabled. A busy recipient stays queued; the next idle take starts one overlay run without rewriting either standing assignment. Read-only senders force the child session to brief access. Completing the child writes a reply card that does not invent success. `POST /kilocode/agent/:agentID/delegate` and `GET .../delegate/:id` are the inspectable HTTP surface.
+
+Changed files: `packages/core/src/kilocode/routine.sql.ts`, `packages/core/src/database/migration/20260911183445_kilocode-routine-delegation.ts`, `packages/core/src/database/schema.gen.ts`, `packages/core/src/database/migration.gen.ts`, `packages/core/schema.json`, `packages/opencode/src/kilocode/task/delegation.ts`, `packages/opencode/src/kilocode/task/runner.ts`, `packages/opencode/src/kilocode/server/httpapi/groups/kilocode.ts`, `packages/opencode/src/kilocode/server/httpapi/handlers/kilocode.ts`, `packages/opencode/test/kilocode/task/delegation.test.ts`, `packages/opencode/test/kilocode/task/delegation-runner.test.ts`, `packages/opencode/test/kilocode/server/httpapi-routine-delegate.test.ts`, `packages/sdk/openapi.json`, `packages/sdk/js/src/v2/gen/sdk.gen.ts`, `packages/sdk/js/src/v2/gen/types.gen.ts`, `.changeset/raya-routine-delegation.md`.
+
+Commands (cwd `packages/opencode`): `bun test ./test/kilocode/task/delegation.test.ts ./test/kilocode/task/delegation-runner.test.ts ./test/kilocode/server/httpapi-routine-delegate.test.ts ./test/kilocode/task/inbox-followup.test.ts --timeout 60000` -> 7 pass / 0 fail / 74 expect / exit 0. `bun run typecheck` -> exit 0. Root `bun run script/check-opencode-annotations.ts --worktree` -> exit 0. Root `bun ./script/generate.ts` -> exit 0.
+
+Remaining: UI to start/inspect a delegation from routines, explicit cancel/stop controls, and cost-attribution review. Do not snapshot:install.
+
+Next executable step: expose delegation cards and a Chief-to-Accounting action on the routines surface. Do not change the default engine.

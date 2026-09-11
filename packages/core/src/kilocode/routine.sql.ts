@@ -67,3 +67,37 @@ export const RayaRoutineMessageTable = sqliteTable(
     index("raya_routine_message_order").on(table.agent_id, table.time_created, table.id),
   ],
 )
+
+export const RayaRoutineDelegationTable = sqliteTable(
+  "raya_routine_delegation",
+  {
+    id: text().primaryKey(),
+    source: text().notNull(),
+    sender_id: text().notNull(),
+    recipient_id: text().notNull(),
+    parent_id: text(),
+    parent_run_id: text(),
+    workspace: text(),
+    objective: text().notNull(),
+    expected: text(),
+    context: text(),
+    deadline: integer(),
+    budget: integer(),
+    depth: integer().notNull(),
+    state: text({
+      enum: ["queued", "accepted", "running", "needs_input", "completed", "failed", "cancelled"],
+    }).notNull(),
+    child_run_id: text(),
+    session_id: text(),
+    response: text(),
+    cost: integer(),
+    reason: text(),
+    time_created: integer().notNull(),
+    time_updated: integer().notNull(),
+  },
+  (table) => [
+    uniqueIndex("raya_routine_delegation_source").on(table.source),
+    index("raya_routine_delegation_recipient").on(table.recipient_id, table.state, table.time_created),
+    index("raya_routine_delegation_parent").on(table.parent_id),
+  ],
+)

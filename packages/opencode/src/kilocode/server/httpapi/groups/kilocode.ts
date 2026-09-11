@@ -38,6 +38,7 @@ import {
   Record as InboxRecord,
   Send as InboxSend,
 } from "@/kilocode/task/inbox"
+import { Record as DelegateRecord, Request as DelegateAsk } from "@/kilocode/task/delegation"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
 import { Template as AgentTemplate } from "@/kilocode/task/templates"
 import { RayaCheckpoint } from "@/kilocode/checkpoint" // raya_change - named workspace checkpoints
@@ -188,6 +189,8 @@ export const KilocodePaths = {
   agentInboxItem: `${root}/agent/:agentID/inbox`,
   agentInboxRead: `${root}/agent/:agentID/inbox/read`,
   agentInboxDraft: `${root}/agent/:agentID/inbox/draft`,
+  agentDelegate: `${root}/agent/:agentID/delegate`,
+  agentDelegateItem: `${root}/agent/:agentID/delegate/:id`,
 } as const
 
 export const KilocodeApi = HttpApi.make("kilocode")
@@ -843,6 +846,32 @@ export const KilocodeApi = HttpApi.make("kilocode")
             identifier: "kilocode.routine.inbox.draft",
             summary: "Save a per-conversation inbox draft",
             description: "Replace or clear the draft for one roster worker. Drafts are not messages and do not admit work.",
+          }),
+        ),
+        HttpApiEndpoint.post("agentDelegate", KilocodePaths.agentDelegate, {
+          params: { agentID: Schema.String },
+          query: WorkspaceRoutingQuery,
+          payload: DelegateAsk,
+          success: described(DelegateRecord, "Tracked worker-to-worker request"),
+          error: [InvalidRequestError, HttpApiError.NotFound, HttpApiError.Conflict],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.delegate.create",
+            summary: "Ask another roster worker for a tracked result",
+            description:
+              "Admit one authorized request to a recipient worker without rewriting either standing assignment. Busy recipients are queued; retries reuse the same source.",
+          }),
+        ),
+        HttpApiEndpoint.get("agentDelegateGet", KilocodePaths.agentDelegateItem, {
+          params: { agentID: Schema.String, id: Schema.String },
+          query: WorkspaceRoutingQuery,
+          success: described(DelegateRecord, "Tracked worker-to-worker request"),
+          error: [InvalidRequestError, HttpApiError.NotFound],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.delegate.get",
+            summary: "Inspect one tracked worker-to-worker request",
+            description: "Return the durable request, current state, and linked child run when present.",
           }),
         ),
         // raya_change start - owner design-system lock

@@ -139,3 +139,31 @@ test("delegation admits once, refuses loops, and queues without duplicating a bu
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })
+
+test("stopping a request keeps a completed child and does not rewrite the parent", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const store = RayaTaskDelegation.make(yield* Database.Service)
+      const chief = agent("chief", "generalist")
+      const books = agent("books", "accountant")
+      const extra = agent("legal", "reviewer")
+      const parent = yield* store.admit(request("dlg_open", chief.id, books.id), chief, books)
+      const taken = yield* store.take(books.id)
+      yield* store.attach(taken!.id, "run_open", SessionID.make("ses_open"))
+      const child = yield* store.admit(
+        request("dlg_child", books.id, extra.id, { parentID: parent.record.id }),
+        books,
+        extra,
+      )
+      expect((yield* store.descendants(parent.record.id)).map((item) => item.id)).toEqual([child.record.id])
+      const halted = yield* store.stop(parent.record.id, books, "Stopped by the user.")
+      expect(halted.state).toBe("cancelled")
+      expect((yield* store.stop(parent.record.id, books, "Stopped by the user.")).state).toBe("cancelled")
+      expect((yield* store.get(child.record.id)).state).toBe("queued")
+      const kept = yield* store.finish(child.record.id, "completed", extra, "Named missing receipts.")
+      expect(kept.state).toBe("completed")
+      expect((yield* store.stop(child.record.id, extra, "Stopped by the user.")).state).toBe("completed")
+      expect(kept.response).toBe("Named missing receipts.")
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})

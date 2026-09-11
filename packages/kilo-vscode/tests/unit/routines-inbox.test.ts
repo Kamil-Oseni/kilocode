@@ -189,3 +189,64 @@ test("routine delegate posts the same source on retry and refreshes inbox summar
     error: "Raya is not connected.",
   })
 })
+
+test("routine delegate cancel posts the request id and refreshes inbox summaries", async () => {
+  const messages: unknown[] = []
+  let path = ""
+  const client = createKiloClient({
+    baseUrl: "http://localhost:4096",
+    fetch: async (input, init) => {
+      const request = new Request(input, init)
+      const url = new URL(request.url)
+      if (url.pathname.endsWith("/cancel") && request.method === "POST") {
+        path = url.pathname
+        return Response.json({
+          id: "rdl_1",
+          source: "dlg:retry",
+          senderID: "chief",
+          recipientID: "books",
+          objective: "Review Friday expenses.",
+          state: "cancelled",
+        })
+      }
+      if (url.pathname.endsWith("/agent-inbox") && request.method === "GET")
+        return Response.json([
+          {
+            agentID: "chief",
+            conversationID: "rcv_chief",
+            name: "Chief of Staff",
+            role: "briefer",
+            unread: 1,
+            state: "scheduled",
+          },
+        ])
+      return new Response("missing", { status: 404 })
+    },
+  })
+  const post = (msg: unknown) => messages.push(msg)
+  await handleRoutineMessage({
+    client,
+    directory: "workspace",
+    post,
+    message: { type: "routineDelegateCancel", requestID: "stop1", agentID: "chief", id: "rdl_1" },
+  })
+  expect(path).toBe("/kilocode/agent/chief/delegate/rdl_1/cancel")
+  expect(messages.filter((msg) => (msg as { type?: string }).type === "routineDelegateStopped").at(-1)).toMatchObject({
+    type: "routineDelegateStopped",
+    requestID: "stop1",
+    agentID: "chief",
+    record: { id: "rdl_1", state: "cancelled" },
+  })
+  expect(messages.at(-1)).toMatchObject({ type: "routineInbox", requestID: "stop1" })
+  await handleRoutineMessage({
+    client: null,
+    directory: "workspace",
+    post,
+    message: { type: "routineDelegateCancel", requestID: "offline", agentID: "chief", id: "rdl_1" },
+  })
+  expect(messages.at(-1)).toMatchObject({
+    type: "routineDelegateStopped",
+    requestID: "offline",
+    error: "Raya is not connected.",
+  })
+})

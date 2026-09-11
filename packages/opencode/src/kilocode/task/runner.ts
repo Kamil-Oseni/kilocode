@@ -115,6 +115,7 @@ export namespace RayaTaskRunner {
     delegate: (
       input: Ask,
     ) => Effect.Effect<Errand, RayaTask.GuardError | RayaTask.NotFoundError | Invalid | Conflict>
+    stop: (id: string) => Effect.Effect<Errand, RayaTask.GuardError | RayaTask.NotFoundError | Invalid>
     settle: (sessionID: SessionID) => Effect.Effect<void>
     park: (sessionID: SessionID, waiting: boolean) => Effect.Effect<void>
     revive: () => Effect.Effect<void>
@@ -127,6 +128,7 @@ export namespace RayaTaskRunner {
     database?: Database.Interface
     storage: Storage.Interface
     sessions: Pick<Session.Interface, "create" | "get" | "messages" | "children">
+    halt?: (sessionID: SessionID) => Effect.Effect<void>
   }): Runner {
     const tasks = RayaTask.make(input)
     const snapshots = RayaTaskSnapshot.make(input)
@@ -429,6 +431,41 @@ export namespace RayaTaskRunner {
       return yield* errands.get(admitted.record.id)
     })
 
+    const abort = Effect.fn("RayaTaskRunner.stopErrand")(function* (id: string) {
+      if (!errands)
+        return yield* new RayaTask.GuardError({
+          kind: "unavailable",
+          message: "The delegation store is unavailable.",
+        })
+      const row = yield* errands.get(id)
+      const kids = yield* errands.descendants(id)
+      const recipient = yield* tasks.get(row.recipientID)
+      const record = yield* errands.stop(row.id, recipient, "Stopped by the user.")
+      for (const child of kids) {
+        const other = yield* tasks.get(child.recipientID)
+        yield* errands.stop(child.id, other, "Stopped because the parent request was stopped.")
+      }
+      const listed = [row, ...kids]
+      for (const item of listed) {
+        if (!item.sessionID || !input.halt) continue
+        yield* input.halt(item.sessionID).pipe(
+          Effect.catch((err) => Effect.sync(() => log.error("delegated session stop failed", { err }))),
+        )
+      }
+      const seen = new Set<string>()
+      for (const item of listed) {
+        if (seen.has(item.recipientID)) continue
+        seen.add(item.recipientID)
+        if (yield* busy(item.recipientID)) continue
+        const taken = yield* errands.take(item.recipientID)
+        if (!taken) continue
+        yield* start(taken).pipe(
+          Effect.catch((err) => Effect.sync(() => log.error("delegated follow-on failed", { err }))),
+        )
+      }
+      return record
+    })
+
     const close = Effect.fn("RayaTaskRunner.closeErrand")(function* (run: RayaTask.Run) {
       if (!errands) return
       const row = yield* errands.bySession(run.sessionID)
@@ -693,6 +730,7 @@ export namespace RayaTaskRunner {
       fire: fire as Runner["fire"],
       ask: ask as Runner["ask"],
       delegate: delegate as Runner["delegate"],
+      stop: abort as Runner["stop"],
       settle: settle as Runner["settle"],
       park: park as Runner["park"],
       revive: revive as Runner["revive"],

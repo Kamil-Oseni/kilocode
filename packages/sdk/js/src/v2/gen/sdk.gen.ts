@@ -261,6 +261,8 @@ import type {
   KilocodeRoutineArchiveResponses,
   KilocodeRoutineCreateErrors,
   KilocodeRoutineCreateResponses,
+  KilocodeRoutineDelegateCancelErrors,
+  KilocodeRoutineDelegateCancelResponses,
   KilocodeRoutineDelegateCreateErrors,
   KilocodeRoutineDelegateCreateResponses,
   KilocodeRoutineDelegateGetErrors,
@@ -9155,6 +9157,44 @@ export class Delegate extends HeyApiClient {
       ThrowOnError
     >({
       url: "/kilocode/agent/{agentID}/delegate/{id}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Stop an outstanding worker-to-worker request
+   *
+   * Cancel one outstanding request and its live descendants. Completed child results are kept. Neither standing assignment is rewritten.
+   */
+  public cancel<ThrowOnError extends boolean = false>(
+    parameters: {
+      agentID: string
+      id: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "agentID" },
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeRoutineDelegateCancelResponses,
+      KilocodeRoutineDelegateCancelErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/agent/{agentID}/delegate/{id}/cancel",
       ...options,
       ...params,
     })

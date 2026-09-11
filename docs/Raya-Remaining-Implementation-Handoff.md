@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Installed product is `ad316af1d1`. Live host/CLI contracts are packaged; the default engine remains `openai-realtime`. Routine inbox, follow-up dispatch, session-list exclusion, and RDM-04 start/inspect UI are installed. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Installed product is `ad316af1d1`. Live host/CLI contracts are packaged; the default engine remains `openai-realtime`. Routine inbox, follow-up dispatch, session-list exclusion, and RDM-04 start/inspect UI are installed. Stop-outstanding-delegation is verified locally and unshipped. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -1225,3 +1225,17 @@ Installed `eden.raya@7.4.23-snapshot+ad316af1d1.kamil-oseni.1789153704041`. VSIX
 Remaining: explicit cancel/stop, cost-attribution review, and RDM-06 Friday accounting E2E. Do not change the default engine.
 
 Next executable step: add user controls to stop outstanding delegated work.
+
+## 2026-09-11: Stop outstanding delegated work
+
+**States:** RDM-04 cancel/stop verified locally; Live remains not the default engine. Product checkpoint remains `ad316af1d1`.
+
+Stopping an outstanding request marks it cancelled, cancels live descendants, and keeps completed child results. Queued work never starts. Running child sessions are halted through the existing session cancel path. Retry is idempotent. Neither standing assignment is rewritten. `POST /kilocode/agent/:agentID/delegate/:id/cancel` is the inspectable HTTP surface. The worker conversation shows **Stop this request** on outstanding ask/sent cards until a reply card arrives.
+
+Changed files: `packages/opencode/src/kilocode/task/delegation.ts`, `packages/opencode/src/kilocode/task/runner.ts`, `packages/opencode/src/kilocode/server/httpapi/groups/kilocode.ts`, `packages/opencode/src/kilocode/server/httpapi/handlers/kilocode.ts`, `packages/opencode/test/kilocode/task/delegation.test.ts`, `packages/opencode/test/kilocode/task/delegation-runner.test.ts`, `packages/opencode/test/kilocode/server/httpapi-routine-delegate.test.ts`, `packages/sdk/openapi.json`, `packages/sdk/js/src/v2/gen/sdk.gen.ts`, `packages/sdk/js/src/v2/gen/types.gen.ts`, `packages/kilo-vscode/src/kilo-provider/routines.ts`, `packages/kilo-vscode/src/KiloProvider.ts`, `packages/kilo-vscode/webview-ui/src/components/routines/Inbox.tsx`, `packages/kilo-vscode/webview-ui/src/types/messages/webview-messages.ts`, `packages/kilo-vscode/webview-ui/src/types/messages/extension-messages.ts`, `packages/kilo-vscode/tests/unit/routines-inbox.test.ts`, `packages/kilo-vscode/tests/fixtures/routine-delegate-view.mjs`, `.changeset/raya-routine-delegate-cancel.md`.
+
+Commands (cwd `packages/opencode`): `bun test ./test/kilocode/task/delegation.test.ts ./test/kilocode/task/delegation-runner.test.ts ./test/kilocode/server/httpapi-routine-delegate.test.ts --timeout 60000` -> 7 pass / 0 fail / 73 expect / exit 0 (`.tmp/routine-delegate-cancel-runtime.log`). `bun run typecheck` -> exit 0. Root `bun ./script/generate.ts` -> exit 0. Cwd `packages/kilo-vscode`: `bun test ./tests/unit/routines-inbox.test.ts ./tests/unit/routines-delegate-view.test.ts ./tests/unit/routines-inbox-view.test.ts --timeout 90000` -> 5 pass / 0 fail / 17 expect / exit 0 (`.tmp/routine-delegate-cancel-ui-tests.log`). `bun run typecheck` -> exit 0. eslint on changed files -> exit 0.
+
+Remaining: cost-attribution review and RDM-06 Friday accounting E2E. Do not change the default engine.
+
+Next executable step: commit, push, and `snapshot:install`.

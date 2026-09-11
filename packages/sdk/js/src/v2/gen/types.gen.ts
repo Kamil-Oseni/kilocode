@@ -22618,6 +22618,64 @@ export type KilocodeRoutineDelegateGetResponses = {
 export type KilocodeRoutineDelegateGetResponse =
   KilocodeRoutineDelegateGetResponses[keyof KilocodeRoutineDelegateGetResponses]
 
+export type KilocodeRoutineDelegateCancelData = {
+  body?: never
+  path: {
+    agentID: string
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/agent/{agentID}/delegate/{id}/cancel"
+}
+
+export type KilocodeRoutineDelegateCancelErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeRoutineDelegateCancelError =
+  KilocodeRoutineDelegateCancelErrors[keyof KilocodeRoutineDelegateCancelErrors]
+
+export type KilocodeRoutineDelegateCancelResponses = {
+  /**
+   * Stopped worker-to-worker request
+   */
+  200: {
+    id: string
+    source: string
+    senderID: string
+    recipientID: string
+    parentID?: string
+    parentRunID?: string
+    workspace?: string
+    objective: string
+    expected?: string
+    context?: string
+    deadline?: number
+    budget?: number
+    depth: number
+    state: "queued" | "accepted" | "running" | "needs_input" | "completed" | "failed" | "cancelled"
+    childRunID?: string
+    sessionID?: string
+    response?: string
+    cost?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    reason?: string
+    time: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+}
+
+export type KilocodeRoutineDelegateCancelResponse =
+  KilocodeRoutineDelegateCancelResponses[keyof KilocodeRoutineDelegateCancelResponses]
+
 export type KilocodeDesignSystemGetData = {
   body?: never
   path?: never

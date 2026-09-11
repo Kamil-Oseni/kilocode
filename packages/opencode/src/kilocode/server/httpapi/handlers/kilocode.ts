@@ -93,7 +93,12 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     const storage = yield* Storage.Service // raya_change - Milestone A durable goal storage
     const goals = RayaGoal.make({ storage, sessions }) // raya_change - Milestone A goal operations
     const database = yield* Database.Service
-    const runner = RayaTaskRunner.make({ storage, sessions, database })
+    const runner = RayaTaskRunner.make({
+      storage,
+      sessions,
+      database,
+      halt: (sessionID) => runState.cancel(sessionID),
+    })
     const inbox = RayaTaskInbox.make(database)
     const errands = RayaTaskDelegation.make(database)
     const checkpoints = RayaCheckpoint.make({ storage, snapshots }) // raya_change - named workspace checkpoints
@@ -676,6 +681,23 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         return yield* new HttpApiError.NotFound({})
       return row
     })
+    const agentDelegateCancel = Effect.fn("KilocodeHttpApi.agentDelegateCancel")(function* (ctx: {
+      params: { agentID: string; id: string }
+    }) {
+      yield* owned(ctx.params.agentID)
+      const row = yield* errands.get(ctx.params.id).pipe(
+        Effect.catchTag("RayaTaskDelegation.Invalid", (err) => Effect.fail(new InvalidRequestError({ message: err.message }))),
+      )
+      if (row.senderID !== ctx.params.agentID && row.recipientID !== ctx.params.agentID)
+        return yield* new HttpApiError.NotFound({})
+      return yield* runner.stop(ctx.params.id).pipe(
+        Effect.catchTag("RayaTask.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+        Effect.catchTag("RayaTask.GuardError", (err) =>
+          Effect.fail(new InvalidRequestError({ message: err.message, kind: err.kind, field: err.field })),
+        ),
+        Effect.catchTag("RayaTaskDelegation.Invalid", (err) => Effect.fail(new InvalidRequestError({ message: err.message }))),
+      )
+    })
 
     // raya_change start - owner design-system lock
     const designSystemGet = Effect.fn("KilocodeHttpApi.designSystemGet")(function* () {
@@ -817,6 +839,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .handle("agentInboxDraft", agentInboxDraft)
         .handle("agentDelegate", agentDelegate)
         .handle("agentDelegateGet", agentDelegateGet)
+        .handle("agentDelegateCancel", agentDelegateCancel)
         .handle("designSystemGet", designSystemGet)
         .handle("designSystemSet", designSystemSet)
         .handle("selfHealCreate", selfHealCreate)

@@ -191,6 +191,7 @@ export const KilocodePaths = {
   agentInboxDraft: `${root}/agent/:agentID/inbox/draft`,
   agentDelegate: `${root}/agent/:agentID/delegate`,
   agentDelegateItem: `${root}/agent/:agentID/delegate/:id`,
+  agentDelegateCancel: `${root}/agent/:agentID/delegate/:id/cancel`,
 } as const
 
 export const KilocodeApi = HttpApi.make("kilocode")
@@ -872,6 +873,19 @@ export const KilocodeApi = HttpApi.make("kilocode")
             identifier: "kilocode.routine.delegate.get",
             summary: "Inspect one tracked worker-to-worker request",
             description: "Return the durable request, current state, and linked child run when present.",
+          }),
+        ),
+        HttpApiEndpoint.post("agentDelegateCancel", KilocodePaths.agentDelegateCancel, {
+          params: { agentID: Schema.String, id: Schema.String },
+          query: WorkspaceRoutingQuery,
+          success: described(DelegateRecord, "Stopped worker-to-worker request"),
+          error: [InvalidRequestError, HttpApiError.NotFound],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.delegate.cancel",
+            summary: "Stop an outstanding worker-to-worker request",
+            description:
+              "Cancel one outstanding request and its live descendants. Completed child results are kept. Neither standing assignment is rewritten.",
           }),
         ),
         // raya_change start - owner design-system lock

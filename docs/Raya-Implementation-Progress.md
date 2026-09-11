@@ -2523,3 +2523,15 @@ Status: committed, pushed and installed as ad316af1d1. Live is packaged but not 
 Installed eden.raya@7.4.23-snapshot+ad316af1d1.kamil-oseni.1789153704041. VSIX C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-ad316af1d1-kamil-oseni-1789153704041.vsix; SHA-256 2F91ACCC1FE22E8B8E7AAC4421B78331AA6BB2379A2791A856E4A165349C38CC; 519920967 bytes, 432 entries, CLI 228761600 bytes. Includes RDM-04 runtime 35eb802178 and the routines start/inspect UI.
 
 Next: add cancel/stop for outstanding delegated work, then cost-attribution review and RDM-06 Friday accounting E2E.
+
+## 2026-09-11: Stop outstanding delegated work (RDM-04)
+
+Status: verified locally and unshipped. Installed product is still ad316af1d1.
+
+A user can stop an outstanding worker-to-worker request. Live descendants are cancelled. Completed child results are kept. Neither standing assignment is rewritten. Retry is idempotent. POST /kilocode/agent/:agentID/delegate/:id/cancel is the HTTP surface; the conversation shows Stop this request until a reply card arrives.
+
+Changed files: packages/opencode/src/kilocode/task/delegation.ts, packages/opencode/src/kilocode/task/runner.ts, packages/opencode/src/kilocode/server/httpapi/groups/kilocode.ts, packages/opencode/src/kilocode/server/httpapi/handlers/kilocode.ts, packages/opencode/test/kilocode/task/delegation.test.ts, packages/opencode/test/kilocode/task/delegation-runner.test.ts, packages/opencode/test/kilocode/server/httpapi-routine-delegate.test.ts, packages/sdk/openapi.json, packages/sdk/js/src/v2/gen/sdk.gen.ts, packages/sdk/js/src/v2/gen/types.gen.ts, packages/kilo-vscode/src/kilo-provider/routines.ts, packages/kilo-vscode/src/KiloProvider.ts, packages/kilo-vscode/webview-ui/src/components/routines/Inbox.tsx, packages/kilo-vscode/webview-ui/src/types/messages/webview-messages.ts, packages/kilo-vscode/webview-ui/src/types/messages/extension-messages.ts, packages/kilo-vscode/tests/unit/routines-inbox.test.ts, packages/kilo-vscode/tests/fixtures/routine-delegate-view.mjs, .changeset/raya-routine-delegate-cancel.md.
+
+Commands (packages/opencode): bun test ./test/kilocode/task/delegation.test.ts ./test/kilocode/task/delegation-runner.test.ts ./test/kilocode/server/httpapi-routine-delegate.test.ts --timeout 60000 -> 7 pass / 0 fail / 73 expect / exit 0 (.tmp/routine-delegate-cancel-runtime.log). bun run typecheck -> exit 0. Root bun ./script/generate.ts -> exit 0. packages/kilo-vscode bun test ./tests/unit/routines-inbox.test.ts ./tests/unit/routines-delegate-view.test.ts ./tests/unit/routines-inbox-view.test.ts --timeout 90000 -> 5 pass / 0 fail / 17 expect / exit 0 (.tmp/routine-delegate-cancel-ui-tests.log). bun run typecheck -> exit 0. eslint on changed files -> exit 0.
+
+Next: commit, push, and snapshot:install. Remaining: cost-attribution review and RDM-06 Friday accounting E2E.

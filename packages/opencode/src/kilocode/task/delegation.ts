@@ -150,9 +150,16 @@ function same(saved: Record, value: Request) {
 function cards(row: Record, sender: RayaTask.Agent, recipient: RayaTask.Agent): Publish[] {
   const ask = `Request from ${sender.name}:\n${row.objective}`
   const sent = `Asked ${recipient.name}:\n${row.objective}`
+  const id = Schema.is(token)(row.id) ? row.id : undefined
   return [
-    { agentID: recipient.id, source: origin("ask", row.source), kind: "delegation", body: ask.slice(0, 8000) },
-    { agentID: sender.id, source: origin("sent", row.source), kind: "delegation", body: sent.slice(0, 8000) },
+    {
+      agentID: recipient.id,
+      source: origin("ask", row.source),
+      kind: "delegation",
+      body: ask.slice(0, 8000),
+      ...(id ? { occurrenceID: id } : {}),
+    },
+    { agentID: sender.id, source: origin("sent", row.source), kind: "delegation", body: sent.slice(0, 8000), ...(id ? { occurrenceID: id } : {}) },
   ]
 }
 
@@ -388,6 +395,20 @@ export namespace RayaTaskDelegation {
       const above = yield* ancestors(current.parentID)
       return [...above.reverse(), current]
     })
+    const descendants = (id: string): Effect.Effect<Record[], Invalid> =>
+      Effect.gen(function* () {
+        const rows = yield* db.select().from(Delegation).where(eq(Delegation.parent_id, id)).all().pipe(Effect.orDie)
+        const items = rows.map(decode)
+        const nested: Record[] = []
+        for (const item of items) nested.push(...(yield* descendants(item.id)))
+        return [...items, ...nested]
+      })
+    const stop = Effect.fn("RayaTaskDelegation.stop")(function* (id: string, recipient: RayaTask.Agent, reason: string) {
+      const prior = yield* get(id)
+      if (prior.state === "cancelled") return prior
+      if (prior.state === "completed" || prior.state === "failed") return prior
+      return yield* finish(id, "cancelled", recipient, undefined, undefined, reason)
+    })
     const queued = Effect.fn("RayaTaskDelegation.queued")(function* (recipientID: string) {
       const rows = yield* db
         .select()
@@ -402,6 +423,6 @@ export namespace RayaTaskDelegation {
       const row = yield* db.select().from(Delegation).where(eq(Delegation.session_id, sessionID)).get().pipe(Effect.orDie)
       return row ? decode(row) : undefined
     })
-    return { admit, take, attach, finish, get, lookup, chain, queued, bySession }
+    return { admit, take, attach, finish, get, lookup, chain, descendants, stop, queued, bySession }
   }
 }

@@ -4,6 +4,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { Storage } from "@/storage/storage"
 import { SessionID } from "@/session/schema"
+import { RayaTaskDelegation } from "@/kilocode/task/delegation"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
 
@@ -141,6 +142,83 @@ test("chief of staff obtains a tracked accounting result without rewriting eithe
       })
       expect(denied.state).toBe("failed")
       expect(starts).toEqual(["start"])
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
+test("stopping a parent cancels live descendants without rewriting assignments", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const starts: string[] = []
+      const halted: string[] = []
+      const runner = RayaTaskRunner.make({
+        database,
+        storage,
+        halt: (sessionID) =>
+          Effect.sync(() => {
+            halted.push(sessionID)
+          }),
+        sessions: {
+          create: () =>
+            Effect.sync(() => {
+              starts.push("start")
+              return session(`ses_${starts.length}`)
+            }),
+          get: () => Effect.die("unused"),
+          messages: () => Effect.succeed([]),
+          children: () => Effect.succeed([]),
+        },
+      })
+      const chief = yield* runner.tasks.create({
+        name: "Chief of Staff",
+        role: "generalist",
+        objective: "Coordinate Friday close.",
+        access: "brief",
+        enabled: true,
+        schedule: { kind: "manual" },
+      })
+      const books = yield* runner.tasks.create({
+        name: "Accounting",
+        role: "accountant",
+        objective: "Reconcile receipts.",
+        capabilities: ["accounting"],
+        access: "full",
+        enabled: true,
+        schedule: { kind: "manual" },
+      })
+      const legal = yield* runner.tasks.create({
+        name: "Legal",
+        role: "reviewer",
+        objective: "Review contracts.",
+        access: "brief",
+        enabled: true,
+        schedule: { kind: "manual" },
+      })
+      const parent = yield* runner.delegate({
+        source: "dlg_stop",
+        senderID: chief.id,
+        recipientID: books.id,
+        objective: "List missing Friday receipts.",
+      })
+      expect(parent.state).toBe("running")
+      const child = yield* runner.delegate({
+        source: "dlg_stop_child",
+        senderID: books.id,
+        recipientID: legal.id,
+        parentID: parent.id,
+        objective: "Confirm the missing receipts against policy.",
+      })
+      expect(child.state).toBe("running")
+      const stopped = yield* runner.stop(parent.id)
+      expect(stopped.state).toBe("cancelled")
+      expect(stopped.reason).toBe("Stopped by the user.")
+      expect(halted).toEqual([parent.sessionID!, child.sessionID!])
+      expect((yield* runner.stop(parent.id)).state).toBe("cancelled")
+      expect((yield* RayaTaskDelegation.make(database).get(child.id)).state).toBe("cancelled")
+      expect((yield* runner.tasks.get(chief.id)).objective).toBe("Coordinate Friday close.")
+      expect((yield* runner.tasks.get(books.id)).objective).toBe("Reconcile receipts.")
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })

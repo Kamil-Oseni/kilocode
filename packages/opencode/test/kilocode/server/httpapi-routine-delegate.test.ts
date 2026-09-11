@@ -83,4 +83,21 @@ test("the shipped routine delegate route tracks a chief-to-accounting request", 
   const listed = Array.isArray(roster) ? roster : []
   expect(listed.find((item: { id: string }) => item.id === chief.id)?.objective).toBe("Coordinate Friday close.")
   expect(listed.find((item: { id: string }) => item.id === books.id)?.objective).toBe("Reconcile receipts.")
+  const cancelled = await app.request(`/kilocode/agent/${chief.id}/delegate/${row.id}/cancel`, {
+    method: "POST",
+    headers,
+  })
+  expect(cancelled.status).toBe(200)
+  expect(Schema.decodeUnknownSync(Schema.toCodecJson(Record))(await cancelled.json()).state).toBe("cancelled")
+  expect(
+    (
+      await app.request(`/kilocode/agent/${chief.id}/delegate/${row.id}/cancel`, {
+        method: "POST",
+        headers,
+      })
+    ).status,
+  ).toBe(200)
+  expect(Schema.decodeUnknownSync(Schema.toCodecJson(Record))(await (await app.request(`/kilocode/agent/${chief.id}/delegate/${row.id}`, { headers })).json()).state).toBe(
+    "cancelled",
+  )
 }, 30_000)

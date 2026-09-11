@@ -199,6 +199,7 @@ try {
         agentID: chief.id,
         kind: "delegation",
         source: `sent:${retry.source}`,
+        occurrenceID: "rdl_1",
         body: "Asked Books:\nReview Friday expenses.",
         time: 2,
       },
@@ -207,6 +208,57 @@ try {
   assert.match(root.textContent, /Asked another worker/)
   assert.match(root.textContent, /Asked Books/)
   assert.equal(root.querySelector("textarea[aria-label='Ask another worker']").value, "")
+  button("Stop this request").click()
+  const stop = sent.findLast((msg) => msg.type === "routineDelegateCancel")
+  assert.equal(stop.agentID, chief.id)
+  assert.equal(stop.id, "rdl_1")
+  emit({
+    type: "routineDelegateStopped",
+    requestID: stop.requestID,
+    agentID: chief.id,
+    error: "Could not stop that request.",
+  })
+  assert.match(root.textContent, /Could not stop that request/)
+  button("Stop this request").click()
+  const again = sent.findLast((msg) => msg.type === "routineDelegateCancel")
+  assert.equal(again.id, stop.id)
+  emit({
+    type: "routineDelegateStopped",
+    requestID: again.requestID,
+    agentID: chief.id,
+    record: { id: "rdl_1", state: "cancelled" },
+  })
+  await new Promise((resolve) => setImmediate(resolve))
+  const after = sent.findLast((msg) => msg.type === "routineInboxPage")
+  emit({
+    type: "routineInboxPage",
+    requestID: after.requestID,
+    agentID: chief.id,
+    messages: [
+      {
+        id: "rmg_sent",
+        agentID: chief.id,
+        kind: "delegation",
+        source: `sent:${retry.source}`,
+        occurrenceID: "rdl_1",
+        body: "Asked Books:\nReview Friday expenses.",
+        time: 2,
+      },
+      {
+        id: "rmg_reply",
+        agentID: chief.id,
+        kind: "delegation",
+        source: `reply:${retry.source}`,
+        body: "Delegation cancelled (Books).\nStopped by the user.\nThis is not a completed worker reply.",
+        time: 3,
+      },
+    ],
+  })
+  assert.match(root.textContent, /Answer from another worker/)
+  assert.equal(
+    [...root.querySelectorAll("button")].some((item) => item.textContent.trim() === "Stop this request"),
+    false,
+  )
   button("Back").click()
   person("Books").click()
   await new Promise((resolve) => setImmediate(resolve))
@@ -229,7 +281,7 @@ try {
   })
   assert.match(root.textContent, /Asked you/)
   assert.match(root.textContent, /Request from Chief of Staff/)
-  console.log("routine-delegate-view: 16 assertions passed")
+  console.log("routine-delegate-view: 22 assertions passed")
 } finally {
   dispose()
   root.remove()

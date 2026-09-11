@@ -111,6 +111,7 @@ function reply(type: string) {
   if (type === "routineInboxRead") return "routineInboxRead"
   if (type === "routineInboxDraft") return "routineInboxDraft"
   if (type === "routineDelegate") return "routineDelegated"
+  if (type === "routineDelegateCancel") return "routineDelegateStopped"
   return "routineState"
 }
 
@@ -143,7 +144,8 @@ function owned(type: string) {
     type === "routineInboxSend" ||
     type === "routineInboxRead" ||
     type === "routineInboxDraft" ||
-    type === "routineDelegate"
+    type === "routineDelegate" ||
+    type === "routineDelegateCancel"
   )
 }
 
@@ -273,6 +275,18 @@ async function pass(ctx: Ctx) {
     { throwOnError: true },
   )
   ctx.post({ type: "routineDelegated", requestID: msg.requestID, agentID: msg.agentID, record: result.data })
+  await summaries(ctx)
+}
+
+async function halt(ctx: Ctx) {
+  const msg = ctx.message
+  if (!token(msg.requestID) || !token(msg.agentID) || !token(msg.id))
+    throw new Error("Reload the conversation before stopping that request.")
+  const result = await ctx.kilo.delegate.cancel(
+    { directory: ctx.dir, agentID: String(msg.agentID), id: String(msg.id) },
+    { throwOnError: true },
+  )
+  ctx.post({ type: "routineDelegateStopped", requestID: msg.requestID, agentID: msg.agentID, record: result.data })
   await summaries(ctx)
 }
 
@@ -503,6 +517,7 @@ const routes: Record<string, (ctx: Ctx) => Promise<void>> = {
   routineInboxRead: seen,
   routineInboxDraft: scribble,
   routineDelegate: pass,
+  routineDelegateCancel: halt,
   routineList: list,
   routineCreate: create,
   routineUpdate: update,

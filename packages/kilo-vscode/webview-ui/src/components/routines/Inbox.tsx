@@ -48,6 +48,40 @@ function kind(value: Note["kind"], source?: string) {
   return "You"
 }
 
+function pending(item: Note, rows: Note[]) {
+  if (item.kind !== "delegation" || !item.occurrenceID) return false
+  if (!item.source.startsWith("sent:") && !item.source.startsWith("ask:")) return false
+  const at = item.source.indexOf(":")
+  const key = at <= 0 ? "" : item.source.slice(at + 1)
+  return !rows.some((row) => row.source === `reply:${key}`)
+}
+
+const Line: Component<{ item: Note; rows: Note[]; busy: boolean; onStop: (id: string) => void }> = (props) => {
+  const live = () => pending(props.item, props.rows)
+  return (
+    <article class="routines-line" data-kind={props.item.kind} data-source={props.item.source}>
+      <span class="routines-line-meta">
+        {kind(props.item.kind, props.item.source)} · {stamp(props.item.time)}
+      </span>
+      <p class="routines-line-body">{props.item.body}</p>
+      <Show when={live()}>
+        <Button
+          type="button"
+          size="small"
+          variant="ghost"
+          disabled={props.busy}
+          onClick={() => {
+            const id = props.item.occurrenceID
+            if (id) props.onStop(id)
+          }}
+        >
+          {props.busy ? "Stopping" : "Stop this request"}
+        </Button>
+      </Show>
+    </article>
+  )
+}
+
 export function status(state: Box["state"]) {
   if (state === "needs_input") return "Needs input"
   if (state === "waiting") return "Waiting"
@@ -166,9 +200,11 @@ export const Inbox: Component<{
   const [note, setNote] = createSignal("")
   const [phase, setPhase] = createSignal<"idle" | "sending" | "failed">("idle")
   const [error, setError] = createSignal("")
+  const [halt, setHalt] = createSignal<"idle" | "sending" | "failed">("idle")
   let source = `user:${crypto.randomUUID()}`
   let pageID = ""
   let sendID = ""
+  let haltID = ""
   let older = false
   let wait = false
   let stick = true
@@ -204,6 +240,7 @@ export const Inbox: Component<{
       setThread([])
       setNext()
       setPhase("idle")
+      setHalt("idle")
       setError("")
       setNote(props.box?.draft ?? "")
       stick = true
@@ -255,6 +292,17 @@ export const Inbox: Component<{
       stick = true
       queueMicrotask(pin)
     }
+    if (msg.type === "routineDelegateStopped" && msg.requestID === haltID && msg.agentID === props.agentID) {
+      if (msg.error) {
+        setHalt("failed")
+        setError(msg.error)
+        return
+      }
+      setHalt("idle")
+      setError("")
+      wait = false
+      load()
+    }
   }
 
   const unsub = vscode.onMessage(receive)
@@ -288,6 +336,19 @@ export const Inbox: Component<{
       agentID: props.agentID,
       source,
       body,
+    })
+  }
+
+  const stop = (id: string) => {
+    if (halt() === "sending") return
+    setHalt("sending")
+    setError("")
+    haltID = crypto.randomUUID()
+    vscode.postMessage({
+      type: "routineDelegateCancel",
+      requestID: haltID,
+      agentID: props.agentID,
+      id,
     })
   }
 
@@ -334,12 +395,7 @@ export const Inbox: Component<{
         </Show>
         <For each={thread()}>
           {(item) => (
-            <article class="routines-line" data-kind={item.kind} data-source={item.source}>
-              <span class="routines-line-meta">
-                {kind(item.kind, item.source)} · {stamp(item.time)}
-              </span>
-              <p class="routines-line-body">{item.body}</p>
-            </article>
+            <Line item={item} rows={thread()} busy={halt() === "sending"} onStop={stop} />
           )}
         </For>
       </div>

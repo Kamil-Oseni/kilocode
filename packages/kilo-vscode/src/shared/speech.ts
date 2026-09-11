@@ -1,7 +1,8 @@
 // raya_change - Milestone H node-free speech contract shared with the webview
 export type VoiceMode = "off" | "push-to-talk" | "hands-free"
-export type VoiceEngine = "openai-realtime" | "qwen-realtime" | "cascade-v1"
+export type VoiceEngine = "openai-live" | "openai-realtime" | "qwen-realtime" | "cascade-v1"
 export type SpeechKey = "openai" | "realtime" | "stt" | "tts"
+export const OPENAI_LIVE_MODEL = "gpt-live-1"
 export const OPENAI_VOICE_MODEL = "gpt-realtime-2.1"
 
 export type SpeechSettings = {

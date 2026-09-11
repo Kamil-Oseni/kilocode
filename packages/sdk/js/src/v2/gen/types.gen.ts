@@ -22262,6 +22262,231 @@ export type KilocodeRoutineEventResponses = {
 
 export type KilocodeRoutineEventResponse = KilocodeRoutineEventResponses[keyof KilocodeRoutineEventResponses]
 
+export type KilocodeRoutineInboxData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/agent-inbox"
+}
+
+export type KilocodeRoutineInboxErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type KilocodeRoutineInboxError = KilocodeRoutineInboxErrors[keyof KilocodeRoutineInboxErrors]
+
+export type KilocodeRoutineInboxResponses = {
+  /**
+   * Routine inbox summaries
+   */
+  200: Array<{
+    agentID: string
+    conversationID: string
+    name: string
+    role: string
+    latest?: {
+      id: string
+      agentID: string
+      kind: "user" | "worker" | "report" | "decision" | "delegation"
+      source: string
+      body: string
+      occurrenceID?: string
+      sessionID?: string
+      time: number
+    }
+    unread: number
+    state: "scheduled" | "running" | "waiting" | "needs_input" | "paused" | "failed"
+    nextRun?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    draft?: string
+  }>
+}
+
+export type KilocodeRoutineInboxResponse = KilocodeRoutineInboxResponses[keyof KilocodeRoutineInboxResponses]
+
+export type KilocodeRoutineInboxPageData = {
+  body?: never
+  path: {
+    agentID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+    cursor?: string
+    limit?: string
+  }
+  url: "/kilocode/agent/{agentID}/inbox"
+}
+
+export type KilocodeRoutineInboxPageErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeRoutineInboxPageError = KilocodeRoutineInboxPageErrors[keyof KilocodeRoutineInboxPageErrors]
+
+export type KilocodeRoutineInboxPageResponses = {
+  /**
+   * Routine conversation page
+   */
+  200: {
+    messages: Array<{
+      id: string
+      agentID: string
+      kind: "user" | "worker" | "report" | "decision" | "delegation"
+      source: string
+      body: string
+      occurrenceID?: string
+      sessionID?: string
+      time: number
+    }>
+    next?: string
+  }
+}
+
+export type KilocodeRoutineInboxPageResponse =
+  KilocodeRoutineInboxPageResponses[keyof KilocodeRoutineInboxPageResponses]
+
+export type KilocodeRoutineInboxSendData = {
+  body?: {
+    source: string
+    body: string
+  }
+  path: {
+    agentID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/agent/{agentID}/inbox"
+}
+
+export type KilocodeRoutineInboxSendErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeRoutineInboxSendError = KilocodeRoutineInboxSendErrors[keyof KilocodeRoutineInboxSendErrors]
+
+export type KilocodeRoutineInboxSendResponses = {
+  /**
+   * Persisted user message
+   */
+  200: {
+    id: string
+    agentID: string
+    kind: "user" | "worker" | "report" | "decision" | "delegation"
+    source: string
+    body: string
+    occurrenceID?: string
+    sessionID?: string
+    time: number
+  }
+}
+
+export type KilocodeRoutineInboxSendResponse =
+  KilocodeRoutineInboxSendResponses[keyof KilocodeRoutineInboxSendResponses]
+
+export type KilocodeRoutineInboxReadData = {
+  body?: {
+    at: number
+  }
+  path: {
+    agentID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/agent/{agentID}/inbox/read"
+}
+
+export type KilocodeRoutineInboxReadErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeRoutineInboxReadError = KilocodeRoutineInboxReadErrors[keyof KilocodeRoutineInboxReadErrors]
+
+export type KilocodeRoutineInboxReadResponses = {
+  /**
+   * Advanced read position
+   */
+  200: {
+    at: number
+  }
+}
+
+export type KilocodeRoutineInboxReadResponse =
+  KilocodeRoutineInboxReadResponses[keyof KilocodeRoutineInboxReadResponses]
+
+export type KilocodeRoutineInboxDraftData = {
+  body?: {
+    draft: string
+  }
+  path: {
+    agentID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/agent/{agentID}/inbox/draft"
+}
+
+export type KilocodeRoutineInboxDraftErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeRoutineInboxDraftError = KilocodeRoutineInboxDraftErrors[keyof KilocodeRoutineInboxDraftErrors]
+
+export type KilocodeRoutineInboxDraftResponses = {
+  /**
+   * Saved draft
+   */
+  200: {
+    draft: string
+  }
+}
+
+export type KilocodeRoutineInboxDraftResponse =
+  KilocodeRoutineInboxDraftResponses[keyof KilocodeRoutineInboxDraftResponses]
+
 export type KilocodeDesignSystemGetData = {
   body?: never
   path?: never

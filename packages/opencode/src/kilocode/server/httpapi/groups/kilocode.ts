@@ -30,6 +30,14 @@ import { SessionID } from "@/session/schema"
 import { CommandFiles } from "@/kilocode/command-files"
 import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal API contracts
 import { RayaTask } from "@/kilocode/task"
+import {
+  Draft as InboxDraft,
+  Item as InboxItem,
+  Page as InboxPage,
+  Read as InboxRead,
+  Record as InboxRecord,
+  Send as InboxSend,
+} from "@/kilocode/task/inbox"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
 import { Template as AgentTemplate } from "@/kilocode/task/templates"
 import { RayaCheckpoint } from "@/kilocode/checkpoint" // raya_change - named workspace checkpoints
@@ -176,6 +184,10 @@ export const KilocodePaths = {
   agentSnapshot: `${root}/agent/:agentID/runs/:runID/snapshot`,
   agentTemplates: `${root}/agent-templates`,
   agentEvent: `${root}/agent-event`,
+  agentInbox: `${root}/agent-inbox`,
+  agentInboxItem: `${root}/agent/:agentID/inbox`,
+  agentInboxRead: `${root}/agent/:agentID/inbox/read`,
+  agentInboxDraft: `${root}/agent/:agentID/inbox/draft`,
 } as const
 
 export const KilocodeApi = HttpApi.make("kilocode")
@@ -762,6 +774,75 @@ export const KilocodeApi = HttpApi.make("kilocode")
             identifier: "kilocode.routine.event",
             summary: "Fire event-triggered agents",
             description: "Start background runs for assigned agents whose event schedule matches this source.",
+          }),
+        ),
+        HttpApiEndpoint.get("agentInbox", KilocodePaths.agentInbox, {
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Array(InboxItem), "Routine inbox summaries"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.inbox",
+            summary: "List routine inbox conversations",
+            description:
+              "List roster workers with unread counts, latest message, draft and operational state. Does not load full transcripts.",
+          }),
+        ),
+        HttpApiEndpoint.get("agentInboxPage", KilocodePaths.agentInboxItem, {
+          params: { agentID: Schema.String },
+          query: Schema.Struct({
+            ...WorkspaceRoutingQueryFields,
+            cursor: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
+            limit: Schema.optional(
+              Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(50)),
+            ),
+          }),
+          success: described(InboxPage, "Routine conversation page"),
+          error: [InvalidRequestError, HttpApiError.NotFound],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.inbox.page",
+            summary: "List messages in a routine conversation",
+            description: "Return up to 50 persisted inbox messages, newest page first, without starting work.",
+          }),
+        ),
+        HttpApiEndpoint.post("agentInboxSend", KilocodePaths.agentInboxItem, {
+          params: { agentID: Schema.String },
+          query: WorkspaceRoutingQuery,
+          payload: InboxSend,
+          success: described(InboxRecord, "Persisted user message"),
+          error: [InvalidRequestError, HttpApiError.NotFound, HttpApiError.Conflict],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.inbox.send",
+            summary: "Persist one user follow-up in a routine conversation",
+            description:
+              "Admit one idempotent user message into the selected worker conversation. Does not rewrite the recurring assignment or start a run.",
+          }),
+        ),
+        HttpApiEndpoint.post("agentInboxRead", KilocodePaths.agentInboxRead, {
+          params: { agentID: Schema.String },
+          query: WorkspaceRoutingQuery,
+          payload: InboxRead,
+          success: described(InboxRead, "Advanced read position"),
+          error: [InvalidRequestError, HttpApiError.NotFound],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.inbox.read",
+            summary: "Advance routine inbox read position",
+            description: "Persist a conversation read cursor that survives webview reload. Read position only advances.",
+          }),
+        ),
+        HttpApiEndpoint.post("agentInboxDraft", KilocodePaths.agentInboxDraft, {
+          params: { agentID: Schema.String },
+          query: WorkspaceRoutingQuery,
+          payload: InboxDraft,
+          success: described(InboxDraft, "Saved draft"),
+          error: [InvalidRequestError, HttpApiError.NotFound],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.inbox.draft",
+            summary: "Save a per-conversation inbox draft",
+            description: "Replace or clear the draft for one roster worker. Drafts are not messages and do not admit work.",
           }),
         ),
         // raya_change start - owner design-system lock

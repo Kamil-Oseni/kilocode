@@ -34,6 +34,7 @@ import { Snapshot } from "@/snapshot" // raya_change - durable goal workspace ch
 import { Storage } from "@/storage/storage" // raya_change - Milestone A durable goal storage
 import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal operations
 import { RayaTask } from "@/kilocode/task"
+import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
 import { templates as agentTemplates } from "@/kilocode/task/templates"
@@ -92,6 +93,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     const goals = RayaGoal.make({ storage, sessions }) // raya_change - Milestone A goal operations
     const database = yield* Database.Service
     const runner = RayaTaskRunner.make({ storage, sessions, database })
+    const inbox = RayaTaskInbox.make(database)
     const checkpoints = RayaCheckpoint.make({ storage, snapshots }) // raya_change - named workspace checkpoints
     const designSystem = RayaDesignSystem.make({ storage }) // raya_change - owner design-system lock
     const healing = RayaSelfHeal.make(storage) // raya_change - one backlog shared across sessions and projects
@@ -581,6 +583,58 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     }) {
       return yield* runner.announce(ctx.payload.source, ctx.payload.filter)
     })
+    const owned = (id: string) =>
+      runner.tasks.get(id).pipe(Effect.catchTag("RayaTask.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))))
+    const agentInbox = Effect.fn("KilocodeHttpApi.agentInbox")(function* () {
+      const agents = yield* runner.preview(Date.now())
+      const runs = new Map<string, RayaTask.Run | undefined>()
+      for (const agent of agents) {
+        const history = yield* runner.tasks.runsFor(agent.id)
+        runs.set(agent.id, history.at(-1))
+      }
+      return yield* inbox.summaries(agents, runs)
+    })
+    const agentInboxPage = Effect.fn("KilocodeHttpApi.agentInboxPage")(function* (ctx: {
+      params: { agentID: string }
+      query: { cursor?: string; limit?: number }
+    }) {
+      yield* owned(ctx.params.agentID)
+      return yield* inbox.page(ctx.params.agentID, ctx.query.cursor, ctx.query.limit ?? 50).pipe(
+        Effect.catchTag("RayaTaskInbox.Invalid", (err) => Effect.fail(new InvalidRequestError({ message: err.message }))),
+      )
+    })
+    const agentInboxSend = Effect.fn("KilocodeHttpApi.agentInboxSend")(function* (ctx: {
+      params: { agentID: string }
+      payload: { source: string; body: string }
+    }) {
+      yield* owned(ctx.params.agentID)
+      return yield* inbox
+        .publish({ agentID: ctx.params.agentID, source: ctx.payload.source, kind: "user", body: ctx.payload.body })
+        .pipe(
+          Effect.catchTag("RayaTaskInbox.Invalid", (err) => Effect.fail(new InvalidRequestError({ message: err.message }))),
+          Effect.catchTag("RayaTaskInbox.Conflict", () => Effect.fail(new HttpApiError.Conflict({}))),
+        )
+    })
+    const agentInboxRead = Effect.fn("KilocodeHttpApi.agentInboxRead")(function* (ctx: {
+      params: { agentID: string }
+      payload: { at: number }
+    }) {
+      yield* owned(ctx.params.agentID)
+      const at = yield* inbox.read(ctx.params.agentID, ctx.payload.at).pipe(
+        Effect.catchTag("RayaTaskInbox.Invalid", (err) => Effect.fail(new InvalidRequestError({ message: err.message }))),
+      )
+      return { at }
+    })
+    const agentInboxDraft = Effect.fn("KilocodeHttpApi.agentInboxDraft")(function* (ctx: {
+      params: { agentID: string }
+      payload: { draft: string | null }
+    }) {
+      yield* owned(ctx.params.agentID)
+      const draft = yield* inbox.draft(ctx.params.agentID, ctx.payload.draft).pipe(
+        Effect.catchTag("RayaTaskInbox.Invalid", (err) => Effect.fail(new InvalidRequestError({ message: err.message }))),
+      )
+      return { draft }
+    })
 
     // raya_change start - owner design-system lock
     const designSystemGet = Effect.fn("KilocodeHttpApi.designSystemGet")(function* () {
@@ -715,6 +769,11 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .handle("agentSnapshot", agentSnapshot)
         .handle("agentTemplates", agentTemplateList)
         .handle("agentEvent", agentEvent)
+        .handle("agentInbox", agentInbox)
+        .handle("agentInboxPage", agentInboxPage)
+        .handle("agentInboxSend", agentInboxSend)
+        .handle("agentInboxRead", agentInboxRead)
+        .handle("agentInboxDraft", agentInboxDraft)
         .handle("designSystemGet", designSystemGet)
         .handle("designSystemSet", designSystemSet)
         .handle("selfHealCreate", selfHealCreate)

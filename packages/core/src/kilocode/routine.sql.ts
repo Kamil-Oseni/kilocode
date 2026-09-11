@@ -39,3 +39,31 @@ export const RayaRoutineOccurrenceTable = sqliteTable(
     index("raya_routine_occurrence_lease").on(table.state, table.lease_until),
   ],
 )
+
+export const RayaRoutineConversationTable = sqliteTable("raya_routine_conversation", {
+  agent_id: text().primaryKey(),
+  id: text().notNull(),
+  read_at: integer().notNull(),
+  draft: text(),
+  time_updated: integer().notNull(),
+})
+
+export const RayaRoutineMessageTable = sqliteTable(
+  "raya_routine_message",
+  {
+    id: text().primaryKey(),
+    agent_id: text()
+      .notNull()
+      .references(() => RayaRoutineConversationTable.agent_id, { onDelete: "cascade" }),
+    source: text().notNull(),
+    kind: text({ enum: ["user", "worker", "report", "decision", "delegation"] }).notNull(),
+    body: text().notNull(),
+    occurrence_id: text(),
+    session_id: text(),
+    time_created: integer().notNull(),
+  },
+  (table) => [
+    uniqueIndex("raya_routine_message_source").on(table.agent_id, table.source),
+    index("raya_routine_message_order").on(table.agent_id, table.time_created, table.id),
+  ],
+)

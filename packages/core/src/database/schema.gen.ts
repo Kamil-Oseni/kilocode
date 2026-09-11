@@ -42,12 +42,38 @@ export default {
       // kilocode_change end
       // kilocode_change start
       yield* tx.run(`
+        CREATE TABLE \`raya_routine_conversation\` (
+          \`agent_id\` text PRIMARY KEY,
+          \`id\` text NOT NULL,
+          \`read_at\` integer NOT NULL,
+          \`draft\` text,
+          \`time_updated\` integer NOT NULL
+        );
+      `)
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(`
         CREATE TABLE \`raya_routine_cursor\` (
           \`agent_id\` text NOT NULL,
           \`schedule_version\` integer NOT NULL,
           \`through\` integer NOT NULL,
           \`time_updated\` integer NOT NULL,
           CONSTRAINT \`raya_routine_cursor_pk\` PRIMARY KEY(\`agent_id\`, \`schedule_version\`)
+        );
+      `)
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(`
+        CREATE TABLE \`raya_routine_message\` (
+          \`id\` text PRIMARY KEY,
+          \`agent_id\` text NOT NULL,
+          \`source\` text NOT NULL,
+          \`kind\` text NOT NULL,
+          \`body\` text NOT NULL,
+          \`occurrence_id\` text,
+          \`session_id\` text,
+          \`time_created\` integer NOT NULL,
+          CONSTRAINT \`fk_raya_routine_message_agent_id_raya_routine_conversation_agent_id_fk\` FOREIGN KEY (\`agent_id\`) REFERENCES \`raya_routine_conversation\`(\`agent_id\`) ON DELETE CASCADE
         );
       `)
       // kilocode_change end
@@ -296,6 +322,16 @@ export default {
       // kilocode_change start
       yield* tx.run(
         `CREATE INDEX \`raya_routine_archive_order\` ON \`raya_routine_archive\` ("archived_at" desc,\`id\`);`,
+      )
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(
+        `CREATE UNIQUE INDEX \`raya_routine_message_source\` ON \`raya_routine_message\` (\`agent_id\`,\`source\`);`,
+      )
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(
+        `CREATE INDEX \`raya_routine_message_order\` ON \`raya_routine_message\` (\`agent_id\`,\`time_created\`,\`id\`);`,
       )
       // kilocode_change end
       // kilocode_change start

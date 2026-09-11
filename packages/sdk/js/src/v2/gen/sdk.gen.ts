@@ -265,6 +265,16 @@ import type {
   KilocodeRoutineEventResponses,
   KilocodeRoutineForecastErrors,
   KilocodeRoutineForecastResponses,
+  KilocodeRoutineInboxDraftErrors,
+  KilocodeRoutineInboxDraftResponses,
+  KilocodeRoutineInboxErrors,
+  KilocodeRoutineInboxPageErrors,
+  KilocodeRoutineInboxPageResponses,
+  KilocodeRoutineInboxReadErrors,
+  KilocodeRoutineInboxReadResponses,
+  KilocodeRoutineInboxResponses,
+  KilocodeRoutineInboxSendErrors,
+  KilocodeRoutineInboxSendResponses,
   KilocodeRoutineListErrors,
   KilocodeRoutineListResponses,
   KilocodeRoutineRemoveErrors,
@@ -8869,6 +8879,179 @@ export class Checkpoint extends HeyApiClient {
   }
 }
 
+export class Inbox extends HeyApiClient {
+  /**
+   * List messages in a routine conversation
+   *
+   * Return up to 50 persisted inbox messages, newest page first, without starting work.
+   */
+  public page<ThrowOnError extends boolean = false>(
+    parameters: {
+      agentID: string
+      directory?: string
+      workspace?: string
+      cursor?: string
+      limit?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "agentID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "cursor" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      KilocodeRoutineInboxPageResponses,
+      KilocodeRoutineInboxPageErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/agent/{agentID}/inbox",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Persist one user follow-up in a routine conversation
+   *
+   * Admit one idempotent user message into the selected worker conversation. Does not rewrite the recurring assignment or start a run.
+   */
+  public send<ThrowOnError extends boolean = false>(
+    parameters: {
+      agentID: string
+      directory?: string
+      workspace?: string
+      source?: string
+      body?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "agentID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "source" },
+            { in: "body", key: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeRoutineInboxSendResponses,
+      KilocodeRoutineInboxSendErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/agent/{agentID}/inbox",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Advance routine inbox read position
+   *
+   * Persist a conversation read cursor that survives webview reload. Read position only advances.
+   */
+  public read<ThrowOnError extends boolean = false>(
+    parameters: {
+      agentID: string
+      directory?: string
+      workspace?: string
+      at?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "agentID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "at" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeRoutineInboxReadResponses,
+      KilocodeRoutineInboxReadErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/agent/{agentID}/inbox/read",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Save a per-conversation inbox draft
+   *
+   * Replace or clear the draft for one roster worker. Drafts are not messages and do not admit work.
+   */
+  public draft<ThrowOnError extends boolean = false>(
+    parameters: {
+      agentID: string
+      directory?: string
+      workspace?: string
+      draft?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "agentID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "draft" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeRoutineInboxDraftResponses,
+      KilocodeRoutineInboxDraftErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/agent/{agentID}/inbox/draft",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Routine extends HeyApiClient {
   /**
    * Preview a routine schedule
@@ -9448,6 +9631,45 @@ export class Routine extends HeyApiClient {
         ...params.headers,
       },
     })
+  }
+
+  /**
+   * List routine inbox conversations
+   *
+   * List roster workers with unread counts, latest message, draft and operational state. Does not load full transcripts.
+   */
+  public inbox<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      KilocodeRoutineInboxResponses,
+      KilocodeRoutineInboxErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/agent-inbox",
+      ...options,
+      ...params,
+    })
+  }
+
+  private _inbox?: Inbox
+  get inbox2(): Inbox {
+    return (this._inbox ??= new Inbox({ client: this.client }))
   }
 }
 

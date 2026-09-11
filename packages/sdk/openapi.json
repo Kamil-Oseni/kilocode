@@ -30719,6 +30719,673 @@
         ]
       }
     },
+    "/kilocode/agent-inbox": {
+      "get": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.routine.inbox",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Routine inbox summaries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "agentID": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "conversationID": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "role": {
+                        "type": "string"
+                      },
+                      "latest": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                          },
+                          "agentID": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": ["user", "worker", "report", "decision", "delegation"]
+                          },
+                          "source": {
+                            "type": "string",
+                            "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                          },
+                          "body": {
+                            "type": "string",
+                            "pattern": "\\S",
+                            "maxLength": 8000
+                          },
+                          "occurrenceID": {
+                            "type": "string",
+                            "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                          },
+                          "sessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "time": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 8640000000000000
+                          }
+                        },
+                        "required": ["id", "agentID", "kind", "source", "body", "time"],
+                        "additionalProperties": false
+                      },
+                      "unread": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": ["scheduled", "running", "waiting", "needs_input", "paused", "failed"]
+                      },
+                      "nextRun": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["NaN"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["-Infinity"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity", "-Infinity", "NaN"]
+                          }
+                        ]
+                      },
+                      "draft": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["agentID", "conversationID", "name", "role", "unread", "state"],
+                    "additionalProperties": false
+                  },
+                  "description": "Routine inbox summaries"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "List roster workers with unread counts, latest message, draft and operational state. Does not load full transcripts.",
+        "summary": "List routine inbox conversations",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.routine.inbox({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/agent/{agentID}/inbox": {
+      "get": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.routine.inbox.page",
+        "parameters": [
+          {
+            "name": "agentID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "required": false
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Routine conversation page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "messages": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                          },
+                          "agentID": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": ["user", "worker", "report", "decision", "delegation"]
+                          },
+                          "source": {
+                            "type": "string",
+                            "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                          },
+                          "body": {
+                            "type": "string",
+                            "pattern": "\\S",
+                            "maxLength": 8000
+                          },
+                          "occurrenceID": {
+                            "type": "string",
+                            "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                          },
+                          "sessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "time": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 8640000000000000
+                          }
+                        },
+                        "required": ["id", "agentID", "kind", "source", "body", "time"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "next": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    }
+                  },
+                  "required": ["messages"],
+                  "additionalProperties": false,
+                  "description": "Routine conversation page"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Return up to 50 persisted inbox messages, newest page first, without starting work.",
+        "summary": "List messages in a routine conversation",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.routine.inbox.page({\n  ...\n})"
+          }
+        ]
+      },
+      "post": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.routine.inbox.send",
+        "parameters": [
+          {
+            "name": "agentID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Persisted user message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                    },
+                    "agentID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": ["user", "worker", "report", "decision", "delegation"]
+                    },
+                    "source": {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                    },
+                    "body": {
+                      "type": "string",
+                      "pattern": "\\S",
+                      "maxLength": 8000
+                    },
+                    "occurrenceID": {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                    },
+                    "sessionID": {
+                      "type": "string",
+                      "pattern": "^ses"
+                    },
+                    "time": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 8640000000000000
+                    }
+                  },
+                  "required": ["id", "agentID", "kind", "source", "body", "time"],
+                  "additionalProperties": false,
+                  "description": "Persisted user message"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_Conflict"
+                }
+              }
+            }
+          }
+        },
+        "description": "Admit one idempotent user message into the selected worker conversation. Does not rewrite the recurring assignment or start a run.",
+        "summary": "Persist one user follow-up in a routine conversation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                  },
+                  "body": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "maxLength": 8000
+                  }
+                },
+                "required": ["source", "body"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.routine.inbox.send({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/agent/{agentID}/inbox/read": {
+      "post": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.routine.inbox.read",
+        "parameters": [
+          {
+            "name": "agentID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Advanced read position",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "at": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 8640000000000000
+                    }
+                  },
+                  "required": ["at"],
+                  "additionalProperties": false,
+                  "description": "Advanced read position"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Persist a conversation read cursor that survives webview reload. Read position only advances.",
+        "summary": "Advance routine inbox read position",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "at": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 8640000000000000
+                  }
+                },
+                "required": ["at"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.routine.inbox.read({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/agent/{agentID}/inbox/draft": {
+      "post": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.routine.inbox.draft",
+        "parameters": [
+          {
+            "name": "agentID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Saved draft",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "draft": {
+                      "type": "string",
+                      "maxLength": 8000
+                    }
+                  },
+                  "required": ["draft"],
+                  "additionalProperties": false,
+                  "description": "Saved draft"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Replace or clear the draft for one roster worker. Drafts are not messages and do not admit work.",
+        "summary": "Save a per-conversation inbox draft",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "draft": {
+                    "type": "string",
+                    "maxLength": 8000
+                  }
+                },
+                "required": ["draft"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.routine.inbox.draft({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/kilocode/design-system": {
       "get": {
         "tags": ["kilocode"],
@@ -37738,6 +38405,389 @@
           {
             "lang": "js",
             "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.memory.purge({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/voice/live/session/{id}/calls": {
+      "post": {
+        "tags": ["raya-voice"],
+        "operationId": "kilocode.voice.live.call",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+            },
+            "required": true
+          },
+          {
+            "name": "x-raya-voice-key",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OpenAIVoiceCall",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenAIVoiceCall"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_Conflict"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Admit one immutable Live delegation using observed transcript context",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "generation": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                  },
+                  "context": {
+                    "type": "object",
+                    "properties": {
+                      "version": {
+                        "type": "number",
+                        "enum": [1]
+                      },
+                      "delegation": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "offset": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "fragments": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256
+                            },
+                            "speaker": {
+                              "type": "string",
+                              "enum": ["user", "assistant"]
+                            },
+                            "text": {
+                              "type": "string",
+                              "maxLength": 6000
+                            },
+                            "start": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "end": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "sequence": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "client": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256
+                            }
+                          },
+                          "required": ["id", "speaker", "text", "start", "end", "sequence"],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 32
+                      },
+                      "incomplete": {
+                        "type": "boolean",
+                        "enum": [true]
+                      },
+                      "omitted": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": ["version", "delegation", "offset", "fragments", "incomplete", "omitted"],
+                    "additionalProperties": false
+                  },
+                  "images": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                    },
+                    "maxItems": 4
+                  }
+                },
+                "required": ["generation", "context"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.voice.live.call({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/voice/live/session/{id}/duration": {
+      "post": {
+        "tags": ["raya-voice"],
+        "operationId": "kilocode.voice.live.duration",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+            },
+            "required": true
+          },
+          {
+            "name": "x-raya-voice-key",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "model": {
+                      "type": "string",
+                      "enum": ["gpt-live-1"]
+                    },
+                    "seconds": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["NaN"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["Infinity"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["-Infinity"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["Infinity", "-Infinity", "NaN"]
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["id", "model", "seconds"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_Conflict"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Retain final provider-reported Live voice duration",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "generation": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                  },
+                  "receipt": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "model": {
+                        "type": "string",
+                        "enum": ["gpt-live-1"]
+                      },
+                      "seconds": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["NaN"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["-Infinity"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity", "-Infinity", "NaN"]
+                          }
+                        ]
+                      }
+                    },
+                    "required": ["id", "model", "seconds"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["generation", "receipt"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.voice.live.duration({\n  ...\n})"
           }
         ]
       }
@@ -62965,6 +64015,167 @@
         "required": ["name", "data"],
         "additionalProperties": false
       },
+      "OpenAIVoiceImage": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+          },
+          "mime": {
+            "type": "string",
+            "enum": ["image/jpeg", "image/png", "image/webp"]
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 262144
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": ["id", "mime", "bytes", "sha256"],
+        "additionalProperties": false
+      },
+      "OpenAIVoiceCall": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+          },
+          "callID": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+          },
+          "messageID": {
+            "type": "string",
+            "pattern": "^msg"
+          },
+          "parentSessionID": {
+            "type": "string",
+            "pattern": "^ses"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["accepted", "running", "completed", "failed", "cancelled", "unknown"]
+          },
+          "createdAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "updatedAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "images": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OpenAIVoiceImage"
+            },
+            "maxItems": 4
+          },
+          "result": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string",
+                "maxLength": 12000
+              },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg"
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "messageID": {
+                      "type": "string",
+                      "pattern": "^msg"
+                    },
+                    "partID": {
+                      "type": "string",
+                      "pattern": "^prt"
+                    },
+                    "tool": {
+                      "type": "string",
+                      "maxLength": 128
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["pending", "running", "completed", "error"]
+                    }
+                  },
+                  "required": ["messageID", "partID", "tool", "status"],
+                  "additionalProperties": false
+                },
+                "maxItems": 64
+              }
+            },
+            "required": ["text", "assistantMessageID", "evidence"],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "maxLength": 64
+              },
+              "message": {
+                "type": "string",
+                "maxLength": 500
+              }
+            },
+            "required": ["code", "message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "callID", "messageID", "parentSessionID", "status", "createdAt", "updatedAt"],
+        "additionalProperties": false
+      },
       "OpenAIVoiceStart": {
         "type": "object",
         "properties": {
@@ -62974,11 +64185,17 @@
           },
           "providerCallID": {
             "type": "string",
-            "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^\\S+$"
           },
           "requestID": {
             "type": "string",
             "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+          },
+          "model": {
+            "type": "string",
+            "enum": ["gpt-realtime-2.1", "gpt-live-1"]
           }
         },
         "required": ["parentSessionID", "providerCallID", "requestID"],
@@ -63004,11 +64221,13 @@
           },
           "providerCallID": {
             "type": "string",
-            "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^\\S+$"
           },
           "model": {
             "type": "string",
-            "enum": ["gpt-realtime-2.1"]
+            "enum": ["gpt-realtime-2.1", "gpt-live-1"]
           },
           "status": {
             "type": "string",
@@ -63224,30 +64443,6 @@
         "required": ["generation", "id", "mime", "data"],
         "additionalProperties": false
       },
-      "OpenAIVoiceImage": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^[a-zA-Z0-9_-]{1,128}$"
-          },
-          "mime": {
-            "type": "string",
-            "enum": ["image/jpeg", "image/png", "image/webp"]
-          },
-          "bytes": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 262144
-          },
-          "sha256": {
-            "type": "string",
-            "pattern": "^[a-f0-9]{64}$"
-          }
-        },
-        "required": ["id", "mime", "bytes", "sha256"],
-        "additionalProperties": false
-      },
       "OpenAIVoiceCallInput": {
         "type": "object",
         "properties": {
@@ -63293,143 +64488,6 @@
           }
         },
         "required": ["generation", "callID", "function", "arguments"],
-        "additionalProperties": false
-      },
-      "OpenAIVoiceCall": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^[a-zA-Z0-9_-]{1,128}$"
-          },
-          "callID": {
-            "type": "string",
-            "pattern": "^[a-zA-Z0-9_-]{1,128}$"
-          },
-          "messageID": {
-            "type": "string",
-            "pattern": "^msg"
-          },
-          "parentSessionID": {
-            "type": "string",
-            "pattern": "^ses"
-          },
-          "status": {
-            "type": "string",
-            "enum": ["accepted", "running", "completed", "failed", "cancelled", "unknown"]
-          },
-          "createdAt": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string",
-                "enum": ["NaN"]
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity"]
-              },
-              {
-                "type": "string",
-                "enum": ["-Infinity"]
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          },
-          "updatedAt": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string",
-                "enum": ["NaN"]
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity"]
-              },
-              {
-                "type": "string",
-                "enum": ["-Infinity"]
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          },
-          "images": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/OpenAIVoiceImage"
-            },
-            "maxItems": 4
-          },
-          "result": {
-            "type": "object",
-            "properties": {
-              "text": {
-                "type": "string",
-                "maxLength": 12000
-              },
-              "assistantMessageID": {
-                "type": "string",
-                "pattern": "^msg"
-              },
-              "evidence": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "messageID": {
-                      "type": "string",
-                      "pattern": "^msg"
-                    },
-                    "partID": {
-                      "type": "string",
-                      "pattern": "^prt"
-                    },
-                    "tool": {
-                      "type": "string",
-                      "maxLength": 128
-                    },
-                    "status": {
-                      "type": "string",
-                      "enum": ["pending", "running", "completed", "error"]
-                    }
-                  },
-                  "required": ["messageID", "partID", "tool", "status"],
-                  "additionalProperties": false
-                },
-                "maxItems": 64
-              }
-            },
-            "required": ["text", "assistantMessageID", "evidence"],
-            "additionalProperties": false
-          },
-          "error": {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "maxLength": 64
-              },
-              "message": {
-                "type": "string",
-                "maxLength": 500
-              }
-            },
-            "required": ["code", "message"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "callID", "messageID", "parentSessionID", "status", "createdAt", "updatedAt"],
         "additionalProperties": false
       },
       "UnauthorizedError": {

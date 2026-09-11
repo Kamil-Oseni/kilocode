@@ -2556,3 +2556,12 @@ Commands (packages/opencode): bun test ./test/kilocode/task/delegation.test.ts .
 
 Next: commit, push, and snapshot:install. Remaining: RDM-06 Friday accounting E2E.
 
+## 2026-09-11: Snapshot install e22ecc09cd
+
+Status: committed, pushed and installed as e22ecc09cd. Live is packaged but not the default engine.
+
+Installed eden.raya@7.4.23-snapshot+e22ecc09cd.kamil-oseni.1789157400180. VSIX C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-e22ecc09cd-kamil-oseni-1789157400180.vsix; SHA-256 3796EE106468055EA522DE0B0903BAB91575FAFB4C107B387AB04BF27FD974A2; 517016892 bytes, 431 entries, CLI 228785664 bytes.
+
+Next: RDM-06 Friday accounting E2E.
+
+

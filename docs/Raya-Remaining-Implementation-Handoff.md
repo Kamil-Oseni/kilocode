@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Installed product is `153189583a`. Live host/CLI contracts are packaged; the default engine remains `openai-realtime`. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, and delegated cost attribution are implemented; cost attribution is verified locally and not yet installed. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Installed product is `e22ecc09cd`. Live host/CLI contracts are packaged; the default engine remains `openai-realtime`. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, and delegated cost attribution are installed. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-11. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `153189583a` is committed, pushed and installed. Live is packaged in this snapshot; the default engine remains `openai-realtime`.
+**Latest delivered product:** checkpoint `e22ecc09cd` is committed, pushed and installed. Live is packaged in this snapshot; the default engine remains `openai-realtime`.
 
 ## Scope and reading order
 
@@ -1252,7 +1252,7 @@ Next executable step: commit, push, and snapshot:install delegated cost attribut
 
 ## 2026-09-11: Delegated cost attribution (RDM-04.6)
 
-**States:** RDM-04.6 verified locally and unshipped. Installed product is still `153189583a`. Live remains not the default engine.
+**States:** RDM-04.6 verified locally, committed as `e22ecc09cd`, and installed in the snapshot below. Live remains not the default engine.
 
 Child request cost is stored as a real amount on the delegation record. The requesting worker's standing-job total stays the cost of that worker's own session. A coordinating report lists contributing requests and distinguishes completed replies from pending input. Missing cost is stated as not recorded; no amount is invented. A conversation ask during outstanding work may attach the parent run; idle conversation asks stay on the child request only.
 
@@ -1260,6 +1260,16 @@ Changed files: `packages/core/src/kilocode/routine.sql.ts`, `packages/core/src/d
 
 Commands (cwd `packages/opencode`): `bun test ./test/kilocode/task/delegation.test.ts ./test/kilocode/task/delegation-runner.test.ts ./test/kilocode/server/httpapi-routine-delegate.test.ts --timeout 60000` -> 9 pass / 0 fail / 97 expect / exit 0 (`.tmp/routine-delegate-cost-runtime.log`). `bun run typecheck` -> exit 0. Cwd `packages/kilo-vscode`: `bun test ./tests/unit/routines-inbox.test.ts ./tests/unit/routines-delegate-view.test.ts ./tests/unit/routines-inbox-view.test.ts --timeout 90000` -> 6 pass / 0 fail / 19 expect / exit 0 (`.tmp/routine-delegate-cost-ui-tests.log`). `bun run typecheck` -> exit 0. eslint on changed files -> exit 0. Cwd `packages/core`: `bun run typecheck` -> exit 0. Root `bun run script/check-opencode-annotations.ts --worktree` -> exit 0.
 
-Remaining after install: RDM-06 Friday accounting E2E, then leftover busy-recipient/denial/timeout/inspectable-chain UI and lifecycle cases. Do not change the default engine.
+Remaining: RDM-06 Friday accounting E2E, then leftover busy-recipient/denial/timeout/inspectable-chain UI and lifecycle cases. Do not change the default engine.
 
-Next executable step: commit, push, and snapshot:install, then run the Friday accounting E2E.
+Next executable step: run the Friday accounting E2E.
+
+## 2026-09-11: Snapshot install `e22ecc09cd`
+
+**States:** committed, pushed and installed as `e22ecc09cd`. Live remains not the default engine.
+
+Installed `eden.raya@7.4.23-snapshot+e22ecc09cd.kamil-oseni.1789157400180`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-e22ecc09cd-kamil-oseni-1789157400180.vsix`; SHA-256 `3796EE106468055EA522DE0B0903BAB91575FAFB4C107B387AB04BF27FD974A2`; 517016892 bytes, 431 entries, CLI 228785664 bytes. Includes delegated cost attribution without double counting. Default engine is still `openai-realtime`.
+
+Remaining: RDM-06 Friday accounting E2E, then leftover busy-recipient/denial/timeout/inspectable-chain UI and lifecycle cases. Do not change the default engine.
+
+Next executable step: run the Friday accounting E2E.

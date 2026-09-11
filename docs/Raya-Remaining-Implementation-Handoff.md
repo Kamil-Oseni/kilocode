@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Installed product is `506f944e64`. New voice setups default to GPT-Live 1 (`openai-live` / `gpt-live-1`) over the Live API; saved Realtime, Qwen and cascade selections stay. Live appends split at the 500-token bound; busy-queue later delegations are acknowledged and later speech requires clarification. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, delegated cost attribution, Friday accounting E2E, and busy-recipient queued/started plus paused-worker denial are installed. Delegation timeout expiry is verified locally and unshipped. Remaining Live work is packaged microphone/acoustic acceptance and provider-switch/disposal. Remaining RDM-06 work is inspectable chain in UI and lifecycle rename/archive. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Installed product is `34beb5b5b7`. New voice setups default to GPT-Live 1 (`openai-live` / `gpt-live-1`) over the Live API; saved Realtime, Qwen and cascade selections stay. Live appends split at the 500-token bound; busy-queue later delegations are acknowledged and later speech requires clarification. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, delegated cost attribution, Friday accounting E2E, busy-recipient queued/started plus paused-worker denial, and overdue-request timeout expiry are installed. Remaining Live work is packaged microphone/acoustic acceptance and provider-switch/disposal. Remaining RDM-06 work is inspectable chain in UI and lifecycle rename/archive. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-11. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `506f944e64` is committed, pushed and installed. New voice setups default to GPT-Live 1. Live appends honor the 500-token bound. Asks to another worker show queued versus started, and a paused worker keeps the draft with a denial. Realtime remains an explicit compatibility path.
+**Latest delivered product:** checkpoint `34beb5b5b7` is committed, pushed and installed. Overdue asks to another worker expire with a timeout in the conversation instead of waiting forever. Realtime remains an explicit compatibility path.
 
 ## Scope and reading order
 
@@ -1372,7 +1372,7 @@ Next executable step: leftover RDM-06 timeout/inspectable-chain/lifecycle, or le
 
 ## 2026-09-11: Delegation timeout expiry
 
-**States:** verified locally and unshipped. Installed product is still `506f944e64`. This closes overdue live-request expiry. It does not close inspectable chain in UI or lifecycle rename/archive.
+**States:** verified locally, committed as `34beb5b5b7`, and installed in the snapshot below. This closes overdue live-request expiry. It does not close inspectable chain in UI or lifecycle rename/archive.
 
 A live request with a deadline is not taken after that time. The scheduler tick fails it, publishes a timeout reply in the conversation, and does not start a child run. A start that is already past its deadline is refused the same way.
 
@@ -1382,4 +1382,14 @@ Commands (cwd `packages/opencode`): `bun test ./test/kilocode/task/delegation.te
 
 Remaining: inspectable chain in UI, lifecycle rename/archive, packaged microphone/acoustic acceptance, and provider-switch/disposal.
 
-Next executable step: commit, push, and snapshot:install this timeout increment, then leftover RDM-06 chain/lifecycle or leftover Live microphone/provider-switch.
+Next executable step: leftover RDM-06 inspectable chain/lifecycle, or leftover Live microphone/provider-switch.
+
+## 2026-09-11: Snapshot install `34beb5b5b7`
+
+**States:** committed, pushed and installed as `34beb5b5b7`. Overdue delegated requests expire with a timeout reply.
+
+Installed `eden.raya@7.4.23-snapshot+34beb5b5b7.kamil-oseni.1789162560915`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-34beb5b5b7-kamil-oseni-1789162560915.vsix`; SHA-256 `0040A484C362603E8763F3FCB01DA636945AAE0F44E2376C941E8E6744A544CC`; 519964463 bytes, 432 entries. CLI binary rebuilt.
+
+Remaining: inspectable chain in UI, lifecycle rename/archive, packaged microphone/acoustic acceptance, and provider-switch/disposal.
+
+Next executable step: leftover RDM-06 inspectable chain/lifecycle, or leftover Live microphone/provider-switch.

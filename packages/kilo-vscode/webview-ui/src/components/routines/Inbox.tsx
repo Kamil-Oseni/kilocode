@@ -57,8 +57,111 @@ function pending(item: Note, rows: Note[]) {
   return !rows.some((row) => row.source === `reply:${key}`)
 }
 
-const Line: Component<{ item: Note; rows: Note[]; busy: boolean; onStop: (id: string) => void }> = (props) => {
+function linked(item: Note) {
+  if (item.kind !== "delegation" || !item.occurrenceID) return
+  if (!item.source.startsWith("sent:") && !item.source.startsWith("ask:")) return
+  return item.occurrenceID
+}
+
+type Step = { id: string; state: string; objective: string }
+
+type Tree = {
+  record: Step
+  above: Step[]
+  below: Step[]
+}
+
+function step(value: unknown): Step | undefined {
+  if (!value || typeof value !== "object") return
+  const row = value as Record<string, unknown>
+  if (typeof row.id !== "string" || typeof row.state !== "string" || typeof row.objective !== "string") return
+  return { id: row.id, state: row.state, objective: row.objective }
+}
+
+function listed(value: unknown): Step[] {
+  if (!Array.isArray(value)) return []
+  const rows: Step[] = []
+  for (const item of value) {
+    const row = step(item)
+    if (row) rows.push(row)
+  }
+  return rows
+}
+
+function tree(value: { record?: unknown; above?: unknown; below?: unknown }) {
+  const record = step(value.record)
+  if (!record) return
+  return { record, above: listed(value.above), below: listed(value.below) }
+}
+
+function title(role: "prior" | "this" | "follow") {
+  if (role === "prior") return "Prior request"
+  if (role === "follow") return "Follow-on request"
+  return "This request"
+}
+
+const Trace: Component<{
+  id: string
+  busy: boolean
+  tree?: Tree
+  error?: string
+  onShow: (id: string) => void
+}> = (props) => {
+  const rows = () => {
+    const found = props.tree
+    if (!found) return []
+    return [
+      ...found.above.map((item) => ({ ...item, role: "prior" as const })),
+      { ...found.record, role: "this" as const },
+      ...found.below.map((item) => ({ ...item, role: "follow" as const })),
+    ]
+  }
+  return (
+    <>
+      <Button
+        type="button"
+        size="small"
+        variant="ghost"
+        disabled={props.busy}
+        onClick={() => props.onShow(props.id)}
+      >
+        {props.busy ? "Loading request chain" : props.tree ? "Refresh request chain" : "Show request chain"}
+      </Button>
+      <Show when={props.error}>
+        <p class="routines-error" role="alert">
+          {props.error}
+        </p>
+      </Show>
+      <Show when={props.tree}>
+        <ol class="routines-chain" aria-label="Request chain">
+          <For each={rows()}>
+            {(item) => (
+              <li data-role={item.role}>
+                <span class="routines-line-meta">
+                  {title(item.role)} · {item.state}
+                </span>
+                <p class="routines-line-body">{item.objective}</p>
+              </li>
+            )}
+          </For>
+        </ol>
+      </Show>
+    </>
+  )
+}
+
+const Line: Component<{
+  item: Note
+  rows: Note[]
+  busy: boolean
+  look: string
+  tree?: Tree
+  fault?: string
+  onStop: (id: string) => void
+  onShow: (id: string) => void
+}> = (props) => {
   const live = () => pending(props.item, props.rows)
+  const id = () => linked(props.item)
   return (
     <article class="routines-line" data-kind={props.item.kind} data-source={props.item.source}>
       <span class="routines-line-meta">
@@ -78,6 +181,17 @@ const Line: Component<{ item: Note; rows: Note[]; busy: boolean; onStop: (id: st
         >
           {props.busy ? "Stopping" : "Stop this request"}
         </Button>
+      </Show>
+      <Show when={id()}>
+        {(value) => (
+          <Trace
+            id={value()}
+            busy={props.look === value()}
+            tree={props.tree}
+            error={props.fault}
+            onShow={props.onShow}
+          />
+        )}
       </Show>
     </article>
   )
@@ -236,10 +350,14 @@ export const Inbox: Component<{
   const [phase, setPhase] = createSignal<"idle" | "sending" | "failed">("idle")
   const [error, setError] = createSignal("")
   const [halt, setHalt] = createSignal<"idle" | "sending" | "failed">("idle")
+  const [look, setLook] = createSignal("")
+  const [trees, setTrees] = createSignal<Record<string, Tree>>({})
+  const [faults, setFaults] = createSignal<Record<string, string>>({})
   let source = `user:${crypto.randomUUID()}`
   let pageID = ""
   let sendID = ""
   let haltID = ""
+  let lookID = ""
   let older = false
   let wait = false
   let stick = true
@@ -276,6 +394,9 @@ export const Inbox: Component<{
       setNext()
       setPhase("idle")
       setHalt("idle")
+      setLook("")
+      setTrees({})
+      setFaults({})
       setError("")
       setNote(props.box?.draft ?? "")
       stick = true
@@ -285,59 +406,92 @@ export const Inbox: Component<{
     if (latest && !thread().some((item) => item.id === latest)) load()
   })
 
-  const receive = (msg: ExtensionMessage) => {
-    if (msg.type === "routineInboxPage" && msg.requestID === pageID && msg.agentID === props.agentID) {
-      wait = false
-      if (msg.error) {
-        setError(msg.error)
-        return
-      }
-      const rows = Array.isArray(msg.messages) ? (msg.messages as Note[]) : []
-      setThread((prior) => (older ? [...rows, ...prior] : rows))
-      setNext(msg.next)
-      setError("")
-      const last = rows.at(-1)
-      if (last && !older)
-        vscode.postMessage({
-          type: "routineInboxRead",
-          requestID: crypto.randomUUID(),
-          agentID: props.agentID,
-          at: last.time,
-        })
-      queueMicrotask(pin)
+  const page = (msg: ExtensionMessage) => {
+    if (msg.type !== "routineInboxPage" || msg.requestID !== pageID || msg.agentID !== props.agentID) return
+    wait = false
+    if (msg.error) {
+      setError(msg.error)
+      return
     }
-    if (msg.type === "routineInboxSent" && msg.requestID === sendID && msg.agentID === props.agentID) {
-      if (msg.error) {
-        setPhase("failed")
-        setError(msg.error)
-        return
-      }
-      const saved = msg.message as Note | undefined
-      if (saved?.id) setThread((prior) => (prior.some((item) => item.id === saved.id) ? prior : [...prior, saved]))
-      source = `user:${crypto.randomUUID()}`
-      setNote("")
-      setPhase("idle")
-      setError("")
+    const rows = Array.isArray(msg.messages) ? (msg.messages as Note[]) : []
+    setThread((prior) => (older ? [...rows, ...prior] : rows))
+    setNext(msg.next)
+    setError("")
+    const last = rows.at(-1)
+    if (last && !older)
       vscode.postMessage({
-        type: "routineInboxDraft",
+        type: "routineInboxRead",
         requestID: crypto.randomUUID(),
         agentID: props.agentID,
-        draft: null,
+        at: last.time,
       })
-      stick = true
-      queueMicrotask(pin)
+    queueMicrotask(pin)
+  }
+
+  const sent = (msg: ExtensionMessage) => {
+    if (msg.type !== "routineInboxSent" || msg.requestID !== sendID || msg.agentID !== props.agentID) return
+    if (msg.error) {
+      setPhase("failed")
+      setError(msg.error)
+      return
     }
-    if (msg.type === "routineDelegateStopped" && msg.requestID === haltID && msg.agentID === props.agentID) {
-      if (msg.error) {
-        setHalt("failed")
-        setError(msg.error)
-        return
-      }
-      setHalt("idle")
-      setError("")
-      wait = false
-      load()
+    const saved = msg.message as Note | undefined
+    if (saved?.id) setThread((prior) => (prior.some((item) => item.id === saved.id) ? prior : [...prior, saved]))
+    source = `user:${crypto.randomUUID()}`
+    setNote("")
+    setPhase("idle")
+    setError("")
+    vscode.postMessage({
+      type: "routineInboxDraft",
+      requestID: crypto.randomUUID(),
+      agentID: props.agentID,
+      draft: null,
+    })
+    stick = true
+    queueMicrotask(pin)
+  }
+
+  const halted = (msg: ExtensionMessage) => {
+    if (msg.type !== "routineDelegateStopped" || msg.requestID !== haltID || msg.agentID !== props.agentID) return
+    if (msg.error) {
+      setHalt("failed")
+      setError(msg.error)
+      return
     }
+    setHalt("idle")
+    setError("")
+    wait = false
+    load()
+  }
+
+  const chained = (msg: ExtensionMessage) => {
+    if (msg.type !== "routineDelegateChain" || msg.requestID !== lookID || msg.agentID !== props.agentID) return
+    const id = typeof msg.id === "string" ? msg.id : look()
+    if (msg.error) {
+      if (id) setFaults((prior) => ({ ...prior, [id]: msg.error || "The request chain could not be read." }))
+      setLook("")
+      return
+    }
+    const next = tree({ record: msg.record, above: msg.above, below: msg.below })
+    if (!id || !next) {
+      if (id) setFaults((prior) => ({ ...prior, [id]: "The request chain could not be read." }))
+      setLook("")
+      return
+    }
+    setFaults((prior) => {
+      const copy = { ...prior }
+      delete copy[id]
+      return copy
+    })
+    setTrees((prior) => ({ ...prior, [id]: next }))
+    setLook("")
+  }
+
+  const receive = (msg: ExtensionMessage) => {
+    page(msg)
+    sent(msg)
+    halted(msg)
+    chained(msg)
   }
 
   const unsub = vscode.onMessage(receive)
@@ -387,6 +541,18 @@ export const Inbox: Component<{
     })
   }
 
+  const show = (id: string) => {
+    if (look()) return
+    setLook(id)
+    lookID = crypto.randomUUID()
+    vscode.postMessage({
+      type: "routineDelegateChain",
+      requestID: lookID,
+      agentID: props.agentID,
+      id,
+    })
+  }
+
   return (
     <div class="routines-thread">
       <header class="routines-thread-head">
@@ -429,9 +595,21 @@ export const Inbox: Component<{
           <p class="routines-empty">Reports and follow-ups for this worker will appear here.</p>
         </Show>
         <For each={thread()}>
-          {(item) => (
-            <Line item={item} rows={thread()} busy={halt() === "sending"} onStop={stop} />
-          )}
+          {(item) => {
+            const id = linked(item)
+            return (
+              <Line
+                item={item}
+                rows={thread()}
+                busy={halt() === "sending"}
+                look={look()}
+                tree={id ? trees()[id] : undefined}
+                fault={id ? faults()[id] : undefined}
+                onStop={stop}
+                onShow={show}
+              />
+            )
+          }}
         </For>
       </div>
       <Show when={error()}>

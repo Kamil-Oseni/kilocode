@@ -308,3 +308,72 @@ test("routine delegate cancel posts the request id and refreshes inbox summaries
     error: "Raya is not connected.",
   })
 })
+
+test("routine delegate chain loads stored parent and follow-on records", async () => {
+  const messages: unknown[] = []
+  let path = ""
+  const client = createKiloClient({
+    baseUrl: "http://localhost:4096",
+    fetch: async (input, init) => {
+      const request = new Request(input, init)
+      const url = new URL(request.url)
+      if (url.pathname.endsWith("/chain") && request.method === "GET") {
+        path = url.pathname
+        return Response.json({
+          record: {
+            id: "rdl_1",
+            source: "dlg:parent",
+            senderID: "chief",
+            recipientID: "books",
+            objective: "List missing Friday receipts.",
+            depth: 1,
+            state: "queued",
+            time: 1,
+          },
+          above: [],
+          below: [
+            {
+              id: "rdl_child",
+              source: "dlg:child",
+              senderID: "books",
+              recipientID: "legal",
+              parentID: "rdl_1",
+              objective: "Name the missing travel receipts.",
+              depth: 2,
+              state: "queued",
+              time: 2,
+            },
+          ],
+        })
+      }
+      return new Response("missing", { status: 404 })
+    },
+  })
+  const post = (msg: unknown) => messages.push(msg)
+  await handleRoutineMessage({
+    client,
+    directory: "workspace",
+    post,
+    message: { type: "routineDelegateChain", requestID: "look1", agentID: "chief", id: "rdl_1" },
+  })
+  expect(path).toBe("/kilocode/agent/chief/delegate/rdl_1/chain")
+  expect(messages.at(-1)).toMatchObject({
+    type: "routineDelegateChain",
+    requestID: "look1",
+    agentID: "chief",
+    id: "rdl_1",
+    record: { id: "rdl_1", state: "queued" },
+    below: [{ id: "rdl_child", parentID: "rdl_1" }],
+  })
+  await handleRoutineMessage({
+    client: null,
+    directory: "workspace",
+    post,
+    message: { type: "routineDelegateChain", requestID: "offline", agentID: "chief", id: "rdl_1" },
+  })
+  expect(messages.at(-1)).toMatchObject({
+    type: "routineDelegateChain",
+    requestID: "offline",
+    error: "Raya is not connected.",
+  })
+})

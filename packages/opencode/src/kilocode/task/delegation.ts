@@ -50,8 +50,15 @@ export const Record = Schema.Struct({
   time: Schema.Number,
 })
 
+export const Lineage = Schema.Struct({
+  record: Record,
+  above: Schema.Array(Record),
+  below: Schema.Array(Record),
+})
+
 export type Request = typeof Request.Type
 export type Record = typeof Record.Type
+export type Lineage = typeof Lineage.Type
 
 export class Conflict extends Schema.TaggedErrorClass<Conflict>()("RayaTaskDelegation.Conflict", {
   message: Schema.String,
@@ -452,6 +459,12 @@ export namespace RayaTaskDelegation {
       const above = yield* ancestors(current.parentID)
       return [...above.reverse(), current]
     })
+    const tree = Effect.fn("RayaTaskDelegation.tree")(function* (id: string) {
+      const items = yield* chain(id)
+      const record = items[items.length - 1]
+      if (!record) return yield* new Invalid({ message: "This delegation request was not found." })
+      return { record, above: items.slice(0, -1), below: yield* descendants(id) }
+    })
     const descendants = (id: string): Effect.Effect<Record[], Invalid> =>
       Effect.gen(function* () {
         const rows = yield* db.select().from(Delegation).where(eq(Delegation.parent_id, id)).all().pipe(Effect.orDie)
@@ -500,6 +513,6 @@ export namespace RayaTaskDelegation {
         .pipe(Effect.orDie)
       return rows.map(decode)
     })
-    return { admit, take, attach, finish, get, lookup, chain, descendants, stop, queued, overdue, bySession, byRun }
+    return { admit, take, attach, finish, get, lookup, chain, tree, descendants, stop, queued, overdue, bySession, byRun }
   }
 }

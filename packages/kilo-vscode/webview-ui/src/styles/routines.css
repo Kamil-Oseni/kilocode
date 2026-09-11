@@ -527,6 +527,15 @@
   overflow-wrap: anywhere;
 }
 
+.routines-chain {
+  margin: var(--raya-space-8) 0 0;
+  padding-left: var(--raya-space-16);
+}
+
+.routines-chain li + li {
+  margin-top: var(--raya-space-8);
+}
+
 .routines-composer {
   margin-top: var(--raya-space-8);
 }

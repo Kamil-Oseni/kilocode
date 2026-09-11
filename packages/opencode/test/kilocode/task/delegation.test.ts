@@ -238,6 +238,11 @@ test("stopping a request keeps a completed child and does not rewrite the parent
         extra,
       )
       expect((yield* store.descendants(parent.record.id)).map((item) => item.id)).toEqual([child.record.id])
+      const lineage = yield* store.tree(child.record.id)
+      expect(lineage.record.id).toBe(child.record.id)
+      expect(lineage.above.map((item) => item.id)).toEqual([parent.record.id])
+      expect(lineage.below).toEqual([])
+      expect((yield* store.tree(parent.record.id)).below.map((item) => item.id)).toEqual([child.record.id])
       const halted = yield* store.stop(parent.record.id, books, "Stopped by the user.")
       expect(halted.state).toBe("cancelled")
       expect((yield* store.stop(parent.record.id, books, "Stopped by the user.")).state).toBe("cancelled")

@@ -263,6 +263,8 @@ import type {
   KilocodeRoutineCreateResponses,
   KilocodeRoutineDelegateCancelErrors,
   KilocodeRoutineDelegateCancelResponses,
+  KilocodeRoutineDelegateChainErrors,
+  KilocodeRoutineDelegateChainResponses,
   KilocodeRoutineDelegateCreateErrors,
   KilocodeRoutineDelegateCreateResponses,
   KilocodeRoutineDelegateGetErrors,
@@ -9157,6 +9159,44 @@ export class Delegate extends HeyApiClient {
       ThrowOnError
     >({
       url: "/kilocode/agent/{agentID}/delegate/{id}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Inspect the parent and follow-on requests for one tracked request
+   *
+   * Return the durable request together with its parent lineage and follow-on requests. Inspect stored records, not conversation cards.
+   */
+  public chain<ThrowOnError extends boolean = false>(
+    parameters: {
+      agentID: string
+      id: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "agentID" },
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      KilocodeRoutineDelegateChainResponses,
+      KilocodeRoutineDelegateChainErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/agent/{agentID}/delegate/{id}/chain",
       ...options,
       ...params,
     })

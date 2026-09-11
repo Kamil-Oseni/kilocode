@@ -1773,7 +1773,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         message.type === "routineInboxRead" ||
         message.type === "routineInboxDraft" ||
         message.type === "routineDelegate" ||
-        message.type === "routineDelegateCancel"
+        message.type === "routineDelegateCancel" ||
+        message.type === "routineDelegateChain"
       ) {
         this.postMessage({
           type:

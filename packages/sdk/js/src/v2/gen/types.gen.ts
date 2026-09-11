@@ -22618,6 +22618,110 @@ export type KilocodeRoutineDelegateGetResponses = {
 export type KilocodeRoutineDelegateGetResponse =
   KilocodeRoutineDelegateGetResponses[keyof KilocodeRoutineDelegateGetResponses]
 
+export type KilocodeRoutineDelegateChainData = {
+  body?: never
+  path: {
+    agentID: string
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/agent/{agentID}/delegate/{id}/chain"
+}
+
+export type KilocodeRoutineDelegateChainErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeRoutineDelegateChainError =
+  KilocodeRoutineDelegateChainErrors[keyof KilocodeRoutineDelegateChainErrors]
+
+export type KilocodeRoutineDelegateChainResponses = {
+  /**
+   * Tracked worker-to-worker request chain
+   */
+  200: {
+    record: {
+      id: string
+      source: string
+      senderID: string
+      recipientID: string
+      parentID?: string
+      parentRunID?: string
+      workspace?: string
+      objective: string
+      expected?: string
+      context?: string
+      deadline?: number
+      budget?: number
+      depth: number
+      state: "queued" | "accepted" | "running" | "needs_input" | "completed" | "failed" | "cancelled"
+      childRunID?: string
+      sessionID?: string
+      response?: string
+      cost?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      reason?: string
+      time: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
+    above: Array<{
+      id: string
+      source: string
+      senderID: string
+      recipientID: string
+      parentID?: string
+      parentRunID?: string
+      workspace?: string
+      objective: string
+      expected?: string
+      context?: string
+      deadline?: number
+      budget?: number
+      depth: number
+      state: "queued" | "accepted" | "running" | "needs_input" | "completed" | "failed" | "cancelled"
+      childRunID?: string
+      sessionID?: string
+      response?: string
+      cost?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      reason?: string
+      time: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }>
+    below: Array<{
+      id: string
+      source: string
+      senderID: string
+      recipientID: string
+      parentID?: string
+      parentRunID?: string
+      workspace?: string
+      objective: string
+      expected?: string
+      context?: string
+      deadline?: number
+      budget?: number
+      depth: number
+      state: "queued" | "accepted" | "running" | "needs_input" | "completed" | "failed" | "cancelled"
+      childRunID?: string
+      sessionID?: string
+      response?: string
+      cost?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      reason?: string
+      time: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }>
+  }
+}
+
+export type KilocodeRoutineDelegateChainResponse =
+  KilocodeRoutineDelegateChainResponses[keyof KilocodeRoutineDelegateChainResponses]
+
 export type KilocodeRoutineDelegateCancelData = {
   body?: never
   path: {

@@ -339,6 +339,17 @@ export interface RoutineDelegateStoppedMessage {
   record?: unknown
   error?: string
 }
+
+export interface RoutineDelegateChainResultMessage {
+  type: "routineDelegateChain"
+  requestID: string
+  agentID: string
+  id?: string
+  record?: unknown
+  above?: unknown
+  below?: unknown
+  error?: string
+}
 // raya_change end
 
 // Wire shape lives in src/shared/stream-messages.ts; narrow `part` to the
@@ -1798,6 +1809,7 @@ export type ExtensionMessage =
   | RoutineInboxDraftResultMessage
   | RoutineDelegatedMessage
   | RoutineDelegateStoppedMessage
+  | RoutineDelegateChainResultMessage
   | PartUpdatedMessage
   | PartsUpdatedMessage
   | PartRemovedMessage

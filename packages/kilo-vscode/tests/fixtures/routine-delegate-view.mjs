@@ -211,6 +211,44 @@ try {
   assert.match(root.textContent, /Asked Books/)
   assert.match(root.textContent, /queued until the worker is free/)
   assert.equal(root.querySelector("textarea[aria-label='Ask another worker']").value, "")
+  button("Show request chain").click()
+  const inspect = sent.findLast((msg) => msg.type === "routineDelegateChain")
+  assert.equal(inspect.agentID, chief.id)
+  assert.equal(inspect.id, "rdl_1")
+  emit({
+    type: "routineDelegateChain",
+    requestID: inspect.requestID,
+    agentID: chief.id,
+    id: "rdl_1",
+    error: "The request chain could not be read.",
+  })
+  assert.match(root.textContent, /The request chain could not be read/)
+  button("Show request chain").click()
+  const againChain = sent.findLast((msg) => msg.type === "routineDelegateChain")
+  assert.equal(againChain.id, inspect.id)
+  emit({
+    type: "routineDelegateChain",
+    requestID: againChain.requestID,
+    agentID: chief.id,
+    id: "rdl_1",
+    record: {
+      id: "rdl_1",
+      state: "queued",
+      objective: "Review Friday expenses.",
+    },
+    above: [],
+    below: [
+      {
+        id: "rdl_child",
+        state: "queued",
+        objective: "Name the missing travel receipts.",
+      },
+    ],
+  })
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.match(root.textContent, /This request/)
+  assert.match(root.textContent, /Follow-on request/)
+  assert.match(root.textContent, /Name the missing travel receipts/)
   button("Stop this request").click()
   const stop = sent.findLast((msg) => msg.type === "routineDelegateCancel")
   assert.equal(stop.agentID, chief.id)
@@ -328,7 +366,7 @@ try {
   await new Promise((resolve) => setImmediate(resolve))
   assert.equal(area2.value, "Need the missing receipts.")
   assert.match(root.textContent, /This worker is paused/)
-  console.log("routine-delegate-view: 28 assertions passed")
+  console.log("routine-delegate-view: 35 assertions passed")
 } finally {
   dispose()
   root.remove()

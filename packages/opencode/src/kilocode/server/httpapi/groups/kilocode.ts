@@ -38,7 +38,7 @@ import {
   Record as InboxRecord,
   Send as InboxSend,
 } from "@/kilocode/task/inbox"
-import { Record as DelegateRecord, Request as DelegateAsk } from "@/kilocode/task/delegation"
+import { Lineage as DelegateLineage, Record as DelegateRecord, Request as DelegateAsk } from "@/kilocode/task/delegation"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
 import { Template as AgentTemplate } from "@/kilocode/task/templates"
 import { RayaCheckpoint } from "@/kilocode/checkpoint" // raya_change - named workspace checkpoints
@@ -191,6 +191,7 @@ export const KilocodePaths = {
   agentInboxDraft: `${root}/agent/:agentID/inbox/draft`,
   agentDelegate: `${root}/agent/:agentID/delegate`,
   agentDelegateItem: `${root}/agent/:agentID/delegate/:id`,
+  agentDelegateChain: `${root}/agent/:agentID/delegate/:id/chain`,
   agentDelegateCancel: `${root}/agent/:agentID/delegate/:id/cancel`,
 } as const
 
@@ -873,6 +874,19 @@ export const KilocodeApi = HttpApi.make("kilocode")
             identifier: "kilocode.routine.delegate.get",
             summary: "Inspect one tracked worker-to-worker request",
             description: "Return the durable request, current state, and linked child run when present.",
+          }),
+        ),
+        HttpApiEndpoint.get("agentDelegateChain", KilocodePaths.agentDelegateChain, {
+          params: { agentID: Schema.String, id: Schema.String },
+          query: WorkspaceRoutingQuery,
+          success: described(DelegateLineage, "Tracked worker-to-worker request chain"),
+          error: [InvalidRequestError, HttpApiError.NotFound],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.delegate.chain",
+            summary: "Inspect the parent and follow-on requests for one tracked request",
+            description:
+              "Return the durable request together with its parent lineage and follow-on requests. Inspect stored records, not conversation cards.",
           }),
         ),
         HttpApiEndpoint.post("agentDelegateCancel", KilocodePaths.agentDelegateCancel, {

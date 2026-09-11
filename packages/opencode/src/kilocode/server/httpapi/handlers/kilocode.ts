@@ -681,6 +681,17 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         return yield* new HttpApiError.NotFound({})
       return row
     })
+    const agentDelegateChain = Effect.fn("KilocodeHttpApi.agentDelegateChain")(function* (ctx: {
+      params: { agentID: string; id: string }
+    }) {
+      yield* owned(ctx.params.agentID)
+      const found = yield* errands.tree(ctx.params.id).pipe(
+        Effect.catchTag("RayaTaskDelegation.Invalid", (err) => Effect.fail(new InvalidRequestError({ message: err.message }))),
+      )
+      if (found.record.senderID !== ctx.params.agentID && found.record.recipientID !== ctx.params.agentID)
+        return yield* new HttpApiError.NotFound({})
+      return found
+    })
     const agentDelegateCancel = Effect.fn("KilocodeHttpApi.agentDelegateCancel")(function* (ctx: {
       params: { agentID: string; id: string }
     }) {
@@ -839,6 +850,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .handle("agentInboxDraft", agentInboxDraft)
         .handle("agentDelegate", agentDelegate)
         .handle("agentDelegateGet", agentDelegateGet)
+        .handle("agentDelegateChain", agentDelegateChain)
         .handle("agentDelegateCancel", agentDelegateCancel)
         .handle("designSystemGet", designSystemGet)
         .handle("designSystemSet", designSystemSet)

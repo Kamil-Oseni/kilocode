@@ -2322,3 +2322,10 @@ No live handles. Next executable step: commit and push this permission slice, st
 ### Delivered pending-approval checkpoint 8b01e72311
 
 Committed and pushed 8b01e7231172ad8916065bcef2e7dc78cb5ec76a to origin/main. Normal push checks: 29 cross-package typecheck tasks and JetBrains pass. Live/telemetry WIP was stashed for packaging and restored afterward. snapshot:install exit 0. Installed eden.raya@7.4.23-snapshot+8b01e72311.kamil-oseni.1789091821099. VSIX SHA-256 446FC10C1FAA687194561707B5A49F55671FCD68B45ABCE07DD84121D85F9DE7; 571767000 bytes, 442 entries, CLI 228484608 bytes. Independent archive check: no live-broker, .tmp or .env entries. Logs: .tmp/permission-policy-isolated.log, .tmp/permission-always-rules.log, .tmp/permission-allow-everything.log, .tmp/permission-policy-types.log, .tmp/permission-policy-lint.log, .tmp/permission-policy-annotations.log, .tmp/permission-policy-facades.log, .tmp/permission-policy-snapshot-install.log, .tmp/permission-policy-snapshot-verification.log, .tmp/permission-policy-installed-extension.log. No forced reload. Full 39-requirement implementation remains ongoing. Next: GPT-Live host/CLI types and contract tests.
+\n
+
+## 2026-09-11: Live type baseline and context validation (OVR-01)
+
+Status: host/CLI types and live-protocol unit tests verified locally. Live remains unshipped. Installed product is still 8b01e72311.
+
+Restored Live WIP compiles: packages/kilo-vscode bun run check-types exit 0 (.tmp/live-host-types.log); packages/opencode bun run typecheck exit 0 (.tmp/live-cli-types.log). live-protocol valid/prompt tests: 3 pass, 12 assertions, exit 0 (.tmp/live-protocol-tests.log); oxlint 0 warnings/0 errors (.tmp/live-protocol-lint.log). Files: packages/opencode/src/kilocode/voice/live-protocol.ts, packages/opencode/test/kilocode/live-protocol.test.ts. Broker, WebRTC, duration receipts, SDK regeneration and engine default remain open. Next: LiveBroker HTTP/WebSocket loopback fixtures.

@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Permission canonical comparison is delivered: committed, pushed and installed as `8b01e72311`. Live WIP was stashed during install and restored; it remains unfinished and unshipped. Next executable step is GPT-Live host/CLI types and contract tests. RDM-01-06 remain unimplemented. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Permission canonical comparison is delivered: committed, pushed and installed as `8b01e72311`. Live host and CLI types now pass on the restored WIP, and Live context validation has a passing unit suite. Live remains unfinished and unshipped. Next executable step is LiveBroker HTTP/WebSocket loopback fixtures. RDM-01-06 remain unimplemented. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -778,9 +778,9 @@ Do not push/reinstall the current failing tree. Finish one coherent slice and re
 ### 6. Replacement continuation prompt
 
 ```text
-Continue Raya in C:\Users\User\Desktop\raya. Read AGENTS.md and docs/Raya-Remaining-Implementation-Handoff.md, beginning with the current-status banners and the 2026-09-11 permission update; then read the comprehensive audit, progress ledger and voice architecture. The scope is all 39 requirements plus RDM-01-06. Last verified pushed/installed checkpoint is 8b01e7231172ad8916065bcef2e7dc78cb5ec76a. Permission canonical comparison is delivered. Live integration remains UNFINISHED in the working tree; preserve it and do not ship it as verified.
+Continue Raya in C:\Users\User\Desktop\raya. Read AGENTS.md and docs/Raya-Remaining-Implementation-Handoff.md, beginning with the current-status banners and the 2026-09-11 permission update; then read the comprehensive audit, progress ledger and voice architecture. The scope is all 39 requirements plus RDM-01-06. Last verified pushed/installed product checkpoint is 8b01e7231172ad8916065bcef2e7dc78cb5ec76a. Permission canonical comparison is delivered. Live host/CLI types pass and live-protocol unit tests pass; Live integration remains UNFINISHED. Preserve remaining Live WIP; do not ship it as verified.
 
-Start GPT-Live host/CLI types and contract tests from the frozen host/backend order. GPT-Live 1 requires its own adapter and exact current official contract; no model-string substitution, history replay as new work, or generated-caption claims about heard audio. Keep parent ownership, existing permissions and durable receipts.
+Start LiveBroker HTTP/WebSocket loopback fixtures from the frozen host/backend order. GPT-Live 1 requires its own adapter and exact current official contract; no model-string substitution, history replay as new work, or generated-caption claims about heard audio. Keep parent ownership, existing permissions and durable receipts.
 
 I authorize root plus two workers, normal periodic commits/pushes to origin/main and verified snapshot installation without asking again. Do not bypass hooks, force push or force reload VS Code. Batch broad checks at coherent checkpoints, but test actual high-risk boundaries before claiming they work. If repeated attempts fail, document the concrete cause and revisit steps before switching to independent work.
 
@@ -887,7 +887,7 @@ Selection uses received fragments whose start is at/before the provider offset, 
 
 **Validation receipts at freeze:** no Live unit/broker/browser/backend tests exist or passed; no current Live lint/Knip/SDK generation pass. `.tmp/live-ui-types-initial.log` failed before the worker's final trivial guard fixes. `.tmp/live-ui-wrap-types.log` is a genuine webview-only pass, terminal 0. Telemetry return-style follow-up has its own 13-test pass. Treat Live as implemented/unverified. Permission is now verified locally; see section 3.
 
-**Next executable step:** restored Live WIP is the current work. Establish host and CLI type errors once, then add Live HTTP/WebSocket/WebRTC contract tests in the frozen order. Do not change the default engine or package Live.
+**Next executable step:** restored Live WIP has host types exit 0 (`.tmp/live-host-types.log`) and CLI types exit 0 (`.tmp/live-cli-types.log`). Live context `valid`/`prompt` tests pass 3/12 assertions, exit 0 (`.tmp/live-protocol-tests.log`). Next: HTTP/WebSocket loopback fixtures for LiveBroker, then duration/delegation store tests. Do not change the default engine or package Live.
 
 ### Local backup and final stop receipt
 
@@ -996,4 +996,10 @@ Remaining limitations: no public HTTP/SDK change; Windows OS confinement and per
 
 Delivery: commit `8b01e7231172ad8916065bcef2e7dc78cb5ec76a` on `origin/main`. Installed `eden.raya@7.4.23-snapshot+8b01e72311.kamil-oseni.1789091821099`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-8b01e72311-kamil-oseni-1789091821099.vsix`; SHA-256 `446FC10C1FAA687194561707B5A49F55671FCD68B45ABCE07DD84121D85F9DE7`; 571767000 bytes, 442 entries, CLI 228484608 bytes. Push hooks: 29 typecheck tasks exit 0, JetBrains typecheck exit 0. `snapshot:install` exit 0.
 
-Next executable step: establish host/CLI type errors for the restored Live WIP once, then add Live contract tests in the frozen host/backend order. Do not change the default engine or package Live.
+## 2026-09-11: Live type baseline and context validation
+
+**States:** Live host/CLI types verified locally; live-protocol `valid`/`prompt` verified locally; remaining Live broker/UI/HTTP work implemented/unverified and unshipped. Product checkpoint remains `8b01e72311`.
+
+After restoring stashed Live WIP, `bun run check-types` in `packages/kilo-vscode` exited 0 (`.tmp/live-host-types.log`) and `bun run typecheck` in `packages/opencode` exited 0 (`.tmp/live-cli-types.log`). Added `packages/opencode/src/kilocode/voice/live-protocol.ts` tests in `packages/opencode/test/kilocode/live-protocol.test.ts`: 3 pass, 12 assertions, exit 0 (`.tmp/live-protocol-tests.log`); scoped oxlint 0 warnings/0 errors (`.tmp/live-protocol-lint.log`). Coverage is context admission only: fresh user evidence, duplicate/time/offset rejection, and prompt uncertainty labels. No LiveBroker, WebRTC, duration receipt or SDK regeneration.
+
+Next executable step: HTTP/WebSocket loopback fixtures for LiveBroker startup/attachment, then duration/delegation store tests. Do not change the default engine or package Live.

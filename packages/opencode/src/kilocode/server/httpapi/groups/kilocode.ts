@@ -816,7 +816,7 @@ export const KilocodeApi = HttpApi.make("kilocode")
             identifier: "kilocode.routine.inbox.send",
             summary: "Persist one user follow-up in a routine conversation",
             description:
-              "Admit one idempotent user message into the selected worker conversation. Does not rewrite the recurring assignment or start a run.",
+              "Admit one idempotent user follow-up into the selected worker conversation and dispatch it without rewriting the recurring assignment.",
           }),
         ),
         HttpApiEndpoint.post("agentInboxRead", KilocodePaths.agentInboxRead, {

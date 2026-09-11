@@ -608,12 +608,23 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       payload: { source: string; body: string }
     }) {
       yield* owned(ctx.params.agentID)
-      return yield* inbox
-        .publish({ agentID: ctx.params.agentID, source: ctx.payload.source, kind: "user", body: ctx.payload.body })
+      const admitted = yield* inbox
+        .admit({ agentID: ctx.params.agentID, source: ctx.payload.source, kind: "user", body: ctx.payload.body })
         .pipe(
           Effect.catchTag("RayaTaskInbox.Invalid", (err) => Effect.fail(new InvalidRequestError({ message: err.message }))),
           Effect.catchTag("RayaTaskInbox.Conflict", () => Effect.fail(new HttpApiError.Conflict({}))),
         )
+      if (admitted.record.sessionID && !admitted.created) return admitted.record
+      const run = yield* runner.ask(ctx.params.agentID, admitted.record.body).pipe(
+        Effect.catchTag("RayaTask.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+        Effect.catchTag("RayaTask.GuardError", (err) =>
+          Effect.fail(new InvalidRequestError({ message: err.message, kind: err.kind, field: err.field })),
+        ),
+      )
+      return yield* inbox.attach(ctx.params.agentID, admitted.record.source, run.sessionID).pipe(
+        Effect.catchTag("RayaTaskInbox.Invalid", (err) => Effect.fail(new InvalidRequestError({ message: err.message }))),
+        Effect.catchTag("RayaTaskInbox.Conflict", () => Effect.fail(new HttpApiError.Conflict({}))),
+      )
     })
     const agentInboxRead = Effect.fn("KilocodeHttpApi.agentInboxRead")(function* (ctx: {
       params: { agentID: string }

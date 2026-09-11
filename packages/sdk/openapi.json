@@ -31142,7 +31142,7 @@
             }
           }
         },
-        "description": "Admit one idempotent user message into the selected worker conversation. Does not rewrite the recurring assignment or start a run.",
+        "description": "Admit one idempotent user follow-up into the selected worker conversation and dispatch it without rewriting the recurring assignment.",
         "summary": "Persist one user follow-up in a routine conversation",
         "requestBody": {
           "content": {

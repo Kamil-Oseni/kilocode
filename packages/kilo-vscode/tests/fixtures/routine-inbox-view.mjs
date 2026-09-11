@@ -150,7 +150,7 @@ try {
     messages: [note],
   })
   assert.match(root.textContent, /Report/)
-  assert.match(root.textContent, /Does not start a run/)
+  assert.match(root.textContent, /Does not change the assignment/)
   const area = root.querySelector("textarea[aria-label='Message this worker']")
   area.focus()
   area.value = "Why did expenses increase?"

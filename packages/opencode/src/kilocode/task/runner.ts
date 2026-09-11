@@ -13,7 +13,7 @@ import { PlanArtifact } from "@/kilocode/plan-artifact"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { RayaTask } from "."
-import { RayaTaskInbox, posted } from "./inbox"
+import { RayaTaskInbox, posted, type Record as Note } from "./inbox"
 import { claim } from "./claim"
 import { inspect, recover } from "./recovery"
 import { poll } from "./poll"
@@ -37,6 +37,21 @@ function kick(input: {
   return RayaGoalContinuation.resume(input).pipe(Effect.ignore) as Effect.Effect<void>
 }
 const decode = Schema.decodeUnknownEffect(PlanArtifact.Info)
+
+function brief(item: RayaTask.Agent, reports: readonly Note[], question: string) {
+  const evidence = reports.filter((row) => row.kind === "report" || row.kind === "decision").slice(-8)
+  const listed = evidence.length
+    ? evidence.map((row) => `${row.source} (${new Date(row.time).toISOString()}):\n${row.body}`).join("\n\n")
+    : "No reports are available in this conversation. Say so if you cannot answer from evidence. Do not invent figures."
+  return [
+    "Answer this user follow-up in this worker conversation.",
+    "The standing assignment and schedule are unchanged. Do not rewrite them, and do not treat this as a request to run the recurring job now.",
+    `Standing assignment:\n${item.objective}`,
+    `Recent conversation evidence:\n${listed}`,
+    `User question:\n${question}`,
+    "If the question is ambiguous about which report or company, ask. Do not invent figures that are not in the evidence.",
+  ].join("\n\n")
+}
 
 function specialist(item: { role: string; mode?: string }) {
   const mode = item.mode?.trim()
@@ -87,6 +102,7 @@ export namespace RayaTaskRunner {
   type Runner = {
     tick: (from: number) => Effect.Effect<void>
     fire: (id: string) => Effect.Effect<RayaTask.Run, RayaTask.GuardError | RayaTask.NotFoundError>
+    ask: (id: string, question: string) => Effect.Effect<RayaTask.Run, RayaTask.GuardError | RayaTask.NotFoundError>
     settle: (sessionID: SessionID) => Effect.Effect<void>
     park: (sessionID: SessionID, waiting: boolean) => Effect.Effect<void>
     revive: () => Effect.Effect<void>
@@ -144,8 +160,14 @@ export namespace RayaTaskRunner {
       return chunks.join("\n\n")
     })
 
-    const check = Effect.fn("RayaTaskRunner.check")(function* (id: string, trigger?: Trigger) {
-      const item = yield* tasks.launchable(id)
+    const check = Effect.fn("RayaTaskRunner.check")(function* (id: string, trigger?: Trigger, follow?: boolean) {
+      const item = follow ? yield* tasks.get(id) : yield* tasks.launchable(id)
+      if (follow && item.access === undefined)
+        return yield* new RayaTask.GuardError({
+          kind: "access",
+          field: "access",
+          message: "Review this older routine's workspace access before starting another run.",
+        })
       if (item.dir?.trim()) yield* workspace()
       if (trigger?.kind === "timer") {
         if (!schedule)
@@ -183,14 +205,14 @@ export namespace RayaTaskRunner {
       )
     })
 
-    const fire = Effect.fn("RayaTaskRunner.fire")((id: string, trigger?: Trigger) =>
+    const fire = Effect.fn("RayaTaskRunner.fire")((id: string, trigger?: Trigger, note?: string) =>
       tasks.enforce(id).pipe(
         Effect.andThen(recoverable(id)),
         Effect.andThen(
           claim(
             input.storage,
             id,
-            check(id, trigger),
+            check(id, trigger, !!note),
             (selected, owner) =>
               Effect.gen(function* () {
                 const item = selected.item
@@ -201,7 +223,7 @@ export namespace RayaTaskRunner {
                     })
                   yield* schedule.reserve(selected.trigger, owner.id)
                 }
-                const objective = yield* seed(item)
+                const objective = note ?? (yield* seed(item))
                 yield* snapshots.save({
                   version: 1,
                   runID: owner.id,
@@ -237,7 +259,14 @@ export namespace RayaTaskRunner {
                 yield* owner.link(created.id)
                 if (selected.trigger.kind === "timer" && schedule)
                   yield* schedule.link(selected.trigger, owner.id, created.id)
-                yield* goals.create(created.id, objective, undefined, undefined, undefined, item.output?.criteria)
+                yield* goals.create(
+                  created.id,
+                  objective,
+                  undefined,
+                  undefined,
+                  undefined,
+                  note ? undefined : item.output?.criteria,
+                )
                 const run: RayaTask.Run = {
                   id: owner.id,
                   agentID: item.id,
@@ -281,6 +310,48 @@ export namespace RayaTaskRunner {
         if (run.status !== "blocked" || run.blockedReason !== WAIT) continue
         yield* tasks.transition(run, { ...run, status: "running", blockedReason: undefined })
       }
+    })
+
+    const steer = Effect.fn("RayaTaskRunner.steer")(function* (run: RayaTask.Run, note: string) {
+      const existing = yield* goals.get(run.sessionID)
+      if (!existing || existing.status === "complete") {
+        yield* goals.create(run.sessionID, note).pipe(
+          Effect.catchTag("RayaGoal.AuditError", (err) => Effect.fail(new RayaTask.GuardError({ message: err.message }))),
+          Effect.catchTag("RayaGoal.ExistsError", () =>
+            Effect.fail(new RayaTask.GuardError({ message: "This worker is already running another goal." })),
+          ),
+        )
+      } else {
+        yield* goals.revise(run.sessionID, note).pipe(
+          Effect.catchTag("RayaGoal.AuditError", (err) => Effect.fail(new RayaTask.GuardError({ message: err.message }))),
+          Effect.catchTag("RayaGoal.NotFoundError", () =>
+            Effect.fail(new RayaTask.GuardError({ message: "This worker's current run could not be steered." })),
+          ),
+        )
+      }
+      if (run.status === "blocked" && run.blockedReason === WAIT) yield* park(run.sessionID, false)
+      yield* kick({
+        database: input.database,
+        sessionID: run.sessionID,
+        storage: input.storage,
+        sessions: input.sessions,
+      }).pipe(Effect.forkDetach)
+      return run
+    })
+
+    const ask = Effect.fn("RayaTaskRunner.ask")(function* (id: string, question: string) {
+      const item = yield* tasks.get(id)
+      if (item.access === undefined)
+        return yield* new RayaTask.GuardError({
+          kind: "access",
+          field: "access",
+          message: "Review this older routine's workspace access before starting another run.",
+        })
+      const reports = inbox ? (yield* inbox.page(id)).messages : []
+      const note = brief(item, reports, question)
+      const last = (yield* tasks.runsFor(id)).at(-1)
+      if (last && RayaTask.pending(last)) return yield* steer(last, note)
+      return yield* fire(id, undefined, note)
     })
 
     const settle = Effect.fn("RayaTaskRunner.settle")(function* (sessionID: SessionID) {
@@ -510,6 +581,7 @@ export namespace RayaTaskRunner {
       tick,
       preview,
       fire: fire as Runner["fire"],
+      ask: ask as Runner["ask"],
       settle: settle as Runner["settle"],
       park: park as Runner["park"],
       revive: revive as Runner["revive"],

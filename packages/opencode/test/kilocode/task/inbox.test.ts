@@ -83,6 +83,8 @@ test("routine inbox publication is idempotent, unread ignores user messages, and
         body: "Why did expenses increase?",
       })
       expect(first.kind).toBe("user")
+      const sid = SessionID.make("ses_followup")
+      expect((yield* inbox.attach("agt_1", "user_1", sid)).sessionID).toBe(sid)
       expect(
         yield* inbox.publish({
           agentID: "agt_1",
@@ -90,7 +92,20 @@ test("routine inbox publication is idempotent, unread ignores user messages, and
           kind: "user",
           body: "Why did expenses increase?",
         }),
-      ).toEqual(first)
+      ).toEqual({ ...first, sessionID: sid })
+      expect(
+        Exit.isFailure(
+          yield* inbox
+            .publish({
+              agentID: "agt_1",
+              source: "user_1",
+              kind: "user",
+              body: "Why did expenses increase?",
+              sessionID: SessionID.make("ses_other"),
+            })
+            .pipe(Effect.exit),
+        ),
+      ).toBe(true)
       expect(
         Exit.isFailure(
           yield* inbox

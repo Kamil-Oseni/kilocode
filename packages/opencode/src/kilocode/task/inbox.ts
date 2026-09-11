@@ -161,7 +161,7 @@ export namespace RayaTaskInbox {
       if (!row) return yield* Effect.die(new Error("Routine conversation could not be created."))
       return row
     })
-    const publish = Effect.fn("RayaTaskInbox.publish")(function* (input: Publish) {
+    const admit = Effect.fn("RayaTaskInbox.admit")(function* (input: Publish) {
       const value = yield* Schema.decodeUnknownEffect(Publish)(input).pipe(
         Effect.mapError(() => new Invalid({ message: "Routine inbox messages need a stable source and non-empty body." })),
       )
@@ -187,10 +187,10 @@ export namespace RayaTaskInbox {
                 saved.kind !== value.kind ||
                 saved.body !== value.body ||
                 saved.occurrenceID !== value.occurrenceID ||
-                saved.sessionID !== value.sessionID
+                (value.sessionID !== undefined && saved.sessionID !== value.sessionID)
               )
                 return yield* new Conflict({ message: "This inbox source already has a different message." })
-              return saved
+              return { record: saved, created: false }
             }
             const now = Date.now()
             const row = {
@@ -210,7 +210,7 @@ export namespace RayaTaskInbox {
               .where(eq(Conversation.agent_id, value.agentID))
               .run()
               .pipe(Effect.orDie)
-            return decode(row)
+            return { record: decode(row), created: true }
           }),
         { behavior: "immediate" },
       ).pipe(
@@ -220,6 +220,28 @@ export namespace RayaTaskInbox {
             : Effect.die(error),
         ),
       )
+    })
+    const publish = Effect.fn("RayaTaskInbox.publish")(function* (input: Publish) {
+      return (yield* admit(input)).record
+    })
+    const attach = Effect.fn("RayaTaskInbox.attach")(function* (agentID: string, source: string, sessionID: SessionID) {
+      const prior = yield* db
+        .select()
+        .from(Message)
+        .where(and(eq(Message.agent_id, agentID), eq(Message.source, source)))
+        .get()
+        .pipe(Effect.orDie)
+      if (!prior) return yield* new Invalid({ message: "This inbox message was not found." })
+      if (prior.session_id && prior.session_id !== sessionID)
+        return yield* new Conflict({ message: "This inbox message is already attached to another session." })
+      if (prior.session_id === sessionID) return decode(prior)
+      yield* db
+        .update(Message)
+        .set({ session_id: sessionID })
+        .where(and(eq(Message.agent_id, agentID), eq(Message.source, source)))
+        .run()
+        .pipe(Effect.orDie)
+      return decode({ ...prior, session_id: sessionID })
     })
     const page = Effect.fn("RayaTaskInbox.page")(function* (agentID: string, cursor?: string, limit = 50) {
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50)
@@ -320,6 +342,6 @@ export namespace RayaTaskInbox {
       }
       return items
     })
-    return { ensure, publish, page, read, draft, summaries }
+    return { ensure, admit, publish, attach, page, read, draft, summaries }
   }
 }

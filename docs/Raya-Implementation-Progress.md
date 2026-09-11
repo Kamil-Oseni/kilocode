@@ -2461,3 +2461,15 @@ Changed files: packages/kilo-vscode/src/kilo-provider/routines.ts, packages/kilo
 Commands (packages/kilo-vscode): bun test tests/unit/routines-inbox.test.ts tests/unit/routines-inbox-view.test.ts tests/unit/routine-refresh.test.ts tests/unit/routine-refresh-view.test.ts tests/unit/routines-edit-view.test.ts tests/unit/routines-access.test.ts --timeout 120000 -> 11 pass / 0 fail / 181 expect / exit 0 (.tmp/routine-inbox-ui-tests.log). bun run check-types -> exit 0. bun run check-types:webview -> exit 0.
 
 Do not snapshot:install. Next: follow-up dispatch.
+
+## 2026-09-11: Routine follow-up dispatch (OVR-05 / RDM-03)
+
+Status: verified locally and unshipped. Installed product is still 8b01e72311.
+
+A follow-up in a worker conversation now dispatches to that worker. Idle and paused workers start one manual run whose goal answers the question using the standing assignment and recent reports. The roster assignment and schedule stay unchanged. Identical retries do not start a second worker. Waiting-on-you resumes the same session.
+
+Changed files: packages/opencode/src/kilocode/task/inbox.ts, packages/opencode/src/kilocode/task/runner.ts, packages/opencode/src/kilocode/server/httpapi/handlers/kilocode.ts, packages/opencode/src/kilocode/server/httpapi/groups/kilocode.ts, packages/opencode/test/kilocode/task/inbox.test.ts, packages/opencode/test/kilocode/task/inbox-followup.test.ts, packages/opencode/test/kilocode/server/httpapi-routine-inbox.test.ts, packages/kilo-vscode/webview-ui/src/components/routines/Inbox.tsx, packages/kilo-vscode/tests/fixtures/routine-inbox-view.mjs, packages/sdk/openapi.json, packages/sdk/js/src/v2/gen/sdk.gen.ts, .changeset/raya-routine-followup.md.
+
+Commands (packages/opencode): bun test ./test/kilocode/task/inbox-followup.test.ts ./test/kilocode/task/inbox.test.ts ./test/kilocode/server/httpapi-routine-inbox.test.ts --timeout 60000 -> 6 pass / 0 fail / 90 expect / exit 0 (.tmp/routine-followup-tests.log). bun run typecheck -> exit 0 (.tmp/routine-followup-types.log). packages/kilo-vscode bun test tests/unit/routines-inbox.test.ts tests/unit/routines-inbox-view.test.ts --timeout 120000 -> 2 pass / 0 fail / 7 expect / exit 0.
+
+Do not snapshot:install. Next: RDM-02.6 session-list exclusion.

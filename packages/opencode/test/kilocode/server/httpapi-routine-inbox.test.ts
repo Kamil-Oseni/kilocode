@@ -68,6 +68,18 @@ test("the shipped routine inbox requires a roster worker and keeps follow-ups id
   const page = Schema.decodeUnknownSync(Schema.toCodecJson(Page))(await (await app.request(route, { headers })).json())
   expect(page.messages).toHaveLength(1)
   expect(page.messages[0].id).toBe(message.id)
+  expect(message.sessionID).toBeDefined()
+  const history = await (await app.request(`/kilocode/agent/${agent.id}/runs`, { headers })).json()
+  expect(Array.isArray(history)).toBe(true)
+  expect(history).toHaveLength(1)
+  expect(history[0].sessionID).toBe(message.sessionID)
+  expect(
+    (await (await app.request(`/kilocode/agent/${agent.id}/runs`, { headers })).json()),
+  ).toHaveLength(1)
+  const roster = await (await app.request("/kilocode/agent", { headers })).json()
+  const worker = Array.isArray(roster) ? roster.find((item: { id: string }) => item.id === agent.id) : undefined
+  expect(worker?.objective).toBe("Review accounts")
+  expect(worker?.enabled).toBe(false)
   const draft = await app.request(`${route}/draft`, {
     method: "POST",
     headers,

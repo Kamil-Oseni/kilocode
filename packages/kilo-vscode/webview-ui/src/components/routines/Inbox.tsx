@@ -260,9 +260,9 @@ export const Inbox: Component<{
             onInput={(event) => change(event.currentTarget.value)}
           />
         </label>
-        <p class="routines-hint">Saves in this conversation. Does not start a run.</p>
+        <p class="routines-hint">Asks this worker about reports here. Does not change the assignment.</p>
         <Button type="button" size="small" disabled={phase() === "sending" || !note().trim()} onClick={submit}>
-          {phase() === "sending" ? "Saving follow-up" : phase() === "failed" ? "Retry follow-up" : "Send"}
+          {phase() === "sending" ? "Asking this worker" : phase() === "failed" ? "Retry follow-up" : "Send"}
         </Button>
       </form>
     </div>

@@ -8923,7 +8923,7 @@ export class Inbox extends HeyApiClient {
   /**
    * Persist one user follow-up in a routine conversation
    *
-   * Admit one idempotent user message into the selected worker conversation. Does not rewrite the recurring assignment or start a run.
+   * Admit one idempotent user follow-up into the selected worker conversation and dispatch it without rewriting the recurring assignment.
    */
   public send<ThrowOnError extends boolean = false>(
     parameters: {

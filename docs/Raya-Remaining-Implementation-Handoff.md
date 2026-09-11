@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Installed product is `e22ecc09cd`. Live host/CLI contracts are packaged; the default engine remains `openai-realtime`. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, delegated cost attribution, and the Friday accounting E2E are implemented; the Friday E2E is verified locally and not yet installed. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Installed product is `c67a5b309b`. Live host/CLI contracts are packaged; the default engine remains `openai-realtime`. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, delegated cost attribution, and the Friday accounting E2E are implemented and installed. RDM-06 leftover busy-recipient/denial/timeout/inspectable-chain UI and lifecycle cases remain. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-11. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `e22ecc09cd` is committed, pushed and installed. Live is packaged in this snapshot; the default engine remains `openai-realtime`.
+**Latest delivered product:** checkpoint `c67a5b309b` is committed, pushed and installed. Live is packaged in this snapshot; the default engine remains `openai-realtime`.
 
 ## Scope and reading order
 
@@ -1276,7 +1276,7 @@ Next executable step: commit, push, and snapshot:install the Friday accounting E
 
 ## 2026-09-11: Friday accounting E2E (RDM-06)
 
-**States:** RDM-06 Friday scenario verified locally and unshipped. Installed product is still `e22ecc09cd`. Live remains not the default engine. This does not close the rest of RDM-06.
+**States:** RDM-06 Friday scenario verified locally, committed as `c67a5b309b`, and installed in the snapshot below. Live remains not the default engine. This does not close the rest of RDM-06.
 
 An accountant assignment with an explicit `America/New_York` Friday 6pm calendar is started by the real scheduler tick within the 60-second catch-up window. A due tick before the occurrence creates no run. The first occurrence publishes one durable inbox report with inspectable criterion evidence. A contextual follow-up uses that report, does not rewrite the assignment, and does not invent figures. After the follow-up settles, the next Friday occurrence publishes into the same conversation. The conversation surface keeps both occurrence reports and the follow-up visible.
 
@@ -1284,6 +1284,16 @@ Changed files: `packages/opencode/test/kilocode/task/friday-accounting.test.ts`,
 
 Commands (cwd `packages/opencode`): `bun test ./test/kilocode/task/friday-accounting.test.ts ./test/kilocode/task/inbox-followup.test.ts ./test/kilocode/task/inbox-report.test.ts --timeout 60000` -> 4 pass / 0 fail / 72 expect / exit 0 (`.tmp/routine-friday-accounting-runtime.log`). `bun run typecheck` -> exit 0. Cwd `packages/kilo-vscode`: `bun test ./tests/unit/routines-inbox-view.test.ts --timeout 90000` -> 1 pass / 0 fail / 1 expect / exit 0 (`.tmp/routine-friday-accounting-ui-tests.log`).
 
-Remaining after install: busy-recipient, denial, timeout, inspectable chain in UI, and lifecycle rename/archive cases. Do not change the default engine.
+Remaining: leftover busy-recipient, denial, timeout, inspectable chain in UI, and lifecycle rename/archive cases. Do not change the default engine.
 
-Next executable step: commit, push, and snapshot:install, then the leftover RDM-06 UI/lifecycle cases.
+Next executable step: leftover RDM-06 UI/lifecycle cases.
+
+## 2026-09-11: Snapshot install `c67a5b309b`
+
+**States:** committed, pushed and installed as `c67a5b309b`. Live remains not the default engine.
+
+Installed `eden.raya@7.4.23-snapshot+c67a5b309b.kamil-oseni.1789158414726`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-c67a5b309b-kamil-oseni-1789158414726.vsix`; SHA-256 `19AF3814395CBE216F9B4EB9C79AC88F85AF2E92E0AC9B2D19ADC4835F48A599`; 519952279 bytes, 432 entries, CLI 228785664 bytes. Includes the Friday accounting E2E proving scheduled reports and follow-ups stay in one conversation. Default engine is still `openai-realtime`.
+
+Remaining: leftover busy-recipient, denial, timeout, inspectable chain in UI, and lifecycle rename/archive cases. Do not change the default engine.
+
+Next executable step: leftover RDM-06 UI/lifecycle cases.

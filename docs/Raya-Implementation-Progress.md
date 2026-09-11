@@ -2566,7 +2566,7 @@ Next: RDM-06 Friday accounting E2E.
 
 ## 2026-09-11: Friday accounting E2E (RDM-06)
 
-Status: verified locally and unshipped. Installed product is still e22ecc09cd.
+Status: verified locally, committed as c67a5b309b, and installed in the snapshot below.
 
 An accountant assignment with an explicit New York Friday 6pm calendar is started by the real scheduler tick. The first occurrence publishes one durable report with inspectable evidence. A follow-up uses that report without rewriting the assignment. The next Friday occurrence arrives in the same conversation. This does not close the rest of RDM-06.
 
@@ -2574,7 +2574,15 @@ Changed files: packages/opencode/test/kilocode/task/friday-accounting.test.ts, p
 
 Commands (packages/opencode): bun test ./test/kilocode/task/friday-accounting.test.ts ./test/kilocode/task/inbox-followup.test.ts ./test/kilocode/task/inbox-report.test.ts --timeout 60000 -> 4 pass / 0 fail / 72 expect / exit 0 (.tmp/routine-friday-accounting-runtime.log). bun run typecheck -> exit 0. packages/kilo-vscode bun test ./tests/unit/routines-inbox-view.test.ts --timeout 90000 -> 1 pass / 0 fail / 1 expect / exit 0 (.tmp/routine-friday-accounting-ui-tests.log).
 
-Next: commit, push, and snapshot:install. Remaining: leftover RDM-06 UI/lifecycle cases.
+Next: leftover RDM-06 UI/lifecycle cases. This does not close the rest of RDM-06.
+
+## 2026-09-11: Snapshot install c67a5b309b
+
+Status: committed, pushed and installed as c67a5b309b. Live is packaged but not the default engine.
+
+Installed eden.raya@7.4.23-snapshot+c67a5b309b.kamil-oseni.1789158414726. VSIX C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-c67a5b309b-kamil-oseni-1789158414726.vsix; SHA-256 19AF3814395CBE216F9B4EB9C79AC88F85AF2E92E0AC9B2D19ADC4835F48A599; 519952279 bytes, 432 entries, CLI 228785664 bytes.
+
+Next: leftover RDM-06 UI/lifecycle cases. This does not close the rest of RDM-06.
 
 
 

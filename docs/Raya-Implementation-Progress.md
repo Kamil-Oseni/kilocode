@@ -2622,5 +2622,17 @@ Installed eden.raya@7.4.23-snapshot+5d7b978226.kamil-oseni.1789160589728. VSIX C
 
 Next: leftover Live microphone/provider-switch cases or leftover RDM-06 UI/lifecycle.
 
+## 2026-09-11: Routine delegation queued, started, and paused denial
+
+Status: verified locally and unshipped. Installed product is still 5d7b978226.
+
+Queued asks publish that the request has not started. Starting the child run adds a Work started card. A paused recipient stores a failed record, publishes a denial reply, and the ask form keeps the draft.
+
+Changed files: packages/opencode/src/kilocode/task/delegation.ts, packages/opencode/test/kilocode/task/delegation.test.ts, packages/kilo-vscode/webview-ui/src/components/routines/Inbox.tsx, packages/kilo-vscode/tests/fixtures/routine-delegate-view.mjs, .changeset/raya-routine-delegate-status.md.
+
+Commands (packages/opencode): bun test ./test/kilocode/task/delegation.test.ts ./test/kilocode/task/delegation-runner.test.ts ./test/kilocode/server/httpapi-routine-delegate.test.ts --timeout 60000 -> 9 pass / 0 fail / 102 expect / exit 0. bun run typecheck -> exit 0. Commands (packages/kilo-vscode): bun test ./tests/unit/routines-inbox.test.ts ./tests/unit/routines-delegate-view.test.ts --timeout 90000 -> 5 pass / 0 fail / 18 expect / exit 0. bun run typecheck -> exit 0. eslint Inbox.tsx -> exit 0.
+
+Next: commit, push, and snapshot:install. Remaining: timeout, inspectable chain in UI, lifecycle rename/archive, packaged microphone/acoustic acceptance, and provider-switch/disposal.
+
 
 

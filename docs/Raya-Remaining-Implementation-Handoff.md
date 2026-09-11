@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Installed product is `5d7b978226`. New voice setups default to GPT-Live 1 (`openai-live` / `gpt-live-1`) over the Live API; saved Realtime, Qwen and cascade selections stay. Live appends split at the 500-token bound; busy-queue later delegations are acknowledged and later speech requires clarification. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, delegated cost attribution, and the Friday accounting E2E are installed. Remaining Live work is packaged microphone/acoustic acceptance and provider-switch/disposal. RDM-06 leftover busy-recipient/denial/timeout/inspectable-chain UI and lifecycle cases remain. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Installed product is `5d7b978226`. New voice setups default to GPT-Live 1 (`openai-live` / `gpt-live-1`) over the Live API; saved Realtime, Qwen and cascade selections stay. Live appends split at the 500-token bound; busy-queue later delegations are acknowledged and later speech requires clarification. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, delegated cost attribution, and the Friday accounting E2E are installed. Busy-recipient queued/started cards and paused-worker denial are verified locally and unshipped. Remaining Live work is packaged microphone/acoustic acceptance and provider-switch/disposal. Remaining RDM-06 work is timeout, inspectable chain in UI, and lifecycle rename/archive. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -1345,3 +1345,17 @@ Installed `eden.raya@7.4.23-snapshot+5d7b978226.kamil-oseni.1789160589728`. VSIX
 Remaining: packaged microphone/acoustic acceptance, provider-switch/disposal, and leftover RDM-06 UI/lifecycle cases.
 
 Next executable step: leftover Live microphone/provider-switch cases or leftover RDM-06 UI/lifecycle.
+
+## 2026-09-11: Routine delegation queued, started, and paused denial
+
+**States:** verified locally and unshipped. Installed product is still `5d7b978226`. This closes busy-recipient queued-versus-started cards and paused-worker denial in the conversation. It does not close timeout, inspectable chain in UI, or lifecycle rename/archive.
+
+A queued ask publishes that the request has not started. Starting the child run adds a separate "Work started" card so the conversation can distinguish waiting from started work. A paused recipient stores a failed record, publishes a denial reply, and the ask form keeps the draft instead of treating the record as success.
+
+Changed files: `packages/opencode/src/kilocode/task/delegation.ts`, `packages/opencode/test/kilocode/task/delegation.test.ts`, `packages/kilo-vscode/webview-ui/src/components/routines/Inbox.tsx`, `packages/kilo-vscode/tests/fixtures/routine-delegate-view.mjs`, `.changeset/raya-routine-delegate-status.md`.
+
+Commands (cwd `packages/opencode`): `bun test ./test/kilocode/task/delegation.test.ts ./test/kilocode/task/delegation-runner.test.ts ./test/kilocode/server/httpapi-routine-delegate.test.ts --timeout 60000` -> 9 pass / 0 fail / 102 expect / exit 0. `bun run typecheck` -> exit 0. Commands (cwd `packages/kilo-vscode`): `bun test ./tests/unit/routines-inbox.test.ts ./tests/unit/routines-delegate-view.test.ts --timeout 90000` -> 5 pass / 0 fail / 18 expect / exit 0. `bun run typecheck` -> exit 0. eslint on `Inbox.tsx` -> exit 0.
+
+Remaining: timeout, inspectable chain in UI, lifecycle rename/archive, packaged microphone/acoustic acceptance, and provider-switch/disposal.
+
+Next executable step: commit, push, and snapshot:install this queued/denial increment, then leftover RDM-06 timeout/chain/lifecycle or leftover Live microphone/provider-switch.

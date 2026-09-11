@@ -42,6 +42,7 @@ function kind(value: Note["kind"], source?: string) {
   if (value === "delegation") {
     if (source?.startsWith("sent:")) return "Asked another worker"
     if (source?.startsWith("reply:")) return "Answer from another worker"
+    if (source?.startsWith("start:")) return "Work started"
     return "Asked you"
   }
   if (value === "worker") return "Worker"
@@ -91,11 +92,21 @@ export function status(state: Box["state"]) {
   return "Scheduled"
 }
 
+function saved(value: unknown) {
+  if (!value || typeof value !== "object") return
+  const row = value as Record<string, unknown>
+  const state = typeof row.state === "string" ? row.state : undefined
+  const reason = typeof row.reason === "string" ? row.reason : undefined
+  if (!state) return
+  return { state, reason }
+}
+
 const Pass: Component<{ agentID: string; workers: Peer[]; runID?: string; onDone?: () => void }> = (props) => {
   const vscode = useVSCode()
   const [ask, setAsk] = createSignal("")
   const [phase, setPhase] = createSignal<"idle" | "sending" | "failed">("idle")
   const [error, setError] = createSignal("")
+  const [news, setNews] = createSignal("")
   let source = `dlg:${crypto.randomUUID()}`
   let sendID = ""
   let seen = ""
@@ -106,6 +117,7 @@ const Pass: Component<{ agentID: string; workers: Peer[]; runID?: string; onDone
     setAsk("")
     setPhase("idle")
     setError("")
+    setNews("")
   }
 
   createEffect(() => {
@@ -118,12 +130,27 @@ const Pass: Component<{ agentID: string; workers: Peer[]; runID?: string; onDone
     if (msg.error) {
       setPhase("failed")
       setError(msg.error)
+      setNews("")
+      return
+    }
+    const row = saved(msg.record)
+    if (row?.state === "failed") {
+      setPhase("failed")
+      setError(row.reason || "This worker did not start the request.")
+      setNews("")
       return
     }
     source = `dlg:${crypto.randomUUID()}`
     setAsk("")
     setPhase("idle")
     setError("")
+    setNews(
+      row?.state === "queued"
+        ? "Queued until this worker is free. It has not started."
+        : row?.state === "running" || row?.state === "accepted"
+          ? "This worker started the request."
+          : "",
+    )
     props.onDone?.()
   }
 
@@ -135,6 +162,7 @@ const Pass: Component<{ agentID: string; workers: Peer[]; runID?: string; onDone
     if (!body || phase() === "sending") return
     setPhase("sending")
     setError("")
+    setNews("")
     sendID = crypto.randomUUID()
     vscode.postMessage({
       type: "routineDelegate",
@@ -165,6 +193,11 @@ const Pass: Component<{ agentID: string; workers: Peer[]; runID?: string; onDone
         />
       </label>
       <p class="routines-hint">Asks another worker for a tracked result. Does not change either assignment.</p>
+      <Show when={news()}>
+        <p class="routines-hint" role="status">
+          {news()}
+        </p>
+      </Show>
       <Show when={error()}>
         <p class="routines-error" role="alert">
           {error()}

@@ -2,7 +2,8 @@ import { expect, test } from "bun:test"
 import { Effect, Exit } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { SessionID } from "@/session/schema"
-import { RayaTaskDelegation, billed, credited, ceiling, replied, scope, type Request } from "@/kilocode/task/delegation"
+import { RayaTaskDelegation, billed, begun, credited, ceiling, replied, scope, type Request } from "@/kilocode/task/delegation"
+import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import type { RayaTask } from "@/kilocode/task"
 
 const agent = (id: string, role: string, extra?: Partial<RayaTask.Agent>): RayaTask.Agent => ({
@@ -117,18 +118,46 @@ test("posted replies do not invent a completed worker result", () => {
   expect(notes[0]).toContain("not added to this run's total")
   expect(notes.some((line) => line.includes("Accounting: completed") && line.includes("$1.5"))).toBe(true)
   expect(notes.some((line) => line.includes("Legal: queued") && line.includes("not a completed worker result"))).toBe(true)
+  expect(
+    begun({
+      id: "rdl_1",
+      source: "dlg_1",
+      senderID: "chief",
+      recipientID: "books",
+      objective: "Review receipts",
+      depth: 1,
+      state: "queued",
+      time: 1,
+    }),
+  ).toBeUndefined()
+  expect(
+    begun({
+      id: "rdl_1",
+      source: "dlg_1",
+      senderID: "chief",
+      recipientID: "books",
+      objective: "Review receipts",
+      depth: 1,
+      state: "running",
+      time: 1,
+    })?.body,
+  ).toContain("no longer only queued")
 })
 
 test("delegation admits once, refuses loops, and queues without duplicating a busy worker", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {
       const store = RayaTaskDelegation.make(yield* Database.Service)
+      const inbox = RayaTaskInbox.make(yield* Database.Service)
       const chief = agent("chief", "generalist")
       const books = agent("books", "accountant")
       const first = yield* store.admit(request("dlg_1", chief.id, books.id), chief, books)
       expect(first.created).toBe(true)
       expect(first.record.state).toBe("queued")
       expect(first.record.depth).toBe(1)
+      expect((yield* inbox.page(chief.id)).messages.some((item) => item.body.includes("queued until the worker is free"))).toBe(
+        true,
+      )
       expect((yield* store.admit(request("dlg_1", chief.id, books.id), chief, books)).created).toBe(false)
       expect(
         Exit.isFailure(
@@ -146,6 +175,9 @@ test("delegation admits once, refuses loops, and queues without duplicating a bu
       const sid = SessionID.make("ses_books")
       const running = yield* store.attach(taken!.id, "run_1", sid)
       expect(running.state).toBe("running")
+      expect((yield* inbox.page(chief.id)).messages.some((item) => item.source.startsWith("start:") && item.body.includes("no longer only queued"))).toBe(
+        true,
+      )
       expect((yield* store.attach(taken!.id, "run_1", sid)).sessionID).toBe(sid)
       expect(
         Exit.isFailure(yield* store.attach(taken!.id, "run_2", sid).pipe(Effect.exit)),
@@ -166,6 +198,9 @@ test("delegation admits once, refuses loops, and queues without duplicating a bu
       const denied = yield* store.admit(request("dlg_pause", chief.id, paused.id), chief, paused)
       expect(denied.record.state).toBe("failed")
       expect(denied.record.reason).toContain("paused")
+      expect((yield* inbox.page(chief.id)).messages.some((item) => item.body.includes("paused") && item.body.includes("not a completed worker reply"))).toBe(
+        true,
+      )
       const extra = agent("legal", "reviewer")
       for (const n of [2, 3, 4, 5]) {
         const item = yield* store.admit(request(`dlg_root_${n}`, chief.id, extra.id), chief, extra)

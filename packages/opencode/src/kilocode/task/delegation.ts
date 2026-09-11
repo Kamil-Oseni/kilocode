@@ -68,7 +68,7 @@ function key(source: string) {
   return `rdl_${digest(source).slice(0, 48)}`
 }
 
-function origin(kind: "ask" | "sent" | "reply", source: string) {
+function origin(kind: "ask" | "sent" | "reply" | "start", source: string) {
   const raw = `${kind}:${source}`
   return Schema.is(token)(raw) ? raw : `${kind}:${digest(source).slice(0, 40)}`
 }
@@ -148,8 +148,14 @@ function same(saved: Record, value: Request) {
 }
 
 function cards(row: Record, sender: RayaTask.Agent, recipient: RayaTask.Agent): Publish[] {
-  const ask = `Request from ${sender.name}:\n${row.objective}`
-  const sent = `Asked ${recipient.name}:\n${row.objective}`
+  const note =
+    row.state === "queued"
+      ? "This request is queued until the worker is free. It has not started."
+      : row.state === "failed"
+        ? row.reason || "This request was not started."
+        : undefined
+  const ask = [`Request from ${sender.name}:`, row.objective, note].filter((line): line is string => !!line).join("\n")
+  const sent = [`Asked ${recipient.name}:`, row.objective, note].filter((line): line is string => !!line).join("\n")
   const id = Schema.is(token)(row.id) ? row.id : undefined
   return [
     {
@@ -161,6 +167,18 @@ function cards(row: Record, sender: RayaTask.Agent, recipient: RayaTask.Agent): 
     },
     { agentID: sender.id, source: origin("sent", row.source), kind: "delegation", body: sent.slice(0, 8000), ...(id ? { occurrenceID: id } : {}) },
   ]
+}
+
+export function begun(row: Record): Publish | undefined {
+  if (row.state !== "accepted" && row.state !== "running") return
+  return {
+    agentID: row.senderID,
+    source: origin("start", row.source),
+    kind: "delegation",
+    body: "This worker started the request. It is no longer only queued.",
+    sessionID: row.sessionID,
+    ...(row.childRunID && Schema.is(token)(row.childRunID) ? { occurrenceID: row.childRunID } : {}),
+  }
 }
 
 export function billed(row: Pick<Record, "cost">) {
@@ -343,7 +361,8 @@ export namespace RayaTaskDelegation {
       }
       yield* db.insert(Delegation).values(row).run().pipe(Effect.orDie)
       const record = decode(row)
-      yield* publish(cards(record, sender, recipient))
+      const denial = state === "failed" ? replied(record, recipient) : undefined
+      yield* publish(denial ? [...cards(record, sender, recipient), denial] : cards(record, sender, recipient))
       return { record, created: true }
     })
     const take = Effect.fn("RayaTaskDelegation.take")(function* (recipientID: string) {
@@ -382,9 +401,12 @@ export namespace RayaTaskDelegation {
         .where(eq(Delegation.id, id))
         .run()
         .pipe(Effect.orDie)
-      return decode({
+      const record = decode({
         ...(yield* db.select().from(Delegation).where(eq(Delegation.id, id)).get().pipe(Effect.orDie))!,
       })
+      const item = begun(record)
+      if (item) yield* publish([item])
+      return record
     })
     const finish = Effect.fn("RayaTaskDelegation.finish")(function* (
       id: string,

@@ -188,6 +188,7 @@ try {
     record: { id: "rdl_1", source: retry.source, state: "queued" },
   })
   await new Promise((resolve) => setImmediate(resolve))
+  assert.match(root.textContent, /Queued until this worker is free/)
   const reload = sent.findLast((msg) => msg.type === "routineInboxPage")
   assert.equal(reload.agentID, chief.id)
   emit({
@@ -201,13 +202,14 @@ try {
         kind: "delegation",
         source: `sent:${retry.source}`,
         occurrenceID: "rdl_1",
-        body: "Asked Books:\nReview Friday expenses.",
+        body: "Asked Books:\nReview Friday expenses.\nThis request is queued until the worker is free. It has not started.",
         time: 2,
       },
     ],
   })
   assert.match(root.textContent, /Asked another worker/)
   assert.match(root.textContent, /Asked Books/)
+  assert.match(root.textContent, /queued until the worker is free/)
   assert.equal(root.querySelector("textarea[aria-label='Ask another worker']").value, "")
   button("Stop this request").click()
   const stop = sent.findLast((msg) => msg.type === "routineDelegateCancel")
@@ -242,7 +244,7 @@ try {
         kind: "delegation",
         source: `sent:${retry.source}`,
         occurrenceID: "rdl_1",
-        body: "Asked Books:\nReview Friday expenses.",
+        body: "Asked Books:\nReview Friday expenses.\nThis request is queued until the worker is free. It has not started.",
         time: 2,
       },
       {
@@ -312,7 +314,21 @@ try {
   const linked = sent.findLast((msg) => msg.type === "routineDelegate")
   assert.equal(linked.parentRunID, "occ_parent")
   assert.equal(linked.objective, "Need the missing receipts.")
-  console.log("routine-delegate-view: 25 assertions passed")
+  emit({
+    type: "routineDelegated",
+    requestID: linked.requestID,
+    agentID: chief.id,
+    record: {
+      id: "rdl_2",
+      source: linked.source,
+      state: "failed",
+      reason: "This worker is paused. Delegation is not started until it is enabled.",
+    },
+  })
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(area2.value, "Need the missing receipts.")
+  assert.match(root.textContent, /This worker is paused/)
+  console.log("routine-delegate-view: 28 assertions passed")
 } finally {
   dispose()
   root.remove()

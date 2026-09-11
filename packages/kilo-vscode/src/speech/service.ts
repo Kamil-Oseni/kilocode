@@ -21,12 +21,52 @@ export class SpeechService implements vscode.Disposable {
   private readonly tts = new MiniMaxTts()
   private readonly aborts = new Map<string, AbortController>()
   private readonly replies = new VoiceReplies() // raya_change - extension-host voice reply handoff
-  private readonly realtime = new RealtimeBroker()
-  private readonly openai = new OpenAIBroker()
-  private readonly live = new LiveBroker()
+  private readonly realtime: RealtimeBroker
+  private readonly openai: OpenAIBroker
+  private readonly live: LiveBroker
+  private closed = false
+  private tail: Promise<void> = Promise.resolve()
 
-  constructor(context: vscode.ExtensionContext) {
+  constructor(
+    context: vscode.ExtensionContext,
+    opts?: { live?: LiveBroker; openai?: OpenAIBroker; realtime?: RealtimeBroker },
+  ) {
     this.settings = new SpeechSettingsStore(context.globalState, context.secrets)
+    this.live = opts?.live ?? new LiveBroker()
+    this.openai = opts?.openai ?? new OpenAIBroker()
+    this.realtime = opts?.realtime ?? new RealtimeBroker()
+  }
+
+  private enqueue(work: () => Promise<void>) {
+    const next = this.tail.then(work, work)
+    this.tail = next.then(
+      () => {},
+      (err) => {
+        console.error("[Raya] Voice cleanup failed; resource release is unconfirmed.", err)
+      },
+    )
+    return next
+  }
+
+  private async release() {
+    await Promise.all([this.live.stop(), this.openai.stop(), this.realtime.stop()])
+  }
+
+  private async admit(failed: (error: string) => void) {
+    if (this.closed) {
+      failed("Voice is closed.")
+      return false
+    }
+    await this.tail
+    if (this.closed) {
+      failed("Voice is closed.")
+      return false
+    }
+    return true
+  }
+
+  ended() {
+    return this.tail
   }
 
   async state(post: Post): Promise<void> {
@@ -34,6 +74,8 @@ export class SpeechService implements vscode.Disposable {
   }
 
   async update(input: Partial<SpeechSettings>, root: string, post: Post): Promise<void> {
+    const prior = await this.settings.load()
+    if (input.voiceEngine !== undefined && input.voiceEngine !== prior.voiceEngine) await this.enqueue(() => this.release())
     const settings = await this.settings.update(input)
     await this.settings.sync(root)
     post({ type: "speechSettingsLoaded", settings })
@@ -50,12 +92,11 @@ export class SpeechService implements vscode.Disposable {
     input: { sessionID: string; directory: string; connection: KiloConnectionService },
     post: Post,
   ): Promise<void> {
-    if (this.openai.active || this.live.active) {
-      post({
-        type: "speechRealtimeError",
-        code: "busy",
-        error: "End the existing OpenAI voice call before switching engines.",
-      })
+    const failed = (error: string) =>
+      post({ type: "speechRealtimeError", code: "busy", error })
+    if (!(await this.admit(failed))) return
+    if (this.openai.active || this.live.active || this.realtime.active) {
+      failed("End the existing OpenAI voice call before switching engines.")
       return
     }
     const result = await this.realtime.start(
@@ -126,7 +167,8 @@ export class SpeechService implements vscode.Disposable {
   ) {
     if (input.engine === "live") return this.liveStart(input, post)
     const failed = (error: string) => post({ type: "speechOpenAIError", requestId: input.requestId, error })
-    if (this.realtime.active || this.live.active) {
+    if (!(await this.admit(failed))) return
+    if (this.realtime.active || this.live.active || this.openai.active) {
       failed("End the existing voice call before switching to OpenAI.")
       return
     }
@@ -164,7 +206,8 @@ export class SpeechService implements vscode.Disposable {
 
   private async liveStart(input: Parameters<SpeechService["openaiStart"]>[0], post: Post): Promise<void> {
     const failed = (error: string) => post({ type: "speechOpenAIError", requestId: input.requestId, error })
-    if (this.realtime.active || this.openai.active) {
+    if (!(await this.admit(failed))) return
+    if (this.realtime.active || this.openai.active || this.live.active) {
       failed("End the existing voice call before switching to GPT-Live.")
       return
     }
@@ -175,6 +218,10 @@ export class SpeechService implements vscode.Disposable {
     }
     if (!(await this.settings.key("openai"))) {
       failed("GPT-Live requires an OpenAI API key in Speech settings.")
+      return
+    }
+    if (this.closed || this.realtime.active || this.openai.active || this.live.active) {
+      failed(this.closed ? "Voice is closed." : "End the existing voice call before switching to GPT-Live.")
       return
     }
     await this.live.start(
@@ -390,24 +437,17 @@ export class SpeechService implements vscode.Disposable {
   }
 
   dispose(): void {
+    this.closed = true
     this.cancel()
-    void this.live.dispose().then(
-      (error) => { if (error) console.error("[Raya] Live voice disposal failed; resource release is unconfirmed.") },
-      () => console.error("[Raya] Live voice disposal failed; resource release is unconfirmed."),
-    )
-    void this.openai.dispose().then(
-      (error) => {
-        if (error) console.error("[Raya] OpenAI voice disposal failed:", error)
-      },
-      () => console.error("[Raya] OpenAI voice disposal failed; resource release is unconfirmed."),
-    )
-    void this.realtime.dispose().then(
-      (failure) => {
-        if (failure) console.error("[Kilo New] Voice disposal failed:", failure.error)
-      },
-      () => console.error("[Kilo New] Voice disposal failed; resource release is unconfirmed."),
-    )
-    this.tts.dispose()
+    void this.enqueue(async () => {
+      const live = await this.live.dispose()
+      if (live) console.error("[Raya] Live voice disposal failed; resource release is unconfirmed.")
+      const openai = await this.openai.dispose()
+      if (openai) console.error("[Raya] OpenAI voice disposal failed:", openai)
+      const realtime = await this.realtime.dispose()
+      if (realtime) console.error("[Kilo New] Voice disposal failed:", realtime.error)
+      this.tts.dispose()
+    })
   }
 }
 

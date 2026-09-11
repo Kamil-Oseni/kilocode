@@ -2722,11 +2722,19 @@ Next: leftover RDM-06 lifecycle UI, or leftover Live microphone/provider-switch.
 
 ## 2026-09-11: Schedule edit during a live run
 
-Status: verified locally, not yet committed. Editing a schedule while a run is active keeps that run and applies the new schedule after it settles. A paused live worker stays paused. Asking a paused worker is blocked before send; that worker's conversation still takes follow-ups.
+Status: verified locally, committed as bf4218eece, and installed in the snapshot below. Editing a schedule while a run is active keeps that run and applies the new schedule after it settles. A paused live worker stays paused. Asking a paused worker is blocked before send; that worker's conversation still takes follow-ups.
 
 Changed files: packages/kilo-vscode/webview-ui/src/components/routines/RoutinesView.tsx, packages/kilo-vscode/webview-ui/src/components/routines/Inbox.tsx, packages/kilo-vscode/tests/fixtures/routine-edit-view.mjs, packages/kilo-vscode/tests/fixtures/routine-delegate-view.mjs, .changeset/raya-routine-lifecycle-copy.md.
 
 Commands (packages/kilo-vscode): bun test tests/unit/routines-edit-view.test.ts tests/unit/routines-delegate-view.test.ts --timeout 90000 -> 2 pass / 0 fail / 2 expect / exit 0. bun run check-types -> exit 0. eslint RoutinesView.tsx Inbox.tsx -> exit 0. bun run check-kilocode-change -> exit 0.
+
+Next: leftover RDM-06 themes/a11y/performance/reviewer, or leftover Live microphone/provider-switch.
+
+## 2026-09-11: Snapshot install bf4218eece
+
+Status: committed, pushed and installed as bf4218eece. Existing routine runs continue when the schedule is edited. Paused workers cannot start a new request until they are enabled.
+
+Installed eden.raya@7.4.23-snapshot+bf4218eece.kamil-oseni.1789170209577. VSIX C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-bf4218eece-kamil-oseni-1789170209577.vsix; SHA-256 1785EBA5165DD6B4F20A0AF4D05F5E8BF1B18AD15E6D775B2A7F9A97F2A8309F; 517052448 bytes, 431 entries. CLI binary already present; not rebuilt.
 
 Next: leftover RDM-06 themes/a11y/performance/reviewer, or leftover Live microphone/provider-switch.
 

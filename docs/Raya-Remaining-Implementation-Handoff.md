@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Installed product is `ad316af1d1`. Live host/CLI contracts are packaged; the default engine remains `openai-realtime`. Routine inbox, follow-up dispatch, session-list exclusion, and RDM-04 start/inspect UI are installed. Stop-outstanding-delegation is verified locally and unshipped. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Installed product is `153189583a`. Live host/CLI contracts are packaged; the default engine remains `openai-realtime`. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, and stop-outstanding-delegation are installed. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-11. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `ad316af1d1` is committed, pushed and installed. Live is packaged in this snapshot; the default engine remains `openai-realtime`.
+**Latest delivered product:** checkpoint `153189583a` is committed, pushed and installed. Live is packaged in this snapshot; the default engine remains `openai-realtime`.
 
 ## Scope and reading order
 
@@ -1228,7 +1228,7 @@ Next executable step: add user controls to stop outstanding delegated work.
 
 ## 2026-09-11: Stop outstanding delegated work
 
-**States:** RDM-04 cancel/stop verified locally; Live remains not the default engine. Product checkpoint remains `ad316af1d1`.
+**States:** RDM-04 cancel/stop verified locally, committed as `153189583a`, and installed in the snapshot below. Live remains not the default engine.
 
 Stopping an outstanding request marks it cancelled, cancels live descendants, and keeps completed child results. Queued work never starts. Running child sessions are halted through the existing session cancel path. Retry is idempotent. Neither standing assignment is rewritten. `POST /kilocode/agent/:agentID/delegate/:id/cancel` is the inspectable HTTP surface. The worker conversation shows **Stop this request** on outstanding ask/sent cards until a reply card arrives.
 
@@ -1238,4 +1238,14 @@ Commands (cwd `packages/opencode`): `bun test ./test/kilocode/task/delegation.te
 
 Remaining: cost-attribution review and RDM-06 Friday accounting E2E. Do not change the default engine.
 
-Next executable step: commit, push, and `snapshot:install`.
+Next executable step: attribute delegated costs to the child request and parent/company without double counting, then run the Friday accounting E2E.
+
+## 2026-09-11: Snapshot install `153189583a`
+
+**States:** committed, pushed and installed as `153189583a`. Live remains not the default engine.
+
+Installed `eden.raya@7.4.23-snapshot+153189583a.kamil-oseni.1789155622428`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-153189583a-kamil-oseni-1789155622428.vsix`; SHA-256 `19D83A8D47588B87723577CE1BA318B7E035D30A091A78D3686A84BC2BCC0A81`; 519935769 bytes, 432 entries, CLI 228771840 bytes. Includes stop/cancel for outstanding worker-to-worker requests. Default engine is still `openai-realtime`.
+
+Remaining: cost-attribution review and RDM-06 Friday accounting E2E. Do not change the default engine.
+
+Next executable step: attribute delegated costs without double counting, then run the Friday accounting E2E.

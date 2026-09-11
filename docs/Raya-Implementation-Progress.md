@@ -2535,3 +2535,11 @@ Changed files: packages/opencode/src/kilocode/task/delegation.ts, packages/openc
 Commands (packages/opencode): bun test ./test/kilocode/task/delegation.test.ts ./test/kilocode/task/delegation-runner.test.ts ./test/kilocode/server/httpapi-routine-delegate.test.ts --timeout 60000 -> 7 pass / 0 fail / 73 expect / exit 0 (.tmp/routine-delegate-cancel-runtime.log). bun run typecheck -> exit 0. Root bun ./script/generate.ts -> exit 0. packages/kilo-vscode bun test ./tests/unit/routines-inbox.test.ts ./tests/unit/routines-delegate-view.test.ts ./tests/unit/routines-inbox-view.test.ts --timeout 90000 -> 5 pass / 0 fail / 17 expect / exit 0 (.tmp/routine-delegate-cancel-ui-tests.log). bun run typecheck -> exit 0. eslint on changed files -> exit 0.
 
 Next: commit, push, and snapshot:install. Remaining: cost-attribution review and RDM-06 Friday accounting E2E.
+
+## 2026-09-11: Snapshot install 153189583a
+
+Status: committed, pushed and installed as 153189583a. Live is packaged but not the default engine.
+
+Installed eden.raya@7.4.23-snapshot+153189583a.kamil-oseni.1789155622428. VSIX C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-153189583a-kamil-oseni-1789155622428.vsix; SHA-256 19D83A8D47588B87723577CE1BA318B7E035D30A091A78D3686A84BC2BCC0A81; 519935769 bytes, 432 entries, CLI 228771840 bytes.
+
+Next: cost-attribution review, then RDM-06 Friday accounting E2E.

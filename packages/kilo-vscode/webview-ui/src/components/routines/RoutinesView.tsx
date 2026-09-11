@@ -128,6 +128,21 @@ function held(item: Agent, book: Record<string, Run[]>) {
   if (run.status === "running" || (run.status === "blocked" && run.blockedReason === "waiting on you")) return run.id
 }
 
+function live(item: Agent, book: Record<string, Run[]>) {
+  const state = item.execution?.state
+  return !!held(item, book) || state === "active" || state === "starting"
+}
+
+function advice(item: Agent, book: Record<string, Run[]>) {
+  if (live(item, book)) {
+    return item.enabled
+      ? "Existing runs continue. The new schedule applies after unfinished work settles."
+      : "Existing runs continue. The new schedule applies after unfinished work settles. This worker stays paused."
+  }
+  if (item.enabled) return "Existing runs continue. The new schedule applies after unfinished work settles."
+  return "This routine is paused. Saving keeps it paused."
+}
+
 function folder(path: string) {
   const parts = path.replaceAll("\\", "/").split("/").filter(Boolean)
   return parts.at(-1) ?? path
@@ -178,6 +193,7 @@ const Person: Component<{
   box?: Box
   stale?: string
   busy: boolean
+  live: boolean
   picked: boolean
   current: boolean
   panel: string
@@ -198,6 +214,7 @@ const Person: Component<{
   onRemove: () => void
 }> = (props) => {
   const resume = () => (!props.item.enabled ? `${props.panel}-${props.item.id}-resume` : undefined)
+  const hold = () => (props.item.enabled && props.live ? `${props.panel}-${props.item.id}-hold` : undefined)
   return (
     <li
       class="routines-row"
@@ -257,7 +274,7 @@ const Person: Component<{
           >
             {caption(props.command, props.item)}
           </Button>
-          <Button size="small" variant="ghost" aria-describedby={resume()} onClick={props.onToggle}>
+          <Button size="small" variant="ghost" aria-describedby={resume() ?? hold()} onClick={props.onToggle}>
             {props.item.enabled ? "Pause" : "Enable"}
           </Button>
           <Button size="small" variant="ghost" onClick={props.onEdit}>
@@ -294,6 +311,12 @@ const Person: Component<{
         <p id={resume()} class="routines-hint routines-resume">
           Enabling allows future runs and starts a fresh consecutive-block count. Earlier runs remain in history.
           Resolve the cause of a pause before enabling again.
+          <Show when={props.live}> The current run continues until it settles.</Show>
+        </p>
+      </Show>
+      <Show when={props.item.enabled && props.live}>
+        <p id={hold()} class="routines-hint">
+          Pausing stops later starts. The current run continues until it settles.
         </p>
       </Show>
     </li>
@@ -864,6 +887,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                     box={boxes()[item.id]}
                     stale={stale()[item.id]}
                     busy={!!busy()[item.id]}
+                    live={live(item, runs())}
                     picked={!!picked()[item.id]}
                     current={chosen() === item.id}
                     panel={panel}
@@ -933,11 +957,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
               <div class="routines-field">
                 <strong>{item().name}</strong>
                 <span>Current schedule: {whenLabel(item().schedule)}</span>
-                <span>
-                  {item().enabled
-                    ? "Existing runs continue. The new schedule applies after unfinished work settles."
-                    : "This routine is paused. Saving keeps it paused."}
-                </span>
+                <span>{advice(item(), runs())}</span>
                 <Show when={item().schedule.kind === "cron" && !timezone(item().schedule)?.trim()}>
                   <p role="note">
                     This routine has no saved timezone. Automatic runs are held until you choose the intended timezone

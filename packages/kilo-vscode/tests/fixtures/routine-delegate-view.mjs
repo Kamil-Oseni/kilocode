@@ -366,7 +366,40 @@ try {
   await new Promise((resolve) => setImmediate(resolve))
   assert.equal(area2.value, "Need the missing receipts.")
   assert.match(root.textContent, /This worker is paused/)
-  console.log("routine-delegate-view: 35 assertions passed")
+  emit({ type: "routineState", agents: [chief, { ...books, enabled: false }] })
+  assert.match(root.textContent, /Paused workers cannot start a new request/)
+  assert.equal(button("Books is paused").disabled, true)
+  const asks = sent.filter((msg) => msg.type === "routineDelegate").length
+  button("Books is paused").click()
+  assert.equal(sent.filter((msg) => msg.type === "routineDelegate").length, asks)
+  emit({
+    type: "routineInbox",
+    items: [
+      {
+        agentID: chief.id,
+        conversationID: "rcv_chief",
+        name: chief.name,
+        role: chief.role,
+        unread: 0,
+        state: "scheduled",
+      },
+      {
+        agentID: books.id,
+        conversationID: "rcv_books",
+        name: books.name,
+        role: books.role,
+        unread: 0,
+        state: "paused",
+      },
+    ],
+  })
+  person("Books").click()
+  await new Promise((resolve) => setImmediate(resolve))
+  const paused = sent.findLast((msg) => msg.type === "routineInboxPage")
+  emit({ type: "routineInboxPage", requestID: paused.requestID, agentID: books.id, messages: [] })
+  assert.match(root.textContent, /Follow-ups still arrive here/)
+  assert.match(root.textContent, /Scheduled starts stay off/)
+  console.log("routine-delegate-view: paused recipient copy passed")
 } finally {
   dispose()
   root.remove()

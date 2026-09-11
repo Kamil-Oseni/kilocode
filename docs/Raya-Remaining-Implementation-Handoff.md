@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Installed product is `54093915e1`. New voice setups default to GPT-Live 1 (`openai-live` / `gpt-live-1`) over the Live API; saved Realtime, Qwen and cascade selections stay. Live appends split at the 500-token bound; busy-queue later delegations are acknowledged and later speech requires clarification. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, delegated cost attribution, Friday accounting E2E, busy-recipient queued/started plus paused-worker denial, overdue-request timeout expiry, inspectable request chains, and rename/archive conversation attribution are installed. Stopping a delegated request now settles its child run so the worker can be removed. Remaining Live work is packaged microphone/acoustic acceptance and provider-switch/disposal. Remaining RDM-06 work is leftover lifecycle UI (schedule-edit-during-execution, leftover recipient-unavailability copy, themes/a11y/performance/reviewer). Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Installed product is `54093915e1`. Schedule-edit-during-execution UI and paused-recipient copy are verified locally and not yet committed. New voice setups default to GPT-Live 1 (`openai-live` / `gpt-live-1`) over the Live API; saved Realtime, Qwen and cascade selections stay. Live appends split at the 500-token bound; busy-queue later delegations are acknowledged and later speech requires clarification. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, delegated cost attribution, Friday accounting E2E, busy-recipient queued/started plus paused-worker denial, overdue-request timeout expiry, inspectable request chains, rename/archive conversation attribution, and stop-settle of child runs are installed. Remaining Live work is packaged microphone/acoustic acceptance and provider-switch/disposal. Remaining RDM-06 work is themes/a11y/performance/reviewer. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -1463,3 +1463,15 @@ Installed `eden.raya@7.4.23-snapshot+54093915e1.kamil-oseni.1789167625919`. VSIX
 Remaining: leftover RDM-06 schedule-edit-during-execution UI, leftover recipient-unavailability copy beyond pause/archive, themes/a11y/performance/reviewer, packaged microphone/acoustic acceptance, and provider-switch/disposal.
 
 Next executable step: leftover RDM-06 lifecycle UI, or leftover Live microphone/provider-switch.
+
+## 2026-09-11: Schedule edit during a live run
+
+**States:** verified locally, not yet committed. Editing a schedule while a run is active tells the user the current work continues and the new schedule applies after it settles. A paused worker with a live run stays paused after save. Asking a paused worker is refused in the roster before send; that worker's own conversation still accepts follow-ups while scheduled starts stay off.
+
+Changed files: `packages/kilo-vscode/webview-ui/src/components/routines/RoutinesView.tsx`, `packages/kilo-vscode/webview-ui/src/components/routines/Inbox.tsx`, `packages/kilo-vscode/tests/fixtures/routine-edit-view.mjs`, `packages/kilo-vscode/tests/fixtures/routine-delegate-view.mjs`, `.changeset/raya-routine-lifecycle-copy.md`.
+
+Commands (cwd `packages/kilo-vscode`): `bun test tests/unit/routines-edit-view.test.ts tests/unit/routines-delegate-view.test.ts --timeout 90000` -> 2 pass / 0 fail / 2 expect / exit 0. `bun run check-types` -> exit 0. eslint on `RoutinesView.tsx` and `Inbox.tsx` -> exit 0. `bun run check-kilocode-change` -> no forbidden markers / exit 0.
+
+Remaining: leftover RDM-06 themes/a11y/performance/reviewer, packaged microphone/acoustic acceptance, and provider-switch/disposal.
+
+Next executable step: leftover RDM-06 themes/a11y/performance/reviewer, or leftover Live microphone/provider-switch.

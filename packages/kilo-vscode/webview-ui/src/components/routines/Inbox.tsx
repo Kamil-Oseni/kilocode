@@ -30,6 +30,11 @@ type Peer = {
   id: string
   name: string
   role: string
+  enabled?: boolean
+}
+
+function ready(item: Peer) {
+  return item.enabled !== false
 }
 
 function stamp(at: number) {
@@ -273,7 +278,8 @@ const Pass: Component<{ agentID: string; workers: Peer[]; runID?: string; onDone
 
   const submit = (recipientID: string) => {
     const body = ask().trim()
-    if (!body || phase() === "sending") return
+    const peer = props.workers.find((item) => item.id === recipientID)
+    if (!body || phase() === "sending" || (peer && !ready(peer))) return
     setPhase("sending")
     setError("")
     setNews("")
@@ -307,6 +313,9 @@ const Pass: Component<{ agentID: string; workers: Peer[]; runID?: string; onDone
         />
       </label>
       <p class="routines-hint">Asks another worker for a tracked result. Does not change either assignment.</p>
+      <Show when={props.workers.some((item) => !ready(item))}>
+        <p class="routines-hint">Paused workers cannot start a new request until they are enabled.</p>
+      </Show>
       <Show when={news()}>
         <p class="routines-hint" role="status">
           {news()}
@@ -322,10 +331,16 @@ const Pass: Component<{ agentID: string; workers: Peer[]; runID?: string; onDone
           <Button
             type="button"
             size="small"
-            disabled={phase() === "sending" || !ask().trim()}
+            disabled={phase() === "sending" || !ask().trim() || !ready(item)}
             onClick={() => submit(item.id)}
           >
-            {phase() === "sending" ? "Asking" : phase() === "failed" ? `Retry ask ${item.name}` : `Ask ${item.name}`}
+            {phase() === "sending"
+              ? "Asking"
+              : !ready(item)
+                ? `${item.name} is paused`
+                : phase() === "failed"
+                  ? `Retry ask ${item.name}`
+                  : `Ask ${item.name}`}
           </Button>
         )}
       </For>
@@ -635,6 +650,11 @@ export const Inbox: Component<{
           />
         </label>
         <p class="routines-hint">Asks this worker about reports here. Does not change the assignment.</p>
+        <Show when={props.box?.state === "paused"}>
+          <p class="routines-hint">
+            This worker is paused. Follow-ups still arrive here. Scheduled starts stay off until it is enabled.
+          </p>
+        </Show>
         <Button type="button" size="small" disabled={phase() === "sending" || !note().trim()} onClick={submit}>
           {phase() === "sending" ? "Asking this worker" : phase() === "failed" ? "Retry follow-up" : "Send"}
         </Button>

@@ -526,6 +526,54 @@ try {
   assert.equal(button("Confirm schedule change").disabled, true)
   button("Back to routines to reload").click()
   assert.ok(sent.findLast((msg) => msg.type === "routineList"))
+  {
+    const occ = {
+      id: "occ_live",
+      agentID: "routine",
+      sessionID: "ses_live",
+      at: 1,
+      status: "running",
+    }
+    const active = {
+      ...agent,
+      enabled: true,
+      execution: { state: "active", sessionID: "ses_live", runID: "occ_live" },
+    }
+    emit({ type: "routineState", agents: [active] })
+    emit({ type: "routineRuns", agentID: "routine", runs: [occ] })
+    assert.match(root.textContent, /Pausing stops later starts/)
+    assert.match(root.textContent, /The current run continues until it settles/)
+    const starts = sent.filter((msg) => msg.type === "routineRun" || msg.type === "routineStop").length
+    button("Edit schedule").click()
+    assert.match(root.textContent, /Existing runs continue/)
+    assert.match(root.textContent, /after unfinished work settles/)
+    assert.doesNotMatch(root.textContent, /Saving keeps it paused/)
+    button("Preview schedule").click()
+    const preview = sent.findLast((msg) => msg.type === "routineForecast")
+    emit({
+      type: "routineForecast",
+      requestID: preview.requestID,
+      forecastID: "live-run",
+      schedule: preview.schedule,
+      occurrences: [Date.now() + 3600_000],
+    })
+    button("Confirm schedule change").click()
+    const change = sent.findLast((msg) => msg.type === "routineScheduleUpdate")
+    assert.equal(change.agentID, "routine")
+    assert.equal(
+      sent.filter((msg) => msg.type === "routineRun" || msg.type === "routineStop").length,
+      starts,
+      "Saving a schedule must not start or stop the current run",
+    )
+    emit({ type: "routineScheduleUpdated", requestID: change.requestID, agentID: "routine" })
+    emit({ type: "routineState", agents: [{ ...active, enabled: false }] })
+    emit({ type: "routineRuns", agentID: "routine", runs: [occ] })
+    assert.match(root.textContent, /The current run continues until it settles/)
+    button("Edit schedule").click()
+    assert.match(root.textContent, /Existing runs continue/)
+    assert.match(root.textContent, /This worker stays paused/)
+    button("Done").click()
+  }
   const legacy = { ...agent, enabled: true, schedule: { kind: "cron", expr: "0 9 * * *" } }
   emit({ type: "routineState", agents: [legacy] })
   assert.match(root.textContent, /Automatic runs need timezone review/)

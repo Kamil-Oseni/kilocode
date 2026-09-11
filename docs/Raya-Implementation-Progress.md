@@ -2720,5 +2720,15 @@ Installed eden.raya@7.4.23-snapshot+54093915e1.kamil-oseni.1789167625919. VSIX C
 
 Next: leftover RDM-06 lifecycle UI, or leftover Live microphone/provider-switch.
 
+## 2026-09-11: Schedule edit during a live run
+
+Status: verified locally, not yet committed. Editing a schedule while a run is active keeps that run and applies the new schedule after it settles. A paused live worker stays paused. Asking a paused worker is blocked before send; that worker's conversation still takes follow-ups.
+
+Changed files: packages/kilo-vscode/webview-ui/src/components/routines/RoutinesView.tsx, packages/kilo-vscode/webview-ui/src/components/routines/Inbox.tsx, packages/kilo-vscode/tests/fixtures/routine-edit-view.mjs, packages/kilo-vscode/tests/fixtures/routine-delegate-view.mjs, .changeset/raya-routine-lifecycle-copy.md.
+
+Commands (packages/kilo-vscode): bun test tests/unit/routines-edit-view.test.ts tests/unit/routines-delegate-view.test.ts --timeout 90000 -> 2 pass / 0 fail / 2 expect / exit 0. bun run check-types -> exit 0. eslint RoutinesView.tsx Inbox.tsx -> exit 0. bun run check-kilocode-change -> exit 0.
+
+Next: leftover RDM-06 themes/a11y/performance/reviewer, or leftover Live microphone/provider-switch.
+
 
 

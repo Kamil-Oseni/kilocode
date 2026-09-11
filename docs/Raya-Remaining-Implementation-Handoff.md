@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Permission canonical comparison is delivered: committed, pushed and installed as `8b01e72311`. LiveBroker fixtures `43e7bc7116` and Live SQL duration/delegation `c3c7f6ae93` are committed and unshipped. Host image four-attempt/hash-reuse and LiveContext selection tests pass locally. Next: SDK regeneration, then WebRTC/UI fixtures. RDM-01-06 remain unimplemented. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Permission canonical comparison is delivered: committed, pushed and installed as `8b01e72311`. LiveBroker fixtures, SQL duration/delegation, host image/context tests, and SDK Live call/duration methods are committed and unshipped. Next: WebRTC/UI fixtures and service/message routing. RDM-01-06 remain unimplemented. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -644,7 +644,7 @@ Continue implementing Raya in C:\Users\User\Desktop\raya. Read AGENTS.md, docs/R
 
 I authorize root plus two subagents, normal periodic commits/pushes to origin/main, and snapshot builds/reinstallation outside the sandbox without asking again. Do not force push, bypass hooks or force reload VS Code. Batch broad testing at coherent checkpoints, but verify relevant contracts before calling features working. If repeated attempts fail, document the exact cause and next approach, move to independent work and revisit.
 
-First inspect current git/process state against the handoff. Preserve uncommitted Live UI/service files. LiveBroker loopback fixtures, Live SQL duration/delegation tests, and host image/context tests are the latest verified local increments; do not package Live. Next: SDK regeneration, then WebRTC/UI fixtures. Keep Raya task ownership, permissions, durable receipts and execution authority. Do not replay historical text as new work or claim generated captions prove heard audio.
+First inspect current git/process state against the handoff. Preserve uncommitted Live UI/service files. LiveBroker fixtures, SQL duration/delegation, host image/context tests and SDK Live methods are the latest verified local increments; do not package Live. Next: WebRTC/UI fixtures and host speech service routing. Keep Raya task ownership, permissions, durable receipts and execution authority. Do not replay historical text as new work or claim generated captions prove heard audio.
 
 Defer new Codex-derived implementation until existing Raya work, including GPT-Live and all 39 requirements, is complete. Use the deferred research document later; do not start a new porting track now. Keep the 39-requirement ledger honest. When I warn that credits are near $10, promptly update the full remaining-work handoff, settle the current work and provide an updated continuation prompt.
 ```
@@ -887,7 +887,7 @@ Selection uses received fragments whose start is at/before the provider offset, 
 
 **Validation receipts at freeze:** historical; superseded for broker fixtures by `.tmp/live-broker-tests.log`. WebRTC/UI/backend SQL tests still absent. Do not package Live. Permission remains the last installed product; see section 3.
 
-**Next executable step:** Live image identity/four-attempt/unknown-receipt and LiveContext selection tests pass (`.tmp/live-image-context-tests.log`). Next: SDK regeneration for Live duration/delegation HTTP endpoints, then WebRTC/UI fixtures. Do not change the default engine or package Live.
+**Next executable step:** SDK now exposes `voice.live.call` and `voice.live.duration`. Next: WebRTC/UI fixtures and host service/message routing. Do not change the default engine or package Live.
 
 ### Local backup and final stop receipt
 
@@ -1041,3 +1041,17 @@ Commands (`packages/kilo-vscode`): `bun test tests/unit/live-broker.test.ts test
 Remaining: SDK regeneration, WebRTC/UI fixtures, service/message routing, and RDM-01-06. Do not snapshot:install.
 
 Next executable step: regenerate the SDK for Live duration/delegation HTTP endpoints. Do not change the default engine or package Live.
+
+## 2026-09-11: Live SDK regeneration
+
+**States:** generated SDK includes Live call/duration; Live remains unshipped. Product checkpoint remains `8b01e72311`.
+
+`packages/sdk/js` now generates `KilocodeVoiceLiveCall` and `KilocodeVoiceLiveDuration` plus `client.voice.live.call` / `duration` against `/kilocode/voice/live/session/{id}/calls` and `/duration`. OpenAI start bindings include optional model `gpt-live-1`. Generated OpenAPI number unions still mention NaN/Infinity; the backend continues to reject non-finite seconds.
+
+Changed files: `packages/sdk/js/src/v2/gen/sdk.gen.ts`, `packages/sdk/js/src/v2/gen/types.gen.ts`.
+
+Commands: `bun ./script/build.ts` in `packages/sdk/js` exit 0 (`.tmp/live-sdk-generate.log`). `bun run typecheck` in `packages/sdk/js` exit 0 (`.tmp/live-sdk-types.log`).
+
+Remaining: WebRTC/UI fixtures, service/message routing, HTTP contract tests, and RDM-01-06. Do not snapshot:install.
+
+Next executable step: WebRTC/UI fixtures and host speech service routing. Do not change the default engine or package Live.

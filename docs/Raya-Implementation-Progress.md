@@ -2365,3 +2365,15 @@ Changed files: packages/kilo-vscode/tests/unit/live-broker.test.ts, packages/kil
 Commands (packages/kilo-vscode): bun test tests/unit/live-broker.test.ts tests/unit/live-context.test.ts tests/unit/live-commands.test.ts --timeout 30000 -> 14 pass / 0 fail / 309 assertions / exit 0 (.tmp/live-image-context-tests.log). bun run check-types -> exit 0 (.tmp/live-image-host-types.log). Root oxlint: 23 warnings / 0 errors / exit 0 (.tmp/live-image-context-lint.log).
 
 Do not snapshot:install. Next: SDK regeneration, then WebRTC/UI fixtures.
+
+## 2026-09-11: Live SDK regeneration (OVR-01)
+
+Status: verified locally, unshipped. Installed product is still 8b01e72311.
+
+The generated SDK now includes Live delegation and duration endpoints under client.voice.live. Default voice engine remains openai-realtime.
+
+Changed files: packages/sdk/js/src/v2/gen/sdk.gen.ts, packages/sdk/js/src/v2/gen/types.gen.ts.
+
+Commands: bun ./script/build.ts in packages/sdk/js -> exit 0 (.tmp/live-sdk-generate.log). bun run typecheck in packages/sdk/js -> exit 0 (.tmp/live-sdk-types.log).
+
+Do not snapshot:install. Next: WebRTC/UI fixtures and host speech service routing.

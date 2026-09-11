@@ -5771,10 +5771,43 @@ export type MemoryApiServerError = {
   }
 }
 
+export type OpenAiVoiceImage = {
+  id: string
+  mime: "image/jpeg" | "image/png" | "image/webp"
+  bytes: number
+  sha256: string
+}
+
+export type OpenAiVoiceCall = {
+  id: string
+  callID: string
+  messageID: string
+  parentSessionID: string
+  status: "accepted" | "running" | "completed" | "failed" | "cancelled" | "unknown"
+  createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  images?: Array<OpenAiVoiceImage>
+  result?: {
+    text: string
+    assistantMessageID: string
+    evidence: Array<{
+      messageID: string
+      partID: string
+      tool: string
+      status: "pending" | "running" | "completed" | "error"
+    }>
+  }
+  error?: {
+    code: string
+    message: string
+  }
+}
+
 export type OpenAiVoiceStart = {
   parentSessionID: string
   providerCallID: string
   requestID: string
+  model?: "gpt-realtime-2.1" | "gpt-live-1"
 }
 
 export type OpenAiVoiceBinding = {
@@ -5783,7 +5816,7 @@ export type OpenAiVoiceBinding = {
   parentSessionID: string
   directory: string
   providerCallID: string
-  model: "gpt-realtime-2.1"
+  model: "gpt-realtime-2.1" | "gpt-live-1"
   status: "active" | "closing" | "closed"
   createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
   expiresAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -5822,13 +5855,6 @@ export type OpenAiVoiceImageInput = {
   data: string
 }
 
-export type OpenAiVoiceImage = {
-  id: string
-  mime: "image/jpeg" | "image/png" | "image/webp"
-  bytes: number
-  sha256: string
-}
-
 export type OpenAiVoiceCallInput = {
   generation: string
   callID: string
@@ -5839,31 +5865,6 @@ export type OpenAiVoiceCallInput = {
   }
   responseID?: string
   itemID?: string
-}
-
-export type OpenAiVoiceCall = {
-  id: string
-  callID: string
-  messageID: string
-  parentSessionID: string
-  status: "accepted" | "running" | "completed" | "failed" | "cancelled" | "unknown"
-  createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-  updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-  images?: Array<OpenAiVoiceImage>
-  result?: {
-    text: string
-    assistantMessageID: string
-    evidence: Array<{
-      messageID: string
-      partID: string
-      tool: string
-      status: "pending" | "running" | "completed" | "error"
-    }>
-  }
-  error?: {
-    code: string
-    message: string
-  }
 }
 
 export type UnauthorizedError = {
@@ -24583,6 +24584,119 @@ export type MemoryPurgeResponses = {
 }
 
 export type MemoryPurgeResponse = MemoryPurgeResponses[keyof MemoryPurgeResponses]
+
+export type KilocodeVoiceLiveCallData = {
+  body?: {
+    generation: string
+    context: {
+      version: 1
+      delegation: string
+      offset: number
+      fragments: Array<{
+        id: string
+        speaker: "user" | "assistant"
+        text: string
+        start: number
+        end: number
+        sequence: number
+        client?: string
+      }>
+      incomplete: true
+      omitted: boolean
+    }
+    images?: Array<string>
+  }
+  headers?: {
+    "x-raya-voice-key"?: string
+  }
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/voice/live/session/{id}/calls"
+}
+
+export type KilocodeVoiceLiveCallErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeVoiceLiveCallError = KilocodeVoiceLiveCallErrors[keyof KilocodeVoiceLiveCallErrors]
+
+export type KilocodeVoiceLiveCallResponses = {
+  /**
+   * OpenAIVoiceCall
+   */
+  200: OpenAiVoiceCall
+}
+
+export type KilocodeVoiceLiveCallResponse = KilocodeVoiceLiveCallResponses[keyof KilocodeVoiceLiveCallResponses]
+
+export type KilocodeVoiceLiveDurationData = {
+  body?: {
+    generation: string
+    receipt: {
+      id: string
+      model: "gpt-live-1"
+      seconds: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
+  }
+  headers?: {
+    "x-raya-voice-key"?: string
+  }
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/voice/live/session/{id}/duration"
+}
+
+export type KilocodeVoiceLiveDurationErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeVoiceLiveDurationError = KilocodeVoiceLiveDurationErrors[keyof KilocodeVoiceLiveDurationErrors]
+
+export type KilocodeVoiceLiveDurationResponses = {
+  /**
+   * Success
+   */
+  200: {
+    id: string
+    model: "gpt-live-1"
+    seconds: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+}
+
+export type KilocodeVoiceLiveDurationResponse =
+  KilocodeVoiceLiveDurationResponses[keyof KilocodeVoiceLiveDurationResponses]
 
 export type KilocodeVoiceOpenaiStartData = {
   body?: OpenAiVoiceStart

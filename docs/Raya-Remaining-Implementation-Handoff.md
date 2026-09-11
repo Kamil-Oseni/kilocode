@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Installed product is `34beb5b5b7`. New voice setups default to GPT-Live 1 (`openai-live` / `gpt-live-1`) over the Live API; saved Realtime, Qwen and cascade selections stay. Live appends split at the 500-token bound; busy-queue later delegations are acknowledged and later speech requires clarification. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, delegated cost attribution, Friday accounting E2E, busy-recipient queued/started plus paused-worker denial, and overdue-request timeout expiry are installed. Remaining Live work is packaged microphone/acoustic acceptance and provider-switch/disposal. Remaining RDM-06 work is inspectable chain in UI and lifecycle rename/archive. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Installed product is `8619b866fb`. New voice setups default to GPT-Live 1 (`openai-live` / `gpt-live-1`) over the Live API; saved Realtime, Qwen and cascade selections stay. Live appends split at the 500-token bound; busy-queue later delegations are acknowledged and later speech requires clarification. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, delegated cost attribution, Friday accounting E2E, busy-recipient queued/started plus paused-worker denial, overdue-request timeout expiry, and inspectable request chains are installed. Remaining Live work is packaged microphone/acoustic acceptance and provider-switch/disposal. Remaining RDM-06 work is lifecycle rename/archive. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-11. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `34beb5b5b7` is committed, pushed and installed. Overdue asks to another worker expire with a timeout in the conversation instead of waiting forever. Realtime remains an explicit compatibility path.
+**Latest delivered product:** checkpoint `8619b866fb` is committed, pushed and installed. The conversation can inspect stored parent and follow-on worker requests instead of leaving the chain in the database only. Realtime remains an explicit compatibility path.
 
 ## Scope and reading order
 
@@ -1393,3 +1393,27 @@ Installed `eden.raya@7.4.23-snapshot+34beb5b5b7.kamil-oseni.1789162560915`. VSIX
 Remaining: inspectable chain in UI, lifecycle rename/archive, packaged microphone/acoustic acceptance, and provider-switch/disposal.
 
 Next executable step: leftover RDM-06 inspectable chain/lifecycle, or leftover Live microphone/provider-switch.
+
+## 2026-09-11: Inspectable delegation chain
+
+**States:** verified locally, committed as `8619b866fb`, and installed in the snapshot below. This closes inspectable parent and follow-on requests in the conversation. It does not close lifecycle rename/archive.
+
+A stored request can be inspected as a chain of real records: parents first, then this request, then follow-on requests. The HTTP GET returns those stored rows. The conversation shows that lineage in place without leaving the thread or rewriting a draft.
+
+Changed files: `packages/opencode/src/kilocode/task/delegation.ts`, `packages/opencode/src/kilocode/server/httpapi/groups/kilocode.ts`, `packages/opencode/src/kilocode/server/httpapi/handlers/kilocode.ts`, `packages/opencode/test/kilocode/task/delegation.test.ts`, `packages/opencode/test/kilocode/server/httpapi-routine-delegate.test.ts`, `packages/kilo-vscode/src/kilo-provider/routines.ts`, `packages/kilo-vscode/src/KiloProvider.ts`, `packages/kilo-vscode/webview-ui/src/components/routines/Inbox.tsx`, `packages/kilo-vscode/tests/unit/routines-inbox.test.ts`, `packages/kilo-vscode/tests/fixtures/routine-delegate-view.mjs`, `.changeset/raya-routine-delegate-chain.md`.
+
+Commands (cwd `packages/opencode`): `bun test ./test/kilocode/task/delegation.test.ts ./test/kilocode/server/httpapi-routine-delegate.test.ts --timeout 60000` -> 8 pass / 0 fail / 89 expect / exit 0. `bun run typecheck` -> exit 0. Commands (cwd `packages/kilo-vscode`): `bun test tests/unit/routines-inbox.test.ts tests/unit/routines-delegate-view.test.ts --timeout 90000` -> 6 pass / 0 fail / 21 expect / exit 0. `bun run check-types` -> exit 0. eslint on `Inbox.tsx` and `routines.ts` -> exit 0.
+
+Remaining: lifecycle rename/archive, packaged microphone/acoustic acceptance, and provider-switch/disposal.
+
+Next executable step: leftover RDM-06 lifecycle rename/archive, or leftover Live microphone/provider-switch.
+
+## 2026-09-11: Snapshot install `8619b866fb`
+
+**States:** committed, pushed and installed as `8619b866fb`. The conversation can inspect stored parent and follow-on worker requests.
+
+Installed `eden.raya@7.4.23-snapshot+8619b866fb.kamil-oseni.1789164260348`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-8619b866fb-kamil-oseni-1789164260348.vsix`; SHA-256 `A0D707D4033214EAFD59C6DA99645920C6FDD7CAC0D77C0E4CD1F4D3E2878AE6`; 519975699 bytes, 432 entries. CLI binary rebuilt.
+
+Remaining: lifecycle rename/archive, packaged microphone/acoustic acceptance, and provider-switch/disposal.
+
+Next executable step: leftover RDM-06 lifecycle rename/archive, or leftover Live microphone/provider-switch.

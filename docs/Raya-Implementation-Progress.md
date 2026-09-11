@@ -2662,5 +2662,25 @@ Installed eden.raya@7.4.23-snapshot+34beb5b5b7.kamil-oseni.1789162560915. VSIX C
 
 Next: leftover RDM-06 inspectable chain/lifecycle, or leftover Live microphone/provider-switch.
 
+## 2026-09-11: Inspectable delegation chain
+
+Status: verified locally, committed as 8619b866fb, and installed in the snapshot below.
+
+A stored request can be inspected as parent records, this request, and follow-on records. The conversation shows that lineage in place without leaving the thread.
+
+Changed files: packages/opencode/src/kilocode/task/delegation.ts, packages/opencode/src/kilocode/server/httpapi/groups/kilocode.ts, packages/opencode/src/kilocode/server/httpapi/handlers/kilocode.ts, packages/opencode/test/kilocode/task/delegation.test.ts, packages/opencode/test/kilocode/server/httpapi-routine-delegate.test.ts, packages/kilo-vscode/src/kilo-provider/routines.ts, packages/kilo-vscode/src/KiloProvider.ts, packages/kilo-vscode/webview-ui/src/components/routines/Inbox.tsx, packages/kilo-vscode/tests/unit/routines-inbox.test.ts, packages/kilo-vscode/tests/fixtures/routine-delegate-view.mjs, .changeset/raya-routine-delegate-chain.md.
+
+Commands (packages/opencode): bun test ./test/kilocode/task/delegation.test.ts ./test/kilocode/server/httpapi-routine-delegate.test.ts --timeout 60000 -> 8 pass / 0 fail / 89 expect / exit 0. bun run typecheck -> exit 0. Commands (packages/kilo-vscode): bun test tests/unit/routines-inbox.test.ts tests/unit/routines-delegate-view.test.ts --timeout 90000 -> 6 pass / 0 fail / 21 expect / exit 0. bun run check-types -> exit 0. eslint on Inbox.tsx and routines.ts -> exit 0.
+
+Next: leftover RDM-06 lifecycle rename/archive, or leftover Live microphone/provider-switch.
+
+## 2026-09-11: Snapshot install 8619b866fb
+
+Status: committed, pushed and installed as 8619b866fb. The conversation can inspect stored parent and follow-on worker requests.
+
+Installed eden.raya@7.4.23-snapshot+8619b866fb.kamil-oseni.1789164260348. VSIX C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-8619b866fb-kamil-oseni-1789164260348.vsix; SHA-256 A0D707D4033214EAFD59C6DA99645920C6FDD7CAC0D77C0E4CD1F4D3E2878AE6; 519975699 bytes, 432 entries. CLI binary rebuilt.
+
+Next: leftover RDM-06 lifecycle rename/archive, or leftover Live microphone/provider-switch.
+
 
 

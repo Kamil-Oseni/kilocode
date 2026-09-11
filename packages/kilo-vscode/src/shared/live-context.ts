@@ -56,6 +56,15 @@ export class LiveContext {
     this.incomplete = true
   }
 
+  later(id: string) {
+    const item = this.delegations.get(id)
+    if (!item) return false
+    return this.fragments.some(
+      (fragment) =>
+        fragment.speaker === "user" && !fragment.client && fragment.start > item.offset && fragment.text.trim(),
+    )
+  }
+
   select(id: string): Selection | undefined {
     const delegation = this.delegations.get(id)
     if (!delegation || this.incomplete || this.limited) return undefined

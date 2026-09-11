@@ -10,6 +10,39 @@ const sdp = "v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n"
 const input = { requestID: "request_1", sessionID: "session_1", sdp }
 const remote = "rtc_live_1"
 
+async function calls(
+  hold: Promise<void> | undefined,
+  mode: string,
+  method: string,
+  body: Record<string, unknown>,
+) {
+  if (hold && method === "POST") await hold
+  const context =
+    body.context && typeof body.context === "object" ? (body.context as Record<string, unknown>) : undefined
+  const dlg = typeof context?.delegation === "string" ? context.delegation : "dlg_1"
+  const expected = `liv_${createHash("sha256").update(dlg).digest("hex").slice(0, 48)}`
+  if (mode === "failed-work")
+    return Response.json({
+      id: `work_${expected}`,
+      callID: expected,
+      messageID: "message_1",
+      parentSessionID: input.sessionID,
+      status: "failed",
+    })
+  return Response.json({
+    id: `work_${expected}`,
+    callID: expected,
+    messageID: "message_1",
+    parentSessionID: input.sessionID,
+    status: "completed",
+    result: {
+      text: mode === "long-work" ? "字".repeat(501) : "Verified Live result",
+      assistantMessageID: "assistant_1",
+      evidence: [],
+    },
+  })
+}
+
 function fixture(startup = 12_000) {
   const state = {
     mode: "normal" as string,
@@ -30,7 +63,7 @@ function fixture(startup = 12_000) {
     events: [] as Record<string, unknown>[],
     socket: undefined as ServerWebSocket<undefined> | undefined,
     control: undefined as WebSocket | undefined,
-    capability: "",
+    hold: undefined as Promise<void> | undefined,
     session: undefined as Record<string, unknown> | undefined,
   }
   const binding = {
@@ -96,25 +129,7 @@ function fixture(startup = 12_000) {
           sha256: state.mode === "image-receipt" ? "wrong" : createHash("sha256").update(bytes).digest("hex"),
         })
       }
-      if (url.pathname.includes("/calls")) {
-        const expected = `liv_${createHash("sha256").update("dlg_1").digest("hex").slice(0, 48)}`
-        if (state.mode === "failed-work")
-          return Response.json({
-            id: `work_${expected}`,
-            callID: expected,
-            messageID: "message_1",
-            parentSessionID: input.sessionID,
-            status: "failed",
-          })
-        return Response.json({
-          id: `work_${expected}`,
-          callID: expected,
-          messageID: "message_1",
-          parentSessionID: input.sessionID,
-          status: "completed",
-          result: { text: "Verified Live result", assistantMessageID: "assistant_1", evidence: [] },
-        })
-      }
+      if (url.pathname.includes("/calls")) return calls(state.hold, state.mode, request.method, body)
       return new Response("unexpected", { status: 404 })
     },
     websocket: {
@@ -461,6 +476,71 @@ test("late session.started after stop cannot revive the call", async () => {
       error: "Live voice is not ready in this task.",
     })
   } finally {
+    await f.close()
+  }
+})
+
+test("long non-ASCII Live results split at 500 scalars", async () => {
+  const f = fixture()
+  f.state.mode = "long-work"
+  try {
+    await f.start()
+    f.send(started())
+    await until(() => f.state.started === 1)
+    request(f)
+    await until(
+      () => f.state.events.filter((event) => event.type === "session.commentary.append").length === 2,
+    )
+    const spoken = f.state.events.filter((event) => event.type === "session.commentary.append")
+    expect(spoken.map((event) => String(event.content))).toEqual(["字".repeat(500), "字"])
+  } finally {
+    await f.close()
+  }
+})
+
+test("busy Live work narrates a waiting request and later speech requires clarification", async () => {
+  const f = fixture()
+  let release!: () => void
+  f.state.hold = new Promise<void>((done) => {
+    release = done
+  })
+  try {
+    await f.start()
+    f.send(started())
+    await until(() => f.state.started === 1)
+    request(f)
+    await until(() => f.state.requests.some((item) => item.path.includes("/calls") && item.method === "POST"))
+    f.send({
+      type: "session.delegation.created",
+      event_id: "evt_dlg_2",
+      offset_ms: 2000,
+      delegation: { id: "dlg_2", type: "delegation", target: "client" },
+    })
+    await until(() =>
+      f.state.events.some(
+        (event) => event.type === "session.thinking.append" && String(event.delegation_id) === "dlg_2",
+      ),
+    )
+    f.send({
+      type: "session.input_transcript.delta",
+      event_id: "evt_user_later",
+      delta: "Do the other file instead",
+      start_ms: 2500,
+      end_ms: 3100,
+    })
+    release()
+    await until(() =>
+      f.state.events.some(
+        (event) =>
+          event.type === "session.commentary.append" && String(event.content).includes("clarify whether to replace"),
+      ),
+    )
+    expect(f.state.requests.filter((item) => item.path.includes("/calls") && item.method === "POST")).toHaveLength(1)
+    expect(
+      f.state.events.filter((event) => event.type === "session.commentary.append" && String(event.content).includes("Verified Live result")),
+    ).toHaveLength(1)
+  } finally {
+    release()
     await f.close()
   }
 })

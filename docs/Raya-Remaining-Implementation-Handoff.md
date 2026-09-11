@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Installed product is `d4e5384528`. New voice setups default to GPT-Live 1 (`openai-live` / `gpt-live-1`) over the Live API; saved Realtime, Qwen and cascade selections stay. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, delegated cost attribution, and the Friday accounting E2E are installed. Remaining Live work is packaged microphone/acoustic acceptance, busy-queue steering, append token bounds, and provider-switch/disposal. RDM-06 leftover busy-recipient/denial/timeout/inspectable-chain UI and lifecycle cases remain. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Installed product is `d4e5384528`. New voice setups default to GPT-Live 1 (`openai-live` / `gpt-live-1`) over the Live API; saved Realtime, Qwen and cascade selections stay. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, delegated cost attribution, and the Friday accounting E2E are installed. Live append token bounds and busy-queue steering are verified locally and unshipped. Remaining Live work is packaged microphone/acoustic acceptance and provider-switch/disposal. RDM-06 leftover busy-recipient/denial/timeout/inspectable-chain UI and lifecycle cases remain. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -1321,3 +1321,17 @@ Installed `eden.raya@7.4.23-snapshot+d4e5384528.kamil-oseni.1789159781902`. VSIX
 Remaining: packaged microphone/acoustic acceptance, busy-queue steering, append token bounds, provider-switch/disposal, and leftover RDM-06 UI/lifecycle cases.
 
 Next executable step: leftover Live acceptance cases, then leftover RDM-06 UI/lifecycle cases.
+
+## 2026-09-11: Live append bounds and busy-queue steering
+
+**States:** verified locally and unshipped. Installed product is still `d4e5384528`. This closes the Live append token-bound and busy-queue steering leftovers. It does not close packaged microphone/acoustic acceptance or provider-switch/disposal.
+
+GPT-Live commentary, thinking and instruction appends now split on Unicode scalars at the documented 500-token bound (each scalar treated as at most one token). A fifth chunk is refused; overflow points the user to the task conversation instead of inventing the rest. Completed work is no longer sliced to 1000 characters. While backend work is busy, a later delegation is acknowledged with `session.thinking.append` and is not dispatched as a second call. If the user speaks after that queued request's offset, dequeue asks for clarification instead of repeating or replacing finished work.
+
+Changed files: `packages/kilo-vscode/src/speech/live-append.ts`, `packages/kilo-vscode/src/speech/live-broker.ts`, `packages/kilo-vscode/src/shared/live-context.ts`, `packages/kilo-vscode/tests/unit/live-append.test.ts`, `packages/kilo-vscode/tests/unit/live-broker.test.ts`, `packages/kilo-vscode/tests/unit/live-context.test.ts`, `.changeset/raya-live-append-queue.md`.
+
+Commands (cwd `packages/kilo-vscode`): `bun test tests/unit/live-append.test.ts tests/unit/live-context.test.ts tests/unit/live-broker.test.ts tests/unit/live-commands.test.ts --timeout 60000` -> 18 pass / 0 fail / 376 expect / exit 0 (`packages/kilo-vscode/.tmp/live-append-busy-queue.log`). `bun run check-types` -> exit 0. eslint on touched files -> exit 0.
+
+Remaining: packaged microphone/acoustic acceptance, provider-switch/disposal, and leftover RDM-06 UI/lifecycle cases.
+
+Next executable step: commit, push, and snapshot:install this Live append/queue increment, then leftover Live microphone/provider-switch cases or leftover RDM-06 UI/lifecycle.

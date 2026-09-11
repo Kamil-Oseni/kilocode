@@ -3,6 +3,7 @@ import WebSocket from "ws"
 import { LiveContext } from "../shared/live-context"
 import type { LiveUsage } from "../shared/live-usage"
 import { sameDirectory } from "../kilo-provider-utils"
+import { speak } from "./live-append"
 import { LiveCommands } from "./live-commands"
 
 type Config = {
@@ -52,6 +53,7 @@ type Claim = {
   recording?: Promise<void>
   calls: Set<string>
   queue: Promise<void>
+  busy: boolean
   images: Map<string, { hash: string; result: Promise<{ status: "staged" | "unknown" | "failed"; error?: string }> }>
 }
 const endpoint = "https://api.openai.com/v1/live/sessions"
@@ -99,6 +101,7 @@ export class LiveBroker {
       failed,
       calls: new Set(),
       queue: Promise.resolve(),
+      busy: false,
       images: new Map(),
     }
     this.claim = claim
@@ -342,12 +345,29 @@ export class LiveBroker {
     if (!delegation || !id(delegation.id) || claim.calls.has(delegation.id)) return
     const key = delegation.id
     claim.calls.add(key)
+    if (claim.busy)
+      void this.say(claim, "session.thinking.append", {
+        delegation_id: key,
+        content:
+          "I am still completing the previous request. I will take this next without repeating finished work.",
+      }).catch(() => {
+        if (this.current(claim))
+          claim.failed("Live could not acknowledge waiting work. Existing work continues.")
+      })
     claim.queue = claim.queue
       .then(async () => {
         this.assert(claim)
+        if (claim.context.later(key)) {
+          await this.say(claim, "session.commentary.append", {
+            delegation_id: key,
+            content:
+              "You spoke again after that request was queued. Please clarify whether to replace it. Existing work has not been repeated.",
+          })
+          return
+        }
         const context = claim.context.select(key)
         if (!context) {
-          await claim.commands.append(`clarify_${randomBytes(8).toString("hex")}`, "session.commentary.append", {
+          await this.say(claim, "session.commentary.append", {
             delegation_id: key,
             content:
               "I do not have enough reliable new request context. Please clarify the task. Existing work has not been repeated.",
@@ -362,38 +382,52 @@ export class LiveBroker {
       })
   }
 
-  private async work(claim: Claim, context: NonNullable<ReturnType<LiveContext["select"]>>) {
-    const binding = claim.binding!
-    const images: string[] = []
-    for (const [id, image] of claim.images) if ((await image.result).status === "staged") images.push(id)
-    this.assert(claim)
-    const expected = `liv_${createHash("sha256").update(context.delegation).digest("hex").slice(0, 48)}`
-    let result = await this.backend(claim, `/live/session/${encodeURIComponent(binding.id)}/calls`, {
-      method: "POST",
-      body: JSON.stringify({ generation: binding.generation, context, ...(images.length ? { images } : {}) }),
-    })
-    const initial = receipt(result, claim, expected)
-    const deadline = Date.now() + 30 * 60_000
-    while (result.status === "accepted" || result.status === "running") {
-      if (Date.now() >= deadline) throw new Error("Live work remains unresolved")
-      await delay(claim.abort.signal)
-      result = await this.backend(claim, `/openai/session/${encodeURIComponent(binding.id)}/calls/${expected}`, {
-        method: "GET",
-      })
-      receipt(result, claim, expected, initial)
+  private async say(
+    claim: Claim,
+    type: "session.commentary.append" | "session.thinking.append" | "session.instructions.append",
+    body: { delegation_id: string | null; content: string },
+  ) {
+    for (const content of speak(body.content)) {
+      this.assert(claim)
+      const result = await claim.commands.append(`say_${randomBytes(8).toString("hex")}`, type, { ...body, content })
+      if (result.status !== "accepted") throw new Error(result.error ?? "Live append was not confirmed.")
     }
-    this.assert(claim)
-    if (!["completed", "failed", "cancelled", "unknown"].includes(String(result.status)))
-      throw new Error("Invalid Live work result")
-    const output = object(result.result)
-    const text =
-      result.status === "completed" && typeof output?.text === "string"
-        ? output.text.slice(0, 1000)
-        : `The task status is ${String(result.status)}. Review the task conversation for details; do not automatically repeat it.`
-    await claim.commands.append(`result_${randomBytes(8).toString("hex")}`, "session.commentary.append", {
-      delegation_id: context.delegation,
-      content: text,
-    })
+  }
+
+  private async work(claim: Claim, context: NonNullable<ReturnType<LiveContext["select"]>>) {
+    claim.busy = true
+    try {
+      const binding = claim.binding!
+      const images: string[] = []
+      for (const [id, image] of claim.images) if ((await image.result).status === "staged") images.push(id)
+      this.assert(claim)
+      const expected = `liv_${createHash("sha256").update(context.delegation).digest("hex").slice(0, 48)}`
+      let result = await this.backend(claim, `/live/session/${encodeURIComponent(binding.id)}/calls`, {
+        method: "POST",
+        body: JSON.stringify({ generation: binding.generation, context, ...(images.length ? { images } : {}) }),
+      })
+      const initial = receipt(result, claim, expected)
+      const deadline = Date.now() + 30 * 60_000
+      while (result.status === "accepted" || result.status === "running") {
+        if (Date.now() >= deadline) throw new Error("Live work remains unresolved")
+        await delay(claim.abort.signal)
+        result = await this.backend(claim, `/openai/session/${encodeURIComponent(binding.id)}/calls/${expected}`, {
+          method: "GET",
+        })
+        receipt(result, claim, expected, initial)
+      }
+      this.assert(claim)
+      if (!["completed", "failed", "cancelled", "unknown"].includes(String(result.status)))
+        throw new Error("Invalid Live work result")
+      const output = object(result.result)
+      const text =
+        result.status === "completed" && typeof output?.text === "string" && output.text.trim()
+          ? output.text
+          : `The task status is ${String(result.status)}. Review the task conversation for details; do not automatically repeat it.`
+      await this.say(claim, "session.commentary.append", { delegation_id: context.delegation, content: text })
+    } finally {
+      claim.busy = false
+    }
   }
 
   private async stage(

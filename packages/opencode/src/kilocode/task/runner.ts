@@ -13,6 +13,7 @@ import { PlanArtifact } from "@/kilocode/plan-artifact"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { RayaTask } from "."
+import { RayaTaskInbox, posted } from "./inbox"
 import { claim } from "./claim"
 import { inspect, recover } from "./recovery"
 import { poll } from "./poll"
@@ -104,6 +105,18 @@ export namespace RayaTaskRunner {
     const goals = RayaGoal.make(input)
     const schedule = input.database ? scheduler({ ...input, database: input.database }) : undefined
     const restore = input.database ? recovery({ ...input, database: input.database }) : undefined
+    const inbox = input.database ? RayaTaskInbox.make(input.database) : undefined
+    const retain = (run: RayaTask.Run) => {
+      const item = posted(run)
+      if (!inbox || !item) return Effect.void
+      return inbox.publish(item).pipe(
+        Effect.catch((error) =>
+          typeof error === "object" && error !== null && "_tag" in error && error._tag === "RayaTaskInbox.Conflict"
+            ? Effect.void
+            : Effect.die(error),
+        ),
+      )
+    }
 
     const seed = Effect.fn("RayaTaskRunner.seed")(function* (item: RayaTask.Agent) {
       const memory = yield* tasks.recall(item.id)
@@ -256,8 +269,13 @@ export namespace RayaTaskRunner {
         const run = history.findLast((entry) => entry.sessionID === sessionID)
         if (!run || run.status === "complete" || run.status === "error") continue
         if (waiting) {
-          if (run.status === "blocked" && run.blockedReason === WAIT) continue
+          if (run.status === "blocked" && run.blockedReason === WAIT) {
+            yield* retain(run)
+            continue
+          }
           yield* tasks.transition(run, { ...run, status: "blocked", blockedReason: WAIT })
+          const latest = (yield* tasks.runsFor(item.id)).find((entry) => entry.id === run.id)
+          if (latest) yield* retain(latest)
           continue
         }
         if (run.status !== "blocked" || run.blockedReason !== WAIT) continue
@@ -270,7 +288,11 @@ export namespace RayaTaskRunner {
       for (const item of items) {
         const history = yield* tasks.runsFor(item.id)
         const run = history.findLast((entry) => entry.sessionID === sessionID && entry.status === "running")
-        if (!run) continue
+        if (!run) {
+          const done = history.findLast((entry) => entry.sessionID === sessionID && entry.status !== "running")
+          if (done) yield* retain(done)
+          continue
+        }
         const goal = yield* goals.get(sessionID)
         const status =
           goal?.status === "complete"
@@ -327,6 +349,8 @@ export namespace RayaTaskRunner {
         }
         if (changed && schedule && (status === "complete" || status === "blocked"))
           yield* schedule.settle({ ...run, status, blockedReason: goal?.blockedReason })
+        const latest = (yield* tasks.runsFor(item.id)).find((entry) => entry.id === run.id)
+        if (latest) yield* retain(latest)
       }
     })
 

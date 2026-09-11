@@ -3,7 +3,7 @@ import { Effect, Exit } from "effect"
 import { eq, sql } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { RayaRoutineConversationTable as Conversation } from "@opencode-ai/core/kilocode/routine.sql"
-import { RayaTaskInbox, status } from "@/kilocode/task/inbox"
+import { RayaTaskInbox, status, posted } from "@/kilocode/task/inbox"
 import type { RayaTask } from "@/kilocode/task"
 import { SessionID } from "@/session/schema"
 
@@ -29,6 +29,47 @@ test("routine inbox state stays separate from unread", () => {
     "needs_input",
   )
   expect(status(agent("a"))).toBe("scheduled")
+})
+
+test("posted reports do not treat a running or empty completion as invented success", () => {
+  const sid = SessionID.make("ses_test")
+  expect(posted({ id: "run", agentID: "a", at: 1, sessionID: sid, status: "running" })).toBeUndefined()
+  const done = posted({
+    id: "run",
+    agentID: "a",
+    at: 1,
+    sessionID: sid,
+    status: "complete",
+    outcome: { kind: "notify", summary: "", cost: 0 },
+  })
+  expect(done?.kind).toBe("report")
+  expect(done?.source).toBe("report:run")
+  expect(done?.body).toContain("not invented success")
+  const need = posted({
+    id: "run",
+    agentID: "a",
+    at: 1,
+    sessionID: sid,
+    status: "blocked",
+    blockedReason: "waiting on you",
+  })
+  expect(need?.kind).toBe("decision")
+  expect(need?.source).toBe("need:run")
+  expect(need?.body).toContain("not a completed report")
+  const failed = posted({ id: "run", agentID: "a", at: 1, sessionID: sid, status: "error" })
+  expect(failed?.kind).toBe("report")
+  expect(failed?.body).toContain("not a completed report")
+  const timer = posted({
+    id: 'timer:["agt",1,1]',
+    agentID: "a",
+    at: 1,
+    sessionID: sid,
+    status: "complete",
+    outcome: { kind: "notify", summary: "Done", cost: 0 },
+  })
+  expect(timer?.source.startsWith("report:")).toBe(true)
+  expect(timer?.occurrenceID).toBeUndefined()
+  expect(timer?.source).not.toContain("[")
 })
 
 test("routine inbox publication is idempotent, unread ignores user messages, and conversation deletion drops messages", async () => {

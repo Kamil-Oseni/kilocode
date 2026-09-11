@@ -108,6 +108,43 @@ export function status(agent: RayaTask.Agent, last?: RayaTask.Run): typeof State
   return "scheduled"
 }
 
+function origin(kind: "need" | "report", id: string) {
+  const raw = `${kind}:${id}`
+  return Schema.is(token)(raw) ? raw : `${kind}:${digest(id).slice(0, 40)}`
+}
+
+export function posted(run: RayaTask.Run): Publish | undefined {
+  if (run.status === "running") return undefined
+  const waiting = run.status === "blocked" && run.blockedReason === "waiting on you"
+  const at = run.trigger?.kind === "timer" ? run.trigger.scheduledAt : run.at
+  const when = Number.isFinite(at) ? new Date(at).toISOString() : "unknown time"
+  const findings = run.outcome?.summary?.trim()
+  const reason = run.blockedReason?.trim()
+  const lines = waiting
+    ? [`This run needs a decision (${when}).`, reason, "This is not a completed report."]
+    : run.status === "complete"
+      ? [
+          `Run completed (${when}).`,
+          findings || "No written findings were saved. Inspect the run details; this is not invented success.",
+        ]
+      : [
+          `Run ${run.status} (${when}).`,
+          reason || findings || "No written findings were saved.",
+          "This is not a completed report.",
+        ]
+  if (run.outcome?.evidence?.length) lines.push("Evidence:", ...run.outcome.evidence.slice(0, 8))
+  const body = lines.filter((line): line is string => !!line).join("\n").slice(0, 8000)
+  if (!body.trim()) return undefined
+  return {
+    agentID: run.agentID,
+    source: origin(waiting ? "need" : "report", run.id),
+    kind: waiting ? "decision" : "report",
+    body,
+    sessionID: run.sessionID,
+    ...(Schema.is(token)(run.id) ? { occurrenceID: run.id } : {}),
+  }
+}
+
 export namespace RayaTaskInbox {
   export function make(database: Database.Interface) {
     const db = database.db

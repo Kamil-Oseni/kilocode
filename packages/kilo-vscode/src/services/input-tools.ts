@@ -18,6 +18,8 @@ type Msg = {
   kind?: SpeechKey
   imageID?: string
   responseID?: string
+  engine?: string
+  action?: string
   eventID?: string
   sdp?: string
   key?: string // raya_change - Milestone H secret keys
@@ -146,32 +148,45 @@ async function routeKey(message: Msg, ctx: Ctx) {
 
 async function routeImage(message: Msg, ctx: Ctx) {
   if (message.type !== "speechOpenAIImage") return false
-  if (typeof message.requestId === "string" && typeof message.imageID === "string" && typeof message.data === "string")
+  if (token(message.requestId) && token(message.imageID) && typeof message.data === "string")
     await ctx.speech?.openaiImage(message.requestId, message.imageID, message.data, ctx.post)
   return true
 }
 
 async function routeOpenAI(message: Msg, ctx: Ctx) {
+  if (message.type === "speechLiveControl") {
+    if (
+      token(message.requestId) &&
+      token(message.eventID) &&
+      (message.action === "mute" || message.action === "unmute" || message.action === "stop_speaking")
+    )
+      await ctx.speech?.liveControl(message.requestId, message.eventID, message.action, ctx.post)
+    else if (typeof message.requestId === "string")
+      ctx.post({
+        type: "speechLiveControlResult",
+        requestId: message.requestId,
+        eventID: token(message.eventID) ? message.eventID : "",
+        status: "failed",
+        error: "Voice control was not understood. End voice and reconnect if needed.",
+      })
+    return true
+  }
   if (await routeImage(message, ctx)) return true
   if (message.type === "speechOpenAIInterrupt") {
-    if (
-      typeof message.requestId === "string" &&
-      typeof message.responseID === "string" &&
-      typeof message.eventID === "string"
-    )
+    if (token(message.requestId) && token(message.responseID) && token(message.eventID))
       ctx.speech?.openaiInterrupt(message.requestId, message.responseID, message.eventID)
     return true
   }
   if (message.type === "speechOpenAIStop") {
-    if (typeof message.requestId === "string") await ctx.speech?.openaiStop(message.requestId, ctx.post)
+    if (token(message.requestId)) await ctx.speech?.openaiStop(message.requestId, ctx.post)
     return true
   }
   if (message.type !== "speechOpenAIStart") return false
-  const scope = typeof message.sessionID === "string" ? ctx.voiceScope?.(message.sessionID) : undefined
-  if (!ctx.speech || !scope || typeof message.requestId !== "string" || typeof message.sdp !== "string") {
+  const scope = token(message.sessionID) ? ctx.voiceScope?.(message.sessionID) : undefined
+  if (!ctx.speech || !scope || !token(message.requestId) || !offer(message.sdp)) {
     ctx.post({
       type: "speechOpenAIError",
-      requestId: message.requestId,
+      requestId: token(message.requestId) ? message.requestId : undefined,
       error: "The voice session's workspace is unavailable or ambiguous. Reopen the task before starting voice.",
     })
     return true
@@ -179,6 +194,7 @@ async function routeOpenAI(message: Msg, ctx: Ctx) {
   await ctx.speech.openaiStart(
     {
       requestId: message.requestId,
+      engine: message.engine === "live" ? "live" : undefined,
       sessionID: message.sessionID!,
       sdp: message.sdp,
       directory: scope.directory,
@@ -188,6 +204,14 @@ async function routeOpenAI(message: Msg, ctx: Ctx) {
     ctx.post,
   )
   return true
+}
+
+function token(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= 256 && !/[\x00-\x20]/.test(value)
+}
+
+function offer(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= 262_144
 }
 
 function routeSpeechPlayback(message: Msg, ctx: Ctx) {

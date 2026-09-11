@@ -9,6 +9,7 @@ import { cancelSpeechCapture, startSpeechCapture, stopSpeechCapture } from "../s
 import type { KiloConnectionService } from "../services/cli-backend/connection-service" // raya_change - realtime voice session broker
 import { RealtimeBroker } from "./realtime-broker"
 import { voiceFallback } from "./fallback" // raya_change - explicit three-rung degradation
+import { LiveBroker } from "./live-broker"
 import { OpenAIBroker } from "./openai-broker"
 import { loadVoiceContext } from "./openai-context"
 import type { SpeechKey } from "../shared/speech"
@@ -22,6 +23,7 @@ export class SpeechService implements vscode.Disposable {
   private readonly replies = new VoiceReplies() // raya_change - extension-host voice reply handoff
   private readonly realtime = new RealtimeBroker()
   private readonly openai = new OpenAIBroker()
+  private readonly live = new LiveBroker()
 
   constructor(context: vscode.ExtensionContext) {
     this.settings = new SpeechSettingsStore(context.globalState, context.secrets)
@@ -48,7 +50,7 @@ export class SpeechService implements vscode.Disposable {
     input: { sessionID: string; directory: string; connection: KiloConnectionService },
     post: Post,
   ): Promise<void> {
-    if (this.openai.active) {
+    if (this.openai.active || this.live.active) {
       post({
         type: "speechRealtimeError",
         code: "busy",
@@ -113,6 +115,7 @@ export class SpeechService implements vscode.Disposable {
   async openaiStart(
     input: {
       requestId: string
+      engine?: "live"
       sessionID: string
       sdp: string
       directory: string
@@ -121,8 +124,9 @@ export class SpeechService implements vscode.Disposable {
     },
     post: Post,
   ) {
+    if (input.engine === "live") return this.liveStart(input, post)
     const failed = (error: string) => post({ type: "speechOpenAIError", requestId: input.requestId, error })
-    if (this.realtime.active) {
+    if (this.realtime.active || this.live.active) {
       failed("End the existing voice call before switching to OpenAI.")
       return
     }
@@ -158,8 +162,57 @@ export class SpeechService implements vscode.Disposable {
     )
   }
 
+  private async liveStart(input: Parameters<SpeechService["openaiStart"]>[0], post: Post): Promise<void> {
+    const failed = (error: string) => post({ type: "speechOpenAIError", requestId: input.requestId, error })
+    if (this.realtime.active || this.openai.active) {
+      failed("End the existing voice call before switching to GPT-Live.")
+      return
+    }
+    const settings = await this.settings.load()
+    if (settings.voiceEngine !== "openai-live") {
+      failed("GPT-Live voice is not selected in Speech settings.")
+      return
+    }
+    if (!(await this.settings.key("openai"))) {
+      failed("GPT-Live requires an OpenAI API key in Speech settings.")
+      return
+    }
+    await this.live.start(
+      { requestID: input.requestId, sessionID: input.sessionID, sdp: input.sdp },
+      async (signal) => {
+        const settings = await this.settings.load()
+        if (settings.voiceEngine !== "openai-live") throw new Error("GPT-Live voice is not selected in Speech settings.")
+        const key = await this.settings.key("openai")
+        if (!key) throw new Error("GPT-Live requires an OpenAI API key in Speech settings.")
+        if (!/^[a-z][a-z0-9_-]{0,63}$/.test(settings.openaiVoice)) throw new Error("OpenAI voice name is invalid.")
+        const client = await input.connection.getClientAsync(input.directory)
+        const server = input.connection.getServerConfig()
+        if (!server || !input.current()) throw new Error("The voice connection or workspace changed.")
+        const current = () => input.current() && input.connection.getServerConfig() === server
+        const context = await loadVoiceContext(client, input.sessionID, input.directory, signal, current)
+        if (!current()) throw new Error("The voice connection or workspace changed.")
+        return {
+          key, voice: settings.openaiVoice, backend: server.baseUrl,
+          authorization: `Basic ${Buffer.from(`kilo:${server.password}`).toString("base64")}`,
+          directory: input.directory, current, context: context.text,
+          started: () => post({ type: "speechLiveStarted", requestId: input.requestId }),
+          usage: (usage) => post({ type: "speechLiveUsage", requestId: input.requestId, sessionID: input.sessionID, usage }),
+        }
+      },
+      (answer) => post({ type: "speechOpenAIReady", requestId: input.requestId, sdp: answer.sdp }),
+      failed,
+    )
+  }
+
+  async liveControl(requestId: string, eventID: string, action: "mute" | "unmute" | "stop_speaking", post: Post) {
+    const result = await this.live.control(requestId, eventID, action)
+    post({ type: "speechLiveControlResult", requestId, eventID, ...result })
+  }
+
   async openaiImage(requestId: string, imageID: string, data: string, post: Post) {
-    const result = await this.openai.share(requestId, imageID, data)
+    const result = this.live.active
+      ? await this.live.share(requestId, imageID, data)
+      : await this.openai.share(requestId, imageID, data)
     post({ type: "speechOpenAIImageResult", requestId, imageID, ...result })
   }
 
@@ -168,7 +221,8 @@ export class SpeechService implements vscode.Disposable {
   }
 
   async openaiStop(requestId: string, post: Post) {
-    const error = await this.openai.stop(requestId)
+    const errors = await Promise.all([this.openai.stop(requestId), this.live.stop(requestId)])
+    const error = errors.find((value) => value !== undefined)
     post(error ? { type: "speechOpenAIError", requestId, error } : { type: "speechOpenAIStopped", requestId })
   }
   // raya_change end
@@ -320,7 +374,7 @@ export class SpeechService implements vscode.Disposable {
     const text = await this.replies.wait(sessionID)
     if (!text) return
     const settings = await this.settings.load()
-    if (settings.mode === "off" || settings.voiceEngine === "openai-realtime" || this.openai.active) return
+    if (settings.mode === "off" || ["openai-realtime", "openai-live"].includes(settings.voiceEngine) || this.openai.active || this.live.active) return
     await this.speak({ requestId: crypto.randomUUID(), text: speakable(text) }, post)
   }
   // raya_change end
@@ -337,6 +391,10 @@ export class SpeechService implements vscode.Disposable {
 
   dispose(): void {
     this.cancel()
+    void this.live.dispose().then(
+      (error) => { if (error) console.error("[Raya] Live voice disposal failed; resource release is unconfirmed.") },
+      () => console.error("[Raya] Live voice disposal failed; resource release is unconfirmed."),
+    )
     void this.openai.dispose().then(
       (error) => {
         if (error) console.error("[Raya] OpenAI voice disposal failed:", error)

@@ -102,11 +102,10 @@ export class LiveBroker {
       images: new Map(),
     }
     this.claim = claim
-    claim.opening = this.open(claim, load, ready).catch(async () => {
+    claim.opening = this.open(claim, load, ready).catch(async (cause: unknown) => {
       const stopped = claim.cancelled
       const error = await this.cleanup(claim)
-      if (!stopped || error)
-        failed(error ?? "GPT-Live could not start. Check model access and review the current task before retrying.")
+      if (!stopped || error) failed(error ?? reveal(cause) ?? "GPT-Live could not start. Check model access and review the current task before retrying.")
     })
     await claim.opening
   }
@@ -570,6 +569,11 @@ export class LiveBroker {
 
 function object(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined
+}
+function reveal(cause: unknown) {
+  if (!(cause instanceof Error) || cause.message.length === 0 || cause.message.length > 240) return undefined
+  if (/bearer|sk-|password|authorization/i.test(cause.message)) return undefined
+  return cause.message
 }
 function id(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= 256 && !/[\x00-\x20]/.test(value)

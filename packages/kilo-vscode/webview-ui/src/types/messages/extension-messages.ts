@@ -1,3 +1,4 @@
+import type { LiveUsage } from "../../../../src/shared/live-usage"
 import type { VoiceUsage } from "../../../../src/shared/voice-usage"
 import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@kilocode/sdk/v2/client"
 import type { DiffSourceCapabilities, DiffSourceDescriptor } from "../../../../src/diff/sources/types"
@@ -784,7 +785,7 @@ export interface SpeechOpenAIImageResultMessage {
   type: "speechOpenAIImageResult"
   requestId: string
   imageID: string
-  status: "shared" | "unknown" | "failed"
+  status: "shared" | "staged" | "unknown" | "failed"
   error?: string
 }
 
@@ -1704,6 +1705,9 @@ export interface AgentManagerFocusContextRequestedMessage {
 }
 
 export type ExtensionMessage =
+  | { type: "speechLiveStarted"; requestId: string }
+  | { type: "speechLiveUsage"; requestId: string; sessionID: string; usage: LiveUsage }
+  | { type: "speechLiveControlResult"; requestId: string; eventID: string; status: "accepted" | "unknown" | "failed"; error?: string }
   | { type: "speechOpenAIUsage"; requestId: string; sessionID: string; usage: VoiceUsage }
   | DocumentResultMessage
   | DocumentOpenMessage

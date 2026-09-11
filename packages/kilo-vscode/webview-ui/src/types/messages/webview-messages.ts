@@ -713,6 +713,7 @@ export interface SpeechRealtimeStopMessage {
 
 export interface SpeechOpenAIStartMessage {
   type: "speechOpenAIStart"
+  engine?: "live"
   requestId: string
   sessionID: string
   sdp: string
@@ -1777,6 +1778,7 @@ export interface DismissAgentMigrationBannerMessage {
 }
 
 export type WebviewMessage =
+  | { type: "speechLiveControl"; requestId: string; eventID: string; action: "mute" | "unmute" | "stop_speaking" }
   | DocumentRequestMessage
   | DocumentOpenFileMessage
   | DocumentCloseMessage

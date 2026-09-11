@@ -109,6 +109,7 @@ function normalize(input?: Partial<SpeechSettings>): SpeechSettings {
 function normalizeRealtime(input?: Partial<SpeechSettings>) {
   return {
     voiceEngine:
+      input?.voiceEngine === "openai-live" ||
       input?.voiceEngine === "openai-realtime" ||
       input?.voiceEngine === "cascade-v1" ||
       input?.voiceEngine === "qwen-realtime"

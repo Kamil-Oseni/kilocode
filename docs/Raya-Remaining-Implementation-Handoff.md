@@ -1030,7 +1030,7 @@ Next executable step: remaining Live host image four-attempt/hash-reuse cases an
 
 ## 2026-09-11: Live image bounds and context selection
 
-**States:** host image identity/four-attempt/unknown-receipt and LiveContext selection verified locally; Live remains unshipped. Product checkpoint remains `8b01e72311`.
+**States:** host image identity/four-attempt/unknown-receipt and LiveContext selection verified locally, committed as `a36f735be5`; Live remains unshipped. Product checkpoint remains `8b01e72311`.
 
 Same image ID with the same bytes is idempotent; a different payload reusing that ID is refused. Four staging attempts are retained; a fifth is refused. Invalid image URLs never POST. A mismatched storage receipt is retained as unknown and does not emit thinking or dispatch work. LiveContext selects fresh user evidence once, ignores client-correlated fragments, blocks selection after a gap, and treats conflicting delegation offsets as invalid.
 

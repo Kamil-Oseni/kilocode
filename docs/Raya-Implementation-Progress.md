@@ -2356,7 +2356,7 @@ Do not snapshot:install. Next: remaining Live host image bounds, SDK regeneratio
 
 ## 2026-09-11: Live image bounds and context selection (OVR-01)
 
-Status: verified locally, unshipped. Installed product is still 8b01e72311.
+Status: verified locally and committed as a36f735be5, unshipped. Installed product is still 8b01e72311.
 
 Live image IDs cannot change content, four staging attempts are retained, invalid bytes never reach storage, and a mismatched receipt stays unknown without dispatching work. LiveContext selects fresh user evidence once, ignores command echoes, blocks selection after a gap, and rejects conflicting delegation offsets.
 

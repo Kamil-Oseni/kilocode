@@ -2642,5 +2642,17 @@ Installed eden.raya@7.4.23-snapshot+506f944e64.kamil-oseni.1789161518503. VSIX C
 
 Next: leftover RDM-06 timeout/inspectable-chain/lifecycle, or leftover Live microphone/provider-switch.
 
+## 2026-09-11: Delegation timeout expiry
+
+Status: verified locally and unshipped. Installed product is still 506f944e64.
+
+A live request past its deadline is not started. The scheduler tick fails it and publishes a timeout reply. A start that is already overdue is refused the same way.
+
+Changed files: packages/opencode/src/kilocode/task/delegation.ts, packages/opencode/src/kilocode/task/runner.ts, packages/opencode/test/kilocode/task/delegation.test.ts, packages/opencode/test/kilocode/task/delegation-runner.test.ts, .changeset/raya-routine-delegate-timeout.md.
+
+Commands (packages/opencode): bun test ./test/kilocode/task/delegation.test.ts ./test/kilocode/task/delegation-runner.test.ts --timeout 60000 -> 10 pass / 0 fail / 100 expect / exit 0. bun run typecheck -> exit 0.
+
+Next: commit, push, and snapshot:install. Remaining: inspectable chain in UI, lifecycle rename/archive, packaged microphone/acoustic acceptance, and provider-switch/disposal.
+
 
 

@@ -324,3 +324,67 @@ test("parent run cost stays independent of a completed child request", async () 
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })
+
+test("an overdue queued request fails on tick without starting", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const starts: string[] = []
+      const runner = RayaTaskRunner.make({
+        database,
+        storage,
+        sessions: {
+          create: () =>
+            Effect.sync(() => {
+              starts.push("start")
+              return session(`ses_${starts.length}`)
+            }),
+          get: () => Effect.die("unused"),
+          messages: () => Effect.succeed([]),
+          children: () => Effect.succeed([]),
+        },
+      })
+      const store = RayaTaskDelegation.make(database)
+      const inbox = RayaTaskInbox.make(database)
+      const chief = yield* runner.tasks.create({
+        name: "Chief of Staff",
+        role: "generalist",
+        objective: "Coordinate Friday close.",
+        access: "brief",
+        enabled: true,
+        schedule: { kind: "manual" },
+      })
+      const books = yield* runner.tasks.create({
+        name: "Accounting",
+        role: "accountant",
+        objective: "Reconcile receipts.",
+        capabilities: ["accounting"],
+        access: "full",
+        enabled: true,
+        schedule: { kind: "manual" },
+      })
+      const first = yield* runner.delegate({
+        source: "dlg_busy",
+        senderID: chief.id,
+        recipientID: books.id,
+        objective: "Finish the open close.",
+      })
+      expect(first.state).toBe("running")
+      const due = Date.now() + 60_000
+      const queued = yield* runner.delegate({
+        source: "dlg_late",
+        senderID: chief.id,
+        recipientID: books.id,
+        objective: "Review the leftover receipts.",
+        deadline: due,
+      })
+      expect(queued.state).toBe("queued")
+      yield* runner.tick(due)
+      expect((yield* store.get(queued.id)).state).toBe("failed")
+      expect((yield* store.get(queued.id)).reason).toContain("timed out")
+      expect((yield* inbox.page(chief.id)).messages.some((item) => item.body.includes("timed out"))).toBe(true)
+      expect(starts).toEqual(["start"])
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})

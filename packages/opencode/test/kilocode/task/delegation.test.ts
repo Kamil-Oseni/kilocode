@@ -281,3 +281,23 @@ test("child cost is stored as a real amount and listed on the parent run without
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })
+
+test("overdue live requests fail with a timeout reply", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const store = RayaTaskDelegation.make(yield* Database.Service)
+      const inbox = RayaTaskInbox.make(yield* Database.Service)
+      const chief = agent("chief", "generalist")
+      const books = agent("books", "accountant")
+      const due = Date.now() + 60_000
+      const first = yield* store.admit(request("dlg_time", chief.id, books.id, { deadline: due }), chief, books)
+      expect(first.record.state).toBe("queued")
+      expect((yield* store.overdue(Date.now())).length).toBe(0)
+      expect((yield* store.overdue(due)).map((item) => item.id)).toEqual([first.record.id])
+      const done = yield* store.finish(first.record.id, "failed", books, undefined, undefined, "This request timed out. It was not completed.")
+      expect(done.state).toBe("failed")
+      expect(done.reason).toContain("timed out")
+      expect((yield* inbox.page(chief.id)).messages.some((item) => item.body.includes("timed out"))).toBe(true)
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})

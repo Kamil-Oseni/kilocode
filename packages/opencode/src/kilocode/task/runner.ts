@@ -138,6 +138,27 @@ export namespace RayaTaskRunner {
     const restore = input.database ? recovery({ ...input, database: input.database }) : undefined
     const inbox = input.database ? RayaTaskInbox.make(input.database) : undefined
     const errands = input.database ? RayaTaskDelegation.make(input.database) : undefined
+    const LATE = "This request timed out. It was not completed."
+    const lapse = Effect.fn("RayaTaskRunner.lapse")(function* (from: number) {
+      if (!errands) return
+      const rows = yield* errands.overdue(from)
+      for (const row of rows) {
+        const recipient = yield* tasks.get(row.recipientID).pipe(
+          Effect.catchTag("RayaTask.NotFoundError", () => Effect.succeed(undefined)),
+        )
+        if (!recipient) continue
+        yield* errands.finish(row.id, "failed", recipient, undefined, undefined, LATE).pipe(
+          Effect.catchTag("RayaTaskDelegation.Conflict", () => Effect.void),
+          Effect.catchTag("RayaTaskDelegation.Invalid", (err) =>
+            Effect.sync(() => log.error("delegation timeout failed", { err })),
+          ),
+        )
+        if (!row.sessionID || !input.halt) continue
+        yield* input.halt(row.sessionID).pipe(
+          Effect.catch((err) => Effect.sync(() => log.error("timed out session stop failed", { err }))),
+        )
+      }
+    })
     const retain = Effect.fn("RayaTaskRunner.retain")(function* (run: RayaTask.Run) {
       const item = posted(run)
       if (!inbox || !item) return
@@ -390,6 +411,10 @@ export namespace RayaTaskRunner {
         })
       const sender = yield* tasks.get(taken.senderID)
       const recipient = yield* tasks.get(taken.recipientID)
+      if (taken.deadline !== undefined && taken.deadline <= Date.now()) {
+        yield* errands.finish(taken.id, "failed", recipient, undefined, undefined, LATE)
+        return yield* errands.get(taken.id)
+      }
       const note = prompt(sender, recipient, {
         source: taken.source,
         senderID: taken.senderID,
@@ -439,6 +464,7 @@ export namespace RayaTaskRunner {
         if (!history.some((run) => run.id === input.parentRunID))
           return yield* new Invalid({ message: "The parent run was not found for this worker." })
       }
+      yield* lapse(Date.now())
       const admitted = yield* errands.admit(input, sender, recipient)
       if ((yield* busy(recipient.id)) || admitted.record.state !== "queued") return admitted.record
       const taken = yield* errands.take(recipient.id)
@@ -647,7 +673,8 @@ export namespace RayaTaskRunner {
     })
 
     const tick = (from: number) =>
-      (schedule ? schedule.clean() : Effect.void).pipe(
+      lapse(from).pipe(
+        Effect.andThen(schedule ? schedule.clean() : Effect.void),
         Effect.andThen(tasks.list()),
         Effect.flatMap((items) =>
           Effect.forEach(

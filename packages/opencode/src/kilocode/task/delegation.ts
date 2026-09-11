@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull } from "drizzle-orm"
+import { and, asc, eq, gt, inArray, isNotNull, isNull, lte, or } from "drizzle-orm"
 import { createHash } from "node:crypto"
 import { Effect, Schema } from "effect"
 import type { Database } from "@opencode-ai/core/database/database"
@@ -369,7 +369,13 @@ export namespace RayaTaskDelegation {
       const row = yield* db
         .select()
         .from(Delegation)
-        .where(and(eq(Delegation.recipient_id, recipientID), eq(Delegation.state, "queued")))
+        .where(
+          and(
+            eq(Delegation.recipient_id, recipientID),
+            eq(Delegation.state, "queued"),
+            or(isNull(Delegation.deadline), gt(Delegation.deadline, Date.now())),
+          ),
+        )
         .orderBy(asc(Delegation.time_created), asc(Delegation.id))
         .limit(1)
         .get()
@@ -484,6 +490,16 @@ export namespace RayaTaskDelegation {
         .pipe(Effect.orDie)
       return rows.map(decode)
     })
-    return { admit, take, attach, finish, get, lookup, chain, descendants, stop, queued, bySession, byRun }
+    const overdue = Effect.fn("RayaTaskDelegation.overdue")(function* (now: number) {
+      const rows = yield* db
+        .select()
+        .from(Delegation)
+        .where(and(inArray(Delegation.state, [...live]), isNotNull(Delegation.deadline), lte(Delegation.deadline, now)))
+        .orderBy(asc(Delegation.time_created), asc(Delegation.id))
+        .all()
+        .pipe(Effect.orDie)
+      return rows.map(decode)
+    })
+    return { admit, take, attach, finish, get, lookup, chain, descendants, stop, queued, overdue, bySession, byRun }
   }
 }

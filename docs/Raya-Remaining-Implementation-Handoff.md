@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Permission canonical comparison is delivered: committed, pushed and installed as `8b01e72311`. LiveBroker fixtures, SQL duration/delegation, host image/context tests, SDK Live methods, Live WebRTC peer fixtures, and host speech routing through `input-tools` are committed and unshipped. Next: VoiceProvider/UI integration. RDM-01-06 remain unimplemented. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Permission canonical comparison is delivered: committed, pushed and installed as `8b01e72311`. LiveBroker fixtures, SQL duration/delegation, host image/context tests, SDK Live methods, Live WebRTC peer fixtures, host speech routing, and VoiceProvider/UI Live integration are committed and unshipped. Next: HTTP contract tests, then RDM-01-06. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -644,7 +644,7 @@ Continue implementing Raya in C:\Users\User\Desktop\raya. Read AGENTS.md, docs/R
 
 I authorize root plus two subagents, normal periodic commits/pushes to origin/main, and snapshot builds/reinstallation outside the sandbox without asking again. Do not force push, bypass hooks or force reload VS Code. Batch broad testing at coherent checkpoints, but verify relevant contracts before calling features working. If repeated attempts fail, document the exact cause and next approach, move to independent work and revisit.
 
-First inspect current git/process state against the handoff. Preserve uncommitted Live UI files. LiveBroker fixtures, SQL duration/delegation, host image/context tests, SDK Live methods, Live WebRTC peer fixtures and host speech routing are the latest verified local increments; do not package Live. Next: VoiceProvider/UI integration. Keep Raya task ownership, permissions, durable receipts and execution authority. Do not replay historical text as new work or claim generated captions prove heard audio.
+First inspect current git/process state against the handoff. Preserve remaining uncommitted telemetry and Codex-deferred files. LiveBroker fixtures, SQL duration/delegation, host image/context tests, SDK Live methods, Live WebRTC peer fixtures, host speech routing and VoiceProvider/UI Live integration are the latest verified local increments; do not package Live. Next: HTTP contract tests, then RDM-01-06. Keep Raya task ownership, permissions, durable receipts and execution authority. Do not replay historical text as new work or claim generated captions prove heard audio.
 
 Defer new Codex-derived implementation until existing Raya work, including GPT-Live and all 39 requirements, is complete. Use the deferred research document later; do not start a new porting track now. Keep the 39-requirement ledger honest. When I warn that credits are near $10, promptly update the full remaining-work handoff, settle the current work and provide an updated continuation prompt.
 ```
@@ -735,7 +735,7 @@ Implement/verify this in order:
 - Image sharing selects the active broker. Live returns `staged`, now added to image state/message unions. UI explicitly says images go to Raya work/its vision model, not GPT-Live. Prove sharing alone cannot admit work; check exact staging identity, retained bounds, retries, task deletion and later selection by delegation.
 - Review CLI speech mirror/fallback/config validation for the new engine; do not only inspect the settings dropdown. Ensure native Live does not accidentally trigger cascade voice or switch the main task agent.
 
-**VoiceProvider/UI integration:** root edited `webview-ui/src/context/voice.tsx`, `voice-images.ts`, settings SpeechTab and chat NativeVoiceControls/Image/Recovery/Usage, VoiceTranscript and PromptInput.
+**VoiceProvider/UI integration:** Chromium fixture `tests/fixtures/live-voice-ui.mjs` drives the production VoiceProvider and composer. Start posts `engine: "live"` without switching the Auto agent. Microphone controls wait for `speechLiveStarted`. Delayed older mute failures cannot overwrite a newer unmute. Stop speaking is local silence plus trusted steering; Resume is required; captions cannot unmute. Task switch clears captions and duration. Images state they go to Raya work/vision, not GPT-Live. Remaining: packaged microphone/acoustic acceptance, existing composer.browser.ts regression pass as a batch, and HTTP contract tests.
 
 - A selected transport (Realtime or Live) is retained through recovery; cleanup must not choose a transport from newly changed settings. The call records engine and owner identity. Start/reset clears Live captions/duration/silence state. Ensure task switches also clear/hide duration and captions: current code needs an explicit review because older cleanup paths mainly clear Realtime transcript state.
 - Live startup messages unlock the local transport; duration updates accept only matching call/recovery and parent task. Existing recovery requires both host acknowledgement and local cleanup. Test asynchronous ordering with actual provider messages and close events, not only a fake sink.
@@ -1080,6 +1080,20 @@ Changed files: `packages/kilo-vscode/src/services/input-tools.ts`, `packages/kil
 
 Commands (packages/kilo-vscode): `bun test tests/unit/live-speech-routing.test.ts tests/unit/live-broker.test.ts --timeout 30000` -> 12 pass / 0 fail / 283 expect / exit 0 (`.tmp/live-speech-routing-tests.log`). `bun run check-types` -> exit 0 (`.tmp/live-routing-types.log`). `bun run check-types:webview` -> exit 0 (`.tmp/live-routing-webview-types.log`). Root oxlint: 11 warnings / 0 errors / exit 0 (`.tmp/live-routing-lint.log`).
 
-Remaining: VoiceProvider/UI integration, HTTP contract tests, and RDM-01-06. Do not snapshot:install.
+Remaining: HTTP contract tests and RDM-01-06. Do not snapshot:install.
 
-Next executable step: VoiceProvider/UI integration. Do not change the default engine or package Live.
+Next executable step: HTTP contract tests for Live duration/delegation, then RDM-01-06. Do not change the default engine or package Live.
+
+## 2026-09-11: Live VoiceProvider UI
+
+**States:** VoiceProvider UI committed as `7f70d78c96`; Live remains unshipped. Product checkpoint remains `8b01e72311`.
+
+Production VoiceProvider keeps the Auto agent, waits for host `speechLiveStarted`, correlates Live control acknowledgements, requires Resume after stop-speaking, labels 64-fragment caption truncation, and clears captions/duration on task switch. Duration updates require matching call/recovery and parent task. Images state they go to Raya work, not GPT-Live.
+
+Changed files: `packages/kilo-vscode/webview-ui/src/context/voice.tsx`, `packages/kilo-vscode/webview-ui/src/context/voice-images.ts`, `packages/kilo-vscode/webview-ui/src/components/chat/NativeVoiceControls.tsx`, `packages/kilo-vscode/webview-ui/src/components/chat/NativeVoiceImage.tsx`, `packages/kilo-vscode/webview-ui/src/components/chat/NativeVoiceRecovery.tsx`, `packages/kilo-vscode/webview-ui/src/components/chat/NativeVoiceUsage.tsx`, `packages/kilo-vscode/webview-ui/src/components/chat/PromptInput.tsx`, `packages/kilo-vscode/webview-ui/src/components/chat/VoiceTranscript.tsx`, `packages/kilo-vscode/webview-ui/src/components/settings/SpeechTab.tsx`, `packages/kilo-vscode/tests/fixtures/composer-entry.jsx`, `packages/kilo-vscode/tests/fixtures/live-voice-ui.mjs`, `packages/kilo-vscode/tests/unit/live-voice-ui.test.ts`.
+
+Commands (packages/kilo-vscode): `bun test tests/unit/live-voice-ui.test.ts --timeout 130000` -> 1 pass / 0 fail / 2 expect / exit 0 (`.tmp/live-voice-ui-tests.log`). `bun run check-types:webview` -> exit 0 (`.tmp/live-ui-webview-types.log`). Root oxlint: 9 warnings / 0 errors / exit 0 (`.tmp/live-ui-lint.log`).
+
+Remaining: HTTP contract tests, packaged microphone acceptance, and RDM-01-06. Do not snapshot:install.
+
+Next executable step: HTTP contract tests for Live duration/delegation, then RDM-01-06. Do not change the default engine or package Live.

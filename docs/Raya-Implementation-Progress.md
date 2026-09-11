@@ -2401,3 +2401,15 @@ Changed files: packages/kilo-vscode/src/services/input-tools.ts, packages/kilo-v
 Commands (packages/kilo-vscode): bun test tests/unit/live-speech-routing.test.ts tests/unit/live-broker.test.ts --timeout 30000 -> 12 pass / 0 fail / 283 expect / exit 0 (.tmp/live-speech-routing-tests.log). bun run check-types -> exit 0 (.tmp/live-routing-types.log). bun run check-types:webview -> exit 0 (.tmp/live-routing-webview-types.log). Root oxlint: 11 warnings / 0 errors / exit 0 (.tmp/live-routing-lint.log).
 
 Do not snapshot:install. Next: VoiceProvider/UI integration.
+
+## 2026-09-11: Live VoiceProvider UI (OVR-01)
+
+Status: verified locally and committed as 7f70d78c96, unshipped. Installed product is still 8b01e72311.
+
+Live VoiceProvider keeps the Auto agent, waits for host startup before enabling mute, ignores stale control failures, requires Resume after stop-speaking, and clears captions and duration when the task changes. Caption display labels the latest-64 truncation. Images go to Raya work, not GPT-Live.
+
+Changed files: packages/kilo-vscode/webview-ui/src/context/voice.tsx, packages/kilo-vscode/webview-ui/src/context/voice-images.ts, packages/kilo-vscode/webview-ui/src/components/chat/NativeVoiceControls.tsx, packages/kilo-vscode/webview-ui/src/components/chat/NativeVoiceImage.tsx, packages/kilo-vscode/webview-ui/src/components/chat/NativeVoiceRecovery.tsx, packages/kilo-vscode/webview-ui/src/components/chat/NativeVoiceUsage.tsx, packages/kilo-vscode/webview-ui/src/components/chat/PromptInput.tsx, packages/kilo-vscode/webview-ui/src/components/chat/VoiceTranscript.tsx, packages/kilo-vscode/webview-ui/src/components/settings/SpeechTab.tsx, packages/kilo-vscode/tests/fixtures/composer-entry.jsx, packages/kilo-vscode/tests/fixtures/live-voice-ui.mjs, packages/kilo-vscode/tests/unit/live-voice-ui.test.ts.
+
+Commands (packages/kilo-vscode): bun test tests/unit/live-voice-ui.test.ts --timeout 130000 -> 1 pass / 0 fail / 2 expect / exit 0 (.tmp/live-voice-ui-tests.log). bun run check-types:webview -> exit 0 (.tmp/live-ui-webview-types.log). Root oxlint: 9 warnings / 0 errors / exit 0 (.tmp/live-ui-lint.log).
+
+Do not snapshot:install. Next: HTTP contract tests, then RDM-01-06.

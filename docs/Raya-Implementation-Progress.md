@@ -2377,3 +2377,15 @@ Changed files: packages/sdk/js/src/v2/gen/sdk.gen.ts, packages/sdk/js/src/v2/gen
 Commands: bun ./script/build.ts in packages/sdk/js -> exit 0 (.tmp/live-sdk-generate.log). bun run typecheck in packages/sdk/js -> exit 0 (.tmp/live-sdk-types.log).
 
 Do not snapshot:install. Next: WebRTC/UI fixtures and host speech service routing.
+
+## 2026-09-11: Live WebRTC peer and microphone readiness (OVR-01)
+
+Status: verified locally and committed as aedb662960, unshipped. Installed product is still 8b01e72311.
+
+LiveVoice keeps the microphone disabled until host started(requestID) and local answer, peer and data-channel readiness. mute(false) cannot enable capture early. Captions stay display-only. Stop during SDP or microphone acquisition cannot revive the call.
+
+Changed files: packages/kilo-vscode/webview-ui/src/context/live-voice.ts, packages/kilo-vscode/tests/fixtures/live-voice.mjs, packages/kilo-vscode/tests/unit/live-voice.test.ts.
+
+Commands (packages/kilo-vscode): bun test tests/unit/live-voice.test.ts --timeout 50000 -> 1 pass / 0 fail / 2 expect / exit 0 (.tmp/live-webrtc-tests.log). bun run check-types -> exit 0 (.tmp/live-webrtc-types.log). bun run check-types:webview -> exit 0 (.tmp/live-webrtc-webview-types.log). Root oxlint: 2 warnings / 0 errors / exit 0 (.tmp/live-webrtc-lint.log).
+
+Do not snapshot:install. Next: host speech service routing.

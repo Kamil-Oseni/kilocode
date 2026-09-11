@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Permission canonical comparison is delivered: committed, pushed and installed as `8b01e72311`. LiveBroker fixtures, SQL duration/delegation, host image/context tests, and SDK Live call/duration methods are committed and unshipped. Next: WebRTC/UI fixtures and service/message routing. RDM-01-06 remain unimplemented. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Permission canonical comparison is delivered: committed, pushed and installed as `8b01e72311`. LiveBroker fixtures, SQL duration/delegation, host image/context tests, SDK Live call/duration methods, and Live WebRTC peer/microphone fixtures are committed and unshipped. Next: host speech service/message routing. RDM-01-06 remain unimplemented. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -644,7 +644,7 @@ Continue implementing Raya in C:\Users\User\Desktop\raya. Read AGENTS.md, docs/R
 
 I authorize root plus two subagents, normal periodic commits/pushes to origin/main, and snapshot builds/reinstallation outside the sandbox without asking again. Do not force push, bypass hooks or force reload VS Code. Batch broad testing at coherent checkpoints, but verify relevant contracts before calling features working. If repeated attempts fail, document the exact cause and next approach, move to independent work and revisit.
 
-First inspect current git/process state against the handoff. Preserve uncommitted Live UI/service files. LiveBroker fixtures, SQL duration/delegation, host image/context tests and SDK Live methods are the latest verified local increments; do not package Live. Next: WebRTC/UI fixtures and host speech service routing. Keep Raya task ownership, permissions, durable receipts and execution authority. Do not replay historical text as new work or claim generated captions prove heard audio.
+First inspect current git/process state against the handoff. Preserve uncommitted Live UI/service files. LiveBroker fixtures, SQL duration/delegation, host image/context tests, SDK Live methods and Live WebRTC peer fixtures are the latest verified local increments; do not package Live. Next: host speech service/message routing. Keep Raya task ownership, permissions, durable receipts and execution authority. Do not replay historical text as new work or claim generated captions prove heard audio.
 
 Defer new Codex-derived implementation until existing Raya work, including GPT-Live and all 39 requirements, is complete. Use the deferred research document later; do not start a new porting track now. Keep the 39-requirement ledger honest. When I warn that credits are near $10, promptly update the full remaining-work handoff, settle the current work and provide an updated continuation prompt.
 ```
@@ -715,7 +715,7 @@ The user requested this stop at approximately $30 credit balance. The next agent
 
 **Telemetry warning cleanup:** `src/services/telemetry/telemetry-proxy.ts` now makes instance capture/setEnabled async and awaits the already failure-contained transport, eliminating mixed return styles. Its 13 targeted boundary/utility tests pass (`.tmp/telemetry-return-style-tests.log`, terminal 0). This small follow-up is local, not in the installed checkpoint. Run scoped lint/typecheck once alongside the next package validation; preserve optional caller settlement.
 
-**Live media transport:** `packages/kilo-vscode/webview-ui/src/context/live-voice.ts` is newly written and has no runtime test yet. It uses actual RTCPeerConnection/media APIs, an independent shared LiveContext for display, disabled microphone until host startup, and no client data-channel command writes. `start` negotiates SDP; `started(requestID)` acknowledges trusted startup; `mute` gates capture; `silence` controls local output; `stop` silences immediately and waits for host finalization or a 12-second cleanup timeout; `finalized(requestID)` releases media after the host settles final usage.
+**Live media transport:** `packages/kilo-vscode/webview-ui/src/context/live-voice.ts` now has a Chromium WebRTC fixture. Microphone capture stays disabled until host `started(requestID)` and local answer/peer/channel readiness share one `prepared` predicate. `mute(false)` cannot enable capture early. No client data-channel command writes. Remaining: 12-second cleanup timeout path, stop-speaking/resume UI, and packaged microphone acceptance.
 
 Implement/verify this in order:
 
@@ -875,7 +875,7 @@ Selection uses received fragments whose start is at/before the provider offset, 
 **Host/backend review priorities, in exact order:**
 
 1. Run extension host and CLI types to establish the final baseline after last guard fixes. Format/lint only touched files, respecting existing complexity caps through cohesive helpers. Do not increase ratchets to hide new complexity. Root webview type result alone does not validate host/backend.
-2. Implement real HTTP/WebSocket loopback fixtures for broker startup/attachment. **Verified locally:** `allowed_client_events: []`, SDP before `session.started`, injectable host timeout closes an unstarted paid call, hangup+DELETE always run, mute waits for started, late started cannot revive a stopped call. Remaining: WebRTC/UI peer, absent-UI service-layer timeout, and packaged microphone acceptance.
+2. Implement real HTTP/WebSocket loopback fixtures for broker startup/attachment. **Verified locally:** `allowed_client_events: []`, SDP before `session.started`, injectable host timeout closes an unstarted paid call, hangup+DELETE always run, mute waits for started, late started cannot revive a stopped call. **WebRTC/UI peer verified locally:** production LiveVoice, synthetic-audio Chromium peers, microphone held until host start and local readiness, host-start before/after SDP, stale request ID, stop during SDP/microphone, failed exchange release. Remaining: absent-UI service-layer timeout, 12-second media cleanup timeout, and packaged microphone acceptance.
 3. Exercise start/stop/disconnect/session.closed races and await all cleanup promises. Confirm final usage can arrive before/after stop and that binding closure does not cancel task work. Lost creation or admission acknowledgement must retain uncertainty; add a query/idempotency recovery boundary rather than blind retries or releasing ownership.
 4. Strengthen completed-work result validation to match existing Realtime broker identity/status checks before commentary. **Partial:** completed results now require text, assistant message identity and evidence; failed status is narrated as a status string. Remaining: stale results after task/owner change and permission waits; still slices successful text to 1000 characters.
 5. Audit append limits: character counts do not prove the provider's token cap. Use a defensible bounded representation or refuse/split according to verified protocol semantics, with tests for long non-ASCII content. Never replay an uncertain append just to obtain an acknowledgement.
@@ -883,7 +883,7 @@ Selection uses received fragments whose start is at/before the provider offset, 
 7. Test image staging: immutable ID/hash, uncertain/failure retention, four-attempt bound, no native image upload, no work from staging alone, correct selected images attached to later work. **Verified locally:** same-ID retry, hash reuse, four-attempt cap, invalid bytes never POSTed, mismatched receipt retained as unknown. Remaining: vision permission/model checks.
 8. Test delegation queue and steering while work is busy. Current queue waits behind polling; selection occurs when dequeued using the provider offset. Define whether newer user corrections revise queued work or require clarification, and fence stale results. Do not claim seamless concurrent steering from serialized happy-path execution.
 9. Test conflicting duplicate session.closed events. **Partial:** a later different event ID marks host usage incomplete and does not POST a second duration. Remaining: same-event retry vs conflict, backend immutability under a changed receipt, and UI presentation of incomplete settlement.
-10. Add actual backend runtime/DB/API tests for model mismatch, invalid/duplicate context, replay cursor, immutable receipts, deletion cascades, late writes and permission boundaries. **Partial:** service-layer SQL tests cover duration immutability after close, Realtime model mismatch, consumed-sequence refusal and liveCursor advance. Remaining: parent-deletion/late-write duration, HTTP contract tests, SDK regeneration, Realtime/retention re-run after SDK, and WebRTC/UI acceptance.
+10. Add actual backend runtime/DB/API tests for model mismatch, invalid/duplicate context, replay cursor, immutable receipts, deletion cascades, late writes and permission boundaries. **Partial:** service-layer SQL tests cover duration immutability after close, Realtime model mismatch, consumed-sequence refusal and liveCursor advance. SDK Live call/duration methods exist. Remaining: parent-deletion/late-write duration, HTTP contract tests, and host service/message routing.
 
 **Validation receipts at freeze:** historical; superseded for broker fixtures by `.tmp/live-broker-tests.log`. WebRTC/UI/backend SQL tests still absent. Do not package Live. Permission remains the last installed product; see section 3.
 
@@ -1052,6 +1052,20 @@ Changed files: `packages/sdk/js/src/v2/gen/sdk.gen.ts`, `packages/sdk/js/src/v2/
 
 Commands: `bun ./script/build.ts` in `packages/sdk/js` exit 0 (`.tmp/live-sdk-generate.log`). `bun run typecheck` in `packages/sdk/js` exit 0 (`.tmp/live-sdk-types.log`).
 
-Remaining: WebRTC/UI fixtures, service/message routing, HTTP contract tests, and RDM-01-06. Do not snapshot:install.
+Remaining: host speech service/message routing, HTTP contract tests, and RDM-01-06. Do not snapshot:install.
 
-Next executable step: WebRTC/UI fixtures and host speech service routing. Do not change the default engine or package Live.
+Next executable step: host speech service routing through `input-tools` and the webview message unions. Do not change the default engine or package Live.
+
+## 2026-09-11: Live WebRTC peer and microphone readiness
+
+**States:** Live WebRTC fixture committed as `aedb662960`; Live remains unshipped. Product checkpoint remains `8b01e72311`.
+
+Production `LiveVoice` now shares one readiness predicate for listening and mute. A Chromium fixture with synthetic audio proved capture stays disabled until both host `started(requestID)` and local answer/peer/channel readiness; host start before SDP, after SDP, after disconnect and for a stale request ID cannot enable the microphone early. Duplicate start, stop during SDP and microphone acquisition, failed exchange cleanup, wrong-request finalization, display-only captions and a single oversized/unreadable failure are covered. Oversized payloads are injected on the local data-channel handler because SCTP cannot carry 524KiB. The 12-second cleanup timeout path was not waited.
+
+Changed files: `packages/kilo-vscode/webview-ui/src/context/live-voice.ts`, `packages/kilo-vscode/tests/fixtures/live-voice.mjs`, `packages/kilo-vscode/tests/unit/live-voice.test.ts`.
+
+Commands (packages/kilo-vscode): `bun test tests/unit/live-voice.test.ts --timeout 50000` -> 1 pass / 0 fail / 2 expect / exit 0 (`.tmp/live-webrtc-tests.log`). `bun run check-types` -> exit 0 (`.tmp/live-webrtc-types.log`). `bun run check-types:webview` -> exit 0 (`.tmp/live-webrtc-webview-types.log`). Root oxlint: 2 warnings / 0 errors / exit 0 (`.tmp/live-webrtc-lint.log`).
+
+Remaining: host service/message routing, HTTP contract tests, and RDM-01-06. Do not snapshot:install.
+
+Next executable step: host speech service routing through `input-tools` and the webview message unions. Do not change the default engine or package Live.

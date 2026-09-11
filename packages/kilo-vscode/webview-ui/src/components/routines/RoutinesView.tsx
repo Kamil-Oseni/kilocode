@@ -127,6 +127,169 @@ function folder(path: string) {
   return parts.at(-1) ?? path
 }
 
+function heading(editing: boolean, screen: "roster" | "assign") {
+  if (editing) return "Edit schedule"
+  if (screen === "assign") return "Assign a routine"
+  return "Routines"
+}
+
+function tone(on: boolean) {
+  return on ? "primary" : "ghost"
+}
+
+function caption(command: ReturnType<typeof action>, item: Agent) {
+  if (command === "review") return "Needs review"
+  if (command === "running") return item.execution?.state === "starting" ? "Starting" : "Running"
+  if (command === "open") return item.execution?.state === "recovery" ? "Review run" : "Open run"
+  return "Run now"
+}
+
+function flag(on: boolean) {
+  return on ? "true" : undefined
+}
+
+function occupancy(item: Agent, box?: Box) {
+  return status(box?.state ?? (item.enabled ? "scheduled" : "paused"))
+}
+
+function unzoned(item: Agent) {
+  return item.schedule.kind === "cron" && !item.schedule.tz?.trim()
+}
+
+function blocked(command: ReturnType<typeof action>, access: Agent["access"], canOpen: boolean) {
+  if (command === "running" || command === "review") return true
+  if (command === "open") return !canOpen
+  return access === undefined
+}
+
+const Person: Component<{
+  item: Agent
+  run?: Run
+  box?: Box
+  stale?: string
+  busy: boolean
+  picked: boolean
+  current: boolean
+  panel: string
+  inspectable: boolean
+  inspected: boolean
+  canOpen: boolean
+  presence: ReturnType<typeof runPresence>
+  command: ReturnType<typeof action>
+  onChoose: () => void
+  onMark: (on: boolean) => void
+  onOpen: () => void
+  onAct: () => void
+  onToggle: () => void
+  onEdit: () => void
+  onAccess: () => void
+  onOutput: () => void
+  onInspect: () => void
+  onRemove: () => void
+}> = (props) => {
+  const resume = () => (!props.item.enabled ? `${props.panel}-${props.item.id}-resume` : undefined)
+  return (
+    <li
+      class="routines-row"
+      data-presence={props.presence}
+      data-paused={flag(!props.item.enabled)}
+      data-picked={flag(props.picked)}
+      data-current={flag(props.current)}
+    >
+      <Checkbox hideLabel checked={props.picked} onChange={props.onMark}>
+        Select {props.item.name}
+      </Checkbox>
+      <button
+        type="button"
+        class="routines-identity"
+        aria-current={flag(props.current)}
+        onClick={props.onChoose}
+      >
+        <span class="routines-name">{props.item.name}</span>
+        <span class="routines-meta">
+          {props.item.role} · {occupancy(props.item, props.box)}
+          <Show when={props.box?.unread}>{(n) => <> · {n()} unread</>}</Show>
+        </span>
+        <span class="routines-job">{props.box?.latest?.body ?? props.item.objective}</span>
+        <Show when={props.stale}>
+          <span class="routines-note" role="status">
+            History may be stale: {props.stale}
+          </span>
+        </Show>
+        <Show when={props.run?.outcome?.summary}>
+          <span class="routines-note routines-result-summary">Recorded result: {props.run?.outcome?.summary}</span>
+        </Show>
+        <Show when={props.run}>{(run) => <span class="routines-note">{reason(run())}</span>}</Show>
+        <Show when={props.item.execution?.state === "recovery"}>
+          <span class="routines-note">Recovery review required before another run can start.</span>
+        </Show>
+        <Show when={props.run?.blockedReason}>
+          <span class="routines-note">{props.run?.blockedReason}</span>
+        </Show>
+        <Show when={props.item.note}>
+          <span class="routines-note">{props.item.note}</span>
+        </Show>
+        <Show when={unzoned(props.item)}>
+          <span class="routines-note">
+            Automatic runs need timezone review. Choose Edit schedule; manual runs remain available when otherwise
+            permitted.
+          </span>
+        </Show>
+      </button>
+      <div class="routines-side">
+        <PresenceBadge state={props.presence} onAck={props.canOpen ? props.onOpen : undefined} />
+        <div class="routines-actions">
+          <Button
+            size="small"
+            variant="ghost"
+            disabled={blocked(props.command, props.item.access, props.canOpen)}
+            onClick={props.onAct}
+          >
+            {caption(props.command, props.item)}
+          </Button>
+          <Button size="small" variant="ghost" aria-describedby={resume()} onClick={props.onToggle}>
+            {props.item.enabled ? "Pause" : "Enable"}
+          </Button>
+          <Button size="small" variant="ghost" onClick={props.onEdit}>
+            Edit schedule
+          </Button>
+          <Button size="small" variant="ghost" data-routine-access={props.item.id} onClick={props.onAccess}>
+            Review access
+          </Button>
+          <Button size="small" variant="ghost" data-routine-output={props.item.id} onClick={props.onOutput}>
+            Edit output
+          </Button>
+          <Show when={props.inspectable}>
+            <Button
+              size="small"
+              variant="ghost"
+              aria-expanded={props.inspected}
+              aria-controls={props.inspected ? props.panel : undefined}
+              data-routine-instructions={props.item.id}
+              onClick={props.onInspect}
+            >
+              {props.inspected ? "Hide review" : "Review runs"}
+            </Button>
+          </Show>
+          <IconButton
+            icon="trash"
+            size="small"
+            variant="ghost"
+            aria-label={`Remove ${props.item.name}`}
+            onClick={props.onRemove}
+          />
+        </div>
+      </div>
+      <Show when={!props.item.enabled}>
+        <p id={resume()} class="routines-hint routines-resume">
+          Enabling allows future runs and starts a fresh consecutive-block count. Earlier runs remain in history.
+          Resolve the cause of a pause before enabling again.
+        </p>
+      </Show>
+    </li>
+  )
+}
+
 interface RoutinesViewProps {
   onBack?: () => void
   onOpenSession?: (id: string) => void
@@ -609,7 +772,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
           </Checkbox>
         </Show>
         <h2 class="routines-title" tabIndex={-1}>
-          {editing() ? "Edit schedule" : screen() === "assign" ? "Assign a routine" : "Routines"}
+          {heading(!!editing(), screen())}
         </h2>
         <Show when={screen() === "roster" && selected().length > 0}>
           <Button class="routines-header-action" size="small" onClick={() => confirm(selected())}>
@@ -661,21 +824,17 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                 />
               </label>
               <div class="routines-filters" role="group" aria-label="Inbox filters">
-                <Button size="small" variant={attention() === "all" ? "primary" : "ghost"} onClick={() => setAttention("all")}>
+                <Button size="small" variant={tone(attention() === "all")} onClick={() => setAttention("all")}>
                   All
                 </Button>
                 <Button
                   size="small"
-                  variant={attention() === "unread" ? "primary" : "ghost"}
+                  variant={tone(attention() === "unread")}
                   onClick={() => setAttention("unread")}
                 >
                   Unread
                 </Button>
-                <Button
-                  size="small"
-                  variant={attention() === "needs" ? "primary" : "ghost"}
-                  onClick={() => setAttention("needs")}
-                >
+                <Button size="small" variant={tone(attention() === "needs")} onClick={() => setAttention("needs")}>
                   Needs attention
                 </Button>
               </div>
@@ -687,133 +846,33 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
             <For each={shown()}>
               {(item) => {
                 const run = () => latest(item, runs())
-                const summary = () => run()?.outcome?.summary
-                const presence = () => state(item)
-                const canOpen = () =>
-                  !!(item.execution ? item.execution.sessionID : run()?.sessionID) && !!props.onOpenSession
                 const command = () => action(run(), !!busy()[item.id], item.execution)
-                const unavailable = () =>
-                  (item.access === undefined && command() !== "open") ||
-                  command() === "running" ||
-                  command() === "review" ||
-                  (command() === "open" && !canOpen())
-                const resume = () => (!item.enabled ? `${panel}-${item.id}-resume` : undefined)
-                const on = () => !!picked()[item.id]
-                const box = () => boxes()[item.id]
                 return (
-                  <li
-                    class="routines-row"
-                    data-presence={presence()}
-                    data-paused={item.enabled ? undefined : "true"}
-                    data-picked={on() ? "true" : undefined}
-                    data-current={chosen() === item.id ? "true" : undefined}
-                  >
-                    <Checkbox hideLabel checked={on()} onChange={(value) => mark(item.id, value)}>
-                      Select {item.name}
-                    </Checkbox>
-                    <button
-                      type="button"
-                      class="routines-identity"
-                      aria-current={chosen() === item.id ? "true" : undefined}
-                      onClick={() => setChosen(item.id)}
-                    >
-                      <span class="routines-name">{item.name}</span>
-                      <span class="routines-meta">
-                        {item.role} · {status(box()?.state ?? (item.enabled ? "scheduled" : "paused"))}
-                        <Show when={box()?.unread}>{(n) => <> · {n()} unread</>}</Show>
-                      </span>
-                      <span class="routines-job">{box()?.latest?.body ?? item.objective}</span>
-                      <Show when={stale()[item.id]}>
-                        <span class="routines-note" role="status">
-                          History may be stale: {stale()[item.id]}
-                        </span>
-                      </Show>
-                      <Show when={summary()}>
-                        <span class="routines-note routines-result-summary">Recorded result: {summary()}</span>
-                      </Show>
-                      <Show when={run()}>{(run) => <span class="routines-note">{reason(run())}</span>}</Show>
-                      <Show when={item.execution?.state === "recovery"}>
-                        <span class="routines-note">Recovery review required before another run can start.</span>
-                      </Show>
-                      <Show when={run()?.blockedReason}>
-                        <span class="routines-note">{run()?.blockedReason}</span>
-                      </Show>
-                      <Show when={item.note}>
-                        <span class="routines-note">{item.note}</span>
-                      </Show>
-                      <Show when={item.schedule.kind === "cron" && !item.schedule.tz?.trim()}>
-                        <span class="routines-note">
-                          Automatic runs need timezone review. Choose Edit schedule; manual runs remain available when
-                          otherwise permitted.
-                        </span>
-                      </Show>
-                    </button>
-                    <div class="routines-side">
-                      <PresenceBadge state={presence()} onAck={canOpen() ? () => open(item) : undefined} />
-                      <div class="routines-actions">
-                        <Button
-                          size="small"
-                          variant="ghost"
-                          disabled={unavailable()}
-                          onClick={() => (command() === "open" ? open(item) : fire(item))}
-                        >
-                          {command() === "review"
-                            ? "Needs review"
-                            : command() === "running"
-                              ? item.execution?.state === "starting"
-                                ? "Starting"
-                                : "Running"
-                              : command() === "open"
-                                ? item.execution?.state === "recovery"
-                                  ? "Review run"
-                                  : "Open run"
-                                : "Run now"}
-                        </Button>
-                        <Button size="small" variant="ghost" aria-describedby={resume()} onClick={() => toggle(item)}>
-                          {item.enabled ? "Pause" : "Enable"}
-                        </Button>
-                        <Button size="small" variant="ghost" onClick={() => edit(item)}>
-                          Edit schedule
-                        </Button>
-                        <Button size="small" variant="ghost" data-routine-access={item.id} onClick={() => review(item)}>
-                          Review access
-                        </Button>
-                        <Button
-                          size="small"
-                          variant="ghost"
-                          data-routine-output={item.id}
-                          onClick={() => review(item, "output")}
-                        >
-                          Edit output
-                        </Button>
-                        <Show when={inspectable(item)}>
-                          <Button
-                            size="small"
-                            variant="ghost"
-                            aria-expanded={inspected(item.id)}
-                            aria-controls={inspected(item.id) ? panel : undefined}
-                            data-routine-instructions={item.id}
-                            onClick={() => inspect(item)}
-                          >
-                            {inspected(item.id) ? "Hide review" : "Review runs"}
-                          </Button>
-                        </Show>
-                        <IconButton
-                          icon="trash"
-                          size="small"
-                          variant="ghost"
-                          aria-label={`Remove ${item.name}`}
-                          onClick={() => confirm([item.id])}
-                        />
-                      </div>
-                    </div>
-                    <Show when={!item.enabled}>
-                      <p id={resume()} class="routines-hint routines-resume">
-                        Enabling allows future runs and starts a fresh consecutive-block count. Earlier runs remain in
-                        history. Resolve the cause of a pause before enabling again.
-                      </p>
-                    </Show>
-                  </li>
+                  <Person
+                    item={item}
+                    run={run()}
+                    box={boxes()[item.id]}
+                    stale={stale()[item.id]}
+                    busy={!!busy()[item.id]}
+                    picked={!!picked()[item.id]}
+                    current={chosen() === item.id}
+                    panel={panel}
+                    inspectable={inspectable(item)}
+                    inspected={inspected(item.id)}
+                    canOpen={!!(item.execution ? item.execution.sessionID : run()?.sessionID) && !!props.onOpenSession}
+                    presence={state(item)}
+                    command={command()}
+                    onChoose={() => setChosen(item.id)}
+                    onMark={(value) => mark(item.id, value)}
+                    onOpen={() => open(item)}
+                    onAct={() => (command() === "open" ? open(item) : fire(item))}
+                    onToggle={() => toggle(item)}
+                    onEdit={() => edit(item)}
+                    onAccess={() => review(item)}
+                    onOutput={() => review(item, "output")}
+                    onInspect={() => inspect(item)}
+                    onRemove={() => confirm([item.id])}
+                  />
                 )
               }}
             </For>

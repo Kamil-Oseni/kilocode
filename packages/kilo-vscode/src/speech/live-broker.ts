@@ -430,50 +430,54 @@ export class LiveBroker {
     }
   }
 
+  private meter(claim: Claim, event: Record<string, unknown>, seconds: unknown) {
+    if (!claim.binding) return
+    claim.recording = this.backend(
+      claim,
+      `/live/session/${encodeURIComponent(claim.binding.id)}/duration`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          generation: claim.binding.generation,
+          receipt: { id: event.event_id, model: "gpt-live-1", seconds },
+        }),
+      },
+      true,
+    )
+      .then((receipt) => {
+        if (receipt.id !== event.event_id || receipt.seconds !== seconds || receipt.model !== "gpt-live-1")
+          throw new Error("Duration receipt mismatch")
+        claim.usage = { ...claim.usage!, recorded: true }
+        claim.config?.usage?.(claim.usage)
+      })
+      .catch(() => {
+        claim.usage = { ...claim.usage!, incomplete: true }
+        claim.config?.usage?.(claim.usage)
+      })
+  }
+
+  private replay(claim: Claim, event: Record<string, unknown>) {
+    if (event.event_id === claim.closure || !claim.usage || claim.usage.incomplete) return
+    claim.usage = { ...claim.usage, incomplete: true }
+    claim.config?.usage?.(claim.usage)
+  }
+
   private finalize(claim: Claim, event: Record<string, unknown>) {
     const session = object(event.session)
     if (!session || session.id !== claim.remote || session.model !== "gpt-live-1" || !id(event.event_id)) return
-    if (claim.final) {
-      if (event.event_id === claim.closure || !claim.usage || claim.usage.incomplete) return
-      claim.usage = { ...claim.usage, incomplete: true }
-      claim.config?.usage?.(claim.usage)
-      return
-    }
+    if (claim.final) return this.replay(claim, event)
     claim.final = true
     claim.closure = event.event_id
     const seconds = object(event.usage)?.seconds
+    const valid = typeof seconds === "number" && Number.isFinite(seconds) && seconds >= 0 && seconds <= 86400
     claim.usage = {
-      ...(typeof seconds === "number" && Number.isFinite(seconds) && seconds >= 0 && seconds <= 86400
-        ? { seconds }
-        : {}),
+      ...(valid ? { seconds } : {}),
       final: true,
       recorded: false,
-      incomplete: typeof seconds !== "number" || !Number.isFinite(seconds) || seconds < 0 || seconds > 86400,
+      incomplete: !valid,
     }
     claim.config?.usage?.(claim.usage)
-    if (!claim.usage.incomplete && claim.binding)
-      claim.recording = this.backend(
-        claim,
-        `/live/session/${encodeURIComponent(claim.binding.id)}/duration`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            generation: claim.binding.generation,
-            receipt: { id: event.event_id, model: "gpt-live-1", seconds },
-          }),
-        },
-        true,
-      )
-        .then((receipt) => {
-          if (receipt.id !== event.event_id || receipt.seconds !== seconds || receipt.model !== "gpt-live-1")
-            throw new Error("Duration receipt mismatch")
-          claim.usage = { ...claim.usage!, recorded: true }
-          claim.config?.usage?.(claim.usage)
-        })
-        .catch(() => {
-          claim.usage = { ...claim.usage!, incomplete: true }
-          claim.config?.usage?.(claim.usage)
-        })
+    if (!claim.usage.incomplete) this.meter(claim, event, seconds)
     claim.finalized?.()
     if (!claim.cancelled) {
       claim.failed("Live voice ended. Existing task work continues independently.")

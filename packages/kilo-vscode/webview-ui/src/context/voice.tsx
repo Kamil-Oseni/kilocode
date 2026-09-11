@@ -254,47 +254,58 @@ export const VoiceProvider: ParentComponent = (props) => {
       })
   }
 
+  function control(message: Extract<ExtensionMessage, { type: "speechLiveControlResult" }>) {
+    if (call?.id !== message.requestId) return
+    if (message.eventID !== latest.mute && message.eventID !== latest.speak) return
+    if (message.eventID === latest.mute) latest.mute = ""
+    if (message.eventID === latest.speak) latest.speak = ""
+    if (message.status !== "accepted")
+      setError(message.error ?? "Voice control was not confirmed. End voice and reconnect if needed.")
+  }
+
+  function ready(message: Extract<ExtensionMessage, { type: "speechOpenAIReady" }>) {
+    if (call?.id !== message.requestId || pending?.id !== message.requestId) return
+    const waiting = pending
+    pending = undefined
+    waiting.resolve(message.sdp)
+  }
+
+  function failed(message: Extract<ExtensionMessage, { type: "speechOpenAIError" }>) {
+    if (call?.id === message.requestId) {
+      failOpenAI(message.error)
+      return
+    }
+    if (recovery.fail(message.requestId) && recovery.state()) {
+      setError(message.error)
+      if (!call) setStatus("degraded")
+    }
+  }
+
   function openaiMessage(message: ExtensionMessage) {
     if (message.type === "speechLiveStarted") {
       live.started(message.requestId)
       return true
     }
     if (message.type === "speechLiveUsage") {
-      if ((call?.id === message.requestId || recovery.state()?.id === message.requestId) && session.currentSessionID() === message.sessionID)
+      if (
+        (call?.id === message.requestId || recovery.state()?.id === message.requestId) &&
+        session.currentSessionID() === message.sessionID
+      )
         setDuration(message.usage)
       return true
     }
     if (message.type === "speechLiveControlResult") {
-      if (call?.id !== message.requestId) return true
-      if (message.eventID !== latest.mute && message.eventID !== latest.speak) return true
-      if (message.status === "accepted") {
-        if (message.eventID === latest.mute) latest.mute = ""
-        if (message.eventID === latest.speak) latest.speak = ""
-        return true
-      }
-      if (message.eventID === latest.mute) latest.mute = ""
-      if (message.eventID === latest.speak) latest.speak = ""
-      setError(message.error ?? "Voice control was not confirmed. End voice and reconnect if needed.")
+      control(message)
       return true
     }
     if (usage.receive(message)) return true
     if (images.receive(message)) return true
     if (message.type === "speechOpenAIReady") {
-      if (call?.id !== message.requestId || pending?.id !== message.requestId) return true
-      const waiting = pending
-      pending = undefined
-      waiting.resolve(message.sdp)
+      ready(message)
       return true
     }
     if (message.type === "speechOpenAIError") {
-      if (call?.id === message.requestId) {
-        failOpenAI(message.error)
-        return true
-      }
-      if (recovery.fail(message.requestId) && recovery.state()) {
-        setError(message.error)
-        if (!call) setStatus("degraded")
-      }
+      failed(message)
       return true
     }
     if (message.type !== "speechOpenAIStopped") return false

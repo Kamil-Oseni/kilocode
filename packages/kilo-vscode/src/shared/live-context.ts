@@ -30,73 +30,17 @@ export class LiveContext {
 
   receive(value: unknown): "ignored" | "transcript" | "delegation" | "invalid" | "limit" {
     if (!record(value)) return "ignored"
-    const transcript =
+    const kind =
       value.type === "session.input_transcript.delta" || value.type === "session.output_transcript.delta"
-    if (!transcript && value.type !== "session.delegation.created") return "ignored"
+        ? "transcript"
+        : value.type === "session.delegation.created"
+          ? "delegation"
+          : "ignored"
+    if (kind === "ignored") return "ignored"
     if (this.limited) return "limit"
     if (!id(value.event_id) || (value.client_event_id !== undefined && !id(value.client_event_id)))
       return this.invalid()
-    if (
-      transcript &&
-      (typeof value.delta !== "string" ||
-        !offset(value.start_ms) ||
-        !offset(value.end_ms) ||
-        value.end_ms < value.start_ms)
-    )
-      return this.invalid()
-    if (transcript && typeof value.delta === "string" && new TextEncoder().encode(value.delta).length > 16384)
-      return this.limit()
-    const delegation = record(value.delegation) ? value.delegation : undefined
-    if (
-      !transcript &&
-      (!offset(value.offset_ms) ||
-        !delegation ||
-        !id(delegation.id) ||
-        delegation.type !== "delegation" ||
-        !["client", "responses"].includes(String(delegation.target)))
-    )
-      return this.invalid()
-    const fingerprint = JSON.stringify(
-      transcript
-        ? [value.type, value.event_id, value.delta, value.start_ms, value.end_ms, value.client_event_id ?? null]
-        : [
-            value.type,
-            value.event_id,
-            value.offset_ms,
-            delegation!.id,
-            delegation!.target,
-            value.client_event_id ?? null,
-          ],
-    )
-    const prior = this.events.get(value.event_id)
-    if (prior !== undefined) return prior === fingerprint ? "ignored" : this.invalid()
-    if (
-      this.events.size >= 4224 ||
-      (transcript && this.bytes + new TextEncoder().encode(String(value.delta)).length > 262144)
-    )
-      return this.limit()
-    this.events.set(value.event_id, fingerprint)
-    if (!transcript) return this.delegate(value)
-    if (
-      typeof value.delta !== "string" ||
-      !offset(value.start_ms) ||
-      !offset(value.end_ms) ||
-      value.end_ms < value.start_ms
-    )
-      return this.invalid()
-    const bytes = new TextEncoder().encode(value.delta).length
-    if (this.fragments.length >= 4096 || this.bytes + bytes > 262144) return this.limit()
-    this.bytes += bytes
-    this.fragments.push({
-      id: value.event_id,
-      speaker: value.type === "session.input_transcript.delta" ? "user" : "assistant",
-      text: value.delta,
-      start: value.start_ms,
-      end: value.end_ms,
-      sequence: ++this.sequence,
-      ...(typeof value.client_event_id === "string" ? { client: value.client_event_id } : {}),
-    })
-    return "transcript"
+    return kind === "transcript" ? this.append(value) : this.created(value)
   }
 
   snapshot() {
@@ -144,6 +88,71 @@ export class LiveContext {
     delegation.selection = selection
     this.consumed = Math.max(...fresh.map((fragment) => fragment.sequence))
     return structuredClone(selection)
+  }
+
+  private retain(id: string, fingerprint: string, extra: boolean) {
+    const prior = this.events.get(id)
+    if (prior !== undefined) return prior === fingerprint ? ("ignored" as const) : this.invalid()
+    if (this.events.size >= 4224 || extra) return this.limit()
+    this.events.set(id, fingerprint)
+    return undefined
+  }
+
+  private append(value: Record<string, unknown>): "ignored" | "transcript" | "invalid" | "limit" {
+    if (
+      typeof value.delta !== "string" ||
+      !offset(value.start_ms) ||
+      !offset(value.end_ms) ||
+      value.end_ms < value.start_ms
+    )
+      return this.invalid()
+    const bytes = new TextEncoder().encode(value.delta).length
+    if (bytes > 16384) return this.limit()
+    const fingerprint = JSON.stringify([
+      value.type,
+      value.event_id,
+      value.delta,
+      value.start_ms,
+      value.end_ms,
+      value.client_event_id ?? null,
+    ])
+    const blocked = this.retain(value.event_id, fingerprint, this.bytes + bytes > 262144)
+    if (blocked) return blocked
+    if (this.fragments.length >= 4096 || this.bytes + bytes > 262144) return this.limit()
+    this.bytes += bytes
+    this.fragments.push({
+      id: value.event_id,
+      speaker: value.type === "session.input_transcript.delta" ? "user" : "assistant",
+      text: value.delta,
+      start: value.start_ms,
+      end: value.end_ms,
+      sequence: ++this.sequence,
+      ...(typeof value.client_event_id === "string" ? { client: value.client_event_id } : {}),
+    })
+    return "transcript"
+  }
+
+  private created(value: Record<string, unknown>): "ignored" | "delegation" | "invalid" | "limit" {
+    const delegation = record(value.delegation) ? value.delegation : undefined
+    if (
+      !offset(value.offset_ms) ||
+      !delegation ||
+      !id(delegation.id) ||
+      delegation.type !== "delegation" ||
+      !["client", "responses"].includes(String(delegation.target))
+    )
+      return this.invalid()
+    const fingerprint = JSON.stringify([
+      value.type,
+      value.event_id,
+      value.offset_ms,
+      delegation.id,
+      delegation.target,
+      value.client_event_id ?? null,
+    ])
+    const blocked = this.retain(value.event_id, fingerprint, false)
+    if (blocked) return blocked
+    return this.delegate(value)
   }
 
   private delegate(value: Record<string, unknown>): "delegation" | "invalid" | "limit" | "ignored" {

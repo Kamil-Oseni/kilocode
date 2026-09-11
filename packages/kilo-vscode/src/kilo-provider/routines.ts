@@ -468,6 +468,24 @@ async function archive(ctx: Ctx) {
   ctx.post({ ...base, runs: runs.data })
 }
 
+const routes: Record<string, (ctx: Ctx) => Promise<void>> = {
+  routineOutputUpdate: output,
+  routineAccessUpdate: review,
+  routineArchive: archive,
+  routineSnapshot: snapshot,
+  routineScheduleUpdate: reschedule,
+  routineForecast: forecast,
+  routineInboxPage: page,
+  routineInboxSend: send,
+  routineInboxRead: seen,
+  routineInboxDraft: scribble,
+  routineList: list,
+  routineCreate: create,
+  routineUpdate: update,
+  routineRemove: drop,
+  routineRun: fire,
+}
+
 export async function handleRoutineMessage(input: {
   message: Msg
   client: KiloClient | null
@@ -504,67 +522,7 @@ export async function handleRoutineMessage(input: {
     refresh: input.refresh,
   }
   try {
-    if (type === "routineOutputUpdate") {
-      await output(ctx)
-      return true
-    }
-    if (type === "routineAccessUpdate") {
-      await review(ctx)
-      return true
-    }
-    if (type === "routineArchive") {
-      await archive(ctx)
-      return true
-    }
-    if (type === "routineSnapshot") {
-      await snapshot(ctx)
-      return true
-    }
-    if (type === "routineScheduleUpdate") {
-      await reschedule(ctx)
-      return true
-    }
-    if (type === "routineForecast") {
-      await forecast(ctx)
-      return true
-    }
-    if (type === "routineInboxPage") {
-      await page(ctx)
-      return true
-    }
-    if (type === "routineInboxSend") {
-      await send(ctx)
-      return true
-    }
-    if (type === "routineInboxRead") {
-      await seen(ctx)
-      return true
-    }
-    if (type === "routineInboxDraft") {
-      await scribble(ctx)
-      return true
-    }
-    if (type === "routineList") {
-      await list(ctx)
-      return true
-    }
-    if (type === "routineCreate") {
-      await create(ctx)
-      return true
-    }
-    if (type === "routineUpdate") {
-      await update(ctx)
-      return true
-    }
-    if (type === "routineRemove") {
-      await drop(ctx)
-      return true
-    }
-    if (type === "routineRun") {
-      await fire(ctx)
-      return true
-    }
-    await one(ctx)
+    await (routes[type] ?? one)(ctx)
     return true
   } catch (err) {
     ctx.post({

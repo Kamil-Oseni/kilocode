@@ -973,3 +973,114 @@ describe("http-recorder", () => {
     expect(names).toEqual(["alpha/one", "beta"])
   })
 })
+
+// kilocode_change start - actual writer acceptance across supported representations
+test("writer refuses synthetic secrets across formats without changing existing cassettes or leaking values", async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "recorder-formats-"))
+  const token = "sk-" + "syntheticonly".repeat(3)
+  const secret = "synthetic-environment-credential-943027"
+  const previous = process.env.RAYA_RECORDER_TEST_SECRET
+  process.env.RAYA_RECORDER_TEST_SECRET = secret
+  const safe: Interaction = {
+    transport: "http",
+    request: { method: "GET", url: "https://example.test", headers: {}, body: "" },
+    response: { status: 200, headers: {}, body: "safe" },
+  }
+  const body = (body: string, binary = false): Interaction => ({
+    ...safe,
+    response: { status: 200, headers: {}, body, ...(binary ? { bodyEncoding: "base64" as const } : {}) },
+  })
+  const cases: Interaction[] = [
+    body(JSON.stringify({ nested: { error: token } })),
+    body(token),
+    body(`data: {"text":"${token}"}\n\n`),
+    { ...safe, request: { ...safe.request, url: `https://example.test/${token}` } },
+    {
+      transport: "websocket",
+      open: { url: "wss://example.test", headers: {} },
+      events: [{ kind: "text", direction: "server", body: token }],
+    },
+    body(Buffer.from(`prefix\0${token}\0suffix`).toString("base64"), true),
+    body(Buffer.from(secret).toString("base64"), true),
+    {
+      transport: "websocket",
+      open: { url: "wss://example.test", headers: {} },
+      events: [
+        { kind: "binary", direction: "client", body: Buffer.from(token).toString("base64"), bodyEncoding: "base64" },
+      ],
+    },
+    body("bad!", true),
+    body("YR==", true),
+    body("YQ", true),
+    body("YQ==\n", true),
+    body(Buffer.alloc(8 * 1024 * 1024 + 1).toString("base64"), true),
+    {
+      transport: "websocket",
+      open: { url: "wss://example.test", headers: {} },
+      events: [1, 2].map(() => ({
+        kind: "binary" as const,
+        direction: "server" as const,
+        body: Buffer.alloc(5 * 1024 * 1024).toString("base64"),
+        bodyEncoding: "base64" as const,
+      })),
+    },
+  ]
+  try {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const cassette = yield* HttpRecorderInternal.Cassette.Service
+        yield* cassette.append("existing", safe)
+        const original = fs.readFileSync(path.join(directory, "existing.json"))
+        for (const interaction of cases) {
+          for (const name of ["existing", "unsafe"]) {
+            const result = yield* cassette.append(name, interaction).pipe(Effect.exit)
+            expect(Exit.isFailure(result)).toBe(true)
+            const error = failureText(result)
+            expect(error).not.toContain(token)
+            expect(error).not.toContain(secret)
+          }
+          expect(fs.readFileSync(path.join(directory, "existing.json"))).toEqual(original)
+          expect(fs.existsSync(path.join(directory, "unsafe.json"))).toBe(false)
+          expect(fs.readdirSync(directory)).toEqual(["existing.json"])
+        }
+        const bytes = Buffer.from([0, 255, 128, 1, 2, 3])
+        const interaction = body(bytes.toString("base64"), true)
+        yield* cassette.append("safe-binary", interaction)
+        expect(yield* cassette.read("safe-binary")).toEqual([interaction])
+      }).pipe(
+        Effect.provide(HttpRecorderInternal.Cassette.fileSystem({ directory })),
+        Effect.provide(NodeFileSystem.layer),
+      ),
+    )
+  } finally {
+    if (previous === undefined) delete process.env.RAYA_RECORDER_TEST_SECRET
+    if (previous !== undefined) process.env.RAYA_RECORDER_TEST_SECRET = previous
+    fs.rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("actual binary HTTP recording refuses a token hidden by transport encoding", async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "recorder-binary-secret-"))
+  const token = "sk-" + "synthetictransport".repeat(2)
+  using server = Bun.serve({
+    port: 0,
+    fetch: () => new Response(Buffer.from(`\0${token}\0`), { headers: { "content-type": "application/octet-stream" } }),
+  })
+  try {
+    const result = await Effect.runPromise(
+      Effect.exit(
+        Effect.gen(function* () {
+          const http = yield* HttpClient.HttpClient
+          const response = yield* http.execute(HttpClientRequest.get(server.url.toString()))
+          return yield* response.arrayBuffer
+        }).pipe(Effect.provide(HttpRecorderInternal.cassetteLayer("binary-secret", { directory, mode: "record" }))),
+      ),
+    )
+    expect(Exit.isFailure(result)).toBe(true)
+    expect(failureText(result)).not.toContain(token)
+    expect(fs.readdirSync(directory)).toEqual([])
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true })
+  }
+})
+// kilocode_change end

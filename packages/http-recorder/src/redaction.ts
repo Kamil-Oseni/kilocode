@@ -103,9 +103,65 @@ export const SecretFindingSchema = Schema.Struct({
 })
 export type SecretFinding = Schema.Schema.Type<typeof SecretFindingSchema>
 
+// kilocode_change start - scan declared binary bodies without changing replay bytes
+const binary = (value: unknown): { entries: { path: string; value: string }[]; findings: SecretFinding[] } => {
+  const entries: { path: string; value: string }[] = []
+  const findings: SecretFinding[] = []
+  let budget = 8 * 1024 * 1024
+  const decode = (value: unknown, path: string) => {
+    if (typeof value !== "string" || value.length % 4 !== 0) {
+      findings.push({ path, reason: "invalid declared base64 body" })
+      return
+    }
+    const size = (value.length / 4) * 3 - (value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0)
+    if (size > budget) {
+      findings.push({ path, reason: "binary inspection exceeds 8 MiB budget" })
+      return
+    }
+    budget -= size
+    const bytes = Buffer.from(value, "base64")
+    if (bytes.toString("base64") !== value) {
+      findings.push({ path, reason: "invalid declared base64 body" })
+      return
+    }
+    entries.push({ path, value: bytes.toString("utf8") })
+  }
+  const object = (value: unknown): value is Record<string, unknown> =>
+    value !== null && typeof value === "object" && !Array.isArray(value)
+  const walk = (value: unknown, path: string) => {
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => walk(item, `${path}[${index}]`))
+      return
+    }
+    if (!object(value)) return
+    const record = value
+    if (record.transport === "http" && object(record.response)) {
+      const response = record.response
+      if (response.bodyEncoding === "base64") decode(response.body, pathFor(path, "response.body"))
+    }
+    if (record.transport === "websocket" && Array.isArray(record.events)) {
+      record.events.forEach((event: unknown, index) => {
+        if (!object(event) || event.kind !== "binary") return
+        const location = `${pathFor(path, "events")}[${index}].body`
+        if (event.bodyEncoding !== "base64") {
+          findings.push({ path: location, reason: "invalid declared binary encoding" })
+          return
+        }
+        decode(event.body, location)
+      })
+    }
+    for (const [key, child] of Object.entries(record)) walk(child, pathFor(path, key))
+  }
+  walk(value, "")
+  return { entries, findings }
+}
+// kilocode_change end
+
 export const secretFindings = (value: unknown): ReadonlyArray<SecretFinding> => {
   const environment = envSecrets()
-  return stringEntries(value).flatMap((entry) => [
+  const decoded = binary(value) // kilocode_change
+  // kilocode_change - include declared binary projections in the existing detector
+  const findings = [...stringEntries(value), ...decoded.entries].flatMap((entry) => [
     ...SECRET_PATTERNS.filter((item) => item.pattern.test(entry.value)).map((item) => ({
       path: entry.path,
       reason: item.label,
@@ -114,4 +170,5 @@ export const secretFindings = (value: unknown): ReadonlyArray<SecretFinding> => 
       .filter((item) => entry.value.includes(item.value))
       .map((item) => ({ path: entry.path, reason: `environment secret ${item.name}` })),
   ])
+  return decoded.findings.concat(findings) // kilocode_change
 }

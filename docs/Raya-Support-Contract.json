@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "extension": { "publisher": "eden", "name": "raya", "editor": "^1.106.0" },
+  "backend": "same-source-build",
+  "targets": [
+    {
+      "os": "windows-latest",
+      "target": "win32-x64",
+      "asset": "raya-win32-x64.vsix",
+      "installation": "local-checkpoint"
+    },
+    { "os": "macos-latest", "target": "darwin-arm64", "asset": "raya-darwin-arm64.vsix", "installation": "unverified" },
+    { "os": "ubuntu-latest", "target": "linux-x64", "asset": "raya-linux-x64.vsix", "installation": "unverified" }
+  ],
+  "evidence": {
+    "commit": "932b20497e4c88b9965861ef713265bbe028256d",
+    "date": "2026-09-10",
+    "target": "win32-x64",
+    "sha256": "74e6a11f16f7388c286590f83f0d350c262051dbe996652c8fae8d2f8a8cf66f",
+    "record": "docs/Raya-Implementation-Progress.md"
+  }
+}

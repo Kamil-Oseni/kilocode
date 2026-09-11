@@ -12,6 +12,10 @@ on:
       - "packages/storybook/**"
       - "packages/ui/**"
       - "script/**"
+      # kilocode_change start
+      - "docs/Raya-Support*"
+      - "packages/kilo-vscode/package.json"
+      # kilocode_change end
   workflow_dispatch:
 
 jobs:
@@ -50,3 +54,16 @@ jobs:
       - name: Check workflow allowlist
         run: bun run script/check-workflows.ts
       # kilocode_change end
+
+  # kilocode_change start
+  raya-support:
+    name: Check Raya support contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - run: bun run script/kilocode/raya-support.ts
+      - run: bun test ./script/kilocode/raya-support.test.ts
+  # kilocode_change end

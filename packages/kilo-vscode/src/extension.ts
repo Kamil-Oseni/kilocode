@@ -133,6 +133,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
       AutocompleteServiceManager.getInstance()?.load()
     } else {
+      telemetry.disconnect()
       remoteService.clearState()
       remoteService.setClient(null)
     }

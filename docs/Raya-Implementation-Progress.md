@@ -4,9 +4,9 @@ Source of scope: [Comprehensive audit](Raya-Comprehensive-Audit.md). All section
 
 ## Current work
 
-Latest verified installed product checkpoint: 9516ee3646, pushed to origin/main. Saved task context and explicit same-task native voice restart passed recorded checks and the production snapshot workflow. Installed version: 7.4.23-snapshot+9516ee3646.kamil-oseni.1789015347759. Live voice/device acceptance, separate Go companion rebuild and post-reload workflows remain open.
+Latest verified installed product checkpoint: 932b20497e, pushed to origin/main. Parent-linked native voice retention and task deletion passed recorded checks and the production snapshot workflow. Installed version: 7.4.23-snapshot+932b20497e.kamil-oseni.1789017037691. Live voice/device acceptance, separate Go companion rebuild and post-reload workflows remain open.
 
-Current checkpoint adds parent-linked native voice retention, strict legacy-file cleanup, and update-only persistence that cannot recreate deleted bindings. Fresh/upgrade database, authenticated deletion, and service checks are being recorded below. Durable spoken snapshots, warm handoff, live device/provider acceptance and the full 39-requirement audit remain open.
+Current checkpoint delivers parent-linked native voice retention, strict legacy-file cleanup, and update-only persistence that cannot recreate deleted bindings. Recorded local checks, push hooks and snapshot installation passed. Durable spoken snapshots, warm handoff, live device/provider acceptance and the full 39-requirement audit remain open.
 
 ## Findings and overhauls
 
@@ -2258,3 +2258,18 @@ Validation:
 - Resolved verification failures: the first cleanup fixture lacked its real process-spawner dependency; the first CLI typecheck found a database dependency captured inside a prompt callback. Both were corrected and relevant checks passed. No failing check is being counted as a pass.
 
 Scope limits: logical deletion does not erase backups, SQLite recovery files or provider-held data; concurrent older binaries can still write the former JSON format. Recursive task and multi-file legacy deletion are not atomic. Age-based purge, durable spoken transcript history, warm handoff, paid-provider/microphone acceptance and full audit completion remain open. This checkpoint adds no HTTP schema and requires no SDK regeneration. Push and packaged installation receipts follow after delivery.
+
+
+Delivery receipt for 932b20497e4c88b9965861ef713265bbe028256d: normal-hook push to origin/main completed with native exit 0; cross-package and JetBrains checks passed (`.tmp/voice-retention-push.log`). Production snapshot installation completed with native exit 0 (`.tmp/voice-retention-snapshot-install.log`), including SDK generation with no tracked API changes, compiled CLI version/model/worker smoke tests, extension types/lint/bundle, packaging and installation. Independent installed-version query confirms `eden.raya@7.4.23-snapshot+932b20497e.kamil-oseni.1789017037691`.
+
+Artifact: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-932b20497e-kamil-oseni-1789017037691.vsix`; 516522863 bytes, 427 entries, embedded CLI 228408320 bytes. SHA-256: `74E6A11F16F7388C286590F83F0D350C262051DBE996652C8FAE8D2F8A8CF66F`. Independent archive check verified publisher/name/version/CLI presence and absence of `.tmp` or `.env` entries (`.tmp/voice-retention-snapshot-verification.log`). VS Code reload was not forced. This is a verified product checkpoint, not full audit completion.
+
+
+## Remaining implementation handoff (2026-09-10)
+
+See [Remaining implementation handoff](Raya-Remaining-Implementation-Handoff.md) for all 39 requirement plans, pending checkpoint work, GPT-Live 1 migration, Codex architecture adaptation backlog, verification instructions and continuation prompt.
+
+
+### Diagnostic transport and support contract checkpoint preparation
+
+EN-13: extension telemetry now clears disconnected endpoints, cancels pending requests, bounds capture concurrency, applies a deadline, refuses redirects and uses content-free errors. Actual HTTP boundary and utility tests: 13 pass, 25 assertions; host/webview typecheck and extension lint terminal 0. Awaited transport settlement fixes the earlier Bun test teardown spin. Receiver consent ordering and final outbound acceptance remain open. Recorder binary-secret tests: 37 pass, 185 assertions; recorder types pass. PR-06: executable support contract and pinned release-note generation; 7 tests, 26 assertions, support/annotation guards pass. Independent integration review found no blocking issues. Source remains pending checkpoint delivery; see handoff for full remaining scope.

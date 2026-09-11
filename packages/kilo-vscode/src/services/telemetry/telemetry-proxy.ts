@@ -9,8 +9,8 @@ import { buildTelemetryPayload, buildTelemetryAuthHeader } from "./telemetry-pro
 export class TelemetryProxy {
   private static singleton: TelemetryProxy | undefined
 
-  private url: string | undefined
-  private password: string | undefined
+  private connection: { url: string; password: string; abort: AbortController } | undefined
+  private pending = new Set<AbortController>()
   private provider: TelemetryPropertiesProvider | undefined
 
   private constructor() {}
@@ -20,15 +20,22 @@ export class TelemetryProxy {
   }
 
   static capture(event: TelemetryEventName, properties?: Record<string, unknown>) {
-    TelemetryProxy.getInstance().capture(event, properties)
+    return TelemetryProxy.getInstance().capture(event, properties)
   }
 
   /**
    * Configure the CLI server connection. Must be called before capture() will send events.
    */
   configure(url: string, password: string) {
-    this.url = url
-    this.password = password
+    this.disconnect()
+    if (url && password) this.connection = { url, password, abort: new AbortController() }
+  }
+
+  disconnect() {
+    this.connection?.abort.abort()
+    this.connection = undefined
+    for (const request of this.pending) request.abort()
+    this.pending.clear()
   }
 
   setProvider(provider: TelemetryPropertiesProvider) {
@@ -40,24 +47,19 @@ export class TelemetryProxy {
   }
 
   /**
-   * Fire-and-forget capture. Enriches with provider properties, then POSTs to CLI.
+   * Capture with optional transport settlement. Enriches with provider properties, then POSTs to CLI.
    */
   capture(event: TelemetryEventName, properties?: Record<string, unknown>) {
     if (!this.isVSCodeTelemetryEnabled()) return
-    if (!this.url || !this.password) return
-
-    const built = buildTelemetryPayload(event, properties, this.provider?.getTelemetryProperties())
-    const payload = JSON.stringify(built)
-    const auth = buildTelemetryAuthHeader(this.password)
-
-    fetch(`${this.url}/telemetry/capture`, {
-      method: "POST",
-      headers: {
-        Authorization: auth,
-        "Content-Type": "application/json",
-      },
-      body: payload,
-    }).catch((err) => console.error("[Kilo New] Telemetry capture failed:", err))
+    const connection = this.connection
+    if (!connection || this.pending.size >= 32) return
+    try {
+      const payload = JSON.stringify(buildTelemetryPayload(event, properties, this.provider?.getTelemetryProperties()))
+      if (this.connection !== connection || !this.isVSCodeTelemetryEnabled()) return
+      return this.send(connection, "capture", payload)
+    } catch {
+      console.error("[Raya] Telemetry event preparation failed.")
+    }
   }
 
   /**
@@ -67,21 +69,42 @@ export class TelemetryProxy {
    * spawn-time state until the process restarts.
    */
   setEnabled(enabled: boolean) {
-    if (!this.url || !this.password) return
-
-    const auth = buildTelemetryAuthHeader(this.password)
-    fetch(`${this.url}/telemetry/setEnabled`, {
-      method: "POST",
-      headers: {
-        Authorization: auth,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ enabled }),
-    }).catch((err) => console.error("[Kilo New] Telemetry setEnabled failed:", err))
+    const connection = this.connection
+    if (!connection) return
+    return this.send(connection, "setEnabled", JSON.stringify({ enabled }))
   }
 
-  /**
-   * No-op — the CLI server handles PostHog shutdown.
-   */
-  shutdown() {}
+  private async send(
+    connection: NonNullable<TelemetryProxy["connection"]>,
+    route: "capture" | "setEnabled",
+    payload: string,
+  ) {
+    const abort = new AbortController()
+    this.pending.add(abort)
+    try {
+      const response = await fetch(`${connection.url}/telemetry/${route}`, {
+        method: "POST",
+        headers: {
+          Authorization: buildTelemetryAuthHeader(connection.password),
+          "Content-Type": "application/json",
+        },
+        body: payload,
+        redirect: "error",
+        signal: AbortSignal.any([connection.abort.signal, abort.signal, AbortSignal.timeout(10_000)]),
+      })
+      await response.body?.cancel()
+      if (!response.ok) throw new Error("Telemetry request refused")
+    } catch {
+      if (!connection.abort.signal.aborted && !abort.signal.aborted)
+        console.error(`[Raya] Telemetry ${route} request failed.`)
+    } finally {
+      this.pending.delete(abort)
+    }
+  }
+
+  /** Drop the endpoint and pending requests; the CLI owns PostHog shutdown. */
+  shutdown() {
+    this.disconnect()
+    this.provider = undefined
+  }
 }

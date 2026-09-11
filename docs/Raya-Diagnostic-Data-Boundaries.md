@@ -35,13 +35,27 @@ The recorder allowlists headers, redacts configured query names and URL credenti
 
 Plain text, SSE payloads, nested error messages, user-defined field names, short secrets, encoded values and private information that is not a credential need their own policy. A synthetic token detector does not remove a person's name, unpublished source code or an ordinary-language company secret. Recorder transformations and refusal behavior must be verified through the actual writer, not just helper functions. Recordings should remain local until a reviewed export mechanism establishes what they contain.
 
+### Declared binary recordings
+
+The cassette writer now inspects decoded bytes for explicitly base64-encoded HTTP responses and binary WebSocket frames. It applies the existing recognized-token and environment-secret checks to their UTF-8 projection before writing; it never rewrites binary content. Canonical base64 is required, including padding and zero padding bits. Invalid encodings and an aggregate decoded size above 8 MiB per inspected interaction are refused before publication. Safe binary data remains byte-for-byte replayable. The budget bounds this added decoding, not the recorder's overall capture memory or total cassette size.
+
+This closes transport encoding hiding a known token. It does not decompress content, inspect encrypted files, recognize arbitrary encodings embedded in ordinary text, or guarantee that private information is absent. Existing cassette reads are not retroactively scanned or rewritten. JSON/text/SSE/URL/nested-error/text-frame checks retain the existing detection policy; short or unknown secrets and ordinary private text remain outside that policy. Recording stays separate from telemetry consent.
+
+Actual filesystem-writer regression coverage checks refusal across these supported representations, preservation of a prior safe cassette, absence of unsafe files/publication remnants, and omission of synthetic secret values from error messages. A loopback HTTP case exercises binary capture through the recorder itself; the existing safe binary record/replay fixture protects byte fidelity. Validation outcomes are recorded in the progress log.
+
+## Connection-bound telemetry transport
+
+The extension now drops its endpoint and cancels pending requests on backend disconnection, replacement and shutdown. Capture checks consent before enrichment and again after serialization, so provider callbacks cannot forward an event using obsolete connection or consent state. Capture concurrency is bounded at 32 pending requests; requests have a ten-second deadline, refuse redirects and report only content-free failure messages. Callers may await transport settlement; this does not establish final analytics delivery.
+
+Actual loopback HTTP tests cover opt-out, reentrant disconnection and serialization, endpoint removal, redirects, non-success responses and cancellation. These do not establish receiving-side consent ordering: concurrent consent updates can still arrive out of order, and aborting a request cannot undo an event already accepted by the backend. Durable consent synchronization and final outbound behavior remain open.
+
 ## Remaining implementation and acceptance
 
 - Extend the implemented allowlisted summary with versioned feature availability and bounded timing/status measurements where supported. Preserve its explicit field contract and test every added field; no complete support bundle is claimed here.
 - Inventory telemetry event properties and receiving endpoints, including free-form error and feedback fields. Document a company retention/deletion policy rather than infer it from a library setting.
-- Verify runtime opt-out propagation, failed acknowledgments, reordered consent changes and reconnection. The current fire-and-forget proxy does not provide a durable consent synchronization guarantee.
+- Verify runtime opt-out propagation, failed acknowledgments, reordered consent changes and reconnection. The connection-bound proxy does not provide a durable consent synchronization guarantee.
 - Verify telemetry enabled/disabled behavior at the CLI receiver and final outbound transport with synthetic events, including queued events and identity updates.
-- Exercise recorder writer rejection/redaction across JSON, plain text, SSE, URLs, nested errors, WebSocket frames and encoded data using synthetic secrets only.
+- Extend the verified writer matrix as supported formats change; compressed, encrypted and arbitrarily encoded content still require a separate policy. Known-token detection does not approve recordings for sharing.
 - Provide an explicit, separate recording/export choice where a product workflow actually introduces sensitive recording. Do not treat ordinary telemetry enablement as consent to record conversations.
 - Review log destinations, access and rotation on each supported platform, and connect deletion controls to the actual stored artifacts.
 

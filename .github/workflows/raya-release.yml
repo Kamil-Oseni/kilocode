@@ -31,9 +31,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.sha }} # kilocode_change
           fetch-depth: 0
 
       - uses: ./.github/actions/setup-bun
+
+      # kilocode_change start
+      - name: Check Raya support contract
+        run: bun run script/kilocode/raya-support.ts
+      # kilocode_change end
 
       - name: Setup Zig for Linux sandbox helper
         if: matrix.os == 'ubuntu-latest'
@@ -70,14 +76,29 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      # kilocode_change start
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      # kilocode_change end
+
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
 
+      # kilocode_change start
+      - name: Generate pinned support notes
+        run: bun run script/kilocode/raya-support.ts --notes dist/support-notes.md
+      # kilocode_change end
       - name: Create release with VSIX assets
         env:
           GH_TOKEN: ${{ github.token }}
+        # kilocode_change start
         run: |
           version="${GITHUB_REF_NAME#raya-}"; version="${version#v}"
           prerelease=""
@@ -86,4 +107,6 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --title "Raya $version" \
             --generate-notes \
+            --notes-file dist/support-notes.md \
             $prerelease
+        # kilocode_change end

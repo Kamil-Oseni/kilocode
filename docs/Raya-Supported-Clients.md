@@ -1,6 +1,6 @@
 # Raya clients, distribution and feature coverage
 
-This is the repository's Raya support baseline, checked against product checkpoint `a05a539dec` on 9 September 2026. It records implemented distribution and validation evidence; it does not establish a company support SLA. The [implementation progress log](Raya-Implementation-Progress.md) records later checkpoints and remaining acceptance work.
+This is the repository's Raya support baseline, checked against packaged product checkpoint `932b20497e4c88b9965861ef713265bbe028256d` on 10 September 2026. It records implemented distribution and validation evidence; it does not establish a company support SLA. The [implementation progress log](Raya-Implementation-Progress.md) records later checkpoints and remaining acceptance work.
 
 For Raya, use the **`eden.raya` VS Code extension from this fork**. The Kilo Marketplace, npm and cloud links in inherited documentation refer to upstream products. Installing those products does not install this fork's Raya features or updates.
 
@@ -22,14 +22,21 @@ Source: [extension identity](../packages/kilo-vscode/package.json), [CLI package
 
 The [Raya release workflow](../.github/workflows/raya-release.yml) declares three platform targets. A configured build target is distinct from a published asset or a successful installation.
 
-| Platform | Expected release asset | Evidence at this baseline |
-|---|---|---|
-| Windows x64 | `raya-win32-x64.vsix` | Local snapshot production build, archive inspection and VS Code installation verified. |
-| macOS Apple Silicon | `raya-darwin-arm64.vsix` | Release job configured; this audit does not certify a macOS installation. |
-| Linux x64 | `raya-linux-x64.vsix` | Release job configured; this audit does not certify a Linux installation. |
-| macOS Intel, Windows ARM64, Linux ARM64, other targets | No Raya asset declared by this workflow | CLI build capabilities and upstream assets do not establish Raya VSIX support for these targets. |
+<!-- raya-support:start -->
+Extension: **`eden.raya`**. Minimum editor range: **VS Code `^1.106.0`**. Backend compatibility: SDK, CLI and extension from the same source build.
 
-The extension manifest requires **VS Code `^1.106.0`**. This requirement alone does not certify every VS Code derivative, remote extension host or browser-hosted editor. The native CLI and browser host need to run on the extension host's platform; remote/WSL/container combinations require their own end-to-end checks before being added to this matrix.
+| Build target | Runner | Expected release asset | Installation evidence |
+|---|---|---|---|
+| `win32-x64` | `windows-latest` | `raya-win32-x64.vsix` | Local checkpoint only; not certification of a future release asset. |
+| `darwin-arm64` | `macos-latest` | `raya-darwin-arm64.vsix` | Unverified; configured build target only. |
+| `linux-x64` | `ubuntu-latest` | `raya-linux-x64.vsix` | Unverified; configured build target only. |
+
+Local installation evidence: `932b20497e4c88b9965861ef713265bbe028256d` (2026-09-10), `win32-x64`; VSIX SHA-256 `74e6a11f16f7388c286590f83f0d350c262051dbe996652c8fae8d2f8a8cf66f`. See the [delivery record](Raya-Implementation-Progress.md). This records packaging and installation, not all live workflows or activation after reload.
+<!-- raya-support:end -->
+
+No other Raya VSIX targets are declared. CLI build capabilities and upstream assets do not establish additional Raya client support.
+
+This requirement alone does not certify every VS Code derivative, remote extension host or browser-hosted editor. The native CLI and browser host need to run on the extension host's platform; remote/WSL/container combinations require their own end-to-end checks before being added to this matrix.
 
 For an internal release, obtain the exact platform VSIX from the configured fork repository's `raya-vX.Y.Z` release and install it through VS Code's **Extensions: Install from VSIX** command. Confirm the publisher/name is `eden.raya`. The extension's updater uses `raya.update.repo`, `raya.update.enabled` and the explicit prerelease setting; a repository being configured does not prove that an eligible asset exists.
 
@@ -66,11 +73,11 @@ A public network deployment is not established by the existence of an HTTP API, 
 | Goals and evidence | Goal controls, history/evidence views and persisted runtime checks | Runtime goal tools are available; do not expect identical UI | No full Raya goal-control parity certification. |
 | Routines | Structured schedule controls and persisted runtime execution | Runtime services exist; not the same scheduling editor | Full routine lifecycle/parity remains open. |
 | File review | Editor/chat Keep/Undo flows with acknowledgement and revision checks | Runtime operations exist; VS Code gutter/review UI is host-specific | Do not equate a generic diff viewer with the same review contract. |
-| Browser automation | Extension-owned browser sessions, frames, dialogs, task-bound transfer receipts and verified download copies | Host-backed operations require an available browser bridge; a bare CLI process does not supply the VS Code browser panel | No browser-host parity established. Authorized uploads are the next implementation slice. |
+| Browser automation | Extension-owned browser sessions, frames, dialogs, task-bound transfer receipts and verified download copies | Host-backed operations require an available browser bridge; a bare CLI process does not supply the VS Code browser panel | No browser-host parity established. Authorized, task-bound file uploads are implemented; file selection and destination acceptance are separate receipts. No cross-client upload parity is claimed. |
 | Canvas | Extension renderer and persisted candidate/current recovery | Host-backed rendering is not supplied by the terminal itself | Other canvas/preview components do not establish the same recovery contract. |
-| Model costs | Session-family/project summaries and stored calculation disclosure | TUI family summary, direct-run observed-step footer and selected-session CLI statistics | These cover settled model steps; separately billed media/tools, complete reconciliation and all consumer parity remain open. |
-| Voice | Existing speech/voice implementation | No matching voice UI baseline | Native realtime multimodal overhaul and client parity remain open. |
-| Self-heal | Repair state, isolated worktree completion and captured-source verification | Runtime tools/check receipts | Captured input does not prove a released, installed or successfully activated repair artifact. Build/install linkage remains open. |
+| Model costs | Session-family/project summaries and stored calculation disclosure | TUI family summary, direct-run observed-step footer and selected-session CLI statistics | Settled model-step accounting and native voice provider usage receipts remain distinct; complete media/tool billing reconciliation and all consumer parity remain open. |
+| Voice | OpenAI native voice default with explicit microphone start, mute, Stop speaking, End voice, selected-image sharing, usage disclosure, saved-task context and explicit restart. Admitted work continues independently; task-linked voice retention is deleted with the task. | No matching voice UI baseline | Local transport, HTTP/WebSocket and actual UI fixtures are verified. Paid-provider/microphone acceptance, acoustic quality, durable spoken history and warm handoff remain unverified or unimplemented. |
+| Self-heal | Repair state, isolated worktree completion, captured-source verification and retained artifact build/inspection receipts | Runtime tools and source/artifact receipts | A real repair VSIX was built and independently inspected. Its originating helper required a watchdog exit; publication, installation, rollback and post-install acceptance remain unverified. Ordinary snapshot installation does not establish repair installation. |
 
 For detailed guarantees and limitations, see [review contract](Raya-Review-Contract.md), [cost accounting](Raya-Cost-Accounting.md), [repair verification](Raya-Self-Heal-Verification.md) and the [full audit](Raya-Comprehensive-Audit.md).
 
@@ -78,4 +85,6 @@ For detailed guarantees and limitations, see [review contract](Raya-Review-Contr
 
 Update this matrix when changing extension identity, minimum VS Code version, release targets, backend selection/authentication, or a host-dependent feature. Record source commit, platform, build/check results, artifact identity and installation evidence in the progress log. Add a platform/client to the verified baseline only after its actual build, install and representative task/recovery flows pass; a green typecheck is not sufficient.
 
-PR-06's documentation gap is addressed by this matrix and the README entry point. Company support ownership/SLA, non-Windows rollout evidence, older backend negotiation, and full per-client acceptance remain explicit product/release decisions rather than inferred support promises.
+The [machine-readable contract](Raya-Support-Contract.json) owns identity, editor range, configured targets and checkpoint evidence. `bun run script/kilocode/raya-support.ts` checks the manifest, release workflow and generated block above; `--write` refreshes that block after an intentional contract update. Existing CI runs the guard and its drift tests, and release builds validate it before packaging. Release notes link this matrix at the checked-out source commit and distinguish build targets from verified installations. Feature coverage outside the generated block still requires source and acceptance review.
+
+PR-06's documentation and distribution-contract gap is addressed by this matrix, guard and README entry point. Company support ownership/SLA, non-Windows rollout evidence, older backend negotiation, and full per-client acceptance remain explicit product/release decisions rather than inferred support promises.

@@ -6,6 +6,7 @@ import * as path from "node:path"
 import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { forget, remember } from "../../src/edit-review/attempts"
+import { forget as erase, listed, record } from "../../src/edit-review/undone"
 
 describe("host review acknowledgements", () => {
   test("confirmed deletion prunes only matching retry and delivery state", async () => {
@@ -25,6 +26,8 @@ describe("host review acknowledgements", () => {
     }
     await remember(state, input)
     await remember(state, { ...input, session: "session-a-other", request: "retained-request" })
+    await record(state, "session-a", { "gone.ts": "undone" })
+    await record(state, "session-a-other", { "gone.ts": "kept" })
     const provider = new KiloProvider({} as never, { pruneSession: () => {} } as never)
     const host = provider as unknown as {
       extensionContext: { workspaceState: typeof state }
@@ -36,10 +39,13 @@ describe("host review acknowledgements", () => {
     host.deliveries.set("session-a-other\0request", async () => {})
     host.pruneDeletedSession("session-a")
     await forget(state, "unrelated")
+    await erase(state, "unrelated")
     expect(host.deliveries.has("session-a\0request")).toBe(false)
     expect(host.deliveries.has("session-a-other\0request")).toBe(true)
     expect(JSON.stringify([...values.values()])).not.toContain("deleted-request")
     expect(JSON.stringify([...values.values()])).toContain("retained-request")
+    expect(listed(state, "session-a")).toEqual({})
+    expect(listed(state, "session-a-other")).toEqual({ "gone.ts": "kept" })
   })
 
   for (const action of ["keep", "undo"] as const) {
@@ -311,4 +317,77 @@ describe("host review acknowledgements", () => {
       })
     })
   }
+
+  test("successful Undo hydrates after the file leaves the live diff and reopens when it returns", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "raya-undone-host-"))
+    const file = path.join(directory, "workspace.json")
+    await writeFile(file, "{}")
+    let live = false
+    const client = createKiloClient({
+      baseUrl: "http://review.test",
+      fetch: async (input) => {
+        const request = input instanceof Request ? input : new Request(input)
+        if (new URL(request.url).pathname.endsWith("/diff")) {
+          if (!live) return Response.json([])
+          return Response.json([
+            { file: "file.ts", patch: "@@ -1 +1 @@\n-old\n+new", additions: 1, deletions: 1, reviewed: "" },
+          ])
+        }
+        return Response.json({ id: "session-a", title: "Task", time: { created: 1, updated: 2 } })
+      },
+    })
+    const values = JSON.parse(await readFile(file, "utf8")) as Record<string, unknown>
+    const state = {
+      get: (key: string) => values[key],
+      update: async (key: string, value: unknown) => {
+        await writeFile(file, JSON.stringify({ ...values, [key]: value }))
+        values[key] = value
+      },
+    }
+    const provider = new KiloProvider({} as never, { getClient: () => client } as never)
+    const messages: unknown[] = []
+    provider.postMessage = (message) => {
+      messages.push(message)
+    }
+    const host = provider as unknown as {
+      extensionContext: { workspaceState: typeof state }
+      reviewAction(
+        sid: string,
+        action: "keep" | "undo",
+        request: string,
+        files: string[],
+        expected: Record<string, string>,
+      ): Promise<void>
+      refreshReview(sessionID?: string): Promise<void>
+      scheduleReview(): void
+      getWorkspaceDirectory(): string
+    }
+    host.extensionContext = { workspaceState: state }
+    host.scheduleReview = () => {}
+    host.getWorkspaceDirectory = () => directory
+    const expected = { "file.ts": "1".repeat(64) }
+    try {
+      await host.reviewAction("session-a", "undo", "original", ["file.ts"], expected)
+      await host.refreshReview("session-a")
+      expect(messages).toContainEqual(
+        expect.objectContaining({
+          type: "reviewStatsLoaded",
+          sessionID: "session-a",
+          expected: {},
+          accepted: expected,
+        }),
+      )
+      expect(listed(state, "session-a")).toEqual(expected)
+      live = true
+      await host.refreshReview("session-a")
+      const loaded = messages.filter(
+        (message): message is { type: string; accepted?: Record<string, string> } =>
+          !!message && typeof message === "object" && "type" in message && message.type === "reviewStatsLoaded",
+      )
+      expect(loaded.at(-1)?.accepted).toEqual({})
+      expect(listed(state, "session-a")).toEqual({})
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
 })

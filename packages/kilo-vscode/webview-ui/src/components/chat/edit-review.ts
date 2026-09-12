@@ -32,7 +32,9 @@ function update(
   )
   const accepted = {
     ...retained,
-    ...Object.fromEntries(Object.entries(confirmed ?? {}).filter(([file, hash]) => expected[file] === hash)),
+    ...Object.fromEntries(
+      Object.entries(confirmed ?? {}).filter(([file, hash]) => !expected[file] || expected[file] === hash),
+    ),
   }
   setStates((all) =>
     new Map(all).set(session, { expected, aliases: { ...prev?.aliases, ...paths }, windows, accepted }),

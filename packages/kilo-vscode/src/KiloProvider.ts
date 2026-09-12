@@ -4,6 +4,7 @@ import { fingerprint } from "./edit-review/revision"
 import * as path from "path"
 import { assertSaved, failure } from "./edit-review/unsaved"
 import { forget, remember } from "./edit-review/attempts"
+import { apply, forget as erase, listed, record, reopen, scoped } from "./edit-review/undone"
 import { existsSync } from "fs"
 import * as vscode from "vscode"
 import { TRANSIENT as MEMORY_TRANSIENT } from "@kilocode/kilo-memory/schema"
@@ -1984,7 +1985,14 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         : undefined
       assertSaved(this.getWorkspaceDirectory(sid), files ?? (revisions ? Object.keys(revisions) : undefined))
       if (action === "keep") await this.handleKeepSessionChanges(sid, files, revisions, attempt?.id)
-      if (action === "undo") await this.handleDiscardSessionChanges(sid, files, revisions, attempt?.id)
+      if (action === "undo") {
+        await this.handleDiscardSessionChanges(sid, files, revisions, attempt?.id)
+        const hashes = scoped(files, revisions)
+        if (hashes)
+          await record(this.extensionContext?.workspaceState, sid, hashes).catch((error) =>
+            console.error("[Raya] Could not persist historical undo dismissals:", error),
+          )
+      }
       if (!attempt?.recovered) accept?.()
       if (requestID && attempt) this.deliveries.set(`${sid}\0${requestID}`, attempt.complete)
       if (requestID)
@@ -2752,6 +2760,9 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private pruneDeletedSession(sessionID: string): void {
     void forget(this.extensionContext?.workspaceState, sessionID).catch((error) =>
       console.error("[Raya] Could not remove deleted session review attempts:", error),
+    )
+    void erase(this.extensionContext?.workspaceState, sessionID).catch((error) =>
+      console.error("[Raya] Could not remove deleted session undo dismissals:", error),
     )
     for (const key of this.deliveries.keys()) {
       if (key.startsWith(`${sessionID}\0`)) this.deliveries.delete(key)
@@ -6135,6 +6146,16 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         expected.set(item.file, fingerprint(item))
         if (item.reviewed === fingerprint(item)) accepted.set(item.file, item.reviewed)
         files.set(item.file, { additions: item.additions ?? 0, deletions: item.deletions ?? 0 })
+      }
+    }
+    const live = Object.fromEntries(expected)
+    for (const id of ids) {
+      try {
+        const result = apply(live, listed(this.extensionContext?.workspaceState, id))
+        for (const [file, hash] of Object.entries(result.accepted)) accepted.set(file, hash)
+        if (result.stale.length) await reopen(this.extensionContext?.workspaceState, id, result.stale)
+      } catch (error) {
+        console.error("[Raya] Could not hydrate historical undo dismissals:", error)
       }
     }
     let additions = 0

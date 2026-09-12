@@ -15,6 +15,17 @@ describe("chat file review state", () => {
     expect(editReview.isKept("a", "a.ts")).toBe(false)
   })
 
+  test("a fresh webview hydrates an Undo-dismissed file that left the live diff", () => {
+    editReview.update("a", { "live.ts": "v1" }, {}, false, { "gone.ts": "undone", "live.ts": "v1" })
+    expect(editReview.isKept("a", "gone.ts")).toBe(true)
+    expect(editReview.isKept("a", "live.ts")).toBe(true)
+    const remove = editReview.register({ session: "a", file: "gone.ts", el: {} as HTMLElement })
+    expect(editReview.pending("a")).toEqual([])
+    remove()
+    editReview.update("a", { "gone.ts": "v2" }, {}, false, {})
+    expect(editReview.isKept("a", "gone.ts")).toBe(false)
+  })
+
   test("Keep all covers files before their transcript nodes mount", () => {
     editReview.update("a", { "first.ts": "v1", "late.ts": "v2" })
     editReview.keepAll("a")

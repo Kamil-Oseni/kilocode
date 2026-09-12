@@ -3,7 +3,7 @@ import { Show, createSignal, createUniqueId, onCleanup, onMount } from "solid-js
 import { useVSCode } from "../../context/vscode"
 
 export function AccessReview(props: {
-  item: { id: string; name: string; access?: "brief" | "full" }
+  item: { id: string; name: string; access?: "brief" | "full"; dir?: string }
   onClose: () => void
 }) {
   const vscode = useVSCode()
@@ -79,6 +79,14 @@ export function AccessReview(props: {
         actions as well as editing, unless a saved tool list restricts them. Neither profile is an operating-system
         sandbox.
       </p>
+      <Show when={props.item.dir?.trim()}>
+        {(folder) => (
+          <p class="routines-hint">
+            Writable location: {folder()}. File tools write here and cannot write in parent folders. Reading can still
+            use other locations. Shell is not confined.
+          </p>
+        )}
+      </Show>
       <label for={`${id}-choice`}>Tool access</label>
       <select
         id={`${id}-choice`}

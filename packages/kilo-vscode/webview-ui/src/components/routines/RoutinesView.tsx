@@ -1313,7 +1313,10 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                   Choose
                 </Button>
               </div>
-              <p class="routines-hint">It can read from anywhere. New files go in this folder.</p>
+              <p class="routines-hint">
+                File tools write here and cannot write in parent folders. Reading can still use other locations. This is
+                not an operating-system sandbox.
+              </p>
             </div>
             <label class="routines-field">
               Plan file

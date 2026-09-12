@@ -311,7 +311,17 @@ export namespace RayaTask {
     return agent.role.toLowerCase() === "briefer"
   }
 
-  export function rules(agent: Pick<Agent, "role" | "access" | "tools">) {
+  function confine(dir: string | undefined, rules: ReturnType<typeof Permission.fromConfig>) {
+    if (!dir?.trim()) return rules
+    return [
+      ...rules,
+      { permission: "edit", pattern: "../**", action: "deny" as const },
+      { permission: "write", pattern: "../**", action: "deny" as const },
+      { permission: "apply_patch", pattern: "../**", action: "deny" as const },
+    ]
+  }
+
+  export function rules(agent: Pick<Agent, "role" | "access" | "tools" | "dir">) {
     if (brief(agent)) {
       const cfg: Record<string, "allow" | "deny"> = { "*": "deny", question: "allow" }
       const reads = [
@@ -338,9 +348,9 @@ export namespace RayaTask {
     if (agent.tools?.length) {
       const cfg: Record<string, "allow" | "deny"> = { "*": "deny", question: "allow" }
       for (const tool of agent.tools) cfg[tool] = "allow"
-      return Permission.fromConfig(cfg)
+      return confine(agent.dir, Permission.fromConfig(cfg))
     }
-    return Permission.fromConfig({ "*": "allow", edit: "allow", write: "allow", bash: "allow" })
+    return confine(agent.dir, Permission.fromConfig({ "*": "allow", edit: "allow", write: "allow", bash: "allow" }))
   }
 
   export function listen(agent: Agent, source: string, filter?: string) {

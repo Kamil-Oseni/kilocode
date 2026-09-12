@@ -215,6 +215,7 @@ try {
   await Promise.resolve()
   assert.match(document.activeElement.textContent, /Tool access for Review/)
   assert.match(root.textContent, /no saved access choice/)
+  assert.doesNotMatch(root.textContent, /Writable location/)
   assert.equal(button("Save access").disabled, true)
   const access = root.querySelector("section[aria-labelledby] select")
   access.value = "brief"
@@ -618,6 +619,7 @@ try {
     assert.match(root.textContent, /Role/)
     assert.match(root.textContent, /Write folder/)
     assert.match(root.textContent, /Role, write folder, agent, and plan file/)
+    assert.match(root.textContent, /cannot write in parent folders/)
     const dest = root.querySelector(".routines-pick input")
     assert.equal(dest.value, "")
     dest.value = "C:/tmp/review-writes"
@@ -673,6 +675,15 @@ try {
       [...root.querySelectorAll("button")].some((item) => item.textContent.trim() === "Save assignment"),
       false,
     )
+  }
+  {
+    button("Review access").click()
+    await Promise.resolve()
+    assert.match(root.textContent, /Writable location: C:\/tmp\/review-writes/)
+    assert.match(root.textContent, /cannot write in parent folders/)
+    assert.match(root.textContent, /Shell is not confined/)
+    button("Close access review").click()
+    await Promise.resolve()
   }
   const legacy = { ...agent, enabled: true, schedule: { kind: "cron", expr: "0 9 * * *" } }
   emit({ type: "routineState", agents: [legacy] })

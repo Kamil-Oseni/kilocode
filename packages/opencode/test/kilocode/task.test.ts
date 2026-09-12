@@ -1622,6 +1622,24 @@ describe("RayaTask store", () => {
     expect(agent.access).toBe("full")
     expect(RayaTask.brief(agent)).toBe(false)
     expect(RayaTask.rules(agent).some((rule) => rule.permission === "edit" && rule.action === "allow")).toBe(true)
+    expect(Permission.evaluate("edit", "report.md", RayaTask.rules(agent)).action).toBe("allow")
+    expect(Permission.evaluate("edit", "../secret/ledger.ts", RayaTask.rules(agent)).action).toBe("deny")
+    expect(Permission.evaluate("write", "../../project/src/a.ts", RayaTask.rules(agent)).action).toBe("deny")
+    expect(Permission.evaluate("read", "../project/src/a.ts", RayaTask.rules(agent)).action).toBe("allow")
+    expect(Permission.evaluate("external_directory", "../project/*", RayaTask.rules(agent)).action).toBe("allow")
+    expect(Permission.evaluate("edit", "../secret/ledger.ts", RayaTask.rules({ ...agent, tools: ["*"] })).action).toBe(
+      "deny",
+    )
+    const open = await Effect.runPromise(
+      tasks.create({
+        name: "Open",
+        role: "ops",
+        objective: "watch deploys",
+        schedule: { kind: "manual" },
+        access: "full",
+      }),
+    )
+    expect(Permission.evaluate("edit", "../secret/ledger.ts", RayaTask.rules(open)).action).toBe("allow")
   })
 
   test("briefer sessions deny file edits unless access is full", () => {

@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-12):** Deleted and renamed review chrome is installed as `712a1aa657`. Remaining: leftover 39-requirement work that is still implementable here, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-12):** Deleted-file virtual review buffers are committed as `8119256e53` and unshipped. Remaining: leftover 39-requirement work that is still implementable here, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -222,11 +222,11 @@ The following sections retain the full 39-item scope. Related findings and overh
 
 ### EN-05 — Identify reviewed content by revision, not line positions
 
-**Recorded status:** In progress. Content and persisted patch-generation fingerprints, stale-command rejection, Keep acceptance hydration, historical Undo hydration, and deletion/rename anchors verified in targeted tests. Chat now offers Keep/Undo on apply_patch and multiedit files, including deletions and renames. Packaged in-editor interaction with a live renamed or deleted buffer remains open.
+**Recorded status:** In progress. Content and persisted patch-generation fingerprints, stale-command rejection, Keep acceptance hydration, historical Undo hydration, and deletion/rename anchors verified in targeted tests. Chat now offers Keep/Undo on apply_patch and multiedit files, including deletions and renames. Opening a reviewed path that is gone on disk loads a virtual editor buffer with the deleted text and the same Keep/Undo CodeLens. Packaged live interaction in a real VS Code session remains open.
 
 **Implementation and verification:**
 
-1. Finish packaged in-editor interaction with a live renamed or deleted buffer.
+1. Finish packaged live VS Code interaction with a renamed or deleted buffer after reload.
 2. Preserve acceptance across unrelated line shifts but reject stale content revisions; make deletion-only actions discoverable.
 3. Change the same lines twice, rename/edit/delete, reopen and undo historical work; inspect anchors, Keep boundaries and focus.
 
@@ -2062,6 +2062,29 @@ Next executable step: leftover implementable 39-requirement work, or a real-acco
 **States:** committed, pushed and installed as `712a1aa657`. Deleted and renamed review chrome is in this snapshot. CLI binary was already present and was not rebuilt.
 
 Installed `eden.raya@7.4.23-snapshot+712a1aa657.kamil-oseni.1789225171178`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-712a1aa657-kamil-oseni-1789225171178.vsix`; SHA-256 `2FB451014DCA1F185E05FD79E5ADEDE82BFEFE925E7E1ACABE67A82D457FA260`; 517130684 bytes, 431 files. VS Code was not force-reloaded.
+
+Remaining: leftover implementable 39-requirement work, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent.
+
+Next executable step: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
+
+## 2026-09-12: Virtual editor buffers for deleted review files
+
+**States:** verified locally and committed as `8119256e53`. Opening a reviewed path that is gone on disk loads a `raya-review` buffer with the deleted text and the same Keep/Undo CodeLens. Chat path rows for deleted and renamed files open that buffer. The visual harness exposes those open controls.
+
+Changed files: `packages/kilo-vscode/src/edit-review/ghost.ts`, `packages/kilo-vscode/src/edit-review/ghost.test.ts`, `packages/kilo-vscode/src/edit-review/InEditorReview.ts`, `packages/kilo-vscode/src/edit-review/InEditorReview.test.ts`, `packages/kilo-vscode/src/kilo-provider/editor-actions.ts`, `packages/kilo-vscode/src/KiloProvider.ts`, `packages/kilo-vscode/tests/setup/vscode-mock.ts`, `packages/kilo-vscode/tests/unit/editor-actions.test.ts`, `packages/kilo-vscode/tests/surfaces-preview.browser.ts`, `packages/kilo-vscode/webview-ui/preview/surfaces.tsx`, `packages/kilo-vscode/webview-ui/src/components/chat/VscodeToolOverrides.tsx`, `packages/kilo-vscode/webview-ui/src/styles/session-actions.css`, `docs/Raya-Review-Contract.md`, `.changeset/raya-review-ghost-buffer.md`.
+
+Commands:
+
+| Command | Result |
+|---|---|
+| `packages/kilo-vscode` `bun test src/edit-review/ghost.test.ts src/edit-review/InEditorReview.test.ts tests/unit/edit-review-state.test.ts tests/unit/review-files.test.ts tests/unit/editor-actions.test.ts --timeout 30000` | 28 pass / 0 fail / 111 expect / exit 0 |
+| `packages/kilo-vscode` `bunx playwright test --config playwright.preview.config.ts tests/surfaces-preview.browser.ts` | 19 pass / 0 fail / exit 0 |
+| `packages/kilo-vscode` `bun run check-types` | exit 0 |
+| `packages/kilo-vscode` `bun run check-types:webview` | exit 0 |
+| `packages/kilo-vscode` `bun run check-kilocode-change` | no forbidden markers / exit 0 |
+| `packages/kilo-vscode` `bunx eslint --no-cache` on touched TypeScript | exit 0 |
+
+This is not a paid GPT-Live call and does not unlock VS Code iframe microphone consent. Packaged live VS Code interaction with a real deleted buffer remains open. Codex-deferred research stays untracked.
 
 Remaining: leftover implementable 39-requirement work, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent.
 

@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-12):** Product commits are `a3ca6bc1d6` and `18edac8c72`. Editing a worker can rename it or change its standing job without starting a new conversation; earlier reports stay on the same worker. Installed snapshot is still `ad066b704d` until this increment is pushed and installed. Remaining: leftover 39-requirement work that is still implementable here, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-12):** Installed product is `f81902f403`. Editing a worker can rename it or change its standing job without starting a new conversation; earlier reports stay on the same worker. Remaining: leftover 39-requirement work that is still implementable here, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-12. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `ad066b704d` is committed, pushed and installed. Archived/other-folder denials and completed-child preservation are in this snapshot.
+**Latest delivered product:** checkpoint `f81902f403` is committed, pushed and installed. Worker rename and standing-job reassignment are in this snapshot.
 
 ## Scope and reading order
 
@@ -1789,6 +1789,16 @@ Commands:
 | `packages/kilo-vscode` `bunx eslint --no-cache webview-ui/src/components/routines/RoutinesView.tsx` | exit 0 |
 
 This is not a paid GPT-Live call and does not unlock VS Code iframe microphone consent. Role, access, folder, and output stay create-only; changing those still requires a new worker. Codex-deferred research stays untracked.
+
+Remaining: leftover implementable 39-requirement work, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent.
+
+Next executable step: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
+
+## 2026-09-12: Snapshot install `f81902f403`
+
+**States:** committed, pushed and installed as `f81902f403`. Worker rename and standing-job reassignment are in this snapshot. CLI binary was already present and was not rebuilt.
+
+Installed `eden.raya@7.4.23-snapshot+f81902f403.kamil-oseni.1789190327003`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-f81902f403-kamil-oseni-1789190327003.vsix`; SHA-256 `8C7AC21887744F5F061FF24EB9D7E28B459C9E0D3C8955C628AC2D8072D30DA2`; 517098005 bytes, 431 files. VS Code was not force-reloaded.
 
 Remaining: leftover implementable 39-requirement work, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent.
 

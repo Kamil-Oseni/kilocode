@@ -2974,6 +2974,14 @@ This is not a paid GPT-Live call and does not unlock VS Code iframe microphone c
 
 Next: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
 
+## 2026-09-12: Snapshot install f81902f403
+
+Status: committed, pushed and installed as f81902f403. Worker rename and standing-job reassignment are in this snapshot. CLI binary was already present and was not rebuilt.
+
+Installed eden.raya@7.4.23-snapshot+f81902f403.kamil-oseni.1789190327003. VSIX C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-f81902f403-kamil-oseni-1789190327003.vsix; SHA-256 8C7AC21887744F5F061FF24EB9D7E28B459C9E0D3C8955C628AC2D8072D30DA2; 517098005 bytes, 431 files. VS Code was not force-reloaded.
+
+Next: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
+
 
 
 

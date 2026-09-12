@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-12):** Product `8b020e9a59` confines full-access file-tool writes to the saved write folder. Not yet installed. Remaining: leftover 39-requirement work that is still implementable here, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-12):** Installed snapshot `b54b24cf5c` confines full-access file-tool writes to the saved write folder. Remaining: leftover 39-requirement work that is still implementable here, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-12. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `8b020e9a59` is committed. Full-access file-tool writes stay in the write folder. Snapshot install is next.
+**Latest delivered product:** installed snapshot `b54b24cf5c` (`eden.raya@7.4.23-snapshot+b54b24cf5c.kamil-oseni.1789199445687`). Full-access file-tool writes stay in the write folder. Reload VS Code to pick up the snapshot.
 
 ## Scope and reading order
 
@@ -1986,6 +1986,16 @@ Commands:
 | `packages/kilo-vscode` `bunx eslint --no-cache` on touched routine TypeScript | exit 0 |
 
 This is not a paid GPT-Live call and does not unlock VS Code iframe microphone consent. Per-service grants, trusted-plugin confinement, and Windows OS confinement remain open under PR-04. Codex-deferred research stays untracked.
+
+Remaining: leftover implementable 39-requirement work, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent.
+
+Next executable step: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
+
+## 2026-09-12: Snapshot install `b54b24cf5c`
+
+**States:** committed, pushed and installed as `b54b24cf5c`. Write-folder file-tool confinement is in this snapshot. CLI binary was rebuilt because CLI source had changed.
+
+Installed `eden.raya@7.4.23-snapshot+b54b24cf5c.kamil-oseni.1789199445687`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-b54b24cf5c-kamil-oseni-1789199445687.vsix`; SHA-256 `8DA2FA36B2C812033D912AB89AAAD41127344CAC814D48933B9E0F4AB2750D5A`; 520064054 bytes, 432 files. VS Code was not force-reloaded.
 
 Remaining: leftover implementable 39-requirement work, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent.
 

@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Installed product is `a7e1f4f1b3`. Recorder binary-secret refusal, the support contract, and telemetry lifecycle settlement are on main and in this snapshot. Conversation Back/Escape restores the same worker. Other-worker reports do not steal the open thread, overwrite a draft, or page that other inbox. Voice engine-switch/disposal serialization is installed. Schedule-edit-during-execution UI and paused-recipient copy are installed. New voice setups default to GPT-Live 1 (`openai-live` / `gpt-live-1`) over the Live API; saved Realtime, Qwen and cascade selections stay. Live appends split at the 500-token bound; busy-queue later delegations are acknowledged and later speech requires clarification. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, delegated cost attribution, Friday accounting E2E, busy-recipient queued/started plus paused-worker denial, overdue-request timeout expiry, inspectable request chains, rename/archive conversation attribution, and stop-settle of child runs are installed. Remaining Live work is packaged microphone/acoustic acceptance. Remaining RDM-06 work is light/dark and narrow/wide Chromium, inbox performance budget, and returning-reviewer journey. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Product commit `c03bf67a95` is local and not yet installed. Browser tools no longer fail when Windows reports a different drive-letter or user-name spelling for the same profile folder. Junction redirects still refuse. Routines light/dark at 320px and 900px pass Chromium, including a clickable worker name, long wrapped report text, and a keyboard-reachable conversation log. Installed product remains `a7e1f4f1b3` until snapshot. Remaining RDM-06 work is inbox performance budget, returning-reviewer journey, and empty/loading/stale/error/200% zoom. Remaining Live work is packaged microphone/acoustic acceptance. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-11. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `a7e1f4f1b3` is committed, pushed and installed. The diagnostic/support/telemetry batch is on main and in this snapshot. Back and Escape restore the open worker.
+**Latest delivered product:** checkpoint `a7e1f4f1b3` is still the installed snapshot. Local product `c03bf67a95` keeps Windows browser profiles across recased paths and verifies routines light/dark layout in Chromium.
 
 ## Scope and reading order
 
@@ -304,7 +304,7 @@ The following sections retain the full 39-item scope. Related findings and overh
 
 ### EN-11 — Give browser identity and captured authentication a lifecycle
 
-**Recorded status:** In progress. Workspace-owned profiles, explicit capture/restore/delete, seven-day expiry, persisted authentication provenance and reset/recovery controls implemented. Native Chromium checks cover storage replacement, restart, expiry, active capture deletion and competing owners; final host/package validation and broader acceptance remain open.
+**Recorded status:** In progress. Workspace-owned profiles, explicit capture/restore/delete, seven-day expiry, persisted authentication provenance and reset/recovery controls implemented. Native Chromium checks cover storage replacement, restart, expiry, active capture deletion and competing owners. Windows recased drive-letter and user-name spellings of the same folder now pass the storage-identity guard; a junction or symlink that redirects the folder still refuses. Final host/package validation and broader acceptance remain open.
 
 **Implementation and verification:**
 
@@ -440,7 +440,7 @@ The following sections retain the full 39-item scope. Related findings and overh
 
 ### UI-01 — Test real components in the visual harness
 
-**Recorded status:** In progress. Preview labels distinguish production from illustrative fixtures. Current/legacy memory frames now use real component/decoder/styles; eight Chromium theme/width checks and screenshot inspection pass. Composer/history/review migration remains open.
+**Recorded status:** In progress. Preview labels distinguish production from illustrative fixtures. Current/legacy memory frames and the routines roster/conversation now use real components; twelve Chromium theme/width checks pass (eight memory, four routines). Composer/history/review migration remains open. Empty/loading/stale/error and 200% zoom for routines remain open.
 
 **Implementation and verification:**
 
@@ -488,7 +488,7 @@ The following sections retain the full 39-item scope. Related findings and overh
 
 ### OVR-02 — A first-class browser skill for agents
 
-**Recorded status:** In progress. Browser skills, stable tab/frame targeting, dialogs, durable downloads and authorized uploads are installed and checkpoint-tested. Upload checks cover staged-byte ownership, destination targeting, lost acknowledgements and restart; file selection does not establish server acceptance. Full model-driven workflow evaluation remains open.
+**Recorded status:** In progress. Browser skills, stable tab/frame targeting, dialogs, durable downloads and authorized uploads are installed and checkpoint-tested. Upload checks cover staged-byte ownership, destination targeting, lost acknowledgements and restart; file selection does not establish server acceptance. The profile-storage identity guard now treats Windows case and long-path spelling as the same folder and still refuses redirected junctions. Full model-driven workflow evaluation remains open.
 
 **Implementation and verification:**
 
@@ -590,7 +590,7 @@ The following sections retain the full 39-item scope. Related findings and overh
 
 ### OVR-10 — Browser runtime and product overhaul
 
-**Recorded status:** In progress. Tab/frame identity, manual control, dialogs, durable downloads and authorized uploads are installed and checkpoint-tested. Real Chromium upload coverage includes 40 MiB files, delayed submission, server rejection, frames and multiple/empty files. Selection remains distinct from submission acceptance; full runtime/product workflow acceptance remains open.
+**Recorded status:** In progress. Tab/frame identity, manual control, dialogs, durable downloads and authorized uploads are installed and checkpoint-tested. Real Chromium upload coverage includes 40 MiB files, delayed submission, server rejection, frames and multiple/empty files. Selection remains distinct from submission acceptance. Workspace profile roots survive Windows recasing and still refuse redirected storage. Full runtime/product workflow acceptance remains open.
 
 **Implementation and verification:**
 
@@ -1535,3 +1535,15 @@ Installed `eden.raya@7.4.23-snapshot+a7e1f4f1b3.kamil-oseni.1789174025050`. VSIX
 Remaining: leftover RDM-06 light/dark and narrow/wide Chromium, inbox performance budget, returning-reviewer journey, and packaged microphone/acoustic acceptance. Receiving-side telemetry consent ordering remains open.
 
 Next executable step: leftover RDM-06 Chromium themes/narrow layout, inbox performance budget, or leftover Live microphone acceptance.
+
+## 2026-09-11: Browser profile identity and routines Chromium layout
+
+**States:** verified locally and committed as `c03bf67a95`. Not yet pushed or installed. Browser tool calls no longer throw `Browser profile storage identity changed` when `fs.realpath()` and `path.resolve()` differ only by drive-letter or user-name case. A junction or directory symlink that redirects the profile root still throws. The routines worker name is a real clickable column. Conversation messages are a labeled, keyboard-reachable log. Production `RoutinesView` is exercised in the preview harness.
+
+Changed files: `packages/kilo-vscode/src/services/browser-automation/browser-held.ts`, `browser-profile.ts`, `browser-session.ts`, `browser-auth.ts`, `browser-upload.ts`, `browser-transfer.ts`, `packages/kilo-vscode/tests/unit/browser-held.test.ts`, `packages/kilo-vscode/webview-ui/src/styles/routines.css`, `packages/kilo-vscode/webview-ui/src/components/routines/Inbox.tsx`, `packages/kilo-vscode/webview-ui/preview/routines.tsx`, `preview/index.tsx`, `preview/mock-vscode.ts`, `preview/preview.css`, `packages/kilo-vscode/tests/routines-preview.browser.ts`, `packages/kilo-vscode/tests/fixtures/routine-inbox-view.mjs`, `.changeset/raya-browser-profile-identity.md`, `.changeset/raya-routine-inbox-height.md`.
+
+Commands (cwd `packages/kilo-vscode`): `bun test tests/unit/browser-held.test.ts tests/unit/browser-auth.test.ts tests/unit/browser-upload.test.ts tests/unit/browser-transfer.test.ts --timeout 60000` → 8 pass / 2 skip / 0 fail / 34 expect / exit 0. `bun test tests/unit/routines-inbox-view.test.ts tests/unit/routines-delegate-view.test.ts tests/unit/routines-edit-view.test.ts --timeout 90000` → 3 pass / 0 fail / 3 expect / exit 0. Isolated inbox rerun after log labelling → 1 pass / exit 0. `bun run check-types` → exit 0. `bun run check-types:webview` → exit 0. `bunx playwright test --config playwright.preview.config.ts` → 12 pass / 0 fail / exit 0. `bun run check-kilocode-change` → no forbidden markers / exit 0.
+
+Remaining: inbox performance budget, returning-reviewer journey, empty/loading/stale/error and 200% zoom, packaged microphone/acoustic acceptance, and receiving-side telemetry consent ordering. Do not force-rebuild `kilo.exe` while the running extension holds it. Codex-deferred research stays untracked.
+
+Next executable step: push and `snapshot:install` this commit, then leftover RDM-06 performance/reviewer or leftover Live microphone acceptance.

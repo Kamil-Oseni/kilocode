@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Installed product is `8e2dc53700`. Browser tools no longer fail when Windows reports a different drive-letter or user-name spelling for the same profile folder. Junction redirects still refuse. Routines light/dark at 320px and 900px pass Chromium, including a clickable worker name, long wrapped report text, and a keyboard-reachable conversation log. Remaining RDM-06 work is inbox performance budget, returning-reviewer journey, and empty/loading/stale/error/200% zoom. Remaining Live work is packaged microphone/acoustic acceptance. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Installed product remains `8e2dc53700`. Latest verified (not yet installed) work is `96715a85f8`: inbox pages stay at 50 messages, and Chromium covers empty, error, stale, loading, and 200% zoom. Remaining RDM-06 work is the returning-reviewer journey. Remaining Live work is packaged microphone/acoustic acceptance. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-11. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `8e2dc53700` is committed, pushed and installed. Windows browser profiles survive recased paths. Routines light/dark layout is verified in Chromium.
+**Latest delivered product:** checkpoint `8e2dc53700` is committed, pushed and installed. Windows browser profiles survive recased paths. Routines light/dark layout is verified in Chromium. Inbox page budget and empty-state Chromium coverage are verified locally as `96715a85f8` and not yet installed.
 
 ## Scope and reading order
 
@@ -1557,3 +1557,17 @@ Installed `eden.raya@7.4.23-snapshot+8e2dc53700.kamil-oseni.1789176460487`. VSIX
 Remaining: leftover RDM-06 inbox performance budget, returning-reviewer journey, empty/loading/stale/error and 200% zoom, and packaged microphone/acoustic acceptance.
 
 Next executable step: leftover RDM-06 performance/reviewer or leftover Live microphone acceptance.
+
+## 2026-09-11: Inbox page budget and empty-state Chromium coverage
+
+**States:** verified locally and committed as `96715a85f8`. Not yet pushed or installed. Each conversation page returns at most 50 persisted messages. Limits below 1 or above 50 are refused. Production `RoutinesView` empty, error, stale, and loading copy is exercised in Chromium, and the worker name stays clickable at 200% zoom.
+
+Changed files: `packages/opencode/test/kilocode/task/inbox.test.ts`, `packages/opencode/test/kilocode/server/httpapi-routine-inbox.test.ts`, `docs/Raya-Routine-Inbox-Workload.md`, `packages/kilo-vscode/webview-ui/preview/mock-vscode.ts`, `packages/kilo-vscode/tests/routines-preview.browser.ts`.
+
+Commands: `packages/opencode` `bun test ./test/kilocode/task/inbox.test.ts ./test/kilocode/server/httpapi-routine-inbox.test.ts --timeout 60000` → 7 pass / 0 fail / 98 expect / exit 0. `packages/kilo-vscode` `bun run check-types:webview` → exit 0. `bunx playwright test --config playwright.preview.config.ts` → 17 pass / 0 fail / exit 0. Root `bun run script/check-md-table-padding.ts` → 471 files, no padded tables / exit 0. `packages/kilo-vscode` `bun run check-kilocode-change` → no forbidden markers / exit 0.
+
+The page cap was already in `packages/opencode/src/kilocode/task/inbox.ts` and the HTTP schema. This slice records that budget and proves it. Empty/loading/stale/error copy was already in `RoutinesView`; Chromium now reaches those scenes through `?scene=`. Horizontal overflow is still checked at 100% zoom, not at 200%.
+
+Remaining: returning-reviewer journey (schema/event flow, then single-worker and delegation journeys), packaged microphone/acoustic acceptance, and receiving-side telemetry consent ordering. Do not force-rebuild `kilo.exe` while the running extension holds it. Codex-deferred research stays untracked.
+
+Next executable step: leftover RDM-06 returning-reviewer journey, or leftover Live microphone acceptance.

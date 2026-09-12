@@ -2806,5 +2806,15 @@ Installed eden.raya@7.4.23-snapshot+8e2dc53700.kamil-oseni.1789176460487. VSIX C
 
 Next: leftover RDM-06 inbox performance budget, returning-reviewer journey, or leftover Live microphone acceptance.
 
+## 2026-09-11: Inbox page budget and empty-state Chromium coverage
+
+Status: verified locally and committed as 96715a85f8. Not yet pushed or installed. Conversation pages stay at 50 messages. Chromium covers empty, error, stale, loading, and 200% zoom.
+
+Changed files: packages/opencode/test/kilocode/task/inbox.test.ts, packages/opencode/test/kilocode/server/httpapi-routine-inbox.test.ts, docs/Raya-Routine-Inbox-Workload.md, packages/kilo-vscode/webview-ui/preview/mock-vscode.ts, packages/kilo-vscode/tests/routines-preview.browser.ts.
+
+Commands: packages/opencode bun test ./test/kilocode/task/inbox.test.ts ./test/kilocode/server/httpapi-routine-inbox.test.ts --timeout 60000 -> 7 pass / 0 fail / 98 expect / exit 0. packages/kilo-vscode bun run check-types:webview -> exit 0. bunx playwright test --config playwright.preview.config.ts -> 17 pass / 0 fail / exit 0. Root bun run script/check-md-table-padding.ts -> exit 0. packages/kilo-vscode bun run check-kilocode-change -> exit 0.
+
+Next: leftover RDM-06 returning-reviewer journey, or leftover Live microphone acceptance.
+
 
 

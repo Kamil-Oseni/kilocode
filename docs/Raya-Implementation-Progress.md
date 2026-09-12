@@ -2984,13 +2984,21 @@ Next: leftover implementable 39-requirement work, or a real-account GPT-Live cal
 
 ## 2026-09-12: Production composer, history, and review in the visual harness
 
-Status: verified locally and committed as b9bef42d2f. Not yet pushed or installed. The 5199 visual harness now mounts production PromptInput, HistoryView, SessionReviewCluster, and EditReviewChrome. Those fixtures are labeled production-view. Slash, topnav, transcript, and conversation stay illustrative. Preview compile waits before listen, caches Babel, and stubs worker URL imports. History header wraps at 320px. The hidden composer file input has an attach label.
+Status: verified locally and committed as b9bef42d2f, documented as 95a05764c9, and installed in the snapshot below. The 5199 visual harness now mounts production PromptInput, HistoryView, SessionReviewCluster, and EditReviewChrome. Those fixtures are labeled production-view. Slash, topnav, transcript, and conversation stay illustrative. Preview compile waits before listen, caches Babel, and stubs worker URL imports. History header wraps at 320px. The hidden composer file input has an attach label.
 
 Changed files: packages/kilo-vscode/webview-ui/src/components/chat/SessionReviewCluster.tsx, packages/kilo-vscode/webview-ui/src/components/chat/EditReviewChrome.tsx, packages/kilo-vscode/webview-ui/src/components/chat/ChatView.tsx, packages/kilo-vscode/webview-ui/src/components/chat/VscodeToolOverrides.tsx, packages/kilo-vscode/webview-ui/src/components/chat/PromptInput.tsx, packages/kilo-vscode/webview-ui/src/styles/history.css, packages/kilo-vscode/webview-ui/preview/surfaces.tsx, packages/kilo-vscode/webview-ui/preview/index.tsx, packages/kilo-vscode/webview-ui/preview/serve.cjs, packages/kilo-vscode/webview-ui/preview/mock-vscode.ts, packages/kilo-vscode/webview-ui/preview/preview.css, packages/kilo-vscode/tests/surfaces-preview.browser.ts, packages/kilo-vscode/playwright.preview.config.ts, .changeset/raya-preview-production-surfaces.md.
 
 Commands: packages/kilo-vscode bunx playwright test --config playwright.preview.config.ts -> 27 pass / 0 fail / exit 0. bun run check-types:webview -> exit 0. bun run check-types -> exit 0. bun run check-kilocode-change -> exit 0. bunx eslint --no-cache on touched chat/preview TypeScript -> exit 0.
 
 This is not a paid GPT-Live call and does not unlock VS Code iframe microphone consent. Composer on 5201 remains the deeper interaction fixture. Codex-deferred research stays untracked.
+
+Next: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
+
+## 2026-09-12: Snapshot install 95a05764c9
+
+Status: committed, pushed and installed as 95a05764c9. Production composer, history, and review fixtures are in this snapshot. CLI binary was already present and was not rebuilt.
+
+Installed eden.raya@7.4.23-snapshot+95a05764c9.kamil-oseni.1789193061196. VSIX C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-95a05764c9-kamil-oseni-1789193061196.vsix; SHA-256 3F26924F2CDA28DD3015B311CA6198F8753E5CDB7ED8926CD9AAC756176C9F4D; 517100084 bytes, 431 files. VS Code was not force-reloaded.
 
 Next: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
 

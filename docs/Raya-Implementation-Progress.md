@@ -2758,11 +2758,19 @@ Next: leftover RDM-06 themes/a11y/performance/reviewer, or leftover Live microph
 
 ## 2026-09-11: Routine conversation return and report arrival
 
-Status: verified locally, not yet committed. Back and Escape restore focus to the same worker. A report for another worker does not steal the open conversation or overwrite a draft. A later report does not jump scroll when the reader is not at the bottom. Leaving stores an unsent draft.
+Status: verified locally, committed as 9f6864dba8, and installed in the snapshot below. Back and Escape restore focus to the same worker. A report for another worker does not steal the open conversation or overwrite a draft. A later report does not jump scroll when the reader is not at the bottom. Leaving stores an unsent draft.
 
 Changed files: packages/kilo-vscode/webview-ui/src/components/routines/RoutinesView.tsx, packages/kilo-vscode/webview-ui/src/components/routines/Inbox.tsx, packages/kilo-vscode/tests/fixtures/routine-inbox-view.mjs, packages/kilo-vscode/tests/unit/routines-inbox-view.test.ts, .changeset/raya-routine-inbox-return.md.
 
 Commands (packages/kilo-vscode): bun test tests/unit/routines-inbox-view.test.ts tests/unit/routines-delegate-view.test.ts tests/unit/routines-edit-view.test.ts --timeout 90000 -> 3 pass / 0 fail / 3 expect / exit 0. bun run check-types -> exit 0. bun run check-types:webview -> exit 0. eslint RoutinesView.tsx Inbox.tsx -> exit 0. bun run check-kilocode-change -> exit 0.
+
+Next: leftover RDM-06 Chromium themes/narrow layout, inbox performance budget, or leftover Live microphone acceptance.
+
+## 2026-09-11: Snapshot install 9f6864dba8
+
+Status: committed, pushed and installed as 9f6864dba8. Back and Escape restore the same worker. Other-worker reports do not steal the open conversation.
+
+Installed eden.raya@7.4.23-snapshot+9f6864dba8.kamil-oseni.1789172347425. VSIX C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-9f6864dba8-kamil-oseni-1789172347425.vsix; SHA-256 DBAECF0B3706C8B32A4FABA80EF3FA5F13A33F5EEA12A0EA2E657B39CAE319E3; 517060407 bytes, 431 entries. CLI binary already present; not rebuilt.
 
 Next: leftover RDM-06 Chromium themes/narrow layout, inbox performance budget, or leftover Live microphone acceptance.
 

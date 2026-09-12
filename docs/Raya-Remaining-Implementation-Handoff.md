@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Installed product is `fd1882194a`. Conversation Back/Escape focus restore, labeled worker threads, and report-arrival draft/scroll isolation are verified locally and not yet committed. Voice engine-switch/disposal serialization is installed. Schedule-edit-during-execution UI and paused-recipient copy are installed. New voice setups default to GPT-Live 1 (`openai-live` / `gpt-live-1`) over the Live API; saved Realtime, Qwen and cascade selections stay. Live appends split at the 500-token bound; busy-queue later delegations are acknowledged and later speech requires clarification. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, delegated cost attribution, Friday accounting E2E, busy-recipient queued/started plus paused-worker denial, overdue-request timeout expiry, inspectable request chains, rename/archive conversation attribution, and stop-settle of child runs are installed. Remaining Live work is packaged microphone/acoustic acceptance. Remaining RDM-06 work is light/dark and narrow/wide Chromium, inbox performance budget, and returning-reviewer journey. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Installed product is `9f6864dba8`. Conversation Back/Escape restores the same worker. Other-worker reports do not steal the open thread, overwrite a draft, or page that other inbox. Voice engine-switch/disposal serialization is installed. Schedule-edit-during-execution UI and paused-recipient copy are installed. New voice setups default to GPT-Live 1 (`openai-live` / `gpt-live-1`) over the Live API; saved Realtime, Qwen and cascade selections stay. Live appends split at the 500-token bound; busy-queue later delegations are acknowledged and later speech requires clarification. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, delegated cost attribution, Friday accounting E2E, busy-recipient queued/started plus paused-worker denial, overdue-request timeout expiry, inspectable request chains, rename/archive conversation attribution, and stop-settle of child runs are installed. Remaining Live work is packaged microphone/acoustic acceptance. Remaining RDM-06 work is light/dark and narrow/wide Chromium, inbox performance budget, and returning-reviewer journey. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-11. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `fd1882194a` is committed, pushed and installed. Changing the saved voice engine waits until an active call is released. Realtime remains an explicit compatibility path.
+**Latest delivered product:** checkpoint `9f6864dba8` is committed, pushed and installed. Back and Escape restore the open worker. Other-worker reports do not steal that conversation.
 
 ## Scope and reading order
 
@@ -1510,12 +1510,22 @@ Next executable step: leftover RDM-06 themes/a11y/performance/reviewer, or lefto
 
 ## 2026-09-11: Routine conversation return and report arrival
 
-**States:** verified locally, not yet committed. Back and Escape leave a worker conversation and restore focus to that worker. The open thread is a labeled region. A report for another worker does not change the open conversation, overwrite a follow-up draft, or page that other inbox. A later report in the open conversation does not jump scroll when the reader is not at the bottom. Leaving with an unsent draft stores it.
+**States:** verified locally, committed as `9f6864dba8`, and installed in the snapshot below. Back and Escape leave a worker conversation and restore focus to that worker. The open thread is a labeled region. A report for another worker does not change the open conversation, overwrite a follow-up draft, or page that other inbox. A later report in the open conversation does not jump scroll when the reader is not at the bottom. Leaving with an unsent draft stores it.
 
 Changed files: `packages/kilo-vscode/webview-ui/src/components/routines/RoutinesView.tsx`, `packages/kilo-vscode/webview-ui/src/components/routines/Inbox.tsx`, `packages/kilo-vscode/tests/fixtures/routine-inbox-view.mjs`, `packages/kilo-vscode/tests/unit/routines-inbox-view.test.ts`, `.changeset/raya-routine-inbox-return.md`.
 
 Commands (cwd `packages/kilo-vscode` unless noted): `bun test tests/unit/routines-inbox-view.test.ts tests/unit/routines-delegate-view.test.ts tests/unit/routines-edit-view.test.ts --timeout 90000` -> 3 pass / 0 fail / 3 expect / exit 0 (`.tmp/routine-inbox-return-tests.log`). `bun run check-types` -> exit 0. `bun run check-types:webview` -> exit 0 (`.tmp/routine-inbox-return-types.log`). Root oxlint on the two view files: 19 warnings / 0 errors / exit 0. eslint on `RoutinesView.tsx` and `Inbox.tsx` -> exit 0 (`.tmp/routine-inbox-return-lint.log`). `bun run check-kilocode-change` -> no forbidden markers / exit 0 (`.tmp/routine-inbox-return-markers.log`).
 
 Remaining: leftover RDM-06 light/dark and narrow/wide Chromium, inbox performance budget, returning-reviewer journey, and packaged microphone/acoustic acceptance. Happy-dom fixtures stub CSS, so layout/theme is not claimed from that fixture.
+
+Next executable step: leftover RDM-06 Chromium themes/narrow layout, inbox performance budget, or leftover Live microphone acceptance.
+
+## 2026-09-11: Snapshot install `9f6864dba8`
+
+**States:** committed, pushed and installed as `9f6864dba8`. Back and Escape restore the same worker. Other-worker reports do not steal the open conversation.
+
+Installed `eden.raya@7.4.23-snapshot+9f6864dba8.kamil-oseni.1789172347425`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-9f6864dba8-kamil-oseni-1789172347425.vsix`; SHA-256 `DBAECF0B3706C8B32A4FABA80EF3FA5F13A33F5EEA12A0EA2E657B39CAE319E3`; 517060407 bytes, 431 entries. CLI binary already present; not rebuilt.
+
+Remaining: leftover RDM-06 light/dark and narrow/wide Chromium, inbox performance budget, returning-reviewer journey, and packaged microphone/acoustic acceptance.
 
 Next executable step: leftover RDM-06 Chromium themes/narrow layout, inbox performance budget, or leftover Live microphone acceptance.

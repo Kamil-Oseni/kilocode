@@ -15,10 +15,16 @@ export const TelemetryCapturePayload = Schema.Struct({
   properties: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)).annotate({
     description: "Event properties",
   }),
+  generation: Schema.optional(Schema.Number).annotate({
+    description: "Consent generation that admitted this event",
+  }),
 })
 
 export const TelemetrySetEnabledPayload = Schema.Struct({
   enabled: Schema.Boolean,
+  generation: Schema.optional(Schema.Number).annotate({
+    description: "Monotonic consent generation; stale enable cannot override a later opt-out",
+  }),
 })
 
 export const TelemetryPaths = {

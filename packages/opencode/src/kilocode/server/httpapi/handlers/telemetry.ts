@@ -11,7 +11,11 @@ export const telemetryHandlers = HttpApiBuilder.group(InstanceHttpApi, "telemetr
     }) {
       // fire-and-forget: log instead of swallowing
       yield* Effect.sync(() =>
-        Telemetry.track(ctx.payload.event as any, ctx.payload.properties as Record<string, unknown> | undefined),
+        Telemetry.track(
+          ctx.payload.event as any,
+          ctx.payload.properties as Record<string, unknown> | undefined,
+          ctx.payload.generation,
+        ),
       ).pipe(Effect.catchCause((cause) => Effect.logWarning("telemetry.capture failed", cause)))
       return true
     })
@@ -19,7 +23,7 @@ export const telemetryHandlers = HttpApiBuilder.group(InstanceHttpApi, "telemetr
     const setEnabled = Effect.fn("TelemetryHttpApi.setEnabled")(function* (ctx: {
       payload: typeof TelemetrySetEnabledPayload.Type
     }) {
-      yield* Effect.sync(() => Telemetry.setEnabled(ctx.payload.enabled))
+      yield* Effect.sync(() => Telemetry.setEnabled(ctx.payload.enabled, ctx.payload.generation))
       return true
     })
 

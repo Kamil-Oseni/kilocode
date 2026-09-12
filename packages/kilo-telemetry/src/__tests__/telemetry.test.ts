@@ -1,5 +1,5 @@
 import { arch, platform, release } from "node:os"
-import { describe, test, expect, beforeEach, spyOn } from "bun:test"
+import { describe, test, expect, beforeEach, afterEach, spyOn } from "bun:test"
 import { Client } from "../client.js"
 import { Identity } from "../identity.js"
 import { TelemetryEvent } from "../events.js"
@@ -135,6 +135,59 @@ describe("Telemetry", () => {
       expect(capture).toHaveBeenCalledWith(TelemetryEvent.TOOL_USED, expect.objectContaining({ tool: "chart", sessionId: "session-123" }))
     } finally {
       capture.mockRestore()
+    }
+  })
+})
+
+describe("consent generation", () => {
+  beforeEach(() => {
+    Telemetry.resetConsent()
+  })
+
+  afterEach(() => {
+    Telemetry.resetConsent()
+  })
+
+  test("a stale enable does not apply after a later opt-out", () => {
+    const enabled = spyOn(Client, "setEnabled").mockImplementation(() => {})
+
+    try {
+      expect(Telemetry.setEnabled(true, 1)).toBe(true)
+      expect(Telemetry.setEnabled(false, 2)).toBe(true)
+      expect(Telemetry.setEnabled(true, 1)).toBe(false)
+      expect(enabled.mock.calls).toEqual([[true], [false]])
+    } finally {
+      enabled.mockRestore()
+    }
+  })
+
+  test("a stale capture is dropped after a later opt-out", () => {
+    const capture = spyOn(Client, "capture").mockImplementation(() => {})
+    const enabled = spyOn(Client, "setEnabled").mockImplementation(() => {})
+
+    try {
+      expect(Telemetry.setEnabled(true, 1)).toBe(true)
+      Telemetry.track(TelemetryEvent.CLI_START, { source: "admitted" }, 1)
+      expect(capture).toHaveBeenCalledTimes(1)
+      capture.mockClear()
+      expect(Telemetry.setEnabled(false, 2)).toBe(true)
+      Telemetry.track(TelemetryEvent.CLI_START, { source: "stale" }, 1)
+      expect(capture).not.toHaveBeenCalled()
+    } finally {
+      capture.mockRestore()
+      enabled.mockRestore()
+    }
+  })
+
+  test("an unversioned enable is refused after a versioned consent change", () => {
+    const enabled = spyOn(Client, "setEnabled").mockImplementation(() => {})
+
+    try {
+      expect(Telemetry.setEnabled(false, 2)).toBe(true)
+      expect(Telemetry.setEnabled(true)).toBe(false)
+      expect(enabled.mock.calls).toEqual([[false]])
+    } finally {
+      enabled.mockRestore()
     }
   })
 })

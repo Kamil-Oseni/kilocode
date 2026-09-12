@@ -38,6 +38,7 @@ test("telemetry consent gates enrichment and dispatch without copying properties
     expect(await received.promise).toEqual({
       event: TelemetryEventName.TAB_SHOWN,
       properties: { source: "synthetic-fixture", surface: "history" },
+      generation: 0,
     })
     expect(reads).toBe(1)
     expect(requests).toEqual(["/telemetry/capture"])
@@ -180,6 +181,45 @@ test("disconnect aborts a pending telemetry HTTP request", async () => {
   } finally {
     proxy.shutdown()
     release.resolve(Response.json(true))
+    Object.defineProperty(vscode.env, "isTelemetryEnabled", consent)
+    await server.stop(true)
+  }
+}, 15_000)
+
+test("a later opt-out generation is sent even if an earlier enable is still in flight", async () => {
+  const consent = Object.getOwnPropertyDescriptor(vscode.env, "isTelemetryEnabled")!
+  const proxy = TelemetryProxy.getInstance()
+  const bodies: { enabled?: boolean; generation?: number }[] = []
+  const entered = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(request) {
+      const body = (await request.json()) as { enabled?: boolean; generation?: number }
+      if (body.enabled === true) {
+        entered.resolve()
+        await release.promise
+      }
+      bodies.push(body)
+      return Response.json(true)
+    },
+  })
+  try {
+    Object.defineProperty(vscode.env, "isTelemetryEnabled", { value: true, configurable: true })
+    proxy.configure(server.url.origin, "synthetic-local-credential")
+    const enable = proxy.setEnabled(true)
+    await entered.promise
+    const disable = proxy.setEnabled(false)
+    await disable
+    release.resolve()
+    await enable
+    expect(bodies).toEqual([
+      { enabled: false, generation: 2 },
+      { enabled: true, generation: 1 },
+    ])
+  } finally {
+    proxy.shutdown()
     Object.defineProperty(vscode.env, "isTelemetryEnabled", consent)
     await server.stop(true)
   }

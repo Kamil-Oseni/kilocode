@@ -12,6 +12,7 @@ export class TelemetryProxy {
   private connection: { url: string; password: string; abort: AbortController } | undefined
   private pending = new Set<AbortController>()
   private provider: TelemetryPropertiesProvider | undefined
+  private seq = 0
 
   private constructor() {}
 
@@ -54,8 +55,12 @@ export class TelemetryProxy {
     const connection = this.connection
     if (!connection || this.pending.size >= 32) return
     try {
-      const payload = JSON.stringify(buildTelemetryPayload(event, properties, this.provider?.getTelemetryProperties()))
-      if (this.connection !== connection || !this.isVSCodeTelemetryEnabled()) return
+      const generation = this.seq
+      const payload = JSON.stringify({
+        ...buildTelemetryPayload(event, properties, this.provider?.getTelemetryProperties()),
+        generation,
+      })
+      if (this.connection !== connection || !this.isVSCodeTelemetryEnabled() || this.seq !== generation) return
       await this.send(connection, "capture", payload)
     } catch {
       console.error("[Raya] Telemetry event preparation failed.")
@@ -71,7 +76,8 @@ export class TelemetryProxy {
   async setEnabled(enabled: boolean) {
     const connection = this.connection
     if (!connection) return
-    await this.send(connection, "setEnabled", JSON.stringify({ enabled }))
+    const generation = ++this.seq
+    await this.send(connection, "setEnabled", JSON.stringify({ enabled, generation }))
   }
 
   private async send(
@@ -106,5 +112,6 @@ export class TelemetryProxy {
   shutdown() {
     this.disconnect()
     this.provider = undefined
+    this.seq = 0
   }
 }

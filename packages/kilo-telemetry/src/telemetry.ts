@@ -58,6 +58,7 @@ export interface IndexingErrorTelemetryProperties extends IndexingTelemetryPrope
 export namespace Telemetry {
   let initialized = false
   let startTime = 0
+  let seq = 0
   let props: TelemetryProperties = {
     appName: "kilo-cli",
     appVersion: "unknown",
@@ -96,8 +97,25 @@ export namespace Telemetry {
     startTime = Date.now()
   }
 
-  export function setEnabled(value: boolean) {
+  export function setEnabled(value: boolean, generation?: number) {
+    if (generation === undefined) {
+      if (seq === 0) {
+        Client.setEnabled(value)
+        return true
+      }
+      if (value) return false
+      seq++
+      Client.setEnabled(false)
+      return true
+    }
+    if (!Number.isInteger(generation) || generation <= seq) return false
+    seq = generation
     Client.setEnabled(value)
+    return true
+  }
+
+  export function resetConsent() {
+    seq = 0
   }
 
   export function isEnabled(): boolean {
@@ -128,7 +146,8 @@ export namespace Telemetry {
     }
   }
 
-  export function track(event: TelemetryEvent, properties?: Record<string, unknown>) {
+  export function track(event: TelemetryEvent, properties?: Record<string, unknown>, generation?: number) {
+    if (generation !== undefined && generation < seq) return
     Client.capture(event, { ...props, ...properties })
   }
 

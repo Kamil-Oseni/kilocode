@@ -3124,13 +3124,21 @@ Next: leftover implementable 39-requirement work, or a real-account GPT-Live cal
 
 ## 2026-09-12: Deleted and renamed files stay reviewable in chat
 
-Status: verified locally and committed as 3df03553e3. Chat Keep/Undo now wraps apply_patch and multiedit as well as edit and write. Deleted and renamed files keep their own review chrome when no editor tab is open. In-editor summaries name Deleted file and Renamed file. The visual harness shows both labels.
+Status: committed, pushed and installed as 712a1aa657. Product commit is 3df03553e3. Chat Keep/Undo now wraps apply_patch and multiedit as well as edit and write. Deleted and renamed files keep their own review chrome when no editor tab is open. In-editor summaries name Deleted file and Renamed file. The visual harness shows both labels.
 
 Changed files: packages/kilo-vscode/webview-ui/src/components/chat/review-files.ts, packages/kilo-vscode/webview-ui/src/components/chat/VscodeToolOverrides.tsx, packages/kilo-vscode/webview-ui/src/components/chat/EditReviewChrome.tsx, packages/kilo-vscode/src/edit-review/InEditorReview.ts, packages/kilo-vscode/src/edit-review/InEditorReview.test.ts, packages/kilo-vscode/tests/unit/review-files.test.ts, packages/kilo-vscode/webview-ui/preview/surfaces.tsx, packages/kilo-vscode/tests/surfaces-preview.browser.ts, packages/kilo-vscode/webview-ui/src/styles/eden.css, packages/kilo-vscode/webview-ui/src/styles/session-actions.css, docs/Raya-Review-Contract.md, .changeset/raya-review-delete-rename.md.
 
 Commands: packages/kilo-vscode bun test tests/unit/review-files.test.ts tests/unit/edit-review-state.test.ts src/edit-review/InEditorReview.test.ts --timeout 30000 -> 23 pass / 0 fail / 94 expect / exit 0. bunx playwright test --config playwright.preview.config.ts tests/surfaces-preview.browser.ts -> 18 pass / 1 timeout on cold axe for light composer at 320px; isolated retry 1 pass / exit 0. Review chrome case passed in the first run. bun run check-types -> exit 0. bun run check-types:webview -> exit 0. bun run check-kilocode-change -> exit 0. bunx eslint --no-cache on touched TypeScript -> exit 0.
 
 This is not a paid GPT-Live call and does not unlock VS Code iframe microphone consent. Packaged in-editor interaction with a live renamed or deleted buffer remains open. Codex-deferred research stays untracked.
+
+Next: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
+
+## 2026-09-12: Snapshot install 712a1aa657
+
+Status: committed, pushed and installed as 712a1aa657. Deleted and renamed review chrome is in this snapshot. CLI binary was already present and was not rebuilt.
+
+Installed eden.raya@7.4.23-snapshot+712a1aa657.kamil-oseni.1789225171178. VSIX C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-712a1aa657-kamil-oseni-1789225171178.vsix; SHA-256 2FB451014DCA1F185E05FD79E5ADEDE82BFEFE925E7E1ACABE67A82D457FA260; 517130684 bytes, 431 files. VS Code was not force-reloaded.
 
 Next: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
 

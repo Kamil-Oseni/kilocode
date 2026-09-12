@@ -2834,5 +2834,13 @@ Commands: packages/opencode bun test ./test/kilocode/task/returning-reviewer.tes
 
 Next: leftover Live microphone acceptance.
 
+## 2026-09-11: Snapshot install 7a748083dd
+
+Status: committed, pushed and installed as 7a748083dd. Returning-reviewer schema inspection, Friday assignment, follow-up report context, history exclusion, and brief-to-full delegation policy are in this snapshot.
+
+Installed eden.raya@7.4.23-snapshot+7a748083dd.kamil-oseni.1789179011559. VSIX C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-7a748083dd-kamil-oseni-1789179011559.vsix; SHA-256 5BD7CBCB1EE401E147C7E530F5DA9CBDC638F21FD4236AD639DA8E7BFE9D095A; 520000749 bytes, 432 entries. Packaging copied a rebuilt CLI into bin/kilo.exe; VS Code was not force-reloaded.
+
+Next: leftover Live microphone acceptance.
+
 
 

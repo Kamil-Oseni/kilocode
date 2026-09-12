@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Installed product remains `d08dc0197d`. Latest verified (not yet installed) work is `750d616f03`: the returning-reviewer path inspects migrated routine schema first, then a Friday assignment, follow-up with report context, history exclusion, and brief-to-full delegation policy. Remaining Live work is packaged microphone/acoustic acceptance. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Installed product is `7a748083dd`. The returning-reviewer path inspects migrated routine schema first, then a Friday assignment, follow-up with report context, history exclusion, and brief-to-full delegation policy. Remaining Live work is packaged microphone/acoustic acceptance. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-11. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `d08dc0197d` is committed, pushed and installed. Inbox pages stay at 50 messages. Chromium covers empty, error, stale, loading, and 200% zoom. Returning-reviewer schema and journeys are verified locally as `750d616f03` and not yet installed.
+**Latest delivered product:** checkpoint `7a748083dd` is committed, pushed and installed. Returning-reviewer schema inspection, Friday assignment, follow-up report context, history exclusion, and brief-to-full delegation policy are in this snapshot.
 
 ## Scope and reading order
 
@@ -1593,5 +1593,15 @@ Commands: `packages/opencode` `bun test ./test/kilocode/task/returning-reviewer.
 The conversation identity stays `rcv_*` and is not the execution session. Follow-up does not rewrite the standing Friday schedule. A paused recipient is not started. This does not add a packaged UI walkthrough or a live microphone check.
 
 Remaining: packaged microphone/acoustic acceptance, and receiving-side telemetry consent ordering. Do not force-rebuild `kilo.exe` while the running extension holds it. Codex-deferred research stays untracked.
+
+Next executable step: leftover Live microphone acceptance.
+
+## 2026-09-11: Snapshot install `7a748083dd`
+
+**States:** committed, pushed and installed as `7a748083dd`. Returning-reviewer schema inspection, Friday assignment, follow-up report context, history exclusion, and brief-to-full delegation policy are in this snapshot.
+
+Installed `eden.raya@7.4.23-snapshot+7a748083dd.kamil-oseni.1789179011559`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-7a748083dd-kamil-oseni-1789179011559.vsix`; SHA-256 `5BD7CBCB1EE401E147C7E530F5DA9CBDC638F21FD4236AD639DA8E7BFE9D095A`; 520000749 bytes, 432 entries. Packaging copied a rebuilt CLI into `bin/kilo.exe`; VS Code was not force-reloaded.
+
+Remaining: packaged microphone/acoustic acceptance, and receiving-side telemetry consent ordering.
 
 Next executable step: leftover Live microphone acceptance.

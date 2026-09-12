@@ -136,6 +136,33 @@ const reply = (message: WebviewMessage) => {
       refreshID: 1,
       agents: [books, legal],
       templates: [],
+      organizations: [
+        {
+          version: 1,
+          id: "org_11111111111111111111111111111111",
+          name: "Website Builders",
+          purpose: "Find, design, build, and support better client websites.",
+          revision: 1,
+          archived: false,
+          createdAt: 1,
+          updatedAt: 2,
+          members: [
+            { agentID: legal.id, role: "Chief of Staff", position: 0 },
+            { agentID: books.id, role: "Accounting", supervisorID: legal.id, position: 1 },
+          ],
+        },
+        {
+          version: 1,
+          id: "org_22222222222222222222222222222222",
+          name: "Finance",
+          purpose: "Keep the books current and report exceptions.",
+          revision: 1,
+          archived: false,
+          createdAt: 1,
+          updatedAt: 1,
+          members: [{ agentID: books.id, role: "Accountant", position: 0 }],
+        },
+      ],
     })
     emit({
       type: "routineInbox",

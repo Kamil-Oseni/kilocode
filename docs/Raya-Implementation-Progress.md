@@ -30,6 +30,20 @@ Installed identity: `eden.raya@7.4.23-snapshot+1b10793de9.kamil-oseni.1789249170
 
 This checkpoint establishes persistence and API contracts; it does not yet expose organizations in the Routines UI or let the main chat provision them. Continue the organization chain described in the handoff before moving to unrelated audit rows.
 
+## ChatGPT 2026-09-12 18:09 America/Toronto — Routine organization navigation
+
+**Status: implemented and verified locally; commit, push, package and installation are next.** The extension's coalesced Routine refresh now reads active organizations through the generated SDK after the core roster/inbox read, validates the untrusted graph before it reaches the webview, and retains the last trusted organization list with an explicit partial-refresh message if the response is malformed or unavailable. Validation checks schema version, stable ID shape, lifecycle, timestamps, contiguous member order, unique worker IDs and same-organization supervisor references.
+
+The production Routines view adds a flat, horizontally scrollable organization selector above the existing worker inbox. `All workers` preserves the full roster; selecting an organization filters the list to its members and displays its purpose and ordered reporting structure in the conversation pane. Each active member opens the existing durable worker DM, so reports, drafts, files, Chat Info, read state and scroll anchors remain in one conversation rather than creating a parallel organization chat store. Organization choice persists per workspace and is cleared safely when a refreshed graph no longer contains it. Manage/select-all is scoped to the visible organization.
+
+The UI follows `docs/designer.md`: neutral native surfaces, hairline structure, restrained active state, no gradients, decorative cards, emoji, tinted panels or duplicate controls. The compact selector scrolls within the left rail instead of widening the page. Archived workers remain named as archived in retained organization graphs and cannot open a missing active DM.
+
+Changed paths: `.changeset/raya-routine-organization-navigation.md`; extension `src/kilo-provider/routine-refresh.ts`; message contract; production `RoutinesView.tsx` and `routines.css`; preview mock; refresh unit test; and Routines Playwright suite.
+
+Evidence: extension host and webview typechecks pass; real-SDK refresh tests pass 7/7 with 169 assertions, including malformed supervisor evidence and bounded refresh behavior; production preview compilation passes; Routines Chromium passes 12/12 across light/dark at 320/900px, organization filtering/hierarchy/DM navigation, empty/error/stale/loading, keyboard/file cards, reload restoration and 200% zoom, with axe and horizontal-overflow checks. ChatGPT inspected the rendered 900px organization and resulting DM views. The first full browser run exposed an eager Solid memo ordering defect that blanked the preview; the memo was moved before its first dependent computation, and the corrected isolated plus full suites pass.
+
+Remaining in this organization chain: create/edit/archive UI, organization-aware delegation edges and provenance, restart-safe main-chat organization provisioning with visible clarification, and tool-result navigation. These remain open and are the next implementation work.
+
 ## Current work
 
 Latest verified installed product checkpoint: `57fd94ecd89fd8b138d8ac45666b55ba0c5e43d1`, pushed to `origin/main` and installed as `eden.raya@7.4.23-snapshot+57fd94ecd8.kamil-oseni.1789245828863`. Routine worker DMs now persist attachment drafts, send file-bearing follow-ups, expose attachment history and Chat Info inventory, and recover admitted delivery after restart without replaying duplicate HTTP sends. Organizations, role/delegation graphs, main-chat creation, inline media thumbnails, full live rebuild-survival acceptance, Live voice/device acceptance, the Go companion rebuild and the remaining 39-requirement work remain open.

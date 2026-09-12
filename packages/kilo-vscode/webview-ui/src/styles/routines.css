@@ -552,6 +552,104 @@
   border-bottom: 1px solid var(--border-weak, var(--vscode-widget-border));
 }
 
+.routines-organizations {
+  display: flex;
+  gap: var(--raya-space-4);
+  overflow-x: auto;
+  padding-bottom: var(--raya-space-2);
+}
+
+.routines-organization {
+  display: flex;
+  align-items: center;
+  gap: var(--raya-space-6);
+  flex: 0 0 auto;
+  appearance: none;
+  border: 0;
+  border-radius: var(--raya-radius-sm, 4px);
+  padding: var(--raya-space-4) var(--raya-space-6);
+  background: transparent;
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font: inherit;
+  cursor: pointer;
+}
+
+.routines-organization:hover,
+.routines-organization[aria-current="page"] {
+  color: var(--text-base, var(--vscode-foreground));
+  background: color-mix(in srgb, var(--text-weak) 10%, transparent);
+}
+
+.routines-organization:focus-visible,
+.routines-organization-members button:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, Highlight);
+  outline-offset: 1px;
+}
+
+.routines-organization-error,
+.routines-organization-purpose,
+.routines-no-match {
+  margin: 0;
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-size: var(--kilo-font-size-12);
+  line-height: 1.45;
+}
+
+.routines-no-match {
+  padding: var(--raya-space-12) var(--raya-space-10);
+}
+
+.routines-organization-overview h3 {
+  margin: 0;
+  font-size: var(--kilo-font-size-13);
+}
+
+.routines-organization-members {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.routines-organization-members li + li {
+  border-top: 1px solid var(--border-weak, var(--vscode-widget-border));
+}
+
+.routines-organization-members button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--raya-space-2) var(--raya-space-12);
+  width: 100%;
+  padding: var(--raya-space-10) 0;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.routines-organization-members button:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.routines-organization-members button > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.routines-organization-members button > span:not(:first-child) {
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-size: var(--kilo-font-size-12);
+}
+
+.routines-organization-members button > span:last-child:nth-child(3) {
+  grid-column: 1 / -1;
+}
+
 .routines-search input {
   border-radius: var(--raya-radius-md-plus);
 }

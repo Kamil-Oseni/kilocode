@@ -38,6 +38,7 @@ test("a mutation during an active read is acknowledged once and requests one tra
         }
         return Response.json([{ id: "routine" }])
       }
+      if (new URL(request.url).pathname.endsWith("/organization")) return Response.json({ items: [] })
       return Response.json([])
     },
   })
@@ -67,7 +68,7 @@ test("a mutation during an active read is acknowledged once and requests one tra
     await Promise.all([pending, mutation])
     expect(mutations).toBe(1)
     expect(cycles).toBe(2)
-    expect(reads).toBe(8)
+    expect(reads).toBe(10)
     expect(messages.filter((msg) => msg.refresh === "complete")).toHaveLength(2)
   } finally {
     blocked.release()
@@ -105,6 +106,7 @@ test("real SDK HTTP refresh burst is bounded, partial histories remain explicit,
         }
         if (url.pathname.endsWith("/agent-templates")) return Response.json([])
         if (url.pathname.endsWith("/agent-inbox")) return Response.json([])
+        if (url.pathname.endsWith("/organization")) return Response.json({ items: [] })
         const id = url.pathname.split("/").at(-2)!
         if (cycle === 2 && id === "agent-7") return new Response("unavailable", { status: 503 })
         return Response.json([{ id: `run-${id}`, agentID: id, status: "complete", at: cycle }])
@@ -125,7 +127,7 @@ test("real SDK HTTP refresh burst is bounded, partial histories remain explicit,
     const comparison = refresh.request("comparison")
     blocked.release()
     await Promise.all([first, ...requests, comparison])
-    expect(calls).toHaveLength(86)
+    expect(calls).toHaveLength(88)
     expect(maximum).toBeLessThanOrEqual(2)
     expect(cycle).toBe(2)
     expect(messages.filter((msg) => msg.requestID === "view" && msg.refresh === "partial")).toHaveLength(1)
@@ -146,7 +148,7 @@ test("real SDK HTTP refresh burst is bounded, partial histories remain explicit,
       message: { type: "routineUpdate", agentID: "agent-0", enabled: false },
     })
     expect(calls.filter((call) => call.startsWith("PATCH"))).toHaveLength(1)
-    expect(calls).toHaveLength(130)
+    expect(calls).toHaveLength(133)
     const saved = messages.findIndex((msg) => msg.saved === true)
     const loading = messages.findIndex((msg) => msg.refreshID === 3 && msg.refresh === "loading")
     expect(saved).toBeGreaterThan(-1)
@@ -175,6 +177,7 @@ for (const change of ["client", "directory", "generation"] as const)
           started.release()
           await blocked.promise
         }
+        if (url.pathname.endsWith("/organization")) return Response.json({ items: [] })
         return Response.json([])
       },
     })
@@ -182,7 +185,7 @@ for (const change of ["client", "directory", "generation"] as const)
     const refresh = new RoutineRefresh(
       () => scope,
       (msg) => messages.push(msg),
-      80,
+      1_000,
     )
     try {
       const old = refresh.request("old", "old")
@@ -216,8 +219,9 @@ test("a stalled real HTTP refresh ends with explicit failure and allows retry", 
   const server = Bun.serve({
     port: 0,
     hostname: "127.0.0.1",
-    async fetch() {
+    async fetch(request) {
       if (stall) await blocked.promise
+      if (new URL(request.url).pathname.endsWith("/organization")) return Response.json({ items: [] })
       return Response.json([])
     },
   })
@@ -225,7 +229,7 @@ test("a stalled real HTTP refresh ends with explicit failure and allows retry", 
   const refresh = new RoutineRefresh(
     () => ({ client, directory: "workspace", generation: 1 }),
     (msg) => messages.push(msg),
-    30,
+    1_000,
   )
   try {
     await refresh.request("view", "view")
@@ -236,6 +240,47 @@ test("a stalled real HTTP refresh ends with explicit failure and allows retry", 
     expect(messages.at(-1)?.refresh).toBe("complete")
   } finally {
     blocked.release()
+    refresh.dispose()
+    await server.stop(true)
+  }
+})
+
+test("invalid organization responses are retained as an explicit partial refresh", async () => {
+  const messages: Record<string, unknown>[] = []
+  const server = Bun.serve({
+    port: 0,
+    hostname: "127.0.0.1",
+    fetch(request) {
+      const path = new URL(request.url).pathname
+      if (path.endsWith("/organization"))
+        return Response.json({
+          items: [
+            {
+              version: 1,
+              id: "org_11111111111111111111111111111111",
+              name: "Broken",
+              revision: 1,
+              archived: false,
+              createdAt: 1,
+              updatedAt: 1,
+              members: [{ agentID: "worker", role: "Lead", supervisorID: "missing", position: 0 }],
+            },
+          ],
+        })
+      return Response.json([])
+    },
+  })
+  const client = createKiloClient({ baseUrl: server.url.toString() })
+  const refresh = new RoutineRefresh(
+    () => ({ client, directory: "workspace", generation: 1 }),
+    (msg) => messages.push(msg),
+  )
+  try {
+    await refresh.request("view", "view")
+    expect(messages.some((msg) => typeof msg.organizationError === "string")).toBe(true)
+    expect(messages.at(-1)?.refresh).toBe("partial")
+    expect(messages.some((msg) => "organizations" in msg)).toBe(false)
+  } finally {
     refresh.dispose()
     await server.stop(true)
   }

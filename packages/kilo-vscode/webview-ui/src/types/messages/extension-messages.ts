@@ -201,6 +201,8 @@ export interface RoutineStateMessage {
   requestID?: string
   agents?: unknown[]
   templates?: unknown[]
+  organizations?: unknown[]
+  organizationError?: string
   error?: string
   recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
   append?: boolean

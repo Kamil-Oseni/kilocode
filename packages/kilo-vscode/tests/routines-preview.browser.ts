@@ -10,6 +10,7 @@ for (const theme of ["light", "dark"]) {
       await expect(fixture).toHaveAttribute("data-preview-kind", "production-view")
       const books = page.locator('.routines-identity[data-routine-worker="routine"]')
       await expect(books).toBeVisible()
+      await expect(page.getByRole("button", { name: "Website Builders 2" })).toBeVisible()
       await expect(page.locator('.routines-unread[aria-label="1 unread"]').first()).toBeVisible()
       await expect(page.locator(".routines-row [data-component='checkbox']")).toHaveCount(0)
       await page.getByRole("button", { name: "Manage" }).click()
@@ -85,6 +86,27 @@ for (const theme of ["light", "dark"]) {
     })
   }
 }
+
+test("wide routines organization filters and opens worker DMs", async ({ page }, info) => {
+  await page.setViewportSize({ width: 900, height: 900 })
+  await page.goto("/?state=light-routines")
+  await page.getByRole("button", { name: "Website Builders 2" }).click()
+  await expect(page.getByRole("heading", { name: "Website Builders" })).toBeVisible()
+  await expect(page.getByText("Find, design, build, and support better client websites.")).toBeVisible()
+  await expect(page.getByText("Reports to Counsel")).toBeVisible()
+  await page.getByRole("button", { name: "Finance 1" }).click()
+  await expect(page.locator('.routines-identity[data-routine-worker="routine"]')).toBeVisible()
+  await expect(page.locator('.routines-identity[data-routine-worker="legal"]')).toBeHidden()
+  await page.getByRole("button", { name: /Books Accountant/ }).click()
+  await expect(page.getByRole("region", { name: "Conversation with Books" })).toBeVisible()
+  const result = await new AxeBuilder({ page })
+    .include(".routines-view")
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+    .analyze()
+  expect(result.violations).toEqual([])
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await page.screenshot({ path: info.outputPath("organization.png"), fullPage: true })
+})
 
 test("light routines empty state", async ({ page }, info) => {
   await page.setViewportSize({ width: 320, height: 900 })

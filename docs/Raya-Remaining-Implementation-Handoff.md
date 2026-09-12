@@ -1,14 +1,14 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Installed product is `e3f9039043`. Routine reports persist path-like evidence as openable file cards; keyboard inbox navigation is covered. Remaining: leftover RDM-06 lifecycle (duplicate replies, parent cancellation, cross-company UI, recipient unavailability beyond pause), paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-12):** Product commit `1ddcd26e7e` is verified locally and not yet pushed or installed. Archived and other-folder workers get a durable failed delegation instead of a start or a generic 404. Duplicate completed replies stay one inbox card. Stopping a parent keeps a completed child result. Remaining: leftover RDM-06 worker rename/reassignment attribution, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
 > **LATEST PRIORITY:** Continue GPT-Live 1 and the remaining 39-requirement scope before Codex-derived additions. See [Codex research and deferred backlog](Raya-Codex-Research-Deferred.md). Keep updating this handoff and the progress ledger during implementation.
 
-Updated 2026-09-11. This is a continuation guide, not a completion certificate.
+Updated 2026-09-12. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `e3f9039043` is committed, pushed and installed. Routine report file cards and keyboard inbox navigation are in this snapshot.
+**Latest delivered product:** checkpoint `e3f9039043` is committed, pushed and installed. Local product commit `1ddcd26e7e` adds archived/other-folder denials and completed-child preservation; it is not yet pushed or installed.
 
 ## Scope and reading order
 
@@ -1736,3 +1736,27 @@ Installed `eden.raya@7.4.23-snapshot+e3f9039043.kamil-oseni.1789186373987`. VSIX
 Remaining: leftover RDM-06 duplicate replies, parent cancellation, cross-company UI, recipient unavailability beyond pause, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent.
 
 Next executable step: leftover RDM-06 lifecycle, or a real-account GPT-Live call on a device.
+
+## 2026-09-12: Archived and other-folder delegation denials
+
+**States:** verified locally and committed as `1ddcd26e7e`. Not yet pushed or installed. Asking an archived worker or a worker in another folder persists a failed request with a conversation card and does not start work. The Ask buttons disable those workers and keep the draft. A second identical completed reply does not add another inbox card. Stopping a parent leaves a completed child result and session intact.
+
+Changed files: `packages/opencode/src/kilocode/task/delegation.ts`, `packages/opencode/src/kilocode/task/runner.ts`, `packages/opencode/src/kilocode/server/httpapi/handlers/kilocode.ts`, `packages/kilo-vscode/src/kilo-provider/routines.ts`, `packages/kilo-vscode/webview-ui/src/components/routines/Inbox.tsx`, `packages/kilo-vscode/tests/fixtures/routine-delegate-view.mjs`, `packages/kilo-vscode/tests/unit/routines-inbox.test.ts`, `packages/opencode/test/kilocode/task/delegation.test.ts`, `packages/opencode/test/kilocode/task/delegation-runner.test.ts`, `packages/opencode/test/kilocode/server/httpapi-routine-delegate.test.ts`, `.changeset/raya-routine-delegate-lifecycle.md`.
+
+Commands:
+
+| Command | Result |
+|---|---|
+| `packages/opencode` `bun test ./test/kilocode/task/delegation.test.ts ./test/kilocode/task/delegation-runner.test.ts ./test/kilocode/server/httpapi-routine-delegate.test.ts --timeout 60000` | 15 pass / 0 fail / 163 expect / exit 0 |
+| `packages/kilo-vscode` `bun test tests/unit/routines-inbox.test.ts tests/unit/routines-delegate-view.test.ts --timeout 90000` | 7 pass / 0 fail / 22 expect / exit 0 |
+| `packages/opencode` `bun run typecheck` | exit 0 |
+| `packages/kilo-vscode` `bun run check-types` | exit 0 |
+| `packages/kilo-vscode` `bun run check-types:webview` | exit 0 |
+| `packages/kilo-vscode` `bun run check-kilocode-change` | no forbidden markers / exit 0 |
+| root `bun run script/check-opencode-annotations.ts --worktree` | exit 0 |
+
+This is not a paid GPT-Live call and does not unlock VS Code iframe microphone consent. Workers without a folder still match a sender that has one. A never-created recipient ID stays 404. Codex-deferred research stays untracked.
+
+Remaining: leftover RDM-06 worker rename/reassignment attribution, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent.
+
+Next executable step: leftover RDM-06 rename/reassignment attribution, or a real-account GPT-Live call on a device.

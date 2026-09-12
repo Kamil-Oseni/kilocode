@@ -2942,6 +2942,18 @@ Installed eden.raya@7.4.23-snapshot+e3f9039043.kamil-oseni.1789186373987. VSIX C
 
 Next: leftover RDM-06 lifecycle, or a real-account GPT-Live call on a device.
 
+## 2026-09-12: Archived and other-folder delegation denials
+
+Status: verified locally and committed as 1ddcd26e7e. Not yet pushed or installed. Asking an archived worker or a worker in another folder persists a failed request with a conversation card and does not start work. The Ask buttons disable those workers and keep the draft. A second identical completed reply does not add another inbox card. Stopping a parent leaves a completed child result and session intact.
+
+Changed files: packages/opencode/src/kilocode/task/delegation.ts, packages/opencode/src/kilocode/task/runner.ts, packages/opencode/src/kilocode/server/httpapi/handlers/kilocode.ts, packages/kilo-vscode/src/kilo-provider/routines.ts, packages/kilo-vscode/webview-ui/src/components/routines/Inbox.tsx, packages/kilo-vscode/tests/fixtures/routine-delegate-view.mjs, packages/kilo-vscode/tests/unit/routines-inbox.test.ts, packages/opencode/test/kilocode/task/delegation.test.ts, packages/opencode/test/kilocode/task/delegation-runner.test.ts, packages/opencode/test/kilocode/server/httpapi-routine-delegate.test.ts, .changeset/raya-routine-delegate-lifecycle.md.
+
+Commands: packages/opencode bun test ./test/kilocode/task/delegation.test.ts ./test/kilocode/task/delegation-runner.test.ts ./test/kilocode/server/httpapi-routine-delegate.test.ts --timeout 60000 -> 15 pass / 0 fail / 163 expect / exit 0. packages/kilo-vscode bun test tests/unit/routines-inbox.test.ts tests/unit/routines-delegate-view.test.ts --timeout 90000 -> 7 pass / 0 fail / 22 expect / exit 0. packages/opencode bun run typecheck -> exit 0. packages/kilo-vscode bun run check-types -> exit 0. bun run check-types:webview -> exit 0. bun run check-kilocode-change -> exit 0. root bun run script/check-opencode-annotations.ts --worktree -> exit 0.
+
+This is not a paid GPT-Live call and does not unlock VS Code iframe microphone consent. Workers without a folder still match a sender that has one. A never-created recipient ID stays 404. Codex-deferred research stays untracked.
+
+Next: leftover RDM-06 rename/reassignment attribution, or a real-account GPT-Live call on a device.
+
 
 
 

@@ -58,9 +58,20 @@ body {
   border-radius: 0;
 }
 
-.pv-page--focused:has([data-fixture$="-routines"]) .routines-view {
-  flex: 1;
-  min-height: 0;
+.pv-page--focused:has([data-fixture$="-history"]),
+.pv-page--focused:has([data-fixture$="-composer"]),
+.pv-page--focused:has([data-fixture$="-composer-focus"]) {
+  max-width: none;
+  width: 100%;
+  padding: var(--raya-space-8);
+  display: block;
+  place-items: unset;
+}
+
+.pv-page--focused:has([data-fixture$="-history"]) .history-view,
+.pv-page--focused:has([data-fixture$="-composer"]) .prompt-input-container,
+.pv-page--focused:has([data-fixture$="-composer-focus"]) .prompt-input-container {
+  min-height: 12rem;
 }
 
 .pv-page--focused .pv-page__header {

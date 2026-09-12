@@ -4,6 +4,7 @@
 const esbuild = require("esbuild")
 const path = require("path")
 const fs = require("fs")
+const crypto = require("crypto")
 const core = require("@babel/core")
 const solid = require("babel-preset-solid")
 const ts = require("@babel/preset-typescript")
@@ -11,16 +12,49 @@ const ts = require("@babel/preset-typescript")
 const PORT = 5199
 const HOST = "127.0.0.1"
 const previewDir = __dirname
+const cacheDir = path.join(__dirname, "..", "..", "node_modules", ".cache", "raya-preview-solid")
+const memory = new Map()
+const stamp = crypto
+  .createHash("sha256")
+  .update(fs.readFileSync(__filename, "utf8"))
+  .update(require("babel-preset-solid/package.json").version || "")
+  .update(require("@babel/preset-typescript/package.json").version || "")
+  .digest("hex")
+  .slice(0, 8)
+
+fs.mkdirSync(cacheDir, { recursive: true })
 
 /**
  * Transform Solid JSX with the same Babel preset the extension build uses
  * (esbuild's built-in JSX cannot compile Solid's fine-grained output).
- * The dev preview rebuilds a small graph, so no disk cache is needed here.
+ * Cache hits keep Playwright from waiting on a 503 while Babel walks PromptInput.
  */
 const previewSolidPlugin = {
   name: "preview-solid",
   setup(build) {
     build.onLoad({ filter: /\.(t|j)sx$/ }, async (args) => {
+      let mtime = 0
+      let size = 0
+      try {
+        const st = fs.statSync(args.path)
+        mtime = st.mtimeMs
+        size = st.size
+      } catch (err) {
+        console.warn("[raya preview] could not stat source for cache key", args.path, err)
+      }
+      const key = `${args.path}:${mtime}:${size}:${stamp}`
+      const hit = memory.get(key)
+      if (hit) return { contents: hit, loader: "js" }
+      const disk = path.join(cacheDir, crypto.createHash("sha256").update(key).digest("hex") + ".js")
+      if (fs.existsSync(disk)) {
+        try {
+          const code = fs.readFileSync(disk, "utf8")
+          memory.set(key, code)
+          return { contents: code, loader: "js" }
+        } catch (err) {
+          console.warn("[raya preview] cache read failed, rebuilding", disk, err)
+        }
+      }
       const source = fs.readFileSync(args.path, "utf8")
       const result = await core.transformAsync(source, {
         presets: [
@@ -32,6 +66,12 @@ const previewSolidPlugin = {
       })
       if (result?.code === void 0 || result.code === null) {
         throw new Error("No result was provided from Babel")
+      }
+      memory.set(key, result.code)
+      try {
+        fs.writeFileSync(disk, result.code)
+      } catch (err) {
+        console.warn("[raya preview] cache write failed", disk, err)
       }
       return { contents: result.code, loader: "js" }
     })
@@ -75,6 +115,21 @@ const cssPackageResolvePlugin = {
   },
 }
 
+/**
+ * PromptInput and HistoryView pull markdown/diff workers. The preview never
+ * runs those workers, so stub the Vite-style `?worker&url` imports.
+ */
+const workerStubPlugin = {
+  name: "preview-worker-stub",
+  setup(build) {
+    build.onResolve({ filter: /\?worker&url$/ }, () => ({ path: "worker", namespace: "preview-worker" }))
+    build.onLoad({ filter: /.*/, namespace: "preview-worker" }, () => ({
+      contents: "export default 'unused-worker.js'",
+      loader: "js",
+    }))
+  },
+}
+
 // raya_change - keep every generated bundle below one ignored directory so a
 // preview run cannot pollute git status or make ESLint scan vendored output.
 function getConfig(check) {
@@ -95,7 +150,7 @@ function getConfig(check) {
       ".ttf": "file",
       ".svg": "file", // raya_change - provider context can include shared file icons
     },
-    plugins: [solidDedupePlugin, cssPackageResolvePlugin, previewSolidPlugin],
+    plugins: [solidDedupePlugin, cssPackageResolvePlugin, workerStubPlugin, previewSolidPlugin],
   }
 }
 
@@ -105,7 +160,9 @@ async function main() {
     return
   }
   const ctx = await esbuild.context(getConfig(false))
-
+  // Compile before listen so Playwright's URL probe does not sit on esbuild's
+  // in-progress 503 for the production PromptInput / HistoryView graph.
+  await ctx.rebuild()
   await ctx.watch()
   const server = await ctx.serve({
     servedir: previewDir,

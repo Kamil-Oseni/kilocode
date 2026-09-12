@@ -20,6 +20,7 @@ import { SessionDock } from "./SessionDock"
 import { StartupErrorBanner } from "./StartupErrorBanner"
 import { SessionTabStrip } from "./SessionTabStrip"
 import { GoalBanner } from "./GoalBanner" // raya_change - Milestone A persistent goal UI
+import { SessionReviewCluster } from "./SessionReviewCluster"
 import { useSession } from "../../context/session"
 import { useLocalTabs } from "../../context/local-tabs"
 import { useVSCode } from "../../context/vscode"
@@ -436,86 +437,22 @@ export const ChatView: Component<ChatViewProps> = (props) => {
             </Tooltip>
           </Show>
           <Show when={canReviewChanges(hasChat)}>
-            <div class="session-review-cluster">
-            <Tooltip value={changesTooltip()} placement="top" class="session-move-changes-trigger">
-              <Button
-                variant="ghost"
-                size="small"
-                class="session-move-changes"
-                classList={{
-                  "session-move-changes--empty": !stats()?.files,
-                  "session-move-changes--has-changes": !!stats()?.files,
-                }}
-                onClick={openChanges}
-                aria-label={language.t("command.session.show.changes")}
-              >
-                <Icon name="layers" size="small" />
-                <span class="session-review-label">Review changes</span>
-                <Show when={stats()?.files}>
-                  <span class="session-diff-add">+{stats()!.additions}</span>
-                  <span class="session-diff-del">-{stats()!.deletions}</span>
-                </Show>
-              </Button>
-            </Tooltip>
-            {/* raya_change - Keep all / Undo all only make sense when there are
-                unreviewed file edits. pending() already requires changed files
-                that haven't been kept or reverted, so a conversation-only turn
-                shows neither, and Keep all dismisses the cluster by marking the
-                current change set reviewed. */}
-            <Show when={pending()}>
-            <Show when={!discarding()}>
-              <Tooltip value="Keep every file edit in this chat" placement="top">
-                <Button
-                  variant="ghost"
-                  size="small"
-                  class="session-move-changes"
-                  disabled={session.status() !== "idle" || !!reviewing()}
-                  onClick={keepAll}
-                >
-                  {reviewing() ? "Saving review..." : "Keep all"}
-                </Button>
-              </Tooltip>
-            </Show>
-            <Show
-              when={discarding()}
-              fallback={
-                <Tooltip value="Undo every file edit in this chat" placement="top">
-                  <Button
-                    variant="ghost"
-                    size="small"
-                    class="session-move-changes"
-                    disabled={session.status() !== "idle" || !!reviewing()}
-                    onClick={() => setDiscarding(true)}
-                  >
-                    Undo all
-                  </Button>
-                </Tooltip>
-              }
-            >
-              <Tooltip value="This can't be undone" placement="top">
-                <Button
-                  variant="secondary"
-                  size="small"
-                  class="session-move-changes session-move-changes--confirm"
-                  disabled={session.status() !== "idle" || !!reviewing()}
-                  onClick={discardAll}
-                >
-                  {reviewing() ? "Undoing..." : "Confirm undo"}
-                </Button>
-              </Tooltip>
-              <Button
-                variant="ghost"
-                size="small"
-                class="session-move-changes"
-                aria-label="Cancel undo"
-                disabled={!!reviewing()}
-                onClick={() => setDiscarding(false)}
-              >
-                Cancel
-              </Button>
-            </Show>
-            </Show>
-            </div>
+            <SessionReviewCluster
+              files={stats()?.files ?? 0}
+              additions={stats()?.additions ?? 0}
+              deletions={stats()?.deletions ?? 0}
+              pending={!!pending()}
+              discarding={discarding()}
+              reviewing={!!reviewing()}
+              idle={session.status() === "idle"}
+              label={language.t("command.session.show.changes")}
+              hint={changesTooltip()}
+              onOpen={openChanges}
+              onKeep={keepAll}
+              onUndo={() => setDiscarding(true)}
+              onConfirm={discardAll}
+              onCancel={() => setDiscarding(false)}
+            />
           </Show>
         </div>
       </div>

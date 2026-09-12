@@ -15,6 +15,7 @@ import "../src/styles/memory-provenance.css"
 import "../src/styles/routines.css"
 import "./preview.css"
 import { RoutinesPreview } from "./routines"
+import { ComposerPreview, HistoryPreview, ReviewPreview, EditReviewPreview } from "./surfaces"
 import { render } from "solid-js/web"
 import { For, Show, type Component } from "solid-js"
 import { installMockVsCode } from "./mock-vscode"
@@ -218,95 +219,6 @@ const SlashBubble: Component = () => (
   </div>
 )
 
-// raya_change - the chat-level Review changes cluster: Review changes with counts,
-// Keep all, and the in-place Undo all -> Confirm undo swap (no clipping question).
-const ReviewCluster: Component<{ confirming?: boolean }> = (props) => (
-  <div class="session-actions-row">
-    <div class="session-review-cluster">
-      <button type="button" class="session-move-changes session-move-changes--has-changes">
-        <span class="session-review-label">Review changes</span>
-        <span class="session-diff-add">+128</span>
-        <span class="session-diff-del">-14</span>
-      </button>
-      <Show when={!props.confirming}>
-        <button type="button" class="session-move-changes">
-          Keep all
-        </button>
-      </Show>
-      <Show
-        when={props.confirming}
-        fallback={
-          <button type="button" class="session-move-changes">
-            Undo all
-          </button>
-        }
-      >
-        <button type="button" class="session-move-changes session-move-changes--confirm">
-          Confirm undo
-        </button>
-        <button type="button" class="session-move-changes">
-          Cancel
-        </button>
-      </Show>
-    </div>
-  </div>
-)
-
-// raya_change - presentational replica of the composer chrome using the real
-// class contract. The overlay mirrors the textarea so the in-field slash pill
-// and caret alignment can be judged by eye. Empty draft shows the placeholder.
-const Composer: Component<{ focus?: boolean; empty?: boolean }> = (props) => (
-  <div
-    class="prompt-input-container"
-    style={props.focus ? "border-color: color-mix(in srgb, var(--text-base) 32%, transparent)" : ""}
-  >
-    <div class="prompt-input-wrapper">
-      <div class="prompt-input-ghost-wrapper">
-        <Show when={!props.empty}>
-          <div class="prompt-input-highlight-overlay" aria-hidden="true">
-            <span class="prompt-input-slash" data-command="goal">
-              /goal
-            </span>{" "}
-            Redesign the composer as one calm editorial sheet.
-          </div>
-        </Show>
-        <textarea
-          class="prompt-input"
-          placeholder="Ask Raya, or start a durable goal with /goal"
-          value={props.empty ? "" : "/goal Redesign the composer as one calm editorial sheet."}
-          rows={1}
-        />
-      </div>
-    </div>
-    <div class="prompt-input-hint">
-      <div class="prompt-input-hint-selectors">
-        <button type="button" data-component="button">
-          Agent
-        </button>
-        <button type="button" data-component="button">
-          qwen3-max
-        </button>
-        <button type="button" data-component="button">
-          Thinking
-        </button>
-      </div>
-      <div class="prompt-input-hint-actions">
-        <button type="button" data-component="button" aria-label="Attach">
-          +
-        </button>
-        <button
-          type="button"
-          data-component="button"
-          class="prompt-send-button prompt-send-button--ready"
-          aria-label="Send"
-        >
-          ↑
-        </button>
-      </div>
-    </div>
-  </div>
-)
-
 // raya_change - top-nav replica using the real task-header class contract:
 // serif title, mono run metrics, text-first Summarize, quiet expand chevron.
 const TopNav: Component = () => (
@@ -383,131 +295,6 @@ const Transcript: Component = () => (
     </div>
   </div>
 )
-
-// raya_change - presentational replica of the inline edit-review chrome, mirroring
-// the DOM the VS Code override emits so the hued block + pills + navigator can be
-// checked in both themes without the full tool registry.
-const ReviewEdit: Component<{ status?: "added" | "deleted" | "modified"; nav?: boolean }> = (props) => (
-  <div class="chat-view">
-    <div data-component="edit-review-block" data-review-status={props.status ?? "modified"} data-review-pending="">
-      <div data-component="tool-part-wrapper" data-tool="edit">
-        <div data-component="tool-trigger">
-          <div data-component="edit-trigger">
-            <div data-slot="message-part-title-area">
-              <div data-slot="message-part-title">
-                <span data-slot="message-part-title-filename">prompt-input.css</span>
-                <span data-slot="message-part-directory-inline">webview-ui/src/styles</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div data-slot="edit-review-actions">
-        <button type="button" data-slot="edit-review-undo">
-          Undo
-        </button>
-        <button type="button" data-slot="edit-review-keep">
-          Keep
-        </button>
-        <Show when={props.nav}>
-          <span data-slot="edit-review-nav">
-            <button type="button" aria-label="Previous edit">
-              ‹
-            </button>
-            <span data-slot="edit-review-count">1 of 2</span>
-            <button type="button" aria-label="Next edit">
-              ›
-            </button>
-          </span>
-        </Show>
-      </div>
-    </div>
-  </div>
-)
-
-// raya_change - history + session-list replica mirroring the real kilo-ui List
-// DOM contract (search field, caps group headers, rows with title + relative
-// date, selected/active states) so the Eden dressing can be checked in both
-// themes without the session context, dialog, and context-menu providers.
-const sessions: { id: string; title: string; when: string; group: string }[] = [
-  { id: "s1", title: "Reskin the composer and goal bar", when: "2h ago", group: "Today" },
-  { id: "s2", title: "Inline edit-review chrome", when: "5h ago", group: "Today" },
-  { id: "s3", title: "Per-file undo, keep the conversation", when: "Yesterday", group: "Yesterday" },
-  { id: "s4", title: "Eden token layer for the webview", when: "Tue", group: "This week" },
-  { id: "s5", title: "Bundle Instrument Serif and Outfit offline", when: "Mon", group: "This week" },
-]
-
-const HistoryRow: Component<{
-  s: (typeof sessions)[number]
-  active?: boolean
-  selected?: boolean
-}> = (props) => (
-  <div class="session-row">
-    <button
-      type="button"
-      data-slot="list-item"
-      data-active={props.active ? "true" : "false"}
-      data-selected={props.selected ? "true" : "false"}
-    >
-      <span data-slot="list-item-title" dir="auto">
-        {props.s.title}
-      </span>
-      <span data-slot="list-item-description">{props.s.when}</span>
-    </button>
-    <span data-slot="session-row-action">✎</span>
-    <span data-slot="session-row-action">🗑</span>
-  </div>
-)
-
-const History: Component = () => {
-  const groups = ["Today", "Yesterday", "This week"]
-  return (
-    <div class="history-view">
-      <div class="history-view-header">
-        <span style={{ color: "var(--text-weak)", "font-size": "12px" }}>‹ Back</span>
-        <div class="history-view-tabs" role="tablist">
-          <button type="button" class="history-tab-btn history-tab-btn--active">
-            Local
-          </button>
-          <button type="button" class="history-tab-btn">
-            Cloud
-          </button>
-        </div>
-        <span class="history-import-btn" style={{ color: "var(--text-weak)", "font-size": "12px" }}>
-          Import
-        </span>
-      </div>
-      <div class="history-view-content">
-        <div class="session-list">
-          <div data-component="list">
-            <div data-slot="list-search-wrapper">
-              <div data-slot="list-search">
-                <div data-slot="list-search-container">
-                  <span style={{ opacity: 0.5 }}>⌕</span>
-                  <span style={{ color: "var(--text-weak)", "font-size": "13px" }}>Search sessions…</span>
-                </div>
-              </div>
-            </div>
-            <div data-slot="list-scroll">
-              <For each={groups}>
-                {(group) => (
-                  <div data-slot="list-group">
-                    <div data-slot="list-header">{group}</div>
-                    <div data-slot="list-items">
-                      <For each={sessions.filter((s) => s.group === group)}>
-                        {(s) => <HistoryRow s={s} active={s.id === "s2"} selected={s.id === "s1"} />}
-                      </For>
-                    </div>
-                  </div>
-                )}
-              </For>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 // raya_change - #12/#15: a full user->assistant turn using the real class
 // contract so the conversation rhythm can be judged by eye: user bubble, a
@@ -593,17 +380,22 @@ const Conversation: Component = () => (
   </div>
 )
 
-const chrome = new Set<PvState>([
-  "conversation",
-  "slash",
-  "review",
-  "review-undo",
-  "composer",
-  "composer-focus",
-  "topnav",
-  "transcript",
-  "edit-review",
-  "history",
+const chrome = new Set<PvState>(["conversation", "slash", "topnav", "transcript"])
+
+const banners = new Set<PvState>([
+  "default",
+  "hover",
+  "focus",
+  "pressed",
+  "disabled",
+  "expanded",
+  "editing",
+  "discard",
+  "discard-busy",
+  "paused",
+  "complete",
+  "blocked",
+  "notice",
 ])
 
 const Fixture: Component<{ id: string; theme: Theme; state: PvState }> = (props) => (
@@ -629,16 +421,16 @@ const Fixture: Component<{ id: string; theme: Theme; state: PvState }> = (props)
         <SlashBubble />
       </Show>
       <Show when={props.state === "review"}>
-        <ReviewCluster />
+        <ReviewPreview />
       </Show>
       <Show when={props.state === "review-undo"}>
-        <ReviewCluster confirming />
+        <ReviewPreview confirming />
       </Show>
       <Show when={props.state === "composer"}>
-        <Composer empty />
+        <ComposerPreview />
       </Show>
       <Show when={props.state === "composer-focus"}>
-        <Composer focus />
+        <ComposerPreview focus />
       </Show>
       <Show when={props.state === "topnav"}>
         <TopNav />
@@ -647,14 +439,10 @@ const Fixture: Component<{ id: string; theme: Theme; state: PvState }> = (props)
         <Transcript />
       </Show>
       <Show when={props.state === "edit-review"}>
-        <div style={{ display: "flex", "flex-direction": "column", gap: "12px" }}>
-          <ReviewEdit status="added" nav />
-          <ReviewEdit status="modified" />
-          <ReviewEdit status="deleted" />
-        </div>
+        <EditReviewPreview />
       </Show>
       <Show when={props.state === "history"}>
-        <History />
+        <HistoryPreview />
       </Show>
       <Show when={props.state === "conversation"}>
         <Conversation />
@@ -662,14 +450,7 @@ const Fixture: Component<{ id: string; theme: Theme; state: PvState }> = (props)
       <Show when={props.state === "routines"}>
         <RoutinesPreview />
       </Show>
-      <Show
-        when={
-          props.state !== "usage" &&
-          props.state !== "routines" &&
-          !props.state.startsWith("memory") &&
-          !chrome.has(props.state)
-        }
-      >
+      <Show when={banners.has(props.state)}>
         <GoalBannerView {...propsFor(props.state)} />
       </Show>
     </div>
@@ -688,9 +469,8 @@ render(
       <header class="pv-page__header">
         <h1 class="pv-page__title">Raya · component preview</h1>
         <p class="pv-page__sub">
-          Goal, usage, memory and routines fixtures render production views with sample data. Composer, history, review
-          and other illustrative fixtures are labeled and cannot establish production interaction or accessibility
-          results.
+          Goal, usage, memory, routines, composer, history and review fixtures render production views with sample
+          data. Slash, topnav, transcript and conversation fixtures stay labeled illustrative.
         </p>
       </header>
       <For each={fixtures}>

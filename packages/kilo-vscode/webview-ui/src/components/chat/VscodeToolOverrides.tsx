@@ -12,8 +12,8 @@ import { Dynamic } from "solid-js/web"
 import { BasicTool } from "@kilocode/kilo-ui/basic-tool"
 import { ToolRegistry, type ToolProps } from "@kilocode/kilo-ui/message-part"
 import { useSession } from "../../context/session"
-import { Button } from "@kilocode/kilo-ui/button"
 import { editReview } from "./edit-review"
+import { EditReviewChrome } from "./EditReviewChrome"
 
 /** Tools that should be open by default in the VS Code sidebar. */
 const DEFAULT_OPEN_TOOLS = ["bash"]
@@ -195,51 +195,21 @@ function reviewed(upstream: Component<ToolProps>): Component<ToolProps> {
     }
 
     return (
-      <div
-        ref={ref}
-        data-component="edit-review-block"
-        data-review-status={status()}
-        data-review-pending={show() ? "" : undefined}
+      <EditReviewChrome
+        setRef={(el) => {
+          ref = el
+        }}
+        status={status()}
+        pending={show()}
+        busy={editReview.busy(sid())}
+        nav={nav()}
+        onUndo={undo}
+        onKeep={keep}
+        onPrev={() => step(-1)}
+        onNext={() => step(1)}
       >
         <Dynamic component={upstream} {...props} />
-        <Show when={show()}>
-          <div data-slot="edit-review-actions">
-            <Button
-              variant="ghost"
-              size="small"
-              data-slot="edit-review-undo"
-              disabled={editReview.busy(sid())}
-              onClick={undo}
-              title="Undo the latest unaccepted edit in this file"
-            >
-              Undo file
-            </Button>
-            <Button
-              variant="ghost"
-              size="small"
-              data-slot="edit-review-keep"
-              disabled={editReview.busy(sid())}
-              onClick={keep}
-              title="Keep all current edits in this file"
-            >
-              Keep file
-            </Button>
-            <Show when={nav().total > 1 && nav().index >= 0}>
-              <span data-slot="edit-review-nav">
-                <button type="button" aria-label="Previous edit" onClick={() => step(-1)}>
-                  ‹
-                </button>
-                <span data-slot="edit-review-count">
-                  {nav().index + 1} of {nav().total}
-                </span>
-                <button type="button" aria-label="Next edit" onClick={() => step(1)}>
-                  ›
-                </button>
-              </span>
-            </Show>
-          </div>
-        </Show>
-      </div>
+      </EditReviewChrome>
     )
   }
 }

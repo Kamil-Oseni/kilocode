@@ -1477,6 +1477,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         class="prompt-file-input"
         type="file"
         multiple
+        aria-label={language.t("prompt.action.attach")}
         onChange={(event) => {
           for (const file of Array.from(event.currentTarget.files ?? [])) imageAttach.add(file)
           event.currentTarget.value = ""

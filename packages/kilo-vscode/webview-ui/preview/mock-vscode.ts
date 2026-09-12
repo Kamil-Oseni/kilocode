@@ -39,6 +39,14 @@ const report = {
 const scene = new URLSearchParams(window.location.search).get("scene") ?? "ready"
 
 const reply = (message: WebviewMessage) => {
+  if (message.type === "webviewReady") {
+    emit({
+      type: "ready",
+      serverInfo: { port: 0, version: "preview" },
+      workspaceDirectory: "C:/Projects/preview",
+    })
+    return
+  }
   if (message.type === "requestProjectUsage") {
     emit({
       type: "projectUsageLoaded",

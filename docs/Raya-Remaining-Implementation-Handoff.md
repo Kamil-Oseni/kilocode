@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-12):** Installed product is `ad066b704d`. Archived and other-folder workers get a durable failed delegation; duplicate completed replies stay one inbox card; stopping a parent keeps a completed child result. Remaining: leftover RDM-06 worker rename/reassignment attribution, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-12):** Product commit is `a3ca6bc1d6`. Editing a worker can rename it or change its standing job without starting a new conversation; earlier reports stay on the same worker. Installed snapshot is still `ad066b704d` until this increment is pushed and installed. Remaining: leftover 39-requirement work that is still implementable here, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -1770,3 +1770,25 @@ Installed `eden.raya@7.4.23-snapshot+ad066b704d.kamil-oseni.1789188556585`. VSIX
 Remaining: leftover RDM-06 worker rename/reassignment attribution, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent.
 
 Next executable step: leftover RDM-06 rename/reassignment attribution, or a real-account GPT-Live call on a device.
+
+## 2026-09-12: Worker rename and standing-job reassignment
+
+**States:** verified locally and committed as `a3ca6bc1d6`. Not yet pushed or installed. Edit schedule now shows Name and Standing job. Saving those fields updates the same worker and does not start a new one. Historical reports stay on that `agentID`. A schedule change still requires preview confirmation.
+
+Changed files: `packages/kilo-vscode/webview-ui/src/components/routines/RoutinesView.tsx`, `packages/kilo-vscode/tests/fixtures/routine-edit-view.mjs`, `packages/opencode/test/kilocode/task.test.ts`, `.changeset/raya-routine-reassignment.md`.
+
+Commands:
+
+| Command | Result |
+|---|---|
+| `packages/opencode` `bun test ./test/kilocode/task.test.ts --timeout 90000` | 62 pass / 0 fail / 584 expect / exit 0 |
+| `packages/kilo-vscode` `bun test tests/unit/routines-edit-view.test.ts --timeout 90000` | 1 pass / 0 fail / 1 expect / exit 0 |
+| `packages/kilo-vscode` `bun run check-types` | exit 0 |
+| `packages/kilo-vscode` `bun run check-types:webview` | exit 0 |
+| `packages/kilo-vscode` `bun run check-kilocode-change` | no forbidden markers / exit 0 |
+
+This is not a paid GPT-Live call and does not unlock VS Code iframe microphone consent. Role, access, folder, and output stay create-only; changing those still requires a new worker. Codex-deferred research stays untracked.
+
+Remaining: leftover implementable 39-requirement work, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent.
+
+Next executable step: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.

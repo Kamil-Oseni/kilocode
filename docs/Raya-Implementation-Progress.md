@@ -2962,6 +2962,18 @@ Installed eden.raya@7.4.23-snapshot+ad066b704d.kamil-oseni.1789188556585. VSIX C
 
 Next: leftover RDM-06 rename/reassignment attribution, or a real-account GPT-Live call on a device.
 
+## 2026-09-12: Worker rename and standing-job reassignment
+
+Status: verified locally and committed as a3ca6bc1d6. Not yet pushed or installed. Edit schedule shows Name and Standing job. Save assignment updates those fields on the same worker. Earlier reports stay on that agentID. A schedule change still requires preview confirmation.
+
+Changed files: packages/kilo-vscode/webview-ui/src/components/routines/RoutinesView.tsx, packages/kilo-vscode/tests/fixtures/routine-edit-view.mjs, packages/opencode/test/kilocode/task.test.ts, .changeset/raya-routine-reassignment.md.
+
+Commands: packages/opencode bun test ./test/kilocode/task.test.ts --timeout 90000 -> 62 pass / 0 fail / 584 expect / exit 0. packages/kilo-vscode bun test tests/unit/routines-edit-view.test.ts --timeout 90000 -> 1 pass / 0 fail / 1 expect / exit 0. bun run check-types -> exit 0. bun run check-types:webview -> exit 0. bun run check-kilocode-change -> exit 0.
+
+This is not a paid GPT-Live call and does not unlock VS Code iframe microphone consent. Role, access, folder, and output stay create-only. Codex-deferred research stays untracked.
+
+Next: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
+
 
 
 

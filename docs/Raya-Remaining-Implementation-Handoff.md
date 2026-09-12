@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-12):** Product `726a93c54c` keeps routine reports on the same worker when agent or plan file changes. Not yet installed. Remaining: leftover 39-requirement work that is still implementable here, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-12):** Installed snapshot `af936192ff` keeps routine reports on the same worker when agent or plan file changes. Remaining: leftover 39-requirement work that is still implementable here, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-12. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `726a93c54c` is committed. Edit schedule can change agent mode and plan file on the same worker. Snapshot install is next.
+**Latest delivered product:** installed snapshot `af936192ff` (`eden.raya@7.4.23-snapshot+af936192ff.kamil-oseni.1789198044029`). Edit schedule can change agent mode and plan file on the same worker. Reload VS Code to pick up the snapshot.
 
 ## Scope and reading order
 
@@ -1952,6 +1952,16 @@ Commands:
 | `packages/kilo-vscode` `bunx eslint --no-cache` on touched routine TypeScript | exit 0 |
 
 This is not a paid GPT-Live call and does not unlock VS Code iframe microphone consent. Tool access and output requirements still use their dedicated review editors. Codex-deferred research stays untracked.
+
+Remaining: leftover implementable 39-requirement work, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent.
+
+Next executable step: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
+
+## 2026-09-12: Snapshot install `af936192ff`
+
+**States:** committed, pushed and installed as `af936192ff`. Agent and plan-file reassignment on the same worker is in this snapshot. CLI binary was rebuilt because CLI source had changed.
+
+Installed `eden.raya@7.4.23-snapshot+af936192ff.kamil-oseni.1789198044029`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-af936192ff-kamil-oseni-1789198044029.vsix`; SHA-256 `512F1A1FBE4393FF5A51E1DA11944157695850DFDE6C966A090BE14F7B7B5A71`; 520062140 bytes, 432 files. VS Code was not force-reloaded.
 
 Remaining: leftover implementable 39-requirement work, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent.
 

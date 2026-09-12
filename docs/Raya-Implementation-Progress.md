@@ -2914,6 +2914,15 @@ This is not a paid GPT-Live call and does not unlock VS Code iframe microphone c
 
 Next: leftover RDM-06 UI/lifecycle, or a real-account GPT-Live call on a device.
 
+## 2026-09-11: Snapshot install 76ac4375b2
+
+Status: committed, pushed and installed as 76ac4375b2. Unexpected Live host-microphone death posts speechLiveMicError. CLI binary was already present and was not rebuilt.
+
+Installed eden.raya@7.4.23-snapshot+76ac4375b2.kamil-oseni.1789184595609. VSIX C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-76ac4375b2-kamil-oseni-1789184595609.vsix; SHA-256 ADB09A1ECC19FED8989066B469020B0C7060F9D827D3F8FA8861928FA5089EA7; 517076828 bytes, 431 files. VS Code was not force-reloaded.
+
+Next: leftover RDM-06 UI/lifecycle, or a real-account GPT-Live call on a device.
+
+
 
 
 

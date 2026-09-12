@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Installed product is `16d2b358ee`. Unexpected Live host-microphone death posts `speechLiveMicError`; committed as `5758eef154` and not yet pushed or installed. Remaining: paid GPT-Live/device acoustic acceptance and VS Code iframe microphone consent. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Installed product is `76ac4375b2`. Unexpected Live host-microphone death posts `speechLiveMicError`. Remaining: paid GPT-Live/device acoustic acceptance and VS Code iframe microphone consent. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-11. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `16d2b358ee` is committed, pushed and installed. Voice engine-switch and backend-drop cleanup is in this snapshot. Host-microphone unexpected death is committed as `5758eef154` and not yet installed.
+**Latest delivered product:** checkpoint `76ac4375b2` is committed, pushed and installed. Unexpected Live host-microphone death posts `speechLiveMicError`.
 
 ## Scope and reading order
 
@@ -1685,6 +1685,16 @@ Changed files: `packages/kilo-vscode/src/speech-to-text/capture.ts`, `packages/k
 Commands (cwd `packages/kilo-vscode`): `bun test tests/unit/speech-to-text-capture.test.ts tests/unit/speech-engine-switch.test.ts tests/unit/live-speech-routing.test.ts --timeout 30000` → 22 pass / 0 fail / 75 expect / exit 0. `bun test tests/unit/speech-to-text-capture.test.ts --timeout 30000` → 14 pass / 0 fail / 28 expect / exit 0. `bun run check-types` → exit 0. `bun run check-types:webview` → exit 0. `bun run check-kilocode-change` → no forbidden markers / exit 0.
 
 This is not a paid GPT-Live call and does not unlock VS Code iframe microphone consent. Codex-deferred research stays untracked.
+
+Remaining: paid GPT-Live/device acoustic acceptance and VS Code iframe microphone consent.
+
+Next executable step: leftover RDM-06 UI/lifecycle, or a real-account GPT-Live call on a device.
+
+## 2026-09-11: Snapshot install `76ac4375b2`
+
+**States:** committed, pushed and installed as `76ac4375b2`. Unexpected Live host-microphone death posts `speechLiveMicError`. CLI binary was already present and was not rebuilt.
+
+Installed `eden.raya@7.4.23-snapshot+76ac4375b2.kamil-oseni.1789184595609`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-76ac4375b2-kamil-oseni-1789184595609.vsix`; SHA-256 `ADB09A1ECC19FED8989066B469020B0C7060F9D827D3F8FA8861928FA5089EA7`; 517076828 bytes, 431 files. VS Code was not force-reloaded.
 
 Remaining: paid GPT-Live/device acoustic acceptance and VS Code iframe microphone consent.
 

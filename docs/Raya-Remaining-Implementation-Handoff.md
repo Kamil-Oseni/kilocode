@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-12):** Installed product is `8c04e1526e`. Slash, topnav, transcript, and conversation fixtures in the 5199 harness now mount production `VscodeUserMessage`, `TaskHeader`, and `TranscriptRowView`. All named harness fixtures are labeled `production-view`. Remaining: leftover 39-requirement work that is still implementable here, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-12):** Product `65dbc2e9a9` mounts a production goal result package and criteria editor in the 5199 harness. Thirty-seven Chromium checks pass. Not yet installed. Remaining: leftover 39-requirement work that is still implementable here, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-12. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `8c04e1526e` is committed, pushed and installed. Slash, topnav, transcript, and conversation now render as production views in the 5199 harness.
+**Latest delivered product:** checkpoint `65dbc2e9a9` is committed. The 5199 harness now mounts a production goal result package and criteria editor. Snapshot install is next.
 
 ## Scope and reading order
 
@@ -96,7 +96,7 @@ The following sections retain the full 39-item scope. Related findings and overh
 
 ### PR-02 — Make completion an inspectable agreement
 
-**Recorded status:** In progress. Existing editable criteria, retained evidence and human review are now presented as separate guarantees. Optional exact-command bindings require the saved command, explicit normalized directory and successful eligible evidence. Backend contract tests and package types pass; combined result/editor views and broader semantic acceptance remain open.
+**Recorded status:** In progress. Existing editable criteria, retained evidence and human review are now presented as separate guarantees. Optional exact-command bindings require the saved command, explicit normalized directory and successful eligible evidence. The 5199 harness now mounts a production `GoalBannerView` result package and the production criteria editor. Broader semantic acceptance and live packaged visual acceptance remain open.
 
 **Implementation and verification:**
 
@@ -440,7 +440,7 @@ The following sections retain the full 39-item scope. Related findings and overh
 
 ### UI-01 — Test real components in the visual harness
 
-**Recorded status:** In progress. Preview labels distinguish production from illustrative fixtures. Memory, routines, composer, history, review, slash, topnav, transcript, and conversation now use real components in the 5199 harness. Thirty-two Chromium checks pass (eight memory, ten routines, fourteen composer/history/review/slash/topnav/transcript/conversation). Result packaged-editor views and live packaged visual acceptance remain open.
+**Recorded status:** In progress. Preview labels distinguish production from illustrative fixtures. Memory, routines, composer, history, review, slash, topnav, transcript, conversation, result, and criteria-editor now use real components in the 5199 harness. Thirty-seven Chromium checks pass. Live packaged visual acceptance remains open.
 
 **Implementation and verification:**
 
@@ -1863,6 +1863,28 @@ Next executable step: leftover implementable 39-requirement work, or a real-acco
 **States:** committed, pushed and installed as `8c04e1526e`. Production slash, topnav, transcript, and conversation fixtures are in this snapshot. CLI binary was already present and was not rebuilt.
 
 Installed `eden.raya@7.4.23-snapshot+8c04e1526e.kamil-oseni.1789194184945`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-8c04e1526e-kamil-oseni-1789194184945.vsix`; SHA-256 `22B95CA4EAF760A1764DEB0C412AC3CB36DFDAFD5EAC3311B5F4DE144AE19B72`; 517101368 bytes, 431 files. VS Code was not force-reloaded.
+
+Remaining: leftover implementable 39-requirement work, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent.
+
+Next executable step: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
+
+## 2026-09-12: Production goal result package and criteria editor in the visual harness
+
+**States:** verified locally and committed as `65dbc2e9a9`. The 5199 harness now mounts production `GoalBannerView` for a completed result package (outcome, command-bound checks, cited results, optional unverified caveats, recorded human review) and for the criteria editor. The banner header and audit rows wrap at 320px.
+
+Changed files: `packages/kilo-vscode/webview-ui/preview/index.tsx`, `packages/kilo-vscode/webview-ui/preview/preview.css`, `packages/kilo-vscode/webview-ui/src/styles/banners.css`, `packages/kilo-vscode/tests/surfaces-preview.browser.ts`, `.changeset/raya-preview-goal-result.md`.
+
+Commands:
+
+| Command | Result |
+|---|---|
+| `packages/kilo-vscode` `bunx playwright test --config playwright.preview.config.ts` | 37 pass / 0 fail / exit 0 |
+| `packages/kilo-vscode` `bun run check-types:webview` | exit 0 |
+| `packages/kilo-vscode` `bun run check-types` | exit 0 |
+| `packages/kilo-vscode` `bun run check-kilocode-change` | no forbidden markers / exit 0 |
+| `packages/kilo-vscode` `bunx eslint --no-cache` on touched preview TypeScript | exit 0 |
+
+This is not a paid GPT-Live call and does not unlock VS Code iframe microphone consent. Cited sources are summaries only in the harness; opening exact tool results still needs a session. Live packaged visual acceptance remains open. Codex-deferred research stays untracked.
 
 Remaining: leftover implementable 39-requirement work, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent.
 

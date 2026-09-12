@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Product commit `c03bf67a95` is local and not yet installed. Browser tools no longer fail when Windows reports a different drive-letter or user-name spelling for the same profile folder. Junction redirects still refuse. Routines light/dark at 320px and 900px pass Chromium, including a clickable worker name, long wrapped report text, and a keyboard-reachable conversation log. Installed product remains `a7e1f4f1b3` until snapshot. Remaining RDM-06 work is inbox performance budget, returning-reviewer journey, and empty/loading/stale/error/200% zoom. Remaining Live work is packaged microphone/acoustic acceptance. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Installed product is `8e2dc53700`. Browser tools no longer fail when Windows reports a different drive-letter or user-name spelling for the same profile folder. Junction redirects still refuse. Routines light/dark at 320px and 900px pass Chromium, including a clickable worker name, long wrapped report text, and a keyboard-reachable conversation log. Remaining RDM-06 work is inbox performance budget, returning-reviewer journey, and empty/loading/stale/error/200% zoom. Remaining Live work is packaged microphone/acoustic acceptance. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-11. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `a7e1f4f1b3` is still the installed snapshot. Local product `c03bf67a95` keeps Windows browser profiles across recased paths and verifies routines light/dark layout in Chromium.
+**Latest delivered product:** checkpoint `8e2dc53700` is committed, pushed and installed. Windows browser profiles survive recased paths. Routines light/dark layout is verified in Chromium.
 
 ## Scope and reading order
 
@@ -1538,7 +1538,7 @@ Next executable step: leftover RDM-06 Chromium themes/narrow layout, inbox perfo
 
 ## 2026-09-11: Browser profile identity and routines Chromium layout
 
-**States:** verified locally and committed as `c03bf67a95`. Not yet pushed or installed. Browser tool calls no longer throw `Browser profile storage identity changed` when `fs.realpath()` and `path.resolve()` differ only by drive-letter or user-name case. A junction or directory symlink that redirects the profile root still throws. The routines worker name is a real clickable column. Conversation messages are a labeled, keyboard-reachable log. Production `RoutinesView` is exercised in the preview harness.
+**States:** verified locally and committed as `c03bf67a95`. Pushed with this docs record as `8e2dc53700` and installed in the snapshot below. Browser tool calls no longer throw `Browser profile storage identity changed` when `fs.realpath()` and `path.resolve()` differ only by drive-letter or user-name case. A junction or directory symlink that redirects the profile root still throws. The routines worker name is a real clickable column. Conversation messages are a labeled, keyboard-reachable log. Production `RoutinesView` is exercised in the preview harness.
 
 Changed files: `packages/kilo-vscode/src/services/browser-automation/browser-held.ts`, `browser-profile.ts`, `browser-session.ts`, `browser-auth.ts`, `browser-upload.ts`, `browser-transfer.ts`, `packages/kilo-vscode/tests/unit/browser-held.test.ts`, `packages/kilo-vscode/webview-ui/src/styles/routines.css`, `packages/kilo-vscode/webview-ui/src/components/routines/Inbox.tsx`, `packages/kilo-vscode/webview-ui/preview/routines.tsx`, `preview/index.tsx`, `preview/mock-vscode.ts`, `preview/preview.css`, `packages/kilo-vscode/tests/routines-preview.browser.ts`, `packages/kilo-vscode/tests/fixtures/routine-inbox-view.mjs`, `.changeset/raya-browser-profile-identity.md`, `.changeset/raya-routine-inbox-height.md`.
 
@@ -1546,4 +1546,14 @@ Commands (cwd `packages/kilo-vscode`): `bun test tests/unit/browser-held.test.ts
 
 Remaining: inbox performance budget, returning-reviewer journey, empty/loading/stale/error and 200% zoom, packaged microphone/acoustic acceptance, and receiving-side telemetry consent ordering. Do not force-rebuild `kilo.exe` while the running extension holds it. Codex-deferred research stays untracked.
 
-Next executable step: push and `snapshot:install` this commit, then leftover RDM-06 performance/reviewer or leftover Live microphone acceptance.
+Next executable step: leftover RDM-06 performance/reviewer or leftover Live microphone acceptance.
+
+## 2026-09-11: Snapshot install `8e2dc53700`
+
+**States:** committed, pushed and installed as `8e2dc53700`. Windows recased profile paths no longer fail browser tools. Routines light/dark at 320px and 900px are in this snapshot.
+
+Installed `eden.raya@7.4.23-snapshot+8e2dc53700.kamil-oseni.1789176460487`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-8e2dc53700-kamil-oseni-1789176460487.vsix`; SHA-256 `340ED6E3C8D271B70D680DEFDF3C7F8138EBD979B20AE6171B310885DCADC92B`; 517061377 bytes, 431 entries. CLI binary already present; not rebuilt.
+
+Remaining: leftover RDM-06 inbox performance budget, returning-reviewer journey, empty/loading/stale/error and 200% zoom, and packaged microphone/acoustic acceptance.
+
+Next executable step: leftover RDM-06 performance/reviewer or leftover Live microphone acceptance.

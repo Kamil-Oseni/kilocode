@@ -2790,13 +2790,21 @@ Next: leftover RDM-06 Chromium themes/narrow layout, inbox performance budget, o
 
 ## 2026-09-11: Browser profile identity and routines Chromium layout
 
-Status: verified locally and committed as c03bf67a95. Not yet pushed or installed. Recased Windows drive-letter and user-name spellings of the same profile folder no longer throw. A redirected junction still refuses. The worker name column stays clickable. Conversation messages are a labeled keyboard-reachable log. Production RoutinesView is exercised in Chromium at light/dark × 320/900.
+Status: verified locally and committed as c03bf67a95. Pushed with the docs record as 8e2dc53700 and installed in the snapshot below. Recased Windows drive-letter and user-name spellings of the same profile folder no longer throw. A redirected junction still refuses. The worker name column stays clickable. Conversation messages are a labeled keyboard-reachable log. Production RoutinesView is exercised in Chromium at light/dark × 320/900.
 
 Changed files: packages/kilo-vscode/src/services/browser-automation/browser-held.ts, browser-profile.ts, browser-session.ts, browser-auth.ts, browser-upload.ts, browser-transfer.ts, packages/kilo-vscode/tests/unit/browser-held.test.ts, packages/kilo-vscode/webview-ui/src/styles/routines.css, packages/kilo-vscode/webview-ui/src/components/routines/Inbox.tsx, packages/kilo-vscode/webview-ui/preview/routines.tsx, preview/index.tsx, preview/mock-vscode.ts, preview/preview.css, packages/kilo-vscode/tests/routines-preview.browser.ts, packages/kilo-vscode/tests/fixtures/routine-inbox-view.mjs, .changeset/raya-browser-profile-identity.md, .changeset/raya-routine-inbox-height.md.
 
 Commands (packages/kilo-vscode): bun test tests/unit/browser-held.test.ts tests/unit/browser-auth.test.ts tests/unit/browser-upload.test.ts tests/unit/browser-transfer.test.ts --timeout 60000 -> 8 pass / 2 skip / 0 fail / 34 expect / exit 0. bun test tests/unit/routines-inbox-view.test.ts tests/unit/routines-delegate-view.test.ts tests/unit/routines-edit-view.test.ts --timeout 90000 -> 3 pass / 0 fail / 3 expect / exit 0. bun run check-types -> exit 0. bun run check-types:webview -> exit 0. bunx playwright test --config playwright.preview.config.ts -> 12 pass / 0 fail / exit 0. bun run check-kilocode-change -> exit 0.
 
-Next: push and snapshot:install, then leftover RDM-06 performance/reviewer or leftover Live microphone acceptance.
+Next: leftover RDM-06 performance/reviewer or leftover Live microphone acceptance.
+
+## 2026-09-11: Snapshot install 8e2dc53700
+
+Status: committed, pushed and installed as 8e2dc53700. Windows recased profile paths no longer fail browser tools. Routines light/dark at 320px and 900px are in this snapshot.
+
+Installed eden.raya@7.4.23-snapshot+8e2dc53700.kamil-oseni.1789176460487. VSIX C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-8e2dc53700-kamil-oseni-1789176460487.vsix; SHA-256 340ED6E3C8D271B70D680DEFDF3C7F8138EBD979B20AE6171B310885DCADC92B; 517061377 bytes, 431 entries. CLI binary already present; not rebuilt.
+
+Next: leftover RDM-06 inbox performance budget, returning-reviewer journey, or leftover Live microphone acceptance.
 
 
 

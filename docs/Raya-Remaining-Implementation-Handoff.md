@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-12):** grok Deleted-file virtual review buffers are installed as `3bac23d766`. Remaining: leftover 39-requirement work that is still implementable here, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-12):** grok Deleted-file virtual review buffers are installed as `f31323cf78`. Remaining: leftover 39-requirement work that is still implementable here, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-12. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** grok installed snapshot `3bac23d766` (`eden.raya@7.4.23-snapshot+3bac23d766.kamil-oseni.1789226754719`). Opening a deleted reviewed file loads a virtual editor buffer with Keep/Undo. Reload VS Code to pick up the snapshot.
+**Latest delivered product:** grok installed snapshot `f31323cf78` (`eden.raya@7.4.23-snapshot+f31323cf78.kamil-oseni.1789228671686`). Opening a deleted reviewed file loads a virtual editor buffer with Keep/Undo. Reload VS Code to pick up the snapshot.
 
 ## Scope and reading order
 
@@ -2095,6 +2095,16 @@ Next executable step: leftover implementable 39-requirement work, or a real-acco
 **States:** committed, pushed and installed as `3bac23d766`. Deleted-file virtual review buffers are in this snapshot. CLI binary was already present and was not rebuilt.
 
 Installed `eden.raya@7.4.23-snapshot+3bac23d766.kamil-oseni.1789226754719`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-3bac23d766-kamil-oseni-1789226754719.vsix`; SHA-256 `E2CBB6F524CF9D8306C61F2E8C2C2D4B8B0B419B8D0948AB9877D048819E8A53`; 517134830 bytes, 431 files. VS Code was not force-reloaded.
+
+Remaining: leftover implementable 39-requirement work, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent.
+
+Next executable step: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
+
+## 2026-09-12: grok Snapshot install `f31323cf78`
+
+**States:** committed, pushed and installed as `f31323cf78`. grok checkpoint attribution is in this snapshot. CLI binary was already present and was not rebuilt.
+
+Installed `eden.raya@7.4.23-snapshot+f31323cf78.kamil-oseni.1789228671686`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-f31323cf78-kamil-oseni-1789228671686.vsix`; SHA-256 `C6065E7CA39C8D85A0ABFEAE9608BC923A956652CB1595E0FD99816F2FB99D36`; 517134830 bytes, 431 files. VS Code was not force-reloaded.
 
 Remaining: leftover implementable 39-requirement work, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent.
 

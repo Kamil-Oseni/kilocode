@@ -3162,6 +3162,14 @@ Installed eden.raya@7.4.23-snapshot+3bac23d766.kamil-oseni.1789226754719. VSIX C
 
 Next: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
 
+## 2026-09-12: grok Snapshot install f31323cf78
+
+Status: committed, pushed and installed as f31323cf78. grok checkpoint attribution is in this snapshot. CLI binary was already present and was not rebuilt.
+
+Installed eden.raya@7.4.23-snapshot+f31323cf78.kamil-oseni.1789228671686. VSIX C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-f31323cf78-kamil-oseni-1789228671686.vsix; SHA-256 C6065E7CA39C8D85A0ABFEAE9608BC923A956652CB1595E0FD99816F2FB99D36; 517134830 bytes, 431 files. VS Code was not force-reloaded.
+
+Next: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
+
 
 
 

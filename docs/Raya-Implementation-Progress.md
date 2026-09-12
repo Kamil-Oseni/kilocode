@@ -3170,6 +3170,16 @@ Installed eden.raya@7.4.23-snapshot+f31323cf78.kamil-oseni.1789228671686. VSIX C
 
 Next: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
 
+## ChatGPT 2026-09-12 12:45 America/Toronto — Grok review completed; defects repaired locally
+
+**Status: verified locally, not yet committed/pushed/installed.** ChatGPT reviewed every product commit attributed to Grok in the handoff: `87a7680782` (historical Undo hydration), `3df03553e3` (deleted/renamed chat review), and `8119256e53` (deleted-file virtual buffers), plus their documentation and install receipts. The receipts and narrow happy paths were correct, but the implementation was not complete.
+
+Material findings: stale review refresh could delete persisted dismissal state; persistence failure was silently reported as success; virtual deleted-file tabs shared absolute-path identity across sessions and worktrees; the fallback could open a same-named review from another directory; summarized/binary deletion content could appear as an empty file; rename rows could expose absolute paths; `multiedit` had no registered renderer despite the documentation claim; removal-only edits were called deleted files; raw buttons and nested review cards violated the shared-component and designer guidance; the preview used hand-authored chrome instead of the registered production renderers.
+
+Repairs: serialized/coalesced refresh and storage reconciliation; explicit post-Undo degraded-persistence warning; bounded and corruption-tolerant dismissal storage; opaque session/revision/path-bound virtual entries; exact worktree matching; authoritative full-detail deleted content with honest unavailable copy; real `multiedit` renderer registration; relative rename identity and deduplication; correct modified/deleted labeling; Kilo UI controls; production renderer preview at both sidebar widths/themes; flatter review rows and one typography family per `docs/designer.md`.
+
+Evidence at this point: `packages/kilo-vscode` combined focused suite for Undo/ghost/in-editor/chat/editor routing passes 52 tests / 202 assertions / exit 0. `bun run check-types`, `bun run check-types:webview`, and targeted ESLint pass. Final Playwright production file review passes 4/4 at light/dark 320px/760px with axe, overflow, path-leak and click-routing checks, and ChatGPT visually inspected the output under `docs/designer.md`. Knip, the extension marker guard, Markdown-table check and `git diff --check` pass. Checkpoint delivery remains next. Update this entry with commit, push, snapshot install, installed identity and artifact receipt before calling the repair delivered.
+
 
 
 

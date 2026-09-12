@@ -16,14 +16,22 @@ describe("openFile review ghost", () => {
   it("opens a virtual review buffer when the reviewed file is gone", async () => {
     const stat = spyOn(vscode.workspace.fs, "stat").mockRejectedValue(new Error("ENOENT"))
     const ghost = vscode.Uri.from({ scheme: "raya-review", path: "/gone.ts", query: "abc" })
+    const calls: unknown[][] = []
     handleEditorAction(
-      { type: "openFile", filePath: "gone.ts" },
-      { dir: () => "/repo", ghost: () => ghost },
+      { type: "openFile", filePath: "gone.ts", sessionID: "session-a" },
+      {
+        dir: () => "/repo",
+        ghost: (...args) => {
+          calls.push(args)
+          return ghost
+        },
+      },
     )
     for (let attempt = 0; open.mock.calls.length === 0 && attempt < 50; attempt++) await Bun.sleep(1)
     expect(open).toHaveBeenCalledWith(ghost)
     expect(find).not.toHaveBeenCalled()
     expect(warn).not.toHaveBeenCalled()
+    expect(calls).toEqual([["gone.ts", "/repo", "session-a"]])
     stat.mockRestore()
   })
 

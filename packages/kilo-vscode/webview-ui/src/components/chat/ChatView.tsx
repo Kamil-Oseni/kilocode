@@ -201,6 +201,9 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   }
   const keepAll = () => requestReview("keep")
   const discardAll = () => requestReview("undo")
+  const warn = (message?: string) => {
+    if (message) showToast({ title: message })
+  }
 
   createEffect(() => {
     const sid = id()
@@ -308,6 +311,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
             setKept(current.key)
           }
         }
+        warn(message.warning)
         vscode.postMessage({ type: "editReviewAcknowledged", sessionID: current.session, requestID: current.request })
         return
       }

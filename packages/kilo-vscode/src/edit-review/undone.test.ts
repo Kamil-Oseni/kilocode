@@ -57,10 +57,50 @@ describe("historical undo dismissals", () => {
     expect(listed(await disk.open(), "session-b")).toEqual({ "gone.ts": "other" })
   })
 
-  test("rejects corrupted persisted dismissals before hydrating", async () => {
+  test("isolates corrupted persisted dismissals and permits repair", async () => {
     const disk = await fixture()
     await writeFile(disk.file, JSON.stringify({ "raya.reviewUndone.v1": { broken: 42 } }))
     const state = await disk.open()
-    expect(() => listed(state, "session-a")).toThrow("Saved review undo dismissals could not be read")
+    expect(listed(state, "session-a")).toEqual({})
+    await record(state, "session-a", { "safe.ts": "revision" })
+    expect(listed(state, "session-a")).toEqual({ "safe.ts": "revision" })
+  })
+
+  test("preserves special filenames without changing object prototypes", async () => {
+    const disk = await fixture()
+    const state = await disk.open()
+    const files = Object.fromEntries([["__proto__", "revision"]])
+    await record(state, "session-a", files)
+    const stored = listed(state, "session-a")
+    expect(Object.entries(stored)).toEqual([["__proto__", "revision"]])
+    expect(Object.getPrototypeOf(stored)).toBe(Object.prototype)
+  })
+
+  test("bounds retained sessions and files", async () => {
+    const values = new Map<string, unknown>()
+    const state = {
+      get: (key: string) => values.get(key),
+      update: async (key: string, value: unknown) => {
+        values.set(key, value)
+      },
+    }
+    const files = Object.fromEntries(Array.from({ length: 260 }, (_, index) => [`file-${index}.ts`, `${index}`]))
+    await record(state, "oldest", files)
+    for (const index of Array.from({ length: 128 }, (_, value) => value))
+      await record(state, `session-${index}`, { "file.ts": `${index}` })
+    expect(listed(state, "oldest")).toEqual({})
+    expect(Object.keys(listed(state, "session-127"))).toHaveLength(1)
+
+    const single = new Map<string, unknown>()
+    const bounded = {
+      get: (key: string) => single.get(key),
+      update: async (key: string, value: unknown) => {
+        single.set(key, value)
+      },
+    }
+    await record(bounded, "session", files)
+    expect(Object.keys(listed(bounded, "session"))).toHaveLength(256)
+    expect(listed(bounded, "session")["file-0.ts"]).toBeUndefined()
+    expect(listed(bounded, "session")["file-259.ts"]).toBe("259")
   })
 })

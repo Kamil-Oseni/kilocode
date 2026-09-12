@@ -364,34 +364,3 @@
     opacity: 1;
   }
 }
-
-[data-slot="edit-review-note"] {
-  margin-right: auto;
-  font-family: var(--font-body);
-  font-size: var(--kilo-font-size-12);
-  color: var(--text-weak, var(--vscode-descriptionForeground));
-}
-
-[data-slot="edit-review-file"] {
-  margin: 0;
-  padding: var(--raya-space-8) var(--raya-space-12);
-  font-family: var(--font-body);
-  font-size: var(--kilo-font-size-12);
-}
-
-button[data-slot="edit-review-file"] {
-  display: block;
-  width: 100%;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  text-align: start;
-  cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 0.15em;
-}
-
-button[data-slot="edit-review-file"]:focus-visible {
-  outline: 2px solid var(--vscode-focusBorder);
-  outline-offset: 2px;
-}

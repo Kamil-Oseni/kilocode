@@ -1,5 +1,6 @@
 import { type Component, type JSX, Show } from "solid-js"
 import { Button } from "@kilocode/kilo-ui/button"
+import { IconButton } from "@kilocode/kilo-ui/icon-button"
 
 export const EditReviewChrome: Component<{
   status: string
@@ -26,37 +27,47 @@ export const EditReviewChrome: Component<{
         <Show when={props.note}>
           <span data-slot="edit-review-note">{props.note}</span>
         </Show>
-        <Button
-          variant="ghost"
-          size="small"
-          data-slot="edit-review-undo"
-          disabled={props.busy}
-          onClick={props.onUndo}
-          title="Undo the latest unaccepted edit in this file"
-        >
-          Undo file
-        </Button>
-        <Button
-          variant="ghost"
-          size="small"
-          data-slot="edit-review-keep"
-          disabled={props.busy}
-          onClick={props.onKeep}
-          title="Keep all current edits in this file"
-        >
-          Keep file
-        </Button>
+        <span data-slot="edit-review-decisions">
+          <Button
+            variant="ghost"
+            size="small"
+            data-slot="edit-review-undo"
+            disabled={props.busy}
+            onClick={props.onUndo}
+            title="Undo the latest unaccepted edit in this file"
+          >
+            Undo file
+          </Button>
+          <Button
+            variant="primary"
+            size="small"
+            data-slot="edit-review-keep"
+            disabled={props.busy}
+            onClick={props.onKeep}
+            title="Keep all current edits in this file"
+          >
+            Keep file
+          </Button>
+        </span>
         <Show when={(props.nav?.total ?? 0) > 1 && (props.nav?.index ?? -1) >= 0}>
           <span data-slot="edit-review-nav">
-            <button type="button" aria-label="Previous edit" onClick={props.onPrev}>
-              ‹
-            </button>
+            <IconButton
+              icon="chevron-left"
+              size="small"
+              variant="ghost"
+              aria-label="Previous edit"
+              onClick={props.onPrev}
+            />
             <span data-slot="edit-review-count">
               {(props.nav?.index ?? 0) + 1} of {props.nav?.total ?? 0}
             </span>
-            <button type="button" aria-label="Next edit" onClick={props.onNext}>
-              ›
-            </button>
+            <IconButton
+              icon="chevron-right"
+              size="small"
+              variant="ghost"
+              aria-label="Next edit"
+              onClick={props.onNext}
+            />
           </span>
         </Show>
       </div>

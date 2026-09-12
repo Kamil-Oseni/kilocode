@@ -17,7 +17,7 @@ import { remember } from "./attempts"
 import type { ReviewFileDiff } from "@kilocode/sdk/v2"
 import type { KiloConnectionService } from "../services/cli-backend/connection-service"
 import { addedRanges, deletionRanges, planReviewLenses, type LineRange } from "./patch-ranges"
-import { decode, prior, SCHEME, uri } from "./ghost"
+import { decode, SCHEME, UNAVAILABLE, uri } from "./ghost"
 
 export interface InEditorReviewDeps {
   readonly connection: Pick<KiloConnectionService, "getClient" | "getConnectionState">
@@ -38,7 +38,17 @@ interface FileReview {
   readonly revision: string
   readonly anchors: LineRange[]
   readonly summary: string
-  readonly body: string
+}
+
+interface GhostReview {
+  readonly identity: string
+  readonly session: string
+  readonly directory: string
+  readonly file: string
+  readonly abs: string
+  readonly revision: string
+  content?: string
+  task?: Promise<string>
 }
 
 export interface InEditorReview extends vscode.Disposable {
@@ -51,7 +61,7 @@ export interface InEditorReview extends vscode.Disposable {
   /** Forget Keep/Undo dismissals so a later edit in this session can show them again. */
   reset(): void
   /** Virtual buffer for a reviewed path that is no longer on disk. */
-  ghost(file: string, dir?: string): vscode.Uri | undefined
+  ghost(file: string, dir?: string, sessionID?: string): vscode.Uri | undefined
 }
 
 export function registerInEditorReview(context: vscode.ExtensionContext, deps: InEditorReviewDeps): InEditorReview {
@@ -64,7 +74,6 @@ export function registerInEditorReview(context: vscode.ExtensionContext, deps: I
 
   const norm = (p: string) => (process.platform === "win32" ? p.toLowerCase() : p)
   const changes = new vscode.EventEmitter<void>()
-  const contents = new vscode.EventEmitter<vscode.Uri>()
 
   let reviews = new Map<string, FileReview>()
   let sid: string | undefined
@@ -72,6 +81,8 @@ export function registerInEditorReview(context: vscode.ExtensionContext, deps: I
   let disposed = false
   const pending = new Set<string>()
   const attempts = new Map<string, string>()
+  const ghosts = new Map<string, GhostReview>()
+  const identities = new Map<string, string>()
   // Only acknowledged content is dismissed; identical line positions do not
   // identify an edit revision.
   const dismissed = new Map<string, string>()
@@ -82,7 +93,7 @@ export function registerInEditorReview(context: vscode.ExtensionContext, deps: I
     const ranges = addedRanges(item.patch)
     const anchors = [...ranges, ...deletionRanges(item.patch)].sort((a, b) => a.start - b.start)
     const renamed = /^rename (?:from|to) /m.test(item.patch)
-    const deleted = item.status === "deleted" || (!ranges.length && deletionRanges(item.patch).length > 0 && !renamed)
+    const deleted = item.status === "deleted" || /^\+\+\+ \/dev\/null$/m.test(item.patch)
     if (!anchors.length && (renamed || deleted)) anchors.push({ start: 0, end: 0 })
     if (!anchors.length) return
     return {
@@ -92,19 +103,34 @@ export function registerInEditorReview(context: vscode.ExtensionContext, deps: I
       anchors,
       revision: fingerprint(item),
       summary: renamed ? "Renamed file" : deleted ? "Deleted file" : `${item.additions} added, ${item.deletions} removed in file`,
-      body: prior(item.patch),
     }
   }
 
-  const keyOf = (doc: vscode.Uri) => decode(doc) ?? norm(doc.fsPath)
+  const entryOf = (doc: vscode.Uri) => {
+    const id = decode(doc)
+    return id ? ghosts.get(id) : undefined
+  }
+
+  const lookup = (doc: vscode.Uri): readonly [string, FileReview] | undefined => {
+    const entry = entryOf(doc)
+    if (doc.scheme === SCHEME) {
+      if (!entry || entry.session !== sid) return
+      const review = reviews.get(entry.abs)
+      if (!review || review.revision !== entry.revision) return
+      return [entry.abs, review]
+    }
+    const key = norm(doc.fsPath)
+    const review = reviews.get(key)
+    return review ? [key, review] : undefined
+  }
 
   const apply = (editor: vscode.TextEditor) => {
-    const key = keyOf(editor.document.uri)
-    const review = reviews.get(key)
-    if (!review || dismissed.get(key) === print(review)) {
+    const found = lookup(editor.document.uri)
+    if (!found || dismissed.get(found[0]) === print(found[1])) {
       editor.setDecorations(decoration, [])
       return
     }
+    const review = found[1]
     const last = editor.document.lineCount - 1
     const ranges = review.ranges
       .filter((r) => r.start <= last)
@@ -157,7 +183,6 @@ export function registerInEditorReview(context: vscode.ExtensionContext, deps: I
     reviews = built
     for (const [key, review] of built) {
       if (dismissed.get(key) && dismissed.get(key) !== print(review)) dismissed.delete(key)
-      contents.fire(uri(review.abs, review.file))
     }
     applyAll()
     changes.fire()
@@ -190,15 +215,37 @@ export function registerInEditorReview(context: vscode.ExtensionContext, deps: I
     changes.fire()
   }
 
-  const ghost = (file: string, dir?: string) => {
-    if (!sid || !file) return
-    const abs = norm(path.resolve(dir ?? deps.directory(sid), file))
-    const review = reviews.get(abs) ?? [...reviews.values()].find((item) => item.file === file)
+  const ghost = (file: string, dir?: string, sessionID?: string) => {
+    if (!sid || !file || sessionID !== sid) return
+    const directory = deps.directory(sid)
+    if (norm(path.resolve(dir ?? directory)) !== norm(path.resolve(directory))) return
+    const abs = norm(path.resolve(directory, file))
+    const review = reviews.get(abs)
     if (!review) return
-    return uri(review.abs, review.file)
+    const identity = `${sid}\0${review.revision}\0${review.abs}`
+    const known = identities.get(identity)
+    if (known) return uri(known, review.file)
+    while (ghosts.size >= 128) {
+      const first = ghosts.entries().next().value as [string, GhostReview] | undefined
+      if (!first) break
+      ghosts.delete(first[0])
+      identities.delete(first[1].identity)
+    }
+    const id = randomUUID()
+    ghosts.set(id, {
+      identity,
+      session: sid,
+      directory,
+      file: review.file,
+      abs: review.abs,
+      revision: review.revision,
+    })
+    identities.set(identity, id)
+    return uri(id, review.file)
   }
 
-  const targetKey = (arg?: string) => arg ?? (vscode.window.activeTextEditor ? keyOf(vscode.window.activeTextEditor.document.uri) : "")
+  const targetKey = (arg?: string) =>
+    arg ?? (vscode.window.activeTextEditor ? (lookup(vscode.window.activeTextEditor.document.uri)?.[0] ?? "") : "")
 
   const identify = (key: string) => {
     const id = attempts.get(key) ?? randomUUID()
@@ -274,9 +321,10 @@ export function registerInEditorReview(context: vscode.ExtensionContext, deps: I
   const lenses: vscode.CodeLensProvider = {
     onDidChangeCodeLenses: changes.event,
     provideCodeLenses(document) {
-      const key = keyOf(document.uri)
-      const review = reviews.get(key)
-      if (disposed || !review || dismissed.get(key) === print(review)) return []
+      const found = lookup(document.uri)
+      if (disposed || !found || dismissed.get(found[0]) === print(found[1])) return []
+      const key = found[0]
+      const review = found[1]
       const line = Math.min(review.anchors[0].start, Math.max(0, document.lineCount - 1))
       if (deps.connection.getConnectionState() !== "connected")
         return [
@@ -324,13 +372,37 @@ export function registerInEditorReview(context: vscode.ExtensionContext, deps: I
     }),
     decoration,
     changes,
-    contents,
     vscode.languages.registerCodeLensProvider([{ scheme: "file" }, { scheme: SCHEME }], lenses),
     vscode.workspace.registerTextDocumentContentProvider(SCHEME, {
-      onDidChange: contents.event,
-      provideTextDocumentContent(doc) {
-        const key = decode(doc)
-        return (key && reviews.get(key)?.body) || ""
+      async provideTextDocumentContent(doc) {
+        const entry = entryOf(doc)
+        if (!entry) return UNAVAILABLE
+        if (entry.content !== undefined) return entry.content
+        if (entry.task) return entry.task
+        if (deps.connection.getConnectionState() !== "connected") return UNAVAILABLE
+        const task = deps.connection
+          .getClient()
+          .session.diff(
+            { sessionID: entry.session, directory: entry.directory, file: entry.file, full: "true" },
+            { throwOnError: true },
+          )
+          .then((res) => {
+            const current = reviews.get(entry.abs)
+            if (disposed || sid !== entry.session || current?.revision !== entry.revision) return UNAVAILABLE
+            const item = res.data?.find((value) => value.file === entry.file)
+            return typeof item?.before === "string" ? item.before : UNAVAILABLE
+          })
+          .catch((err) => {
+            console.error("[Kilo New] deleted review content failed:", err)
+            return UNAVAILABLE
+          })
+          .then((content) => {
+            entry.content = content
+            entry.task = undefined
+            return content
+          })
+        entry.task = task
+        return task
       },
     }),
     vscode.commands.registerCommand("raya.editReview.undoFile", (arg?: string, revision?: string, session?: string) =>
@@ -356,7 +428,8 @@ export function registerInEditorReview(context: vscode.ExtensionContext, deps: I
       disposed = true
       generation++
       decoration.dispose()
-      contents.dispose()
+      ghosts.clear()
+      identities.clear()
     },
   }
 }

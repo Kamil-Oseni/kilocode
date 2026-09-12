@@ -1529,6 +1529,7 @@ export interface EditReviewResultMessage {
   requestID: string
   action: "keep" | "undo"
   error?: string
+  warning?: string
 }
 
 // Set the model for a session (extension → webview, used during multi-version creation)

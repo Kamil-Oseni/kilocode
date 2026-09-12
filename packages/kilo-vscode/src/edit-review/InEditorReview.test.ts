@@ -14,7 +14,11 @@ afterEach(() => {
 function setup(workspaceState?: Parameters<typeof remember>[0]) {
   const state = {
     session: "session-a",
+    directory: process.cwd(),
+    file: "file.ts",
     patch: "@@ -1 +1 @@\n-old\n+first",
+    before: undefined as string | undefined,
+    status: undefined as "added" | "deleted" | "modified" | undefined,
     connected: true,
     defer: false,
     reviewed: undefined as string | undefined,
@@ -49,14 +53,28 @@ function setup(workspaceState?: Parameters<typeof remember>[0]) {
     baseUrl: "http://review.test",
     fetch: async (input) => {
       const request = input instanceof Request ? input : new Request(input)
+      const url = new URL(request.url)
+      if (request.method === "GET" && url.searchParams.get("full") === "true")
+        return Response.json([
+          {
+            file: state.file,
+            patch: state.patch,
+            before: state.before,
+            after: "",
+            additions: 0,
+            deletions: 2,
+            status: state.status,
+          },
+        ])
       if (request.method === "GET" && state.defer) return new Promise<Response>((resolve) => reads.push(resolve))
       if (request.method === "GET")
         return Response.json([
           {
-            file: "file.ts",
+            file: state.file,
             patch: state.patch,
             additions: 1,
             deletions: 1,
+            status: state.status,
             reviewed: state.reviewed,
             generation: state.generation,
           },
@@ -69,7 +87,7 @@ function setup(workspaceState?: Parameters<typeof remember>[0]) {
   const review = registerInEditorReview({ subscriptions, workspaceState } as vscode.ExtensionContext, {
     connection: { getClient: () => client, getConnectionState: () => (state.connected ? "connected" : "disconnected") },
     session: () => state.session,
-    directory: () => process.cwd(),
+    directory: () => state.directory,
     onFile: (event) => events.push(event),
   })
   cleanups.push(() => review.dispose())
@@ -303,22 +321,80 @@ describe("in-editor review acknowledgements", () => {
     expect((await fixture.read())[0].command?.title).toContain("Renamed file")
     expect((await fixture.read())[1].command?.title).toBe("$(check) Keep file")
     fixture.state.patch = "@@ -1,2 +0,0 @@\n-old\n-lines"
+    fixture.state.status = "deleted"
     await fixture.review.refresh()
     expect(await fixture.read()).toHaveLength(3)
     expect((await fixture.read())[0].command?.title).toContain("Deleted file")
     expect((await fixture.read())[2].command?.title).toBe("$(discard) Undo file")
   })
 
+  test("a removal-only edit remains a modified file", async () => {
+    const fixture = setup()
+    fixture.state.patch = "@@ -1,2 +1 @@\n keep\n-removed"
+    fixture.state.status = "modified"
+    await fixture.review.refresh()
+    expect((await fixture.read())[0].command?.title).toContain("1 added, 1 removed in file")
+    expect((await fixture.read())[0].command?.title).not.toContain("Deleted file")
+  })
+
   test("a missing deleted file opens a virtual buffer with the same Keep and Undo lenses", async () => {
     const fixture = setup()
     fixture.state.patch = "@@ -1,2 +0,0 @@\n-old\n-lines"
+    fixture.state.before = "old\nlines"
+    fixture.state.status = "deleted"
     await fixture.review.refresh()
-    const ghost = fixture.review.ghost("file.ts")
+    const ghost = fixture.review.ghost("file.ts", process.cwd(), "session-a")
     expect(ghost?.scheme).toBe("raya-review")
     expect(ghost?.path).toBe("/file.ts")
     const document = { uri: ghost!, lineCount: 2 } as vscode.TextDocument
     expect((await fixture.read(document))[0]?.command?.title).toContain("Deleted file")
     expect((await fixture.read(document))[2]?.command?.title).toBe("$(discard) Undo file")
-    expect(fixture.contents()?.provideTextDocumentContent(ghost!, {} as vscode.CancellationToken)).toBe("old\nlines")
+    expect(await fixture.contents()?.provideTextDocumentContent(ghost!, {} as vscode.CancellationToken)).toBe("old\nlines")
+  })
+
+  test("ghost identity is immutable across sessions and stale controls cannot act on the replacement", async () => {
+    const fixture = setup()
+    fixture.state.patch = "@@ -1 +0,0 @@\n-first"
+    fixture.state.before = "first"
+    fixture.state.status = "deleted"
+    await fixture.review.refresh()
+    const first = fixture.review.ghost("file.ts", process.cwd(), "session-a")!
+    const document = { uri: first, lineCount: 1 } as vscode.TextDocument
+    const lens = (await fixture.read(document))[1].command!
+    expect(await fixture.contents()?.provideTextDocumentContent(first, {} as vscode.CancellationToken)).toBe("first")
+
+    fixture.state.session = "session-b"
+    fixture.state.patch = "@@ -1 +0,0 @@\n-second"
+    fixture.state.before = "second"
+    await fixture.review.refresh()
+    expect(await fixture.read(document)).toEqual([])
+    expect(await fixture.contents()?.provideTextDocumentContent(first, {} as vscode.CancellationToken)).toBe("first")
+    await fixture.commands.get(lens.command)!(...lens.arguments!)
+    expect(fixture.requests).toEqual([])
+
+    const second = fixture.review.ghost("file.ts", process.cwd(), "session-b")!
+    expect(second.query).not.toBe(first.query)
+    expect(await fixture.contents()?.provideTextDocumentContent(second, {} as vscode.CancellationToken)).toBe("second")
+  })
+
+  test("ghost lookup requires the exact current session and directory", async () => {
+    const fixture = setup()
+    fixture.state.patch = "@@ -1 +0,0 @@\n-old"
+    fixture.state.status = "deleted"
+    await fixture.review.refresh()
+    expect(fixture.review.ghost("file.ts", process.cwd(), "session-b")).toBeUndefined()
+    expect(fixture.review.ghost("file.ts", path.resolve("other"), "session-a")).toBeUndefined()
+    expect(fixture.review.ghost("other/file.ts", process.cwd(), "session-a")).toBeUndefined()
+  })
+
+  test("shows an explicit unavailable document when full deleted content is absent", async () => {
+    const fixture = setup()
+    fixture.state.patch = ""
+    fixture.state.status = "deleted"
+    await fixture.review.refresh()
+    const ghost = fixture.review.ghost("file.ts", process.cwd(), "session-a")!
+    expect(await fixture.contents()?.provideTextDocumentContent(ghost, {} as vscode.CancellationToken)).toContain(
+      "does not contain the original text",
+    )
   })
 })

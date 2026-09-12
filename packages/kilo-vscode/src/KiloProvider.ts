@@ -496,6 +496,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private reviewTimer: ReturnType<typeof setTimeout> | undefined
   private lastReviewHash = ""
   private reviewGeneration = 0
+  private reviewQueue: Promise<void> | undefined
+  private reviewPending: { sessionID?: string } | null = null
   private cachedGitRepo = false
   private cachedGitDirectory: string | undefined
   private gitStatusRevision = 0
@@ -515,7 +517,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         dismissAll(): void
         reset(): void
         capture(session: string, files?: string[]): () => void
-        ghost?(file: string, dir?: string): vscode.Uri | undefined
+        ghost?(file: string, dir?: string, sessionID?: string): vscode.Uri | undefined
       }
     | undefined // raya_change
   private diffVirtualProvider: import("./DiffVirtualProvider").DiffVirtualProvider | undefined
@@ -979,7 +981,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     dismissAll(): void
     reset(): void
     capture(session: string, files?: string[]): () => void
-    ghost?(file: string, dir?: string): vscode.Uri | undefined
+    ghost?(file: string, dir?: string, sessionID?: string): vscode.Uri | undefined
   }): void {
     this.inEditorReview = review
   }
@@ -1992,14 +1994,19 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         : undefined
       assertSaved(this.getWorkspaceDirectory(sid), files ?? (revisions ? Object.keys(revisions) : undefined))
       if (action === "keep") await this.handleKeepSessionChanges(sid, files, revisions, attempt?.id)
-      if (action === "undo") {
+      const warning = await (async () => {
+        if (action !== "undo") return
         await this.handleDiscardSessionChanges(sid, files, revisions, attempt?.id)
         const hashes = scoped(files, revisions)
-        if (hashes)
-          await record(this.extensionContext?.workspaceState, sid, hashes).catch((error) =>
-            console.error("[Raya] Could not persist historical undo dismissals:", error),
-          )
-      }
+        if (!hashes) return
+        return record(this.extensionContext?.workspaceState, sid, hashes).then(
+          () => undefined,
+          (error) => {
+            console.error("[Kilo New] Could not persist historical undo dismissals:", error)
+            return "Undo completed, but Raya couldn't save its review state. This card may return after reload."
+          },
+        )
+      })()
       if (!attempt?.recovered) accept?.()
       if (requestID && attempt) this.deliveries.set(`${sid}\0${requestID}`, attempt.complete)
       if (requestID)
@@ -2008,8 +2015,10 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           sessionID: sid,
           requestID,
           action,
+          ...(warning ? { warning } : {}),
           ...(attempt?.recovered ? { refreshOnly: true } : {}),
         })
+      if (!requestID && warning) this.postMessage({ type: "error", sessionID: sid, message: warning })
     } catch (error) {
       console.error("[Kilo New] review action failed:", error)
       this.scheduleReview(sid)
@@ -2041,7 +2050,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       // An explicit sessionID (e.g. from validateFiles) takes precedence over
       // the live currentSession — see editor-actions.ts's validateFiles case.
       dir: (sessionID) => this.getWorkspaceDirectory(sessionID ?? this.currentSession?.id),
-      ghost: (file, dir) => this.inEditorReview?.ghost?.(file, dir),
+      ghost: (file, dir, sessionID) => this.inEditorReview?.ghost?.(file, dir, sessionID),
       diff: this.diffVirtualProvider,
       openMarkdown: (file, sessionID) => {
         if (!this.documentViewerProvider) return false
@@ -6128,7 +6137,31 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.reviewTimer = setTimeout(() => void this.refreshReview(sessionID), 250)
   }
 
-  private async refreshReview(sessionID?: string): Promise<void> {
+  private refreshReview(sessionID?: string): Promise<void> {
+    this.reviewPending = { sessionID }
+    if (this.reviewQueue) return this.reviewQueue
+    const run = async () => {
+      while (this.reviewPending) {
+        const next = this.reviewPending
+        this.reviewPending = null
+        await this.loadReview(next.sessionID)
+      }
+    }
+    const task = run()
+    this.reviewQueue = task.then(
+      () => {
+        this.reviewQueue = undefined
+      },
+      (error) => {
+        console.error("[Kilo New] review refresh failed:", error)
+        this.reviewQueue = undefined
+        if (this.reviewPending) void this.refreshReview(this.reviewPending.sessionID)
+      },
+    )
+    return task
+  }
+
+  private async loadReview(sessionID?: string): Promise<void> {
     const sid = sessionID ?? this.currentSession?.id
     if (!sid || !this.client) return
     const generation = ++this.reviewGeneration
@@ -6156,6 +6189,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         files.set(item.file, { additions: item.additions ?? 0, deletions: item.deletions ?? 0 })
       }
     }
+    if (generation !== this.reviewGeneration) return
     const live = Object.fromEntries(expected)
     for (const id of ids) {
       try {
@@ -6163,7 +6197,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         for (const [file, hash] of Object.entries(result.accepted)) accepted.set(file, hash)
         if (result.stale.length) await reopen(this.extensionContext?.workspaceState, id, result.stale)
       } catch (error) {
-        console.error("[Raya] Could not hydrate historical undo dismissals:", error)
+        console.error("[Kilo New] Could not hydrate historical undo dismissals:", error)
       }
     }
     let additions = 0

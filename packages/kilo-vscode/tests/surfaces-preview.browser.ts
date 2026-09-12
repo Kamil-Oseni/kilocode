@@ -42,7 +42,7 @@ for (const theme of ["light", "dark"]) {
   }
 }
 
-test("light review cluster and file chrome", async ({ page }, info) => {
+test("light review cluster", async ({ page }) => {
   await page.setViewportSize({ width: 760, height: 900 })
   await page.goto("/?state=light-review")
   await expect(page.locator("[data-fixture]")).toHaveAttribute("data-preview-kind", "production-view")
@@ -51,17 +51,34 @@ test("light review cluster and file chrome", async ({ page }, info) => {
   await expect(page.getByRole("button", { name: "Keep all" })).toBeVisible()
   await page.goto("/?state=light-review-undo")
   await expect(page.getByRole("button", { name: "Confirm undo" })).toBeVisible()
-  await page.goto("/?state=light-edit-review")
-  await expect(page.locator("[data-fixture]")).toHaveAttribute("data-preview-kind", "production-view")
-  await expect(page.getByRole("button", { name: "Undo file" }).first()).toBeVisible()
-  await expect(page.getByRole("button", { name: "Keep file" }).first()).toBeVisible()
-  await expect(page.getByText("Renamed file")).toBeVisible()
-  await expect(page.getByText("Deleted file")).toBeVisible()
-  await expect(page.getByRole("button", { name: "Open src/review/rename.ts in the editor" })).toBeVisible()
-  await expect(page.getByRole("button", { name: "Open src/styles/legacy-composer.css in the editor" })).toBeVisible()
-  await expect(page.getByText("1 of 4").first()).toBeVisible()
-  await page.screenshot({ path: info.outputPath("review.png"), fullPage: true })
 })
+
+for (const theme of ["light", "dark"]) {
+  for (const width of [320, 760]) {
+    test(`${theme} production file review at ${width}px`, async ({ page }, info) => {
+      await page.setViewportSize({ width, height: 900 })
+      await page.goto(`/?state=${theme}-edit-review`)
+      const fixture = page.locator("[data-fixture]")
+      await expect(fixture).toHaveAttribute("data-preview-kind", "production-view")
+      await expect(page.getByText("Edit files")).toBeVisible()
+      await expect(page.getByText("Renamed file")).toBeVisible()
+      await expect(page.getByText("Deleted file")).toBeVisible()
+      await expect(page.getByRole("button", { name: "Open src/review/renamed.ts in the editor" })).toBeVisible()
+      await expect(
+        page.getByRole("button", { name: "Open src/styles/legacy-composer.css in the editor" }),
+      ).toBeVisible()
+      await expect(page.getByText("C:/Users/example/project")).toHaveCount(0)
+      await expect(page.getByRole("button", { name: "Previous edit" }).first()).toBeVisible()
+      await expect(page.getByRole("button", { name: "Next edit" }).first()).toBeVisible()
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
+      const result = await new AxeBuilder({ page }).include(".chat-view").analyze()
+      expect(result.violations).toEqual([])
+      await page.getByRole("button", { name: "Undo file" }).first().click()
+      await expect(page.locator(".chat-view")).toHaveAttribute("data-review-request", "undo:src/review/renamed.ts")
+      await page.screenshot({ path: info.outputPath("review.png"), fullPage: true })
+    })
+  }
+}
 
 test("light slash, transcript, and conversation", async ({ page }, info) => {
   await page.setViewportSize({ width: 760, height: 900 })

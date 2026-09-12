@@ -1,20 +1,19 @@
 import { describe, expect, test } from "bun:test"
 import * as vscode from "vscode"
-import { decode, prior, SCHEME, uri } from "./ghost"
+import { decode, SCHEME, UNAVAILABLE, uri } from "./ghost"
 
 describe("ghost review buffers", () => {
-  test("reconstructs deleted file text from the old side of the patch", () => {
-    expect(prior("@@ -1,2 +0,0 @@\n-old\n-lines")).toBe("old\nlines")
-    expect(prior("diff --git a/old.ts b/file.ts\nrename from old.ts\nrename to file.ts")).toBe("")
-    expect(prior("@@ -2,3 +2,2 @@\n keep\n-gone\n keep")).toBe("keep\ngone\nkeep")
+  test("provides an honest fallback when authoritative content is unavailable", () => {
+    expect(UNAVAILABLE).toContain("does not contain the original text")
   })
 
-  test("round-trips the absolute review identity through the virtual uri", () => {
-    const abs = "C:\\repo\\gone.ts"
-    const doc = uri(abs, "src/gone.ts")
+  test("round-trips an opaque registry id without exposing an absolute path", () => {
+    const id = "0115ccad-2a86-4b8d-b7d2-23e38df94067"
+    const doc = uri(id, "src/gone.ts")
     expect(doc.scheme).toBe(SCHEME)
     expect(doc.path).toBe("/src/gone.ts")
-    expect(decode(doc)).toBe(abs)
+    expect(doc.toString()).not.toContain("repo")
+    expect(decode(doc)).toBe(id)
     expect(decode({ scheme: "file", query: "", path: "/src/gone.ts" } as vscode.Uri)).toBeUndefined()
   })
 })

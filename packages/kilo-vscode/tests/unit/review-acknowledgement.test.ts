@@ -390,4 +390,121 @@ describe("host review acknowledgements", () => {
       await rm(directory, { recursive: true, force: true })
     }
   })
+
+  test("successful Undo reports degraded persistence without claiming the mutation failed", async () => {
+    const values = new Map<string, unknown>()
+    const state = {
+      get: (key: string) => values.get(key),
+      update: async (key: string, value: unknown) => {
+        if (key === "raya.reviewUndone.v1") throw new Error("storage unavailable")
+        values.set(key, value)
+      },
+    }
+    const client = createKiloClient({
+      baseUrl: "http://review.test",
+      fetch: async () => Response.json({ id: "session-a", title: "Task", time: { created: 1, updated: 2 } }),
+    })
+    const provider = new KiloProvider({} as never, { getClient: () => client } as never)
+    const messages: unknown[] = []
+    let accepted = 0
+    provider.postMessage = (message) => {
+      messages.push(message)
+    }
+    provider.setInEditorReview({
+      refresh() {},
+      dismissAll() {},
+      reset() {},
+      capture: () => () => {
+        accepted++
+      },
+    })
+    const host = provider as unknown as {
+      extensionContext: { workspaceState: typeof state }
+      reviewAction(
+        sid: string,
+        action: "keep" | "undo",
+        request: string,
+        files: string[],
+        expected: Record<string, string>,
+      ): Promise<void>
+      scheduleReview(): void
+      getWorkspaceDirectory(): string
+    }
+    host.extensionContext = { workspaceState: state }
+    host.scheduleReview = () => {}
+    host.getWorkspaceDirectory = () => process.cwd()
+    await host.reviewAction("session-a", "undo", "request-a", ["file.ts"], { "file.ts": "revision" })
+    expect(accepted).toBe(1)
+    expect(messages).toContainEqual({
+      type: "editReviewResult",
+      sessionID: "session-a",
+      requestID: "request-a",
+      action: "undo",
+      warning: "Undo completed, but Raya couldn't save its review state. This card may return after reload.",
+    })
+  })
+
+  test("does not start a newer refresh while pruning from an earlier observation", async () => {
+    const values = new Map<string, unknown>()
+    let block = false
+    let persist: (() => void) | undefined
+    const state = {
+      get: (key: string) => values.get(key),
+      update: async (key: string, value: unknown) => {
+        if (key === "raya.reviewUndone.v1" && block)
+          await new Promise<void>((resolve) => {
+            persist = resolve
+          })
+        values.set(key, value)
+      },
+    }
+    await record(state, "session-a", { "file.ts": "undone" })
+    block = true
+    let release: (() => void) | undefined
+    let calls = 0
+    let active = 0
+    let peak = 0
+    const client = createKiloClient({
+      baseUrl: "http://review.test",
+      fetch: async (input) => {
+        const request = input instanceof Request ? input : new Request(input)
+        if (!new URL(request.url).pathname.endsWith("/diff")) return Response.json({ id: "session-a" })
+        calls++
+        active++
+        peak = Math.max(peak, active)
+        if (calls === 1)
+          await new Promise<void>((resolve) => {
+            release = resolve
+          })
+        active--
+        if (calls === 1)
+          return Response.json([
+            { file: "file.ts", patch: "@@ -1 +1 @@\n-old\n+new", additions: 1, deletions: 1, reviewed: "" },
+          ])
+        return Response.json([])
+      },
+    })
+    const provider = new KiloProvider({} as never, { getClient: () => client } as never)
+    const host = provider as unknown as {
+      extensionContext: { workspaceState: typeof state }
+      refreshReview(sessionID?: string): Promise<void>
+      getWorkspaceDirectory(): string
+    }
+    host.extensionContext = { workspaceState: state }
+    host.getWorkspaceDirectory = () => process.cwd()
+    const first = host.refreshReview("session-a")
+    for (let attempt = 0; !release && attempt < 100; attempt++) await Bun.sleep(1)
+    expect(release).toBeDefined()
+    expect(calls).toBe(1)
+    release!()
+    for (let attempt = 0; !persist && attempt < 100; attempt++) await Bun.sleep(1)
+    expect(persist).toBeDefined()
+    const second = host.refreshReview("session-a")
+    expect(calls).toBe(1)
+    persist!()
+    await Promise.all([first, second])
+    expect(calls).toBe(2)
+    expect(peak).toBe(1)
+    expect(listed(state, "session-a")).toEqual({})
+  })
 })

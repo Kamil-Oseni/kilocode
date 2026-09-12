@@ -79,7 +79,7 @@ export function handleEditorAction(
   },
   opts: {
     dir: (sessionID?: string) => string
-    ghost?: (file: string, dir: string) => vscode.Uri | undefined
+    ghost?: (file: string, dir: string, sessionID?: string) => vscode.Uri | undefined
     diff?: DiffVirtualProvider
     openMarkdown?: (file: string, sessionID?: string) => boolean
     storage?: vscode.Uri
@@ -92,7 +92,7 @@ export function handleEditorAction(
     // current — mirrors the validateFiles case below.
     if (message.filePath) {
       if (isMarkdownFile(message.filePath) && opts.openMarkdown?.(message.filePath, message.sessionID)) return true
-      openFile(opts.dir(message.sessionID), message.filePath, message.line, message.column, opts.ghost)
+      openFile(opts.dir(message.sessionID), message.filePath, message.line, message.column, message.sessionID, opts.ghost)
     }
     return true
   }
@@ -193,7 +193,8 @@ function openFile(
   filePath: string,
   line?: number,
   column?: number,
-  ghost?: (file: string, dir: string) => vscode.Uri | undefined,
+  sessionID?: string,
+  ghost?: (file: string, dir: string, sessionID?: string) => vscode.Uri | undefined,
 ): void {
   const uri = isAbsolutePath(filePath) ? vscode.Uri.file(filePath) : vscode.Uri.joinPath(vscode.Uri.file(dir), filePath)
   vscode.workspace.fs.stat(uri).then(
@@ -205,7 +206,7 @@ function openFile(
       show(uri, line, column)
     },
     () => {
-      const alt = ghost?.(filePath, dir)
+      const alt = ghost?.(filePath, dir, sessionID)
       if (alt) {
         show(alt, line, column)
         return

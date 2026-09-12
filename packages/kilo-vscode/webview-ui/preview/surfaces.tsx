@@ -1,8 +1,11 @@
-import { createComponent, onMount, type Component, type JSX } from "solid-js"
+import { createComponent, createSignal, onCleanup, onMount, type Component, type JSX } from "solid-js"
+import { Dynamic } from "solid-js/web"
+import { ToolRegistry } from "@kilocode/kilo-ui/message-part"
 import HistoryView from "../src/components/history/HistoryView"
 import { PromptInput } from "../src/components/chat/PromptInput"
 import { SessionReviewCluster } from "../src/components/chat/SessionReviewCluster"
-import { EditReviewChrome } from "../src/components/chat/EditReviewChrome"
+import { registerVscodeToolOverrides } from "../src/components/chat/VscodeToolOverrides"
+import { editReview } from "../src/components/chat/edit-review"
 import { StoryProviders } from "../src/stories/StoryProviders"
 import { SessionContext, useSession } from "../src/context/session"
 import { VoiceProvider } from "../src/context/voice"
@@ -114,23 +117,79 @@ export const ReviewPreview: Component<{ confirming?: boolean }> = (props) => (
   </div>
 )
 
-export const EditReviewPreview: Component = () => (
-  <div class="chat-view" style={{ display: "flex", "flex-direction": "column", gap: "12px" }}>
-    <EditReviewChrome status="added" pending nav={{ index: 0, total: 4 }}>
-      <p>src/styles/prompt-input.css</p>
-    </EditReviewChrome>
-    <EditReviewChrome status="modified" pending nav={{ index: 1, total: 4 }}>
-      <p>src/components/chat/PromptInput.tsx</p>
-    </EditReviewChrome>
-    <EditReviewChrome status="renamed" note="Renamed file" pending nav={{ index: 2, total: 4 }}>
-      <button type="button" data-slot="edit-review-file" aria-label="Open src/review/rename.ts in the editor">
-        src/review/rename.ts
-      </button>
-    </EditReviewChrome>
-    <EditReviewChrome status="deleted" note="Deleted file" pending nav={{ index: 3, total: 4 }}>
-      <button type="button" data-slot="edit-review-file" aria-label="Open src/styles/legacy-composer.css in the editor">
-        src/styles/legacy-composer.css
-      </button>
-    </EditReviewChrome>
-  </div>
-)
+registerVscodeToolOverrides()
+
+const patch = ToolRegistry.render("apply_patch")
+const multi = ToolRegistry.render("multiedit")
+if (!patch || !multi) throw new Error("Review tool renderers are unavailable")
+
+export const EditReviewPreview: Component = () => {
+  const [request, setRequest] = createSignal("")
+  const expected = {
+    "src/review/renamed.ts": "rename-v1",
+    "src/styles/legacy-composer.css": "delete-v1",
+    "src/components/chat/PromptInput.tsx": "edit-v1",
+  }
+  editReview.update("s2", expected)
+  const dispose = editReview.connect("s2", {
+    request: (action, file) => setRequest(`${action}:${file}`),
+    busy: () => false,
+  })
+  onCleanup(dispose)
+
+  return wrap("s2", () => (
+    <div
+      class="chat-view"
+      data-review-request={request()}
+      style={{ display: "flex", "flex-direction": "column", gap: "12px" }}
+    >
+      <Dynamic
+        component={patch}
+        tool="apply_patch"
+        status="completed"
+        input={{}}
+        output="Success. Updated 2 files."
+        metadata={{
+          files: [
+            {
+              filePath: "C:/Users/example/project/src/review/old.ts",
+              relativePath: "src/review/renamed.ts",
+              movePath: "C:/Users/example/project/src/review/renamed.ts",
+              type: "move",
+              patch: "@@ -1 +1 @@\n-old name\n+new name",
+              additions: 1,
+              deletions: 1,
+            },
+            {
+              filePath: "C:/Users/example/project/src/styles/legacy-composer.css",
+              relativePath: "src/styles/legacy-composer.css",
+              type: "delete",
+              patch: "@@ -1 +0,0 @@\n-legacy rule",
+              additions: 0,
+              deletions: 1,
+            },
+          ],
+        }}
+      />
+      <Dynamic
+        component={multi}
+        tool="multiedit"
+        status="completed"
+        input={{}}
+        output="Updated src/components/chat/PromptInput.tsx"
+        metadata={{
+          results: [
+            {
+              filediff: {
+                file: "src/components/chat/PromptInput.tsx",
+                status: "modified",
+                additions: 1,
+                deletions: 1,
+              },
+            },
+          ],
+        }}
+      />
+    </div>
+  ))
+}

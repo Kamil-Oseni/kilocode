@@ -17,27 +17,44 @@ function status(value: unknown): Kind {
   return "modified"
 }
 
+function unique(items: Target[]) {
+  const seen = new Set<string>()
+  return items.filter((item) => {
+    const key = item.file.replaceAll("\\", "/")
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 /** Paths the chat review chrome should offer Keep/Undo for. */
 export function targets(tool: string, input: unknown, metadata: unknown): Target[] {
   const meta = record(metadata)
   const data = record(input)
   if (tool === "apply_patch" && Array.isArray(meta?.files)) {
-    return meta.files.flatMap((item) => {
-      const file = record(item)
-      if (!file) return []
-      const path = text(file.movePath) ?? text(file.relativePath) ?? text(file.filePath)
-      if (!path) return []
-      return [{ file: path, kind: status(file.type) }]
-    })
+    return unique(
+      meta.files.flatMap((item) => {
+        const file = record(item)
+        if (!file) return []
+        // apply_patch emits an absolute movePath but its relativePath already
+        // names the destination. Keep host paths out of transcript and review
+        // state, which both use paths relative to the session directory.
+        const path = text(file.relativePath)
+        if (!path) return []
+        return [{ file: path, kind: status(file.type) }]
+      }),
+    )
   }
   if (tool === "multiedit" && Array.isArray(meta?.results)) {
-    return meta.results.flatMap((item) => {
-      const result = record(item)
-      const diff = record(result?.filediff)
-      const path = text(diff?.file)
-      if (!path) return []
-      return [{ file: path, kind: status(diff?.status) }]
-    })
+    return unique(
+      meta.results.flatMap((item) => {
+        const result = record(item)
+        const diff = record(result?.filediff)
+        const path = text(diff?.file)
+        if (!path) return []
+        return [{ file: path, kind: status(diff?.status) }]
+      }),
+    )
   }
   const diff = record(meta?.filediff)
   const path = text(diff?.file) ?? text(meta?.filepath) ?? text(data?.filePath)

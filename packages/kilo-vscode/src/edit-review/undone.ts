@@ -3,8 +3,11 @@ import { createHash } from "node:crypto"
 type State = { get(key: string): unknown; update(key: string, value: unknown): PromiseLike<void> }
 type Store = Record<string, Record<string, string>>
 const name = "raya.reviewUndone.v1"
+const owners = 128
+const paths = 256
 const queues = new WeakMap<State, Promise<unknown>>()
 const owner = (session: string) => createHash("sha256").update(session).digest("hex")
+const dict = (entries: Iterable<readonly [string, string]>) => Object.fromEntries(entries) as Record<string, string>
 
 function serial<T>(state: State, run: () => Promise<T>) {
   const next = (queues.get(state) ?? Promise.resolve()).then(run, run)
@@ -19,19 +22,13 @@ function valid(file: string, hash: string) {
 function read(state: State): Store {
   const value = state.get(name)
   if (value === undefined) return {}
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("Saved review undo dismissals could not be read. Review remains available.")
-  const stored: Store = {}
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {}
+  const stored = Object.create(null) as Store
   for (const [key, files] of Object.entries(value)) {
-    if (!/^[a-f0-9]{64}$/.test(key) || !files || typeof files !== "object" || Array.isArray(files))
-      throw new Error("Saved review undo dismissals could not be read. Review remains available.")
-    const next: Record<string, string> = {}
-    for (const [file, hash] of Object.entries(files)) {
-      if (typeof hash !== "string" || !valid(file, hash))
-        throw new Error("Saved review undo dismissals could not be read. Review remains available.")
-      next[file] = hash
-    }
-    stored[key] = next
+    if (!/^[a-f0-9]{64}$/.test(key) || !files || typeof files !== "object" || Array.isArray(files)) continue
+    const entries = Object.entries(files)
+    if (entries.some(([file, hash]) => typeof hash !== "string" || !valid(file, hash))) continue
+    stored[key] = dict(entries as Array<[string, string]>)
   }
   return stored
 }
@@ -73,13 +70,20 @@ export async function record(state: State | undefined, session: string, files: R
   const hash = owner(session)
   await serial(state, async () => {
     const stored = read(state)
-    const next = { ...stored[hash] }
-    for (const [file, revision] of Object.entries(files)) {
+    const added = Object.entries(files)
+    for (const [file, revision] of added) {
       if (!valid(file, revision))
         throw new Error("Saved review undo dismissals could not be read. Review remains available.")
-      next[file] = revision
     }
-    await state.update(name, { ...stored, [hash]: next })
+    const entries = new Map(Object.entries(stored[hash] ?? {}))
+    for (const [file, revision] of added) {
+      entries.delete(file)
+      entries.set(file, revision)
+    }
+    const next = dict([...entries].slice(-paths))
+    const sessions = Object.entries(stored).filter(([key]) => key !== hash)
+    sessions.push([hash, next])
+    await state.update(name, Object.fromEntries(sessions.slice(-owners)))
   })
 }
 
@@ -91,12 +95,11 @@ export async function reopen(state: State | undefined, session: string, files: r
     const stored = read(state)
     const current = stored[hash]
     if (!current) return
-    const next = { ...current }
-    for (const file of files) delete next[file]
-    const copy = { ...stored }
-    if (Object.keys(next).length) copy[hash] = next
-    else delete copy[hash]
-    await state.update(name, copy)
+    const removed = new Set(files)
+    const next = dict(Object.entries(current).filter(([file]) => !removed.has(file)))
+    const entries = Object.entries(stored).filter(([key]) => key !== hash)
+    if (Object.keys(next).length) entries.push([hash, next])
+    await state.update(name, Object.fromEntries(entries))
   })
 }
 
@@ -107,8 +110,6 @@ export async function forget(state: State | undefined, session: string) {
   await serial(state, async () => {
     const stored = read(state)
     if (!stored[hash]) return
-    const next = { ...stored }
-    delete next[hash]
-    await state.update(name, next)
+    await state.update(name, Object.fromEntries(Object.entries(stored).filter(([key]) => key !== hash)))
   })
 }

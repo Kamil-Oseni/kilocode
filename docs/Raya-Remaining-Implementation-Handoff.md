@@ -2110,5 +2110,15 @@ Remaining: leftover implementable 39-requirement work, paid GPT-Live/device acou
 
 Next executable step: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
 
+## ChatGPT 2026-09-12 12:45 America/Toronto — Grok implementation review and repair
+
+**Review verdict:** Grok's three attributed product commits (`87a7680782`, `3df03553e3`, and `8119256e53`) were partially correct, and their documented VSIX sizes/checksums and happy-path tests were real. They were not safe to accept as complete. Independent source review found that stale refreshes could prune durable Undo state, failed workspace-state persistence was reported as full success, deleted-file virtual URIs could cross session/worktree boundaries, absolute rename paths could leak into the transcript, `multiedit` review chrome was claimed but never registered, removal-only modifications were mislabeled as deleted files, and the added path/navigation controls bypassed the shared UI components. The static preview did not exercise the registered production tool path.
+
+**Repair now implemented locally:** review refresh/reconciliation is serialized and coalesced; Undo persistence failure produces a truthful warning while preserving the completed file mutation; the dismissal store is bounded to 128 sessions and 256 paths per session, isolates malformed owners, and supports special filenames. Deleted-file buffers use opaque bounded entries bound to session, revision, canonical path and directory; exact session/directory matching replaces relative-name fallback; stale tabs cannot act on another session; content is fetched through authoritative `session.diff` full detail and unavailable content is stated plainly. Real `multiedit` rendering is registered before review wrapping, rename review identity uses the destination-relative path, repeated targets are deduplicated, and production preview data exercises both apply_patch and multiedit. Raw controls were replaced with Kilo UI components, the layout uses flat review rows and shared typography, and pure-removal modifications retain a modified-file label.
+
+**Current evidence:** combined focused host/webview tests pass 52 tests, 202 assertions, exit 0. Extension host and webview typechecks and targeted ESLint pass. The final production file-review Playwright cases pass 4/4 at 320px and 760px in light and dark themes, including accessibility, horizontal-overflow, absolute-path-leak and Undo-routing assertions. ChatGPT visually inspected the final flat-row results against `docs/designer.md`. Knip, the extension marker guard, Markdown-table check and `git diff --check` pass. These repairs are not yet committed, pushed, installed, or accepted in a live VS Code editor. Do not describe the Grok checkpoints themselves as corrected; the correction begins in this ChatGPT checkpoint.
+
+**Next:** commit/push/install the repair, verify installed identity, and append the delivery receipt here and in the progress log. Then continue the remaining 39-requirement and GPT-Live work. New Codex-derived implementation remains deferred.
+
 
 

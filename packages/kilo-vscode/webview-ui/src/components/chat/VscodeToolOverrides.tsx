@@ -10,6 +10,7 @@
 import { createEffect, createMemo, For, onCleanup, Show, type Component, type JSX } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { BasicTool } from "@kilocode/kilo-ui/basic-tool"
+import { Button } from "@kilocode/kilo-ui/button"
 import { ToolRegistry, type ToolProps } from "@kilocode/kilo-ui/message-part"
 import { useSession } from "../../context/session"
 import { useVSCode } from "../../context/vscode"
@@ -158,6 +159,38 @@ function BackgroundProcessTool(props: ToolProps) {
   )
 }
 
+function MultiEditTool(props: ToolProps) {
+  const files = createMemo(() => targets("multiedit", props.input, props.metadata))
+  const subtitle = createMemo(() => {
+    const count = files().length
+    return count ? `${count} ${count === 1 ? "file" : "files"}` : undefined
+  })
+
+  return (
+    <BasicTool
+      {...props}
+      icon="edit"
+      trigger={{ title: "Edit files", subtitle: subtitle(), args: [] }}
+      defaultOpen={expanded(props.status, props.defaultOpen)}
+      allowPendingToggle
+    >
+      <Show when={output(props.output)}>
+        {(value) => (
+          <div
+            data-component="tool-output"
+            data-variant="preview"
+            data-scrollable
+            tabIndex={0}
+            aria-label="Multi-edit result"
+          >
+            <pre data-slot="multiedit-output">{value()}</pre>
+          </div>
+        )}
+      </Show>
+    </BasicTool>
+  )
+}
+
 // raya_change - wrap file-mutating renderers with inline review chrome: a hued
 // block plus rounded Undo/Keep pills and an "N of M" navigator to step between
 // unaccepted edits, matching the Cursor-style review affordance the user asked
@@ -165,13 +198,7 @@ function BackgroundProcessTool(props: ToolProps) {
 // renames, so those changes stay reviewable when no editor tab is open. Both
 // file-wide actions use the chat coordinator's acknowledged backend request. The
 // chrome only appears once the edit has completed.
-function FileReview(props: {
-  file: string
-  kind: Kind
-  status: string
-  path?: boolean
-  children?: JSX.Element
-}) {
+function FileReview(props: { file: string; kind: Kind; status: string; path?: boolean; children?: JSX.Element }) {
   const session = useSession()
   const vscode = useVSCode()
   let ref: HTMLDivElement | undefined
@@ -222,9 +249,15 @@ function FileReview(props: {
       onNext={() => step(1)}
     >
       <Show when={props.path || props.kind === "deleted" || props.kind === "renamed"}>
-        <button type="button" data-slot="edit-review-file" aria-label={`Open ${props.file} in the editor`} onClick={open}>
+        <Button
+          variant="ghost"
+          size="small"
+          data-slot="edit-review-file"
+          aria-label={`Open ${props.file} in the editor`}
+          onClick={open}
+        >
           {props.file}
-        </button>
+        </Button>
       </Show>
       {props.children}
     </EditReviewChrome>
@@ -242,9 +275,17 @@ function reviewed(name: string, upstream: Component<ToolProps>): Component<ToolP
           fallback={
             <>
               <Dynamic component={upstream} {...props} />
-              <For each={items()}>
-                {(item) => <FileReview file={item.file} kind={item.kind} status={props.status ?? ""} path />}
-              </For>
+              <Show when={props.status === "completed"}>
+                <div data-component="edit-review-files" role="list" aria-label="Files to review">
+                  <For each={items()}>
+                    {(item) => (
+                      <div role="listitem">
+                        <FileReview file={item.file} kind={item.kind} status={props.status ?? ""} path />
+                      </div>
+                    )}
+                  </For>
+                </div>
+              </Show>
             </>
           }
         >
@@ -260,6 +301,8 @@ function reviewed(name: string, upstream: Component<ToolProps>): Component<ToolP
 }
 
 export function registerVscodeToolOverrides() {
+  if (!ToolRegistry.render("multiedit")) ToolRegistry.register({ name: "multiedit", render: MultiEditTool })
+
   for (const name of REVIEW_TOOLS) {
     if (registered.has(name)) continue
     const upstream = ToolRegistry.render(name)

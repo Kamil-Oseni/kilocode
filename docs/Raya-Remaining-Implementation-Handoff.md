@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-12):** Deleted-file virtual review buffers are installed as `3bac23d766`. Remaining: leftover 39-requirement work that is still implementable here, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-12):** grok Deleted-file virtual review buffers are installed as `3bac23d766`. Remaining: leftover 39-requirement work that is still implementable here, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-12. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** installed snapshot `3bac23d766` (`eden.raya@7.4.23-snapshot+3bac23d766.kamil-oseni.1789226754719`). Opening a deleted reviewed file loads a virtual editor buffer with Keep/Undo. Reload VS Code to pick up the snapshot.
+**Latest delivered product:** grok installed snapshot `3bac23d766` (`eden.raya@7.4.23-snapshot+3bac23d766.kamil-oseni.1789226754719`). Opening a deleted reviewed file loads a virtual editor buffer with Keep/Undo. Reload VS Code to pick up the snapshot.
 
 ## Scope and reading order
 
@@ -2001,7 +2001,7 @@ Remaining: leftover implementable 39-requirement work, paid GPT-Live/device acou
 
 Next executable step: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
 
-## 2026-09-12: Historical Undo hydration after the file leaves the diff
+## 2026-09-12: grok Historical Undo hydration after the file leaves the diff
 
 **States:** verified locally and committed as `87a7680782`. Successful Undo now stores submitted file fingerprints in workspace state. After the file leaves the live diff, a later review refresh includes those hashes so a fresh webview keeps the transcript card dismissed. If the same path returns in the live diff, the stored dismissal is dropped and that file reopens. Session deletion prunes the stored dismissals with the retry journal.
 
@@ -2024,7 +2024,7 @@ Remaining: leftover implementable 39-requirement work, paid GPT-Live/device acou
 
 Next executable step: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
 
-## 2026-09-12: Snapshot install `728fc46c90`
+## 2026-09-12: grok Snapshot install `728fc46c90`
 
 **States:** committed, pushed and installed as `728fc46c90`. Historical Undo hydration is in this snapshot. CLI binary was already present and was not rebuilt.
 
@@ -2034,7 +2034,7 @@ Remaining: leftover implementable 39-requirement work, paid GPT-Live/device acou
 
 Next executable step: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
 
-## 2026-09-12: Deleted and renamed files stay reviewable in chat
+## 2026-09-12: grok Deleted and renamed files stay reviewable in chat
 
 **States:** committed, pushed and installed as `712a1aa657`. Product commit is `3df03553e3`. Chat Keep/Undo now wraps `apply_patch` and `multiedit` as well as `edit` and `write`. Deleted and renamed files keep their own review chrome when no editor tab is open. In-editor summaries name Deleted file and Renamed file. The visual harness shows both labels.
 
@@ -2057,7 +2057,7 @@ Remaining: leftover implementable 39-requirement work, paid GPT-Live/device acou
 
 Next executable step: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
 
-## 2026-09-12: Snapshot install `712a1aa657`
+## 2026-09-12: grok Snapshot install `712a1aa657`
 
 **States:** committed, pushed and installed as `712a1aa657`. Deleted and renamed review chrome is in this snapshot. CLI binary was already present and was not rebuilt.
 
@@ -2067,7 +2067,7 @@ Remaining: leftover implementable 39-requirement work, paid GPT-Live/device acou
 
 Next executable step: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
 
-## 2026-09-12: Virtual editor buffers for deleted review files
+## 2026-09-12: grok Virtual editor buffers for deleted review files
 
 **States:** committed, pushed and installed as `3bac23d766`. Product commit is `8119256e53`. Opening a reviewed path that is gone on disk loads a `raya-review` buffer with the deleted text and the same Keep/Undo CodeLens. Chat path rows for deleted and renamed files open that buffer. The visual harness exposes those open controls.
 
@@ -2090,7 +2090,7 @@ Remaining: leftover implementable 39-requirement work, paid GPT-Live/device acou
 
 Next executable step: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
 
-## 2026-09-12: Snapshot install `3bac23d766`
+## 2026-09-12: grok Snapshot install `3bac23d766`
 
 **States:** committed, pushed and installed as `3bac23d766`. Deleted-file virtual review buffers are in this snapshot. CLI binary was already present and was not rebuilt.
 

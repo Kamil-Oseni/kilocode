@@ -39,6 +39,13 @@ import { RayaTaskInfo, type Identity as TaskIdentity } from "@/kilocode/task/inf
 import { RayaTaskDelegation } from "@/kilocode/task/delegation"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
+import {
+  RayaTaskOrganization,
+  type Archive as OrganizationArchive,
+  type Create as OrganizationCreate,
+  type Query as OrganizationQuery,
+  type Update as OrganizationUpdate,
+} from "@/kilocode/task/organization"
 import { templates as agentTemplates } from "@/kilocode/task/templates"
 import { RayaCheckpoint } from "@/kilocode/checkpoint" // raya_change - named workspace checkpoints
 import { RayaDesignSystem } from "@/kilocode/design-system" // raya_change - owner design-system lock
@@ -101,6 +108,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       halt: (sessionID) => runState.cancel(sessionID),
     })
     const inbox = RayaTaskInbox.make(database)
+    const organizations = RayaTaskOrganization.make(database, runner.tasks, storage)
     const info = RayaTaskInfo.make(database)
     const errands = RayaTaskDelegation.make(database)
     const checkpoints = RayaCheckpoint.make({ storage, snapshots }) // raya_change - named workspace checkpoints
@@ -587,6 +595,59 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     const agentTemplateList = Effect.fn("KilocodeHttpApi.agentTemplates")(function* () {
       return agentTemplates
     })
+    const organizationList = Effect.fn("KilocodeHttpApi.organizationList")(function* (ctx: {
+      query: OrganizationQuery
+    }) {
+      return yield* organizations
+        .list(ctx.query)
+        .pipe(
+          Effect.catchTag("RayaTaskOrganization.Invalid", (err) =>
+            Effect.fail(new InvalidRequestError({ message: err.message })),
+          ),
+        )
+    })
+    const organizationCreate = Effect.fn("KilocodeHttpApi.organizationCreate")(function* (ctx: {
+      payload: OrganizationCreate
+    }) {
+      return yield* organizations
+        .create(ctx.payload)
+        .pipe(
+          Effect.catchTag("RayaTaskOrganization.Invalid", (err) =>
+            Effect.fail(new InvalidRequestError({ message: err.message })),
+          ),
+        )
+    })
+    const organizationGet = Effect.fn("KilocodeHttpApi.organizationGet")(function* (ctx: {
+      params: { organizationID: string }
+    }) {
+      return yield* organizations
+        .get(ctx.params.organizationID)
+        .pipe(Effect.catchTag("RayaTaskOrganization.NotFound", () => Effect.fail(new HttpApiError.NotFound({}))))
+    })
+    const organizationUpdate = Effect.fn("KilocodeHttpApi.organizationUpdate")(function* (ctx: {
+      params: { organizationID: string }
+      payload: OrganizationUpdate
+    }) {
+      return yield* organizations.update(ctx.params.organizationID, ctx.payload).pipe(
+        Effect.catchTag("RayaTaskOrganization.Invalid", (err) =>
+          Effect.fail(new InvalidRequestError({ message: err.message })),
+        ),
+        Effect.catchTag("RayaTaskOrganization.NotFound", () => Effect.fail(new HttpApiError.NotFound({}))),
+        Effect.catchTag("RayaTaskOrganization.Conflict", () => Effect.fail(new HttpApiError.Conflict({}))),
+      )
+    })
+    const organizationArchive = Effect.fn("KilocodeHttpApi.organizationArchive")(function* (ctx: {
+      params: { organizationID: string }
+      payload: OrganizationArchive
+    }) {
+      return yield* organizations.archive(ctx.params.organizationID, ctx.payload).pipe(
+        Effect.catchTag("RayaTaskOrganization.Invalid", (err) =>
+          Effect.fail(new InvalidRequestError({ message: err.message })),
+        ),
+        Effect.catchTag("RayaTaskOrganization.NotFound", () => Effect.fail(new HttpApiError.NotFound({}))),
+        Effect.catchTag("RayaTaskOrganization.Conflict", () => Effect.fail(new HttpApiError.Conflict({}))),
+      )
+    })
     const agentEvent = Effect.fn("KilocodeHttpApi.agentEvent")(function* (ctx: {
       payload: typeof TaskEventPayload.Type
     }) {
@@ -944,6 +1005,11 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .handle("agentRuns", agentRuns)
         .handle("agentSnapshot", agentSnapshot)
         .handle("agentTemplates", agentTemplateList)
+        .handle("organizationList", organizationList)
+        .handle("organizationCreate", organizationCreate)
+        .handle("organizationGet", organizationGet)
+        .handle("organizationUpdate", organizationUpdate)
+        .handle("organizationArchive", organizationArchive)
         .handle("agentEvent", agentEvent)
         .handle("agentInbox", agentInbox)
         .handle("agentInboxPage", agentInboxPage)

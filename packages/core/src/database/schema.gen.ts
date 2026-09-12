@@ -147,6 +147,46 @@ export default {
       // kilocode_change end
       // kilocode_change start
       yield* tx.run(`
+        CREATE TABLE \`raya_routine_organization_member\` (
+          \`organization_id\` text NOT NULL,
+          \`agent_id\` text NOT NULL,
+          \`role\` text NOT NULL,
+          \`position\` integer NOT NULL,
+          \`supervisor_id\` text,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL,
+          CONSTRAINT \`raya_routine_organization_member_pk\` PRIMARY KEY(\`organization_id\`, \`agent_id\`),
+          CONSTRAINT \`fk_raya_routine_organization_member_organization_id_raya_routine_organization_id_fk\` FOREIGN KEY (\`organization_id\`) REFERENCES \`raya_routine_organization\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(`
+        CREATE TABLE \`raya_routine_organization_revision\` (
+          \`organization_id\` text NOT NULL,
+          \`revision\` integer NOT NULL,
+          \`definition\` text NOT NULL,
+          \`time_created\` integer NOT NULL,
+          CONSTRAINT \`raya_routine_organization_revision_pk\` PRIMARY KEY(\`organization_id\`, \`revision\`),
+          CONSTRAINT \`fk_raya_routine_organization_revision_organization_id_raya_routine_organization_id_fk\` FOREIGN KEY (\`organization_id\`) REFERENCES \`raya_routine_organization\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(`
+        CREATE TABLE \`raya_routine_organization\` (
+          \`id\` text PRIMARY KEY,
+          \`name\` text NOT NULL,
+          \`purpose\` text,
+          \`revision\` integer NOT NULL,
+          \`archived_at\` integer,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL
+        );
+      `)
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(`
         CREATE TABLE \`raya_voice_binding\` (
           \`id\` text PRIMARY KEY,
           \`session_id\` text NOT NULL,
@@ -417,6 +457,26 @@ export default {
       // kilocode_change start
       yield* tx.run(
         `CREATE INDEX \`raya_routine_occurrence_lease\` ON \`raya_routine_occurrence\` (\`state\`,\`lease_until\`);`,
+      )
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(
+        `CREATE UNIQUE INDEX \`raya_routine_organization_member_position\` ON \`raya_routine_organization_member\` (\`organization_id\`,\`position\`);`,
+      )
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(
+        `CREATE INDEX \`raya_routine_organization_member_agent\` ON \`raya_routine_organization_member\` (\`agent_id\`,\`organization_id\`);`,
+      )
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(
+        `CREATE INDEX \`raya_routine_organization_member_supervisor\` ON \`raya_routine_organization_member\` (\`organization_id\`,\`supervisor_id\`);`,
+      )
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(
+        `CREATE INDEX \`raya_routine_organization_lifecycle\` ON \`raya_routine_organization\` (\`archived_at\`,\`time_updated\`,\`id\`);`,
       )
       // kilocode_change end
       // kilocode_change start

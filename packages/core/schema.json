@@ -1,9 +1,9 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "a0a21b54-d5a9-491d-90c5-f8fd2bb95454",
+  "id": "dac6c5b7-5e01-416b-b668-e2c58036cbc6",
   "prevIds": [
-    "39062738-382b-4893-97c2-e22a9f109c9b"
+    "a0a21b54-d5a9-491d-90c5-f8fd2bb95454"
   ],
   "ddl": [
     {
@@ -44,6 +44,18 @@
     },
     {
       "name": "raya_routine_occurrence",
+      "entityType": "tables"
+    },
+    {
+      "name": "raya_routine_organization_member",
+      "entityType": "tables"
+    },
+    {
+      "name": "raya_routine_organization_revision",
+      "entityType": "tables"
+    },
+    {
+      "name": "raya_routine_organization",
       "entityType": "tables"
     },
     {
@@ -917,6 +929,186 @@
       "name": "time_updated",
       "entityType": "columns",
       "table": "raya_routine_occurrence"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "table": "raya_routine_organization_member"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "agent_id",
+      "entityType": "columns",
+      "table": "raya_routine_organization_member"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "role",
+      "entityType": "columns",
+      "table": "raya_routine_organization_member"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "position",
+      "entityType": "columns",
+      "table": "raya_routine_organization_member"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "supervisor_id",
+      "entityType": "columns",
+      "table": "raya_routine_organization_member"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_created",
+      "entityType": "columns",
+      "table": "raya_routine_organization_member"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_updated",
+      "entityType": "columns",
+      "table": "raya_routine_organization_member"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "table": "raya_routine_organization_revision"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "revision",
+      "entityType": "columns",
+      "table": "raya_routine_organization_revision"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "definition",
+      "entityType": "columns",
+      "table": "raya_routine_organization_revision"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_created",
+      "entityType": "columns",
+      "table": "raya_routine_organization_revision"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "raya_routine_organization"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "raya_routine_organization"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "purpose",
+      "entityType": "columns",
+      "table": "raya_routine_organization"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "revision",
+      "entityType": "columns",
+      "table": "raya_routine_organization"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "archived_at",
+      "entityType": "columns",
+      "table": "raya_routine_organization"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_created",
+      "entityType": "columns",
+      "table": "raya_routine_organization"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_updated",
+      "entityType": "columns",
+      "table": "raya_routine_organization"
     },
     {
       "type": "text",
@@ -2310,6 +2502,36 @@
     },
     {
       "columns": [
+        "organization_id"
+      ],
+      "tableTo": "raya_routine_organization",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_raya_routine_organization_member_organization_id_raya_routine_organization_id_fk",
+      "entityType": "fks",
+      "table": "raya_routine_organization_member"
+    },
+    {
+      "columns": [
+        "organization_id"
+      ],
+      "tableTo": "raya_routine_organization",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_raya_routine_organization_revision_organization_id_raya_routine_organization_id_fk",
+      "entityType": "fks",
+      "table": "raya_routine_organization_revision"
+    },
+    {
+      "columns": [
         "session_id"
       ],
       "tableTo": "session",
@@ -2515,6 +2737,26 @@
     },
     {
       "columns": [
+        "organization_id",
+        "agent_id"
+      ],
+      "nameExplicit": false,
+      "name": "raya_routine_organization_member_pk",
+      "entityType": "pks",
+      "table": "raya_routine_organization_member"
+    },
+    {
+      "columns": [
+        "organization_id",
+        "revision"
+      ],
+      "nameExplicit": false,
+      "name": "raya_routine_organization_revision_pk",
+      "entityType": "pks",
+      "table": "raya_routine_organization_revision"
+    },
+    {
+      "columns": [
         "email",
         "url"
       ],
@@ -2622,6 +2864,15 @@
       "nameExplicit": false,
       "name": "raya_routine_occurrence_pk",
       "table": "raya_routine_occurrence",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "raya_routine_organization_pk",
+      "table": "raya_routine_organization",
       "entityType": "pks"
     },
     {
@@ -2968,6 +3219,82 @@
       "name": "raya_routine_occurrence_lease",
       "entityType": "indexes",
       "table": "raya_routine_occurrence"
+    },
+    {
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false
+        },
+        {
+          "value": "position",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "raya_routine_organization_member_position",
+      "entityType": "indexes",
+      "table": "raya_routine_organization_member"
+    },
+    {
+      "columns": [
+        {
+          "value": "agent_id",
+          "isExpression": false
+        },
+        {
+          "value": "organization_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "raya_routine_organization_member_agent",
+      "entityType": "indexes",
+      "table": "raya_routine_organization_member"
+    },
+    {
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false
+        },
+        {
+          "value": "supervisor_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "raya_routine_organization_member_supervisor",
+      "entityType": "indexes",
+      "table": "raya_routine_organization_member"
+    },
+    {
+      "columns": [
+        {
+          "value": "archived_at",
+          "isExpression": false
+        },
+        {
+          "value": "time_updated",
+          "isExpression": false
+        },
+        {
+          "value": "id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "raya_routine_organization_lifecycle",
+      "entityType": "indexes",
+      "table": "raya_routine_organization"
     },
     {
       "columns": [

@@ -8,6 +8,7 @@ import { migrations } from "@opencode-ai/core/database/migration.gen"
 import migration from "@opencode-ai/core/database/migration/20260908092112_kilocode-routine-occurrence"
 import archive from "@opencode-ai/core/database/migration/20260908124554_kilocode-routine-archive"
 import attachments from "@opencode-ai/core/database/migration/20260912150000_kilocode-routine-user-attachments"
+import organization from "@opencode-ai/core/database/migration/20260912210000_kilocode-routine-organization"
 import type { SqlClient } from "effect/unstable/sql/SqlClient"
 
 const run = <A, E>(effect: Effect.Effect<A, E, SqlClient>) =>
@@ -118,14 +119,14 @@ test("attachment schema upgrade preserves drafts and marks legacy attached user 
       )
       yield* DatabaseMigration.applyOnly(db, [attachments])
       expect(
-        yield* db.get(
-          sql`SELECT draft, draft_attachments FROM raya_routine_conversation WHERE agent_id = 'books'`,
-        ),
+        yield* db.get(sql`SELECT draft, draft_attachments FROM raya_routine_conversation WHERE agent_id = 'books'`),
       ).toEqual({ draft: "keep me", draft_attachments: null })
       expect(
         yield* db.get(sql`SELECT attachments, delivery_id, delivered_at FROM raya_routine_message WHERE id = 'legacy'`),
       ).toEqual({ attachments: null, delivery_id: null, delivered_at: 12 })
-      expect(yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'raya_routine_attachment'`)).toEqual({
+      expect(
+        yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'raya_routine_attachment'`),
+      ).toEqual({
         name: "raya_routine_attachment",
       })
       yield* DatabaseMigration.applyOnly(db, [attachments])
@@ -150,6 +151,57 @@ test("a conflicting attachment table rolls back its added message and conversati
       expect(message.some((column) => column.name === "attachments")).toBe(false)
       expect(message.some((column) => column.name === "delivery_id")).toBe(false)
       expect(yield* db.get(sql`SELECT id FROM migration WHERE id = ${attachments.id}`)).toBeUndefined()
+    }),
+  )
+})
+
+test("organization migration creates durable graph and immutable revision tables idempotently", async () => {
+  await run(
+    Effect.gen(function* () {
+      const db = yield* EffectDrizzleSqlite.makeWithDefaults()
+      const index = migrations.findIndex((item) => item.id === organization.id)
+      expect(index).toBeGreaterThan(0)
+      yield* DatabaseMigration.applyOnly(db, migrations.slice(0, index))
+      yield* DatabaseMigration.applyOnly(db, [organization])
+      yield* db.run(
+        sql`INSERT INTO raya_routine_organization (id, name, revision, time_created, time_updated) VALUES ('org_test', 'Test', 1, 1, 1)`,
+      )
+      yield* db.run(
+        sql`INSERT INTO raya_routine_organization_member (organization_id, agent_id, role, position, time_created, time_updated) VALUES ('org_test', 'worker', 'Owner', 0, 1, 1)`,
+      )
+      yield* db.run(
+        sql`INSERT INTO raya_routine_organization_revision (organization_id, revision, definition, time_created) VALUES ('org_test', 1, '{"version":1}', 1)`,
+      )
+      yield* DatabaseMigration.applyOnly(db, [organization])
+      expect(yield* db.get(sql`SELECT role, position FROM raya_routine_organization_member`)).toEqual({
+        role: "Owner",
+        position: 0,
+      })
+      expect(yield* db.get(sql`SELECT definition FROM raya_routine_organization_revision`)).toEqual({
+        definition: '{"version":1}',
+      })
+      expect(yield* db.get(sql`SELECT count(*) AS count FROM migration WHERE id = ${organization.id}`)).toEqual({
+        count: 1,
+      })
+    }),
+  )
+})
+
+test("a conflicting organization member table rolls back the organization migration", async () => {
+  await run(
+    Effect.gen(function* () {
+      const db = yield* EffectDrizzleSqlite.makeWithDefaults()
+      yield* db.run(sql`CREATE TABLE raya_routine_organization_member (id TEXT PRIMARY KEY)`)
+      expect(Exit.isFailure(yield* DatabaseMigration.applyOnly(db, [organization]).pipe(Effect.exit))).toBe(true)
+      expect(
+        yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'raya_routine_organization'`),
+      ).toBeUndefined()
+      expect(
+        yield* db.get(
+          sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'raya_routine_organization_revision'`,
+        ),
+      ).toBeUndefined()
+      expect(yield* db.get(sql`SELECT id FROM migration WHERE id = ${organization.id}`)).toBeUndefined()
     }),
   )
 })

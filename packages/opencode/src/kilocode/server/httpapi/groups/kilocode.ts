@@ -47,6 +47,14 @@ import {
   Request as DelegateAsk,
 } from "@/kilocode/task/delegation"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
+import {
+  Archive as OrganizationArchive,
+  Create as OrganizationCreate,
+  Organization,
+  Page as OrganizationPage,
+  Query as OrganizationQuery,
+  Update as OrganizationUpdate,
+} from "@/kilocode/task/organization"
 import { Template as AgentTemplate } from "@/kilocode/task/templates"
 import { RayaCheckpoint } from "@/kilocode/checkpoint" // raya_change - named workspace checkpoints
 import { RayaDesignSystem } from "@/kilocode/design-system" // raya_change - owner design-system lock
@@ -198,6 +206,8 @@ export const KilocodePaths = {
   agentInboxRead: `${root}/agent/:agentID/inbox/read`,
   agentInboxDraft: `${root}/agent/:agentID/inbox/draft`,
   agentInboxAttachment: `${root}/agent/:agentID/inbox/attachment/:attachmentID`,
+  organizations: `${root}/organization`,
+  organizationItem: `${root}/organization/:organizationID`,
   agentDelegate: `${root}/agent/:agentID/delegate`,
   agentDelegateItem: `${root}/agent/:agentID/delegate/:id`,
   agentDelegateChain: `${root}/agent/:agentID/delegate/:id/chain`,
@@ -776,6 +786,67 @@ export const KilocodeApi = HttpApi.make("kilocode")
             identifier: "kilocode.routine.templates",
             summary: "List agent templates",
             description: "Starter roles for assigning a useful agent in two clicks.",
+          }),
+        ),
+        HttpApiEndpoint.get("organizationList", KilocodePaths.organizations, {
+          query: Schema.Struct({ ...WorkspaceRoutingQueryFields, ...OrganizationQuery.fields }),
+          success: described(OrganizationPage, "Routine organizations"),
+          error: InvalidRequestError,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.organization.list",
+            summary: "List routine organizations",
+            description: "Page active or archived organizations with their ordered worker hierarchy.",
+          }),
+        ),
+        HttpApiEndpoint.post("organizationCreate", KilocodePaths.organizations, {
+          query: WorkspaceRoutingQuery,
+          payload: OrganizationCreate,
+          success: described(Organization, "Created routine organization"),
+          error: InvalidRequestError,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.organization.create",
+            summary: "Create a routine organization",
+            description: "Create a versioned organization graph from existing persistent routine workers.",
+          }),
+        ),
+        HttpApiEndpoint.get("organizationGet", KilocodePaths.organizationItem, {
+          params: { organizationID: Organization.fields.id },
+          query: WorkspaceRoutingQuery,
+          success: described(Organization, "Routine organization"),
+          error: HttpApiError.NotFound,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.organization.get",
+            summary: "Get a routine organization",
+          }),
+        ),
+        HttpApiEndpoint.patch("organizationUpdate", KilocodePaths.organizationItem, {
+          params: { organizationID: Organization.fields.id },
+          query: WorkspaceRoutingQuery,
+          payload: OrganizationUpdate,
+          success: described(Organization, "Updated routine organization"),
+          error: [InvalidRequestError, HttpApiError.NotFound, HttpApiError.Conflict],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.organization.update",
+            summary: "Update a routine organization",
+            description: "Replace organization fields or its ordered graph using an optimistic revision.",
+          }),
+        ),
+        HttpApiEndpoint.delete("organizationArchive", KilocodePaths.organizationItem, {
+          params: { organizationID: Organization.fields.id },
+          query: WorkspaceRoutingQuery,
+          payload: OrganizationArchive,
+          success: described(Organization, "Archived routine organization"),
+          error: [InvalidRequestError, HttpApiError.NotFound, HttpApiError.Conflict],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.organization.archive",
+            summary: "Archive a routine organization",
+            description:
+              "Archive the organization while retaining its graph, revision history, workers, and conversations.",
           }),
         ),
         HttpApiEndpoint.post("agentEvent", KilocodePaths.agentEvent, {

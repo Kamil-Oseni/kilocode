@@ -125,3 +125,51 @@ export const RayaRoutineDelegationTable = sqliteTable(
     index("raya_routine_delegation_run").on(table.parent_run_id),
   ],
 )
+
+export const RayaRoutineOrganizationTable = sqliteTable(
+  "raya_routine_organization",
+  {
+    id: text().primaryKey(),
+    name: text().notNull(),
+    purpose: text(),
+    revision: integer().notNull(),
+    archived_at: integer(),
+    time_created: integer().notNull(),
+    time_updated: integer().notNull(),
+  },
+  (table) => [index("raya_routine_organization_lifecycle").on(table.archived_at, table.time_updated, table.id)],
+)
+
+export const RayaRoutineOrganizationMemberTable = sqliteTable(
+  "raya_routine_organization_member",
+  {
+    organization_id: text()
+      .notNull()
+      .references(() => RayaRoutineOrganizationTable.id, { onDelete: "cascade" }),
+    agent_id: text().notNull(),
+    role: text().notNull(),
+    position: integer().notNull(),
+    supervisor_id: text(),
+    time_created: integer().notNull(),
+    time_updated: integer().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.organization_id, table.agent_id] }),
+    uniqueIndex("raya_routine_organization_member_position").on(table.organization_id, table.position),
+    index("raya_routine_organization_member_agent").on(table.agent_id, table.organization_id),
+    index("raya_routine_organization_member_supervisor").on(table.organization_id, table.supervisor_id),
+  ],
+)
+
+export const RayaRoutineOrganizationRevisionTable = sqliteTable(
+  "raya_routine_organization_revision",
+  {
+    organization_id: text()
+      .notNull()
+      .references(() => RayaRoutineOrganizationTable.id, { onDelete: "cascade" }),
+    revision: integer().notNull(),
+    definition: text().notNull(),
+    time_created: integer().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.organization_id, table.revision] })],
+)

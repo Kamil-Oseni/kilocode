@@ -289,6 +289,16 @@ import type {
   KilocodeRoutineInboxSendResponses,
   KilocodeRoutineListErrors,
   KilocodeRoutineListResponses,
+  KilocodeRoutineOrganizationArchiveErrors,
+  KilocodeRoutineOrganizationArchiveResponses,
+  KilocodeRoutineOrganizationCreateErrors,
+  KilocodeRoutineOrganizationCreateResponses,
+  KilocodeRoutineOrganizationGetErrors,
+  KilocodeRoutineOrganizationGetResponses,
+  KilocodeRoutineOrganizationListErrors,
+  KilocodeRoutineOrganizationListResponses,
+  KilocodeRoutineOrganizationUpdateErrors,
+  KilocodeRoutineOrganizationUpdateResponses,
   KilocodeRoutineRemoveErrors,
   KilocodeRoutineRemoveResponses,
   KilocodeRoutineRunErrors,
@@ -8895,6 +8905,227 @@ export class Checkpoint extends HeyApiClient {
   }
 }
 
+export class Organization2 extends HeyApiClient {
+  /**
+   * List routine organizations
+   *
+   * Page active or archived organizations with their ordered worker hierarchy.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      archived?: "true" | "false"
+      cursor?: string
+      limit?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "archived" },
+            { in: "query", key: "cursor" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      KilocodeRoutineOrganizationListResponses,
+      KilocodeRoutineOrganizationListErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/organization",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Create a routine organization
+   *
+   * Create a versioned organization graph from existing persistent routine workers.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      name?: string
+      purpose?: string
+      members?: Array<{
+        agentID: string
+        role: string
+        supervisorID?: string
+      }>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "name" },
+            { in: "body", key: "purpose" },
+            { in: "body", key: "members" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeRoutineOrganizationCreateResponses,
+      KilocodeRoutineOrganizationCreateErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/organization",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Archive a routine organization
+   *
+   * Archive the organization while retaining its graph, revision history, workers, and conversations.
+   */
+  public archive<ThrowOnError extends boolean = false>(
+    parameters: {
+      organizationID: string
+      directory?: string
+      workspace?: string
+      expectedRevision?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "organizationID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "expectedRevision" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      KilocodeRoutineOrganizationArchiveResponses,
+      KilocodeRoutineOrganizationArchiveErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/organization/{organizationID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Get a routine organization
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      organizationID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "organizationID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      KilocodeRoutineOrganizationGetResponses,
+      KilocodeRoutineOrganizationGetErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/organization/{organizationID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Update a routine organization
+   *
+   * Replace organization fields or its ordered graph using an optimistic revision.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      organizationID: string
+      directory?: string
+      workspace?: string
+      expectedRevision?: number
+      name?: string
+      purpose?: string
+      members?: Array<{
+        agentID: string
+        role: string
+        supervisorID?: string
+      }>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "organizationID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "expectedRevision" },
+            { in: "body", key: "name" },
+            { in: "body", key: "purpose" },
+            { in: "body", key: "members" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<
+      KilocodeRoutineOrganizationUpdateResponses,
+      KilocodeRoutineOrganizationUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/organization/{organizationID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Inbox extends HeyApiClient {
   /**
    * List messages in a routine conversation
@@ -9958,6 +10189,11 @@ export class Routine extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  private _organization?: Organization2
+  get organization(): Organization2 {
+    return (this._organization ??= new Organization2({ client: this.client }))
   }
 
   private _inbox?: Inbox

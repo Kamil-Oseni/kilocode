@@ -22190,6 +22190,287 @@ export type KilocodeRoutineTemplatesResponses = {
 export type KilocodeRoutineTemplatesResponse =
   KilocodeRoutineTemplatesResponses[keyof KilocodeRoutineTemplatesResponses]
 
+export type KilocodeRoutineOrganizationListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    archived?: "true" | "false"
+    cursor?: string
+    limit?: string
+  }
+  url: "/kilocode/organization"
+}
+
+export type KilocodeRoutineOrganizationListErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+}
+
+export type KilocodeRoutineOrganizationListError =
+  KilocodeRoutineOrganizationListErrors[keyof KilocodeRoutineOrganizationListErrors]
+
+export type KilocodeRoutineOrganizationListResponses = {
+  /**
+   * Routine organizations
+   */
+  200: {
+    items: Array<{
+      version: 1
+      id: string
+      name: string
+      purpose?: string
+      revision: number
+      archived: boolean
+      archivedAt?: number
+      createdAt: number
+      updatedAt: number
+      members: Array<{
+        agentID: string
+        role: string
+        supervisorID?: string
+        position: number
+      }>
+    }>
+    next?: string
+  }
+}
+
+export type KilocodeRoutineOrganizationListResponse =
+  KilocodeRoutineOrganizationListResponses[keyof KilocodeRoutineOrganizationListResponses]
+
+export type KilocodeRoutineOrganizationCreateData = {
+  body?: {
+    name: string
+    purpose?: string
+    members: Array<{
+      agentID: string
+      role: string
+      supervisorID?: string
+    }>
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/organization"
+}
+
+export type KilocodeRoutineOrganizationCreateErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+}
+
+export type KilocodeRoutineOrganizationCreateError =
+  KilocodeRoutineOrganizationCreateErrors[keyof KilocodeRoutineOrganizationCreateErrors]
+
+export type KilocodeRoutineOrganizationCreateResponses = {
+  /**
+   * Created routine organization
+   */
+  200: {
+    version: 1
+    id: string
+    name: string
+    purpose?: string
+    revision: number
+    archived: boolean
+    archivedAt?: number
+    createdAt: number
+    updatedAt: number
+    members: Array<{
+      agentID: string
+      role: string
+      supervisorID?: string
+      position: number
+    }>
+  }
+}
+
+export type KilocodeRoutineOrganizationCreateResponse =
+  KilocodeRoutineOrganizationCreateResponses[keyof KilocodeRoutineOrganizationCreateResponses]
+
+export type KilocodeRoutineOrganizationArchiveData = {
+  body?: {
+    expectedRevision: number
+  }
+  path: {
+    organizationID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/organization/{organizationID}"
+}
+
+export type KilocodeRoutineOrganizationArchiveErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeRoutineOrganizationArchiveError =
+  KilocodeRoutineOrganizationArchiveErrors[keyof KilocodeRoutineOrganizationArchiveErrors]
+
+export type KilocodeRoutineOrganizationArchiveResponses = {
+  /**
+   * Archived routine organization
+   */
+  200: {
+    version: 1
+    id: string
+    name: string
+    purpose?: string
+    revision: number
+    archived: boolean
+    archivedAt?: number
+    createdAt: number
+    updatedAt: number
+    members: Array<{
+      agentID: string
+      role: string
+      supervisorID?: string
+      position: number
+    }>
+  }
+}
+
+export type KilocodeRoutineOrganizationArchiveResponse =
+  KilocodeRoutineOrganizationArchiveResponses[keyof KilocodeRoutineOrganizationArchiveResponses]
+
+export type KilocodeRoutineOrganizationGetData = {
+  body?: never
+  path: {
+    organizationID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/organization/{organizationID}"
+}
+
+export type KilocodeRoutineOrganizationGetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeRoutineOrganizationGetError =
+  KilocodeRoutineOrganizationGetErrors[keyof KilocodeRoutineOrganizationGetErrors]
+
+export type KilocodeRoutineOrganizationGetResponses = {
+  /**
+   * Routine organization
+   */
+  200: {
+    version: 1
+    id: string
+    name: string
+    purpose?: string
+    revision: number
+    archived: boolean
+    archivedAt?: number
+    createdAt: number
+    updatedAt: number
+    members: Array<{
+      agentID: string
+      role: string
+      supervisorID?: string
+      position: number
+    }>
+  }
+}
+
+export type KilocodeRoutineOrganizationGetResponse =
+  KilocodeRoutineOrganizationGetResponses[keyof KilocodeRoutineOrganizationGetResponses]
+
+export type KilocodeRoutineOrganizationUpdateData = {
+  body?: {
+    expectedRevision: number
+    name?: string
+    purpose?: string
+    members?: Array<{
+      agentID: string
+      role: string
+      supervisorID?: string
+    }>
+  }
+  path: {
+    organizationID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/organization/{organizationID}"
+}
+
+export type KilocodeRoutineOrganizationUpdateErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeRoutineOrganizationUpdateError =
+  KilocodeRoutineOrganizationUpdateErrors[keyof KilocodeRoutineOrganizationUpdateErrors]
+
+export type KilocodeRoutineOrganizationUpdateResponses = {
+  /**
+   * Updated routine organization
+   */
+  200: {
+    version: 1
+    id: string
+    name: string
+    purpose?: string
+    revision: number
+    archived: boolean
+    archivedAt?: number
+    createdAt: number
+    updatedAt: number
+    members: Array<{
+      agentID: string
+      role: string
+      supervisorID?: string
+      position: number
+    }>
+  }
+}
+
+export type KilocodeRoutineOrganizationUpdateResponse =
+  KilocodeRoutineOrganizationUpdateResponses[keyof KilocodeRoutineOrganizationUpdateResponses]
+
 export type KilocodeRoutineEventData = {
   body?: {
     source: string

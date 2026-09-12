@@ -896,6 +896,13 @@ export namespace RayaTask {
           return yield* new GuardError({
             message: "This routine has outstanding delegated requests. Stop them before removing it.",
           })
+        const { RayaTaskOrganization } = yield* Effect.promise(() => import("./organization"))
+        const organization = RayaTaskOrganization.make(deps.database, { get }, deps.storage)
+        if (yield* organization.hasActive(id))
+          return yield* new GuardError({
+            message:
+              "This routine belongs to an active organization. Archive or update that organization before removing it.",
+          })
       }
       return { found, remaining: items.filter((item) => item.id !== id) }
     })

@@ -2,6 +2,26 @@
 
 Source of scope: [Comprehensive audit](Raya-Comprehensive-Audit.md). All sections and all ten overhauls remain in scope. Work proceeds in dependency order, with broader validation batched at checkpoints. A completed subtask does not mean the overall overhaul is complete.
 
+## ChatGPT 2026-09-12 17:33 America/Toronto — why the ledger still reads 1 verified + 38 in progress
+
+The 39 rows are large parent outcomes, not individual tickets. A parent remains **In progress** when even one required acceptance layer is still open. This avoids reporting a feature as finished after its unit tests pass while its packaged product, restart behavior, real device/provider path, accessibility, recovery, or release proof is still missing. Substantial parts of the 38 open parents are already implemented; the status reflects their remaining end-to-end evidence.
+
+The largest recurring blockers are real-device GPT-Live and VS Code microphone consent, packaged VS Code interaction, non-Windows release evidence, moderated usability, held-out routing evaluations, cross-process crash/recovery, broader assistive-technology coverage, and external provider/platform checks. Work will now close dependency chains in order—persistence, API, SDK, host, UI, lifecycle verification, packaged installation—before opening another broad slice. Parent rows will move to **Verified** only when their stated outcome and required acceptance are complete.
+
+## ChatGPT 2026-09-12 17:33 America/Toronto — Routine organization foundation
+
+**Status: backend, persistence, HTTP and generated SDK implemented and verified locally; extension organization navigation, chat-created provisioning, organization-aware delegation, commit/push and installation remain next.**
+
+Raya now has a first-class persisted organization entity instead of deriving companies from worker names or conversations. Each organization has a stable `org_*` identity, schema version, name, optional purpose, ordered membership graph, role labels, supervisor links, optimistic revision and archive lifecycle. Every create, update and archive writes an immutable definition snapshot. Archived organizations retain their graph, worker references and existing worker conversations.
+
+Validation rejects duplicate members, missing workers, self-supervision, supervisors outside the organization and cycles. Organization hierarchy is descriptive and does not expand worker access, tools, filesystem scope, schedule, capabilities or delegation authority. Active membership blocks worker deletion. Organization writes and worker removal use the same durable task mutation gate, and a deterministic concurrent test proves a worker cannot disappear between membership validation and persistence. Workers may belong to multiple organizations; bounded membership predicates support later delegation checks without selecting an arbitrary organization.
+
+The bounded HTTP surface is `GET/POST /kilocode/organization` and `GET/PATCH/DELETE /kilocode/organization/:organizationID`. List defaults to active organizations, caps pages at 50 and uses an opaque cursor. Update and archive require `expectedRevision`; stale changes return a conflict. The OpenAPI document and JavaScript SDK were regenerated after the contract stabilized.
+
+Changed product paths: `.changeset/raya-routine-organizations.md`; core Routine SQL schema, generated schema manifest, migration registry, migration `20260912210000_kilocode-routine-organization` and migration tests; OpenCode organization service, worker-removal guard, Kilo HTTP group/handler and focused service/HTTP tests; regenerated `packages/sdk/openapi.json` and JavaScript SDK types/client.
+
+Evidence: organization service and real HTTP tests pass 4/4 with 55 assertions; the full focused Routine migration suite passes 8/8 with 35 assertions; core, OpenCode and SDK typechecks pass; Markdown-table and diff-integrity checks pass. SDK generation initially encountered a transient Windows write error while formatting one generated file; an unchanged rerun completed successfully and left only the intended generated API changes.
+
 ## Current work
 
 Latest verified installed product checkpoint: `57fd94ecd89fd8b138d8ac45666b55ba0c5e43d1`, pushed to `origin/main` and installed as `eden.raya@7.4.23-snapshot+57fd94ecd8.kamil-oseni.1789245828863`. Routine worker DMs now persist attachment drafts, send file-bearing follow-ups, expose attachment history and Chat Info inventory, and recover admitted delivery after restart without replaying duplicate HTTP sends. Organizations, role/delegation graphs, main-chat creation, inline media thumbnails, full live rebuild-survival acceptance, Live voice/device acceptance, the Go companion rebuild and the remaining 39-requirement work remain open.

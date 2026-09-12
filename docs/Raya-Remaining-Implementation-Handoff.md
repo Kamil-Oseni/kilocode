@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-12):** Deleted-file virtual review buffers are committed as `8119256e53` and unshipped. Remaining: leftover 39-requirement work that is still implementable here, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-12):** Deleted-file virtual review buffers are installed as `3bac23d766`. Remaining: leftover 39-requirement work that is still implementable here, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-12. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** installed snapshot `712a1aa657` (`eden.raya@7.4.23-snapshot+712a1aa657.kamil-oseni.1789225171178`). Chat Keep/Undo wraps deleted and renamed files from `apply_patch` and `multiedit`. Reload VS Code to pick up the snapshot.
+**Latest delivered product:** installed snapshot `3bac23d766` (`eden.raya@7.4.23-snapshot+3bac23d766.kamil-oseni.1789226754719`). Opening a deleted reviewed file loads a virtual editor buffer with Keep/Undo. Reload VS Code to pick up the snapshot.
 
 ## Scope and reading order
 
@@ -2069,7 +2069,7 @@ Next executable step: leftover implementable 39-requirement work, or a real-acco
 
 ## 2026-09-12: Virtual editor buffers for deleted review files
 
-**States:** verified locally and committed as `8119256e53`. Opening a reviewed path that is gone on disk loads a `raya-review` buffer with the deleted text and the same Keep/Undo CodeLens. Chat path rows for deleted and renamed files open that buffer. The visual harness exposes those open controls.
+**States:** committed, pushed and installed as `3bac23d766`. Product commit is `8119256e53`. Opening a reviewed path that is gone on disk loads a `raya-review` buffer with the deleted text and the same Keep/Undo CodeLens. Chat path rows for deleted and renamed files open that buffer. The visual harness exposes those open controls.
 
 Changed files: `packages/kilo-vscode/src/edit-review/ghost.ts`, `packages/kilo-vscode/src/edit-review/ghost.test.ts`, `packages/kilo-vscode/src/edit-review/InEditorReview.ts`, `packages/kilo-vscode/src/edit-review/InEditorReview.test.ts`, `packages/kilo-vscode/src/kilo-provider/editor-actions.ts`, `packages/kilo-vscode/src/KiloProvider.ts`, `packages/kilo-vscode/tests/setup/vscode-mock.ts`, `packages/kilo-vscode/tests/unit/editor-actions.test.ts`, `packages/kilo-vscode/tests/surfaces-preview.browser.ts`, `packages/kilo-vscode/webview-ui/preview/surfaces.tsx`, `packages/kilo-vscode/webview-ui/src/components/chat/VscodeToolOverrides.tsx`, `packages/kilo-vscode/webview-ui/src/styles/session-actions.css`, `docs/Raya-Review-Contract.md`, `.changeset/raya-review-ghost-buffer.md`.
 
@@ -2085,6 +2085,16 @@ Commands:
 | `packages/kilo-vscode` `bunx eslint --no-cache` on touched TypeScript | exit 0 |
 
 This is not a paid GPT-Live call and does not unlock VS Code iframe microphone consent. Packaged live VS Code interaction with a real deleted buffer remains open. Codex-deferred research stays untracked.
+
+Remaining: leftover implementable 39-requirement work, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent.
+
+Next executable step: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
+
+## 2026-09-12: Snapshot install `3bac23d766`
+
+**States:** committed, pushed and installed as `3bac23d766`. Deleted-file virtual review buffers are in this snapshot. CLI binary was already present and was not rebuilt.
+
+Installed `eden.raya@7.4.23-snapshot+3bac23d766.kamil-oseni.1789226754719`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-3bac23d766-kamil-oseni-1789226754719.vsix`; SHA-256 `E2CBB6F524CF9D8306C61F2E8C2C2D4B8B0B419B8D0948AB9877D048819E8A53`; 517134830 bytes, 431 files. VS Code was not force-reloaded.
 
 Remaining: leftover implementable 39-requirement work, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent.
 

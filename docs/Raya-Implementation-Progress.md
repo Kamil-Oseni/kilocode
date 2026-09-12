@@ -3144,13 +3144,21 @@ Next: leftover implementable 39-requirement work, or a real-account GPT-Live cal
 
 ## 2026-09-12: Virtual editor buffers for deleted review files
 
-Status: verified locally and committed as 8119256e53. Opening a reviewed path that is gone on disk loads a raya-review buffer with the deleted text and the same Keep/Undo CodeLens. Chat path rows for deleted and renamed files open that buffer. The visual harness exposes those open controls.
+Status: committed, pushed and installed as 3bac23d766. Product commit is 8119256e53. Opening a reviewed path that is gone on disk loads a raya-review buffer with the deleted text and the same Keep/Undo CodeLens. Chat path rows for deleted and renamed files open that buffer. The visual harness exposes those open controls.
 
 Changed files: packages/kilo-vscode/src/edit-review/ghost.ts, packages/kilo-vscode/src/edit-review/ghost.test.ts, packages/kilo-vscode/src/edit-review/InEditorReview.ts, packages/kilo-vscode/src/edit-review/InEditorReview.test.ts, packages/kilo-vscode/src/kilo-provider/editor-actions.ts, packages/kilo-vscode/src/KiloProvider.ts, packages/kilo-vscode/tests/setup/vscode-mock.ts, packages/kilo-vscode/tests/unit/editor-actions.test.ts, packages/kilo-vscode/tests/surfaces-preview.browser.ts, packages/kilo-vscode/webview-ui/preview/surfaces.tsx, packages/kilo-vscode/webview-ui/src/components/chat/VscodeToolOverrides.tsx, packages/kilo-vscode/webview-ui/src/styles/session-actions.css, docs/Raya-Review-Contract.md, .changeset/raya-review-ghost-buffer.md.
 
 Commands: packages/kilo-vscode bun test src/edit-review/ghost.test.ts src/edit-review/InEditorReview.test.ts tests/unit/edit-review-state.test.ts tests/unit/review-files.test.ts tests/unit/editor-actions.test.ts --timeout 30000 -> 28 pass / 0 fail / 111 expect / exit 0. bunx playwright test --config playwright.preview.config.ts tests/surfaces-preview.browser.ts -> 19 pass / 0 fail / exit 0. bun run check-types -> exit 0. bun run check-types:webview -> exit 0. bun run check-kilocode-change -> exit 0. bunx eslint --no-cache on touched TypeScript -> exit 0.
 
 This is not a paid GPT-Live call and does not unlock VS Code iframe microphone consent. Packaged live VS Code interaction with a real deleted buffer remains open. Codex-deferred research stays untracked.
+
+Next: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
+
+## 2026-09-12: Snapshot install 3bac23d766
+
+Status: committed, pushed and installed as 3bac23d766. Deleted-file virtual review buffers are in this snapshot. CLI binary was already present and was not rebuilt.
+
+Installed eden.raya@7.4.23-snapshot+3bac23d766.kamil-oseni.1789226754719. VSIX C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-3bac23d766-kamil-oseni-1789226754719.vsix; SHA-256 E2CBB6F524CF9D8306C61F2E8C2C2D4B8B0B419B8D0948AB9877D048819E8A53; 517134830 bytes, 431 files. VS Code was not force-reloaded.
 
 Next: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
 

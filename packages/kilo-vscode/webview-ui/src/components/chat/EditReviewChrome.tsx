@@ -3,6 +3,7 @@ import { Button } from "@kilocode/kilo-ui/button"
 
 export const EditReviewChrome: Component<{
   status: string
+  note?: string
   pending?: boolean
   busy?: boolean
   nav?: { index: number; total: number }
@@ -22,6 +23,9 @@ export const EditReviewChrome: Component<{
     {props.children}
     <Show when={props.pending}>
       <div data-slot="edit-review-actions">
+        <Show when={props.note}>
+          <span data-slot="edit-review-note">{props.note}</span>
+        </Show>
         <Button
           variant="ghost"
           size="small"

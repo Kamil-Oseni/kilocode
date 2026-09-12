@@ -77,7 +77,8 @@ export function registerInEditorReview(context: vscode.ExtensionContext, deps: I
     const ranges = addedRanges(item.patch)
     const anchors = [...ranges, ...deletionRanges(item.patch)].sort((a, b) => a.start - b.start)
     const renamed = /^rename (?:from|to) /m.test(item.patch)
-    if (!anchors.length && (renamed || item.status === "deleted")) anchors.push({ start: 0, end: 0 })
+    const deleted = item.status === "deleted" || (!ranges.length && deletionRanges(item.patch).length > 0 && !renamed)
+    if (!anchors.length && (renamed || deleted)) anchors.push({ start: 0, end: 0 })
     if (!anchors.length) return
     return {
       file: item.file,
@@ -85,7 +86,7 @@ export function registerInEditorReview(context: vscode.ExtensionContext, deps: I
       ranges,
       anchors,
       revision: fingerprint(item),
-      summary: renamed ? "Renamed file" : `${item.additions} added, ${item.deletions} removed in file`,
+      summary: renamed ? "Renamed file" : deleted ? "Deleted file" : `${item.additions} added, ${item.deletions} removed in file`,
     }
   }
 

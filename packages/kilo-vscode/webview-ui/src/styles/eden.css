@@ -355,6 +355,12 @@ html[data-theme="kilo-vscode"] .chat-view [data-component="edit-review-block"][d
 html[data-theme="kilo-vscode"] .chat-view [data-component="edit-review-block"][data-review-status="deleted"] {
   --review-hue: #d1554b;
 }
+html[data-theme="kilo-vscode"] .chat-view [data-slot="edit-review-note"] {
+  margin-right: auto;
+  font-family: var(--font-body);
+  font-size: var(--kilo-font-size-12);
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+}
 html[data-theme="kilo-vscode"] .chat-view [data-component="edit-review-block"][data-review-pending] {
   border-radius: var(--raya-radius-md-plus, 10px);
   border: var(--raya-hairline) solid var(--border-weak-base, var(--vscode-panel-border));

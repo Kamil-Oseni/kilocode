@@ -115,14 +115,17 @@ export const ReviewPreview: Component<{ confirming?: boolean }> = (props) => (
 )
 
 export const EditReviewPreview: Component = () => (
-  <div style={{ display: "flex", "flex-direction": "column", gap: "12px" }}>
-    <EditReviewChrome status="added" pending nav={{ index: 0, total: 3 }}>
+  <div class="chat-view" style={{ display: "flex", "flex-direction": "column", gap: "12px" }}>
+    <EditReviewChrome status="added" pending nav={{ index: 0, total: 4 }}>
       <p>src/styles/prompt-input.css</p>
     </EditReviewChrome>
-    <EditReviewChrome status="modified" pending nav={{ index: 1, total: 3 }}>
+    <EditReviewChrome status="modified" pending nav={{ index: 1, total: 4 }}>
       <p>src/components/chat/PromptInput.tsx</p>
     </EditReviewChrome>
-    <EditReviewChrome status="deleted" pending nav={{ index: 2, total: 3 }}>
+    <EditReviewChrome status="renamed" note="Renamed file" pending nav={{ index: 2, total: 4 }}>
+      <p>src/review/rename.ts</p>
+    </EditReviewChrome>
+    <EditReviewChrome status="deleted" note="Deleted file" pending nav={{ index: 3, total: 4 }}>
       <p>src/styles/legacy-composer.css</p>
     </EditReviewChrome>
   </div>

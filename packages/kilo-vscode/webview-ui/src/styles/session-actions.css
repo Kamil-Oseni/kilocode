@@ -364,3 +364,17 @@
     opacity: 1;
   }
 }
+
+[data-slot="edit-review-note"] {
+  margin-right: auto;
+  font-family: var(--font-body);
+  font-size: var(--kilo-font-size-12);
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+}
+
+[data-slot="edit-review-file"] {
+  margin: 0;
+  padding: var(--raya-space-8) var(--raya-space-12);
+  font-family: var(--font-body);
+  font-size: var(--kilo-font-size-12);
+}

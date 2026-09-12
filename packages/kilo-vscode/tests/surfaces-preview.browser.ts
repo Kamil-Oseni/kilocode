@@ -55,7 +55,9 @@ test("light review cluster and file chrome", async ({ page }, info) => {
   await expect(page.locator("[data-fixture]")).toHaveAttribute("data-preview-kind", "production-view")
   await expect(page.getByRole("button", { name: "Undo file" }).first()).toBeVisible()
   await expect(page.getByRole("button", { name: "Keep file" }).first()).toBeVisible()
-  await expect(page.getByText("1 of 3").first()).toBeVisible()
+  await expect(page.getByText("Renamed file")).toBeVisible()
+  await expect(page.getByText("Deleted file")).toBeVisible()
+  await expect(page.getByText("1 of 4").first()).toBeVisible()
   await page.screenshot({ path: info.outputPath("review.png"), fullPage: true })
 })
 

@@ -299,6 +299,7 @@ describe("in-editor review acknowledgements", () => {
     fixture.state.patch = "@@ -1,2 +0,0 @@\n-old\n-lines"
     await fixture.review.refresh()
     expect(await fixture.read()).toHaveLength(3)
+    expect((await fixture.read())[0].command?.title).toContain("Deleted file")
     expect((await fixture.read())[2].command?.title).toBe("$(discard) Undo file")
   })
 })

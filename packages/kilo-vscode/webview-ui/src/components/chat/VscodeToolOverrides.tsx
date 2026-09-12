@@ -7,18 +7,19 @@
  * upstream tool registrations have run (i.e. after importing message-part).
  */
 
-import { createEffect, createMemo, For, onCleanup, Show, type Component } from "solid-js"
+import { createEffect, createMemo, For, onCleanup, Show, type Component, type JSX } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { BasicTool } from "@kilocode/kilo-ui/basic-tool"
 import { ToolRegistry, type ToolProps } from "@kilocode/kilo-ui/message-part"
 import { useSession } from "../../context/session"
 import { editReview } from "./edit-review"
 import { EditReviewChrome } from "./EditReviewChrome"
+import { note, targets, type Kind } from "./review-files"
 
 /** Tools that should be open by default in the VS Code sidebar. */
 const DEFAULT_OPEN_TOOLS = ["bash"]
-/** Single-file edit tools that get the inline review chrome (Undo/Keep + navigator). */
-const REVIEW_TOOLS = ["edit", "write"]
+/** File-mutating tools that get the inline review chrome (Undo/Keep + navigator). */
+const REVIEW_TOOLS = ["edit", "write", "apply_patch", "multiedit"]
 const registered = new Set<string>()
 
 const TITLE: Record<string, string> = {
@@ -156,60 +157,96 @@ function BackgroundProcessTool(props: ToolProps) {
   )
 }
 
-// raya_change - wrap an edit/write renderer with inline review chrome: a hued
+// raya_change - wrap file-mutating renderers with inline review chrome: a hued
 // block plus rounded Undo/Keep pills and an "N of M" navigator to step between
 // unaccepted edits, matching the Cursor-style review affordance the user asked
-// for. Both file-wide actions use the chat coordinator's acknowledged backend
-// request. The chrome only appears once the edit has completed.
-function reviewed(upstream: Component<ToolProps>): Component<ToolProps> {
+// for. apply_patch and multiedit keep every file, including deletions and
+// renames, so those changes stay reviewable when no editor tab is open. Both
+// file-wide actions use the chat coordinator's acknowledged backend request. The
+// chrome only appears once the edit has completed.
+function FileReview(props: {
+  file: string
+  kind: Kind
+  status: string
+  children?: JSX.Element
+}) {
+  const session = useSession()
+  let ref: HTMLDivElement | undefined
+
+  const sid = () => session.currentSessionID() ?? ""
+  const show = () => props.status === "completed" && !!props.file && !!sid() && !editReview.isKept(sid(), props.file)
+  const nav = () => {
+    const list = editReview.pending(sid())
+    return { index: list.indexOf(props.file), total: list.length }
+  }
+
+  createEffect(() => {
+    if (!ref || !props.file || !sid()) return
+    const dispose = editReview.register({ session: sid(), file: props.file, el: ref })
+    onCleanup(dispose)
+  })
+
+  const undo = () => {
+    if (!sid() || !props.file) return
+    editReview.request(sid(), props.file, "undo")
+  }
+  const keep = () => editReview.request(sid(), props.file, "keep")
+  const step = (delta: number) => {
+    const list = editReview.pending(sid())
+    if (list.length === 0) return
+    const at = list.indexOf(props.file)
+    const next = list[(at + delta + list.length) % list.length]
+    if (next) editReview.focus(sid(), next)
+  }
+
+  return (
+    <EditReviewChrome
+      setRef={(el) => {
+        ref = el
+      }}
+      status={props.kind}
+      note={note(props.kind)}
+      pending={show()}
+      busy={editReview.busy(sid())}
+      nav={nav()}
+      onUndo={undo}
+      onKeep={keep}
+      onPrev={() => step(-1)}
+      onNext={() => step(1)}
+    >
+      {props.children}
+    </EditReviewChrome>
+  )
+}
+
+function reviewed(name: string, upstream: Component<ToolProps>): Component<ToolProps> {
   return (props) => {
-    const session = useSession()
-    let ref: HTMLDivElement | undefined
-
-    const sid = () => session.currentSessionID() ?? ""
-    const file = () => (props.metadata?.filediff?.file || props.input.filePath || "") as string
-    const status = () => (props.metadata?.filediff?.status as string | undefined) ?? "modified"
-    const show = () => props.status === "completed" && !!file() && !!sid() && !editReview.isKept(sid(), file())
-    const nav = () => {
-      const list = editReview.pending(sid())
-      return { index: list.indexOf(file()), total: list.length }
-    }
-
-    createEffect(() => {
-      if (!ref || !file() || !sid()) return
-      const dispose = editReview.register({ session: sid(), file: file(), el: ref })
-      onCleanup(dispose)
-    })
-
-    const undo = () => {
-      if (!sid() || !file()) return
-      editReview.request(sid(), file(), "undo")
-    }
-    const keep = () => editReview.request(sid(), file(), "keep")
-    const step = (delta: number) => {
-      const list = editReview.pending(sid())
-      if (list.length === 0) return
-      const at = list.indexOf(file())
-      const next = list[(at + delta + list.length) % list.length]
-      if (next) editReview.focus(sid(), next)
-    }
-
+    const items = () => targets(name, props.input, props.metadata)
+    const first = () => items()[0]
     return (
-      <EditReviewChrome
-        setRef={(el) => {
-          ref = el
-        }}
-        status={status()}
-        pending={show()}
-        busy={editReview.busy(sid())}
-        nav={nav()}
-        onUndo={undo}
-        onKeep={keep}
-        onPrev={() => step(-1)}
-        onNext={() => step(1)}
-      >
-        <Dynamic component={upstream} {...props} />
-      </EditReviewChrome>
+      <Show when={items().length > 0} fallback={<Dynamic component={upstream} {...props} />}>
+        <Show
+          when={items().length === 1 && first()}
+          fallback={
+            <>
+              <Dynamic component={upstream} {...props} />
+              <For each={items()}>
+                {(item) => (
+                  <FileReview file={item.file} kind={item.kind} status={props.status ?? ""}>
+                    <p data-slot="edit-review-file">{item.file}</p>
+                  </FileReview>
+                )}
+              </For>
+            </>
+          }
+        >
+          {(item) => (
+            <FileReview file={item().file} kind={item().kind} status={props.status ?? ""}>
+              <Dynamic component={upstream} {...props} />
+            </FileReview>
+          )}
+        </Show>
+      </Show>
     )
   }
 }
@@ -219,7 +256,7 @@ export function registerVscodeToolOverrides() {
     if (registered.has(name)) continue
     const upstream = ToolRegistry.render(name)
     if (!upstream) continue
-    ToolRegistry.register({ name, render: reviewed(upstream) })
+    ToolRegistry.register({ name, render: reviewed(name, upstream) })
     registered.add(name)
   }
 

@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Installed product is `9f6864dba8`. Conversation Back/Escape restores the same worker. Other-worker reports do not steal the open thread, overwrite a draft, or page that other inbox. Voice engine-switch/disposal serialization is installed. Schedule-edit-during-execution UI and paused-recipient copy are installed. New voice setups default to GPT-Live 1 (`openai-live` / `gpt-live-1`) over the Live API; saved Realtime, Qwen and cascade selections stay. Live appends split at the 500-token bound; busy-queue later delegations are acknowledged and later speech requires clarification. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, delegated cost attribution, Friday accounting E2E, busy-recipient queued/started plus paused-worker denial, overdue-request timeout expiry, inspectable request chains, rename/archive conversation attribution, and stop-settle of child runs are installed. Remaining Live work is packaged microphone/acoustic acceptance. Remaining RDM-06 work is light/dark and narrow/wide Chromium, inbox performance budget, and returning-reviewer journey. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Installed product is `a7e1f4f1b3`. Recorder binary-secret refusal, the support contract, and telemetry lifecycle settlement are on main and in this snapshot. Conversation Back/Escape restores the same worker. Other-worker reports do not steal the open thread, overwrite a draft, or page that other inbox. Voice engine-switch/disposal serialization is installed. Schedule-edit-during-execution UI and paused-recipient copy are installed. New voice setups default to GPT-Live 1 (`openai-live` / `gpt-live-1`) over the Live API; saved Realtime, Qwen and cascade selections stay. Live appends split at the 500-token bound; busy-queue later delegations are acknowledged and later speech requires clarification. Routine inbox, follow-up dispatch, session-list exclusion, RDM-04 start/inspect, stop-outstanding-delegation, delegated cost attribution, Friday accounting E2E, busy-recipient queued/started plus paused-worker denial, overdue-request timeout expiry, inspectable request chains, rename/archive conversation attribution, and stop-settle of child runs are installed. Remaining Live work is packaged microphone/acoustic acceptance. Remaining RDM-06 work is light/dark and narrow/wide Chromium, inbox performance budget, and returning-reviewer journey. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-11. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `9f6864dba8` is committed, pushed and installed. Back and Escape restore the open worker. Other-worker reports do not steal that conversation.
+**Latest delivered product:** checkpoint `a7e1f4f1b3` is committed, pushed and installed. The diagnostic/support/telemetry batch is on main and in this snapshot. Back and Escape restore the open worker.
 
 ## Scope and reading order
 
@@ -27,37 +27,31 @@ Status excerpts below are historical records, not a fresh certification of every
 
 ## Immediate uncommitted work
 
+These three items were listed as uncommitted at e74508a063 recovery. They are now committed, pushed, and part of later installs, including the current snapshot. Re-verified 2026-09-11. Do not treat this section as outstanding source. Codex-deferred research stays untracked.
+
 ### Recorder binary secret refusal — EN-13
+
+**States:** committed and pushed in `e74508a063`; present in later snapshots including `9f6864dba8`. Re-verified: `bun test ./test/record-replay.test.ts --timeout 30000` in `packages/http-recorder` → 37 pass / 0 fail / 185 expect / exit 0.
 
 Files: `packages/http-recorder/src/redaction.ts`, `packages/http-recorder/test/record-replay.test.ts`, `docs/Raya-Diagnostic-Data-Boundaries.md`, `.changeset/raya-recorder-binary-secrets.md`.
 
-Implemented strict canonical base64 inspection for declared HTTP response bodies and binary WebSocket frames, with an aggregate 8 MiB decoded budget per inspected interaction. Known-token/environment-secret detection checks decoded UTF-8 without rewriting safe replay bytes. Actual filesystem-writer and loopback capture cases cover refusal and byte preservation. Arbitrary private prose, compressed/encrypted content and undeclared encodings remain outside this detector.
-
-Agent-recorded final checks: 37 tests/185 assertions, native exit 0 (`.tmp/recorder-binary-tests-final.log`); package types exit 0 (`.tmp/recorder-binary-types-final.log`); scoped lint no errors/two existing warnings (`.tmp/recorder-binary-lint-final.log`). Review and include the four files; no commit/install yet.
+Strict canonical base64 inspection for declared HTTP response bodies and binary WebSocket frames, with an aggregate 8 MiB decoded budget per inspected interaction. Known-token/environment-secret detection checks decoded UTF-8 without rewriting safe replay bytes. Arbitrary private prose, compressed/encrypted content and undeclared encodings remain outside this detector.
 
 ### Support/release contract — PR-06
 
+**States:** committed and pushed in `e74508a063`; present in later snapshots including `9f6864dba8`. Re-verified: `bun test --config .tmp/bunfig-script.toml ./script/kilocode/raya-support.test.ts --timeout 30000` → 7 pass / 0 fail / 26 expect / exit 0. `bun run script/check-workflows.ts` → exit 0.
+
 Files: `docs/Raya-Support-Contract.json`, `docs/Raya-Supported-Clients.md`, `script/kilocode/raya-support.ts`, `script/kilocode/raya-support.test.ts`, `.github/workflows/raya-release.yml`, `.github/workflows/check-opencode-annotations.yml`, `.changeset/raya-support-contract.md`.
 
-Implemented a shared identity/editor-range/target/runner/asset contract, generated matrix block, drift guard and source-pinned release-note preamble. Configured macOS/Linux targets are not installation evidence. Review exact source checkout, workflow permissions, notes generation and guard integration before commit. Do not publish a release to test the notes.
+Shared identity/editor-range/target/runner/asset contract, generated matrix block, drift guard and source-pinned release-note preamble. Configured macOS/Linux targets are not installation evidence. Do not publish a release to test the notes.
 
-Agent-recorded checks: 7 tests/26 assertions; strict scoped tsgo, workflow allowlist, annotations and Markdown passed; real notes output is `.tmp/raya-support-release-notes.md`. Final `.tmp/raya-support-lint.log` reports zero warnings/errors, and the worker recovered terminal exit 0 for handle 85331. Independent review found no blocking integration defects.
+### Telemetry connection lifecycle — EN-13
 
-### Telemetry connection lifecycle — EN-13; verification unfinished
+**States:** diagnostic transport committed in `e74508a063`; awaited settlement committed as `a0024a4f77`. Re-verified: `bun test tests/unit/telemetry-proxy-boundary.test.ts tests/unit/telemetry-proxy-utils.test.ts --timeout 30000` in `packages/kilo-vscode` → 13 pass / 0 fail / 25 expect / exit 0.
 
 Files: `packages/kilo-vscode/src/services/telemetry/telemetry-proxy.ts`, `packages/kilo-vscode/src/extension.ts`, `packages/kilo-vscode/tests/unit/telemetry-proxy-boundary.test.ts`, `.changeset/raya-telemetry-connection-lifecycle.md`.
 
-Implemented endpoint/password invalidation on disconnect/shutdown, cancellation of obsolete requests, scope and consent rechecks after property enrichment/JSON serialization, redirect refusal, 10-second deadlines and generic failure logs. Capture admission caps pending requests at 32; consent requests are not covered by that cap. Receiving-side consent ordering is NOT fixed: an old enable request can still apply after a later opt-out. Aborting the client request cannot prove a server mutation was undone.
-
-**Resolved fixture failure (historical):** run 77926 printed the first passing boundary test and then spun at high CPU. Root explicitly interrupted that owned process; terminal exit 1. `.tmp/telemetry-lifecycle-tests.log` is not a passing suite. There is no live 77926 handle. Suspected Windows Bun fixture interaction: aborting a response and stopping the in-process server before client settlement. Do not weaken production cancellation or repeatedly restart the same fixture.
-
-Implementation/checks 1?4 below are now complete: 13 tests/25 assertions pass, extension types/lint/knip/marker checks pass, diagnostic documentation updated. Continue with checkpoint delivery in step 5.
-
-1. Return the existing send Promise from instance/static capture and setEnabled, while ordinary callers may continue ignoring it. Await transport settlement before fixture teardown.
-2. Retain a real pending-request abort regression. If Bun's in-process server still spins, use a native Node HTTP child peer; do not replace the production request path with a fake.
-3. Test provider and `toJSON` reentrancy, opt-out before dispatch, disconnected/replaced endpoints, redirects, non-2xx replies, secret-free logs and shutdown. Preserve explicit test deadlines and always close the known process handle.
-4. Run extension types, lint and knip; update diagnostic documentation. Keep backend consent ordering as a separately documented next implementation.
-5. Review all current diffs and exact staged paths, commit/push with normal hooks, then build/install a verified snapshot. Only checkpoint 932b204 is currently verified installed.
+Endpoint/password invalidation on disconnect/shutdown, cancellation of obsolete requests, scope and consent rechecks after property enrichment/JSON serialization, redirect refusal, 10-second deadlines and generic failure logs. Capture admission caps pending requests at 32; consent requests are not covered by that cap. Receiving-side consent ordering is NOT fixed: an old enable request can still apply after a later opt-out. Aborting the client request cannot prove a server mutation was undone.
 
 ## GPT-Live 1 migration takes priority over more Realtime infrastructure
 
@@ -651,7 +645,7 @@ Defer new Codex-derived implementation until existing Raya work, including GPT-L
 
 ## Latest continuation update
 
-Telemetry transport settlement is now returned to callers. The loopback fixtures await settlement before shutting down their peers; all 13 boundary/utility tests pass with 25 assertions and terminal exit 0 (`.tmp/telemetry-lifecycle-tests-final.log`). The earlier native teardown spin is resolved by this fixture lifecycle change. Extension host/webview typecheck and lint both passed with terminal exit 0; independent recorder/support integration review found no blocking defects. Support worker recovered its prior lint terminal exit 0. No new commit, push or installation yet. Receiving-side consent ordering remains open.
+Telemetry transport settlement is now returned to callers. The loopback fixtures await settlement before shutting down their peers; all 13 boundary/utility tests pass with 25 assertions and terminal exit 0. Recorder binary-secret tests pass 37/185. Support-contract tests pass 7/26. These landed in `e74508a063` and `a0024a4f77` and remain on `origin/main`. Receiving-side consent ordering remains open.
 
 The final extension knip and Kilo marker checks also passed (terminal 0), and the Markdown table guard passed. All local Markdown links in this handoff resolve. Root lint handle 82630 stalled and was explicitly stopped with exit 1. The authorized retry outside the sandbox, handle 26906, completed with terminal exit 0. Root lint passes; the first attempt remains a stopped run.
 
@@ -1527,5 +1521,17 @@ Next executable step: leftover RDM-06 Chromium themes/narrow layout, inbox perfo
 Installed `eden.raya@7.4.23-snapshot+9f6864dba8.kamil-oseni.1789172347425`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-9f6864dba8-kamil-oseni-1789172347425.vsix`; SHA-256 `DBAECF0B3706C8B32A4FABA80EF3FA5F13A33F5EEA12A0EA2E657B39CAE319E3`; 517060407 bytes, 431 entries. CLI binary already present; not rebuilt.
 
 Remaining: leftover RDM-06 light/dark and narrow/wide Chromium, inbox performance budget, returning-reviewer journey, and packaged microphone/acoustic acceptance.
+
+Next executable step: leftover RDM-06 Chromium themes/narrow layout, inbox performance budget, or leftover Live microphone acceptance.
+
+## 2026-09-11: Diagnostic/support/telemetry batch re-verified and reinstalled
+
+**States:** already committed as `e74508a063` and `a0024a4f77`; re-verified locally; current HEAD `a7e1f4f1b3` reinstalled so the batch is in the running snapshot. Working tree had no remaining source for these files. A forced CLI rebuild hit EPERM on a locked `kilo.exe`; the packaged CLI was restored from the `9f6864dba8` VSIX (228803072 bytes) and matched the current source hash.
+
+Commands: `packages/http-recorder` `bun test ./test/record-replay.test.ts --timeout 30000` → 37 pass / 0 fail / 185 expect / exit 0. Root `bun test --config .tmp/bunfig-script.toml ./script/kilocode/raya-support.test.ts --timeout 30000` → 7 pass / 0 fail / 26 expect / exit 0. `bun run script/check-workflows.ts` → exit 0. `packages/kilo-vscode` `bun test tests/unit/telemetry-proxy-boundary.test.ts tests/unit/telemetry-proxy-utils.test.ts --timeout 30000` → 13 pass / 0 fail / 25 expect / exit 0.
+
+Installed `eden.raya@7.4.23-snapshot+a7e1f4f1b3.kamil-oseni.1789174025050`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-a7e1f4f1b3-kamil-oseni-1789174025050.vsix`; SHA-256 `205E847A841D45224824169C9F6910FB12C4496B9F348E9F79402F9CD2D99205`; 517060407 bytes, 431 entries. CLI binary already present; not rebuilt.
+
+Remaining: leftover RDM-06 light/dark and narrow/wide Chromium, inbox performance budget, returning-reviewer journey, and packaged microphone/acoustic acceptance. Receiving-side telemetry consent ordering remains open.
 
 Next executable step: leftover RDM-06 Chromium themes/narrow layout, inbox performance budget, or leftover Live microphone acceptance.

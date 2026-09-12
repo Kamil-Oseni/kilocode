@@ -2774,5 +2774,19 @@ Installed eden.raya@7.4.23-snapshot+9f6864dba8.kamil-oseni.1789172347425. VSIX C
 
 Next: leftover RDM-06 Chromium themes/narrow layout, inbox performance budget, or leftover Live microphone acceptance.
 
+## 2026-09-11: Diagnostic/support/telemetry batch already on main
+
+Status: the handoff still listed recorder binary secrets, the support contract, and telemetry lifecycle as uncommitted. Working tree had no remaining source for those files. They are already on origin/main as e74508a063 and a0024a4f77. Re-verified locally: recorder 37 pass / 185 expect / exit 0; support 7 pass / 26 expect / exit 0; telemetry 13 pass / 25 expect / exit 0; check-workflows exit 0. A forced CLI rebuild hit EPERM because kilo.exe was locked; the packaged CLI was restored from the 9f6864dba8 VSIX (228803072 bytes). Codex-deferred research stays untracked.
+
+Next: reinstall current HEAD so this verified batch is in the running snapshot, then leftover RDM-06 Chromium themes/narrow layout.
+
+## 2026-09-11: Snapshot install a7e1f4f1b3
+
+Status: committed, pushed and installed as a7e1f4f1b3. Recorder binary-secret refusal, the support contract, and telemetry lifecycle settlement are in this snapshot. Conversation return from 9f6864dba8 remains.
+
+Installed eden.raya@7.4.23-snapshot+a7e1f4f1b3.kamil-oseni.1789174025050. VSIX C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-a7e1f4f1b3-kamil-oseni-1789174025050.vsix; SHA-256 205E847A841D45224824169C9F6910FB12C4496B9F348E9F79402F9CD2D99205; 517060407 bytes, 431 entries. CLI binary already present; not rebuilt after restoring kilo.exe from the 9f6864dba8 VSIX.
+
+Next: leftover RDM-06 Chromium themes/narrow layout, inbox performance budget, or leftover Live microphone acceptance.
+
 
 

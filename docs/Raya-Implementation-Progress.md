@@ -2882,6 +2882,19 @@ Installed eden.raya@7.4.23-snapshot+dd7966a567.kamil-oseni.1789181590925. VSIX C
 
 Next: leftover provider-switch/disposal, or a real-account GPT-Live call on a device.
 
+## 2026-09-11: Live engine-switch and backend-drop cleanup
+
+Status: verified locally and committed as 25d89292fa. Not yet pushed or installed. Engine changes take the SpeechService lock before the new engine is saved. Host PCM capture is cancelled during release. Backend disconnect drops the call without closing the service. VoiceProvider stops on backend disconnect, keeps Start voice disabled until cleanup is confirmed, and does not auto-start a replacement engine.
+
+Changed files: packages/kilo-vscode/src/speech/service.ts, packages/kilo-vscode/src/speech/live-broker.ts, packages/kilo-vscode/src/speech-to-text/capture.ts, packages/kilo-vscode/src/KiloProvider.ts, packages/kilo-vscode/webview-ui/src/context/voice.tsx, packages/kilo-vscode/tests/unit/speech-engine-switch.test.ts, packages/kilo-vscode/tests/fixtures/live-voice-ui.mjs, packages/kilo-vscode/tests/unit/live-voice-ui.test.ts, .changeset/raya-voice-switch-drop.md.
+
+Commands (packages/kilo-vscode): bun test tests/unit/speech-engine-switch.test.ts tests/unit/live-speech-routing.test.ts --timeout 30000 -> 8 pass / 0 fail / 47 expect / exit 0. bun test tests/unit/speech-to-text-capture.test.ts --timeout 30000 -> 11 pass / 0 fail / 27 expect / exit 0. bun test tests/unit/openai-provider.test.ts --timeout 30000 -> 1 pass / 0 fail / 1 expect / exit 0. bun test tests/unit/live-voice-ui.test.ts --timeout 130000 -> 1 pass / 0 fail / 2 expect / exit 0. bun run check-types -> exit 0. bun run check-types:webview -> exit 0. bun run check-kilocode-change -> exit 0.
+
+This is not a paid GPT-Live call and does not unlock VS Code iframe microphone consent. Codex-deferred research stays untracked.
+
+Next: leftover RDM-06 UI/lifecycle, or a real-account GPT-Live call on a device.
+
+
 
 
 

@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Installed product is `dd7966a567`. Receiving-side telemetry consent uses a monotonic generation so a stale enable cannot override a later opt-out. Remaining: paid GPT-Live/device acoustic acceptance, VS Code iframe microphone consent, and provider-switch/disposal. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Installed product is `dd7966a567`. Voice engine-switch and backend-drop cleanup is committed as `25d89292fa` and not yet pushed or installed. Remaining: paid GPT-Live/device acoustic acceptance and VS Code iframe microphone consent. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -1651,3 +1651,17 @@ Installed `eden.raya@7.4.23-snapshot+dd7966a567.kamil-oseni.1789181590925`. VSIX
 Remaining: paid GPT-Live/device acoustic acceptance, VS Code iframe microphone consent, and provider-switch/disposal.
 
 Next executable step: leftover provider-switch/disposal, or a real-account GPT-Live call on a device.
+
+## 2026-09-11: Live engine-switch and backend-drop cleanup
+
+**States:** verified locally and committed as `25d89292fa`. Not yet pushed or installed. An engine change takes the SpeechService lock before saving the new engine, so a Live start or host-microphone request cannot sneak in while the previous call is still owned. Release cancels in-flight host PCM capture. Backend disconnect drops the call without closing SpeechService, so a later start is still admitted. VoiceProvider ends the UI call on `connectionState` other than connected, keeps Start voice disabled until cleanup is confirmed, and does not auto-start a replacement engine.
+
+Changed files: `packages/kilo-vscode/src/speech/service.ts`, `packages/kilo-vscode/src/speech/live-broker.ts`, `packages/kilo-vscode/src/speech-to-text/capture.ts`, `packages/kilo-vscode/src/KiloProvider.ts`, `packages/kilo-vscode/webview-ui/src/context/voice.tsx`, `packages/kilo-vscode/tests/unit/speech-engine-switch.test.ts`, `packages/kilo-vscode/tests/fixtures/live-voice-ui.mjs`, `packages/kilo-vscode/tests/unit/live-voice-ui.test.ts`, `.changeset/raya-voice-switch-drop.md`.
+
+Commands (cwd `packages/kilo-vscode`): `bun test tests/unit/speech-engine-switch.test.ts tests/unit/live-speech-routing.test.ts --timeout 30000` → 8 pass / 0 fail / 47 expect / exit 0. `bun test tests/unit/speech-to-text-capture.test.ts --timeout 30000` → 11 pass / 0 fail / 27 expect / exit 0. `bun test tests/unit/openai-provider.test.ts --timeout 30000` → 1 pass / 0 fail / 1 expect / exit 0. `bun test tests/unit/live-voice-ui.test.ts --timeout 130000` → 1 pass / 0 fail / 2 expect / exit 0. `bun run check-types` → exit 0. `bun run check-types:webview` → exit 0. `bun run check-kilocode-change` → no forbidden markers / exit 0. eslint on the touched voice/host files → exit 0.
+
+This is not a paid GPT-Live call and does not unlock VS Code iframe microphone consent. Unexpected ffmpeg death after a successful host-mic start is still not posted as `speechLiveMicError`. Codex-deferred research stays untracked.
+
+Remaining: paid GPT-Live/device acoustic acceptance and VS Code iframe microphone consent.
+
+Next executable step: leftover RDM-06 UI/lifecycle, or a real-account GPT-Live call on a device.

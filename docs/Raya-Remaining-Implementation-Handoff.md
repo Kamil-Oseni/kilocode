@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-12):** grok Deleted-file virtual review buffers are installed as `f31323cf78`. Remaining: leftover 39-requirement work that is still implementable here, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-12):** ChatGPT reviewed and repaired Grok's file-review checkpoints. The corrected product is committed, pushed, and installed as `6b97169dc1`. Remaining: leftover 39-requirement work that is still implementable here, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-12. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** grok installed snapshot `f31323cf78` (`eden.raya@7.4.23-snapshot+f31323cf78.kamil-oseni.1789228671686`). Opening a deleted reviewed file loads a virtual editor buffer with Keep/Undo. Reload VS Code to pick up the snapshot.
+**Latest delivered product:** ChatGPT installed snapshot `6b97169dc1` (`eden.raya@7.4.23-snapshot+6b97169dc1.kamil-oseni.1789232065802`). This repairs review persistence, session/worktree identity, deleted-file content, multiedit coverage, path privacy and the file-review UI. Reload VS Code to pick up the snapshot.
 
 ## Scope and reading order
 
@@ -2119,6 +2119,14 @@ Next executable step: leftover implementable 39-requirement work, or a real-acco
 **Current evidence:** combined focused host/webview tests pass 52 tests, 202 assertions, exit 0. Extension host and webview typechecks and targeted ESLint pass. The final production file-review Playwright cases pass 4/4 at 320px and 760px in light and dark themes, including accessibility, horizontal-overflow, absolute-path-leak and Undo-routing assertions. ChatGPT visually inspected the final flat-row results against `docs/designer.md`. Knip, the extension marker guard, Markdown-table check and `git diff --check` pass. These repairs are not yet committed, pushed, installed, or accepted in a live VS Code editor. Do not describe the Grok checkpoints themselves as corrected; the correction begins in this ChatGPT checkpoint.
 
 **Next:** commit/push/install the repair, verify installed identity, and append the delivery receipt here and in the progress log. Then continue the remaining 39-requirement and GPT-Live work. New Codex-derived implementation remains deferred.
+
+## ChatGPT 2026-09-12 12:56 America/Toronto — Grok repair delivery
+
+**States:** the correction is committed as `6b97169dc1e414fbececd9d13399d79dac301f70`, pushed to `origin/main`, packaged, installed, and independently inspected. Normal push hooks passed 29 cross-package typecheck tasks plus JetBrains. Snapshot validation passed host/webview types, lint and production bundling; the production SDK reported no drift and the existing CLI binary was reused.
+
+Installed `eden.raya@7.4.23-snapshot+6b97169dc1.kamil-oseni.1789232065802`. VSIX: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-6b97169dc1-kamil-oseni-1789232065802.vsix`; SHA-256 `8A4A9C47A4ABEFC26BDB4CC543B7E6504EB6C6032A44D3632FBB80419F5523B1`; 517128269 bytes, 431 entries, bundled CLI 228829184 bytes. `code --list-extensions --show-versions` returned the exact installed identity; it also emitted a non-fatal VS Code log-directory permission warning. VS Code was not force-reloaded.
+
+**Scope limit:** source-level, unit, rendered-browser, packaging and installed-identity evidence now support this repair. A live packaged interaction with a real deleted/renamed file in the VS Code editor remains unperformed and must not be inferred from the snapshot install. Continue the remaining 39 requirements and GPT-Live acceptance next, while using `docs/designer.md` for every UI/UX change and preserving continuous ChatGPT/agent attribution in both documents.
 
 
 

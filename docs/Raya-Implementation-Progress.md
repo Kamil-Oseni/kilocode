@@ -3180,6 +3180,14 @@ Repairs: serialized/coalesced refresh and storage reconciliation; explicit post-
 
 Evidence at this point: `packages/kilo-vscode` combined focused suite for Undo/ghost/in-editor/chat/editor routing passes 52 tests / 202 assertions / exit 0. `bun run check-types`, `bun run check-types:webview`, and targeted ESLint pass. Final Playwright production file review passes 4/4 at light/dark 320px/760px with axe, overflow, path-leak and click-routing checks, and ChatGPT visually inspected the output under `docs/designer.md`. Knip, the extension marker guard, Markdown-table check and `git diff --check` pass. Checkpoint delivery remains next. Update this entry with commit, push, snapshot install, installed identity and artifact receipt before calling the repair delivered.
 
+## ChatGPT 2026-09-12 12:56 America/Toronto — Grok review repair delivered
+
+The repair is committed as `6b97169dc1e414fbececd9d13399d79dac301f70`, pushed to `origin/main`, and installed. Push hooks passed 29 cross-package typechecks plus JetBrains. Snapshot validation passed extension host/webview types, lint and production bundle; SDK inputs/output were unchanged and the existing CLI binary was reused.
+
+Installed `eden.raya@7.4.23-snapshot+6b97169dc1.kamil-oseni.1789232065802`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-6b97169dc1-kamil-oseni-1789232065802.vsix`; SHA-256 `8A4A9C47A4ABEFC26BDB4CC543B7E6504EB6C6032A44D3632FBB80419F5523B1`; 517128269 bytes; 431 entries; bundled CLI 228829184 bytes. Installed identity matched exactly. The `code` listing emitted a non-fatal permission warning while trying to create its log directory. VS Code was not force-reloaded.
+
+This closes the defects found in Grok's three attributed product commits at source/unit/render/package level. Packaged live VS Code interaction with an actual deleted/renamed file is still open and is not claimed by the install. Next: continue the remaining implementable 39-requirement work or perform real-account GPT-Live/device acceptance. Keep Codex-derived implementation deferred and apply `docs/designer.md` to all UI/UX work.
+
 
 
 

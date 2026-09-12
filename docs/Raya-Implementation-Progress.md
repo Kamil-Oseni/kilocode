@@ -2824,5 +2824,15 @@ Installed eden.raya@7.4.23-snapshot+d08dc0197d.kamil-oseni.1789177768668. VSIX C
 
 Next: leftover RDM-06 returning-reviewer journey, or leftover Live microphone acceptance.
 
+## 2026-09-11: Returning-reviewer schema and journeys
+
+Status: verified locally and committed as 750d616f03. Not yet pushed or installed. Migrated routine schema is inspected first. Friday assignment, follow-up report context, default history exclusion, and brief-to-full delegation policy then run through the real scheduler and runner.
+
+Changed files: packages/opencode/test/kilocode/task/returning-reviewer.test.ts.
+
+Commands: packages/opencode bun test ./test/kilocode/task/returning-reviewer.test.ts --timeout 60000 -> 1 pass / 0 fail / 34 expect / exit 0.
+
+Next: leftover Live microphone acceptance.
+
 
 

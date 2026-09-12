@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Installed product is `d08dc0197d`. Inbox pages stay at 50 messages. Chromium covers empty, error, stale, loading, and 200% zoom. Remaining RDM-06 work is the returning-reviewer journey. Remaining Live work is packaged microphone/acoustic acceptance. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Installed product remains `d08dc0197d`. Latest verified (not yet installed) work is `750d616f03`: the returning-reviewer path inspects migrated routine schema first, then a Friday assignment, follow-up with report context, history exclusion, and brief-to-full delegation policy. Remaining Live work is packaged microphone/acoustic acceptance. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-11. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `d08dc0197d` is committed, pushed and installed. Inbox pages stay at 50 messages. Chromium covers empty, error, stale, loading, and 200% zoom.
+**Latest delivered product:** checkpoint `d08dc0197d` is committed, pushed and installed. Inbox pages stay at 50 messages. Chromium covers empty, error, stale, loading, and 200% zoom. Returning-reviewer schema and journeys are verified locally as `750d616f03` and not yet installed.
 
 ## Scope and reading order
 
@@ -1581,3 +1581,17 @@ Installed `eden.raya@7.4.23-snapshot+d08dc0197d.kamil-oseni.1789177768668`. VSIX
 Remaining: leftover RDM-06 returning-reviewer journey and packaged microphone/acoustic acceptance.
 
 Next executable step: leftover RDM-06 returning-reviewer journey, or leftover Live microphone acceptance.
+
+## 2026-09-11: Returning-reviewer schema and journeys
+
+**States:** verified locally and committed as `750d616f03`. Not yet pushed or installed. A returning reviewer can inspect the migrated routine tables and kilocode-routine migrations first, then reproduce a Friday assignment through the real scheduler, a follow-up that keeps the report source in run context, default chat-list exclusion of runner-created execution sessions, and a brief coordinating worker whose delegated session cannot edit.
+
+Changed files: `packages/opencode/test/kilocode/task/returning-reviewer.test.ts`.
+
+Commands: `packages/opencode` `bun test ./test/kilocode/task/returning-reviewer.test.ts --timeout 60000` → 1 pass / 0 fail / 34 expect / exit 0.
+
+The conversation identity stays `rcv_*` and is not the execution session. Follow-up does not rewrite the standing Friday schedule. A paused recipient is not started. This does not add a packaged UI walkthrough or a live microphone check.
+
+Remaining: packaged microphone/acoustic acceptance, and receiving-side telemetry consent ordering. Do not force-rebuild `kilo.exe` while the running extension holds it. Codex-deferred research stays untracked.
+
+Next executable step: leftover Live microphone acceptance.

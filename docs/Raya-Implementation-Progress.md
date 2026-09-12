@@ -2842,5 +2842,18 @@ Installed eden.raya@7.4.23-snapshot+7a748083dd.kamil-oseni.1789179011559. VSIX C
 
 Next: leftover Live microphone acceptance.
 
+## 2026-09-11: Packaged Live host-microphone fallback
+
+Status: verified locally and committed as 1a37c6ea81. Not yet pushed or installed. Denied webview getUserMedia falls back to extension-host PCM. Packaged HTML allows mediastream and declares microphone=(self). This does not unlock VS Code iframe allow. Chromium covers acoustic constraints, denied-mic fallback, linger, and a 24 kHz s16le pump. Host ffmpeg args emit 24 kHz mono PCM.
+
+Changed files: packages/kilo-vscode/webview-ui/src/context/live-voice.ts, packages/kilo-vscode/webview-ui/src/context/voice.tsx, packages/kilo-vscode/webview-ui/src/types/messages/extension-messages.ts, packages/kilo-vscode/webview-ui/src/types/messages/webview-messages.ts, packages/kilo-vscode/src/speech-to-text/capture.ts, packages/kilo-vscode/src/speech/service.ts, packages/kilo-vscode/src/services/input-tools.ts, packages/kilo-vscode/src/utils.ts, packages/kilo-vscode/src/webview-html-utils.ts, packages/kilo-vscode/tests/fixtures/live-voice.mjs, packages/kilo-vscode/tests/unit/live-voice.test.ts, packages/kilo-vscode/tests/unit/live-speech-routing.test.ts, packages/kilo-vscode/tests/unit/speech-to-text-capture.test.ts, packages/kilo-vscode/tests/unit/webview-html.test.ts, .changeset/raya-live-host-microphone.md.
+
+Commands (packages/kilo-vscode): bun test tests/unit/webview-html.test.ts tests/unit/speech-to-text-capture.test.ts tests/unit/live-speech-routing.test.ts --timeout 30000 -> 31 pass / 0 fail / 80 expect / exit 0. bun test tests/unit/live-voice.test.ts --timeout 50000 -> 1 pass / 0 fail / 2 expect / exit 0. bun test tests/unit/live-voice-ui.test.ts --timeout 90000 -> 1 pass / 0 fail / 2 expect / exit 0. bun run check-types -> exit 0. bun run check-types:webview -> exit 0. bun run check-kilocode-change -> exit 0.
+
+This is not a paid GPT-Live call and not real-device acoustic quality. Host PCM does not claim echo cancellation. Codex-deferred research stays untracked.
+
+Next: leftover receiving-side telemetry consent ordering, or a real-account GPT-Live call on a device.
+
+
 
 

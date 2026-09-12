@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Installed product is `7a748083dd`. The returning-reviewer path inspects migrated routine schema first, then a Friday assignment, follow-up with report context, history exclusion, and brief-to-full delegation policy. Remaining Live work is packaged microphone/acoustic acceptance. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Product checkpoint `1a37c6ea81` is verified locally and not yet pushed or installed. Packaged Live falls back to extension-host PCM when the webview microphone is denied. Remaining: paid GPT-Live/device acoustic acceptance, VS Code iframe microphone consent, and receiving-side telemetry consent ordering. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-11. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `7a748083dd` is committed, pushed and installed. Returning-reviewer schema inspection, Friday assignment, follow-up report context, history exclusion, and brief-to-full delegation policy are in this snapshot.
+**Latest delivered product:** checkpoint `7a748083dd` is committed, pushed and installed. Returning-reviewer schema inspection, Friday assignment, follow-up report context, history exclusion, and brief-to-full delegation policy are in that snapshot. Packaged Live host-microphone fallback is verified locally as `1a37c6ea81` and is not yet in the installed VSIX.
 
 ## Scope and reading order
 
@@ -1605,3 +1605,17 @@ Installed `eden.raya@7.4.23-snapshot+7a748083dd.kamil-oseni.1789179011559`. VSIX
 Remaining: packaged microphone/acoustic acceptance, and receiving-side telemetry consent ordering.
 
 Next executable step: leftover Live microphone acceptance.
+
+## 2026-09-11: Packaged Live host-microphone fallback
+
+**States:** verified locally and committed as `1a37c6ea81`. Not yet pushed or installed. When the webview `getUserMedia` path is denied, LiveVoice acquires a host PCM MediaStream. Packaged HTML allows `media-src blob: mediastream:` and declares `microphone=(self)`. This does not unlock VS Code's iframe `allow` attribute; the extension-host ffmpeg/pw-record path is the packaged capture route. Chromium proves acoustic constraint requests, denied-mic fallback, and a 24 kHz s16le pump. Host ffmpeg arguments emit 24 kHz mono PCM to `pipe:1`.
+
+Changed files: `packages/kilo-vscode/webview-ui/src/context/live-voice.ts`, `packages/kilo-vscode/webview-ui/src/context/voice.tsx`, `packages/kilo-vscode/webview-ui/src/types/messages/extension-messages.ts`, `packages/kilo-vscode/webview-ui/src/types/messages/webview-messages.ts`, `packages/kilo-vscode/src/speech-to-text/capture.ts`, `packages/kilo-vscode/src/speech/service.ts`, `packages/kilo-vscode/src/services/input-tools.ts`, `packages/kilo-vscode/src/utils.ts`, `packages/kilo-vscode/src/webview-html-utils.ts`, `packages/kilo-vscode/tests/fixtures/live-voice.mjs`, `packages/kilo-vscode/tests/unit/live-voice.test.ts`, `packages/kilo-vscode/tests/unit/live-speech-routing.test.ts`, `packages/kilo-vscode/tests/unit/speech-to-text-capture.test.ts`, `packages/kilo-vscode/tests/unit/webview-html.test.ts`, `.changeset/raya-live-host-microphone.md`.
+
+Commands (packages/kilo-vscode): `bun test tests/unit/webview-html.test.ts tests/unit/speech-to-text-capture.test.ts tests/unit/live-speech-routing.test.ts --timeout 30000` → 31 pass / 0 fail / 80 expect / exit 0. `bun test tests/unit/live-voice.test.ts --timeout 50000` → 1 pass / 0 fail / 2 expect / exit 0. `bun test tests/unit/live-voice-ui.test.ts --timeout 90000` → 1 pass / 0 fail / 2 expect / exit 0. `bun run check-types` → exit 0. `bun run check-types:webview` → exit 0. `bun run check-kilocode-change` → exit 0.
+
+This is not a paid GPT-Live call and not real-device acoustic quality. Browser AEC is requested on the webview path; host PCM does not claim echo cancellation. VS Code stable webviews still omit iframe microphone permission. Unexpected ffmpeg death after start is not yet posted as `speechLiveMicError`. Receiving-side telemetry consent ordering remains open. Codex-deferred research stays untracked.
+
+Remaining: paid GPT-Live/device acoustic acceptance, VS Code iframe microphone consent, provider-switch/disposal, and receiving-side telemetry consent ordering.
+
+Next executable step: leftover receiving-side telemetry consent ordering, or a real-account GPT-Live call on a device.

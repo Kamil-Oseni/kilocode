@@ -481,7 +481,7 @@ try {
   emit({ type: "routineState", agents: [agent] })
   button("Edit schedule").click()
   assert.match(root.textContent, /Saving keeps it paused/)
-  assert.equal(button("Confirm schedule change").disabled, true)
+  assert.equal(button("Save assignment").disabled, true)
   button("Preview schedule").click()
   const first = sent.findLast((msg) => msg.type === "routineForecast")
   assert.deepEqual(first.edit, { agentID: "routine", expectedSchedule: agent.schedule, expectedScheduleVersion: 4 })
@@ -495,7 +495,7 @@ try {
     schedule: first.schedule,
     occurrences: [],
   })
-  assert.equal(button("Confirm schedule change").disabled, true)
+  assert.equal(button("Save assignment").disabled, true)
   button("Preview schedule").click()
   const second = sent.findLast((msg) => msg.type === "routineForecast")
   emit({
@@ -523,7 +523,7 @@ try {
   })
   emit({ type: "routineState", agents: [agent] })
   assert.match(root.textContent, /Schedule version changed/)
-  assert.equal(button("Confirm schedule change").disabled, true)
+  assert.equal(button("Save assignment").disabled, true)
   button("Back to routines to reload").click()
   assert.ok(sent.findLast((msg) => msg.type === "routineList"))
   {
@@ -574,6 +574,40 @@ try {
     assert.match(root.textContent, /This worker stays paused/)
     button("Done").click()
   }
+  {
+    button("Edit schedule").click()
+    assert.match(root.textContent, /Earlier reports stay in this conversation/)
+    const named = [...root.querySelectorAll("label")]
+      .find((item) => item.textContent.trim().startsWith("Name"))
+      .querySelector("input")
+    const job = [...root.querySelectorAll("label")]
+      .find((item) => item.textContent.trim().startsWith("Standing job"))
+      .querySelector("textarea")
+    assert.equal(named.value, "Review")
+    assert.equal(job.value, "Review changes")
+    named.value = "Accounting"
+    named.dispatchEvent(new window.Event("input", { bubbles: true }))
+    job.value = "Reconcile Friday receipts"
+    job.dispatchEvent(new window.Event("input", { bubbles: true }))
+    const prior = sent.filter((msg) => msg.type === "routineForecast").length
+    button("Save assignment").click()
+    assert.equal(sent.filter((msg) => msg.type === "routineForecast").length, prior)
+    const saved = sent.findLast((msg) => msg.type === "routineUpdate")
+    assert.equal(saved.agentID, "routine")
+    assert.equal(saved.name, "Accounting")
+    assert.equal(saved.objective, "Reconcile Friday receipts")
+    assert.equal(saved.enabled, undefined)
+    emit({
+      type: "routineState",
+      saved: true,
+      agents: [{ ...agent, name: "Accounting", objective: "Reconcile Friday receipts" }],
+    })
+    assert.equal(
+      [...root.querySelectorAll("button")].some((item) => item.textContent.trim() === "Save assignment"),
+      false,
+    )
+    assert.match(root.textContent, /Accounting/)
+  }
   const legacy = { ...agent, enabled: true, schedule: { kind: "cron", expr: "0 9 * * *" } }
   emit({ type: "routineState", agents: [legacy] })
   assert.match(root.textContent, /Automatic runs need timezone review/)
@@ -587,7 +621,7 @@ try {
   button("Preview schedule").click()
   assert.equal(sent.filter((msg) => msg.type === "routineForecast").length, before)
   assert.match(root.textContent, /Choose a timezone/)
-  assert.equal(button("Confirm schedule change").disabled, true)
+  assert.equal(button("Save assignment").disabled, true)
   zone.value = "America/Toronto"
   zone.dispatchEvent(new window.Event("input", { bubbles: true }))
   button("Preview schedule").click()

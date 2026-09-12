@@ -1514,6 +1514,13 @@ describe("RayaTask store", () => {
     expect(listed[0].agentID).toBe(books.id)
     expect(listed[0].latest?.id).toBe(report.id)
     expect(listed[0].latest?.body).toBe("Friday receipts are missing.")
+    const moved = await Effect.runPromise(tasks.update(books.id, { objective: "Reconcile Friday receipts" }))
+    expect(moved.id).toBe(books.id)
+    expect(moved.objective).toBe("Reconcile Friday receipts")
+    expect(moved.name).toBe("Accounting")
+    const kept = await Effect.runPromise(inbox.summaries([moved], new Map()))
+    expect(kept[0].agentID).toBe(books.id)
+    expect(kept[0].latest?.body).toBe("Friday receipts are missing.")
     const page = await Effect.runPromise(inbox.page(books.id))
     expect(page.messages.some((item) => item.agentID === books.id && item.body === report.body)).toBe(true)
     const admitted = await Effect.runPromise(

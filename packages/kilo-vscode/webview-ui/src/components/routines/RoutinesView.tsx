@@ -561,6 +561,14 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
         setSaving(false)
       }
     }
+    if (msg.saved && !msg.error && editing() && saving() && !pending()) {
+      setError("")
+      hold = false
+      setSaving(false)
+      setEditing(undefined)
+      setScreen("roster")
+      load()
+    }
     if (msg.saved && !msg.error && !editing()) {
       setError("")
       hold = false
@@ -638,6 +646,12 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     setDraft(populate(item.schedule, draft().zone))
   }
 
+  const moved = () => {
+    const item = editing()
+    if (!item) return false
+    return name().trim() !== item.name || objective().trim() !== item.objective
+  }
+
   const create = () => {
     if (!editing() && !consent()) {
       setError("Choose whether to allow the records this role needs before assigning it.")
@@ -645,6 +659,32 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     }
     if (!editing() && !deliverable()) {
       setError("Describe the required output and how to verify each criterion before assigning it.")
+      return
+    }
+    const item = editing()
+    if (item) {
+      const named = name().trim()
+      const job = objective().trim()
+      if (!named || !job) {
+        setError("Keep a name and standing job.")
+        return
+      }
+      const token = preview()?.forecastID
+      const timed = confirmed() && !!token
+      if (!moved() && !timed) {
+        setError("Preview the schedule before saving, or change the name or standing job.")
+        return
+      }
+      setError("")
+      setSaving(true)
+      hold = true
+      if (moved())
+        vscode.postMessage({ type: "routineUpdate", agentID: item.id, name: named, objective: job })
+      if (!timed) return
+      const id = crypto.randomUUID()
+      setPending(id)
+      setNotice("")
+      vscode.postMessage({ type: "routineScheduleUpdate", requestID: id, agentID: item.id, forecastID: token })
       return
     }
     const token = preview()?.forecastID
@@ -655,14 +695,6 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     setError("")
     setSaving(true)
     hold = true
-    const item = editing()
-    if (item) {
-      const id = crypto.randomUUID()
-      setPending(id)
-      setNotice("")
-      vscode.postMessage({ type: "routineScheduleUpdate", requestID: id, agentID: item.id, forecastID: token })
-      return
-    }
     const capabilities = [money() ? "money" : "", messages() ? "messages" : ""].filter(Boolean)
     const chosen = current()
     vscode.postMessage({
@@ -685,6 +717,8 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
 
   const edit = (item: Agent) => {
     setEditing(item)
+    setName(item.name)
+    setObjective(item.objective)
     setDraft(
       populate(
         item.schedule,
@@ -1014,11 +1048,11 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
               create()
             }}
           >
+            <label class="routines-field">
+              Name
+              <input value={name()} onInput={(e) => setName(e.currentTarget.value)} placeholder="Nightly review" />
+            </label>
             <Show when={!editing()}>
-              <label class="routines-field">
-                Name
-                <input value={name()} onInput={(e) => setName(e.currentTarget.value)} placeholder="Nightly review" />
-              </label>
               <div class="routines-field">
                 <span>Role</span>
                 <Select
@@ -1041,15 +1075,18 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                   />
                 </label>
               </Show>
-              <label class="routines-field">
-                Standing job
-                <textarea
-                  value={objective()}
-                  onInput={(e) => setObjective(e.currentTarget.value)}
-                  placeholder="Review the repo for bugs every weekday evening."
-                  rows={3}
-                />
-              </label>
+            </Show>
+            <label class="routines-field">
+              Standing job
+              <textarea
+                value={objective()}
+                onInput={(e) => setObjective(e.currentTarget.value)}
+                placeholder="Review the repo for bugs every weekday evening."
+                rows={3}
+              />
+            </label>
+            <Show when={editing()}>
+              <p class="routines-hint">Earlier reports stay in this conversation. This does not start a new worker.</p>
             </Show>
             <ScheduleEditor value={draft()} onChange={setDraft} disabled={saving()} />
             <Show when={!editing()}>
@@ -1216,12 +1253,18 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
             <Button
               type="submit"
               disabled={
-                (!editing() && (!objective().trim() || !dir().trim() || !consent() || !deliverable())) ||
                 saving() ||
-                !confirmed()
+                (!editing() && (!objective().trim() || !dir().trim() || !consent() || !deliverable() || !confirmed())) ||
+                (!!editing() && (!name().trim() || !objective().trim() || (!confirmed() && !moved())))
               }
             >
-              {saving() ? "Saving" : editing() ? "Confirm schedule change" : "Confirm and assign"}
+              {saving()
+                ? "Saving"
+                : editing()
+                  ? confirmed()
+                    ? "Confirm schedule change"
+                    : "Save assignment"
+                  : "Confirm and assign"}
             </Button>
           </form>
         </Show>

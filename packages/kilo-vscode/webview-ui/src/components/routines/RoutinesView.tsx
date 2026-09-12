@@ -143,6 +143,18 @@ function advice(item: Agent, book: Record<string, Run[]>) {
   return "This routine is paused. Saving keeps it paused."
 }
 
+function roleof(role: string, custom: string) {
+  return role === "custom" ? custom.trim() || "custom" : role
+}
+
+function grants(money: boolean, messages: boolean) {
+  return [money ? "money" : "", messages ? "messages" : ""].filter(Boolean)
+}
+
+function known(id: string) {
+  return roles.some((item) => item.id === id && item.id !== "custom")
+}
+
 function folder(path: string) {
   const parts = path.replaceAll("\\", "/").split("/").filter(Boolean)
   return parts.at(-1) ?? path
@@ -649,7 +661,12 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const moved = () => {
     const item = editing()
     if (!item) return false
-    return name().trim() !== item.name || objective().trim() !== item.objective
+    return (
+      name().trim() !== item.name ||
+      objective().trim() !== item.objective ||
+      roleof(role(), custom()) !== item.role ||
+      dir().trim() !== (item.dir ?? "")
+    )
   }
 
   const caption = () => {
@@ -661,27 +678,42 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
 
   const blocked = () => {
     if (saving()) return true
-    if (editing()) return !name().trim() || !objective().trim() || (!confirmed() && !moved())
+    if (editing()) return !name().trim() || !objective().trim() || !consent() || (!confirmed() && !moved())
     return !objective().trim() || !dir().trim() || !consent() || !deliverable() || !confirmed()
   }
 
   const persist = (item: Agent) => {
     const named = name().trim()
     const job = objective().trim()
+    const part = roleof(role(), custom())
+    const dest = dir().trim()
     if (!named || !job) {
       setError("Keep a name and standing job.")
+      return
+    }
+    if (!consent()) {
+      setError("Choose whether to allow the records this role needs before assigning it.")
       return
     }
     const token = preview()?.forecastID
     const timed = confirmed() && !!token
     if (!moved() && !timed) {
-      setError("Preview the schedule before saving, or change the name or standing job.")
+      setError("Preview the schedule before saving, or change the name, role, standing job, or write folder.")
       return
     }
     setError("")
     setSaving(true)
     hold = true
-    if (moved()) vscode.postMessage({ type: "routineUpdate", agentID: item.id, name: named, objective: job })
+    if (moved())
+      vscode.postMessage({
+        type: "routineUpdate",
+        agentID: item.id,
+        name: named,
+        objective: job,
+        role: part,
+        dir: dest || undefined,
+        capabilities: part === "accountant" || part === "inbox" ? grants(money(), messages()) : undefined,
+      })
     if (!timed) return
     const id = crypto.randomUUID()
     setPending(id)
@@ -711,7 +743,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     setError("")
     setSaving(true)
     hold = true
-    const capabilities = [money() ? "money" : "", messages() ? "messages" : ""].filter(Boolean)
+    const capabilities = grants(money(), messages())
     const chosen = current()
     vscode.postMessage({
       type: "routineCreate",
@@ -735,6 +767,16 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     setEditing(item)
     setName(item.name)
     setObjective(item.objective)
+    if (known(item.role)) {
+      setRole(item.role)
+      setCustom("")
+    } else {
+      setRole("custom")
+      setCustom(item.role)
+    }
+    setDir(item.dir ?? "")
+    setMoney(item.capabilities.some((cap) => ["money", "accounting", "books"].includes(cap.toLowerCase())))
+    setMessages(item.capabilities.some((cap) => cap.toLowerCase() === "messages"))
     setDraft(
       populate(
         item.schedule,
@@ -1068,29 +1110,27 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
               Name
               <input value={name()} onInput={(e) => setName(e.currentTarget.value)} placeholder="Nightly review" />
             </label>
-            <Show when={!editing()}>
-              <div class="routines-field">
-                <span>Role</span>
-                <Select
-                  options={[...roles]}
-                  current={roleOpt()}
-                  label={(item) => item.label}
-                  value={(item) => item.id}
-                  onSelect={(item) => item && pick(item.id)}
-                  variant="secondary"
-                  size="small"
+            <div class="routines-field">
+              <span>Role</span>
+              <Select
+                options={[...roles]}
+                current={roleOpt()}
+                label={(item) => item.label}
+                value={(item) => item.id}
+                onSelect={(item) => item && pick(item.id)}
+                variant="secondary"
+                size="small"
+              />
+            </div>
+            <Show when={role() === "custom"}>
+              <label class="routines-field">
+                Custom role
+                <input
+                  value={custom()}
+                  onInput={(e) => setCustom(e.currentTarget.value)}
+                  placeholder="ops, researcher, gardener"
                 />
-              </div>
-              <Show when={role() === "custom"}>
-                <label class="routines-field">
-                  Custom role
-                  <input
-                    value={custom()}
-                    onInput={(e) => setCustom(e.currentTarget.value)}
-                    placeholder="ops, researcher, gardener"
-                  />
-                </label>
-              </Show>
+              </label>
             </Show>
             <label class="routines-field">
               Standing job
@@ -1102,7 +1142,10 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
               />
             </label>
             <Show when={editing()}>
-              <p class="routines-hint">Earlier reports stay in this conversation. This does not start a new worker.</p>
+              <p class="routines-hint">
+                Earlier reports stay in this conversation. This does not start a new worker. Role and write folder
+                changes apply to later runs.
+              </p>
             </Show>
             <ScheduleEditor value={draft()} onChange={setDraft} disabled={saving()} />
             <Show when={!editing()}>
@@ -1218,45 +1261,47 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                   {workOpt().description} This policy does not provide operating-system confinement.
                 </p>
               </div>
-              <Show when={role() === "accountant"}>
-                <div class="routines-consent">
-                  <Checkbox checked={money()} onChange={setMoney}>
-                    Allow money records
-                  </Checkbox>
-                  <p class="routines-hint">Receipts, ledgers, and invoices. It will not send payments.</p>
-                </div>
-              </Show>
-              <Show when={role() === "inbox"}>
-                <div class="routines-consent">
-                  <Checkbox checked={messages()} onChange={setMessages}>
-                    Allow messages
-                  </Checkbox>
-                  <p class="routines-hint">Read the inbox and draft replies. It will not send unless you ask.</p>
-                </div>
-              </Show>
-              <div class="routines-field">
-                <span>Write folder</span>
-                <div class="routines-pick">
-                  <input
-                    value={dir()}
-                    onInput={(e) => setDir(e.currentTarget.value)}
-                    placeholder="Choose or type a folder"
-                  />
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="small"
-                    onClick={() => {
-                      const id = crypto.randomUUID()
-                      setWait(id)
-                      vscode.postMessage({ type: "requestFolderPicker", requestId: id })
-                    }}
-                  >
-                    Choose
-                  </Button>
-                </div>
-                <p class="routines-hint">It can read from anywhere. New files go in this folder.</p>
+            </Show>
+            <Show when={role() === "accountant"}>
+              <div class="routines-consent">
+                <Checkbox checked={money()} onChange={setMoney}>
+                  Allow money records
+                </Checkbox>
+                <p class="routines-hint">Receipts, ledgers, and invoices. It will not send payments.</p>
               </div>
+            </Show>
+            <Show when={role() === "inbox"}>
+              <div class="routines-consent">
+                <Checkbox checked={messages()} onChange={setMessages}>
+                  Allow messages
+                </Checkbox>
+                <p class="routines-hint">Read the inbox and draft replies. It will not send unless you ask.</p>
+              </div>
+            </Show>
+            <div class="routines-field">
+              <span>Write folder</span>
+              <div class="routines-pick">
+                <input
+                  value={dir()}
+                  onInput={(e) => setDir(e.currentTarget.value)}
+                  placeholder="Choose or type a folder"
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="small"
+                  onClick={() => {
+                    const id = crypto.randomUUID()
+                    setWait(id)
+                    vscode.postMessage({ type: "requestFolderPicker", requestId: id })
+                  }}
+                >
+                  Choose
+                </Button>
+              </div>
+              <p class="routines-hint">It can read from anywhere. New files go in this folder.</p>
+            </div>
+            <Show when={!editing()}>
               <label class="routines-field">
                 Plan file
                 <input

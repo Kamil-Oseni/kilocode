@@ -596,6 +596,9 @@ try {
     assert.equal(saved.agentID, "routine")
     assert.equal(saved.name, "Accounting")
     assert.equal(saved.objective, "Reconcile Friday receipts")
+    assert.equal(saved.role, "reviewer")
+    assert.equal(saved.dir, undefined)
+    assert.equal(saved.capabilities, undefined)
     assert.equal(saved.enabled, undefined)
     emit({
       type: "routineState",
@@ -607,6 +610,31 @@ try {
       false,
     )
     assert.match(root.textContent, /Accounting/)
+  }
+  {
+    button("Edit schedule").click()
+    assert.match(root.textContent, /Role/)
+    assert.match(root.textContent, /Write folder/)
+    assert.match(root.textContent, /Role and write folder/)
+    const dest = root.querySelector(".routines-pick input")
+    assert.equal(dest.value, "")
+    dest.value = "C:/tmp/review-writes"
+    dest.dispatchEvent(new window.Event("input", { bubbles: true }))
+    button("Save assignment").click()
+    const assigned = sent.findLast((msg) => msg.type === "routineUpdate")
+    assert.equal(assigned.agentID, "routine")
+    assert.equal(assigned.role, "reviewer")
+    assert.equal(assigned.dir, "C:/tmp/review-writes")
+    assert.equal(assigned.capabilities, undefined)
+    emit({
+      type: "routineState",
+      saved: true,
+      agents: [{ ...agent, name: "Accounting", objective: "Reconcile Friday receipts", dir: assigned.dir }],
+    })
+    assert.equal(
+      [...root.querySelectorAll("button")].some((item) => item.textContent.trim() === "Save assignment"),
+      false,
+    )
   }
   const legacy = { ...agent, enabled: true, schedule: { kind: "cron", expr: "0 9 * * *" } }
   emit({ type: "routineState", agents: [legacy] })
@@ -917,6 +945,9 @@ try {
     assert.match(creation.output.criteria[0].id, /^criterion-/)
     assert.equal(creation.output.criteria[0].verification, "Include a message reference for each draft")
   }
+} catch (err) {
+  console.error(err)
+  throw err
 } finally {
   dispose()
   await window.happyDOM.close()

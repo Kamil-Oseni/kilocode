@@ -167,6 +167,11 @@ function tools(msg: Msg) {
   return msg.tools.filter((item): item is string => typeof item === "string")
 }
 
+function capabilities(msg: Msg) {
+  if (!Array.isArray(msg.capabilities)) return
+  return msg.capabilities.filter((item): item is string => typeof item === "string")
+}
+
 function access(msg: Msg) {
   if (msg.access === "full" || msg.access === "brief") return msg.access
 }
@@ -393,6 +398,7 @@ async function update(ctx: Ctx) {
       dir: folder(msg),
       access: access(msg),
       tools: tools(msg),
+      capabilities: capabilities(msg),
     },
     { throwOnError: true },
   )

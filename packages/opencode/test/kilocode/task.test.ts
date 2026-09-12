@@ -1521,6 +1521,13 @@ describe("RayaTask store", () => {
     const kept = await Effect.runPromise(inbox.summaries([moved], new Map()))
     expect(kept[0].agentID).toBe(books.id)
     expect(kept[0].latest?.body).toBe("Friday receipts are missing.")
+    const recast = await Effect.runPromise(tasks.update(books.id, { role: "reviewer", dir: "C:/tmp/books-writes" }))
+    expect(recast.id).toBe(books.id)
+    expect(recast.role).toBe("reviewer")
+    expect(recast.dir).toBe("C:/tmp/books-writes")
+    const still = await Effect.runPromise(inbox.summaries([recast], new Map()))
+    expect(still[0].agentID).toBe(books.id)
+    expect(still[0].latest?.body).toBe("Friday receipts are missing.")
     const page = await Effect.runPromise(inbox.page(books.id))
     expect(page.messages.some((item) => item.agentID === books.id && item.body === report.body)).toBe(true)
     const admitted = await Effect.runPromise(

@@ -2862,6 +2862,19 @@ Installed eden.raya@7.4.23-snapshot+78d94211b4.kamil-oseni.1789180690558. VSIX C
 
 Next: leftover receiving-side telemetry consent ordering, or a real-account GPT-Live call on a device.
 
+## 2026-09-11: Receiving-side telemetry consent generation
+
+Status: verified locally and committed as fd1017b373. Not yet pushed or installed. CLI setEnabled admits only a newer generation. A stale enable after a later opt-out is refused. Captures with an older generation are dropped. The extension still sends a later opt-out while an earlier enable is in flight.
+
+Changed files: packages/kilo-telemetry/src/telemetry.ts, packages/kilo-telemetry/src/__tests__/telemetry.test.ts, packages/opencode/src/kilocode/server/httpapi/groups/telemetry.ts, packages/opencode/src/kilocode/server/httpapi/handlers/telemetry.ts, packages/kilo-vscode/src/services/telemetry/telemetry-proxy.ts, packages/kilo-vscode/tests/unit/telemetry-proxy-boundary.test.ts, .changeset/raya-telemetry-consent-generation.md.
+
+Commands: packages/kilo-telemetry bun test src/__tests__/telemetry.test.ts --timeout 30000 -> 20 pass / 0 fail / 50 expect / exit 0. packages/kilo-vscode bun test tests/unit/telemetry-proxy-boundary.test.ts tests/unit/telemetry-proxy-utils.test.ts --timeout 30000 -> 14 pass / 0 fail / 26 expect / exit 0. bun run check-types -> exit 0. packages/kilo-telemetry bun run typecheck -> exit 0. packages/opencode bun run typecheck -> exit 0. bun test ./test/kilocode/server/httpapi-public.test.ts --timeout 30000 -> 13 pass / 0 fail / 133 expect / exit 0. packages/kilo-vscode bun run check-kilocode-change -> exit 0.
+
+Aborting a client request still cannot undo a PostHog mutation that already happened. SDK types were not regenerated. Codex-deferred research stays untracked.
+
+Next: leftover provider-switch/disposal, or a real-account GPT-Live call on a device.
+
+
 
 
 

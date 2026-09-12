@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Installed product is `78d94211b4`. Packaged Live falls back to extension-host PCM when the webview microphone is denied. Remaining: paid GPT-Live/device acoustic acceptance, VS Code iframe microphone consent, and receiving-side telemetry consent ordering. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Product checkpoint `fd1017b373` is verified locally and not yet pushed or installed. Receiving-side telemetry consent uses a monotonic generation so a stale enable cannot override a later opt-out. Remaining: paid GPT-Live/device acoustic acceptance, VS Code iframe microphone consent, and provider-switch/disposal. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-11. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `78d94211b4` is committed, pushed and installed. Packaged Live host-microphone fallback, including the routing-complexity fix, is in this snapshot.
+**Latest delivered product:** checkpoint `78d94211b4` is committed, pushed and installed. Packaged Live host-microphone fallback, including the routing-complexity fix, is in that snapshot. Receiving-side telemetry consent generation is verified locally as `fd1017b373` and is not yet in the installed VSIX.
 
 ## Scope and reading order
 
@@ -1629,3 +1629,15 @@ Installed `eden.raya@7.4.23-snapshot+78d94211b4.kamil-oseni.1789180690558`. VSIX
 Remaining: paid GPT-Live/device acoustic acceptance, VS Code iframe microphone consent, provider-switch/disposal, and receiving-side telemetry consent ordering.
 
 Next executable step: leftover receiving-side telemetry consent ordering, or a real-account GPT-Live call on a device.
+
+## 2026-09-11: Receiving-side telemetry consent generation
+
+**States:** verified locally and committed as `fd1017b373`. Not yet pushed or installed. The CLI admits `setEnabled` only when the generation is newer than the last applied consent. A stale enable after a later opt-out is refused. Captures stamped with an older generation are dropped. The extension stamps a monotonic generation on both routes and still sends a later opt-out while an earlier enable is in flight. Unversioned enable remains valid only before any versioned consent change, so existing HTTP exercise `{ enabled: true }` still works on a fresh process.
+
+Changed files: `packages/kilo-telemetry/src/telemetry.ts`, `packages/kilo-telemetry/src/__tests__/telemetry.test.ts`, `packages/opencode/src/kilocode/server/httpapi/groups/telemetry.ts`, `packages/opencode/src/kilocode/server/httpapi/handlers/telemetry.ts`, `packages/kilo-vscode/src/services/telemetry/telemetry-proxy.ts`, `packages/kilo-vscode/tests/unit/telemetry-proxy-boundary.test.ts`, `.changeset/raya-telemetry-consent-generation.md`.
+
+Commands: `packages/kilo-telemetry` `bun test src/__tests__/telemetry.test.ts --timeout 30000` → 20 pass / 0 fail / 50 expect / exit 0. `packages/kilo-vscode` `bun test tests/unit/telemetry-proxy-boundary.test.ts tests/unit/telemetry-proxy-utils.test.ts --timeout 30000` → 14 pass / 0 fail / 26 expect / exit 0. `bun run check-types` → exit 0. `packages/kilo-telemetry` `bun run typecheck` → exit 0. `packages/opencode` `bun run typecheck` → exit 0. `bun test ./test/kilocode/server/httpapi-public.test.ts --timeout 30000` → 13 pass / 0 fail / 133 expect / exit 0. `packages/kilo-vscode` `bun run check-kilocode-change` → exit 0.
+
+Aborting a client request still cannot undo a PostHog mutation that already happened. This closes CLI admission ordering. SDK types were not regenerated; generation is an optional JSON field and the extension uses raw fetch. Remaining: paid GPT-Live/device acoustic acceptance, VS Code iframe microphone consent, and provider-switch/disposal. Codex-deferred research stays untracked.
+
+Next executable step: leftover provider-switch/disposal, or a real-account GPT-Live call on a device.

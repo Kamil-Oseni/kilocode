@@ -342,12 +342,23 @@ try {
       const heldFallback = fallback.start({ sessionID: "session-a", requestID: "request-host" }, after)
       await until(() => channel?.readyState === "open")
       fallback.started("request-host")
+      const host = captures.at(-2).getAudioTracks()[0]
+      check(
+        events.statuses.at(-1) === "connecting" && !host.enabled,
+        "host fallback waits for correlated capture readiness",
+      )
+      fallback.microphone("request-stale")
+      check(!host.enabled, "stale host microphone readiness cannot enable capture")
+      fallback.microphone("request-host")
       await heldFallback
       check(events.statuses.at(-1) === "listening", "denied webview microphone falls back to the host stream")
-      check(captures.at(-2).getAudioTracks()[0].readyState === "live", "host fallback supplies a live track")
+      check(host.readyState === "live" && host.enabled, "matching host readiness enables the fallback track")
       const closingFallback = fallback.stop()
       fallback.finalized("request-host")
       await closingFallback
+      const stopped = events.statuses.length
+      fallback.microphone("request-host")
+      check(events.statuses.length === stopped && host.readyState === "ended", "late host readiness cannot revive stopped media")
       drop()
 
       const pcm = Voice.pump(24000)
@@ -369,7 +380,7 @@ try {
       for (const context of contexts) await context.close()
     }
   })
-  assert.equal(result.length, 45)
+  assert.equal(result.length, 48)
   console.log(`Live native WebRTC: ${result.length} implementation assertions passed; local peers/synthetic audio only.`)
 } finally {
   await browser.close()

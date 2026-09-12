@@ -395,6 +395,7 @@ const AppContent: Component = () => {
             </Match>
             <Match when={currentView() === "routines"}>
               <RoutinesView
+                workspace={server.workspaceDirectory()}
                 onBack={() => setCurrentView("newTask")}
                 onOpenSession={(id) => {
                   handleSelectSession(id)

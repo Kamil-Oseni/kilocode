@@ -3,6 +3,8 @@ import { Button } from "@kilocode/kilo-ui/button"
 import { useVSCode } from "../../context/vscode"
 import type { ExtensionMessage } from "../../types/messages"
 
+const RESTORE_PAGE_LIMIT = 20
+
 export type Note = {
   id: string
   agentID: string
@@ -25,6 +27,11 @@ export type Box = {
   state: "scheduled" | "running" | "waiting" | "needs_input" | "paused" | "failed"
   nextRun?: number
   draft?: string
+}
+
+export type Anchor = {
+  id: string
+  offset: number
 }
 
 type Peer = {
@@ -192,7 +199,12 @@ const Line: Component<{
   const live = () => pending(props.item, props.rows)
   const id = () => linked(props.item)
   return (
-    <article class="routines-line" data-kind={props.item.kind} data-source={props.item.source}>
+    <article
+      class="routines-line"
+      data-kind={props.item.kind}
+      data-source={props.item.source}
+      data-routine-message={props.item.id}
+    >
       <span class="routines-line-meta">
         {kind(props.item.kind, props.item.source)} · {stamp(props.item.time)}
       </span>
@@ -424,6 +436,8 @@ export const Inbox: Component<{
   workspace?: string
   workers?: Peer[]
   runID?: string
+  anchor?: Anchor
+  onAnchor?: (value?: Anchor) => void
   onBack?: () => void
 }> = (props) => {
   const vscode = useVSCode()
@@ -444,6 +458,9 @@ export const Inbox: Component<{
   let older = false
   let wait = false
   let stick = true
+  let target: Anchor | undefined
+  let mark = ""
+  let depth = 0
   let seen = ""
   let pane: HTMLDivElement | undefined
   let frame: HTMLDivElement | undefined
@@ -467,6 +484,47 @@ export const Inbox: Component<{
     pane.scrollTop = pane.scrollHeight
   }
 
+  const place = () => {
+    if (!target || !pane) {
+      pin()
+      return
+    }
+    const key = typeof CSS !== "undefined" && typeof CSS.escape === "function" ? CSS.escape(target.id) : target.id
+    const row = pane.querySelector<HTMLElement>(`[data-routine-message="${key}"]`)
+    if (row) {
+      pane.scrollTop += row.getBoundingClientRect().top - pane.getBoundingClientRect().top - target.offset
+      stick = pane.scrollHeight - pane.scrollTop - pane.clientHeight < 48
+      target = undefined
+      return
+    }
+    const next = cursor()
+    if (next && !wait && depth < RESTORE_PAGE_LIMIT) {
+      depth++
+      load(next)
+      return
+    }
+    target = undefined
+    stick = true
+    props.onAnchor?.()
+    pin()
+  }
+
+  const remember = () => {
+    if (!pane) return
+    stick = pane.scrollHeight - pane.scrollTop - pane.clientHeight < 48
+    if (stick) {
+      props.onAnchor?.()
+      return
+    }
+    const top = pane.getBoundingClientRect().top
+    const row = [...pane.querySelectorAll<HTMLElement>("[data-routine-message]")].find(
+      (item) => item.getBoundingClientRect().bottom > top,
+    )
+    const id = row?.dataset.routineMessage
+    if (!row || !id) return
+    props.onAnchor?.({ id, offset: row.getBoundingClientRect().top - top })
+  }
+
   createEffect(() => {
     const id = props.agentID
     const latest = props.box?.latest?.id
@@ -484,6 +542,7 @@ export const Inbox: Component<{
       setError("")
       setNote(props.box?.draft ?? "")
       stick = true
+      depth = 0
       load()
       queueMicrotask(() => frame?.focus())
       return
@@ -510,7 +569,7 @@ export const Inbox: Component<{
         agentID: props.agentID,
         at: last.time,
       })
-    queueMicrotask(pin)
+    queueMicrotask(place)
   }
 
   const sent = (msg: ExtensionMessage) => {
@@ -591,9 +650,22 @@ export const Inbox: Component<{
   const unsub = vscode.onMessage(receive)
   onCleanup(() => {
     unsub()
+    remember()
     if (!timer) return
     clearTimeout(timer)
     persist(note())
+  })
+
+  createEffect(() => {
+    const id = props.anchor?.id ?? ""
+    const offset = props.anchor?.offset ?? 0
+    const next = `${id}:${offset}`
+    if (!id || next === mark) return
+    mark = next
+    target = { id, offset }
+    stick = false
+    depth = 0
+    if (thread().length) queueMicrotask(place)
   })
 
   const change = (value: string) => {
@@ -678,10 +750,7 @@ export const Inbox: Component<{
         tabIndex={0}
         aria-label={`Messages with ${props.name}`}
         aria-relevant="additions"
-        onScroll={() => {
-          if (!pane) return
-          stick = pane.scrollHeight - pane.scrollTop - pane.clientHeight < 48
-        }}
+        onScroll={remember}
       >
         <Show when={cursor()}>
           <Button

@@ -46,10 +46,13 @@ globalThis.window = window
 globalThis.requestAnimationFrame = window.requestAnimationFrame.bind(window)
 globalThis.cancelAnimationFrame = window.cancelAnimationFrame.bind(window)
 const sent = []
+let webview = { unrelated: "keep me" }
 globalThis.acquireVsCodeApi = () => ({
   postMessage: (msg) => sent.push(msg),
-  getState: () => undefined,
-  setState: () => {},
+  getState: () => webview,
+  setState: (state) => {
+    webview = state
+  },
 })
 const { createComponent } = await import("solid-js")
 const { render } = await import("solid-js/web")
@@ -60,29 +63,31 @@ const { DialogProvider } = await import("@kilocode/kilo-ui/context/dialog")
 const { default: RoutinesView } = await import("../../webview-ui/src/components/routines/RoutinesView.tsx")
 const root = document.createElement("div")
 document.body.append(root)
-const dispose = render(
-  () =>
-    createComponent(VSCodeProvider, {
-      get children() {
-        return createComponent(LanguageContext.Provider, {
-          value: { t: (key) => key },
-          get children() {
-            return createComponent(SessionContext.Provider, {
-              value: { agents: () => [] },
-              get children() {
-                return createComponent(DialogProvider, {
-                  get children() {
-                    return createComponent(RoutinesView, {})
-                  },
-                })
-              },
-            })
-          },
-        })
-      },
-    }),
-  root,
-)
+const mount = (workspace = "C:/Projects/Books") =>
+  render(
+    () =>
+      createComponent(VSCodeProvider, {
+        get children() {
+          return createComponent(LanguageContext.Provider, {
+            value: { t: (key) => key },
+            get children() {
+              return createComponent(SessionContext.Provider, {
+                value: { agents: () => [] },
+                get children() {
+                  return createComponent(DialogProvider, {
+                    get children() {
+                      return createComponent(RoutinesView, { workspace })
+                    },
+                  })
+                },
+              })
+            },
+          })
+        },
+      }),
+    root,
+  )
+let dispose = mount()
 const emit = (data) => window.dispatchEvent(new window.MessageEvent("message", { data }))
 const button = (text) => {
   const found = [...root.querySelectorAll("button")].find((item) => item.textContent.trim() === text)
@@ -141,6 +146,8 @@ try {
   assert.match(root.textContent, /1 unread/)
   assert.match(root.textContent, /Scheduled/)
   root.querySelector(".routines-identity").click()
+  assert.equal(webview.unrelated, "keep me")
+  assert.deepEqual(Object.values(webview.routineInbox.selected), [agent.id])
   await new Promise((resolve) => setImmediate(resolve))
   const page = sent.findLast((msg) => msg.type === "routineInboxPage")
   assert.equal(page.agentID, agent.id)
@@ -338,7 +345,17 @@ try {
       },
     },
   })
+  pane.getBoundingClientRect = () => ({ top: 0, bottom: 200 })
+  const visible = pane.querySelector('[data-routine-message="rmg_user"]')
+  visible.getBoundingClientRect = () => ({ top: 20, bottom: 60 })
+  for (const row of pane.querySelectorAll("[data-routine-message]")) {
+    if (row === visible) continue
+    row.getBoundingClientRect = () => ({ top: -80, bottom: -40 })
+  }
   pane.dispatchEvent(new window.Event("scroll"))
+  assert.deepEqual(Object.values(webview.routineInbox.anchors).map(({ id, offset }) => ({ id, offset })), [
+    { id: "rmg_user", offset: 20 },
+  ])
   emit({
     type: "routineInbox",
     requestID: request.requestID,
@@ -450,6 +467,106 @@ try {
   await new Promise((resolve) => setImmediate(resolve))
   assert.equal(root.querySelector(".routines-thread[role='region']"), null)
   assert.equal(document.activeElement, root.querySelector('[data-routine-worker="routine"]'))
+
+  webview = {
+    ...webview,
+    routineInbox: {
+      ...webview.routineInbox,
+      selected: { ...webview.routineInbox.selected, "c:/projects/books": agent.id },
+      anchors: {
+        ...webview.routineInbox.anchors,
+        '["c:/projects/books","rcv_1"]': { id: "rmg_user", offset: 20, at: Date.now() },
+      },
+    },
+  }
+  dispose()
+  dispose = mount()
+  await new Promise((resolve) => setImmediate(resolve))
+  const restored = sent.findLast((msg) => msg.type === "routineList")
+  emit({
+    type: "routineState",
+    requestID: restored.requestID,
+    viewID: restored.viewID,
+    refreshID: 1,
+    agents: [agent, legal],
+    templates: [],
+  })
+  assert.equal(root.querySelector(".routines-thread[role='region']").getAttribute("aria-label"), "Conversation with Books")
+  emit({
+    type: "routineInbox",
+    requestID: restored.requestID,
+    viewID: restored.viewID,
+    refreshID: 1,
+    items: [
+      {
+        agentID: agent.id,
+        conversationID: "rcv_1",
+        name: agent.name,
+        role: agent.role,
+        latest: { id: "rmg_4", agentID: agent.id, kind: "report", source: "report:occ3", body: "Latest", time: 5 },
+        unread: 1,
+        state: "scheduled",
+      },
+    ],
+  })
+  const firstPage = sent.findLast((msg) => msg.type === "routineInboxPage")
+  emit({
+    type: "routineInboxPage",
+    requestID: firstPage.requestID,
+    agentID: agent.id,
+    messages: [{ id: "rmg_4", agentID: agent.id, kind: "report", source: "report:occ3", body: "Latest", time: 5 }],
+    next: "2:rmg_user",
+  })
+  await new Promise((resolve) => setImmediate(resolve))
+  const older = sent.findLast((msg) => msg.type === "routineInboxPage")
+  assert.equal(older.cursor, "2:rmg_user")
+  emit({
+    type: "routineInboxPage",
+    requestID: older.requestID,
+    agentID: agent.id,
+    messages: [note, { id: "rmg_user", agentID: agent.id, kind: "user", source: retry.source, body: retry.body, time: 2 }],
+  })
+  const restoredPane = root.querySelector(".routines-thread-body")
+  let restoredTop = 0
+  Object.defineProperties(restoredPane, {
+    scrollHeight: { configurable: true, get: () => 800 },
+    clientHeight: { configurable: true, get: () => 200 },
+    scrollTop: {
+      configurable: true,
+      get: () => restoredTop,
+      set: (value) => {
+        restoredTop = value
+      },
+    },
+  })
+  restoredPane.getBoundingClientRect = () => ({ top: 0, bottom: 200 })
+  restoredPane.querySelector('[data-routine-message="rmg_user"]').getBoundingClientRect = () => ({ top: 30, bottom: 70 })
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(restoredTop, 10)
+  assert.equal(webview.unrelated, "keep me")
+
+  dispose()
+  webview = {
+    ...webview,
+    routineInbox: {
+      ...webview.routineInbox,
+      selected: { ...webview.routineInbox.selected, "c:/projects/legal": "missing" },
+    },
+  }
+  dispose = mount("C:/Projects/Legal")
+  await new Promise((resolve) => setImmediate(resolve))
+  const isolated = sent.findLast((msg) => msg.type === "routineList")
+  emit({
+    type: "routineState",
+    requestID: isolated.requestID,
+    viewID: isolated.viewID,
+    refreshID: 1,
+    agents: [agent, legal],
+    templates: [],
+  })
+  assert.equal(root.querySelector(".routines-thread[role='region']"), null)
+  assert.equal(webview.routineInbox.selected["c:/projects/legal"], undefined)
+  assert.equal(webview.routineInbox.selected["c:/projects/books"], agent.id)
   console.log("routine-inbox-view: conversation return and report arrival assertions passed")
 } finally {
   dispose()

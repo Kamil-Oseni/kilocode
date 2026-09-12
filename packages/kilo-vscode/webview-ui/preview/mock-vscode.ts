@@ -193,12 +193,16 @@ export function installMockVsCode() {
   const scope = globalThis as unknown as { acquireVsCodeApi?: () => VSCodeAPI; rayaPreviewMocked?: boolean }
   if (scope.rayaPreviewMocked) return
   scope.rayaPreviewMocked = true
+  const key = "raya-preview-webview-state"
   scope.acquireVsCodeApi = () => ({
     postMessage: (message) => {
       console.info("[raya preview] mock postMessage", message)
       queueMicrotask(() => reply(message))
     },
-    getState: () => undefined,
-    setState: () => {},
+    getState: () => {
+      const value = sessionStorage.getItem(key)
+      return value ? JSON.parse(value) : undefined
+    },
+    setState: (state) => sessionStorage.setItem(key, JSON.stringify(state)),
   })
 }

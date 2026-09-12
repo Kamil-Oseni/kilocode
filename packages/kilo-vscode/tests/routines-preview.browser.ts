@@ -107,6 +107,20 @@ test("light routines keyboard and file cards", async ({ page }, info) => {
   await page.screenshot({ path: info.outputPath("keyboard.png"), fullPage: true })
 })
 
+test("narrow routines restore the selected worker after reload", async ({ page }, info) => {
+  await page.setViewportSize({ width: 320, height: 900 })
+  await page.goto("/?state=light-routines")
+  await page.locator('.routines-identity[data-routine-worker="routine"]').click()
+  const thread = page.getByRole("region", { name: "Conversation with Books" })
+  await expect(thread).toBeVisible()
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem("raya-preview-webview-state"))).toContain('"routine"')
+  await page.reload()
+  await expect(page.getByRole("region", { name: "Conversation with Books" })).toBeVisible()
+  await expect(page.locator(".routines-people")).toBeHidden()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await page.screenshot({ path: info.outputPath("restored.png"), fullPage: true })
+})
+
 test("light routines at 200% zoom", async ({ page }, info) => {
   await page.setViewportSize({ width: 900, height: 900 })
   await page.goto("/?state=light-routines")

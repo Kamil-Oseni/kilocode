@@ -64,7 +64,6 @@ export const ComposerConfiguration: ParentComponent<{ sessionID: Accessor<string
           <span class="composer-configuration-action">{language.t("composer.configuration.action")}</span>
         </Collapsible.Trigger>
         <Collapsible.Content hidden={!open()} class="composer-configuration-body">
-          <p>{language.t("composer.configuration.help")}</p>
           <div class="composer-configuration-controls">{props.children}</div>
         </Collapsible.Content>
       </Collapsible>

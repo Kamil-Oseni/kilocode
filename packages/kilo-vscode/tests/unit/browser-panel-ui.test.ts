@@ -5,6 +5,19 @@ import { Window } from "happy-dom"
 const source = await Bun.file(new URL("../../src/services/browser-automation/browser-panel.ts", import.meta.url)).text()
 
 describe("Raya browser takeover panel", () => {
+  it("reserves a grid row for every browser surface", () => {
+    const start = source.indexOf("<!doctype html>")
+    const end = source.indexOf("  <script nonce=", start)
+    expect(start).toBeGreaterThanOrEqual(0)
+    expect(end).toBeGreaterThan(start)
+
+    const window = new Window()
+    window.document.write(source.slice(start, end) + "</body></html>")
+    const surfaces = Array.from(window.document.body.children).map((element) => element.id || element.tagName)
+    expect(surfaces).toEqual(["identity", "HEADER", "HEADER", "statusbar", "MAIN"])
+    expect(source).toContain("grid-template-rows: auto 36px 42px 32px minmax(0, 1fr)")
+  })
+
   it("shows live attempt state and an explicit resume control", () => {
     expect(source).toContain('id="status"')
     expect(source).toContain('id="resume"')

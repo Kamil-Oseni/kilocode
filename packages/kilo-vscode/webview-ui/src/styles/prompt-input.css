@@ -1046,11 +1046,6 @@
 .composer-configuration-body {
   padding: var(--raya-space-8) 0;
 }
-.composer-configuration-body p {
-  margin: 0 0 var(--raya-space-8);
-  line-height: 1.5;
-  font-size: var(--kilo-font-size-12);
-}
 .composer-configuration-controls {
   display: flex;
   flex-wrap: wrap;

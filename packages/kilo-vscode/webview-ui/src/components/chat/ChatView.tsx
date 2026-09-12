@@ -30,7 +30,7 @@ import { useServer } from "../../context/server"
 import { TranscriptSearchProvider } from "../../context/transcript-search"
 import { isPromptBlocked, isSuggesting, isQuestioning } from "./prompt-input-utils"
 import { editReview } from "./edit-review" // raya_change - inline edit review chrome
-import { reviewResult, retry, type ReviewRequest } from "./review-request"
+import { ready, reviewResult, retry, type ReviewRequest } from "./review-request"
 import { showTabStrip } from "../../utils/local-tabs"
 
 interface ChatViewProps {
@@ -181,7 +181,8 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   }
   const pending = () => {
     const key = changeKey()
-    return !!key && kept() !== key && !session.revert()
+    const details = revision()
+    return !!key && ready(id(), details) && kept() !== key && !session.revert()
   }
   const requestReview = (action: "keep" | "undo", file?: string) => {
     const sid = id()
@@ -189,7 +190,8 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     const selected = file ? editReview.select(sid, file) : undefined
     const expected = file ? selected?.expected : revision()?.session === sid ? revision()?.expected : undefined
     if (!expected || Object.keys(expected).length === 0) {
-      showToast({ title: "Session review details are not available yet. Open Review changes to inspect the current files." })
+      vscode.postMessage({ type: "requestReviewStats", sessionID: sid })
+      showToast({ title: "Refreshing review details. Try the action again when the controls return." })
       return
     }
     const attempt = { session: sid, key: changeKey(), epoch, file: selected?.file, revision: selected && expected[selected.file], action }
@@ -212,6 +214,12 @@ export const ChatView: Component<ChatViewProps> = (props) => {
       request: requestReview,
       busy: () => !!reviewing() || session.status() !== "idle" || server.connectionState() !== "connected",
     }))
+  })
+
+  createEffect(() => {
+    const sid = id()
+    if (!sid || props.readonly || session.status() !== "idle") return
+    vscode.postMessage({ type: "requestReviewStats", sessionID: sid })
   })
 
   const moveToWorktree = () => {
@@ -262,6 +270,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     epoch++
     setDiscarding(false)
     setKept(undefined)
+    setRevision(undefined)
   })
 
   createEffect(() => {
@@ -277,49 +286,48 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     if (session.status() === "idle") return
     epoch++
     setKept(undefined)
+    setRevision(undefined)
   })
 
-  onMount(() => {
-    const off = vscode.onMessage((message) => {
-      if (message.type === "reviewStatsLoaded" && message.sessionID && message.sessionID === id() && message.revision) {
-        editReview.update(message.sessionID, message.expected ?? {}, message.aliases, message.windows, message.accepted)
-        setRevision({ session: message.sessionID, value: message.revision, expected: message.expected })
-        if (message.accepted && message.expected) {
-          const files = Object.entries(message.expected)
-          setKept(files.length > 0 && files.every(([file, hash]) => message.accepted?.[file] === hash)
-            ? `${message.sessionID}:${message.revision}:${message.files}:${message.additions}:${message.deletions}`
-            : undefined)
-        }
+  const offReview = vscode.onMessage((message) => {
+    if (message.type === "reviewStatsLoaded" && message.sessionID && message.sessionID === id() && message.revision) {
+      editReview.update(message.sessionID, message.expected ?? {}, message.aliases, message.windows, message.accepted)
+      setRevision({ session: message.sessionID, value: message.revision, expected: message.expected })
+      if (message.accepted && message.expected) {
+        const files = Object.entries(message.expected)
+        setKept(files.length > 0 && files.every(([file, hash]) => message.accepted?.[file] === hash)
+          ? `${message.sessionID}:${message.revision}:${message.files}:${message.additions}:${message.deletions}`
+          : undefined)
+      }
+      return
+    }
+    if (message.type === "editReviewResult") {
+      const current = reviewing()
+      const outcome = reviewResult(current, message, { session: id(), key: changeKey(), epoch })
+      if (!current || outcome === "ignore") return
+      setReviewing(undefined)
+      if (outcome === "failed") {
+        setFailed(current)
+        showToast({ title: message.error })
         return
       }
-      if (message.type === "editReviewResult") {
-        const current = reviewing()
-        const outcome = reviewResult(current, message, { session: id(), key: changeKey(), epoch })
-        if (!current || outcome === "ignore") return
-        setReviewing(undefined)
-        if (outcome === "failed") {
-          setFailed(current)
-          showToast({ title: message.error })
-          return
+      setDiscarding(false)
+      setFailed(undefined)
+      if (outcome === "accept") {
+        if (current.file) editReview.keep(current.session, current.file, current.revision)
+        if (!current.file) {
+          editReview.keepAll(current.session)
+          setKept(current.key)
         }
-        setDiscarding(false)
-        setFailed(undefined)
-        if (outcome === "accept") {
-          if (current.file) editReview.keep(current.session, current.file, current.revision)
-          if (!current.file) {
-            editReview.keepAll(current.session)
-            setKept(current.key)
-          }
-        }
-        warn(message.warning)
-        vscode.postMessage({ type: "editReviewAcknowledged", sessionID: current.session, requestID: current.request })
-        return
       }
-      if (message.type !== "editReviewSync" || message.sessionID !== id()) return
-      if (message.revision) editReview.keep(message.sessionID, message.file, message.revision)
-    })
-    onCleanup(off)
+      warn(message.warning)
+      vscode.postMessage({ type: "editReviewAcknowledged", sessionID: current.session, requestID: current.request })
+      return
+    }
+    if (message.type !== "editReviewSync" || message.sessionID !== id()) return
+    if (message.revision) editReview.keep(message.sessionID, message.file, message.revision)
   })
+  onCleanup(offReview)
 
   // raya_change - New session, New worktree, and Move to worktree were bloating
   // the conversation footer. New session already lives in the top bar and the

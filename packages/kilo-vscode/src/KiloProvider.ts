@@ -1901,6 +1901,11 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       expected?: unknown
     },
   ): boolean {
+    if (message.type === "requestReviewStats") {
+      if (typeof message.sessionID === "string" && message.sessionID === this.currentSession?.id)
+        this.scheduleReview(message.sessionID)
+      return true
+    }
     if (message.type === "editReviewAcknowledged") {
       if (typeof message.sessionID === "string" && typeof message.requestID === "string") {
         const sid = message.sessionID

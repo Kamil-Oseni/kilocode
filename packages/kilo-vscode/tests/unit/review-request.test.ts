@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test"
-import { reviewResult, retry } from "../../webview-ui/src/components/chat/review-request"
+import { ready, reviewResult, retry } from "../../webview-ui/src/components/chat/review-request"
+
+test("bulk review waits for nonempty details from the current session", () => {
+  expect(ready("session-a", undefined)).toBe(false)
+  expect(ready("session-a", { session: "session-a" })).toBe(false)
+  expect(ready("session-a", { session: "session-a", expected: {} })).toBe(false)
+  expect(ready("session-a", { session: "session-b", expected: { "file.ts": "revision" } })).toBe(false)
+  expect(ready("session-a", { session: "session-a", expected: { "file.ts": "revision" } })).toBe(true)
+})
 
 describe("chat review acknowledgement identity", () => {
   test("reuses a retry identity only for the same logical review action", () => {

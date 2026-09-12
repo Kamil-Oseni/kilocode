@@ -680,8 +680,6 @@ export const dict = {
   "composer.configuration.action": "Configure",
   "composer.configuration.preferred": "Preferred model",
   "composer.configuration.reasoning": "Reasoning",
-  "composer.configuration.help":
-    "Choose how Raya works and which model to use. Open the model picker for pricing and provider details. Auto may use other configured models for routed work. File access and approvals are configured separately.",
   "composer.configuration.unset": "Model not selected",
   "composer.configuration.choose": "Open Configure to choose a model.",
   "composer.configuration.unavailable": "Selected model unavailable. Open Configure to check the model and provider.",

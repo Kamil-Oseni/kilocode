@@ -292,6 +292,10 @@ export const VoiceProvider: ParentComponent = (props) => {
   }
 
   function host(message: ExtensionMessage) {
+    if (message.type === "speechLiveMicReady") {
+      if (call?.engine === "live" && call.id === message.requestId && feed) live.microphone(message.requestId)
+      return true
+    }
     if (message.type === "speechLiveMicChunk") {
       if (
         call?.id === message.requestId &&

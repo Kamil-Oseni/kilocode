@@ -9,6 +9,22 @@ import { forget, remember } from "../../src/edit-review/attempts"
 import { forget as erase, listed, record } from "../../src/edit-review/undone"
 
 describe("host review acknowledgements", () => {
+  test("review detail refresh is scoped to the current session", () => {
+    const provider = new KiloProvider({} as never, {} as never)
+    const requested: Array<string | undefined> = []
+    const host = provider as unknown as {
+      currentSession?: { id: string }
+      scheduleReview(sessionID?: string): void
+      handleCheckpointMessage(message: unknown): boolean
+    }
+    host.currentSession = { id: "session-a" }
+    host.scheduleReview = (sessionID) => requested.push(sessionID)
+    expect(host.handleCheckpointMessage({ type: "requestReviewStats", sessionID: "session-b" })).toBe(true)
+    expect(host.handleCheckpointMessage({ type: "requestReviewStats", sessionID: "session-a" })).toBe(true)
+    expect(host.handleCheckpointMessage({ type: "requestReviewStats", sessionID: 7 })).toBe(true)
+    expect(requested).toEqual(["session-a"])
+  })
+
   test("confirmed deletion prunes only matching retry and delivery state", async () => {
     const values = new Map<string, unknown>()
     const state = {

@@ -116,14 +116,20 @@ if (new URLSearchParams(location.search).has("live")) {
   LiveVoice.prototype.start = async function (input, exchange) {
     window.__voiceStarts++
     window.__liveTransport = this
-    this.operation = { id: input.requestID, closed: false, started: false, muted: false, audio: { muted: false } }
+    this.operation = { id: input.requestID, closed: false, started: false, capture: false, muted: false, audio: { muted: false } }
     this.sink.status("connecting")
+    await this.acquire()
     await exchange("v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n")
   }
   LiveVoice.prototype.started = function (id) {
     if (!this.operation || this.operation.id !== id || this.operation.closed) return
     this.operation.started = true
-    this.sink.status("listening")
+    if (this.operation.capture) this.sink.status("listening")
+  }
+  LiveVoice.prototype.microphone = function (id) {
+    if (!this.operation || this.operation.id !== id || this.operation.closed) return
+    this.operation.capture = true
+    if (this.operation.started) this.sink.status("listening")
   }
   LiveVoice.prototype.stop = async function () {
     window.__voiceStopped++

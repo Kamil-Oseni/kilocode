@@ -280,6 +280,11 @@ export interface UnrevertSessionRequest {
   sessionID: string
 }
 
+export interface RequestReviewStatsMessage {
+  type: "requestReviewStats"
+  sessionID: string
+}
+
 // raya_change - discard file edits only, keep the conversation. Omit `files` to
 // discard every edit (Undo all); pass a subset for a single inline edit's Undo.
 export interface DiscardSessionChangesRequest {
@@ -1879,6 +1884,7 @@ export type WebviewMessage =
   | RevertSessionRequest
   | UnrevertSessionRequest
   | DiscardSessionChangesRequest
+  | RequestReviewStatsMessage
   | EditReviewKeepAllRequest
   | EditReviewAcknowledgedRequest
   | DeleteMessageRequest

@@ -18,7 +18,7 @@ export const RoutinesPreview: Component = () =>
             get children() {
               return createComponent(DialogProvider, {
                 get children() {
-                  return createComponent(RoutinesView, {})
+                  return createComponent(RoutinesView, { workspace: "C:/Projects/preview" })
                 },
               })
             },

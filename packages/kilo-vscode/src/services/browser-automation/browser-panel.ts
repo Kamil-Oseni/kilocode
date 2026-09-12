@@ -369,7 +369,7 @@ export class BrowserPanel implements vscode.Disposable {
     * { box-sizing: border-box; }
     [hidden] { display: none !important; }
     html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; color: var(--vscode-foreground); background: var(--vscode-editor-background); font-family: var(--vscode-font-family); }
-    body { display: grid; grid-template-rows: 36px 42px 32px minmax(0, 1fr); }
+    body { display: grid; grid-template-rows: auto 36px 42px 32px minmax(0, 1fr); }
     header { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--vscode-panel-border); background: var(--vscode-sideBar-background); }
     button, input, select { height: 28px; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, transparent); }
     button { min-width: 30px; cursor: pointer; }

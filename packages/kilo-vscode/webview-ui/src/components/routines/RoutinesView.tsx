@@ -1,4 +1,4 @@
-import { Component, For, Show, createMemo, createSignal, createUniqueId, onCleanup, onMount } from "solid-js"
+import { Component, For, Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup, onMount } from "solid-js"
 import { Button } from "@kilocode/kilo-ui/button"
 import { Checkbox } from "@kilocode/kilo-ui/checkbox"
 import { Dialog } from "@kilocode/kilo-ui/dialog"
@@ -19,7 +19,7 @@ import { Archive } from "./Archive"
 import { AccessReview } from "./AccessReview"
 import { OutputEditor } from "./OutputEditor"
 import { OutputReview } from "./OutputReview"
-import { Inbox, status, type Box } from "./Inbox"
+import { Inbox, status, type Anchor, type Box } from "./Inbox"
 import { Output } from "../../../../src/shared/routine-output"
 
 type Schedule =
@@ -68,6 +68,22 @@ type Template = {
 }
 
 type Choice = { key: string; label: string }
+
+type Saved = {
+  selected?: Record<string, string>
+  anchors?: Record<string, Anchor & { at: number }>
+}
+
+type ViewState = Record<string, unknown> & { routineInbox?: Saved }
+
+function scope(value: string) {
+  const path = value.trim().replaceAll("\\", "/").replace(/\/+$/, "")
+  return /^[A-Za-z]:\//.test(path) ? path.toLowerCase() : path
+}
+
+function pair(workspace: string, conversation: string) {
+  return JSON.stringify([workspace, conversation])
+}
 
 const roles = [
   { id: "briefer", label: "Briefer" },
@@ -341,6 +357,7 @@ const Person: Component<{
 interface RoutinesViewProps {
   onBack?: () => void
   onOpenSession?: (id: string) => void
+  workspace?: string
 }
 
 const RoutinesView: Component<RoutinesViewProps> = (props) => {
@@ -395,14 +412,81 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const [chosen, setChosen] = createSignal<string>()
   const [query, setQuery] = createSignal("")
   const [attention, setAttention] = createSignal<"all" | "unread" | "needs">("all")
+  const [workspace, setWorkspace] = createSignal(scope(props.workspace ?? ""))
   let correlation = crypto.randomUUID()
   let revision = 0
   let dirty = false
   let hold = false
 
+  createEffect(() => {
+    const next = scope(props.workspace ?? "")
+    setWorkspace(next)
+  })
+
+  const viewState = () => {
+    const value = vscode.getState<ViewState>()
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {} as ViewState
+    return value
+  }
+
+  const cache = () => {
+    const value = viewState().routineInbox
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {} as Saved
+    return value
+  }
+
+  const update = (saved: Saved) => vscode.setState<ViewState>({ ...viewState(), routineInbox: saved })
+
+  const remember = (agentID?: string) => {
+    const dir = workspace()
+    if (!dir) return
+    const saved = cache()
+    const selected = { ...(saved.selected ?? {}) }
+    if (agentID) selected[dir] = agentID
+    else delete selected[dir]
+    update({ ...saved, selected })
+  }
+
+  const stored = () => {
+    const dir = workspace()
+    if (!dir) return
+    const value = cache().selected?.[dir]
+    return typeof value === "string" && value ? value : undefined
+  }
+
+  const anchor = (conversation?: string) => {
+    const dir = workspace()
+    if (!dir || !conversation) return
+    const value = cache().anchors?.[pair(dir, conversation)]
+    if (!value || typeof value.id !== "string" || !Number.isFinite(value.offset)) return
+    return { id: value.id, offset: value.offset }
+  }
+
+  const saveAnchor = (conversation: string | undefined, value?: Anchor) => {
+    const dir = workspace()
+    if (!dir || !conversation) return
+    const saved = cache()
+    const anchors = { ...(saved.anchors ?? {}) }
+    const key = pair(dir, conversation)
+    if (value && Number.isFinite(value.offset)) anchors[key] = { ...value, at: Date.now() }
+    else delete anchors[key]
+    const entries = Object.entries(anchors)
+      .filter((entry) => {
+        const item = entry[1]
+        return !!item && typeof item.id === "string" && Number.isFinite(item.offset) && Number.isFinite(item.at)
+      })
+      .sort((a, b) => b[1].at - a[1].at)
+    update({ ...saved, anchors: Object.fromEntries(entries.slice(0, 128)) })
+  }
+
+  const choose = (agentID?: string) => {
+    setChosen(agentID)
+    remember(agentID)
+  }
+
   const leave = () => {
     const id = chosen()
-    setChosen()
+    choose()
     queueMicrotask(() => {
       if (chosen() || !root?.isConnected) return
       const title = root.querySelector<HTMLElement>(".routines-title")
@@ -461,7 +545,12 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     setAgents(items)
     if (reviewed() && section() !== "output" && !items.some((item) => item.id === reviewed()?.id)) dismiss()
     const id = chosen()
-    if (id && !items.some((item) => item.id === id)) setChosen()
+    if (id && !items.some((item) => item.id === id)) choose()
+    if (!id) {
+      const saved = stored()
+      if (saved && items.some((item) => item.id === saved)) setChosen(saved)
+      else if (saved) remember()
+    }
     if (items.some((item) => inspected(item.id))) return
     if (root?.querySelector(".routines-instructions")?.contains(document.activeElement)) return close()
     setInspection(undefined)
@@ -518,6 +607,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
       else setFreshness("Disconnected. Previously loaded routine information may be stale.")
     }
     if (msg.type === "workspaceDirectoryChanged") {
+      setWorkspace(scope(msg.directory))
       correlation = crypto.randomUUID()
       revision = 0
       dirty = false
@@ -1020,7 +1110,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                     canOpen={!!(item.execution ? item.execution.sessionID : run()?.sessionID) && !!props.onOpenSession}
                     presence={state(item)}
                     command={command()}
-                    onChoose={() => setChosen(item.id)}
+                    onChoose={() => choose(item.id)}
                     onMark={(value) => mark(item.id, value)}
                     onOpen={() => open(item)}
                     onAct={() => (command() === "open" ? open(item) : fire(item))}
@@ -1046,6 +1136,8 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                   workspace={item.dir ? folder(item.dir) : undefined}
                   workers={others(item.id, agents())}
                   runID={held(item, runs())}
+                  anchor={anchor(boxes()[item.id]?.conversationID)}
+                  onAnchor={(value) => saveAnchor(boxes()[item.id]?.conversationID, value)}
                   onBack={leave}
                 />
               )}

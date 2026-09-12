@@ -10,6 +10,13 @@ export type ReviewRequest = {
   action?: "keep" | "undo"
 }
 
+export function ready(
+  session: string | undefined,
+  details: { session: string; expected?: Record<string, string> } | undefined,
+) {
+  return !!session && details?.session === session && !!details.expected && Object.keys(details.expected).length > 0
+}
+
 /** Reuse an attempt only while its action, scope, revision and session still match. */
 export function retry(previous: ReviewRequest | undefined, next: Omit<ReviewRequest, "request">) {
   if (

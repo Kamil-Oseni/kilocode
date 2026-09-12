@@ -38,6 +38,10 @@ try {
   )
   assert.equal(request.engine, "live")
   assert.equal(request.sessionID, "first")
+  assert.equal(
+    await page.evaluate(() => window.__composerMessages.find((message) => message.type === "speechLiveMicStart")?.requestId),
+    request.requestId,
+  )
   assert.match(await summary.textContent(), /Auto/)
   await page.evaluate(
     (requestId) => window.postMessage({ type: "speechOpenAIReady", requestId, sdp: "local-answer" }, "*"),
@@ -53,6 +57,13 @@ try {
   assert.equal(await controls.getByRole("button", { name: "Mute microphone", exact: true }).isDisabled(), true)
   await page.evaluate(
     (requestId) => window.postMessage({ type: "speechLiveStarted", requestId }, "*"),
+    request.requestId,
+  )
+  assert.equal(await controls.getByRole("button", { name: "Mute microphone", exact: true }).isDisabled(), true)
+  await page.evaluate(() => window.postMessage({ type: "speechLiveMicReady", requestId: "stale" }, "*"))
+  assert.equal(await controls.getByRole("button", { name: "Mute microphone", exact: true }).isDisabled(), true)
+  await page.evaluate(
+    (requestId) => window.postMessage({ type: "speechLiveMicReady", requestId }, "*"),
     request.requestId,
   )
   await controls.getByRole("button", { name: "Mute microphone", exact: true }).click()
@@ -146,6 +157,10 @@ try {
     (requestId) => window.postMessage({ type: "speechLiveStarted", requestId }, "*"),
     request.requestId,
   )
+  await page.evaluate(
+    (requestId) => window.postMessage({ type: "speechLiveMicReady", requestId }, "*"),
+    request.requestId,
+  )
   assert.equal(await page.getByRole("group", { name: "Voice controls" }).count(), 0)
   assert.equal(await page.getByRole("button", { name: "Start voice", exact: true }).isDisabled(), true)
   await page.getByText("Previous voice cleanup is still unconfirmed. Restart Raya if cleanup does not finish.").waitFor()
@@ -166,6 +181,10 @@ try {
   )
   await page.evaluate(
     (requestId) => window.postMessage({ type: "speechLiveStarted", requestId }, "*"),
+    second.requestId,
+  )
+  await page.evaluate(
+    (requestId) => window.postMessage({ type: "speechLiveMicReady", requestId }, "*"),
     second.requestId,
   )
   await page.getByRole("group", { name: "Voice controls" }).waitFor()
@@ -219,7 +238,7 @@ try {
     second.requestId,
   )
   assert.equal(await page.getByRole("group", { name: "Voice controls" }).count(), 0)
-  console.log("Live VoiceProvider UI: 31 implementation assertions passed")
+  console.log("Live VoiceProvider UI: 34 implementation assertions passed")
 } finally {
   await browser.close()
   server.kill()

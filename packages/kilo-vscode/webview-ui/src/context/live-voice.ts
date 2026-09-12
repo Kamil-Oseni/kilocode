@@ -11,6 +11,7 @@ type Operation = {
   closed: boolean
   started: boolean
   answer: boolean
+  capture: boolean
   muted: boolean
   failed: boolean
   peer: RTCPeerConnection
@@ -92,6 +93,7 @@ export class LiveVoice {
       closed: false,
       started: false,
       answer: false,
+      capture: false,
       muted: false,
       failed: false,
       peer,
@@ -126,6 +128,13 @@ export class LiveVoice {
     const operation = this.operation
     if (!operation || operation.id !== id || operation.closed) return
     operation.started = true
+    this.connected(operation)
+  }
+
+  microphone(id: string) {
+    const operation = this.operation
+    if (!operation || operation.id !== id || operation.closed) return
+    operation.capture = true
     this.connected(operation)
   }
 
@@ -176,10 +185,10 @@ export class LiveVoice {
 
   private async capture() {
     try {
-      return await navigator.mediaDevices.getUserMedia({ audio: acoustic })
+      return { media: await navigator.mediaDevices.getUserMedia({ audio: acoustic }), ready: true }
     } catch (err) {
       if (!this.acquire) throw err
-      return this.acquire()
+      return { media: await this.acquire(), ready: false }
     }
   }
 
@@ -192,6 +201,7 @@ export class LiveVoice {
       this.current(operation) &&
       operation.started &&
       operation.answer &&
+      operation.capture &&
       operation.peer.connectionState === "connected" &&
       operation.channel.readyState === "open"
     )
@@ -232,12 +242,14 @@ export class LiveVoice {
       operation.audio.autoplay = true
       void operation.audio.play().catch(() => this.fail(operation, "Live voice playback was blocked. Reconnect from the voice button."))
     }
-    const media = await this.capture()
+    const capture = await this.capture()
+    const media = capture.media
     if (!this.current(operation)) {
       for (const track of media.getTracks()) track.stop()
       return
     }
     operation.media = media
+    operation.capture ||= capture.ready
     const track = media.getAudioTracks()[0]
     if (!track) throw new Error("No microphone track was supplied.")
     track.enabled = false

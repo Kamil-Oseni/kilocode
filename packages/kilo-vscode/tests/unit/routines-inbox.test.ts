@@ -248,6 +248,32 @@ test("routine delegate forwards a parent run id when the sender has outstanding 
   expect(messages[0]).toMatchObject({ type: "routineDelegated", requestID: "dlg1" })
 })
 
+test("routine delegate maps a missing worker to a durable unavailability error", async () => {
+  const messages: unknown[] = []
+  const client = createKiloClient({
+    baseUrl: "http://localhost:4096",
+    fetch: async () => new Response("Not Found", { status: 404 }),
+  })
+  await handleRoutineMessage({
+    client,
+    directory: "workspace",
+    post: (msg: unknown) => messages.push(msg),
+    message: {
+      type: "routineDelegate",
+      requestID: "dlg1",
+      agentID: "chief",
+      recipientID: "books",
+      source: "dlg:gone",
+      objective: "Review Friday expenses.",
+    },
+  })
+  expect(messages.at(-1)).toMatchObject({
+    type: "routineDelegated",
+    requestID: "dlg1",
+    error: "This worker is no longer available. Delegation is not started.",
+  })
+})
+
 test("routine delegate cancel posts the request id and refreshes inbox summaries", async () => {
   const messages: unknown[] = []
   let path = ""

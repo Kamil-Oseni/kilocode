@@ -169,3 +169,74 @@ test("the shipped routine delegate chain returns stored parent and follow-on rec
   expect(fromChild.record.id).toBe(child.id)
   expect((await app.request(`/kilocode/agent/${extra.id}/delegate/${parent.id}/chain`, { headers })).status).toBe(404)
 }, 60_000)
+
+test("the shipped routine delegate route denies archived and other-folder workers", async () => {
+  await using directory = await tmpdir({ git: true })
+  const headers = { "content-type": "application/json", "x-kilo-directory": directory.path }
+  const app = Server.Default().app
+  const spawn = async (name: string, role: string, objective: string, extra?: { capabilities?: string[]; dir?: string }) =>
+    Schema.decodeUnknownSync(Schema.toCodecJson(RayaTask.Agent))(
+      await (
+        await app.request("/kilocode/agent", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            name,
+            role,
+            objective,
+            access: "full",
+            enabled: true,
+            schedule: { kind: "manual" },
+            ...extra,
+          }),
+        })
+      ).json(),
+    )
+  const chief = await spawn("Chief of Staff", "generalist", "Coordinate Friday close.", { dir: "/close" })
+  const books = await spawn("Accounting", "accountant", "Reconcile receipts.", {
+    capabilities: ["accounting"],
+    dir: "/other",
+  })
+  const away = await app.request(`/kilocode/agent/${chief.id}/delegate`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      source: "dlg_dir",
+      senderID: chief.id,
+      recipientID: books.id,
+      objective: "List missing Friday receipts.",
+    }),
+  })
+  expect(away.status).toBe(200)
+  expect(Schema.decodeUnknownSync(Schema.toCodecJson(Record))(await away.json()).state).toBe("failed")
+  const quiet = await spawn("Quiet", "reviewer", "Review later.")
+  expect((await app.request(`/kilocode/agent/${quiet.id}`, { method: "DELETE", headers })).status).toBe(200)
+  const gone = await app.request(`/kilocode/agent/${chief.id}/delegate`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      source: "dlg_gone",
+      senderID: chief.id,
+      recipientID: quiet.id,
+      objective: "Review the Friday close.",
+    }),
+  })
+  expect(gone.status).toBe(200)
+  const row = Schema.decodeUnknownSync(Schema.toCodecJson(Record))(await gone.json())
+  expect(row.state).toBe("failed")
+  expect(row.reason).toContain("no longer available")
+  expect(
+    (
+      await app.request(`/kilocode/agent/${chief.id}/delegate`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          source: "dlg_missing",
+          senderID: chief.id,
+          recipientID: "missing",
+          objective: "Review the Friday close.",
+        }),
+      })
+    ).status,
+  ).toBe(404)
+}, 60_000)

@@ -276,7 +276,11 @@ async function pass(ctx: Ctx) {
       ...(token(msg.parentRunID) ? { parentRunID: String(msg.parentRunID) } : {}),
     },
     { throwOnError: true },
-  )
+  ).catch((err: unknown) => {
+    const text = getErrorMessage(err)
+    if (/\b404\b|not found/i.test(text)) throw new Error("This worker is no longer available. Delegation is not started.")
+    throw err
+  })
   ctx.post({ type: "routineDelegated", requestID: msg.requestID, agentID: msg.agentID, record: result.data })
   await summaries(ctx)
 }

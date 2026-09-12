@@ -32,10 +32,33 @@ type Peer = {
   name: string
   role: string
   enabled?: boolean
+  dir?: string
 }
 
-function ready(item: Peer) {
-  return item.enabled !== false
+function folder(value?: string) {
+  const path = value?.trim()
+  if (!path) return
+  return path.replaceAll("\\", "/").replace(/\/+$/, "")
+}
+
+function away(item: Peer, workspace?: string) {
+  const from = folder(workspace)
+  const to = folder(item.dir)
+  return !!(from && to && from !== to)
+}
+
+function ready(item: Peer, workspace?: string) {
+  if (item.enabled === false) return false
+  if (away(item, workspace)) return false
+  return true
+}
+
+function caption(item: Peer, phase: "idle" | "sending" | "failed", workspace?: string) {
+  if (phase === "sending") return "Asking"
+  if (item.enabled === false) return `${item.name} is paused`
+  if (away(item, workspace)) return `${item.name} is in another folder`
+  if (phase === "failed") return `Retry ask ${item.name}`
+  return `Ask ${item.name}`
 }
 
 function stamp(at: number) {
@@ -268,7 +291,7 @@ function saved(value: unknown) {
   return { state, reason }
 }
 
-const Pass: Component<{ agentID: string; workers: Peer[]; runID?: string; onDone?: () => void }> = (props) => {
+const Pass: Component<{ agentID: string; workers: Peer[]; workspace?: string; runID?: string; onDone?: () => void }> = (props) => {
   const vscode = useVSCode()
   const [ask, setAsk] = createSignal("")
   const [phase, setPhase] = createSignal<"idle" | "sending" | "failed">("idle")
@@ -327,7 +350,7 @@ const Pass: Component<{ agentID: string; workers: Peer[]; runID?: string; onDone
   const submit = (recipientID: string) => {
     const body = ask().trim()
     const peer = props.workers.find((item) => item.id === recipientID)
-    if (!body || phase() === "sending" || (peer && !ready(peer))) return
+    if (!body || phase() === "sending" || (peer && !ready(peer, props.workspace))) return
     setPhase("sending")
     setError("")
     setNews("")
@@ -361,8 +384,11 @@ const Pass: Component<{ agentID: string; workers: Peer[]; runID?: string; onDone
         />
       </label>
       <p class="routines-hint">Asks another worker for a tracked result. Does not change either assignment.</p>
-      <Show when={props.workers.some((item) => !ready(item))}>
+      <Show when={props.workers.some((item) => item.enabled === false)}>
         <p class="routines-hint">Paused workers cannot start a new request until they are enabled.</p>
+      </Show>
+      <Show when={props.workers.some((item) => away(item, props.workspace))}>
+        <p class="routines-hint">Workers in another folder cannot take this request.</p>
       </Show>
       <Show when={news()}>
         <p class="routines-hint" role="status">
@@ -379,16 +405,10 @@ const Pass: Component<{ agentID: string; workers: Peer[]; runID?: string; onDone
           <Button
             type="button"
             size="small"
-            disabled={phase() === "sending" || !ask().trim() || !ready(item)}
+            disabled={phase() === "sending" || !ask().trim() || !ready(item, props.workspace)}
             onClick={() => submit(item.id)}
           >
-            {phase() === "sending"
-              ? "Asking"
-              : !ready(item)
-                ? `${item.name} is paused`
-                : phase() === "failed"
-                  ? `Retry ask ${item.name}`
-                  : `Ask ${item.name}`}
+            {caption(item, phase(), props.workspace)}
           </Button>
         )}
       </For>
@@ -729,7 +749,16 @@ export const Inbox: Component<{
         </Button>
       </form>
       <Show when={props.workers && props.workers.length > 0}>
-        <Pass agentID={props.agentID} workers={props.workers!} runID={props.runID} onDone={() => { wait = false; load() }} />
+        <Pass
+          agentID={props.agentID}
+          workers={props.workers!}
+          workspace={props.workspace}
+          runID={props.runID}
+          onDone={() => {
+            wait = false
+            load()
+          }}
+        />
       </Show>
     </div>
   )

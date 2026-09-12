@@ -86,6 +86,9 @@ function folder(value?: string) {
   return path.replaceAll("\\", "/").replace(/\/+$/, "")
 }
 
+export const AWAY = "This request cannot leave the sender's workspace."
+export const GONE = "This worker is no longer available. Delegation is not started."
+
 export function scope(sender: Pick<RayaTask.Agent, "dir">, recipient: Pick<RayaTask.Agent, "dir">) {
   const from = folder(sender.dir)
   const to = folder(recipient.dir)
@@ -290,7 +293,12 @@ export namespace RayaTaskDelegation {
         .pipe(Effect.orDie)
       return rows.length
     })
-    const admit = Effect.fn("RayaTaskDelegation.admit")(function* (input: Request, sender: RayaTask.Agent, recipient: RayaTask.Agent) {
+    const admit = Effect.fn("RayaTaskDelegation.admit")(function* (
+      input: Request,
+      sender: RayaTask.Agent,
+      recipient: RayaTask.Agent,
+      gone?: boolean,
+    ) {
       const value = yield* Schema.decodeUnknownEffect(Request)(input).pipe(
         Effect.mapError(() => new Invalid({ message: "Delegation requests need a stable source and a non-empty objective." })),
       )
@@ -299,8 +307,6 @@ export namespace RayaTaskDelegation {
       if (value.senderID === value.recipientID)
         return yield* new Invalid({ message: "A worker cannot delegate to itself." })
       const workspace = scope(sender, recipient)
-      if (sender.dir?.trim() && recipient.dir?.trim() && workspace === undefined)
-        return yield* new Invalid({ message: "This request cannot leave the sender's workspace." })
       if (value.deadline !== undefined && value.deadline <= Date.now())
         return yield* new Invalid({ message: "This delegation deadline has already passed." })
       const prior = yield* lookup(value.source)
@@ -319,6 +325,10 @@ export namespace RayaTaskDelegation {
       const count = yield* outstanding(value.senderID, value.parentID)
       if (count >= FAN)
         return yield* new Invalid({ message: "This worker already has too many outstanding delegated requests." })
+      if (gone)
+        return yield* persist(value, sender, recipient, workspace, depth, "failed", GONE)
+      if (sender.dir?.trim() && recipient.dir?.trim() && workspace === undefined)
+        return yield* persist(value, sender, recipient, workspace, depth, "failed", AWAY)
       if (!recipient.enabled)
         return yield* persist(value, sender, recipient, workspace, depth, "failed", "This worker is paused. Delegation is not started until it is enabled.")
       if (recipient.access === undefined)

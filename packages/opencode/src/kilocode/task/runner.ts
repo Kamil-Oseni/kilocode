@@ -91,6 +91,22 @@ function workspace() {
   })
 }
 
+function absent(id: string): RayaTask.Agent {
+  return {
+    id,
+    name: "Unavailable worker",
+    role: "unavailable",
+    objective: "This worker is no longer available.",
+    capabilities: [],
+    memoryScope: "session",
+    schedule: { kind: "manual" },
+    enabled: false,
+    createdAt: 0,
+    updatedAt: 0,
+    access: "brief",
+  }
+}
+
 function open<A, E, R>(dir: string | undefined, effect: Effect.Effect<A, E, R>) {
   const path = dir?.trim()
   if (!path) return effect
@@ -459,6 +475,18 @@ export namespace RayaTaskRunner {
       return false
     })
 
+    const fetch = (id: string) =>
+      Effect.gen(function* () {
+        const live = yield* tasks.get(id).pipe(Effect.catchTag("RayaTask.NotFoundError", () => Effect.succeed(undefined)))
+        if (live) return { agent: live, gone: false as const }
+        const archived = yield* tasks.page({ agentID: id }).pipe(
+          Effect.catchTag("RayaTask.GuardError", () => Effect.succeed({ items: [] as const })),
+        )
+        const found = archived.items.find((item) => item.definition.id === id)
+        if (found) return { agent: found.definition, gone: true as const }
+        return
+      })
+
     const delegate = Effect.fn("RayaTaskRunner.delegate")(function* (input: Ask) {
       if (!errands)
         return yield* new RayaTask.GuardError({
@@ -466,14 +494,16 @@ export namespace RayaTaskRunner {
           message: "The delegation store is unavailable.",
         })
       const sender = yield* tasks.get(input.senderID)
-      const recipient = yield* tasks.get(input.recipientID)
+      const found = yield* fetch(input.recipientID)
+      if (!found) return yield* new RayaTask.NotFoundError({ message: "Agent not found" })
+      const recipient = found.agent
       if (input.parentRunID) {
         const history = yield* tasks.runsFor(sender.id)
         if (!history.some((run) => run.id === input.parentRunID))
           return yield* new Invalid({ message: "The parent run was not found for this worker." })
       }
       yield* lapse(Date.now())
-      const admitted = yield* errands.admit(input, sender, recipient)
+      const admitted = yield* errands.admit(input, sender, recipient, found.gone)
       if ((yield* busy(recipient.id)) || admitted.record.state !== "queued") return admitted.record
       const taken = yield* errands.take(recipient.id)
       if (!taken) return admitted.record
@@ -490,14 +520,15 @@ export namespace RayaTaskRunner {
         })
       const row = yield* errands.get(id)
       const kids = yield* errands.descendants(id)
-      const recipient = yield* tasks.get(row.recipientID)
+      const recipient = (yield* fetch(row.recipientID))?.agent ?? absent(row.recipientID)
       const record = yield* errands.stop(row.id, recipient, "Stopped by the user.")
       for (const child of kids) {
-        const other = yield* tasks.get(child.recipientID)
+        const other = (yield* fetch(child.recipientID))?.agent ?? absent(child.recipientID)
         yield* errands.stop(child.id, other, "Stopped because the parent request was stopped.")
       }
       const listed = [row, ...kids]
       for (const item of listed) {
+        if (item.state === "completed" || item.state === "failed") continue
         yield* drop(item.recipientID, item.sessionID, item.childRunID, "Stopped by the user.")
         if (!item.sessionID || !input.halt) continue
         yield* input.halt(item.sessionID).pipe(

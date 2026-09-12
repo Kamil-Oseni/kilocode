@@ -188,6 +188,11 @@ test("delegation admits once, refuses loops, and queues without duplicating a bu
       expect((yield* store.finish(taken!.id, "completed", books, "Travel receipts are missing.")).state).toBe(
         "completed",
       )
+      expect((yield* inbox.page(chief.id)).messages.filter((item) => item.source.startsWith("reply:")).length).toBe(1)
+      expect(
+        Exit.isFailure(yield* store.finish(taken!.id, "failed", books, "A different result.").pipe(Effect.exit)),
+      ).toBe(true)
+      expect((yield* inbox.page(chief.id)).messages.filter((item) => item.source.startsWith("reply:")).length).toBe(1)
       const loop = yield* store.admit(
         request("dlg_loop", books.id, chief.id, { parentID: first.record.id }),
         books,
@@ -211,13 +216,22 @@ test("delegation admits once, refuses loops, and queues without duplicating a bu
           yield* store.admit(request("dlg_root_6", chief.id, extra.id), chief, extra).pipe(Effect.exit),
         ),
       ).toBe(true)
-      expect(
-        Exit.isFailure(
-          yield* store
-            .admit(request("dlg_dir", chief.id, books.id), agent("chief", "generalist", { dir: "/a" }), agent("books", "accountant", { dir: "/b" }))
-            .pipe(Effect.exit),
-        ),
-      ).toBe(true)
+      const away = yield* store.admit(
+        request("dlg_dir", books.id, extra.id),
+        { ...books, dir: "/a" },
+        { ...extra, dir: "/b" },
+      )
+      expect(away.record.state).toBe("failed")
+      expect(away.record.reason).toContain("cannot leave the sender's workspace")
+      expect((yield* inbox.page(books.id)).messages.some((item) => item.body.includes("cannot leave") && item.body.includes("not a completed worker reply"))).toBe(
+        true,
+      )
+      const missing = yield* store.admit(request("dlg_gone", books.id, extra.id), books, extra, true)
+      expect(missing.record.state).toBe("failed")
+      expect(missing.record.reason).toContain("no longer available")
+      expect((yield* inbox.page(books.id)).messages.some((item) => item.body.includes("no longer available") && item.body.includes("not a completed worker reply"))).toBe(
+        true,
+      )
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })

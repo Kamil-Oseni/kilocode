@@ -372,6 +372,30 @@ try {
   const asks = sent.filter((msg) => msg.type === "routineDelegate").length
   button("Books is paused").click()
   assert.equal(sent.filter((msg) => msg.type === "routineDelegate").length, asks)
+  const legal = {
+    id: "legal",
+    name: "Legal",
+    role: "reviewer",
+    objective: "Review exceptions",
+    capabilities: [],
+    schedule: { kind: "manual" },
+    enabled: true,
+    access: "brief",
+    dir: "/other",
+  }
+  emit({
+    type: "routineState",
+    agents: [
+      { ...chief, dir: "/close" },
+      { ...books, enabled: false, dir: "/close" },
+      legal,
+    ],
+  })
+  assert.match(root.textContent, /Workers in another folder cannot take this request/)
+  assert.equal(button("Legal is in another folder").disabled, true)
+  button("Legal is in another folder").click()
+  assert.equal(sent.filter((msg) => msg.type === "routineDelegate").length, asks)
+  assert.equal(area2.value, "Need the missing receipts.")
   emit({
     type: "routineInbox",
     items: [

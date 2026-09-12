@@ -668,7 +668,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       payload: { source: string; senderID: string; recipientID: string; objective: string; parentRunID?: string }
     }) {
       yield* owned(ctx.params.agentID)
-      yield* owned(ctx.payload.recipientID)
+      yield* remembered(ctx.payload.recipientID)
       return yield* runner
         .delegate({ ...ctx.payload, senderID: ctx.params.agentID })
         .pipe(

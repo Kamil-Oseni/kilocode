@@ -393,3 +393,161 @@ test("an overdue queued request fails on tick without starting", async () => {
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })
+
+test("an archived or other-folder worker is denied without starting", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const starts: string[] = []
+      const runner = RayaTaskRunner.make({
+        database,
+        storage,
+        sessions: {
+          create: () =>
+            Effect.sync(() => {
+              starts.push("start")
+              return session(`ses_${starts.length}`)
+            }),
+          get: () => Effect.die("unused"),
+          messages: () => Effect.succeed([]),
+          children: () => Effect.succeed([]),
+        },
+      })
+      const inbox = RayaTaskInbox.make(database)
+      const chief = yield* runner.tasks.create({
+        name: "Chief of Staff",
+        role: "generalist",
+        objective: "Coordinate Friday close.",
+        access: "brief",
+        enabled: true,
+        dir: "/close",
+        schedule: { kind: "manual" },
+      })
+      const books = yield* runner.tasks.create({
+        name: "Accounting",
+        role: "accountant",
+        objective: "Reconcile receipts.",
+        capabilities: ["accounting"],
+        access: "full",
+        enabled: true,
+        dir: "/other",
+        schedule: { kind: "manual" },
+      })
+      const away = yield* runner.delegate({
+        source: "dlg_dir",
+        senderID: chief.id,
+        recipientID: books.id,
+        objective: "List missing Friday receipts.",
+      })
+      expect(away.state).toBe("failed")
+      expect(away.reason).toContain("cannot leave the sender's workspace")
+      expect(starts).toEqual([])
+      expect(yield* runner.tasks.remove(books.id)).toBe(true)
+      const gone = yield* runner.delegate({
+        source: "dlg_gone",
+        senderID: chief.id,
+        recipientID: books.id,
+        objective: "List missing Friday receipts.",
+      })
+      expect(gone.state).toBe("failed")
+      expect(gone.reason).toContain("no longer available")
+      expect(starts).toEqual([])
+      expect((yield* inbox.page(chief.id)).messages.filter((item) => item.source.startsWith("reply:")).length).toBe(2)
+      expect(
+        Exit.isFailure(
+          yield* runner
+            .delegate({
+              source: "dlg_missing",
+              senderID: chief.id,
+              recipientID: "missing",
+              objective: "List missing Friday receipts.",
+            })
+            .pipe(Effect.exit),
+        ),
+      ).toBe(true)
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
+test("stopping a parent keeps a completed child result", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const starts: string[] = []
+      const halted: string[] = []
+      const runner = RayaTaskRunner.make({
+        database,
+        storage,
+        halt: (sessionID) =>
+          Effect.sync(() => {
+            halted.push(sessionID)
+          }),
+        sessions: {
+          create: () =>
+            Effect.sync(() => {
+              starts.push("start")
+              return session(`ses_${starts.length}`)
+            }),
+          get: () => Effect.die("unused"),
+          messages: () => Effect.succeed([]),
+          children: () => Effect.succeed([]),
+        },
+      })
+      const store = RayaTaskDelegation.make(database)
+      const inbox = RayaTaskInbox.make(database)
+      const chief = yield* runner.tasks.create({
+        name: "Chief of Staff",
+        role: "generalist",
+        objective: "Coordinate Friday close.",
+        access: "brief",
+        enabled: true,
+        schedule: { kind: "manual" },
+      })
+      const books = yield* runner.tasks.create({
+        name: "Accounting",
+        role: "accountant",
+        objective: "Reconcile receipts.",
+        capabilities: ["accounting"],
+        access: "full",
+        enabled: true,
+        schedule: { kind: "manual" },
+      })
+      const legal = yield* runner.tasks.create({
+        name: "Legal",
+        role: "reviewer",
+        objective: "Review contracts.",
+        access: "brief",
+        enabled: true,
+        schedule: { kind: "manual" },
+      })
+      const parent = yield* runner.delegate({
+        source: "dlg_keep",
+        senderID: chief.id,
+        recipientID: books.id,
+        objective: "List missing Friday receipts.",
+      })
+      const child = yield* runner.delegate({
+        source: "dlg_keep_child",
+        senderID: books.id,
+        recipientID: legal.id,
+        parentID: parent.id,
+        objective: "Confirm the missing receipts against policy.",
+      })
+      const kept = yield* store.finish(child.id, "completed", legal, "Named missing receipts.")
+      expect(kept.state).toBe("completed")
+      const run = (yield* runner.tasks.runsFor(legal.id)).at(-1)
+      expect(run).toBeDefined()
+      yield* runner.tasks.transition(run!, { ...run!, status: "complete", outcome: { kind: "notify", summary: "Named missing receipts.", cost: 0 } })
+      const stopped = yield* runner.stop(parent.id)
+      expect(stopped.state).toBe("cancelled")
+      expect((yield* store.get(child.id)).state).toBe("completed")
+      expect((yield* store.get(child.id)).response).toBe("Named missing receipts.")
+      expect(halted).toEqual([parent.sessionID!])
+      expect((yield* inbox.page(books.id)).messages.filter((item) => item.source.startsWith("reply:")).length).toBe(1)
+      expect((yield* runner.tasks.runsFor(legal.id)).at(-1)?.status).toBe("complete")
+      expect((yield* runner.tasks.runsFor(legal.id)).some(RayaTask.pending)).toBe(false)
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})

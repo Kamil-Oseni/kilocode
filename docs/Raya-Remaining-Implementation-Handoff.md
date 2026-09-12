@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-12):** Historical Undo hydration is committed as `87a7680782` and unshipped. Remaining: leftover 39-requirement work that is still implementable here, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-12):** Installed snapshot `728fc46c90` hydrates Undo dismissals after the file leaves the live diff. Remaining: leftover 39-requirement work that is still implementable here, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-12. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** installed snapshot `b54b24cf5c` (`eden.raya@7.4.23-snapshot+b54b24cf5c.kamil-oseni.1789199445687`). Full-access file-tool writes stay in the write folder. Reload VS Code to pick up the snapshot.
+**Latest delivered product:** installed snapshot `728fc46c90` (`eden.raya@7.4.23-snapshot+728fc46c90.kamil-oseni.1789223800363`). Undo-dismissed review cards stay dismissed after reload when the file has left the live diff. Reload VS Code to pick up the snapshot.
 
 ## Scope and reading order
 
@@ -2023,4 +2023,15 @@ This is not a paid GPT-Live call and does not unlock VS Code iframe microphone c
 Remaining: leftover implementable 39-requirement work, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent.
 
 Next executable step: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
+
+## 2026-09-12: Snapshot install `728fc46c90`
+
+**States:** committed, pushed and installed as `728fc46c90`. Historical Undo hydration is in this snapshot. CLI binary was already present and was not rebuilt.
+
+Installed `eden.raya@7.4.23-snapshot+728fc46c90.kamil-oseni.1789223800363`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-728fc46c90-kamil-oseni-1789223800363.vsix`; SHA-256 `894C1D0EA86D0CC7F116D533A52DE0DA795D0B24C1E89C7A4E7DFD8C115EEA88`; 517123831 bytes, 431 files. VS Code was not force-reloaded.
+
+Remaining: leftover implementable 39-requirement work, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent.
+
+Next executable step: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
+
 

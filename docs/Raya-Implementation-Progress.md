@@ -3114,6 +3114,15 @@ This is not a paid GPT-Live call and does not unlock VS Code iframe microphone c
 
 Next: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
 
+## 2026-09-12: Snapshot install 728fc46c90
+
+Status: committed, pushed and installed as 728fc46c90. Historical Undo hydration is in this snapshot. CLI binary was already present and was not rebuilt.
+
+Installed eden.raya@7.4.23-snapshot+728fc46c90.kamil-oseni.1789223800363. VSIX C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-728fc46c90-kamil-oseni-1789223800363.vsix; SHA-256 894C1D0EA86D0CC7F116D533A52DE0DA795D0B24C1E89C7A4E7DFD8C115EEA88; 517123831 bytes, 431 files. VS Code was not force-reloaded.
+
+Next: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
+
+
 
 
 

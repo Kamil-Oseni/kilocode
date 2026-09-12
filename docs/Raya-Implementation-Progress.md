@@ -2902,6 +2902,19 @@ Installed eden.raya@7.4.23-snapshot+16d2b358ee.kamil-oseni.1789183666191. VSIX C
 
 Next: leftover RDM-06 UI/lifecycle, or a real-account GPT-Live call on a device.
 
+## 2026-09-11: Live host-microphone unexpected death
+
+Status: verified locally and committed as 5758eef154. Not yet pushed or installed. After host PCM capture is ready, an unexpected process exit posts speechLiveMicError. An intentional stop and a failed start do not use that path.
+
+Changed files: packages/kilo-vscode/src/speech-to-text/capture.ts, packages/kilo-vscode/src/speech/service.ts, packages/kilo-vscode/tests/unit/speech-to-text-capture.test.ts, .changeset/raya-live-mic-death.md.
+
+Commands (packages/kilo-vscode): bun test tests/unit/speech-to-text-capture.test.ts tests/unit/speech-engine-switch.test.ts tests/unit/live-speech-routing.test.ts --timeout 30000 -> 22 pass / 0 fail / 75 expect / exit 0. bun run check-types -> exit 0. bun run check-types:webview -> exit 0. bun run check-kilocode-change -> exit 0.
+
+This is not a paid GPT-Live call and does not unlock VS Code iframe microphone consent. Codex-deferred research stays untracked.
+
+Next: leftover RDM-06 UI/lifecycle, or a real-account GPT-Live call on a device.
+
+
 
 
 

@@ -49,7 +49,12 @@ export class SpeechService implements vscode.Disposable {
   }
 
   private async release() {
+    await cancelLiveCapture()
     await Promise.all([this.live.stop(), this.openai.stop(), this.realtime.stop()])
+  }
+
+  drop() {
+    void this.enqueue(() => this.release())
   }
 
   private async admit(failed: (error: string) => void) {
@@ -74,9 +79,16 @@ export class SpeechService implements vscode.Disposable {
   }
 
   async update(input: Partial<SpeechSettings>, root: string, post: Post): Promise<void> {
-    const prior = await this.settings.load()
-    if (input.voiceEngine !== undefined && input.voiceEngine !== prior.voiceEngine) await this.enqueue(() => this.release())
-    const settings = await this.settings.update(input)
+    if (input.voiceEngine !== undefined) {
+      await this.enqueue(async () => {
+        const prior = await this.settings.load()
+        if (input.voiceEngine !== prior.voiceEngine) await this.release()
+        await this.settings.update(input)
+      })
+    } else {
+      await this.settings.update(input)
+    }
+    const settings = await this.settings.load()
     await this.settings.sync(root)
     post({ type: "speechSettingsLoaded", settings })
   }
@@ -252,6 +264,13 @@ export class SpeechService implements vscode.Disposable {
   }
 
   async liveMicStart(requestId: string, post: Post): Promise<void> {
+    const failed = (error: string) => post({ type: "speechLiveMicError", requestId, error })
+    if (!(await this.admit(failed))) return
+    const settings = await this.settings.load()
+    if (settings.voiceEngine !== "openai-live" || !this.live.owned(requestId)) {
+      failed("Live microphone capture is not available for this call.")
+      return
+    }
     try {
       await startLiveCapture(requestId, (buf) => {
         post({ type: "speechLiveMicChunk", requestId, data: buf.toString("base64") })

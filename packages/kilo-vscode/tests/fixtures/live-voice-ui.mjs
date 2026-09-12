@@ -130,7 +130,96 @@ try {
   assert.equal(await page.locator('[data-slot="live-transcript"]').count(), 0)
   assert.match(await summary.textContent(), /Auto/)
   assert.equal(await page.evaluate(() => window.__workStops), 0)
-  console.log("Live VoiceProvider UI: 18 implementation assertions passed")
+  const prior = await page.evaluate(() => window.__composerMessages.length)
+  await page.evaluate(() => window.postMessage({ type: "connectionState", state: "disconnected" }, "*"))
+  await page.waitForFunction((n) => window.__composerMessages.length > n, prior)
+  const halt = await page.evaluate(() => {
+    const stop = window.__composerMessages.filter((message) => message.type === "speechOpenAIStop").at(-1)
+    const mic = window.__composerMessages.filter((message) => message.type === "speechLiveMicStop").at(-1)
+    return { stop: stop?.requestId, mic: mic?.requestId, stopped: window.__voiceStopped }
+  })
+  assert.equal(halt.stop, request.requestId)
+  assert.equal(halt.mic, request.requestId)
+  assert.ok(halt.stopped >= 1)
+  assert.equal(await page.getByRole("group", { name: "Voice controls" }).count(), 0)
+  await page.evaluate(
+    (requestId) => window.postMessage({ type: "speechLiveStarted", requestId }, "*"),
+    request.requestId,
+  )
+  assert.equal(await page.getByRole("group", { name: "Voice controls" }).count(), 0)
+  assert.equal(await page.getByRole("button", { name: "Start voice", exact: true }).isDisabled(), true)
+  await page.getByText("Previous voice cleanup is still unconfirmed. Restart Raya if cleanup does not finish.").waitFor()
+  await page.evaluate(
+    (requestId) => window.postMessage({ type: "speechOpenAIStopped", requestId }, "*"),
+    request.requestId,
+  )
+  await page.evaluate(() => window.postMessage({ type: "connectionState", state: "connected" }, "*"))
+  await page.getByRole("button", { name: "Start voice", exact: true }).click()
+  const second = await page.evaluate(() =>
+    window.__composerMessages.filter((message) => message.type === "speechOpenAIStart").at(-1),
+  )
+  assert.equal(second.engine, "live")
+  assert.notEqual(second.requestId, request.requestId)
+  await page.evaluate(
+    (requestId) => window.postMessage({ type: "speechOpenAIReady", requestId, sdp: "local-answer" }, "*"),
+    second.requestId,
+  )
+  await page.evaluate(
+    (requestId) => window.postMessage({ type: "speechLiveStarted", requestId }, "*"),
+    second.requestId,
+  )
+  await page.getByRole("group", { name: "Voice controls" }).waitFor()
+  const swapped = await page.evaluate(() => window.__composerMessages.length)
+  await page.evaluate(() =>
+    window.postMessage(
+      {
+        type: "speechSettingsLoaded",
+        settings: {
+          voiceEngine: "openai-realtime",
+          openaiVoice: "marin",
+          realtimeEndpoint: "wss://dashscope-intl.aliyuncs.com/api-ws/v1/realtime",
+          realtimeModel: "qwen-audio-3.0-realtime-plus",
+          realtimeVoice: "longanqian",
+          mediaFrontendURL: "http://127.0.0.1:7890",
+          sttEndpoint: "",
+          sttModel: "SenseVoice-Small",
+          ttsEndpoint: "wss://api.minimax.io/ws/v1/t2a_v2",
+          ttsModel: "speech-2.6-turbo",
+          voice: "English_Graceful_Lady",
+          mode: "push-to-talk",
+          autoSpeak: true,
+          cliMirror: false,
+          vadThreshold: 0.025,
+          vadSilenceMs: 900,
+          hasOpenAIKey: true,
+          hasRealtimeKey: false,
+          hasSttKey: false,
+          hasTtsKey: false,
+        },
+      },
+      "*",
+    ),
+  )
+  await page.waitForFunction((n) => window.__composerMessages.length > n, swapped)
+  const change = await page.evaluate(() => {
+    const stop = window.__composerMessages.filter((message) => message.type === "speechOpenAIStop").at(-1)
+    const start = window.__composerMessages.filter((message) => message.type === "speechOpenAIStart").at(-1)
+    return { stop: stop?.requestId, start: start?.requestId, engine: start?.engine }
+  })
+  assert.equal(change.stop, second.requestId)
+  assert.equal(change.start, second.requestId)
+  assert.equal(change.engine, "live")
+  assert.equal(await page.getByRole("group", { name: "Voice controls" }).count(), 0)
+  await page.evaluate(
+    (requestId) =>
+      window.postMessage(
+        { type: "speechRealtimeReady", connection: { id: "stale", livekitURL: "ws://unused", clientToken: "unused", engine: "qwen-realtime", acceptsTruncation: false } },
+        "*",
+      ),
+    second.requestId,
+  )
+  assert.equal(await page.getByRole("group", { name: "Voice controls" }).count(), 0)
+  console.log("Live VoiceProvider UI: 31 implementation assertions passed")
 } finally {
   await browser.close()
   server.kill()

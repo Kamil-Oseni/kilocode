@@ -394,6 +394,16 @@ export const VoiceProvider: ParentComponent = (props) => {
   }
 
   const unsubscribe = vscode.onMessage((message: ExtensionMessage) => {
+    if (message.type === "connectionState") {
+      if (message.state !== "connected") {
+        stop()
+        recovery.invalidate()
+        setCaptions(undefined)
+        setDuration(undefined)
+        setSilenced(false)
+      }
+      return
+    }
     if (openaiMessage(message)) return
     if (message.type === "speechSettingsLoaded") {
       if (message.settings.voiceEngine !== settings().voiceEngine) {

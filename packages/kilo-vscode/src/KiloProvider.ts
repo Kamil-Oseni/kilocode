@@ -2200,6 +2200,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           this.routineRefresh.invalidate()
           this.connectionGeneration++
           this.configBindings.clear()
+          if (state !== "connected") this.speech?.drop()
         }
         this.connectionState = state
         this.postConnectionState(error)

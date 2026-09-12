@@ -72,6 +72,9 @@ export class LiveBroker {
   get active() {
     return !!this.claim
   }
+  owned(requestID: string) {
+    return this.claim?.input.requestID === requestID && !this.claim.cancelled
+  }
 
   async start(
     input: Input,

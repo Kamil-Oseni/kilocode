@@ -97,6 +97,91 @@ test("an engine change waits until the Live call is released before the new engi
   await speech.ended()
 })
 
+test("a start and host microphone wait until the engine change is saved, then Live is refused", async () => {
+  const hold = Promise.withResolvers<void>()
+  const live = {
+    active: true,
+    owned(id: string) {
+      return id === "request_1" && live.active
+    },
+    async stop() {
+      await hold.promise
+      live.active = false
+    },
+    async dispose() {
+      return this.stop()
+    },
+  }
+  const root = await mkdtemp(join(tmpdir(), "raya-voice-switch-race-"))
+  const speech = new SpeechService(memory(), { live: live as unknown as LiveBroker })
+  await speech.update({ voiceEngine: "openai-live" }, root, () => {})
+  const posts: Record<string, unknown>[] = []
+  const switching = speech.update({ voiceEngine: "openai-realtime" }, root, () => {})
+  const mic = speech.liveMicStart("request_1", (msg) => posts.push(msg as Record<string, unknown>))
+  const start = speech.openaiStart(
+    {
+      requestId: "request_2",
+      engine: "live",
+      sessionID: "session_1",
+      sdp,
+      directory: root,
+      connection,
+      current: () => true,
+    },
+    (msg) => posts.push(msg as Record<string, unknown>),
+  )
+  expect(live.active).toBe(true)
+  expect((await speech.settings.load()).voiceEngine).toBe("openai-live")
+  hold.resolve()
+  await switching
+  await mic
+  await start
+  expect(live.active).toBe(false)
+  expect((await speech.settings.load()).voiceEngine).toBe("openai-realtime")
+  expect(posts).toContainEqual({
+    type: "speechLiveMicError",
+    requestId: "request_1",
+    error: "Live microphone capture is not available for this call.",
+  })
+  expect(posts).toContainEqual({
+    type: "speechOpenAIError",
+    requestId: "request_2",
+    error: "GPT-Live voice is not selected in Speech settings.",
+  })
+  speech.dispose()
+  await speech.ended()
+})
+
+test("backend drop releases Live and still admits a later start", async () => {
+  const { live, speech, root } = await owned()
+  expect(live.active).toBe(true)
+  speech.drop()
+  await speech.ended()
+  expect(live.active).toBe(false)
+  const posts: Record<string, unknown>[] = []
+  await speech.openaiStart(
+    {
+      requestId: "request_2",
+      engine: "live",
+      sessionID: "session_1",
+      sdp,
+      directory: root,
+      connection,
+      current: () => true,
+    },
+    (msg) => posts.push(msg as Record<string, unknown>),
+  )
+  expect(posts).toEqual([
+    {
+      type: "speechOpenAIError",
+      requestId: "request_2",
+      error: "GPT-Live requires an OpenAI API key in Speech settings.",
+    },
+  ])
+  speech.dispose()
+  await speech.ended()
+})
+
 test("a mismatched stop leaves the Live call, and host disposal refuses later starts", async () => {
   const { live, speech, root } = await owned()
   const posts: Record<string, unknown>[] = []

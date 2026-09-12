@@ -72,6 +72,7 @@ let active: Recording | undefined
 let starting: string | undefined
 let live: Stream | undefined
 let opening: string | undefined
+let epoch = 0
 let ffmpeg: Promise<string> | undefined
 
 export async function prewarmSpeechCapture(): Promise<void> {
@@ -135,10 +136,13 @@ export async function cancelSpeechCapture(requestId: string): Promise<void> {
 
 export async function startLiveCapture(requestId: string, onChunk: (buf: Buffer) => void): Promise<void> {
   if (active || starting || live || opening) throw new Error("Speech recording is already in progress")
+  const stamp = epoch
   opening = requestId
   try {
     const bin = await resolveFFmpeg()
-    await startLiveWithArgs(bin, requestId, onChunk, await inputArgSets(bin))
+    if (stamp !== epoch) throw new Error("Live microphone capture was cancelled.")
+    const state = await startLiveWithArgs(bin, requestId, onChunk, await inputArgSets(bin))
+    if (stamp !== epoch || state.stopped) throw new Error("Live microphone capture was cancelled.")
   } finally {
     if (opening === requestId) opening = undefined
   }
@@ -153,6 +157,7 @@ export async function stopLiveCapture(requestId: string): Promise<void> {
 }
 
 export async function cancelLiveCapture(): Promise<void> {
+  epoch++
   const state = live
   if (!state) return
   state.stopped = true

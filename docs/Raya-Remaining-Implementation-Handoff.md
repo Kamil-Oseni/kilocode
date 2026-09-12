@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Installed product is `76ac4375b2`. Unexpected Live host-microphone death posts `speechLiveMicError`. Remaining: paid GPT-Live/device acoustic acceptance and VS Code iframe microphone consent. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Product commit `3c62cb12df` persists routine report files as openable conversation cards and covers keyboard inbox navigation. Installed product is still `76ac4375b2` until this increment is snapshotted. Remaining: paid GPT-Live/device acoustic acceptance, VS Code iframe microphone consent, leftover RDM-06 lifecycle (duplicate replies, parent cancellation, cross-company UI, recipient unavailability beyond pause). Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-11. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `76ac4375b2` is committed, pushed and installed. Unexpected Live host-microphone death posts `speechLiveMicError`.
+**Latest delivered product:** product commit `3c62cb12df` is local and not yet pushed or installed. Installed snapshot remains `76ac4375b2`.
 
 ## Scope and reading order
 
@@ -1699,3 +1699,30 @@ Installed `eden.raya@7.4.23-snapshot+76ac4375b2.kamil-oseni.1789184595609`. VSIX
 Remaining: paid GPT-Live/device acoustic acceptance and VS Code iframe microphone consent.
 
 Next executable step: leftover RDM-06 UI/lifecycle, or a real-account GPT-Live call on a device.
+
+## 2026-09-11: Routine report file cards and keyboard inbox
+
+**States:** verified locally and committed as `3c62cb12df`. Not yet pushed or installed. Path-like run evidence is stored on the inbox message and rendered as openable file cards. Opening a worker conversation focuses the thread so Escape returns to that worker. Keyboard focus uses a visible outline. Settlement after a completed run with no inbox row publishes one report, including file cards, without duplicating on retry.
+
+Changed files: `packages/opencode/src/kilocode/task/inbox.ts`, `packages/core/src/kilocode/routine.sql.ts`, `packages/core/src/database/schema.gen.ts`, `packages/core/src/database/migration.gen.ts`, `packages/core/src/database/migration/20260911234600_kilocode-routine-inbox-files.ts`, `packages/kilo-vscode/webview-ui/src/components/routines/Inbox.tsx`, `packages/kilo-vscode/webview-ui/src/components/routines/Archive.tsx`, `packages/kilo-vscode/webview-ui/src/styles/routines.css`, `packages/kilo-vscode/webview-ui/preview/mock-vscode.ts`, `packages/kilo-vscode/tests/fixtures/routine-inbox-view.mjs`, `packages/kilo-vscode/tests/routines-preview.browser.ts`, `packages/opencode/test/kilocode/task/inbox.test.ts`, `packages/opencode/test/kilocode/task/inbox-report.test.ts`, `.changeset/raya-routine-inbox-files.md`.
+
+Commands:
+
+| Command | Result |
+|---|---|
+| `packages/opencode` `bun test ./test/kilocode/task/inbox.test.ts ./test/kilocode/task/inbox-report.test.ts --timeout 60000` | 6 pass / 0 fail / 71 expect / exit 0 |
+| `packages/opencode` `bun test ./test/kilocode/server/httpapi-routine-inbox.test.ts --timeout 60000` | 3 pass / 0 fail / 50 expect / exit 0 |
+| `packages/opencode` `bun run typecheck` | exit 0 |
+| `packages/core` `bun test ./test/database-migration.test.ts ./test/kilocode/migration-backup.test.ts --timeout 60000` | 21 pass / 0 fail / 85 expect / exit 0 |
+| `packages/kilo-vscode` `bun test tests/unit/routines-inbox-view.test.ts --timeout 90000` | 1 pass / 0 fail / 1 expect / exit 0 |
+| `packages/kilo-vscode` `bun run check-types` | exit 0 |
+| `packages/kilo-vscode` `bun run check-types:webview` | exit 0 |
+| `packages/kilo-vscode` `bunx playwright test --config playwright.preview.config.ts` | 18 pass / 0 fail / exit 0 |
+| root `bun run script/check-opencode-annotations.ts --worktree` | exit 0 |
+| `packages/kilo-vscode` `bun run check-kilocode-change` | no forbidden markers / exit 0 |
+
+This is not a paid GPT-Live call and does not unlock VS Code iframe microphone consent. File cards open a workspace path; they are not uploaded blobs. Evidence lines that contain spaces stay in the report body and are not turned into cards. Codex-deferred research stays untracked.
+
+Remaining: leftover RDM-06 duplicate replies, parent cancellation, cross-company UI, recipient unavailability beyond pause, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent.
+
+Next executable step: leftover RDM-06 lifecycle, or a real-account GPT-Live call on a device.

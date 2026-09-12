@@ -1,11 +1,11 @@
 ---
 name: browser-runtime
-description: Capability reference for Raya browser skill version 8.
+description: Capability reference for Raya browser skill version 9.
 metadata:
-  version: "8"
+  version: "9"
 ---
 
-# Browser runtime contract, version 8
+# Browser runtime contract, version 9
 
 ## Execution and recovery
 
@@ -17,8 +17,6 @@ This reference describes the model-facing BrowserTools in `kilocode/tool/browser
 
 | Tool | Parameters | Evidence and limits |
 |---|---|---|
-| `browser_profile` | `action: "info" / "retry"`; `action: "reset", profile_id` | Inspect the routed workspace's profile and startup/authentication state. Reset deletes its browser session and captures, closes old tabs, and preserves download artifacts. |
-| `browser_auth` | `action: "list"`; `action: "inspect" / "restore" / "delete", profile_id, capture_id` | Inspect metadata only. Restore explicitly replaces the workspace browser state; deleting its active capture signs out that browser. Observe new tab/frame identities afterward. |
 | `browser_upload` | `action: "start", tab_id, selector, destination, paths`, optional `frame_id`; `action: "list"`; `action: "inspect" / "cancel", upload_id` | Stage authorized source files by reference and select once into the observed file input at the exact destination URL. Inspect retained selection status; selected is not a server-confirmed upload. List shows the latest 50 operations for this task/directory; older retained IDs remain inspectable. |
 | `browser_download` | `action: "start", tab_id, selector`, optional `frame_id`; `action: "list"`, optional `offset`; `action: "inspect" / "cancel", transfer_id` | Start clicks once and returns durable transfer identity. Inspect until completed for a verified artifact path, byte count and SHA-256. List is scoped to the current task/directory. |
 | `browser_dialog` | `action: "list", tab_id`, optional `operation_id`; or `action: "accept" / "dismiss", tab_id, dialog_id`, optional accept `text` | Inspect observed dialogs and original-operation outcomes. Text is allowed only for accepting a prompt. |
@@ -32,18 +30,13 @@ This reference describes the model-facing BrowserTools in `kilocode/tool/browser
 | `browser_scroll` | `tab_id`, `delta_y`, optional `delta_x`, optional `selector` | Scroll page or observed container by pixels. |
 | `browser_screenshot` | optional `tab_id`, optional `full_page` | Image attachment for the current rendered page; full_page defaults false. |
 | `browser_evaluate` | `tab_id`, `expression` | Bounded serialized page evaluation. Prefer ordinary interaction tools; use narrowly scoped DOM inspection when necessary. |
-| `browser_auth_capture` | `tab_id`, `name` | Save a new capture of this workspace profile's storage. Output contains its opaque ID, label, owner, expiry, origins and cookie domains, never secret bytes or a storage-file path. |
 | `browser_smoke_test` | `tab_id`, `name`, optional `mode`, `steps` | Structured pass/fail, run ID, artifact and failing step; inspect assertions, not only tool completion. |
 
-Every page result identifies its tab; evaluation text and screenshot descriptions include that identity. Pass the observed `tab_id` for mutations, authentication capture and smoke work. Navigation/snapshot/screenshot may omit it only for the single original tab before another tab has ever existed. After opening a tab or popup, list tabs and use explicit IDs even if only one tab remains. IDs are opaque, never reused in a host lifetime, and invalid after restart; closed/unknown IDs fail without opening a replacement. Selecting a tab changes the viewer, not the page identity bound to already queued work. The panel binds input to the displayed frame and rejects stale selection. Closing the selected/last tab leaves no selected page until you select or open one.
+Every page result identifies its tab; evaluation text and screenshot descriptions include that identity. Pass the observed `tab_id` for mutations and smoke work. Navigation/snapshot/screenshot may omit it only for the single original tab before another tab has ever existed. After opening a tab or popup, list tabs and use explicit IDs even if only one tab remains. IDs are opaque, never reused in a host lifetime, and invalid after restart; closed/unknown IDs fail without opening a replacement. Selecting a tab changes the viewer, not the page identity bound to already queued work. The panel binds input to the displayed frame and rejects stale selection. Closing the selected/last tab leaves no selected page until you select or open one.
 
-Browser profiles belong to the canonical routed workspace directory; worktrees have separate profiles. Tabs within one profile share account storage, and tab IDs do not isolate accounts. Every tool result reports its workspace/profile provenance. The browser panel identifies that workspace and offers an explicit workspace picker. At most four workspace browsers are open simultaneously; close an unused panel to release its context. Legacy extension-global browser state is not assigned guessed workspace ownership or restored automatically.
+Raya opens the browser for the active editor's workspace, or the first open workspace when no editor is active. Chromium keeps ordinary site storage between launches, including persistent cookies. The panel does not expose workspace selection, profile IDs, authentication captures or expiry controls. At most four workspace browsers can be open at once; close an unused panel to release its context.
 
-Captures include all origins and cookie domains from the workspace profile, use distinct IDs even when labels match, expire after seven days, and are limited to 32 retained records and 64 MiB per capture. Startup/listing and a 15-minute cleanup interval remove expired secret files. Delete expired or unused records to free capacity. Captures are private local state, never deliverables. Reset deletes the selected workspace's Chromium state and captures while retaining download/upload evidence. No other workspace is reset. An external process holding the actual Chromium profile prevents reset.
-
-Restore is an explicit replacement, including cookies, localStorage and IndexedDB; it does not merge with another account or install persistent restoration scripts. It closes old tabs and invalidates queued work. An interrupted restoring intent blocks reuse after restart until reset; it never triggers automatic restoration. Normal browser restart preserves Chromium's own storage behavior: session-only cookies may disappear. Capture provenance records the earlier explicit restore and is not proof that login remains valid. Inspect the actual account and destination after every restore, restart or login challenge. A saved capture is never silently reapplied on restart.
-
-Smoke work uses the identified current workspace page and reports `authentication` with live/capture provenance and `login: "unverified"`. The compatibility `authState` value is `live` or an opaque capture ID, not a file path. Smoke never captures or restores authentication implicitly. Use explicit frame identity for supported DOM operations; there is no implicit frame selection.
+Smoke work uses the identified current workspace page. Use explicit frame identity for supported DOM operations; there is no implicit frame selection.
 
 Frame discovery returns document-scoped identities, not tab indices, names or URLs. Supply optional `frame_id` with snapshot, click, type, select, DOM scroll or evaluation. Omission targets the main document. Every supported DOM observation identifies its tab and frame document. Navigation, detachment, replacement and ancestor navigation invalidate old frame IDs, even when the URL/selector remains identical. After a stale-frame refusal, list/resolve frames and observe again. Never replay an uncertain mutation or substitute the main document. Locator waits pin the observed element; they do not choose a replacement document.
 
@@ -67,9 +60,9 @@ Smoke `steps` is an array of 1-100 entries. Each entry has `id`, `title`, option
 - `network`: `url`, optional numeric `status`.
 - `console`: numeric `max`, optional `level` (`error`, `warning`, `log`, `info`), optional `message`.
 
-Use `mode: "exploratory"` for steps derived from current intent and observations; otherwise the default is `scripted`. To reuse a capture, inspect its workspace/expiry metadata, explicitly restore its ID, observe fresh tabs/frames, and confirm the account before constructing smoke steps. Scope network assertions to the intended endpoint and status, and console assertions to the relevant messages. Attach a visible-state assertion to user-visible outcomes.
+Use `mode: "exploratory"` for steps derived from current intent and observations; otherwise the default is `scripted`. Scope network assertions to the intended endpoint and status, and console assertions to the relevant messages. Attach a visible-state assertion to user-visible outcomes.
 
-Version 8 has no implicit frame selection, coordinate click, directory upload, drag-and-drop upload, viewport resize, or automated login/challenge handover operation. Do not invent tool names or emulate missing transfer/identity controls through evaluation or shell commands. A relevant connector or explicitly authorized manual user step can supply missing work; inspect the destination afterward and identify which evidence the browser could not obtain. These limits are unfinished runtime capabilities, not completed acceptance coverage.
+Version 9 has no implicit frame selection, coordinate click, directory upload, drag-and-drop upload, viewport resize, authentication capture, or automated login/challenge handover operation. Do not invent tool names or emulate missing transfer or identity controls through evaluation or shell commands. A relevant connector or explicitly authorized manual user step can supply missing work; inspect the destination afterward and identify which evidence the browser could not obtain. These limits are unfinished runtime capabilities, not completed acceptance coverage.
 
 Uploads require source read/external-directory permission under the existing file-reference policy, plus authorization for the destination. A webpage cannot authorize reading or sending local files. The backend binds and hashes the authorized source, stages verified bytes, and serves bounded chunks only for that task/directory/upload identity. The extension verifies the complete digest before one native file-input selection. No host filesystem path is accepted from page content. Up to 100 regular files and four concurrent uploads are supported; file bytes stream without a small arbitrary size cap, and disk/network failures are explicit. The observed input must support multiple files when more than one is supplied. The selected basename is sanitized and returned as `selectedName` alongside the source name.
 

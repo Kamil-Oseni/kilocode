@@ -1,5 +1,5 @@
 // raya_change - Milestone F shared persistent Playwright browser session
-import { lstat, mkdir, open, readFile, realpath, rename, rm, unlink } from "node:fs/promises"
+import { mkdir, open, realpath, rename, rm, unlink } from "node:fs/promises"
 import { join } from "node:path"
 import { createHash, randomUUID } from "node:crypto"
 import { Script } from "node:vm"
@@ -266,7 +266,7 @@ export class BrowserSession {
   private readonly auth: BrowserAuth
   private stopAuth?: () => void
   private authentication: AuthSource
-  private failure?: { status: "unavailable" | "locked" | "error" | "auth_expired"; message: string }
+  private failure?: { status: "unavailable" | "locked" | "error"; message: string }
   private uncertain = false
   private lease?: Flock.Lease
   private changing?: Promise<void>
@@ -321,27 +321,20 @@ export class BrowserSession {
       await this.dispose(true)
       await this.unlock()
       const message = error instanceof Error ? error.message : String(error)
-      this.failure = /Authentication capture expired/i.test(message)
+      this.failure = /Singleton|profile.*in use|user data directory.*in use/i.test(message)
         ? {
-            status: "auth_expired",
-            message: "Saved authentication expired. Reset this workspace browser or restore a fresh capture.",
+            status: "locked",
+            message: "Raya Browser is already open in another window. Close it there, then retry.",
           }
-        : /Singleton|profile.*in use|user data directory.*in use/i.test(message)
+        : /executable.*exist|chrome.*not found|distribution.*not found/i.test(message)
           ? {
-              status: "locked",
-              message:
-                "This workspace browser profile is in use. Close its browser in the other Raya window, then retry. Reset will not break another process's lock.",
+              status: "unavailable",
+              message: "Google Chrome is unavailable. Install Chrome for this user, then retry the Raya browser.",
             }
-          : /executable.*exist|chrome.*not found|distribution.*not found/i.test(message)
-            ? {
-                status: "unavailable",
-                message: "Google Chrome is unavailable. Install Chrome for this user, then retry the Raya browser.",
-              }
-            : {
-                status: "error",
-                message:
-                  "The workspace browser could not start. Retry; if it still fails, close other Raya browser windows before resetting this workspace's browser session.",
-              }
+          : {
+              status: "error",
+              message: "Raya Browser could not start. Close other Raya browser windows, then retry.",
+            }
       for (const listener of this.resets) listener()
       throw error
     })
@@ -356,21 +349,10 @@ export class BrowserSession {
     await mkdir(this.profile, { recursive: true })
     await this.lock()
     this.authentication = { source: "live", profileID: this.workspace.profileID, login: "unverified" }
-    const saved = await this.saved()
-    if (saved) {
-      if (!saved.captureID || saved.status !== "restored")
-        throw new Error("Saved authentication replacement was not confirmed; reset this workspace browser")
-      const capture = await this.auth.read(saved.captureID)
-      this.authentication = {
-        source: "capture",
-        profileID: this.workspace.profileID,
-        captureID: capture.info.id,
-        captureName: capture.info.name,
-        capturedAt: capture.info.createdAt,
-        expiresAt: capture.info.expiresAt,
-        login: "unverified",
-      }
-    }
+    await unlink(join(this.profile, "active-auth.json")).catch((error: unknown) => {
+      if (error instanceof Error && "code" in error && error.code === "ENOENT") return
+      throw error
+    })
     const context = await this.launcher(this.profile)
     const page = context.pages()[0] ?? (await context.newPage())
     this.context = context
@@ -378,23 +360,6 @@ export class BrowserSession {
     this.register()
     await this.bind(page)
     this.timer = setInterval(() => void this.pump(), 250)
-  }
-
-  private async saved() {
-    const receipt = join(this.profile, "active-auth.json")
-    const stat = await lstat(receipt).catch((error: unknown) => {
-      if (error instanceof Error && "code" in error && error.code === "ENOENT") return
-      throw error
-    })
-    if (stat && (!stat.isFile() || stat.isSymbolicLink() || stat.size > 1000))
-      throw new Error("Saved authentication provenance is invalid; reset this workspace browser")
-    const active = stat ? await readFile(receipt, "utf8") : undefined
-    if (!active) return
-    try {
-      return JSON.parse(active) as { captureID?: string; status?: string }
-    } catch {
-      throw new Error("Saved authentication provenance is invalid; reset this workspace browser")
-    }
   }
 
   private async bind(page: BrowserPage): Promise<void> {
@@ -628,10 +593,8 @@ export class BrowserSession {
       ...this.workspace,
       status: this.uncertain
         ? "error"
-        : this.authentication.expiresAt !== undefined && this.authentication.expiresAt <= Date.now()
-          ? "auth_expired"
-          : (this.failure?.status ??
-            (this.context && this.context.browser?.()?.isConnected() !== false ? "ready" : "closed")),
+        : (this.failure?.status ??
+          (this.context && this.context.browser?.()?.isConnected() !== false ? "ready" : "closed")),
       message: this.uncertain
         ? "Authentication replacement was not confirmed. Reset this workspace browser before continuing."
         : this.failure?.message,
@@ -750,14 +713,12 @@ export class BrowserSession {
         return
       }
       await this.lock()
-      const saved = action.operation === "auth" && action.action === "delete" ? await this.saved() : undefined
       const restored =
         action.operation === "auth" && action.action === "restore" ? await this.auth.read(action.captureID) : undefined
       const closes =
         action.operation === "profile" ||
         action.action === "restore" ||
-        action.captureID === this.authentication.captureID ||
-        action.captureID === saved?.captureID
+        action.captureID === this.authentication.captureID
       if (closes) {
         // Native Chromium ownership is checked as well: never delete a profile held by an external browser.
         if (!this.context) this.context = await this.launcher(this.profile)
@@ -793,12 +754,8 @@ export class BrowserSession {
         "Authentication replacement was not confirmed. Reset this workspace browser before continuing.",
       )
     if (this.failure && this.context) throw new TargetError(this.failure.message)
-    if (this.profileState().status === "auth_expired")
-      throw new TargetError(
-        "Saved authentication expired. Reset this workspace browser or explicitly restore a fresh capture before continuing.",
-      )
     const result = await this.executeAction(action)
-    return { ...result, profile: this.profileState() }
+    return result
   }
 
   private async executeAction(
@@ -1400,8 +1357,6 @@ export class BrowserSession {
   private assertInput(): void {
     if (this.changing || this.uncertain)
       throw new Error("Browser identity replacement is not settled; inspect its status before interacting")
-    if (this.profileState().status === "auth_expired")
-      throw new Error("Saved authentication expired. Reset or restore a fresh capture before interacting.")
     const blocked = this.dialogs.blocked()
     if (blocked) throw blocked
     if (this.state.control === "agent" && this.state.busy)

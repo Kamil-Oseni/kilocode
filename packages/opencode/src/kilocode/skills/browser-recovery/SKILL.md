@@ -2,10 +2,10 @@
 name: browser-recovery
 description: Recover grounded browser actions while preserving completed work.
 metadata:
-  version: "8"
+  version: "9"
 ---
 
-# Browser recovery, version 8
+# Browser recovery, version 9
 
 Start from current observable state and the last verified postcondition. Preserve source references, record IDs and drafts before changing approach. Never interpret an interrupted tool call as proof the host cancelled its external action.
 
@@ -34,6 +34,6 @@ For a stale frame document, list frames for the observed tab and inspect the new
 
 For `dialog_pending`, use the reported operation ID to inspect and respond to the observed dialog. Do not repeat the initiating action. After any lost response acknowledgement, inspect the retained dialog/original operation; never assume acceptance, cancellation or page closure from transport success alone.
 
-For missing Chrome or a locked profile, inspect `browser_profile info`. Install Chrome for the local user or close the other owner, then retry startup. Reset never bypasses an external browser lock. An abandoned Raya ownership lock recovers after one minute; waiting does not establish successful startup. Expired capture bytes cannot be restored: reset/sign in or explicitly choose a fresh capture. An unknown restoring intent blocks profile startup and must be reconciled by reset. Deleting the active capture also clears its browser session. Reset and restore invalidate old tabs/frames, so observe fresh identities instead of retrying old actions. Session-only cookies can disappear on a normal restart; no hidden capture replay repairs that loss.
+For missing Chrome, install Chrome for the local user and reopen Raya Browser. If Raya Browser is already open in another window, close it there and use the panel's Retry browser action. An abandoned ownership lock recovers after one minute; waiting does not establish successful startup. A host restart invalidates old tabs and frames, so observe fresh identities instead of retrying old actions. Persistent cookies use Chrome's normal site storage; session-only cookies can disappear on a normal restart.
 
 For an interrupted upload, inspect its retained upload ID and the destination. Staging can be cancelled before file selection; selecting/selected/unknown may already have submitted data. Do not repeat selection after a lost acknowledgement or host restart. A selected file is not proof of a saved attachment: check validation errors and the actual destination record. A changed file source, expired staging reference, wrong destination, stale frame or digest mismatch requires fresh authorized source/destination observation before a new operation.

@@ -2,10 +2,10 @@
 name: browser-workflows
 description: Task-specific playbooks for the Raya browser skill.
 metadata:
-  version: "8"
+  version: "9"
 ---
 
-# Browser playbooks, version 8
+# Browser playbooks, version 9
 
 Apply the relevant playbook under the `browser` operating loop and `browser-runtime` contract. Do not execute unrelated playbooks.
 
@@ -19,7 +19,7 @@ Inspect the active account/project, field labels, existing values and validation
 
 ## Authentication
 
-Inspect `browser_profile info` and a visible account label/project before acting. If login, MFA, CAPTCHA or account selection needs the user, explain the precise step and wait for explicit completion; there is no automated challenge handover operation in version 8. Reinspect afterward. Do not ask for passwords, expose capture files, or treat elapsed time as successful login. Save authentication only for authorized reuse, under a meaningful label. List/inspect captures by opaque ID, confirm workspace and expiry, then explicitly restore when authorized to replace the browser session and discard its drafts. Observe fresh tabs and frames after restoration, and confirm the account again. Smoke reports capture provenance separately from successful assertions; it never silently restores an old named state.
+Inspect a visible account label or project before acting. If login, MFA, CAPTCHA or account selection needs the user, explain the precise step and wait for explicit completion; there is no automated challenge handover operation in version 9. Reinspect afterward. Do not ask for passwords or treat elapsed time as successful login. Raya Browser keeps ordinary persistent Chrome site storage between launches without capture, expiry or profile controls.
 
 ## Downloads and uploads
 

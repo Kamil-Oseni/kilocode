@@ -450,8 +450,6 @@ export function prepare(cfg: Config.Info): KiloData {
           browser_dialog: "allow" as const,
           browser_download: "allow" as const,
           browser_upload: "allow" as const,
-          browser_profile: "allow" as const,
-          browser_auth: "allow" as const,
           browser_frames: "allow" as const,
           browser_tabs: "allow" as const,
           browser_navigate: "allow" as const,
@@ -462,7 +460,6 @@ export function prepare(cfg: Config.Info): KiloData {
           browser_scroll: "allow" as const,
           browser_screenshot: "allow" as const,
           browser_evaluate: "allow" as const,
-          browser_auth_capture: "allow" as const, // raya_change - Milestone G authenticated smoke tests
           browser_smoke_test: "allow" as const, // raya_change - Milestone G authenticated smoke tests
           create_canvas: "allow" as const, // raya_change - Milestone E canvas artifacts
           update_canvas: "allow" as const, // raya_change - Milestone E canvas artifacts
@@ -887,8 +884,6 @@ export function patchAgents(
           browser_dialog: "allow",
           browser_download: "allow",
           browser_upload: "allow",
-          browser_profile: "allow",
-          browser_auth: "allow",
           browser_frames: "allow",
           browser_tabs: "allow",
           browser_navigate: "allow",
@@ -899,7 +894,6 @@ export function patchAgents(
           browser_scroll: "allow",
           browser_screenshot: "allow",
           browser_evaluate: "allow",
-          browser_auth_capture: "allow",
           browser_smoke_test: "allow",
           create_canvas: "allow",
           update_canvas: "allow",

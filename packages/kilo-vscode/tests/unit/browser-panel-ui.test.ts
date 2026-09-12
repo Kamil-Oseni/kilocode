@@ -14,8 +14,11 @@ describe("Raya browser takeover panel", () => {
     const window = new Window()
     window.document.write(source.slice(start, end) + "</body></html>")
     const surfaces = Array.from(window.document.body.children).map((element) => element.id || element.tagName)
-    expect(surfaces).toEqual(["identity", "HEADER", "HEADER", "statusbar", "MAIN"])
-    expect(source).toContain("grid-template-rows: auto 36px 42px 32px minmax(0, 1fr)")
+    expect(surfaces).toEqual(["HEADER", "HEADER", "statusbar", "MAIN"])
+    expect(source).toContain("grid-template-rows: 36px 42px 32px minmax(0, 1fr)")
+    expect(source).not.toContain("Workspace browser identity")
+    expect(source).not.toContain("Save authentication")
+    expect(source).not.toContain("Choose workspace")
   })
 
   it("shows live attempt state and an explicit resume control", () => {
@@ -59,43 +62,19 @@ it("binds panel input to displayed tab identity and hides stale frames", () => {
       window.requestAnimationFrame.bind(window),
     )
     const message = (data: unknown) => window.dispatchEvent(new window.MessageEvent("message", { data }))
-    const profile = {
-      profileID: "profile_seen",
-      directory: "<img src=x onerror=bad()>",
-      status: "locked",
-      message: "Close the other browser and retry.",
-      authentication: { source: "live", login: "unverified" },
-    }
     message({
-      type: "profile",
-      profile,
-      captures: [
-        {
-          id: "capture_seen",
-          name: "<img src=x onerror=bad()>",
-          status: "expired",
-          expiresAt: 0,
-          origins: [],
-          domains: ["example.test"],
-        },
-      ],
+      type: "startup",
+      status: "locked",
+      message: "Close <img src=x onerror=bad()> and retry.",
     })
-    const captures = window.document.getElementById("captures")!
-    expect(captures.textContent).toContain("<img src=x onerror=bad()>")
-    expect(captures.querySelector("img")).toBeNull()
-    expect(captures.querySelector("button")!.disabled).toBe(true)
-    expect(window.document.getElementById("profile-state")!.textContent).toContain("login unverified")
-    expect(window.document.getElementById("identity")!.hasAttribute("open")).toBe(true)
-    captures.querySelectorAll("button")[1].click()
-    expect(sent.at(-1)).toMatchObject({
-      type: "auth",
-      action: "delete",
-      profileID: "profile_seen",
-      captureID: "capture_seen",
-    })
+    const empty = window.document.getElementById("empty")!
+    expect(empty.textContent).toContain("<img src=x onerror=bad()>")
+    expect(empty.querySelector("img")).toBeNull()
+    expect(window.document.getElementById("retry-browser")!.hidden).toBe(false)
     window.document.getElementById("retry-browser")!.click()
-    expect(sent.at(-1)).toMatchObject({ type: "profile", action: "retry" })
-    message({ type: "profile", profile: { ...profile, status: "ready" }, captures: [] })
+    expect(sent.at(-1)).toMatchObject({ type: "retry" })
+    message({ type: "startup", status: "ready" })
+    expect(window.document.getElementById("retry-browser")!.hidden).toBe(true)
     message({
       type: "uploads",
       uploads: [

@@ -1,5 +1,8 @@
 // raya_change - Milestone F drive/watch, input forwarding, and login persistence
 import { describe, expect, it } from "bun:test"
+import { access, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import type {
   BrowserCDP,
   BrowserContextLike,
@@ -346,6 +349,25 @@ describe("Raya browser session", () => {
 
     expect(result.output).toBe("auth=logged-in")
     await second.dispose()
+  })
+
+  it("ignores obsolete authentication receipts and keeps normal browser storage", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "raya-browser-live-"))
+    const fake = harness()
+    try {
+      await writeFile(join(dir, "active-auth.json"), JSON.stringify({ captureID: "expired", status: "restored" }))
+      const session = new BrowserSession(dir, fake.launch)
+      await session.execute({ operation: "evaluate", expression: "document.cookie='auth=still-live'" })
+      await expect(access(join(dir, "active-auth.json"))).rejects.toThrow()
+      await session.dispose()
+
+      const next = new BrowserSession(dir, fake.launch)
+      const result = await next.execute({ operation: "evaluate", expression: "document.cookie" })
+      expect(result.output).toBe("auth=still-live")
+      await next.dispose()
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
   })
 
   it("does not retry a click whose dispatch outcome is unknown", async () => {

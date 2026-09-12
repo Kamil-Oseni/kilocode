@@ -7,13 +7,10 @@ import { Selector, SmokeStep, type Result } from "@/kilocode/browser/protocol"
 import { Browser, HostError } from "@/kilocode/browser/service"
 import { Permission } from "@/permission"
 import {
-  BrowserProfileTool,
-  BrowserAuthTool,
   BrowserDialogTool,
   BrowserDownloadTool,
   BrowserFramesTool,
   BrowserTabsTool,
-  BrowserAuthCaptureTool,
   BrowserClickTool,
   BrowserEvaluateTool,
   BrowserNavigateTool,
@@ -144,8 +141,6 @@ test("auto-approves every native browser action in VS Code", () => {
       "browser_dialog",
       "browser_download",
       "browser_upload",
-      "browser_auth",
-      "browser_profile",
       "browser_frames",
       "browser_tabs",
       "browser_navigate",
@@ -156,7 +151,6 @@ test("auto-approves every native browser action in VS Code", () => {
       "browser_scroll",
       "browser_screenshot",
       "browser_evaluate",
-      "browser_auth_capture",
       "browser_smoke_test",
     ]) {
       expect(Permission.evaluate(permission, "*", rules).action).toBe("allow")
@@ -354,42 +348,6 @@ describe("browser host tools", () => {
   )
 
   it.instance(
-    "forwards profile recovery and observed capture identities through explicit permissions",
-    () =>
-      Effect.gen(function* () {
-        calls.length = 0
-        const asks: Parameters<Tool.Context["ask"]>[0][] = []
-        const ctx = context(asks)
-        const profile = yield* BrowserProfileTool.pipe(
-          Effect.provideService(Browser.Service, host),
-          Effect.flatMap(Tool.init),
-        )
-        const auth = yield* BrowserAuthTool.pipe(
-          Effect.provideService(Browser.Service, host),
-          Effect.flatMap(Tool.init),
-        )
-        const id = "a".repeat(64)
-        const capture = "11111111-1111-4111-8111-111111111111"
-        yield* profile.execute({ action: "info" }, ctx)
-        yield* profile.execute({ action: "reset", profile_id: id }, ctx)
-        yield* auth.execute({ action: "list" }, ctx)
-        yield* auth.execute({ action: "restore", profile_id: id, capture_id: capture }, ctx)
-        yield* auth.execute({ action: "delete", profile_id: id, capture_id: capture }, ctx)
-        expect(calls[1]).toMatchObject({ operation: "profile", action: "reset", profileID: id })
-        expect(calls[3]).toMatchObject({ operation: "auth", action: "restore", profileID: id, captureID: capture })
-        expect(calls[4]).toMatchObject({ operation: "auth", action: "delete", captureID: capture })
-        expect(asks.map((ask) => ask.permission)).toEqual([
-          "browser_profile",
-          "browser_profile",
-          "browser_auth",
-          "browser_auth",
-          "browser_auth",
-        ])
-      }),
-    60_000,
-  )
-
-  it.instance(
     "forwards stable tab commands and refuses missing mutation identity",
     () =>
       Effect.gen(function* () {
@@ -490,10 +448,6 @@ describe("browser host tools", () => {
           Effect.provideService(Browser.Service, host),
           Effect.flatMap(Tool.init),
         )
-        const auth = yield* BrowserAuthCaptureTool.pipe(
-          Effect.provideService(Browser.Service, host),
-          Effect.flatMap(Tool.init),
-        )
         const smoke = yield* BrowserSmokeTestTool.pipe(
           Effect.provideService(Browser.Service, host),
           Effect.flatMap(Tool.init),
@@ -507,7 +461,6 @@ describe("browser host tools", () => {
         yield* scroll.execute({ tab_id: "tab_test", delta_x: 4, delta_y: 500, selector: "#main" }, ctx)
         const image = yield* screenshot.execute({ full_page: true }, ctx)
         const value = yield* evaluate.execute({ tab_id: "tab_test", expression: "() => ({ ok: true })" }, ctx)
-        yield* auth.execute({ tab_id: "tab_test", name: "sample-app" }, ctx)
         const report = yield* smoke.execute(
           {
             tab_id: "tab_test",
@@ -537,7 +490,6 @@ describe("browser host tools", () => {
           "scroll",
           "screenshot",
           "evaluate",
-          "auth_capture",
           "smoke",
         ])
         expect(calls[3]).toMatchObject({ text: "Raya", submit: true })
@@ -551,10 +503,12 @@ describe("browser host tools", () => {
           "browser_scroll",
           "browser_screenshot",
           "browser_evaluate",
-          "browser_auth_capture",
           "browser_smoke_test",
         ])
         expect(tree.output).toContain("Continue")
+        expect(tree.output).not.toContain("profileID")
+        expect(report.output).not.toContain("authentication")
+        expect(report.output).not.toContain("authState")
         expect(value.output).toContain('{"ok":true}')
         expect(navigate.description).toContain("browse") // raya_change - plain-English Milestone F activation
         expect(snapshot.description).toContain("inspect a website")

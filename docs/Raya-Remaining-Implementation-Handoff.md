@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-12):** ChatGPT reviewed and repaired Grok's file-review checkpoints, delivered workspace-interaction fixes, shipped the broader Routines messenger hierarchy and persisted worker Chat Info, then added durable Routine DM attachments as `57fd94ecd8`. Remaining: the unfinished 39-requirement work, inline media thumbnails, organizations and role/delegation graphs, main-chat creation, full live rebuild-survival acceptance, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-12):** ChatGPT reviewed and repaired Grok's work, delivered durable Routine DMs, attachments, Chat Info, first-class organization persistence and organization navigation through installed commit `69f91c03f4`. Browser capture/profile UI and model tools are now removed locally and awaiting the next delivery checkpoint. Remaining: organization-aware delegation, restart-safe main-chat provisioning, the unfinished 39-requirement work, inline media treatment, full live rebuild-survival acceptance, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-12. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** ChatGPT installed snapshot `57fd94ecd8` (`eden.raya@7.4.23-snapshot+57fd94ecd8.kamil-oseni.1789245828863`). Routines is a compact worker inbox with persistent DM conversations, message bubbles, durable text/file drafts, file-bearing follow-ups, focused management controls, on-demand delegation, and an Info view backed by saved settings, shared files/HTTP links and structured delegation history. Reload VS Code normally to pick up the snapshot.
+**Latest delivered product:** ChatGPT installed snapshot `69f91c03f4` (`eden.raya@7.4.23-snapshot+69f91c03f4.kamil-oseni.1789250607451`). Routines is a compact worker inbox with persistent DMs, attachments, Chat Info, organization filtering and ordered reporting-line navigation. Reload VS Code normally to pick up the snapshot.
 
 ## Scope and reading order
 
@@ -19,11 +19,19 @@ Status excerpts below are historical records, not a fresh certification of every
 ## Checkpoint and standing authorization
 
 - Workspace: `C:\Users\User\Desktop\raya`; PowerShell; branch `main`; origin `https://github.com/Kamil-Oseni/kilocode.git`.
-- Last verified pushed product checkpoint: `57fd94ecd89fd8b138d8ac45666b55ba0c5e43d1`, durable Routine DM attachments and restart-safe delivery.
-- Installed: `eden.raya@7.4.23-snapshot+57fd94ecd8.kamil-oseni.1789245828863`.
-- VSIX: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-57fd94ecd8-kamil-oseni-1789245828863.vsix`; SHA-256 `BB84E96B0E623BCDC8BF34A8C8579215BA623EE60AE56EC0424612C562DE6738`; 517303013 bytes; 431 entries; bundled CLI 228931072 bytes.
+- Last verified pushed product checkpoint: `69f91c03f4316d971935bbf262520243b4701497`, Routine organization navigation over the durable worker DM inbox.
+- Installed: `eden.raya@7.4.23-snapshot+69f91c03f4.kamil-oseni.1789250607451`.
+- VSIX: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-69f91c03f4-kamil-oseni-1789250607451.vsix`; SHA-256 `F9BF24AAC65416CC909336B069FFD66F38D0A4EED389CCBA9965815D2275A6A7`; 517392932 bytes; 431 entries.
 - The user authorizes two parallel workers plus root, batched checks, periodic normal commits/pushes to `origin/main`, and `snapshot:install` outside the sandbox. Do not ask again. No force push, hook bypass or forced VS Code reload.
 - At approximately $10 remaining, as reported by the user, stop opening broad work, settle current processes, update this handoff and give the continuation prompt below. Do not invent a credit balance.
+
+## ChatGPT 2026-09-12 18:26 America/Toronto — latest delivered and active checkpoints
+
+Routine organization navigation is delivered in `69f91c03f4316d971935bbf262520243b4701497`, pushed to `origin/main` and installed as `eden.raya@7.4.23-snapshot+69f91c03f4.kamil-oseni.1789250607451`. Its VSIX is `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-69f91c03f4-kamil-oseni-1789250607451.vsix`, SHA-256 `F9BF24AAC65416CC909336B069FFD66F38D0A4EED389CCBA9965815D2275A6A7`, 517392932 bytes and 431 files. The normal push hook passed 29 package typechecks plus JetBrains, and the snapshot workflow passed host/webview types, lint, production bundle, package and install. No force push, hook bypass or forced reload was used.
+
+The active local browser checkpoint removes the workspace chooser, profile ID/status disclosure, authentication-capture UI, seven-day expiry copy, capture/reset actions and the corresponding model tools. Normal browser tool output also strips internal profile/authentication provenance. Raya Browser selects the active editor's workspace automatically, presents the browser canvas under its compact tab/address/status chrome, and shows `Retry browser` only for an actual startup failure. Startup deletes the obsolete `active-auth.json` receipt rather than allowing a stale or expired capture to block launch; Chromium's normal persistent user-data directory keeps persistent cookies and site storage. Browser runtime/workflow/recovery skills are updated to version 9 and no longer direct agents to capture, inspect or restore authentication.
+
+Local evidence: extension host/webview typechecks pass; panel/session tests pass 25/25 with 121 assertions; CLI typecheck passes; registered browser tool/skill tests pass 10/10 with 101 assertions; focused extension ESLint, Kilo marker and OpenCode annotation checks pass. The stale-receipt test proves launch proceeds, removes the old receipt and preserves the normal browser cookie across a fresh session. Still required for this checkpoint: supported full lint/Knip and guard runs, commit, normal push, `snapshot:install`, installed identity/hash verification, then update both ledgers with the delivery receipt.
 
 ## Immediate uncommitted work
 

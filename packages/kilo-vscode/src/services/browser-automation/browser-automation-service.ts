@@ -1,5 +1,5 @@
 // raya_change - Milestone F shared Playwright host and CLI bridge
-import { basename, join } from "node:path"
+import { join } from "node:path"
 import * as vscode from "vscode"
 import type { KiloConnectionService } from "../cli-backend/connection-service"
 import { BrowserSession } from "./browser-session"
@@ -59,7 +59,6 @@ export class BrowserAutomationService implements vscode.Disposable {
       )
     }
     const panel = new BrowserPanel(session, {
-      select: () => this.show(false, true),
       close,
     })
     const entry = { session, panel, close }
@@ -67,7 +66,7 @@ export class BrowserAutomationService implements vscode.Disposable {
     return entry
   }
 
-  async show(preserveFocus = false, choose = false): Promise<void> {
+  async show(preserveFocus = false): Promise<void> {
     this.assertEnabled()
     const directories = [
       ...new Set([
@@ -79,28 +78,17 @@ export class BrowserAutomationService implements vscode.Disposable {
     const active =
       vscode.window.activeTextEditor &&
       vscode.workspace.getWorkspaceFolder(vscode.window.activeTextEditor.document.uri)?.uri.fsPath
-    const directory =
-      choose || (directories.length > 1 && !active)
-        ? (
-            await vscode.window.showQuickPick(
-              directories.map((directory) => ({ label: basename(directory), description: directory })),
-              {
-                title: "Choose a workspace browser profile",
-                placeHolder: "Each workspace keeps separate sign-in state",
-              },
-            )
-          )?.description
-        : (active ?? directories[0])
-    if (!directory) return
+    const directory = active ?? directories[0]
     await (await this.entry(directory)).panel.show(preserveFocus)
   }
 
   restore(panel: vscode.WebviewPanel): void {
-    // Legacy serialized panels have no authoritative workspace owner. Require a fresh selection.
+    // Legacy serialized panels have no authoritative workspace owner. Reopen against the active workspace.
     panel.dispose()
-    void this.show(true).catch(() =>
-      vscode.window.showErrorMessage("Choose an open workspace to restore its Raya browser."),
-    )
+    void this.show(true).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error)
+      void vscode.window.showErrorMessage(`Raya Browser: ${message}`)
+    })
   }
 
   dispose(): void {

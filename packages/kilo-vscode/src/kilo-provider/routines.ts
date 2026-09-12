@@ -152,8 +152,9 @@ function owned(type: string) {
 }
 
 function mode(msg: Msg) {
-  const name = typeof msg.mode === "string" ? msg.mode.trim() : ""
-  if (!name || name === "chat") return
+  if (typeof msg.mode !== "string") return
+  const name = msg.mode.trim()
+  if (!name || name === "chat") return ""
   return name
 }
 

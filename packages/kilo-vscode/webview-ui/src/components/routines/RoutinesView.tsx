@@ -43,6 +43,8 @@ type Agent = {
   execution?: Execution
   access?: "full" | "brief"
   dir?: string
+  mode?: string
+  plan?: string
 }
 
 type Run = {
@@ -625,7 +627,11 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
       .filter((item) => !item.hidden)
       .map((item) => ({ key: item.name, label: title(item) }))
     extras.sort((a, b) => a.label.localeCompare(b.label))
-    return [chat, ...extras]
+    const list = [chat, ...extras]
+    const extra = editing()?.mode?.trim()
+    if (extra && extra !== "chat" && !list.some((item) => item.key === extra))
+      list.push({ key: extra, label: extra })
+    return list
   })
 
   const current = createMemo(() => picks().find((item) => item.key === mode()) ?? chat)
@@ -665,7 +671,9 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
       name().trim() !== item.name ||
       objective().trim() !== item.objective ||
       roleof(role(), custom()) !== item.role ||
-      dir().trim() !== (item.dir ?? "")
+      dir().trim() !== (item.dir ?? "") ||
+      (current().key === "chat" ? undefined : current().key) !== (item.mode?.trim() || undefined) ||
+      plan().trim() !== (item.plan ?? "")
     )
   }
 
@@ -698,7 +706,9 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     const token = preview()?.forecastID
     const timed = confirmed() && !!token
     if (!moved() && !timed) {
-      setError("Preview the schedule before saving, or change the name, role, standing job, or write folder.")
+      setError(
+        "Preview the schedule before saving, or change the name, role, standing job, write folder, agent, or plan file.",
+      )
       return
     }
     setError("")
@@ -712,6 +722,8 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
         objective: job,
         role: part,
         dir: dest || undefined,
+        mode: current().key,
+        plan: plan().trim(),
         capabilities: part === "accountant" || part === "inbox" ? grants(money(), messages()) : undefined,
       })
     if (!timed) return
@@ -775,6 +787,8 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
       setCustom(item.role)
     }
     setDir(item.dir ?? "")
+    setMode(item.mode?.trim() || "chat")
+    setPlan(item.plan ?? "")
     setMoney(item.capabilities.some((cap) => ["money", "accounting", "books"].includes(cap.toLowerCase())))
     setMessages(item.capabilities.some((cap) => cap.toLowerCase() === "messages"))
     setDraft(
@@ -1143,8 +1157,8 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
             </label>
             <Show when={editing()}>
               <p class="routines-hint">
-                Earlier reports stay in this conversation. This does not start a new worker. Role and write folder
-                changes apply to later runs.
+                Earlier reports stay in this conversation. This does not start a new worker. Role, write folder,
+                agent, and plan file changes apply to later runs.
               </p>
             </Show>
             <ScheduleEditor value={draft()} onChange={setDraft} disabled={saving()} />
@@ -1223,29 +1237,29 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                 </div>
               )}
             </Show>
+            <div class="routines-field">
+              <span>Agent</span>
+              <Select
+                options={picks()}
+                current={current()}
+                label={(item) => item.label}
+                value={(item) => item.key}
+                onSelect={(item) => item && setMode(item.key)}
+                variant="secondary"
+                size="small"
+              />
+              <p class="routines-hint">
+                Same as chat, or a mode from Settings. It uses the model you assigned that mode.
+                <button
+                  type="button"
+                  class="routines-inline"
+                  onClick={() => vscode.postMessage({ type: "openSettingsPanel", tab: "agentBehaviour" })}
+                >
+                  Open Settings
+                </button>
+              </p>
+            </div>
             <Show when={!editing()}>
-              <div class="routines-field">
-                <span>Agent</span>
-                <Select
-                  options={picks()}
-                  current={current()}
-                  label={(item) => item.label}
-                  value={(item) => item.key}
-                  onSelect={(item) => item && setMode(item.key)}
-                  variant="secondary"
-                  size="small"
-                />
-                <p class="routines-hint">
-                  Same as chat, or a mode from Settings. It uses the model you assigned that mode.
-                  <button
-                    type="button"
-                    class="routines-inline"
-                    onClick={() => vscode.postMessage({ type: "openSettingsPanel", tab: "agentBehaviour" })}
-                  >
-                    Open Settings
-                  </button>
-                </p>
-              </div>
               <div class="routines-field">
                 <span>Tool access</span>
                 <Select
@@ -1301,16 +1315,14 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
               </div>
               <p class="routines-hint">It can read from anywhere. New files go in this folder.</p>
             </div>
-            <Show when={!editing()}>
-              <label class="routines-field">
-                Plan file
-                <input
-                  value={plan()}
-                  onInput={(e) => setPlan(e.currentTarget.value)}
-                  placeholder="Optional path to a .md plan"
-                />
-              </label>
-            </Show>
+            <label class="routines-field">
+              Plan file
+              <input
+                value={plan()}
+                onInput={(e) => setPlan(e.currentTarget.value)}
+                placeholder="Optional path to a .md plan"
+              />
+            </label>
             <Button type="submit" disabled={blocked()}>
               {caption()}
             </Button>

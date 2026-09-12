@@ -598,6 +598,8 @@ try {
     assert.equal(saved.objective, "Reconcile Friday receipts")
     assert.equal(saved.role, "reviewer")
     assert.equal(saved.dir, undefined)
+    assert.equal(saved.mode, "chat")
+    assert.equal(saved.plan, "")
     assert.equal(saved.capabilities, undefined)
     assert.equal(saved.enabled, undefined)
     emit({
@@ -615,7 +617,7 @@ try {
     button("Edit schedule").click()
     assert.match(root.textContent, /Role/)
     assert.match(root.textContent, /Write folder/)
-    assert.match(root.textContent, /Role and write folder/)
+    assert.match(root.textContent, /Role, write folder, agent, and plan file/)
     const dest = root.querySelector(".routines-pick input")
     assert.equal(dest.value, "")
     dest.value = "C:/tmp/review-writes"
@@ -625,11 +627,47 @@ try {
     assert.equal(assigned.agentID, "routine")
     assert.equal(assigned.role, "reviewer")
     assert.equal(assigned.dir, "C:/tmp/review-writes")
+    assert.equal(assigned.mode, "chat")
+    assert.equal(assigned.plan, "")
     assert.equal(assigned.capabilities, undefined)
     emit({
       type: "routineState",
       saved: true,
       agents: [{ ...agent, name: "Accounting", objective: "Reconcile Friday receipts", dir: assigned.dir }],
+    })
+    assert.equal(
+      [...root.querySelectorAll("button")].some((item) => item.textContent.trim() === "Save assignment"),
+      false,
+    )
+  }
+  {
+    button("Edit schedule").click()
+    assert.match(root.textContent, /Agent/)
+    assert.match(root.textContent, /Plan file/)
+    assert.match(root.textContent, /agent, and plan file/)
+    const file = [...root.querySelectorAll("label")]
+      .find((item) => item.textContent.trim().startsWith("Plan file"))
+      .querySelector("input")
+    assert.equal(file.value, "")
+    file.value = "plans/friday.md"
+    file.dispatchEvent(new window.Event("input", { bubbles: true }))
+    button("Save assignment").click()
+    const planned = sent.findLast((msg) => msg.type === "routineUpdate")
+    assert.equal(planned.agentID, "routine")
+    assert.equal(planned.plan, "plans/friday.md")
+    assert.equal(planned.mode, "chat")
+    emit({
+      type: "routineState",
+      saved: true,
+      agents: [
+        {
+          ...agent,
+          name: "Accounting",
+          objective: "Reconcile Friday receipts",
+          dir: "C:/tmp/review-writes",
+          plan: planned.plan,
+        },
+      ],
     })
     assert.equal(
       [...root.querySelectorAll("button")].some((item) => item.textContent.trim() === "Save assignment"),

@@ -256,6 +256,12 @@ export namespace RayaTask {
     return run?.status === "running" || (run?.status === "blocked" && run.blockedReason === "waiting on you")
   }
 
+  function slot(value: string) {
+    const name = value.trim()
+    if (!name || name === "chat") return
+    return name
+  }
+
   function timed(run: Run) {
     return !run.trigger || run.trigger.kind === "timer"
   }
@@ -635,9 +641,9 @@ export namespace RayaTask {
         avatar: patch.avatar ?? prior.avatar,
         enabled: patch.enabled ?? prior.enabled,
         blockReset: patch.enabled === true ? (yield* runsFor(id)).map((run) => run.id) : prior.blockReset,
-        plan: patch.plan ?? prior.plan,
+        plan: patch.plan === undefined ? prior.plan : patch.plan.trim() || undefined,
         model: patch.model ?? prior.model,
-        mode: patch.mode?.trim() || prior.mode,
+        mode: patch.mode === undefined ? prior.mode : slot(patch.mode),
         dir: patch.dir?.trim() || prior.dir,
         access: patch.access ?? prior.access,
         tools: patch.tools ?? prior.tools,

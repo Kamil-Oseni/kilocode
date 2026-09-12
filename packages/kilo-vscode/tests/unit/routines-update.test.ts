@@ -37,3 +37,69 @@ test("assignment save forwards role, write folder, and sensitive-role consent", 
     capabilities: ["money"],
   })
 })
+
+test("assignment save forwards agent mode and plan file", async () => {
+  const calls: Request[] = []
+  const client = createKiloClient({
+    baseUrl: "http://localhost:4096",
+    fetch: async (input, init) => {
+      const request = new Request(input, init)
+      calls.push(request)
+      return Response.json({ id: "routine", mode: "code", plan: "plans/friday.md" })
+    },
+  })
+  await handleRoutineMessage({
+    client,
+    directory: "workspace",
+    post: () => {},
+    message: {
+      type: "routineUpdate",
+      agentID: "routine",
+      name: "Books",
+      objective: "Review accounts",
+      mode: "code",
+      plan: "plans/friday.md",
+    },
+  })
+  const patch = calls.find((request) => request.method === "PATCH")
+  expect(patch).toBeDefined()
+  expect(await patch!.json()).toEqual({
+    name: "Books",
+    objective: "Review accounts",
+    mode: "code",
+    plan: "plans/friday.md",
+  })
+})
+
+test("assignment save clears default chat mode and empty plan file", async () => {
+  const calls: Request[] = []
+  const client = createKiloClient({
+    baseUrl: "http://localhost:4096",
+    fetch: async (input, init) => {
+      const request = new Request(input, init)
+      calls.push(request)
+      return Response.json({ id: "routine" })
+    },
+  })
+  await handleRoutineMessage({
+    client,
+    directory: "workspace",
+    post: () => {},
+    message: {
+      type: "routineUpdate",
+      agentID: "routine",
+      name: "Books",
+      objective: "Review accounts",
+      mode: "chat",
+      plan: "",
+    },
+  })
+  const patch = calls.find((request) => request.method === "PATCH")
+  expect(patch).toBeDefined()
+  expect(await patch!.json()).toEqual({
+    name: "Books",
+    objective: "Review accounts",
+    mode: "",
+    plan: "",
+  })
+})

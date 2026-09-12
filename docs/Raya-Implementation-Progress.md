@@ -22,7 +22,7 @@ Current checkpoint delivers parent-linked native voice retention, strict legacy-
 | EN-02 — Give routines atomic execution ownership and restart semantics | In progress | Overlap exclusion, startup claims, schedule versions and immutable trigger evidence implemented. Transactional occurrence store, migration and timer runner integration implemented. Automatic goal resume/retry checks queue ownership. Interrupted-start recovery, atomic execution fencing, full transaction boundaries and lifecycle semantics remain open. A loaded contention test timed out; its isolated rerun passed. |
 | EN-03 — Implement timezone and event-filter semantics end to end | In progress | Stored timezone evaluation, exact event filters and read-only forecasts verified. Legacy calendars without a timezone now hold automatic admission until explicit review; queued rows and history remain preserved. CLI, real queue migration and actual editor checks pass. Deployed event and full packaged acceptance remain open. |
 | EN-04 — Acknowledge review actions before dismissing them | In progress | Correlated editor/chat acknowledgement and delivery, saved retry identities, atomic backend receipts, inherited Keep boundaries, and manual-edit preconditions verified. Uncertain-outcome reconciliation, cross-process workspace transactions, retention, and live/packaged validation remain open. |
-| EN-05 — Identify reviewed content by revision, not line positions | In progress | Content and persisted patch-generation fingerprints, stale-command rejection, acceptance hydration, and deletion/rename anchors verified in targeted tests. Historical Undo hydration and renamed/deleted-file live interaction remain open. |
+| EN-05 — Identify reviewed content by revision, not line positions | In progress | Content and persisted patch-generation fingerprints, stale-command rejection, Keep acceptance hydration, historical Undo hydration, and deletion/rename anchors verified in targeted tests. Renamed/deleted-file live interaction remains open. |
 | EN-06 — Preserve the last working canvas across failed updates and restarts | In progress | Candidate/render identity, durable current/previous records, retention, restart/late-error recovery, draft repair, and local-edit preservation implemented and covered by targeted tests. Independent-writer/crash reconciliation, saved-manifest corruption recovery, and live/packaged verification remain open. |
 | EN-07 — Use explicit compatibility contracts during the runtime migration | In progress | Added a versioned capability manifest following existing optional server authentication and connection-specific pre-mutation support checks for command-bound goal edits. Unsupported or replaced backends preserve the draft. Actual auth, SDK regeneration and affected package typechecks pass; broader feature/event and client-version contracts remain open. |
 | EN-08 — Repair schema regression checks and isolate contract-test state | Verified | Named contract manifests, Windows paths, and automatic temporary state isolation; schema 17, client 16, core migration 27 tests pass. All three package typechecks pass. |
@@ -3101,6 +3101,19 @@ Status: committed, pushed and installed as b54b24cf5c. Write-folder file-tool co
 Installed eden.raya@7.4.23-snapshot+b54b24cf5c.kamil-oseni.1789199445687. VSIX C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-b54b24cf5c-kamil-oseni-1789199445687.vsix; SHA-256 8DA2FA36B2C812033D912AB89AAAD41127344CAC814D48933B9E0F4AB2750D5A; 520064054 bytes, 432 files. VS Code was not force-reloaded.
 
 Next: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
+
+## 2026-09-12: Historical Undo hydration after the file leaves the diff
+
+Status: verified locally and committed as 87a7680782. Successful Undo now stores submitted file fingerprints in workspace state. After the file leaves the live diff, a later review refresh includes those hashes so a fresh webview keeps the transcript card dismissed. If the same path returns in the live diff, the stored dismissal is dropped and that file reopens. Session deletion prunes the stored dismissals with the retry journal.
+
+Changed files: packages/kilo-vscode/src/edit-review/undone.ts, packages/kilo-vscode/src/edit-review/undone.test.ts, packages/kilo-vscode/src/KiloProvider.ts, packages/kilo-vscode/webview-ui/src/components/chat/edit-review.ts, packages/kilo-vscode/tests/unit/edit-review-state.test.ts, packages/kilo-vscode/tests/unit/review-acknowledgement.test.ts, docs/Raya-Review-Contract.md, .changeset/raya-review-undo-hydration.md.
+
+Commands: packages/kilo-vscode bun test tests/unit/edit-review-state.test.ts src/edit-review/undone.test.ts tests/unit/review-acknowledgement.test.ts --timeout 30000 -> 22 pass / 0 fail / 84 expect / exit 0. packages/kilo-vscode bun test src/edit-review/InEditorReview.test.ts --timeout 30000 -> 14 pass / 0 fail / 64 expect / exit 0. bun run check-types -> exit 0. bun run check-types:webview -> exit 0. bun run check-kilocode-change -> exit 0. bunx eslint --no-cache on touched TypeScript -> exit 0.
+
+This is not a paid GPT-Live call and does not unlock VS Code iframe microphone consent. Renamed/deleted-file live interaction remains open under EN-05. Codex-deferred research stays untracked.
+
+Next: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
+
 
 
 

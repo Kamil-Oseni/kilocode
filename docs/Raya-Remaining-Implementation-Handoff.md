@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-12):** Installed snapshot `b54b24cf5c` confines full-access file-tool writes to the saved write folder. Remaining: leftover 39-requirement work that is still implementable here, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-12):** Historical Undo hydration is committed as `87a7680782` and unshipped. Remaining: leftover 39-requirement work that is still implementable here, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -222,11 +222,11 @@ The following sections retain the full 39-item scope. Related findings and overh
 
 ### EN-05 — Identify reviewed content by revision, not line positions
 
-**Recorded status:** In progress. Content and persisted patch-generation fingerprints, stale-command rejection, acceptance hydration, and deletion/rename anchors verified in targeted tests. Historical Undo hydration and renamed/deleted-file live interaction remain open.
+**Recorded status:** In progress. Content and persisted patch-generation fingerprints, stale-command rejection, Keep acceptance hydration, historical Undo hydration, and deletion/rename anchors verified in targeted tests. Renamed/deleted-file live interaction remains open.
 
 **Implementation and verification:**
 
-1. Finish historical Undo hydration and renamed/deleted-file interactions from persisted content/patch fingerprints.
+1. Finish renamed/deleted-file live interaction from persisted content/patch fingerprints.
 2. Preserve acceptance across unrelated line shifts but reject stale content revisions; make deletion-only actions discoverable.
 3. Change the same lines twice, rename/edit/delete, reopen and undo historical work; inspect anchors, Keep boundaries and focus.
 
@@ -2000,3 +2000,27 @@ Installed `eden.raya@7.4.23-snapshot+b54b24cf5c.kamil-oseni.1789199445687`. VSIX
 Remaining: leftover implementable 39-requirement work, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent.
 
 Next executable step: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
+
+## 2026-09-12: Historical Undo hydration after the file leaves the diff
+
+**States:** verified locally and committed as `87a7680782`. Successful Undo now stores submitted file fingerprints in workspace state. After the file leaves the live diff, a later review refresh includes those hashes so a fresh webview keeps the transcript card dismissed. If the same path returns in the live diff, the stored dismissal is dropped and that file reopens. Session deletion prunes the stored dismissals with the retry journal.
+
+Changed files: `packages/kilo-vscode/src/edit-review/undone.ts`, `packages/kilo-vscode/src/edit-review/undone.test.ts`, `packages/kilo-vscode/src/KiloProvider.ts`, `packages/kilo-vscode/webview-ui/src/components/chat/edit-review.ts`, `packages/kilo-vscode/tests/unit/edit-review-state.test.ts`, `packages/kilo-vscode/tests/unit/review-acknowledgement.test.ts`, `docs/Raya-Review-Contract.md`, `.changeset/raya-review-undo-hydration.md`.
+
+Commands:
+
+| Command | Result |
+|---|---|
+| `packages/kilo-vscode` `bun test tests/unit/edit-review-state.test.ts src/edit-review/undone.test.ts tests/unit/review-acknowledgement.test.ts --timeout 30000` | 22 pass / 0 fail / 84 expect / exit 0 |
+| `packages/kilo-vscode` `bun test src/edit-review/InEditorReview.test.ts --timeout 30000` | 14 pass / 0 fail / 64 expect / exit 0 |
+| `packages/kilo-vscode` `bun run check-types` | exit 0 |
+| `packages/kilo-vscode` `bun run check-types:webview` | exit 0 |
+| `packages/kilo-vscode` `bun run check-kilocode-change` | no forbidden markers / exit 0 |
+| `packages/kilo-vscode` `bunx eslint --no-cache` on touched TypeScript | exit 0 |
+
+This is not a paid GPT-Live call and does not unlock VS Code iframe microphone consent. Renamed/deleted-file live interaction remains open under EN-05. Codex-deferred research stays untracked.
+
+Remaining: leftover implementable 39-requirement work, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent.
+
+Next executable step: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
+

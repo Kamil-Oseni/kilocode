@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Installed product remains `8e2dc53700`. Latest verified (not yet installed) work is `96715a85f8`: inbox pages stay at 50 messages, and Chromium covers empty, error, stale, loading, and 200% zoom. Remaining RDM-06 work is the returning-reviewer journey. Remaining Live work is packaged microphone/acoustic acceptance. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Installed product is `d08dc0197d`. Inbox pages stay at 50 messages. Chromium covers empty, error, stale, loading, and 200% zoom. Remaining RDM-06 work is the returning-reviewer journey. Remaining Live work is packaged microphone/acoustic acceptance. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-11. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `8e2dc53700` is committed, pushed and installed. Windows browser profiles survive recased paths. Routines light/dark layout is verified in Chromium. Inbox page budget and empty-state Chromium coverage are verified locally as `96715a85f8` and not yet installed.
+**Latest delivered product:** checkpoint `d08dc0197d` is committed, pushed and installed. Inbox pages stay at 50 messages. Chromium covers empty, error, stale, loading, and 200% zoom.
 
 ## Scope and reading order
 
@@ -1569,5 +1569,15 @@ Commands: `packages/opencode` `bun test ./test/kilocode/task/inbox.test.ts ./tes
 The page cap was already in `packages/opencode/src/kilocode/task/inbox.ts` and the HTTP schema. This slice records that budget and proves it. Empty/loading/stale/error copy was already in `RoutinesView`; Chromium now reaches those scenes through `?scene=`. Horizontal overflow is still checked at 100% zoom, not at 200%.
 
 Remaining: returning-reviewer journey (schema/event flow, then single-worker and delegation journeys), packaged microphone/acoustic acceptance, and receiving-side telemetry consent ordering. Do not force-rebuild `kilo.exe` while the running extension holds it. Codex-deferred research stays untracked.
+
+Next executable step: leftover RDM-06 returning-reviewer journey, or leftover Live microphone acceptance.
+
+## 2026-09-11: Snapshot install `d08dc0197d`
+
+**States:** committed, pushed and installed as `d08dc0197d`. Conversation pages stay at 50 messages. Chromium empty, error, stale, loading, and 200% zoom coverage is in this snapshot.
+
+Installed `eden.raya@7.4.23-snapshot+d08dc0197d.kamil-oseni.1789177768668`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-d08dc0197d-kamil-oseni-1789177768668.vsix`; SHA-256 `5F4C937EBE76549E20D3DE6F68D8703E942AD2F604C427DC4573934B5BCA6623`; 520000749 bytes, 432 entries. Packaging copied a rebuilt CLI into `bin/kilo.exe`; VS Code was not force-reloaded.
+
+Remaining: leftover RDM-06 returning-reviewer journey and packaged microphone/acoustic acceptance.
 
 Next executable step: leftover RDM-06 returning-reviewer journey, or leftover Live microphone acceptance.

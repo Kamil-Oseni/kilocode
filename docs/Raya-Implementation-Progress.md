@@ -2816,5 +2816,13 @@ Commands: packages/opencode bun test ./test/kilocode/task/inbox.test.ts ./test/k
 
 Next: leftover RDM-06 returning-reviewer journey, or leftover Live microphone acceptance.
 
+## 2026-09-11: Snapshot install d08dc0197d
+
+Status: committed, pushed and installed as d08dc0197d. Conversation pages stay at 50 messages. Chromium empty, error, stale, loading, and 200% zoom coverage is in this snapshot.
+
+Installed eden.raya@7.4.23-snapshot+d08dc0197d.kamil-oseni.1789177768668. VSIX C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-d08dc0197d-kamil-oseni-1789177768668.vsix; SHA-256 5F4C937EBE76549E20D3DE6F68D8703E942AD2F604C427DC4573934B5BCA6623; 520000749 bytes, 432 entries. Packaging copied a rebuilt CLI into bin/kilo.exe; VS Code was not force-reloaded.
+
+Next: leftover RDM-06 returning-reviewer journey, or leftover Live microphone acceptance.
+
 
 

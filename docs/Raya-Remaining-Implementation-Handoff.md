@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Product checkpoint `1a37c6ea81` is verified locally and not yet pushed or installed. Packaged Live falls back to extension-host PCM when the webview microphone is denied. Remaining: paid GPT-Live/device acoustic acceptance, VS Code iframe microphone consent, and receiving-side telemetry consent ordering. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Installed product is `78d94211b4`. Packaged Live falls back to extension-host PCM when the webview microphone is denied. Remaining: paid GPT-Live/device acoustic acceptance, VS Code iframe microphone consent, and receiving-side telemetry consent ordering. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-11. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `7a748083dd` is committed, pushed and installed. Returning-reviewer schema inspection, Friday assignment, follow-up report context, history exclusion, and brief-to-full delegation policy are in that snapshot. Packaged Live host-microphone fallback is verified locally as `1a37c6ea81` and is not yet in the installed VSIX.
+**Latest delivered product:** checkpoint `78d94211b4` is committed, pushed and installed. Packaged Live host-microphone fallback, including the routing-complexity fix, is in this snapshot.
 
 ## Scope and reading order
 
@@ -1615,6 +1615,16 @@ Changed files: `packages/kilo-vscode/webview-ui/src/context/live-voice.ts`, `pac
 Commands (packages/kilo-vscode): `bun test tests/unit/webview-html.test.ts tests/unit/speech-to-text-capture.test.ts tests/unit/live-speech-routing.test.ts --timeout 30000` → 31 pass / 0 fail / 80 expect / exit 0. `bun test tests/unit/live-voice.test.ts --timeout 50000` → 1 pass / 0 fail / 2 expect / exit 0. `bun test tests/unit/live-voice-ui.test.ts --timeout 90000` → 1 pass / 0 fail / 2 expect / exit 0. `bun run check-types` → exit 0. `bun run check-types:webview` → exit 0. `bun run check-kilocode-change` → exit 0.
 
 This is not a paid GPT-Live call and not real-device acoustic quality. Browser AEC is requested on the webview path; host PCM does not claim echo cancellation. VS Code stable webviews still omit iframe microphone permission. Unexpected ffmpeg death after start is not yet posted as `speechLiveMicError`. Receiving-side telemetry consent ordering remains open. Codex-deferred research stays untracked.
+
+Remaining: paid GPT-Live/device acoustic acceptance, VS Code iframe microphone consent, provider-switch/disposal, and receiving-side telemetry consent ordering.
+
+Next executable step: leftover receiving-side telemetry consent ordering, or a real-account GPT-Live call on a device.
+
+## 2026-09-11: Snapshot install `78d94211b4`
+
+**States:** committed, pushed and installed as `78d94211b4`. Packaged Live host-microphone fallback is in this snapshot. The first snapshot attempt at `93f00fb141` failed packaged lint because `openaiMessage` exceeded complexity 20; that is fixed in this install.
+
+Installed `eden.raya@7.4.23-snapshot+78d94211b4.kamil-oseni.1789180690558`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-78d94211b4-kamil-oseni-1789180690558.vsix`; SHA-256 `B4AFE3358BA0723F9267580494066C950CAEA9859FFE6FB280B30EA0694D416B`; 517069119 bytes, 431 files. CLI binary already present; not rebuilt. VS Code was not force-reloaded.
 
 Remaining: paid GPT-Live/device acoustic acceptance, VS Code iframe microphone consent, provider-switch/disposal, and receiving-side telemetry consent ordering.
 

@@ -2854,6 +2854,15 @@ This is not a paid GPT-Live call and not real-device acoustic quality. Host PCM 
 
 Next: leftover receiving-side telemetry consent ordering, or a real-account GPT-Live call on a device.
 
+## 2026-09-11: Snapshot install 78d94211b4
+
+Status: committed, pushed and installed as 78d94211b4. Packaged Live host-microphone fallback is in this snapshot. The first snapshot attempt at 93f00fb141 failed packaged lint because openaiMessage exceeded complexity 20; 78d94211b4 extracts host-mic message handling.
+
+Installed eden.raya@7.4.23-snapshot+78d94211b4.kamil-oseni.1789180690558. VSIX C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-78d94211b4-kamil-oseni-1789180690558.vsix; SHA-256 B4AFE3358BA0723F9267580494066C950CAEA9859FFE6FB280B30EA0694D416B; 517069119 bytes, 431 files. CLI binary already present; not rebuilt. VS Code was not force-reloaded.
+
+Next: leftover receiving-side telemetry consent ordering, or a real-account GPT-Live call on a device.
+
+
 
 
 

@@ -272,10 +272,18 @@ export class SpeechService implements vscode.Disposable {
       return
     }
     try {
-      await startLiveCapture(requestId, (buf) => {
-        post({ type: "speechLiveMicChunk", requestId, data: buf.toString("base64") })
-      })
-      post({ type: "speechLiveMicReady", requestId })
+      let dead = false
+      await startLiveCapture(
+        requestId,
+        (buf) => {
+          post({ type: "speechLiveMicChunk", requestId, data: buf.toString("base64") })
+        },
+        (error) => {
+          dead = true
+          failed(error)
+        },
+      )
+      if (!dead) post({ type: "speechLiveMicReady", requestId })
     } catch (err) {
       post({ type: "speechLiveMicError", requestId, error: getErrorMessage(err) })
     }

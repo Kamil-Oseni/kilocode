@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import { spawn } from "node:child_process"
 import {
   cleanOutput,
   ffmpegCaptureArgs,
@@ -6,7 +7,9 @@ import {
   ffmpegPipeArgs,
   livePipeArgs,
   macCaptureArgs,
+  openLive,
   parseDshowAudioDevices,
+  stopLiveCapture,
   useMacCapture,
 } from "../../src/speech-to-text/capture"
 
@@ -177,5 +180,37 @@ default: Input/output error
     expect(cleanOutput(raw)).toBe(
       "ALSA lib ../../../src/pcm/pcm.c:2477:(snd_pcm_open_conf) Unknown field libs\ndefault: Input/output error",
     )
+  })
+})
+
+describe("openLive", () => {
+  it("reports unexpected process death after capture is ready", async () => {
+    const proc = spawn(
+      process.execPath,
+      ["-e", "process.stdout.write('x'); setTimeout(() => process.exit(1), 80)"],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    )
+    const lost = Promise.withResolvers<string>()
+    await openLive(proc, "request_1", () => {}, (error) => lost.resolve(error))
+    expect(await lost.promise).toMatch(/Live microphone capture stopped unexpectedly/)
+  })
+
+  it("does not report death after an intentional stop", async () => {
+    const proc = spawn(process.execPath, ["-e", "process.stdout.write('x'); setInterval(() => {}, 1000)"], {
+      stdio: ["ignore", "pipe", "pipe"],
+    })
+    const seen: string[] = []
+    await openLive(proc, "request_2", () => {}, (error) => seen.push(error))
+    await stopLiveCapture("request_2")
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    expect(seen).toEqual([])
+  })
+
+  it("does not treat a failed start as unexpected death", async () => {
+    const proc = spawn(process.execPath, ["-e", "process.exit(1)"], { stdio: ["ignore", "pipe", "pipe"] })
+    const seen: string[] = []
+    const started = openLive(proc, "request_3", () => {}, (error) => seen.push(error))
+    await expect(started).rejects.toThrow(/Could not start Live microphone capture/)
+    expect(seen).toEqual([])
   })
 })

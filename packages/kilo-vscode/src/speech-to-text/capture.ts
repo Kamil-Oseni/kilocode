@@ -40,6 +40,8 @@ type Stream = {
   proc: ChildProcess
   stderr: string[]
   stopped: boolean
+  ready?: boolean
+  dead?: boolean
 }
 
 type Args = {
@@ -134,15 +136,40 @@ export async function cancelSpeechCapture(requestId: string): Promise<void> {
   await removeFile(state.file)
 }
 
-export async function startLiveCapture(requestId: string, onChunk: (buf: Buffer) => void): Promise<void> {
+export async function startLiveCapture(
+  requestId: string,
+  onChunk: (buf: Buffer) => void,
+  lost?: (error: string) => void,
+): Promise<void> {
   if (active || starting || live || opening) throw new Error("Speech recording is already in progress")
   const stamp = epoch
   opening = requestId
   try {
     const bin = await resolveFFmpeg()
     if (stamp !== epoch) throw new Error("Live microphone capture was cancelled.")
-    const state = await startLiveWithArgs(bin, requestId, onChunk, await inputArgSets(bin))
+    const state = await startLiveWithArgs(bin, requestId, onChunk, await inputArgSets(bin), lost)
     if (stamp !== epoch || state.stopped) throw new Error("Live microphone capture was cancelled.")
+  } finally {
+    if (opening === requestId) opening = undefined
+  }
+}
+
+export async function openLive(
+  proc: ChildProcess,
+  requestId: string,
+  onChunk: (buf: Buffer) => void,
+  lost?: (error: string) => void,
+): Promise<void> {
+  if (active || starting || live || opening) throw new Error("Speech recording is already in progress")
+  const stamp = epoch
+  opening = requestId
+  try {
+    const state: Stream = { requestId, proc, stderr: [], stopped: false }
+    live = state
+    watch(state, onChunk, lost)
+    await waitForLive(state)
+    if (stamp !== epoch || state.stopped) throw new Error("Live microphone capture was cancelled.")
+    state.ready = true
   } finally {
     if (opening === requestId) opening = undefined
   }
@@ -307,21 +334,9 @@ async function startWithArgs(bin: string, file: string, input: Input, args: Args
   }
 }
 
-async function startLiveWithArgs(
-  bin: string,
-  requestId: string,
-  onChunk: (buf: Buffer) => void,
-  args: Args[],
-): Promise<Stream> {
-  const [first, ...rest] = args
-  if (!first) throw new Error(`Unsupported platform for speech input: ${process.platform}`)
-  const proc = first.pipe
-    ? spawn("pw-record", livePipeArgs(), { stdio: ["ignore", "pipe", "pipe"] })
-    : spawn(bin, ffmpegLiveArgs(first.input), { stdio: ["pipe", "pipe", "pipe"] })
-  const state: Stream = { requestId, proc, stderr: [], stopped: false }
-  live = state
+function watch(state: Stream, onChunk: (buf: Buffer) => void, lost?: (error: string) => void) {
   const size = 48_000
-  proc.stdout?.on("data", (buf: Buffer) => {
+  state.proc.stdout?.on("data", (buf: Buffer) => {
     if (state.stopped) return
     let offset = 0
     while (offset < buf.length) {
@@ -330,29 +345,52 @@ async function startLiveWithArgs(
       offset = end
     }
   })
-  proc.stderr?.on("data", (data: Buffer) => {
+  state.proc.stderr?.on("data", (data: Buffer) => {
     if (state.stderr.length < 20) state.stderr.push(data.toString())
   })
-  proc.on("exit", () => {
+  const fail = () => {
     if (live === state && !state.stopped) live = undefined
-  })
-  proc.on("error", (err) => {
+    if (state.stopped || !state.ready || state.dead) return
+    state.dead = true
+    lost?.(summary(state, "Live microphone capture stopped unexpectedly"))
+  }
+  state.proc.on("exit", fail)
+  state.proc.on("error", (err) => {
     state.stderr.push(err.message)
-    if (live === state && !state.stopped) live = undefined
+    fail()
   })
+}
+
+async function startLiveWithArgs(
+  bin: string,
+  requestId: string,
+  onChunk: (buf: Buffer) => void,
+  args: Args[],
+  lost?: (error: string) => void,
+): Promise<Stream> {
+  const [first, ...rest] = args
+  if (!first) throw new Error(`Unsupported platform for speech input: ${process.platform}`)
+  const proc = first.pipe
+    ? spawn("pw-record", livePipeArgs(), { stdio: ["ignore", "pipe", "pipe"] })
+    : spawn(bin, ffmpegLiveArgs(first.input), { stdio: ["pipe", "pipe", "pipe"] })
+  const state: Stream = { requestId, proc, stderr: [], stopped: false }
+  live = state
+  watch(state, onChunk, lost)
   try {
     await waitForLive(state)
+    state.ready = true
     return state
   } catch (err) {
     if (state.stopped) return state
     if (live === state) live = undefined
     await stopProcess(state)
     if (rest.length === 0) throw err
-    return startLiveWithArgs(bin, requestId, onChunk, rest)
+    return startLiveWithArgs(bin, requestId, onChunk, rest, lost)
   }
 }
 
 async function waitForLive(state: Stream): Promise<void> {
+  if (state.proc.exitCode !== null) throw new Error(summary(state, "Could not start Live microphone capture"))
   await new Promise<void>((resolve, reject) => {
     const done = () => {
       state.proc.off("error", onError)

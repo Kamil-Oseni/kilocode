@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-12):** Installed product is `b52758bee3`. The 5199 harness now mounts a production goal result package and criteria editor. Thirty-seven Chromium checks pass. Remaining: leftover 39-requirement work that is still implementable here, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-12):** Product `9dad281a88` keeps routine reports on the same worker when role or write folder changes. Not yet installed. Remaining: leftover 39-requirement work that is still implementable here, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-12. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `b52758bee3` is committed, pushed and installed. The 5199 harness now mounts a production goal result package and criteria editor.
+**Latest delivered product:** checkpoint `9dad281a88` is committed. Edit schedule can change role and write folder on the same worker. Snapshot install is next.
 
 ## Scope and reading order
 
@@ -1895,6 +1895,29 @@ Next executable step: leftover implementable 39-requirement work, or a real-acco
 **States:** committed, pushed and installed as `b52758bee3`. Production goal result and criteria-editor fixtures are in this snapshot. CLI binary was already present and was not rebuilt.
 
 Installed `eden.raya@7.4.23-snapshot+b52758bee3.kamil-oseni.1789195725262`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-b52758bee3-kamil-oseni-1789195725262.vsix`; SHA-256 `999843A6BA51DCCB395C4350C1B4DFC4DFF9A54DD66F07517E1A660FCAB31292`; 517102464 bytes, 431 files. VS Code was not force-reloaded.
+
+Remaining: leftover implementable 39-requirement work, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent.
+
+Next executable step: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
+
+## 2026-09-12: Role and write-folder reassignment on the same worker
+
+**States:** verified locally and committed as `9dad281a88`. Edit schedule now shows Role and Write folder. Save assignment updates those fields on the same `agentID`. Accountant and inbox role changes still require the matching records consent. Access and output stay on their dedicated review editors. Earlier reports stay in the same conversation.
+
+Changed files: `packages/kilo-vscode/webview-ui/src/components/routines/RoutinesView.tsx`, `packages/kilo-vscode/src/kilo-provider/routines.ts`, `packages/kilo-vscode/tests/fixtures/routine-edit-view.mjs`, `packages/kilo-vscode/tests/unit/routines-update.test.ts`, `packages/opencode/test/kilocode/task.test.ts`, `.changeset/raya-routine-role-folder.md`.
+
+Commands:
+
+| Command | Result |
+|---|---|
+| `packages/opencode` `bun test ./test/kilocode/task.test.ts --timeout 90000` | 62 pass / 0 fail / 589 expect / exit 0 |
+| `packages/kilo-vscode` `bun test tests/unit/routines-edit-view.test.ts tests/unit/routines-update.test.ts --timeout 90000` | 2 pass / 0 fail / 4 expect / exit 0 |
+| `packages/kilo-vscode` `bun run check-types` | exit 0 |
+| `packages/kilo-vscode` `bun run check-types:webview` | exit 0 |
+| `packages/kilo-vscode` `bun run check-kilocode-change` | no forbidden markers / exit 0 |
+| `packages/kilo-vscode` `bunx eslint --no-cache` on touched routine TypeScript | exit 0 |
+
+This is not a paid GPT-Live call and does not unlock VS Code iframe microphone consent. Tool access, agent mode, plan file, and output requirements still use their existing create or dedicated-review paths. Codex-deferred research stays untracked.
 
 Remaining: leftover implementable 39-requirement work, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent.
 

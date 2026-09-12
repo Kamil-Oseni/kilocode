@@ -3042,6 +3042,18 @@ Installed eden.raya@7.4.23-snapshot+b52758bee3.kamil-oseni.1789195725262. VSIX C
 
 Next: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
 
+## 2026-09-12: Role and write-folder reassignment on the same worker
+
+Status: verified locally and committed as 9dad281a88. Edit schedule now shows Role and Write folder. Save assignment updates those fields on the same agentID. Accountant and inbox role changes still require the matching records consent. Access and output stay on their dedicated review editors. Earlier reports stay in the same conversation.
+
+Changed files: packages/kilo-vscode/webview-ui/src/components/routines/RoutinesView.tsx, packages/kilo-vscode/src/kilo-provider/routines.ts, packages/kilo-vscode/tests/fixtures/routine-edit-view.mjs, packages/kilo-vscode/tests/unit/routines-update.test.ts, packages/opencode/test/kilocode/task.test.ts, .changeset/raya-routine-role-folder.md.
+
+Commands: packages/opencode bun test ./test/kilocode/task.test.ts --timeout 90000 -> 62 pass / 0 fail / 589 expect / exit 0. packages/kilo-vscode bun test tests/unit/routines-edit-view.test.ts tests/unit/routines-update.test.ts --timeout 90000 -> 2 pass / 0 fail / 4 expect / exit 0. bun run check-types -> exit 0. bun run check-types:webview -> exit 0. bun run check-kilocode-change -> exit 0. bunx eslint --no-cache on touched routine TypeScript -> exit 0.
+
+This is not a paid GPT-Live call and does not unlock VS Code iframe microphone consent. Tool access, agent mode, plan file, and output requirements still use their existing create or dedicated-review paths. Codex-deferred research stays untracked.
+
+Next: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
+
 
 
 

@@ -39,3 +39,47 @@ for (const theme of ["light", "dark"]) {
     })
   }
 }
+
+test("light routines empty state", async ({ page }, info) => {
+  await page.setViewportSize({ width: 320, height: 900 })
+  await page.goto("/?state=light-routines&scene=empty")
+  await expect(page.getByText("No standing jobs yet.")).toBeVisible()
+  await expect(page.getByRole("button", { name: "Assign a routine" })).toBeVisible()
+  await page.screenshot({ path: info.outputPath("empty.png"), fullPage: true })
+})
+
+test("light routines error state", async ({ page }, info) => {
+  await page.setViewportSize({ width: 320, height: 900 })
+  await page.goto("/?state=light-routines&scene=error")
+  await expect(page.getByRole("alert")).toContainText("The routine list could not be refreshed")
+  await expect(page.getByRole("button", { name: "Dismiss message" })).toBeVisible()
+  await page.screenshot({ path: info.outputPath("error.png"), fullPage: true })
+})
+
+test("light routines stale history", async ({ page }, info) => {
+  await page.setViewportSize({ width: 900, height: 900 })
+  await page.goto("/?state=light-routines&scene=stale")
+  await expect(page.getByText("History may be stale: Recorded history could not be refreshed.")).toBeVisible()
+  await page.screenshot({ path: info.outputPath("stale.png"), fullPage: true })
+})
+
+test("light routines loading state", async ({ page }, info) => {
+  await page.setViewportSize({ width: 320, height: 900 })
+  await page.goto("/?state=light-routines&scene=loading")
+  const status = page.locator('[role="status"][aria-busy="true"]')
+  await expect(status).toContainText("Refreshing routines and recorded history...")
+  await page.screenshot({ path: info.outputPath("loading.png"), fullPage: true })
+})
+
+test("light routines at 200% zoom", async ({ page }, info) => {
+  await page.setViewportSize({ width: 900, height: 900 })
+  await page.goto("/?state=light-routines")
+  await page.evaluate(() => {
+    document.documentElement.style.zoom = "2"
+  })
+  const books = page.locator('.routines-identity[data-routine-worker="routine"]')
+  await expect(books).toBeVisible()
+  await books.click()
+  await expect(page.getByRole("region", { name: "Conversation with Books" })).toBeVisible()
+  await page.screenshot({ path: info.outputPath("zoom.png"), fullPage: true })
+})

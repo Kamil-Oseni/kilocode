@@ -158,3 +158,34 @@ test("routine inbox publication is idempotent, unread ignores user messages, and
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })
+
+test("routine inbox pages return at most 50 messages and refuse a larger limit", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const inbox = RayaTaskInbox.make(yield* Database.Service)
+      for (const n of Array.from({ length: 60 }, (_, i) => i)) {
+        yield* inbox.publish({
+          agentID: "agt_page",
+          source: `report:occ_${n}`,
+          kind: "report",
+          body: `Friday close note ${n}.`,
+          occurrenceID: `occ_${n}`,
+        })
+      }
+      const first = yield* inbox.page("agt_page")
+      expect(first.messages).toHaveLength(50)
+      expect(first.next).toBeDefined()
+      const second = yield* inbox.page("agt_page", first.next)
+      expect(second.messages).toHaveLength(10)
+      expect(second.next).toBeUndefined()
+      const seen = new Set([...first.messages, ...second.messages].map((item) => item.source))
+      expect(seen.size).toBe(60)
+      expect(
+        Exit.isFailure(yield* inbox.page("agt_page", undefined, 51).pipe(Effect.exit)),
+      ).toBe(true)
+      expect(
+        Exit.isFailure(yield* inbox.page("agt_page", undefined, 0).pipe(Effect.exit)),
+      ).toBe(true)
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})

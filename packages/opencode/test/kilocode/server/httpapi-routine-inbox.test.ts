@@ -186,3 +186,28 @@ test("renamed workers keep conversation identity and archived inbox stays readab
     message: expect.stringMatching(/unfinished runs|outstanding delegated requests/),
   })
 }, 60_000)
+
+test("routine inbox HTTP pages refuse a limit above 50", async () => {
+  await using directory = await tmpdir({ git: true })
+  const headers = { "content-type": "application/json", "x-kilo-directory": directory.path }
+  const app = Server.Default().app
+  const created = await app.request("/kilocode/agent", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      name: "Accounts",
+      role: "accountant",
+      objective: "Review accounts",
+      capabilities: ["accounting"],
+      enabled: false,
+      schedule: { kind: "manual" },
+    }),
+  })
+  expect(created.status).toBe(200)
+  const agent = Schema.decodeUnknownSync(Schema.toCodecJson(RayaTask.Agent))(await created.json())
+  const route = `/kilocode/agent/${agent.id}/inbox`
+  expect((await app.request(`${route}?limit=51`, { headers })).status).toBe(400)
+  expect((await app.request(`${route}?limit=0`, { headers })).status).toBe(400)
+  const page = Schema.decodeUnknownSync(Schema.toCodecJson(Page))(await (await app.request(route, { headers })).json())
+  expect(page.messages).toEqual([])
+}, 60_000)

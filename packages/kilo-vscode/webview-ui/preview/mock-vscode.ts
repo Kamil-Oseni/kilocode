@@ -35,6 +35,8 @@ const report = {
   time: 1,
 }
 
+const scene = new URLSearchParams(window.location.search).get("scene") ?? "ready"
+
 const reply = (message: WebviewMessage) => {
   if (message.type === "requestProjectUsage") {
     emit({
@@ -87,18 +89,41 @@ const reply = (message: WebviewMessage) => {
     return
   }
   if (message.type === "routineList") {
+    const id = message.requestID
+    const view = message.viewID
+    if (scene === "loading") {
+      emit({ type: "routineState", requestID: id, viewID: view, refreshID: 1, refresh: "loading" })
+      return
+    }
+    if (scene === "error") {
+      emit({
+        type: "routineState",
+        requestID: id,
+        viewID: view,
+        refreshID: 1,
+        refresh: "error",
+        error: "The routine list could not be refreshed. Try Refresh routines.",
+      })
+      return
+    }
+    if (scene === "empty") {
+      emit({ type: "routineState", requestID: id, viewID: view, refreshID: 1, agents: [], templates: [] })
+      emit({ type: "routineInbox", requestID: id, viewID: view, refreshID: 1, items: [] })
+      emit({ type: "routineState", requestID: id, viewID: view, refreshID: 1, refresh: "complete" })
+      return
+    }
     emit({
       type: "routineState",
-      requestID: message.requestID,
-      viewID: message.viewID,
+      requestID: id,
+      viewID: view,
       refreshID: 1,
       agents: [books, legal],
       templates: [],
     })
     emit({
       type: "routineInbox",
-      requestID: message.requestID,
-      viewID: message.viewID,
+      requestID: id,
+      viewID: view,
       refreshID: 1,
       items: [
         {
@@ -128,10 +153,18 @@ const reply = (message: WebviewMessage) => {
         },
       ],
     })
+    if (scene === "stale") {
+      emit({
+        type: "routineRuns",
+        requestID: id,
+        agentID: books.id,
+        error: "Recorded history could not be refreshed.",
+      })
+    }
     emit({
       type: "routineState",
-      requestID: message.requestID,
-      viewID: message.viewID,
+      requestID: id,
+      viewID: view,
       refreshID: 1,
       refresh: "complete",
     })

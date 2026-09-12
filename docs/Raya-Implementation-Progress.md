@@ -3082,6 +3082,18 @@ Installed eden.raya@7.4.23-snapshot+af936192ff.kamil-oseni.1789198044029. VSIX C
 
 Next: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
 
+## 2026-09-12: Write-folder file-tool confinement
+
+Status: verified locally and committed as 8b020e9a59. A full-access routine with a write folder now denies parent-folder edit/write/apply_patch patterns. Reads and external_directory remain allowed. Brief access is unchanged. Access review names the writable location. Shell, plugins, and service grants are not confined.
+
+Changed files: packages/opencode/src/kilocode/task/index.ts, packages/opencode/test/kilocode/task.test.ts, packages/kilo-vscode/webview-ui/src/components/routines/AccessReview.tsx, packages/kilo-vscode/webview-ui/src/components/routines/RoutinesView.tsx, packages/kilo-vscode/tests/fixtures/routine-edit-view.mjs, docs/Raya-Routine-Capabilities.md, .changeset/raya-routine-write-folder.md.
+
+Commands: packages/opencode bun test ./test/kilocode/task.test.ts --timeout 90000 -> 62 pass / 0 fail / 602 expect / exit 0. packages/kilo-vscode bun test tests/unit/routines-edit-view.test.ts tests/unit/routines-access.test.ts --timeout 90000 -> 2 pass / 0 fail / 10 expect / exit 0. packages/opencode bun run typecheck -> exit 0. packages/kilo-vscode bun run check-types -> exit 0. bun run check-types:webview -> exit 0. bun run check-kilocode-change -> exit 0. bunx eslint --no-cache on touched routine TypeScript -> exit 0.
+
+This is not a paid GPT-Live call and does not unlock VS Code iframe microphone consent. Per-service grants, trusted-plugin confinement, and Windows OS confinement remain open under PR-04. Codex-deferred research stays untracked.
+
+Next: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
+
 
 
 

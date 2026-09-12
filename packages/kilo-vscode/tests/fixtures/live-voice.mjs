@@ -70,8 +70,12 @@ try {
       captures.push(destination.stream)
       return destination.stream
     }
+    const requests = []
     const original = navigator.mediaDevices.getUserMedia
-    navigator.mediaDevices.getUserMedia = async () => capture()
+    navigator.mediaDevices.getUserMedia = async (constraints) => {
+      requests.push(constraints)
+      return capture()
+    }
     const originalChannel = RTCPeerConnection.prototype.createDataChannel
     let local
     RTCPeerConnection.prototype.createDataChannel = function (...args) {
@@ -136,6 +140,12 @@ try {
       check(events.statuses.at(-1) === "listening", "native peer, channel and host start establish listening")
       check(exchanges.length === 1, "one host exchange")
       check(live.enabled && live.readyState === "live", "capture enables only after host start and local peer readiness")
+      check(
+        requests[0]?.audio?.echoCancellation === true &&
+          requests[0]?.audio?.noiseSuppression === true &&
+          requests[0]?.audio?.autoGainControl === true,
+        "webview capture requests acoustic echo cancellation, noise suppression and automatic gain",
+      )
       check(events.aec.at(-1) === false, "synthetic stream does not claim acoustic echo cancellation")
       check(inbound.length === 0, "listening establishes without client data-channel writes")
       check(
@@ -322,6 +332,33 @@ try {
         "linger timeout releases media without a host finalized event",
       )
 
+      drop()
+      navigator.mediaDevices.getUserMedia = async () => {
+        const err = new Error("Permission denied")
+        err.name = "NotAllowedError"
+        throw err
+      }
+      const fallback = new Voice.LiveVoice(sink, 50, async () => capture())
+      const heldFallback = fallback.start({ sessionID: "session-a", requestID: "request-host" }, after)
+      await until(() => channel?.readyState === "open")
+      fallback.started("request-host")
+      await heldFallback
+      check(events.statuses.at(-1) === "listening", "denied webview microphone falls back to the host stream")
+      check(captures.at(-2).getAudioTracks()[0].readyState === "live", "host fallback supplies a live track")
+      const closingFallback = fallback.stop()
+      fallback.finalized("request-host")
+      await closingFallback
+      drop()
+
+      const pcm = Voice.pump(24000)
+      check(pcm.stream.getAudioTracks()[0].readyState === "live", "PCM pump exposes a live MediaStreamTrack")
+      pcm.write(new Int16Array(480).buffer)
+      await pcm.close()
+      check(
+        pcm.stream.getTracks().every((item) => item.readyState === "ended"),
+        "PCM pump close ends the host track",
+      )
+
       return checks
     } finally {
       await voice.stop()
@@ -332,7 +369,7 @@ try {
       for (const context of contexts) await context.close()
     }
   })
-  assert.equal(result.length, 40)
+  assert.equal(result.length, 45)
   console.log(`Live native WebRTC: ${result.length} implementation assertions passed; local peers/synthetic audio only.`)
 } finally {
   await browser.close()

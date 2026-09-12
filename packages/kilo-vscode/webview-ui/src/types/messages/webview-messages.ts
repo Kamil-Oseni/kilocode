@@ -790,6 +790,16 @@ export interface SpeechOpenAIStopMessage {
   type: "speechOpenAIStop"
   requestId: string
 }
+
+export interface SpeechLiveMicStartMessage {
+  type: "speechLiveMicStart"
+  requestId: string
+}
+
+export interface SpeechLiveMicStopMessage {
+  type: "speechLiveMicStop"
+  requestId: string
+}
 // raya_change end
 // raya_change end
 
@@ -1947,6 +1957,8 @@ export type WebviewMessage =
   | SpeechRealtimeStopMessage // raya_change - realtime voice
   | SpeechOpenAIStartMessage
   | SpeechOpenAIStopMessage
+  | SpeechLiveMicStartMessage
+  | SpeechLiveMicStopMessage
   | SpeechOpenAIInterruptMessage
   | SpeechOpenAIImageMessage
   | RequestFileSearchMessage

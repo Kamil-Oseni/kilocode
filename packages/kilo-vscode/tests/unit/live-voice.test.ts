@@ -17,6 +17,6 @@ test("native Live transport owns local WebRTC media and holds the microphone unt
     child.on("exit", resolve)
   }).finally(() => clearTimeout(timer))
   const output = Buffer.concat(chunks).toString()
-  expect(output).toContain("40 implementation assertions passed")
+  expect(output).toContain("45 implementation assertions passed")
   expect(code).toBe(0)
 }, 50_000)

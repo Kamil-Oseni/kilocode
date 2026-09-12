@@ -80,6 +80,7 @@ export function buildWebviewHtml(
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="${csp}">
+  <meta http-equiv="Permissions-Policy" content="microphone=(self)">
   <link rel="stylesheet" href="${opts.styleUri}">
   <title>${opts.title}</title>
   <style>

@@ -153,6 +153,16 @@ async function routeImage(message: Msg, ctx: Ctx) {
   return true
 }
 
+async function liveMic(message: Msg, ctx: Ctx) {
+  if (message.type === "speechLiveMicStart") {
+    if (token(message.requestId)) await ctx.speech?.liveMicStart(message.requestId, ctx.post)
+    return true
+  }
+  if (message.type !== "speechLiveMicStop") return false
+  if (token(message.requestId)) await ctx.speech?.liveMicStop(message.requestId)
+  return true
+}
+
 async function live(message: Msg, ctx: Ctx) {
   if (message.type !== "speechLiveControl") return false
   if (
@@ -199,6 +209,7 @@ async function begin(message: Msg, ctx: Ctx) {
 }
 
 async function routeOpenAI(message: Msg, ctx: Ctx) {
+  if (await liveMic(message, ctx)) return true
   if (await live(message, ctx)) return true
   if (await routeImage(message, ctx)) return true
   if (message.type === "speechOpenAIInterrupt") {

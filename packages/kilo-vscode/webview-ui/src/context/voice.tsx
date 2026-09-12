@@ -24,7 +24,7 @@ import { VoiceEcho } from "./voice-echo" // raya_change - residual spoken-respon
 import { createVoiceRecovery } from "./voice-recovery"
 import { createVoiceUsage } from "./voice-usage"
 import { createVoiceImages } from "./voice-images"
-import { LiveVoice } from "./live-voice"
+import { LiveVoice, pump } from "./live-voice"
 import type { LiveContext } from "../../../src/shared/live-context"
 import type { LiveUsage } from "../../../src/shared/live-usage"
 import { OpenAIVoice } from "./openai-voice"
@@ -93,6 +93,7 @@ export const VoiceProvider: ParentComponent = (props) => {
   const state = { request: "", generation: 0, terminal: false }
   let call: { id: string; session: string; engine: "live" | "realtime" } | undefined
   let pending: { id: string; resolve: (sdp: string) => void; reject: (error: Error) => void } | undefined
+  let feed: ReturnType<typeof pump> | undefined
   const latest = { mute: "", speak: "" }
   let transport: OpenAIVoice | LiveVoice
   const recovery = createVoiceRecovery(
@@ -176,6 +177,11 @@ export const VoiceProvider: ParentComponent = (props) => {
     captions: (value) => { if (call?.engine === "live") setCaptions(value) },
     aec: setAec,
     error: failOpenAI,
+  }, 12_000, async () => {
+    await feed?.close()
+    feed = pump()
+    if (call) vscode.postMessage({ type: "speechLiveMicStart", requestId: call.id })
+    return feed.stream
   })
   transport = native
 
@@ -200,7 +206,11 @@ export const VoiceProvider: ParentComponent = (props) => {
       waiting.reject(new Error("Voice connection cancelled."))
     }
     recovery.close()
+    const closing = feed
+    feed = undefined
+    void closing?.close()
     if (current) {
+      vscode.postMessage({ type: "speechLiveMicStop", requestId: current.id })
       vscode.postMessage({ type: "speechOpenAIStop", requestId: current.id })
     }
   }
@@ -284,6 +294,20 @@ export const VoiceProvider: ParentComponent = (props) => {
   function openaiMessage(message: ExtensionMessage) {
     if (message.type === "speechLiveStarted") {
       live.started(message.requestId)
+      return true
+    }
+    if (message.type === "speechLiveMicChunk") {
+      if (
+        call?.id === message.requestId &&
+        feed &&
+        message.data.length <= 100_000 &&
+        /^[A-Za-z0-9+/]+=*$/.test(message.data)
+      )
+        feed.write(Uint8Array.from(atob(message.data), (char) => char.charCodeAt(0)).buffer)
+      return true
+    }
+    if (message.type === "speechLiveMicError") {
+      if (call?.id === message.requestId) failOpenAI(message.error)
       return true
     }
     if (message.type === "speechLiveUsage") {

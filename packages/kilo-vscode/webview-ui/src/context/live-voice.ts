@@ -27,12 +27,59 @@ type Operation = {
 }
 
 /** Media and display only. No commands or work context are sent over the data channel. */
+const acoustic = {
+  echoCancellation: true,
+  noiseSuppression: true,
+  autoGainControl: true,
+  channelCount: 1,
+} as const
+
+/** Turn host PCM (s16le) into a WebRTC-capable MediaStream when the webview microphone is blocked. */
+export function pump(rate = 24_000) {
+  const ctx = new AudioContext()
+  const dest = ctx.createMediaStreamDestination()
+  const queue: Float32Array[] = []
+  const node = ctx.createScriptProcessor(2048, 1, 1)
+  if (ctx.state === "suspended") void ctx.resume()
+  node.onaudioprocess = (event) => {
+    const out = event.outputBuffer.getChannelData(0)
+    out.fill(0)
+    let filled = 0
+    while (filled < out.length && queue.length > 0) {
+      const next = queue[0]
+      const take = Math.min(out.length - filled, next.length)
+      out.set(next.subarray(0, take), filled)
+      filled += take
+      if (take === next.length) queue.shift()
+      else queue[0] = next.subarray(take)
+    }
+  }
+  node.connect(dest)
+  return {
+    stream: dest.stream,
+    write(bytes: ArrayBuffer) {
+      const src = new Int16Array(bytes)
+      if (src.length === 0) return
+      const ratio = ctx.sampleRate / rate
+      const pcm = new Float32Array(Math.max(1, Math.round(src.length * ratio)))
+      for (const i of pcm.keys()) pcm[i] = src[Math.min(src.length - 1, Math.floor(i / ratio))] / 32768
+      queue.push(pcm)
+    },
+    async close() {
+      node.disconnect()
+      for (const track of dest.stream.getTracks()) track.stop()
+      await ctx.close()
+    },
+  }
+}
+
 export class LiveVoice {
   private operation?: Operation
 
   constructor(
     private readonly sink: Sink,
     private readonly linger = 12_000,
+    private readonly acquire?: () => Promise<MediaStream>,
   ) {}
 
   async start(input: { requestID: string; sessionID: string }, exchange: (sdp: string) => Promise<string>) {
@@ -127,6 +174,15 @@ export class LiveVoice {
     if (operation?.id === id) operation.finish?.()
   }
 
+  private async capture() {
+    try {
+      return await navigator.mediaDevices.getUserMedia({ audio: acoustic })
+    } catch (err) {
+      if (!this.acquire) throw err
+      return this.acquire()
+    }
+  }
+
   private current(operation: Operation) {
     return this.operation === operation && !operation.closed
   }
@@ -176,9 +232,7 @@ export class LiveVoice {
       operation.audio.autoplay = true
       void operation.audio.play().catch(() => this.fail(operation, "Live voice playback was blocked. Reconnect from the voice button."))
     }
-    const media = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
-    })
+    const media = await this.capture()
     if (!this.current(operation)) {
       for (const track of media.getTracks()) track.stop()
       return

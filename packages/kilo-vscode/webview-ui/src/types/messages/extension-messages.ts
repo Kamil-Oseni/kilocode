@@ -1776,6 +1776,9 @@ export interface AgentManagerFocusContextRequestedMessage {
 
 export type ExtensionMessage =
   | { type: "speechLiveStarted"; requestId: string }
+  | { type: "speechLiveMicReady"; requestId: string }
+  | { type: "speechLiveMicChunk"; requestId: string; data: string }
+  | { type: "speechLiveMicError"; requestId: string; error: string }
   | { type: "speechLiveUsage"; requestId: string; sessionID: string; usage: LiveUsage }
   | { type: "speechLiveControlResult"; requestId: string; eventID: string; status: "accepted" | "unknown" | "failed"; error?: string }
   | { type: "speechOpenAIUsage"; requestId: string; sessionID: string; usage: VoiceUsage }

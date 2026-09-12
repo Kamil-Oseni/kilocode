@@ -5,7 +5,7 @@ import { transcribe } from "./openai-stt"
 import { SpeechSettingsStore, type SpeechSettings } from "./settings"
 import { VoiceReplies } from "./replies"
 import { getErrorMessage } from "../kilo-provider-utils"
-import { cancelSpeechCapture, startSpeechCapture, stopSpeechCapture } from "../speech-to-text/capture" // raya_change - native fallback when VS Code denies webview mic access
+import { cancelSpeechCapture, startSpeechCapture, stopSpeechCapture, startLiveCapture, stopLiveCapture, cancelLiveCapture } from "../speech-to-text/capture" // raya_change - native fallback when VS Code denies webview mic access
 import type { KiloConnectionService } from "../services/cli-backend/connection-service" // raya_change - realtime voice session broker
 import { RealtimeBroker } from "./realtime-broker"
 import { voiceFallback } from "./fallback" // raya_change - explicit three-rung degradation
@@ -251,6 +251,21 @@ export class SpeechService implements vscode.Disposable {
     )
   }
 
+  async liveMicStart(requestId: string, post: Post): Promise<void> {
+    try {
+      await startLiveCapture(requestId, (buf) => {
+        post({ type: "speechLiveMicChunk", requestId, data: buf.toString("base64") })
+      })
+      post({ type: "speechLiveMicReady", requestId })
+    } catch (err) {
+      post({ type: "speechLiveMicError", requestId, error: getErrorMessage(err) })
+    }
+  }
+
+  async liveMicStop(requestId: string): Promise<void> {
+    await stopLiveCapture(requestId)
+  }
+
   async liveControl(requestId: string, eventID: string, action: "mute" | "unmute" | "stop_speaking", post: Post) {
     const result = await this.live.control(requestId, eventID, action)
     post({ type: "speechLiveControlResult", requestId, eventID, ...result })
@@ -268,6 +283,7 @@ export class SpeechService implements vscode.Disposable {
   }
 
   async openaiStop(requestId: string, post: Post) {
+    await stopLiveCapture(requestId)
     const errors = await Promise.all([this.openai.stop(requestId), this.live.stop(requestId)])
     const error = errors.find((value) => value !== undefined)
     post(error ? { type: "speechOpenAIError", requestId, error } : { type: "speechOpenAIStopped", requestId })
@@ -429,6 +445,7 @@ export class SpeechService implements vscode.Disposable {
   cancel(requestId?: string): void {
     if (requestId) this.aborts.get(requestId)?.abort()
     if (requestId) void cancelSpeechCapture(requestId) // raya_change - extension-host microphone fallback
+    if (requestId) void stopLiveCapture(requestId)
     if (!requestId) {
       for (const ctrl of this.aborts.values()) ctrl.abort()
       this.aborts.clear()
@@ -439,6 +456,7 @@ export class SpeechService implements vscode.Disposable {
   dispose(): void {
     this.closed = true
     this.cancel()
+    void cancelLiveCapture()
     void this.enqueue(async () => {
       const live = await this.live.dispose()
       if (live) console.error("[Raya] Live voice disposal failed; resource release is unconfirmed.")

@@ -61,9 +61,10 @@ describe("buildCspString", () => {
     expect(result).toContain("data:")
   })
 
-  // raya_change - Milestone H streaming speech playback
-  it("allows only blob-backed webview audio", () => {
-    expect(buildCspString(cspSource, nonce)).toContain("media-src blob:")
+  // raya_change - Live microphone MediaStream plus blob playback
+  it("allows blob playback and live microphone streams", () => {
+    const result = buildCspString(cspSource, nonce)
+    expect(result).toContain("media-src blob: mediastream:")
   })
 
   it("uses wildcard connect-src when no port provided", () => {
@@ -91,5 +92,12 @@ describe("buildCspString", () => {
     const result = buildCspString(cspSource, nonce)
     const parts = result.split(";")
     expect(parts.length).toBeGreaterThanOrEqual(5)
+  })
+})
+
+describe("packaged webview microphone policy", () => {
+  it("asks the packaged webview for its own microphone", async () => {
+    const source = await Bun.file(new URL("../../src/utils.ts", import.meta.url)).text()
+    expect(source).toContain('http-equiv="Permissions-Policy" content="microphone=(self)"')
   })
 })

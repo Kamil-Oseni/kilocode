@@ -193,3 +193,32 @@ test("openai-live CLI mirror does not write the OpenAI key and native Live skips
   expect(posts).toEqual([])
   speech.dispose()
 })
+
+test("Live host microphone start and stop route through input-tools", async () => {
+  const posts: Record<string, unknown>[] = []
+  const seen = { start: "", stop: "" }
+  const send = (message: Record<string, unknown>) =>
+    routeInputToolMessage(message, {
+      connection: {} as KiloConnectionService,
+      dir: "/tmp",
+      post: (msg) => posts.push(msg as Record<string, unknown>),
+      speech: {
+        liveMicStart: async (id, post) => {
+          seen.start = id
+          post({ type: "speechLiveMicReady", requestId: id })
+        },
+        liveMicStop: async (id) => {
+          seen.stop = id
+        },
+      } as SpeechService,
+    })
+  expect(await send({ type: "speechLiveMicStart", requestId: "request_1" })).toBe(true)
+  expect(seen.start).toBe("request_1")
+  expect(posts).toEqual([{ type: "speechLiveMicReady", requestId: "request_1" }])
+  expect(await send({ type: "speechLiveMicStop", requestId: "request_1" })).toBe(true)
+  expect(seen.stop).toBe("request_1")
+  posts.length = 0
+  expect(await send({ type: "speechLiveMicStart", requestId: "" })).toBe(true)
+  expect(seen.start).toBe("request_1")
+  expect(posts).toEqual([])
+})

@@ -2,7 +2,9 @@ import { describe, expect, it } from "bun:test"
 import {
   cleanOutput,
   ffmpegCaptureArgs,
+  ffmpegLiveArgs,
   ffmpegPipeArgs,
+  livePipeArgs,
   macCaptureArgs,
   parseDshowAudioDevices,
   useMacCapture,
@@ -84,6 +86,29 @@ describe("ffmpeg args", () => {
       "+faststart",
       "/tmp/speech.m4a",
     ])
+  })
+
+  it("builds 24 kHz mono PCM for packaged Live capture", () => {
+    expect(ffmpegLiveArgs(["-f", "dshow", "-i", "audio=Microphone"])).toEqual([
+      "-y",
+      "-f",
+      "dshow",
+      "-i",
+      "audio=Microphone",
+      "-f",
+      "s16le",
+      "-acodec",
+      "pcm_s16le",
+      "-ar",
+      "24000",
+      "-ac",
+      "1",
+      "pipe:1",
+    ])
+  })
+
+  it("records Live PipeWire at 24 kHz mono", () => {
+    expect(livePipeArgs()).toEqual(["--format", "s16", "--rate", "24000", "--channels", "1", "-"])
   })
 })
 

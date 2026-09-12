@@ -35,6 +35,13 @@ type Audio = {
   language?: string
 }
 
+type Stream = {
+  requestId: string
+  proc: ChildProcess
+  stderr: string[]
+  stopped: boolean
+}
+
 type Args = {
   pipe?: string[]
   input: string[]
@@ -63,6 +70,8 @@ function run(args) {
 
 let active: Recording | undefined
 let starting: string | undefined
+let live: Stream | undefined
+let opening: string | undefined
 let ffmpeg: Promise<string> | undefined
 
 export async function prewarmSpeechCapture(): Promise<void> {
@@ -71,7 +80,7 @@ export async function prewarmSpeechCapture(): Promise<void> {
 }
 
 export async function startSpeechCapture(input: Input): Promise<boolean> {
-  if (active || starting) throw new Error("Speech recording is already in progress")
+  if (active || starting || live || opening) throw new Error("Speech recording is already in progress")
 
   starting = input.requestId
   try {
@@ -122,6 +131,33 @@ export async function cancelSpeechCapture(requestId: string): Promise<void> {
   active = undefined
   await stopProcess(state)
   await removeFile(state.file)
+}
+
+export async function startLiveCapture(requestId: string, onChunk: (buf: Buffer) => void): Promise<void> {
+  if (active || starting || live || opening) throw new Error("Speech recording is already in progress")
+  opening = requestId
+  try {
+    const bin = await resolveFFmpeg()
+    await startLiveWithArgs(bin, requestId, onChunk, await inputArgSets(bin))
+  } finally {
+    if (opening === requestId) opening = undefined
+  }
+}
+
+export async function stopLiveCapture(requestId: string): Promise<void> {
+  const state = live
+  if (!state || state.requestId !== requestId) return
+  state.stopped = true
+  live = undefined
+  await stopProcess(state)
+}
+
+export async function cancelLiveCapture(): Promise<void> {
+  const state = live
+  if (!state) return
+  state.stopped = true
+  live = undefined
+  await stopProcess(state)
 }
 
 async function waitForStart(state: Recording): Promise<void> {
@@ -226,6 +262,14 @@ export function ffmpegPipeArgs(file: string): string[] {
   ]
 }
 
+export function ffmpegLiveArgs(input: string[]): string[] {
+  return ["-y", ...input, "-f", "s16le", "-acodec", "pcm_s16le", "-ar", "24000", "-ac", "1", "pipe:1"]
+}
+
+export function livePipeArgs(): string[] {
+  return ["--format", "s16", "--rate", "24000", "--channels", "1", "-"]
+}
+
 export function useMacCapture(platform: NodeJS.Platform, env: NodeJS.ProcessEnv): boolean {
   return platform === "darwin" && !env.KILO_FFMPEG_PATH && !env.FFMPEG_PATH
 }
@@ -256,6 +300,96 @@ async function startWithArgs(bin: string, file: string, input: Input, args: Args
     if (rest.length === 0) throw err
     return startWithArgs(bin, file, input, rest)
   }
+}
+
+async function startLiveWithArgs(
+  bin: string,
+  requestId: string,
+  onChunk: (buf: Buffer) => void,
+  args: Args[],
+): Promise<Stream> {
+  const [first, ...rest] = args
+  if (!first) throw new Error(`Unsupported platform for speech input: ${process.platform}`)
+  const proc = first.pipe
+    ? spawn("pw-record", livePipeArgs(), { stdio: ["ignore", "pipe", "pipe"] })
+    : spawn(bin, ffmpegLiveArgs(first.input), { stdio: ["pipe", "pipe", "pipe"] })
+  const state: Stream = { requestId, proc, stderr: [], stopped: false }
+  live = state
+  const size = 48_000
+  proc.stdout?.on("data", (buf: Buffer) => {
+    if (state.stopped) return
+    let offset = 0
+    while (offset < buf.length) {
+      const end = Math.min(buf.length, offset + size)
+      onChunk(buf.subarray(offset, end))
+      offset = end
+    }
+  })
+  proc.stderr?.on("data", (data: Buffer) => {
+    if (state.stderr.length < 20) state.stderr.push(data.toString())
+  })
+  proc.on("exit", () => {
+    if (live === state && !state.stopped) live = undefined
+  })
+  proc.on("error", (err) => {
+    state.stderr.push(err.message)
+    if (live === state && !state.stopped) live = undefined
+  })
+  try {
+    await waitForLive(state)
+    return state
+  } catch (err) {
+    if (state.stopped) return state
+    if (live === state) live = undefined
+    await stopProcess(state)
+    if (rest.length === 0) throw err
+    return startLiveWithArgs(bin, requestId, onChunk, rest)
+  }
+}
+
+async function waitForLive(state: Stream): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const done = () => {
+      state.proc.off("error", onError)
+      state.proc.off("exit", onExit)
+      state.proc.stderr?.off("data", onData)
+      state.proc.stdout?.off("data", onOut)
+      clearTimeout(armed)
+      clearTimeout(timer)
+      resolve()
+    }
+    const onError = (err: Error) => {
+      state.proc.off("exit", onExit)
+      state.proc.stderr?.off("data", onData)
+      state.proc.stdout?.off("data", onOut)
+      clearTimeout(armed)
+      clearTimeout(timer)
+      reject(err)
+    }
+    const onExit = () => {
+      if (state.stopped) {
+        done()
+        return
+      }
+      onError(new Error(summary(state, "Could not start Live microphone capture")))
+    }
+    const onData = (data: Buffer) => {
+      if (/^ready$|Output #0|Press \[q\]|size=\s*\d+/im.test(data.toString())) done()
+    }
+    const onOut = () => done()
+    const armed = setTimeout(done, 400)
+    const timer = setTimeout(() => {
+      onError(new Error(summary(state, "Timed out starting Live microphone capture")))
+    }, 5000)
+    state.proc.stderr?.on("data", onData)
+    state.proc.stdout?.on("data", onOut)
+    state.proc.once("error", onError)
+    state.proc.once("exit", onExit)
+  }).catch(async (err: unknown) => {
+    if (live === state) live = undefined
+    await stopProcess(state)
+    throw err
+  })
 }
 
 function createState(input: Input, file: string, proc: ChildProcess): Recording {
@@ -308,7 +442,7 @@ function pipeProcess(pipe: string[], bin: string, file: string): ChildProcess {
   return proc
 }
 
-async function stopProcess(state: Recording): Promise<void> {
+async function stopProcess(state: { proc: ChildProcess }): Promise<void> {
   if (state.proc.exitCode !== null || state.proc.signalCode) return
 
   await new Promise<void>((resolve) => {
@@ -470,7 +604,7 @@ function processOutput(err: unknown): string {
   return `${typeof result.stdout === "string" ? result.stdout : ""}\n${typeof result.stderr === "string" ? result.stderr : ""}`
 }
 
-function summary(state: Recording, fallback: string): string {
+function summary(state: { stderr: string[] }, fallback: string): string {
   const stderr = cleanOutput(state.stderr.join("\n"))
   if (!stderr) return fallback
   return `${fallback}: ${stderr.slice(-800)}`

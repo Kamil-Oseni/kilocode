@@ -31,7 +31,7 @@ export function buildCspString(cspSource: string, nonce: string, port?: number):
     `font-src ${cspSource}`,
     `connect-src ${cspSource} ${connectSrc} https: wss:`, // raya_change - configurable LiveKit Cloud signaling
     `img-src ${cspSource} data: https:`,
-    "media-src blob:", // raya_change - Milestone H streams synthesized audio through a MediaSource blob
+    "media-src blob: mediastream:", // raya_change - Live microphone MediaStream plus blob playback
   ]
   return joinCspDirectives(directives)
 }

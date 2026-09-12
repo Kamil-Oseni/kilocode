@@ -3062,6 +3062,18 @@ Installed eden.raya@7.4.23-snapshot+4cabf8d725.kamil-oseni.1789196858491. VSIX C
 
 Next: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
 
+## 2026-09-12: Agent and plan-file reassignment on the same worker
+
+Status: verified locally and committed as 726a93c54c. Edit schedule now shows Agent and Plan file. Save assignment updates those fields on the same agentID. Choosing the default chat mode or an empty plan file clears the saved values. Tool access stays on the dedicated access review. Earlier reports stay in the same conversation.
+
+Changed files: packages/kilo-vscode/webview-ui/src/components/routines/RoutinesView.tsx, packages/kilo-vscode/src/kilo-provider/routines.ts, packages/opencode/src/kilocode/task/index.ts, packages/kilo-vscode/tests/fixtures/routine-edit-view.mjs, packages/kilo-vscode/tests/unit/routines-update.test.ts, packages/opencode/test/kilocode/task.test.ts, .changeset/raya-routine-mode-plan.md.
+
+Commands: packages/opencode bun test ./test/kilocode/task.test.ts --timeout 90000 -> 62 pass / 0 fail / 595 expect / exit 0. packages/kilo-vscode bun test tests/unit/routines-edit-view.test.ts tests/unit/routines-update.test.ts --timeout 90000 -> 4 pass / 0 fail / 8 expect / exit 0. packages/opencode bun run typecheck -> exit 0. packages/kilo-vscode bun run check-types -> exit 0. bun run check-types:webview -> exit 0. bun run check-kilocode-change -> exit 0. bunx eslint --no-cache on touched routine TypeScript -> exit 0.
+
+This is not a paid GPT-Live call and does not unlock VS Code iframe microphone consent. Tool access and output requirements still use their dedicated review editors. Codex-deferred research stays untracked.
+
+Next: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
+
 
 
 

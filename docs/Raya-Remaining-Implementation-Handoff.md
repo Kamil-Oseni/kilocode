@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-12):** ChatGPT reviewed and repaired Grok's file-review checkpoints, delivered workspace-interaction fixes, and shipped the first broader Routines messenger redesign as `a4626f6858`. Remaining: the unfinished 39-requirement work, Routines chat info/attachments/organizations/chat creation/rebuild survival, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-12):** ChatGPT reviewed and repaired Grok's file-review checkpoints, delivered workspace-interaction fixes, shipped the broader Routines messenger hierarchy, and added persisted worker Chat Info as `0b2480b582`. Remaining: the unfinished 39-requirement work, Routines user attachments/media previews/organizations/chat creation/rebuild survival, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-12. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** ChatGPT installed snapshot `a4626f6858` (`eden.raya@7.4.23-snapshot+a4626f6858.kamil-oseni.1789237716892`). This includes the reviewed repair/workspace fixes and presents Routines as a compact worker inbox with persistent DM conversations, message bubbles, focused management controls and on-demand delegation. Reload VS Code normally to pick up the snapshot.
+**Latest delivered product:** ChatGPT installed snapshot `0b2480b582` (`eden.raya@7.4.23-snapshot+0b2480b582.kamil-oseni.1789242103740`). Routines is a compact worker inbox with persistent DM conversations, message bubbles, focused management controls, on-demand delegation, and an Info view backed by saved settings, report files/HTTP links and structured delegation history. Reload VS Code normally to pick up the snapshot.
 
 ## Scope and reading order
 
@@ -19,9 +19,9 @@ Status excerpts below are historical records, not a fresh certification of every
 ## Checkpoint and standing authorization
 
 - Workspace: `C:\Users\User\Desktop\raya`; PowerShell; branch `main`; origin `https://github.com/Kamil-Oseni/kilocode.git`.
-- Last verified pushed product checkpoint: `a4626f68586131f065fb9ed73fc2b5c6b38cdb75`, Routines messenger hierarchy snapshot.
-- Installed: `eden.raya@7.4.23-snapshot+a4626f6858.kamil-oseni.1789237716892`.
-- VSIX: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-a4626f6858-kamil-oseni-1789237716892.vsix`; SHA-256 `AC5BFA6F31655F91E214B102318E8D6BEF7D372C846D541A1D23F51F3E8A5CBD`; 517156211 bytes; 431 entries.
+- Last verified pushed product checkpoint: `0b2480b5826db36e0285e044745022ce45955e90`, persisted Routine Chat Info.
+- Installed: `eden.raya@7.4.23-snapshot+0b2480b582.kamil-oseni.1789242103740`.
+- VSIX: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-0b2480b582-kamil-oseni-1789242103740.vsix`; SHA-256 `68936742C39B21A9EEAB69EC9B5AA2A2682726C78B0320C8D5B86ADB6A18AECD`; 517225060 bytes; 431 entries; bundled CLI 228871168 bytes.
 - The user authorizes two parallel workers plus root, batched checks, periodic normal commits/pushes to `origin/main`, and `snapshot:install` outside the sandbox. Do not ask again. No force push, hook bypass or forced VS Code reload.
 - At approximately $10 remaining, as reported by the user, stop opening broad work, settle current processes, update this handoff and give the continuation prompt below. Do not invent a credit balance.
 
@@ -772,7 +772,7 @@ Do not push/reinstall the current failing tree. Finish one coherent slice and re
 ### 6. Replacement continuation prompt
 
 ```text
-Continue Raya in C:\Users\User\Desktop\raya. This instruction is the authoritative continuation prompt stored inside docs/Raya-Remaining-Implementation-Handoff.md; follow it directly rather than asking the user to paste a separate prompt. Read AGENTS.md and this handoff beginning with the top current-status banner and newest ChatGPT entries, then read docs/Raya-Implementation-Progress.md, docs/Raya-Comprehensive-Audit.md, docs/Raya-Voice-Architecture.md and the owner-authored docs/Raya-Features.md. The scope is all 39 requirements plus RDM-01-06, the expanded Routines direction and GPT-Live. The latest verified pushed and installed product checkpoint is a4626f68586131f065fb9ed73fc2b5c6b38cdb75; repository HEAD may be a later documentation-only commit, so verify git and installed state before editing. ChatGPT's review/repair work, workspace-interaction batch and first broader Routines messenger hierarchy are delivered. Organizations, chat-created routines/orgs, chat info/media/link/contact history, user attachments, rebuild-survival acceptance, Live integration and the remaining acceptance work are UNFINISHED; do not claim them as verified.
+Continue Raya in C:\Users\User\Desktop\raya. This instruction is the authoritative continuation prompt stored inside docs/Raya-Remaining-Implementation-Handoff.md; follow it directly rather than asking the user to paste a separate prompt. Read AGENTS.md and this handoff beginning with the top current-status banner and newest ChatGPT entries, then read docs/Raya-Implementation-Progress.md, docs/Raya-Comprehensive-Audit.md, docs/Raya-Voice-Architecture.md and the owner-authored docs/Raya-Features.md. The scope is all 39 requirements plus RDM-01-06, the expanded Routines direction and GPT-Live. The latest verified pushed and installed product checkpoint is 0b2480b5826db36e0285e044745022ce45955e90; repository HEAD may be a later documentation-only commit, so verify git and installed state before editing. ChatGPT's review/repair work, workspace-interaction batch, Routines messenger hierarchy and persisted Chat Info for saved settings/report files/HTTP links/structured delegation history are delivered. Organizations, chat-created routines/orgs, user attachments and MIME/media previews, rebuild-survival acceptance, Live integration and the remaining acceptance work are UNFINISHED; do not claim them as verified.
 
 Start LiveBroker HTTP/WebSocket loopback fixtures from the frozen host/backend order. GPT-Live 1 requires its own adapter and exact current official contract; no model-string substitution, history replay as new work, or generated-caption claims about heard audio. Keep parent ownership, existing permissions and durable receipts.
 
@@ -2186,3 +2186,11 @@ Changed product paths: `.changeset/raya-routine-chat-info.md`; `packages/opencod
 Evidence: backend info/delegation tests 6 pass / 57 assertions; extension bridge and production-component fixture tests 8 pass / 27 assertions; CLI, SDK, extension-host and webview typechecks exit 0; targeted extension ESLint exit 0; scoped backend Oxlint has zero errors and one unchanged `consistent-return` warning in `handlers/kilocode.ts:605`; production preview compile passes; full Routines Chromium suite passed 11/11, and the final changed visual cases passed 5/5 plus the corrected 200% case 1/1. Light/dark 320/900 cases verify all four Info sections, draft retention, Escape focus, axe and horizontal overflow. The 200% context uses a 450 CSS-pixel viewport at 2x device scale and checks every descendant plus the document for overflow. ChatGPT inspected the resulting light/dark narrow/wide and 200% screenshots. Knip, forbidden Kilo markers, OpenCode annotations, Promise-facade ratchet, source-link extraction, Markdown tables and `git diff --check` pass. Root Oxlint exits 0 with 11,253 existing warnings and no errors.
 
 Explicit limits: this exposes already-persisted report files, links and structured delegations. It does not yet add user message attachments, MIME/media thumbnails, organization entities and role graphs, chat-created routines/organizations, or rebuild-survival acceptance. Those remain open. Next: review the exact staged manifest, commit conventionally, push normally, run the authorized `snapshot:install`, independently verify installed identity and artifact hash, then append the delivery receipt to both documents.
+
+## ChatGPT 2026-09-12 15:51 America/Toronto — Routine Chat Info delivery receipt
+
+Product commit `0b2480b5826db36e0285e044745022ce45955e90` is on `origin/main`. Normal push hooks passed 29 cross-package typechecks plus the JetBrains Gradle typecheck. The first snapshot command was invoked from the repository root and correctly failed because that package has no `snapshot:install` script; rerunning the authorized command from `packages/kilo-vscode` completed successfully. The workflow regenerated the JavaScript SDK without unexpected tracked drift, rebuilt the changed CLI, passed CLI version/model/sandbox-worker smoke checks, extension host/webview types, lint and production bundling, packaged the VSIX and installed it.
+
+Installed identity: `eden.raya@7.4.23-snapshot+0b2480b582.kamil-oseni.1789242103740`. VSIX: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-0b2480b582-kamil-oseni-1789242103740.vsix`; SHA-256 `68936742C39B21A9EEAB69EC9B5AA2A2682726C78B0320C8D5B86ADB6A18AECD`; 517225060 bytes; 431 entries; bundled CLI 228871168 bytes. Archive inspection found zero `.env` or `.tmp` entries. `code --list-extensions --show-versions` independently returned the exact installed identity. HEAD and `origin/main` both resolve to the product commit. No force push, hook bypass or forced VS Code reload was used.
+
+This delivers saved Chat Info settings, report file and HTTP-link inventory, and structured sent/received worker delegation evidence. It does not deliver routine user attachments, media thumbnails/MIME treatment, organizations and role graphs, main-chat creation tools or rebuild-survival acceptance. Continue those Routines requirements and the remaining 39-item/GPT-Live work; Codex-derived implementation remains deferred.

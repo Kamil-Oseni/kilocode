@@ -2934,6 +2934,14 @@ This is not a paid GPT-Live call and does not unlock VS Code iframe microphone c
 
 Next: leftover RDM-06 lifecycle, or a real-account GPT-Live call on a device.
 
+## 2026-09-11: Snapshot install e3f9039043
+
+Status: committed, pushed and installed as e3f9039043. Routine report file cards and keyboard inbox navigation are in this snapshot. Snapshot packaging regenerated the JS SDK (inbox files field) and rebuilt kilo.exe.
+
+Installed eden.raya@7.4.23-snapshot+e3f9039043.kamil-oseni.1789186373987. VSIX C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-e3f9039043-kamil-oseni-1789186373987.vsix; SHA-256 56C61C63A4412A4D0469D6ABD7C37679B2ECDBA932CFB56DC5755394B4277CFE; 520033674 bytes, 432 files. VS Code was not force-reloaded.
+
+Next: leftover RDM-06 lifecycle, or a real-account GPT-Live call on a device.
+
 
 
 

@@ -22300,6 +22300,10 @@ export type KilocodeRoutineInboxResponses = {
       body: string
       occurrenceID?: string
       sessionID?: string
+      files?: Array<{
+        name: string
+        path: string
+      }>
       time: number
     }
     unread: number
@@ -22351,6 +22355,10 @@ export type KilocodeRoutineInboxPageResponses = {
       body: string
       occurrenceID?: string
       sessionID?: string
+      files?: Array<{
+        name: string
+        path: string
+      }>
       time: number
     }>
     next?: string
@@ -22404,6 +22412,10 @@ export type KilocodeRoutineInboxSendResponses = {
     body: string
     occurrenceID?: string
     sessionID?: string
+    files?: Array<{
+      name: string
+      path: string
+    }>
     time: number
   }
 }

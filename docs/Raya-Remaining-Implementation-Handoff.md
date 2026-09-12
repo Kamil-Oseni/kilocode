@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-11):** Product commit `3c62cb12df` persists routine report files as openable conversation cards and covers keyboard inbox navigation. Installed product is still `76ac4375b2` until this increment is snapshotted. Remaining: paid GPT-Live/device acoustic acceptance, VS Code iframe microphone consent, leftover RDM-06 lifecycle (duplicate replies, parent cancellation, cross-company UI, recipient unavailability beyond pause). Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-11):** Installed product is `e3f9039043`. Routine reports persist path-like evidence as openable file cards; keyboard inbox navigation is covered. Remaining: leftover RDM-06 lifecycle (duplicate replies, parent cancellation, cross-company UI, recipient unavailability beyond pause), paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-11. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** product commit `3c62cb12df` is local and not yet pushed or installed. Installed snapshot remains `76ac4375b2`.
+**Latest delivered product:** checkpoint `e3f9039043` is committed, pushed and installed. Routine report file cards and keyboard inbox navigation are in this snapshot.
 
 ## Scope and reading order
 
@@ -1722,6 +1722,16 @@ Commands:
 | `packages/kilo-vscode` `bun run check-kilocode-change` | no forbidden markers / exit 0 |
 
 This is not a paid GPT-Live call and does not unlock VS Code iframe microphone consent. File cards open a workspace path; they are not uploaded blobs. Evidence lines that contain spaces stay in the report body and are not turned into cards. Codex-deferred research stays untracked.
+
+Remaining: leftover RDM-06 duplicate replies, parent cancellation, cross-company UI, recipient unavailability beyond pause, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent.
+
+Next executable step: leftover RDM-06 lifecycle, or a real-account GPT-Live call on a device.
+
+## 2026-09-11: Snapshot install `e3f9039043`
+
+**States:** committed, pushed and installed as `e3f9039043`. Routine report file cards and keyboard inbox navigation are in this snapshot. Snapshot packaging regenerated the JS SDK (inbox `files` field) and rebuilt `kilo.exe`.
+
+Installed `eden.raya@7.4.23-snapshot+e3f9039043.kamil-oseni.1789186373987`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-e3f9039043-kamil-oseni-1789186373987.vsix`; SHA-256 `56C61C63A4412A4D0469D6ABD7C37679B2ECDBA932CFB56DC5755394B4277CFE`; 520033674 bytes, 432 files. VS Code was not force-reloaded.
 
 Remaining: leftover RDM-06 duplicate replies, parent cancellation, cross-company UI, recipient unavailability beyond pause, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent.
 

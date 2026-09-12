@@ -64,7 +64,9 @@ body {
 .pv-page--focused:has([data-fixture$="-topnav"]),
 .pv-page--focused:has([data-fixture$="-slash"]),
 .pv-page--focused:has([data-fixture$="-transcript"]),
-.pv-page--focused:has([data-fixture$="-conversation"]) {
+.pv-page--focused:has([data-fixture$="-conversation"]),
+.pv-page--focused:has([data-fixture$="-result"]),
+.pv-page--focused:has([data-fixture$="-editing"]) {
   max-width: none;
   width: 100%;
   padding: var(--raya-space-8);
@@ -121,6 +123,7 @@ body {
 }
 
 .pv-panel {
+  min-width: 0;
   border: var(--raya-hairline) solid var(--pv-stage-line);
   border-radius: var(--raya-radius-lg);
   padding: var(--raya-space-12);

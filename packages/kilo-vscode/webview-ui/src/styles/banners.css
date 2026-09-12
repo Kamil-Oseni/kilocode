@@ -396,6 +396,7 @@
   gap: var(--raya-space-10); /* raya_change - more vertical air between header, track, summary, actions */
   margin: var(--raya-space-8) var(--raya-space-12) 0;
   padding: var(--raya-space-12) var(--raya-space-14, 14px); /* raya_change - text no longer hugs the walls */
+  min-width: 0;
   border: var(--raya-hairline) solid var(--goal-line);
   border-radius: var(--raya-radius-lg);
   background: var(--goal-surface);
@@ -446,8 +447,10 @@
 /* Header: status cluster reads first, usage meta yields to the right. */
 .goal-banner__header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--raya-space-2) var(--raya-space-8);
+  min-width: 0;
 }
 
 .goal-banner__status {
@@ -512,10 +515,12 @@
 
 .goal-banner__usage {
   margin-left: auto;
+  min-width: 0;
   font-family: var(--font-display); /* raya_change - Instrument Serif for the run amounts, Eden-style */
   font-size: var(--kilo-font-size-13);
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
   color: var(--goal-text-quiet);
 }
 
@@ -692,8 +697,11 @@
 
 .goal-banner__audit .goal-banner__section-title {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  gap: var(--raya-space-4);
+  min-width: 0;
   margin-bottom: 0;
 }
 
@@ -728,6 +736,8 @@
 .goal-banner__audit-req {
   display: grid;
   gap: var(--raya-space-4);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .goal-banner__audit-req-head {
@@ -973,6 +983,7 @@
   padding: 0;
   margin: 0;
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 .goal-banner__criteria-editor label {
   display: grid;

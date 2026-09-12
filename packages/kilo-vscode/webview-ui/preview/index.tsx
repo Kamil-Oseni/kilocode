@@ -57,6 +57,7 @@ type PvState =
   | "history"
   | "conversation"
   | "routines"
+  | "result"
 type Theme = "light" | "dark"
 
 const states: PvState[] = [
@@ -87,6 +88,7 @@ const states: PvState[] = [
   "history",
   "conversation",
   "routines",
+  "result",
 ]
 const themes: Theme[] = ["light", "dark"]
 
@@ -157,6 +159,59 @@ const goal = (status: GoalStatus, extra?: Partial<GoalState>): GoalState => ({
   ...extra,
 })
 
+const criteria = [
+  {
+    id: "preview",
+    description: "Serve the preview harness without a 503 on first request.",
+    verification: "Open the focused result fixture and confirm the production banner.",
+    required: true as const,
+    check: {
+      kind: "command" as const,
+      command: "bunx playwright test --config playwright.preview.config.ts",
+      directory: "C:/Users/User/Desktop/raya/packages/kilo-vscode",
+    },
+  },
+  {
+    id: "device",
+    description: "Confirm the result on a real device.",
+    verification: "Inspect the packaged webview on a machine with a microphone.",
+    required: false as const,
+  },
+]
+
+const requirements = [
+  {
+    criterionID: "preview",
+    requirement: "Deliver the preview harness",
+    passed: true,
+    evidence: [{ callID: "rebuild", summary: "esbuild rebuilt the preview before listen." }],
+  },
+  {
+    criterionID: "device",
+    requirement: "Review on a real device",
+    passed: false,
+    evidence: [],
+  },
+]
+
+const pack = (status: GoalStatus, extra?: Partial<GoalState>): GoalState =>
+  goal(status, {
+    criteria,
+    review: {
+      status: "accepted",
+      at: now - 30_000,
+      criteria: ["preview"],
+      acceptedAt: now - 15_000,
+    },
+    audit: {
+      summary: "Preview rebuilt before listen; device review remains unverified.",
+      requirements,
+      verifiedAt: now - 45_000,
+    },
+    auditAttempt: { accepted: true, at: now - 45_000, requirements },
+    ...extra,
+  })
+
 const propsFor = (state: PvState): GoalBannerProps => {
   const todos = [
     { id: "preview", content: "Build the preview harness", status: "completed" as const, priority: "high" as const },
@@ -173,7 +228,9 @@ const propsFor = (state: PvState): GoalBannerProps => {
   if (state === "pressed") return { goal: goal("active"), pv: "active" }
   if (state === "disabled") return { goal: goal("active"), disabled: true }
   if (state === "expanded") return { goal: goal("active"), todos, expanded: true }
-  if (state === "editing") return { goal: goal("active"), todos, expanded: true, editing: true }
+  if (state === "editing") {
+    return { goal: goal("active", { criteria }), todos, expanded: true, editing: true }
+  }
   if (state === "discard") return { goal: goal("paused"), todos, expanded: true, confirmingStop: true }
   if (state === "discard-busy") {
     return {
@@ -185,6 +242,7 @@ const propsFor = (state: PvState): GoalBannerProps => {
   }
   if (state === "paused") return { goal: goal("paused") }
   if (state === "complete") return { goal: goal("complete") }
+  if (state === "result") return { goal: pack("complete"), todos, expanded: true }
   if (state === "blocked") {
     return {
       goal: goal("blocked", { blockedReason: "Compile failed. Fix the type errors, then run the smoke run again." }),
@@ -213,6 +271,7 @@ const banners = new Set<PvState>([
   "complete",
   "blocked",
   "notice",
+  "result",
 ])
 
 const Fixture: Component<{ id: string; theme: Theme; state: PvState }> = (props) => (
@@ -280,8 +339,8 @@ render(
       <header class="pv-page__header">
         <h1 class="pv-page__title">Raya · component preview</h1>
         <p class="pv-page__sub">
-          Goal, usage, memory, routines, composer, history, review, slash, topnav, transcript and conversation
-          fixtures render production views with sample data.
+          Goal, usage, memory, routines, composer, history, review, slash, topnav, transcript, conversation,
+          and result fixtures render production views with sample data.
         </p>
       </header>
       <For each={fixtures}>

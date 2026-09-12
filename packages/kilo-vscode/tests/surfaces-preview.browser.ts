@@ -76,3 +76,34 @@ test("light slash, transcript, and conversation", async ({ page }, info) => {
   await expect(page.getByText("Here's the change to the composer stylesheet.")).toBeVisible()
   await page.screenshot({ path: info.outputPath("chrome.png"), fullPage: true })
 })
+
+for (const theme of ["light", "dark"]) {
+  for (const width of [320, 760]) {
+    test(`${theme} result package at ${width}px`, async ({ page }, info) => {
+      await page.setViewportSize({ width, height: 900 })
+      await page.goto(`/?state=${theme}-result`)
+      const fixture = page.locator("[data-fixture]")
+      await expect(fixture).toHaveAttribute("data-preview-kind", "production-view")
+      await expect(page.getByText("Goal accepted through review")).toBeVisible()
+      await expect(page.getByText("Evidence references accepted", { exact: true })).toBeVisible()
+      await expect(page.getByText("bunx playwright test --config playwright.preview.config.ts").first()).toBeVisible()
+      await expect(page.getByText("Not verified. Optional criteria do not prevent goal completion.")).toBeVisible()
+      await expect(page.getByRole("button", { name: "Copy goal report" })).toBeVisible()
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
+      await page.screenshot({ path: info.outputPath("result.png"), fullPage: true })
+    })
+  }
+}
+
+test("light criteria editor", async ({ page }, info) => {
+  await page.setViewportSize({ width: 760, height: 900 })
+  await page.goto("/?state=light-editing")
+  await expect(page.locator("[data-fixture]")).toHaveAttribute("data-preview-kind", "production-view")
+  await expect(page.getByRole("textbox", { name: "Update the goal" })).toBeVisible()
+  await expect(page.locator("legend", { hasText: "Acceptance criteria" })).toBeVisible()
+  await expect(page.getByRole("textbox", { name: "Criterion 1", exact: true })).toBeVisible()
+  await expect(page.getByRole("textbox", { name: "Command for criterion 1", exact: true })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Update goal" })).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
+  await page.screenshot({ path: info.outputPath("editor.png"), fullPage: true })
+})

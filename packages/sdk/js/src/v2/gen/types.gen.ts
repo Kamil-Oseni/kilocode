@@ -24393,6 +24393,10 @@ export type TelemetryCaptureData = {
     properties?: {
       [key: string]: unknown
     }
+    /**
+     * Consent generation that admitted this event
+     */
+    generation?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
   }
   path?: never
   query?: {
@@ -24423,6 +24427,10 @@ export type TelemetryCaptureResponse = TelemetryCaptureResponses[keyof Telemetry
 export type TelemetrySetEnabledData = {
   body?: {
     enabled: boolean
+    /**
+     * Monotonic consent generation; stale enable cannot override a later opt-out
+     */
+    generation?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
   }
   path?: never
   query?: {

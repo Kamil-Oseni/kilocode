@@ -2874,6 +2874,15 @@ Aborting a client request still cannot undo a PostHog mutation that already happ
 
 Next: leftover provider-switch/disposal, or a real-account GPT-Live call on a device.
 
+## 2026-09-11: Snapshot install dd7966a567
+
+Status: committed, pushed and installed as dd7966a567. Receiving-side telemetry consent generation is in this snapshot. Snapshot packaging regenerated the JS SDK for the optional generation field. The first Kilo Console vite pass failed with EPERM on packages/kilo-console/dist/assets; the CLI build reused the existing console dist and copied a rebuilt kilo.exe.
+
+Installed eden.raya@7.4.23-snapshot+dd7966a567.kamil-oseni.1789181590925. VSIX C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-dd7966a567-kamil-oseni-1789181590925.vsix; SHA-256 9EFC43299DF9D4371AF01A6DA0F3874A7497BAC4861EE2DB1FBC1D366D30F776; 520013600 bytes, 432 files. Packaging copied a rebuilt CLI into bin/kilo.exe. VS Code was not force-reloaded.
+
+Next: leftover provider-switch/disposal, or a real-account GPT-Live call on a device.
+
+
 
 
 

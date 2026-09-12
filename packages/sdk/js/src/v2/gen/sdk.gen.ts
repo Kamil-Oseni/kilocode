@@ -12176,6 +12176,7 @@ export class Telemetry extends HeyApiClient {
       properties?: {
         [key: string]: unknown
       }
+      generation?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -12188,6 +12189,7 @@ export class Telemetry extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "body", key: "event" },
             { in: "body", key: "properties" },
+            { in: "body", key: "generation" },
           ],
         },
       ],
@@ -12214,6 +12216,7 @@ export class Telemetry extends HeyApiClient {
       directory?: string
       workspace?: string
       enabled?: boolean
+      generation?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -12225,6 +12228,7 @@ export class Telemetry extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "body", key: "enabled" },
+            { in: "body", key: "generation" },
           ],
         },
       ],

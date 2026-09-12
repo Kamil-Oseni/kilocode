@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-12):** Product commit `1ddcd26e7e` is verified locally and not yet pushed or installed. Archived and other-folder workers get a durable failed delegation instead of a start or a generic 404. Duplicate completed replies stay one inbox card. Stopping a parent keeps a completed child result. Remaining: leftover RDM-06 worker rename/reassignment attribution, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-12):** Installed product is `ad066b704d`. Archived and other-folder workers get a durable failed delegation; duplicate completed replies stay one inbox card; stopping a parent keeps a completed child result. Remaining: leftover RDM-06 worker rename/reassignment attribution, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-12. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `e3f9039043` is committed, pushed and installed. Local product commit `1ddcd26e7e` adds archived/other-folder denials and completed-child preservation; it is not yet pushed or installed.
+**Latest delivered product:** checkpoint `ad066b704d` is committed, pushed and installed. Archived/other-folder denials and completed-child preservation are in this snapshot.
 
 ## Scope and reading order
 
@@ -1739,7 +1739,7 @@ Next executable step: leftover RDM-06 lifecycle, or a real-account GPT-Live call
 
 ## 2026-09-12: Archived and other-folder delegation denials
 
-**States:** verified locally and committed as `1ddcd26e7e`. Not yet pushed or installed. Asking an archived worker or a worker in another folder persists a failed request with a conversation card and does not start work. The Ask buttons disable those workers and keep the draft. A second identical completed reply does not add another inbox card. Stopping a parent leaves a completed child result and session intact.
+**States:** verified locally and committed as `1ddcd26e7e`, documented as `ad066b704d`, and installed in the snapshot below. Asking an archived worker or a worker in another folder persists a failed request with a conversation card and does not start work. The Ask buttons disable those workers and keep the draft. A second identical completed reply does not add another inbox card. Stopping a parent leaves a completed child result and session intact.
 
 Changed files: `packages/opencode/src/kilocode/task/delegation.ts`, `packages/opencode/src/kilocode/task/runner.ts`, `packages/opencode/src/kilocode/server/httpapi/handlers/kilocode.ts`, `packages/kilo-vscode/src/kilo-provider/routines.ts`, `packages/kilo-vscode/webview-ui/src/components/routines/Inbox.tsx`, `packages/kilo-vscode/tests/fixtures/routine-delegate-view.mjs`, `packages/kilo-vscode/tests/unit/routines-inbox.test.ts`, `packages/opencode/test/kilocode/task/delegation.test.ts`, `packages/opencode/test/kilocode/task/delegation-runner.test.ts`, `packages/opencode/test/kilocode/server/httpapi-routine-delegate.test.ts`, `.changeset/raya-routine-delegate-lifecycle.md`.
 
@@ -1756,6 +1756,16 @@ Commands:
 | root `bun run script/check-opencode-annotations.ts --worktree` | exit 0 |
 
 This is not a paid GPT-Live call and does not unlock VS Code iframe microphone consent. Workers without a folder still match a sender that has one. A never-created recipient ID stays 404. Codex-deferred research stays untracked.
+
+Remaining: leftover RDM-06 worker rename/reassignment attribution, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent.
+
+Next executable step: leftover RDM-06 rename/reassignment attribution, or a real-account GPT-Live call on a device.
+
+## 2026-09-12: Snapshot install `ad066b704d`
+
+**States:** committed, pushed and installed as `ad066b704d`. Archived and other-folder denials, one reply card after duplicate completion, and completed-child preservation on parent stop are in this snapshot. Snapshot packaging regenerated the JS SDK and rebuilt `kilo.exe`.
+
+Installed `eden.raya@7.4.23-snapshot+ad066b704d.kamil-oseni.1789188556585`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-ad066b704d-kamil-oseni-1789188556585.vsix`; SHA-256 `E3F99A17A4BE644DF24B207DDBB1E0DBF7F470BD2FB8BF0F739E7F3C34B8623C`; 520039289 bytes, 432 files. VS Code was not force-reloaded.
 
 Remaining: leftover RDM-06 worker rename/reassignment attribution, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent.
 

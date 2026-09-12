@@ -2954,6 +2954,14 @@ This is not a paid GPT-Live call and does not unlock VS Code iframe microphone c
 
 Next: leftover RDM-06 rename/reassignment attribution, or a real-account GPT-Live call on a device.
 
+## 2026-09-12: Snapshot install ad066b704d
+
+Status: committed, pushed and installed as ad066b704d. Archived and other-folder denials, one reply card after duplicate completion, and completed-child preservation on parent stop are in this snapshot. Snapshot packaging regenerated the JS SDK and rebuilt kilo.exe.
+
+Installed eden.raya@7.4.23-snapshot+ad066b704d.kamil-oseni.1789188556585. VSIX C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-ad066b704d-kamil-oseni-1789188556585.vsix; SHA-256 E3F99A17A4BE644DF24B207DDBB1E0DBF7F470BD2FB8BF0F739E7F3C34B8623C; 520039289 bytes, 432 files. VS Code was not force-reloaded.
+
+Next: leftover RDM-06 rename/reassignment attribution, or a real-account GPT-Live call on a device.
+
 
 
 

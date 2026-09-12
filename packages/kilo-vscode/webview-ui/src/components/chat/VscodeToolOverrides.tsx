@@ -12,6 +12,7 @@ import { Dynamic } from "solid-js/web"
 import { BasicTool } from "@kilocode/kilo-ui/basic-tool"
 import { ToolRegistry, type ToolProps } from "@kilocode/kilo-ui/message-part"
 import { useSession } from "../../context/session"
+import { useVSCode } from "../../context/vscode"
 import { editReview } from "./edit-review"
 import { EditReviewChrome } from "./EditReviewChrome"
 import { note, targets, type Kind } from "./review-files"
@@ -168,9 +169,11 @@ function FileReview(props: {
   file: string
   kind: Kind
   status: string
+  path?: boolean
   children?: JSX.Element
 }) {
   const session = useSession()
+  const vscode = useVSCode()
   let ref: HTMLDivElement | undefined
 
   const sid = () => session.currentSessionID() ?? ""
@@ -191,6 +194,10 @@ function FileReview(props: {
     editReview.request(sid(), props.file, "undo")
   }
   const keep = () => editReview.request(sid(), props.file, "keep")
+  const open = () => {
+    if (!props.file) return
+    vscode.postMessage({ type: "openFile", filePath: props.file, sessionID: sid() || undefined })
+  }
   const step = (delta: number) => {
     const list = editReview.pending(sid())
     if (list.length === 0) return
@@ -214,6 +221,11 @@ function FileReview(props: {
       onPrev={() => step(-1)}
       onNext={() => step(1)}
     >
+      <Show when={props.path || props.kind === "deleted" || props.kind === "renamed"}>
+        <button type="button" data-slot="edit-review-file" aria-label={`Open ${props.file} in the editor`} onClick={open}>
+          {props.file}
+        </button>
+      </Show>
       {props.children}
     </EditReviewChrome>
   )
@@ -231,11 +243,7 @@ function reviewed(name: string, upstream: Component<ToolProps>): Component<ToolP
             <>
               <Dynamic component={upstream} {...props} />
               <For each={items()}>
-                {(item) => (
-                  <FileReview file={item.file} kind={item.kind} status={props.status ?? ""}>
-                    <p data-slot="edit-review-file">{item.file}</p>
-                  </FileReview>
-                )}
+                {(item) => <FileReview file={item.file} kind={item.kind} status={props.status ?? ""} path />}
               </For>
             </>
           }

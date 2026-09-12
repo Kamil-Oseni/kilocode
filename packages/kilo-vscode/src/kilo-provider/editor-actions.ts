@@ -79,6 +79,7 @@ export function handleEditorAction(
   },
   opts: {
     dir: (sessionID?: string) => string
+    ghost?: (file: string, dir: string) => vscode.Uri | undefined
     diff?: DiffVirtualProvider
     openMarkdown?: (file: string, sessionID?: string) => boolean
     storage?: vscode.Uri
@@ -91,7 +92,7 @@ export function handleEditorAction(
     // current — mirrors the validateFiles case below.
     if (message.filePath) {
       if (isMarkdownFile(message.filePath) && opts.openMarkdown?.(message.filePath, message.sessionID)) return true
-      openFile(opts.dir(message.sessionID), message.filePath, message.line, message.column)
+      openFile(opts.dir(message.sessionID), message.filePath, message.line, message.column, opts.ghost)
     }
     return true
   }
@@ -187,7 +188,13 @@ function findFallback(dir: string, filePath: string, line?: number, column?: num
   )
 }
 
-function openFile(dir: string, filePath: string, line?: number, column?: number): void {
+function openFile(
+  dir: string,
+  filePath: string,
+  line?: number,
+  column?: number,
+  ghost?: (file: string, dir: string) => vscode.Uri | undefined,
+): void {
   const uri = isAbsolutePath(filePath) ? vscode.Uri.file(filePath) : vscode.Uri.joinPath(vscode.Uri.file(dir), filePath)
   vscode.workspace.fs.stat(uri).then(
     (stat) => {
@@ -197,6 +204,13 @@ function openFile(dir: string, filePath: string, line?: number, column?: number)
       }
       show(uri, line, column)
     },
-    () => findFallback(dir, filePath, line, column),
+    () => {
+      const alt = ghost?.(filePath, dir)
+      if (alt) {
+        show(alt, line, column)
+        return
+      }
+      findFallback(dir, filePath, line, column)
+    },
   )
 }

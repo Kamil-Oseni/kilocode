@@ -510,7 +510,13 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private createWorktreeHandler: ((baseBranch?: string, branchName?: string) => Promise<void>) | null = null
 
   private inEditorReview:
-    | { refresh(): void; dismissAll(): void; reset(): void; capture(session: string, files?: string[]): () => void }
+    | {
+        refresh(): void
+        dismissAll(): void
+        reset(): void
+        capture(session: string, files?: string[]): () => void
+        ghost?(file: string, dir?: string): vscode.Uri | undefined
+      }
     | undefined // raya_change
   private diffVirtualProvider: import("./DiffVirtualProvider").DiffVirtualProvider | undefined
   private diffViewerProvider: import("./diff/DiffViewerProvider").DiffViewerProvider | undefined
@@ -973,6 +979,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     dismissAll(): void
     reset(): void
     capture(session: string, files?: string[]): () => void
+    ghost?(file: string, dir?: string): vscode.Uri | undefined
   }): void {
     this.inEditorReview = review
   }
@@ -2034,6 +2041,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       // An explicit sessionID (e.g. from validateFiles) takes precedence over
       // the live currentSession — see editor-actions.ts's validateFiles case.
       dir: (sessionID) => this.getWorkspaceDirectory(sessionID ?? this.currentSession?.id),
+      ghost: (file, dir) => this.inEditorReview?.ghost?.(file, dir),
       diff: this.diffVirtualProvider,
       openMarkdown: (file, sessionID) => {
         if (!this.documentViewerProvider) return false

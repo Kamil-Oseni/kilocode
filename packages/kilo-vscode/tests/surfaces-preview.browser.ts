@@ -57,6 +57,8 @@ test("light review cluster and file chrome", async ({ page }, info) => {
   await expect(page.getByRole("button", { name: "Keep file" }).first()).toBeVisible()
   await expect(page.getByText("Renamed file")).toBeVisible()
   await expect(page.getByText("Deleted file")).toBeVisible()
+  await expect(page.getByRole("button", { name: "Open src/review/rename.ts in the editor" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Open src/styles/legacy-composer.css in the editor" })).toBeVisible()
   await expect(page.getByText("1 of 4").first()).toBeVisible()
   await page.screenshot({ path: info.outputPath("review.png"), fullPage: true })
 })

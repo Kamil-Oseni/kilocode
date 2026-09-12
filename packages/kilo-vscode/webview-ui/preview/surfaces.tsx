@@ -123,10 +123,14 @@ export const EditReviewPreview: Component = () => (
       <p>src/components/chat/PromptInput.tsx</p>
     </EditReviewChrome>
     <EditReviewChrome status="renamed" note="Renamed file" pending nav={{ index: 2, total: 4 }}>
-      <p>src/review/rename.ts</p>
+      <button type="button" data-slot="edit-review-file" aria-label="Open src/review/rename.ts in the editor">
+        src/review/rename.ts
+      </button>
     </EditReviewChrome>
     <EditReviewChrome status="deleted" note="Deleted file" pending nav={{ index: 3, total: 4 }}>
-      <p>src/styles/legacy-composer.css</p>
+      <button type="button" data-slot="edit-review-file" aria-label="Open src/styles/legacy-composer.css in the editor">
+        src/styles/legacy-composer.css
+      </button>
     </EditReviewChrome>
   </div>
 )

@@ -17,6 +17,7 @@ import { remember } from "./attempts"
 import type { ReviewFileDiff } from "@kilocode/sdk/v2"
 import type { KiloConnectionService } from "../services/cli-backend/connection-service"
 import { addedRanges, deletionRanges, planReviewLenses, type LineRange } from "./patch-ranges"
+import { decode, prior, SCHEME, uri } from "./ghost"
 
 export interface InEditorReviewDeps {
   readonly connection: Pick<KiloConnectionService, "getClient" | "getConnectionState">
@@ -37,6 +38,7 @@ interface FileReview {
   readonly revision: string
   readonly anchors: LineRange[]
   readonly summary: string
+  readonly body: string
 }
 
 export interface InEditorReview extends vscode.Disposable {
@@ -48,6 +50,8 @@ export interface InEditorReview extends vscode.Disposable {
   capture(session: string, files?: string[]): () => void
   /** Forget Keep/Undo dismissals so a later edit in this session can show them again. */
   reset(): void
+  /** Virtual buffer for a reviewed path that is no longer on disk. */
+  ghost(file: string, dir?: string): vscode.Uri | undefined
 }
 
 export function registerInEditorReview(context: vscode.ExtensionContext, deps: InEditorReviewDeps): InEditorReview {
@@ -60,6 +64,7 @@ export function registerInEditorReview(context: vscode.ExtensionContext, deps: I
 
   const norm = (p: string) => (process.platform === "win32" ? p.toLowerCase() : p)
   const changes = new vscode.EventEmitter<void>()
+  const contents = new vscode.EventEmitter<vscode.Uri>()
 
   let reviews = new Map<string, FileReview>()
   let sid: string | undefined
@@ -87,11 +92,14 @@ export function registerInEditorReview(context: vscode.ExtensionContext, deps: I
       anchors,
       revision: fingerprint(item),
       summary: renamed ? "Renamed file" : deleted ? "Deleted file" : `${item.additions} added, ${item.deletions} removed in file`,
+      body: prior(item.patch),
     }
   }
 
+  const keyOf = (doc: vscode.Uri) => decode(doc) ?? norm(doc.fsPath)
+
   const apply = (editor: vscode.TextEditor) => {
-    const key = norm(editor.document.uri.fsPath)
+    const key = keyOf(editor.document.uri)
     const review = reviews.get(key)
     if (!review || dismissed.get(key) === print(review)) {
       editor.setDecorations(decoration, [])
@@ -149,6 +157,7 @@ export function registerInEditorReview(context: vscode.ExtensionContext, deps: I
     reviews = built
     for (const [key, review] of built) {
       if (dismissed.get(key) && dismissed.get(key) !== print(review)) dismissed.delete(key)
+      contents.fire(uri(review.abs, review.file))
     }
     applyAll()
     changes.fire()
@@ -181,7 +190,15 @@ export function registerInEditorReview(context: vscode.ExtensionContext, deps: I
     changes.fire()
   }
 
-  const targetKey = (arg?: string) => arg ?? norm(vscode.window.activeTextEditor?.document.uri.fsPath ?? "")
+  const ghost = (file: string, dir?: string) => {
+    if (!sid || !file) return
+    const abs = norm(path.resolve(dir ?? deps.directory(sid), file))
+    const review = reviews.get(abs) ?? [...reviews.values()].find((item) => item.file === file)
+    if (!review) return
+    return uri(review.abs, review.file)
+  }
+
+  const targetKey = (arg?: string) => arg ?? (vscode.window.activeTextEditor ? keyOf(vscode.window.activeTextEditor.document.uri) : "")
 
   const identify = (key: string) => {
     const id = attempts.get(key) ?? randomUUID()
@@ -257,7 +274,7 @@ export function registerInEditorReview(context: vscode.ExtensionContext, deps: I
   const lenses: vscode.CodeLensProvider = {
     onDidChangeCodeLenses: changes.event,
     provideCodeLenses(document) {
-      const key = norm(document.uri.fsPath)
+      const key = keyOf(document.uri)
       const review = reviews.get(key)
       if (disposed || !review || dismissed.get(key) === print(review)) return []
       const line = Math.min(review.anchors[0].start, Math.max(0, document.lineCount - 1))
@@ -307,7 +324,15 @@ export function registerInEditorReview(context: vscode.ExtensionContext, deps: I
     }),
     decoration,
     changes,
-    vscode.languages.registerCodeLensProvider({ scheme: "file" }, lenses),
+    contents,
+    vscode.languages.registerCodeLensProvider([{ scheme: "file" }, { scheme: SCHEME }], lenses),
+    vscode.workspace.registerTextDocumentContentProvider(SCHEME, {
+      onDidChange: contents.event,
+      provideTextDocumentContent(doc) {
+        const key = decode(doc)
+        return (key && reviews.get(key)?.body) || ""
+      },
+    }),
     vscode.commands.registerCommand("raya.editReview.undoFile", (arg?: string, revision?: string, session?: string) =>
       act("undo", arg, revision, session),
     ),
@@ -326,10 +351,12 @@ export function registerInEditorReview(context: vscode.ExtensionContext, deps: I
     dismissAll,
     capture,
     reset,
+    ghost,
     dispose: () => {
       disposed = true
       generation++
       decoration.dispose()
+      contents.dispose()
     },
   }
 }

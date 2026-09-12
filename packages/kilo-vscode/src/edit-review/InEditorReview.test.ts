@@ -25,6 +25,7 @@ function setup(workspaceState?: Parameters<typeof remember>[0]) {
   const events: unknown[] = []
   const commands = new Map<string, (...args: string[]) => Promise<void>>()
   let provider: vscode.CodeLensProvider | undefined
+  let contents: vscode.TextDocumentContentProvider | undefined
   const command = spyOn(vscode.commands, "registerCommand").mockImplementation((id, callback) => {
     commands.set(id, callback)
     return { dispose() {} }
@@ -33,10 +34,15 @@ function setup(workspaceState?: Parameters<typeof remember>[0]) {
     provider = value
     return { dispose() {} }
   })
+  const docs = spyOn(vscode.workspace, "registerTextDocumentContentProvider").mockImplementation((_scheme, value) => {
+    contents = value
+    return { dispose() {} }
+  })
   const errors = spyOn(vscode.window, "showErrorMessage").mockResolvedValue(undefined)
   cleanups.push(
     () => command.mockRestore(),
     () => lenses.mockRestore(),
+    () => docs.mockRestore(),
     () => errors.mockRestore(),
   )
   const client = createKiloClient({
@@ -68,7 +74,7 @@ function setup(workspaceState?: Parameters<typeof remember>[0]) {
   })
   cleanups.push(() => review.dispose())
   const document = { uri: vscode.Uri.file(path.resolve("file.ts")), lineCount: 10 } as vscode.TextDocument
-  const read = async () => (await provider!.provideCodeLenses(document, {} as vscode.CancellationToken)) ?? []
+  const read = async (doc = document) => (await provider!.provideCodeLenses(doc, {} as vscode.CancellationToken)) ?? []
   const run = async (action: "keep" | "undo") => {
     const list = await read()
     const lens = list.find((item) => item.command?.command === `raya.editReview.${action}File`)!
@@ -78,7 +84,7 @@ function setup(workspaceState?: Parameters<typeof remember>[0]) {
     for (let attempt = 0; requests.length < count && attempt < 100; attempt++) await Bun.sleep(1)
     expect(requests.length).toBe(count)
   }
-  return { state, requests, reads, events, review, read, run, wait, errors, commands }
+  return { state, requests, reads, events, review, read, run, wait, errors, commands, contents: () => contents }
 }
 
 describe("in-editor review acknowledgements", () => {
@@ -301,5 +307,18 @@ describe("in-editor review acknowledgements", () => {
     expect(await fixture.read()).toHaveLength(3)
     expect((await fixture.read())[0].command?.title).toContain("Deleted file")
     expect((await fixture.read())[2].command?.title).toBe("$(discard) Undo file")
+  })
+
+  test("a missing deleted file opens a virtual buffer with the same Keep and Undo lenses", async () => {
+    const fixture = setup()
+    fixture.state.patch = "@@ -1,2 +0,0 @@\n-old\n-lines"
+    await fixture.review.refresh()
+    const ghost = fixture.review.ghost("file.ts")
+    expect(ghost?.scheme).toBe("raya-review")
+    expect(ghost?.path).toBe("/file.ts")
+    const document = { uri: ghost!, lineCount: 2 } as vscode.TextDocument
+    expect((await fixture.read(document))[0]?.command?.title).toContain("Deleted file")
+    expect((await fixture.read(document))[2]?.command?.title).toBe("$(discard) Undo file")
+    expect(fixture.contents()?.provideTextDocumentContent(ghost!, {} as vscode.CancellationToken)).toBe("old\nlines")
   })
 })

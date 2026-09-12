@@ -21,6 +21,14 @@ const mockUri = {
     const joined = [base.fsPath, ...segments].join("/")
     return { scheme: "file", authority: "", path: joined, query: "", fragment: "", fsPath: joined }
   },
+  from: (parts: { scheme: string; path?: string; query?: string; fragment?: string; authority?: string }) => ({
+    scheme: parts.scheme,
+    authority: parts.authority ?? "",
+    path: parts.path ?? "",
+    query: parts.query ?? "",
+    fragment: parts.fragment ?? "",
+    fsPath: parts.path ?? "",
+  }),
 }
 
 const mockVscode = {
@@ -63,6 +71,7 @@ const mockVscode = {
       getText: () => input.content ?? "",
       languageId: input.language ?? "plaintext",
     }),
+    registerTextDocumentContentProvider: () => ({ dispose: noop }),
     getConfiguration: () => ({
       get: <T>(_key: string, value?: T) => value,
       update: async () => {},
@@ -71,6 +80,7 @@ const mockVscode = {
       const value = typeof pathOrUri === "string" ? pathOrUri : (pathOrUri.fsPath ?? "")
       return value.startsWith("/repo/") ? value.slice("/repo/".length) : value
     },
+    findFiles: async () => [],
     fs: {
       createDirectory: async () => {},
       writeFile: async () => {},

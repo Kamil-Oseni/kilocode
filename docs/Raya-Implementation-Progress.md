@@ -3188,6 +3188,10 @@ Installed `eden.raya@7.4.23-snapshot+6b97169dc1.kamil-oseni.1789232065802`. VSIX
 
 This closes the defects found in Grok's three attributed product commits at source/unit/render/package level. Packaged live VS Code interaction with an actual deleted/renamed file is still open and is not claimed by the install. Next: continue the remaining implementable 39-requirement work or perform real-account GPT-Live/device acceptance. Keep Codex-derived implementation deferred and apply `docs/designer.md` to all UI/UX work.
 
+## ChatGPT 2026-09-12 13:08 America/Toronto — next-agent launch contract clarified
+
+The authoritative continuation prompt is stored inside `docs/Raya-Remaining-Implementation-Handoff.md` under **Replacement continuation prompt**. The next agent must read and follow that embedded prompt directly; the user does not need to reconstruct or paste the full implementation brief. The prompt now identifies `6b97169dc1e414fbececd9d13399d79dac301f70` as the latest installed product checkpoint and requires each coherent product slice to be verified, committed conventionally, pushed normally to `origin/main`, installed with the authorized `snapshot:install` workflow, independently checked for installed identity, and recorded immediately in both implementation documents. Documentation-only checkpoints do not require an extension rebuild. Standing authorization remains in force; no repeated permission request is needed, and hooks, force push, or forced VS Code reload must not be bypassed.
+
 
 
 

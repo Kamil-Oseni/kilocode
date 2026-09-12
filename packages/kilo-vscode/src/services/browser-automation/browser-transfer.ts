@@ -1,10 +1,11 @@
 import { createHash, randomUUID } from "node:crypto"
 import { createReadStream, createWriteStream } from "node:fs"
-import { lstat, mkdir, open, readFile, readdir, rename, realpath } from "node:fs/promises"
-import { join, resolve } from "node:path"
+import { lstat, mkdir, open, readFile, readdir, rename } from "node:fs/promises"
+import { join } from "node:path"
 import { Transform } from "node:stream"
 import { pipeline } from "node:stream/promises"
 import { z } from "zod"
+import { held } from "./browser-held"
 
 const Origin = z.object({ requestID: z.string().min(1), sessionID: z.string().min(1), directory: z.string().min(1) })
 export type TransferOrigin = z.infer<typeof Origin>
@@ -81,8 +82,7 @@ export class BrowserTransfers {
   private async restore() {
     await mkdir(this.root, { recursive: true })
     if ((await lstat(this.root)).isSymbolicLink()) throw new Error("Download artifact directory must not be a link")
-    if ((await realpath(this.root)) !== resolve(this.root))
-      throw new Error("Download artifact directory must resolve to its owned location")
+    if (!(await held(this.root))) throw new Error("Download artifact directory must resolve to its owned location")
     for (const name of await readdir(this.root)) {
       if (!z.string().uuid().safeParse(name).success) continue
       const dir = join(this.root, name)
@@ -342,8 +342,7 @@ export class BrowserTransfers {
     const entry = this.entries.get(id)!
     if (entry.info.status !== "completed") throw new Error("Download is not complete")
     const file = join(this.root, id, "artifact")
-    if ((await realpath(file)) !== resolve(file) || !(await lstat(file)).isFile())
-      throw new Error("Download artifact identity changed")
+    if (!(await held(file)) || !(await lstat(file)).isFile()) throw new Error("Download artifact identity changed")
     const hash = createHash("sha256")
     let bytes = 0
     for await (const chunk of createReadStream(file)) {

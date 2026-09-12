@@ -12,7 +12,9 @@ import "../src/styles/history.css" // raya_change - preview the history + sessio
 import "../src/styles/tool-overrides.css" // raya_change - preview the bundled tool-call group (#8)
 import "../src/styles/chat-layout.css" // raya_change - preview conversation lane + turn rhythm (#12)
 import "../src/styles/memory-provenance.css"
+import "../src/styles/routines.css"
 import "./preview.css"
+import { RoutinesPreview } from "./routines"
 import { render } from "solid-js/web"
 import { For, Show, type Component } from "solid-js"
 import { installMockVsCode } from "./mock-vscode"
@@ -53,6 +55,7 @@ type PvState =
   | "edit-review"
   | "history"
   | "conversation"
+  | "routines"
 type Theme = "light" | "dark"
 
 const states: PvState[] = [
@@ -82,6 +85,7 @@ const states: PvState[] = [
   "edit-review",
   "history",
   "conversation",
+  "routines",
 ]
 const themes: Theme[] = ["light", "dark"]
 
@@ -655,7 +659,17 @@ const Fixture: Component<{ id: string; theme: Theme; state: PvState }> = (props)
       <Show when={props.state === "conversation"}>
         <Conversation />
       </Show>
-      <Show when={props.state !== "usage" && !props.state.startsWith("memory") && !chrome.has(props.state)}>
+      <Show when={props.state === "routines"}>
+        <RoutinesPreview />
+      </Show>
+      <Show
+        when={
+          props.state !== "usage" &&
+          props.state !== "routines" &&
+          !props.state.startsWith("memory") &&
+          !chrome.has(props.state)
+        }
+      >
         <GoalBannerView {...propsFor(props.state)} />
       </Show>
     </div>
@@ -674,8 +688,9 @@ render(
       <header class="pv-page__header">
         <h1 class="pv-page__title">Raya · component preview</h1>
         <p class="pv-page__sub">
-          Goal, usage and memory fixtures render production views with sample data. Composer, history, review and other
-          illustrative fixtures are labeled and cannot establish production interaction or accessibility results.
+          Goal, usage, memory and routines fixtures render production views with sample data. Composer, history, review
+          and other illustrative fixtures are labeled and cannot establish production interaction or accessibility
+          results.
         </p>
       </header>
       <For each={fixtures}>

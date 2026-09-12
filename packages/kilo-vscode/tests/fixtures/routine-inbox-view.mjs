@@ -241,6 +241,8 @@ try {
   assert.equal(button("Back").getAttribute("aria-label"), "Back to Books")
   const pane = root.querySelector(".routines-thread-body")
   assert.equal(pane.getAttribute("role"), "log")
+  assert.equal(pane.getAttribute("tabindex"), "0")
+  assert.equal(pane.getAttribute("aria-label"), "Messages with Books")
   const draft = root.querySelector("textarea[aria-label='Message this worker']")
   draft.focus()
   draft.value = "Keep this draft"

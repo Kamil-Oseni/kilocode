@@ -1,10 +1,11 @@
 // raya_change - Milestone F shared persistent Playwright browser session
 import { lstat, mkdir, open, readFile, realpath, rename, rm, unlink } from "node:fs/promises"
-import { join, resolve } from "node:path"
+import { join } from "node:path"
 import { createHash, randomUUID } from "node:crypto"
 import { Script } from "node:vm"
 import { chromium } from "playwright-core"
 import { Flock } from "@opencode-ai/core/util/flock"
+import { held, same } from "./browser-held"
 import { locate, TargetError, type BrowserTarget, type TargetPage } from "./browser-target"
 import { FrameRegistry, type FrameOwner, type FrameInfo, type DocumentFrame } from "./browser-frame"
 import { pending, BrowserDialogs, type DialogPage, type DialogInfo, type DialogOperation } from "./browser-dialog"
@@ -641,11 +642,10 @@ export class BrowserSession {
   private async lock() {
     if (this.lease) return
     await mkdir(this.profile, { recursive: true, mode: 0o700 })
-    if ((await realpath(this.profile)) !== resolve(this.profile))
-      throw new Error("Browser profile storage identity changed")
+    if (!(await held(this.profile))) throw new Error("Browser profile storage identity changed")
     const dir = join(this.profile, ".locks")
     await mkdir(dir, { recursive: true, mode: 0o700 })
-    if ((await realpath(dir)) !== resolve(dir)) throw new Error("Browser profile lock identity changed")
+    if (!(await held(dir))) throw new Error("Browser profile lock identity changed")
     this.lease = await Flock.acquire("browser-profile", { dir, timeoutMs: 1000 }).catch(() => {
       throw new Error(
         "Browser profile is in use. Close its other Raya browser window, then retry. An abandoned lock recovers after one minute.",
@@ -677,14 +677,14 @@ export class BrowserSession {
   }
 
   private async eraseProfile() {
+    if (!(await held(this.profile))) throw new Error("Browser profile storage identity changed; reset refused")
     const root = await realpath(this.profile)
-    if (root !== resolve(this.profile)) throw new Error("Browser profile storage identity changed; reset refused")
     const path = join(root, "chromium")
     const canonical = await realpath(path).catch((error: unknown) => {
       if (error instanceof Error && "code" in error && error.code === "ENOENT") return
       throw error
     })
-    if (canonical && canonical !== path) throw new Error("Browser profile identity changed; reset refused")
+    if (canonical && !same(canonical, path)) throw new Error("Browser profile identity changed; reset refused")
     if (canonical) await rm(path, { recursive: true })
     await unlink(join(root, "active-auth.json")).catch((error: unknown) => {
       if (error instanceof Error && "code" in error && error.code === "ENOENT") return

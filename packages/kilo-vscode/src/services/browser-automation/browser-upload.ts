@@ -1,8 +1,9 @@
 import { createHash, randomUUID } from "node:crypto"
-import { lstat, mkdir, open, readFile, readdir, realpath, rename, unlink } from "node:fs/promises"
-import { join, resolve } from "node:path"
+import { lstat, mkdir, open, readFile, readdir, rename, unlink } from "node:fs/promises"
+import { join } from "node:path"
 import { z } from "zod"
 import type { TransferOrigin } from "./browser-transfer"
+import { held } from "./browser-held"
 import { filename } from "./browser-save"
 
 const File = z.object({
@@ -52,8 +53,7 @@ export class BrowserUploads {
   }
   private async restore() {
     await mkdir(this.root, { recursive: true, mode: 0o700 })
-    if ((await realpath(this.root)) !== resolve(this.root))
-      throw new Error("Upload artifact directory identity changed")
+    if (!(await held(this.root))) throw new Error("Upload artifact directory identity changed")
     for (const id of await readdir(this.root)) {
       if (!z.string().uuid().safeParse(id).success) continue
       const dir = join(this.root, id)

@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from "node:crypto"
-import { lstat, mkdir, open, readFile, readdir, realpath, rename, unlink } from "node:fs/promises"
-import { join, resolve } from "node:path"
+import { lstat, mkdir, open, readFile, readdir, rename, unlink } from "node:fs/promises"
+import { join } from "node:path"
 import { z } from "zod"
+import { held } from "./browser-held"
 
 const Capture = z.object({
   id: z.string().uuid(),
@@ -58,7 +59,7 @@ export class BrowserAuth {
 
   private async directory() {
     await mkdir(this.root, { recursive: true, mode: 0o700 })
-    if ((await realpath(this.root)) !== resolve(this.root)) throw new Error("Authentication storage identity changed")
+    if (!(await held(this.root))) throw new Error("Authentication storage identity changed")
   }
 
   private file(id: string, suffix: string) {

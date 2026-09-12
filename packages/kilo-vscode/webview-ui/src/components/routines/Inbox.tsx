@@ -603,6 +603,8 @@ export const Inbox: Component<{
         ref={pane}
         class="routines-thread-body"
         role="log"
+        tabIndex={0}
+        aria-label={`Messages with ${props.name}`}
         aria-relevant="additions"
         onScroll={() => {
           if (!pane) return

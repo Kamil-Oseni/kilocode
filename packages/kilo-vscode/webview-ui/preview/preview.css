@@ -32,6 +32,37 @@ body {
   place-items: center;
 }
 
+.pv-page--focused:has([data-fixture$="-routines"]) {
+  max-width: none;
+  width: 100%;
+  height: 100vh;
+  padding: 0;
+  display: block;
+  place-items: unset;
+}
+
+.pv-page--focused:has([data-fixture$="-routines"]) .pv-fixture__label {
+  display: none;
+}
+
+.pv-page--focused:has([data-fixture$="-routines"]) .pv-fixture {
+  height: 100%;
+}
+
+.pv-page--focused:has([data-fixture$="-routines"]) .pv-panel {
+  height: 100%;
+  min-height: 28rem;
+  display: flex;
+  flex-direction: column;
+  border: 0;
+  border-radius: 0;
+}
+
+.pv-page--focused:has([data-fixture$="-routines"]) .routines-view {
+  flex: 1;
+  min-height: 0;
+}
+
 .pv-page--focused .pv-page__header {
   display: none;
 }
@@ -119,6 +150,8 @@ body {
   --raya-primary-ghost: color-mix(in srgb, var(--raya-primary) 9%, transparent);
   --raya-accent: var(--raya-primary);
   --raya-accent-strong: var(--raya-primary-strong);
+  --surface-brand-base: #45557a;
+  --surface-brand-hover: #303b54;
   color: var(--text-base);
 }
 

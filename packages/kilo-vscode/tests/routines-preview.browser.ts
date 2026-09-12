@@ -1,0 +1,41 @@
+import AxeBuilder from "@axe-core/playwright"
+import { expect, test } from "@playwright/test"
+
+for (const theme of ["light", "dark"]) {
+  for (const width of [320, 900]) {
+    test(`${theme} routines at ${width}px`, async ({ page }, info) => {
+      await page.setViewportSize({ width, height: 900 })
+      await page.goto(`/?state=${theme}-routines`)
+      const fixture = page.locator("[data-fixture]")
+      await expect(fixture).toHaveAttribute("data-preview-kind", "production-view")
+      const books = page.locator('.routines-identity[data-routine-worker="routine"]')
+      await expect(books).toBeVisible()
+      await expect(page.getByText("1 unread").first()).toBeVisible()
+      await books.click()
+      const thread = page.getByRole("region", { name: "Conversation with Books" })
+      await expect(thread).toBeVisible()
+      await expect(page.getByRole("button", { name: "Back to Books" })).toBeVisible()
+      await expect(thread.getByText("Friday expenses increased in travel.")).toBeVisible()
+      const people = page.locator(".routines-people")
+      if (width === 320) {
+        await expect(people).toBeHidden()
+      } else {
+        await expect(people).toBeVisible()
+        await expect(page.locator('.routines-identity[data-routine-worker="legal"]')).toBeVisible()
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+      expect(
+        await page.locator(".routines-line-body").evaluate((node) => {
+          const wrap = getComputedStyle(node).overflowWrap
+          return wrap === "anywhere" || wrap === "break-word"
+        }),
+      ).toBe(true)
+      const result = await new AxeBuilder({ page })
+        .include(".routines-view")
+        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+        .analyze()
+      expect(result.violations).toEqual([])
+      await page.screenshot({ path: info.outputPath("thread.png"), fullPage: true })
+    })
+  }
+}

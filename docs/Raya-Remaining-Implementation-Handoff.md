@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-12):** Installed product is `f81902f403`. Editing a worker can rename it or change its standing job without starting a new conversation; earlier reports stay on the same worker. Remaining: leftover 39-requirement work that is still implementable here, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-12):** Last installed product is `f81902f403`. Composer, history, and review fixtures in the 5199 visual harness now render production views (`PromptInput`, `HistoryView`, `SessionReviewCluster`, `EditReviewChrome`) and are labeled `production-view`. Slash, topnav, transcript, and conversation stay illustrative. Remaining: leftover 39-requirement work that is still implementable here, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-12. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `f81902f403` is committed, pushed and installed. Worker rename and standing-job reassignment are in this snapshot.
+**Latest delivered product:** checkpoint `f81902f403` is committed, pushed and installed. Worker rename and standing-job reassignment are in that snapshot. Composer/history/review preview migration is committed as `b9bef42d2f` and not yet installed.
 
 ## Scope and reading order
 
@@ -440,7 +440,7 @@ The following sections retain the full 39-item scope. Related findings and overh
 
 ### UI-01 — Test real components in the visual harness
 
-**Recorded status:** In progress. Preview labels distinguish production from illustrative fixtures. Current/legacy memory frames and the routines roster/conversation now use real components; twelve Chromium theme/width checks pass (eight memory, four routines). Composer/history/review migration remains open. Empty/loading/stale/error and 200% zoom for routines remain open.
+**Recorded status:** In progress. Preview labels distinguish production from illustrative fixtures. Memory, routines, composer, history, and review now use real components in the 5199 harness. Twenty-seven Chromium checks pass (eight memory, ten routines, nine composer/history/review). Slash, topnav, transcript, and conversation remain illustrative. Result previews and live packaged visual acceptance remain open.
 
 **Implementation and verification:**
 
@@ -1799,6 +1799,28 @@ Next executable step: leftover implementable 39-requirement work, or a real-acco
 **States:** committed, pushed and installed as `f81902f403`. Worker rename and standing-job reassignment are in this snapshot. CLI binary was already present and was not rebuilt.
 
 Installed `eden.raya@7.4.23-snapshot+f81902f403.kamil-oseni.1789190327003`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-f81902f403-kamil-oseni-1789190327003.vsix`; SHA-256 `8C7AC21887744F5F061FF24EB9D7E28B459C9E0D3C8955C628AC2D8072D30DA2`; 517098005 bytes, 431 files. VS Code was not force-reloaded.
+
+Remaining: leftover implementable 39-requirement work, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent.
+
+Next executable step: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
+
+## 2026-09-12: Production composer, history, and review in the visual harness
+
+**States:** verified locally and committed as `b9bef42d2f`. Not yet pushed or installed. The 5199 visual harness now mounts production `PromptInput`, `HistoryView`, `SessionReviewCluster`, and `EditReviewChrome` instead of illustrative replicas. Those fixtures are labeled `production-view`. Slash, topnav, transcript, and conversation stay labeled illustrative. The preview server compiles before listen, caches Babel transforms, and stubs `?worker&url` imports so Playwright does not wait on esbuild 503s. History's header wraps at 320px. The hidden composer file input now has an attach label.
+
+Changed files: `packages/kilo-vscode/webview-ui/src/components/chat/SessionReviewCluster.tsx`, `packages/kilo-vscode/webview-ui/src/components/chat/EditReviewChrome.tsx`, `packages/kilo-vscode/webview-ui/src/components/chat/ChatView.tsx`, `packages/kilo-vscode/webview-ui/src/components/chat/VscodeToolOverrides.tsx`, `packages/kilo-vscode/webview-ui/src/components/chat/PromptInput.tsx`, `packages/kilo-vscode/webview-ui/src/styles/history.css`, `packages/kilo-vscode/webview-ui/preview/surfaces.tsx`, `packages/kilo-vscode/webview-ui/preview/index.tsx`, `packages/kilo-vscode/webview-ui/preview/serve.cjs`, `packages/kilo-vscode/webview-ui/preview/mock-vscode.ts`, `packages/kilo-vscode/webview-ui/preview/preview.css`, `packages/kilo-vscode/tests/surfaces-preview.browser.ts`, `packages/kilo-vscode/playwright.preview.config.ts`, `.changeset/raya-preview-production-surfaces.md`.
+
+Commands:
+
+| Command | Result |
+|---|---|
+| `packages/kilo-vscode` `bunx playwright test --config playwright.preview.config.ts` | 27 pass / 0 fail / exit 0 |
+| `packages/kilo-vscode` `bun run check-types:webview` | exit 0 |
+| `packages/kilo-vscode` `bun run check-types` | exit 0 |
+| `packages/kilo-vscode` `bun run check-kilocode-change` | no forbidden markers / exit 0 |
+| `packages/kilo-vscode` `bunx eslint --no-cache` on touched chat/preview TypeScript | exit 0 |
+
+This is not a paid GPT-Live call and does not unlock VS Code iframe microphone consent. Composer on 5201 remains the deeper interaction fixture. Codex-deferred research stays untracked.
 
 Remaining: leftover implementable 39-requirement work, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent.
 

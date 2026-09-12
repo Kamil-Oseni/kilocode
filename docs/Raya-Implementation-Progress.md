@@ -3054,6 +3054,14 @@ This is not a paid GPT-Live call and does not unlock VS Code iframe microphone c
 
 Next: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
 
+## 2026-09-12: Snapshot install 4cabf8d725
+
+Status: committed, pushed and installed as 4cabf8d725. Role and write-folder reassignment on the same worker is in this snapshot. CLI binary was rebuilt because CLI source had changed.
+
+Installed eden.raya@7.4.23-snapshot+4cabf8d725.kamil-oseni.1789196858491. VSIX C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-4cabf8d725-kamil-oseni-1789196858491.vsix; SHA-256 16BF39B73CA25B854DCB51C37FE8FD922983AA34A951C199FED6D33E57AB5296; 520060065 bytes, 432 files. VS Code was not force-reloaded.
+
+Next: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
+
 
 
 

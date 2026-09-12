@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-12):** Last installed product is `95a05764c9`. Slash, topnav, transcript, and conversation fixtures in the 5199 harness now mount production `VscodeUserMessage`, `TaskHeader`, and `TranscriptRowView`. All named harness fixtures are labeled `production-view`. Remaining: leftover 39-requirement work that is still implementable here, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-12):** Installed product is `8c04e1526e`. Slash, topnav, transcript, and conversation fixtures in the 5199 harness now mount production `VscodeUserMessage`, `TaskHeader`, and `TranscriptRowView`. All named harness fixtures are labeled `production-view`. Remaining: leftover 39-requirement work that is still implementable here, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-12. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** checkpoint `95a05764c9` is committed, pushed and installed. Composer, history, and review now render as production views in that snapshot. Slash/topnav/transcript/conversation preview migration is committed as `890a06791d` and not yet installed.
+**Latest delivered product:** checkpoint `8c04e1526e` is committed, pushed and installed. Slash, topnav, transcript, and conversation now render as production views in the 5199 harness.
 
 ## Scope and reading order
 
@@ -1838,7 +1838,7 @@ Next executable step: leftover implementable 39-requirement work, or a real-acco
 
 ## 2026-09-12: Production slash, topnav, transcript, and conversation in the visual harness
 
-**States:** verified locally and committed as `890a06791d`. Not yet pushed or installed. The 5199 harness now mounts production `VscodeUserMessage`, `TaskHeader`, and `TranscriptRowView` for slash, topnav, transcript, and conversation. All named fixtures are labeled `production-view`. The task header wraps at 320px.
+**States:** verified locally and committed as `890a06791d`, documented as `8c04e1526e`, and installed in the snapshot below. The 5199 harness now mounts production `VscodeUserMessage`, `TaskHeader`, and `TranscriptRowView` for slash, topnav, transcript, and conversation. All named fixtures are labeled `production-view`. The task header wraps at 320px.
 
 Changed files: `packages/kilo-vscode/webview-ui/preview/chrome.tsx`, `packages/kilo-vscode/webview-ui/preview/index.tsx`, `packages/kilo-vscode/webview-ui/preview/surfaces.tsx`, `packages/kilo-vscode/webview-ui/preview/preview.css`, `packages/kilo-vscode/webview-ui/src/styles/task-header.css`, `packages/kilo-vscode/tests/surfaces-preview.browser.ts`, `.changeset/raya-preview-chrome-surfaces.md`.
 
@@ -1853,6 +1853,16 @@ Commands:
 | `packages/kilo-vscode` `bunx eslint --no-cache` on touched preview TypeScript | exit 0 |
 
 This is not a paid GPT-Live call and does not unlock VS Code iframe microphone consent. Combined result/editor views and live packaged visual acceptance remain open. Codex-deferred research stays untracked.
+
+Remaining: leftover implementable 39-requirement work, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent.
+
+Next executable step: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
+
+## 2026-09-12: Snapshot install `8c04e1526e`
+
+**States:** committed, pushed and installed as `8c04e1526e`. Production slash, topnav, transcript, and conversation fixtures are in this snapshot. CLI binary was already present and was not rebuilt.
+
+Installed `eden.raya@7.4.23-snapshot+8c04e1526e.kamil-oseni.1789194184945`. VSIX `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-8c04e1526e-kamil-oseni-1789194184945.vsix`; SHA-256 `22B95CA4EAF760A1764DEB0C412AC3CB36DFDAFD5EAC3311B5F4DE144AE19B72`; 517101368 bytes, 431 files. VS Code was not force-reloaded.
 
 Remaining: leftover implementable 39-requirement work, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent.
 

@@ -134,6 +134,7 @@ test("returning reviewer inspects schema then single-worker and delegation journ
         })
         .onConflictDoNothing()
         .run()
+        .pipe(Effect.orDie)
       const persist = (info: ReturnType<typeof session>, input?: { metadata?: unknown; permission?: Permission.Ruleset }) =>
         db
           .insert(SessionTable)
@@ -156,6 +157,7 @@ test("returning reviewer inspects schema then single-worker and delegation journ
             time_updated: info.time.updated,
           })
           .run()
+          .pipe(Effect.orDie)
       yield* persist(session("ses_chat"))
       const runner = RayaTaskRunner.make({
         database,

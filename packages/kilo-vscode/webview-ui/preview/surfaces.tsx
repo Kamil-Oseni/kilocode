@@ -42,7 +42,7 @@ const listed: SessionInfo[] = [
   },
 ]
 
-function wrap(sessionID: string, child: () => JSX.Element) {
+export function wrap(sessionID: string, child: () => JSX.Element) {
   return createComponent(StoryProviders, {
     sessionID,
     noPadding: true,

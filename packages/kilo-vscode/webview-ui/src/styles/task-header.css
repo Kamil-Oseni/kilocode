@@ -12,6 +12,17 @@
   border-bottom: var(--raya-hairline) solid color-mix(in srgb, var(--border-base) 55%, transparent);
 }
 
+html[data-theme="kilo-vscode"] [data-component="task-header"] {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+html[data-theme="kilo-vscode"] [data-component="task-header"] [data-slot="task-header-stats"] {
+  flex-wrap: wrap;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
 html[data-theme="kilo-vscode"] [data-slot="task-header-title-label"] {
   font-size: var(--kilo-font-size-15, 15px);
   letter-spacing: 0.01em;

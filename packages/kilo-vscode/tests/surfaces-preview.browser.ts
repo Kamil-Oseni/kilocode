@@ -28,6 +28,17 @@ for (const theme of ["light", "dark"]) {
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
       await page.screenshot({ path: info.outputPath("history.png"), fullPage: true })
     })
+
+    test(`${theme} topnav at ${width}px`, async ({ page }, info) => {
+      await page.setViewportSize({ width, height: 900 })
+      await page.goto(`/?state=${theme}-topnav`)
+      await expect(page.locator("[data-fixture]")).toHaveAttribute("data-preview-kind", "production-view")
+      await expect(page.getByText("Redesign Raya into an editorial system")).toBeVisible()
+      await expect(page.getByRole("button", { name: "Compact session" })).toBeVisible()
+      await expect(page.getByRole("button", { name: "Toggle timeline" })).toBeVisible()
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
+      await page.screenshot({ path: info.outputPath("topnav.png"), fullPage: true })
+    })
   }
 }
 
@@ -46,4 +57,22 @@ test("light review cluster and file chrome", async ({ page }, info) => {
   await expect(page.getByRole("button", { name: "Keep file" }).first()).toBeVisible()
   await expect(page.getByText("1 of 3").first()).toBeVisible()
   await page.screenshot({ path: info.outputPath("review.png"), fullPage: true })
+})
+
+test("light slash, transcript, and conversation", async ({ page }, info) => {
+  await page.setViewportSize({ width: 760, height: 900 })
+  await page.goto("/?state=light-slash")
+  await expect(page.locator("[data-fixture]")).toHaveAttribute("data-preview-kind", "production-view")
+  await expect(page.locator('[data-highlight="slash"][data-command="goal"]')).toHaveText("/goal")
+  await expect(page.locator('[data-highlight="slash"][data-command="loop"]')).toHaveText("/loop")
+  await page.goto("/?state=light-transcript")
+  await expect(page.locator("[data-fixture]")).toHaveAttribute("data-preview-kind", "production-view")
+  await expect(page.getByText("prompt-input.css")).toBeVisible()
+  await expect(page.getByText("bun run typecheck")).toBeVisible()
+  await page.goto("/?state=light-conversation")
+  await expect(page.locator("[data-fixture]")).toHaveAttribute("data-preview-kind", "production-view")
+  await expect(page.locator('[data-highlight="slash"][data-command="goal"]')).toBeVisible()
+  await expect(page.locator(".tool-group__count").first()).toContainText("steps")
+  await expect(page.getByText("Here's the change to the composer stylesheet.")).toBeVisible()
+  await page.screenshot({ path: info.outputPath("chrome.png"), fullPage: true })
 })

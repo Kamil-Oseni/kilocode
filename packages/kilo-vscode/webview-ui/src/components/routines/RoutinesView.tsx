@@ -652,6 +652,43 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     return name().trim() !== item.name || objective().trim() !== item.objective
   }
 
+  const caption = () => {
+    if (saving()) return "Saving"
+    if (!editing()) return "Confirm and assign"
+    if (confirmed()) return "Confirm schedule change"
+    return "Save assignment"
+  }
+
+  const blocked = () => {
+    if (saving()) return true
+    if (editing()) return !name().trim() || !objective().trim() || (!confirmed() && !moved())
+    return !objective().trim() || !dir().trim() || !consent() || !deliverable() || !confirmed()
+  }
+
+  const persist = (item: Agent) => {
+    const named = name().trim()
+    const job = objective().trim()
+    if (!named || !job) {
+      setError("Keep a name and standing job.")
+      return
+    }
+    const token = preview()?.forecastID
+    const timed = confirmed() && !!token
+    if (!moved() && !timed) {
+      setError("Preview the schedule before saving, or change the name or standing job.")
+      return
+    }
+    setError("")
+    setSaving(true)
+    hold = true
+    if (moved()) vscode.postMessage({ type: "routineUpdate", agentID: item.id, name: named, objective: job })
+    if (!timed) return
+    const id = crypto.randomUUID()
+    setPending(id)
+    setNotice("")
+    vscode.postMessage({ type: "routineScheduleUpdate", requestID: id, agentID: item.id, forecastID: token })
+  }
+
   const create = () => {
     if (!editing() && !consent()) {
       setError("Choose whether to allow the records this role needs before assigning it.")
@@ -663,28 +700,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     }
     const item = editing()
     if (item) {
-      const named = name().trim()
-      const job = objective().trim()
-      if (!named || !job) {
-        setError("Keep a name and standing job.")
-        return
-      }
-      const token = preview()?.forecastID
-      const timed = confirmed() && !!token
-      if (!moved() && !timed) {
-        setError("Preview the schedule before saving, or change the name or standing job.")
-        return
-      }
-      setError("")
-      setSaving(true)
-      hold = true
-      if (moved())
-        vscode.postMessage({ type: "routineUpdate", agentID: item.id, name: named, objective: job })
-      if (!timed) return
-      const id = crypto.randomUUID()
-      setPending(id)
-      setNotice("")
-      vscode.postMessage({ type: "routineScheduleUpdate", requestID: id, agentID: item.id, forecastID: token })
+      persist(item)
       return
     }
     const token = preview()?.forecastID
@@ -1250,21 +1266,8 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                 />
               </label>
             </Show>
-            <Button
-              type="submit"
-              disabled={
-                saving() ||
-                (!editing() && (!objective().trim() || !dir().trim() || !consent() || !deliverable() || !confirmed())) ||
-                (!!editing() && (!name().trim() || !objective().trim() || (!confirmed() && !moved())))
-              }
-            >
-              {saving()
-                ? "Saving"
-                : editing()
-                  ? confirmed()
-                    ? "Confirm schedule change"
-                    : "Save assignment"
-                  : "Confirm and assign"}
+            <Button type="submit" disabled={blocked()}>
+              {caption()}
             </Button>
           </form>
         </Show>

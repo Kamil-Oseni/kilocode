@@ -99,6 +99,7 @@ export default {
           \`body\` text NOT NULL,
           \`occurrence_id\` text,
           \`session_id\` text,
+          \`files\` text,
           \`time_created\` integer NOT NULL,
           CONSTRAINT \`fk_raya_routine_message_agent_id_raya_routine_conversation_agent_id_fk\` FOREIGN KEY (\`agent_id\`) REFERENCES \`raya_routine_conversation\`(\`agent_id\`) ON DELETE CASCADE
         );

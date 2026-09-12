@@ -60,6 +60,7 @@ export const RayaRoutineMessageTable = sqliteTable(
     body: text().notNull(),
     occurrence_id: text(),
     session_id: text(),
+    files: text(),
     time_created: integer().notNull(),
   },
   (table) => [

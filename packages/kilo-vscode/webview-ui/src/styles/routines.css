@@ -109,8 +109,15 @@
 
 .routines-instructions:focus-visible,
 .routines-title:focus-visible,
+.routines-identity:focus,
+.routines-identity:focus-visible,
+.routines-thread:focus,
+.routines-thread:focus-visible,
+.routines-thread-body:focus-visible,
+.routines-file:focus,
+.routines-file:focus-visible,
 .routines-instructions :is(select, summary, pre):focus-visible {
-  outline: 1px solid var(--vscode-focusBorder);
+  outline: 1px solid var(--vscode-focusBorder, Highlight);
   outline-offset: 2px;
 }
 
@@ -532,6 +539,49 @@
 .routines-line-body {
   margin: 0;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.routines-files {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--raya-space-4);
+  max-width: 100%;
+}
+
+.routines-file {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--raya-space-2);
+  width: min(100%, 22rem);
+  max-width: 100%;
+  padding: var(--raya-space-8) var(--raya-space-12);
+  appearance: none;
+  border: 1px solid var(--border-weak, var(--vscode-widget-border));
+  border-radius: var(--raya-radius-sm, 4px);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.routines-file-name {
+  font-family: var(--font-body);
+  font-size: var(--kilo-font-size-13);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.routines-file-path {
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-size: var(--kilo-font-size-12);
   overflow-wrap: anywhere;
 }
 

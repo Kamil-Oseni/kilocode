@@ -120,3 +120,52 @@ test("settlement publishes one durable inbox report and retries without duplicat
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })
+
+test("settlement after a persisted completed run publishes one report with file cards", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const sessions = {
+        create: () => Effect.die("must not create another session"),
+        get: () => Effect.die("unused"),
+        messages: () => Effect.succeed([]),
+        children: () => Effect.succeed([]),
+      }
+      const runner = RayaTaskRunner.make({ database, storage, sessions })
+      const inbox = RayaTaskInbox.make(database)
+      const agent = yield* runner.tasks.create({
+        name: "Accounts",
+        role: "accountant",
+        objective: "Review accounts",
+        capabilities: ["accounting"],
+        enabled: false,
+        schedule: { kind: "manual" },
+      })
+      const sid = SessionID.make("ses_inbox_crash")
+      const now = Date.now()
+      yield* runner.tasks.record({
+        id: "occ_crash",
+        agentID: agent.id,
+        sessionID: sid,
+        at: now,
+        status: "complete",
+        outcome: {
+          kind: "notify",
+          summary: "Friday close attached the ledger.",
+          evidence: ["receipts/Q3-close/ledger.pdf", "Travel increased versus last week."],
+          cost: 0,
+        },
+      })
+      expect((yield* inbox.page(agent.id)).messages).toEqual([])
+      yield* runner.settle(sid)
+      const first = yield* inbox.page(agent.id)
+      expect(first.messages).toHaveLength(1)
+      expect(first.messages[0].kind).toBe("report")
+      expect(first.messages[0].source).toBe("report:occ_crash")
+      expect(first.messages[0].files).toEqual([{ name: "ledger.pdf", path: "receipts/Q3-close/ledger.pdf" }])
+      yield* runner.settle(sid)
+      expect((yield* inbox.page(agent.id)).messages).toHaveLength(1)
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})

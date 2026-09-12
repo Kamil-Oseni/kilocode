@@ -1,6 +1,6 @@
 import { and, count, desc, eq, gt, ne, sql } from "drizzle-orm"
 import { createHash } from "node:crypto"
-import { Effect, Schema } from "effect"
+import { Effect, Exit, Schema } from "effect"
 import type { Database } from "@opencode-ai/core/database/database"
 import {
   RayaRoutineConversationTable as Conversation,
@@ -13,6 +13,12 @@ const token = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_.:-]{1,128}$/))
 const body = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(8000))
 const Kind = Schema.Literals(["user", "worker", "report", "decision", "delegation"])
 export const State = Schema.Literals(["scheduled", "running", "waiting", "needs_input", "paused", "failed"])
+export const Clip = Schema.Struct({
+  name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)),
+  path: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(1024)),
+})
+const Files = Schema.Array(Clip).check(Schema.isMinLength(1), Schema.isMaxLength(8))
+const decodeFiles = Schema.decodeUnknownExit(Files)
 export const Record = Schema.Struct({
   id: token,
   agentID: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)),
@@ -21,6 +27,7 @@ export const Record = Schema.Struct({
   body,
   occurrenceID: Schema.optional(token),
   sessionID: Schema.optional(SessionID),
+  files: Schema.optional(Files),
   time: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(8.64e15)),
 })
 export const Publish = Schema.Struct({
@@ -30,6 +37,7 @@ export const Publish = Schema.Struct({
   body,
   occurrenceID: Schema.optional(token),
   sessionID: Schema.optional(SessionID),
+  files: Schema.optional(Files),
 })
 export const Send = Schema.Struct({ source: token, body })
 export const Read = Schema.Struct({
@@ -85,7 +93,37 @@ function receipt(agentID: string, source: string) {
   return `rmg_${digest(JSON.stringify([agentID, source])).slice(0, 48)}`
 }
 
+function packed(rows?: readonly typeof Clip.Type[]) {
+  if (!rows?.length) return null
+  return JSON.stringify(rows)
+}
+
+function listed(raw: string | null) {
+  if (!raw || raw[0] !== "[") return
+  const decoded = decodeFiles(JSON.parse(raw))
+  if (!Exit.isSuccess(decoded)) return
+  return decoded.value
+}
+
+function matched(left?: readonly typeof Clip.Type[], right?: readonly typeof Clip.Type[]) {
+  return packed(left) === packed(right)
+}
+
+export function paths(rows?: readonly string[]) {
+  if (!rows?.length) return
+  const items: typeof Clip.Type[] = []
+  for (const row of rows.slice(0, 8)) {
+    const path = row.trim()
+    if (!path || /\s/.test(path)) continue
+    const leaf = path.replaceAll("\\", "/").split("/").at(-1)
+    if (!leaf || !/\.[A-Za-z0-9]{1,8}$/.test(leaf)) continue
+    items.push({ name: leaf.slice(0, 256), path: path.slice(0, 1024) })
+  }
+  return items.length ? items : undefined
+}
+
 function decode(row: typeof Message.$inferSelect): Record {
+  const files = listed(row.files)
   return {
     id: row.id,
     agentID: row.agent_id,
@@ -95,6 +133,7 @@ function decode(row: typeof Message.$inferSelect): Record {
     time: row.time_created,
     ...(row.occurrence_id ? { occurrenceID: row.occurrence_id } : {}),
     ...(row.session_id ? { sessionID: SessionID.make(row.session_id) } : {}),
+    ...(files ? { files } : {}),
   }
 }
 
@@ -135,6 +174,7 @@ export function posted(run: RayaTask.Run): Publish | undefined {
   if (run.outcome?.evidence?.length) lines.push("Evidence:", ...run.outcome.evidence.slice(0, 8))
   const body = lines.filter((line): line is string => !!line).join("\n").slice(0, 8000)
   if (!body.trim()) return undefined
+  const files = paths(run.outcome?.evidence)
   return {
     agentID: run.agentID,
     source: origin(waiting ? "need" : "report", run.id),
@@ -142,6 +182,7 @@ export function posted(run: RayaTask.Run): Publish | undefined {
     body,
     sessionID: run.sessionID,
     ...(Schema.is(token)(run.id) ? { occurrenceID: run.id } : {}),
+    ...(files ? { files } : {}),
   }
 }
 
@@ -187,6 +228,7 @@ export namespace RayaTaskInbox {
                 saved.kind !== value.kind ||
                 saved.body !== value.body ||
                 saved.occurrenceID !== value.occurrenceID ||
+                !matched(saved.files, value.files) ||
                 (value.sessionID !== undefined && saved.sessionID !== value.sessionID)
               )
                 return yield* new Conflict({ message: "This inbox source already has a different message." })
@@ -201,6 +243,7 @@ export namespace RayaTaskInbox {
               body: value.body,
               occurrence_id: value.occurrenceID ?? null,
               session_id: value.sessionID ?? null,
+              files: packed(value.files),
               time_created: now,
             }
             yield* tx.insert(Message).values(row).run().pipe(Effect.orDie)

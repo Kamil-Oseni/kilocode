@@ -3,7 +3,7 @@ import { Button } from "@kilocode/kilo-ui/button"
 import { useVSCode } from "../../context/vscode"
 import type { ExtensionMessage } from "../../types/messages"
 import { RunReview } from "./RunReview"
-import type { Note } from "./Inbox"
+import { Files, type Note } from "./Inbox"
 
 type Reply = Extract<ExtensionMessage, { type: "routineArchive" }>
 
@@ -23,6 +23,19 @@ function label(kind: Note["kind"], source?: string) {
   }
   if (kind === "worker") return "Worker"
   return "You"
+}
+
+function clips(value: unknown) {
+  if (!Array.isArray(value)) return
+  const rows: NonNullable<Note["files"]> = []
+  for (const item of value) {
+    if (!item || typeof item !== "object") return
+    const name = (item as { name?: unknown }).name
+    const path = (item as { path?: unknown }).path
+    if (typeof name !== "string" || typeof path !== "string" || !name.trim() || !path.trim()) return
+    rows.push({ name, path })
+  }
+  return rows.length ? rows : undefined
 }
 
 function parse(value: unknown, id: string) {
@@ -51,6 +64,7 @@ function parse(value: unknown, id: string) {
       time: row.time,
       occurrenceID: typeof row.occurrenceID === "string" ? row.occurrenceID : undefined,
       sessionID: typeof row.sessionID === "string" ? row.sessionID : undefined,
+      files: clips(row.files),
     })
   }
   return rows
@@ -234,6 +248,7 @@ export function Archive(props: { onOpenSession?: (id: string) => void }) {
                         {label(note.kind, note.source)} · {new Date(note.time).toLocaleString()}
                       </span>
                       <p class="routines-line-body">{note.body}</p>
+                      <Files items={note.files} session={note.sessionID} />
                     </article>
                   )}
                 </For>

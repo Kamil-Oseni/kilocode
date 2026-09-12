@@ -32,6 +32,7 @@ const report = {
   kind: "report",
   source: "report:occ1",
   body: `Friday expenses increased in travel. ${"receipts/Q3-close/vendor-travel-".repeat(18)}ledger.pdf`,
+  files: [{ name: "vendor-travel-ledger-q3-close-final.pdf", path: "receipts/Q3-close/vendor-travel-ledger.pdf" }],
   time: 1,
 }
 

@@ -71,6 +71,21 @@ test("posted reports do not treat a running or empty completion as invented succ
   expect(timer?.source.startsWith("report:")).toBe(true)
   expect(timer?.occurrenceID).toBeUndefined()
   expect(timer?.source).not.toContain("[")
+  const files = posted({
+    id: "run",
+    agentID: "a",
+    at: 1,
+    sessionID: sid,
+    status: "complete",
+    outcome: {
+      kind: "notify",
+      summary: "Friday close attached the ledger.",
+      evidence: ["receipts/Q3-close/ledger.pdf", "Travel increased versus last week."],
+      cost: 0,
+    },
+  })
+  expect(files?.files).toEqual([{ name: "ledger.pdf", path: "receipts/Q3-close/ledger.pdf" }])
+  expect(files?.body).toContain("Travel increased versus last week.")
 })
 
 test("routine inbox publication is idempotent, unread ignores user messages, and conversation deletion drops messages", async () => {
@@ -120,6 +135,7 @@ test("routine inbox publication is idempotent, unread ignores user messages, and
         kind: "report",
         body: "Friday accounts review is complete.",
         occurrenceID: "occ_1",
+        files: [{ name: "ledger.pdf", path: "receipts/Q3-close/ledger.pdf" }],
       })
       const items = yield* inbox.summaries([agent("agt_1")], new Map())
       expect(items).toHaveLength(1)
@@ -141,6 +157,23 @@ test("routine inbox publication is idempotent, unread ignores user messages, and
       expect(renamed[0].latest?.body).toBe(report.body)
       expect(renamed[0].latest?.agentID).toBe("agt_1")
       expect((yield* inbox.page("agt_1")).messages.find((item) => item.kind === "report")?.body).toBe(report.body)
+      expect((yield* inbox.page("agt_1")).messages.find((item) => item.kind === "report")?.files).toEqual([
+        { name: "ledger.pdf", path: "receipts/Q3-close/ledger.pdf" },
+      ])
+      expect(
+        Exit.isFailure(
+          yield* inbox
+            .publish({
+              agentID: "agt_1",
+              source: "report:occ_1",
+              kind: "report",
+              body: "Friday accounts review is complete.",
+              occurrenceID: "occ_1",
+              files: [{ name: "other.pdf", path: "receipts/other.pdf" }],
+            })
+            .pipe(Effect.exit),
+        ),
+      ).toBe(true)
       const db = (yield* Database.Service).db
       yield* db.delete(Conversation).where(eq(Conversation.agent_id, "agt_1")).run()
       expect(yield* db.get(sql`SELECT count(*) AS n FROM raya_routine_message WHERE agent_id = 'agt_1'`)).toEqual({

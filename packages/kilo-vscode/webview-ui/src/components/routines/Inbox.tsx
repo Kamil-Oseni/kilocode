@@ -11,6 +11,7 @@ export type Note = {
   body: string
   occurrenceID?: string
   sessionID?: string
+  files?: { name: string; path: string }[]
   time: number
 }
 
@@ -173,6 +174,7 @@ const Line: Component<{
         {kind(props.item.kind, props.item.source)} · {stamp(props.item.time)}
       </span>
       <p class="routines-line-body">{props.item.body}</p>
+      <Files items={props.item.files} session={props.item.sessionID} />
       <Show when={live()}>
         <Button
           type="button"
@@ -199,6 +201,52 @@ const Line: Component<{
         )}
       </Show>
     </article>
+  )
+}
+
+function clips(value: unknown) {
+  if (!Array.isArray(value)) return []
+  const rows: NonNullable<Note["files"]> = []
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue
+    const name = (item as { name?: unknown }).name
+    const path = (item as { path?: unknown }).path
+    if (typeof name !== "string" || typeof path !== "string") continue
+    if (!name.trim() || !path.trim()) continue
+    rows.push({ name, path })
+  }
+  return rows
+}
+
+export const Files: Component<{ items?: Note["files"]; session?: string }> = (props) => {
+  const vscode = useVSCode()
+  const rows = () => clips(props.items)
+  return (
+    <Show when={rows().length}>
+      <ul class="routines-files" aria-label="Attached files">
+        <For each={rows()}>
+          {(file) => (
+            <li>
+              <button
+                type="button"
+                class="routines-file"
+                aria-label={`Open ${file.name}`}
+                onClick={() =>
+                  vscode.postMessage({
+                    type: "openFile",
+                    filePath: file.path,
+                    ...(props.session ? { sessionID: props.session } : {}),
+                  })
+                }
+              >
+                <span class="routines-file-name">{file.name}</span>
+                <span class="routines-file-path">{file.path}</span>
+              </button>
+            </li>
+          )}
+        </For>
+      </ul>
+    </Show>
   )
 }
 
@@ -378,6 +426,7 @@ export const Inbox: Component<{
   let stick = true
   let seen = ""
   let pane: HTMLDivElement | undefined
+  let frame: HTMLDivElement | undefined
   let timer: ReturnType<typeof setTimeout> | undefined
 
   const load = (after?: string) => {
@@ -416,6 +465,7 @@ export const Inbox: Component<{
       setNote(props.box?.draft ?? "")
       stick = true
       load()
+      queueMicrotask(() => frame?.focus())
       return
     }
     if (latest && !thread().some((item) => item.id === latest)) load()
@@ -574,8 +624,10 @@ export const Inbox: Component<{
 
   return (
     <div
+      ref={frame}
       class="routines-thread"
       role="region"
+      tabIndex={-1}
       aria-label={`Conversation with ${props.name}`}
       onKeyDown={(event) => {
         if (event.key !== "Escape" || !props.onBack) return

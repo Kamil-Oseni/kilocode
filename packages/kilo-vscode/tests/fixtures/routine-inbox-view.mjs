@@ -108,6 +108,7 @@ try {
     kind: "report",
     source: "report:occ1",
     body: "Friday expenses increased in travel.",
+    files: [{ name: "ledger.pdf", path: "receipts/Q3-close/ledger.pdf" }],
     time: 1,
   }
   emit({
@@ -151,6 +152,11 @@ try {
   })
   assert.match(root.textContent, /Report/)
   assert.match(root.textContent, /Does not change the assignment/)
+  const card = root.querySelector('[aria-label="Open ledger.pdf"]')
+  assert.equal(card.querySelector(".routines-file-name").textContent, "ledger.pdf")
+  card.click()
+  const opened = sent.findLast((msg) => msg.type === "openFile")
+  assert.equal(opened.filePath, "receipts/Q3-close/ledger.pdf")
   const area = root.querySelector("textarea[aria-label='Message this worker']")
   area.focus()
   area.value = "Why did expenses increase?"

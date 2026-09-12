@@ -24,10 +24,16 @@ for (const theme of ["light", "dark"]) {
         await expect(page.locator('.routines-identity[data-routine-worker="legal"]')).toBeVisible()
       }
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
-      expect(
-        await page.locator(".routines-line-body").evaluate((node) => {
+      expect(await page.locator(".routines-line-body").evaluate((node) => {
           const wrap = getComputedStyle(node).overflowWrap
           return wrap === "anywhere" || wrap === "break-word"
+        }),
+      ).toBe(true)
+      await expect(page.getByRole("button", { name: "Open vendor-travel-ledger-q3-close-final.pdf" })).toBeVisible()
+      expect(
+        await page.locator(".routines-file-name").evaluate((node) => {
+          const style = getComputedStyle(node)
+          return style.textOverflow === "ellipsis" && node.scrollWidth <= node.clientWidth + 1
         }),
       ).toBe(true)
       const result = await new AxeBuilder({ page })
@@ -69,6 +75,36 @@ test("light routines loading state", async ({ page }, info) => {
   const status = page.locator('[role="status"][aria-busy="true"]')
   await expect(status).toContainText("Refreshing routines and recorded history...")
   await page.screenshot({ path: info.outputPath("loading.png"), fullPage: true })
+})
+
+test("light routines keyboard and file cards", async ({ page }, info) => {
+  await page.setViewportSize({ width: 900, height: 900 })
+  await page.goto("/?state=light-routines")
+  const search = page.getByLabel("Search workers")
+  const books = page.locator('.routines-identity[data-routine-worker="routine"]')
+  await search.click()
+  for (let i = 0; i < 12; i++) {
+    if (await books.evaluate((node) => node === document.activeElement)) break
+    await page.keyboard.press("Tab")
+  }
+  await expect(books).toBeFocused()
+  expect(
+    await books.evaluate((node) => {
+      const style = getComputedStyle(node)
+      return style.outlineStyle !== "none" && style.outlineWidth !== "0px"
+    }),
+  ).toBe(true)
+  await page.keyboard.press("Enter")
+  const thread = page.getByRole("region", { name: "Conversation with Books" })
+  await expect(thread).toBeVisible()
+  const card = page.getByRole("button", { name: "Open vendor-travel-ledger-q3-close-final.pdf" })
+  await expect(card).toBeVisible()
+  await expect(page.getByRole("list", { name: "Attached files" })).toBeVisible()
+  await expect(thread).toBeFocused()
+  await page.keyboard.press("Escape")
+  await expect(thread).toBeHidden()
+  await expect(books).toBeFocused()
+  await page.screenshot({ path: info.outputPath("keyboard.png"), fullPage: true })
 })
 
 test("light routines at 200% zoom", async ({ page }, info) => {

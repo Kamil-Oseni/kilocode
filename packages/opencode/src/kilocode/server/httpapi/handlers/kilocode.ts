@@ -35,6 +35,7 @@ import { Storage } from "@/storage/storage" // raya_change - Milestone A durable
 import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal operations
 import { RayaTask } from "@/kilocode/task"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
+import { RayaTaskInfo, type Identity as TaskIdentity } from "@/kilocode/task/info"
 import { RayaTaskDelegation } from "@/kilocode/task/delegation"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
@@ -100,6 +101,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       halt: (sessionID) => runState.cancel(sessionID),
     })
     const inbox = RayaTaskInbox.make(database)
+    const info = RayaTaskInfo.make(database)
     const errands = RayaTaskDelegation.make(database)
     const checkpoints = RayaCheckpoint.make({ storage, snapshots }) // raya_change - named workspace checkpoints
     const designSystem = RayaDesignSystem.make({ storage }) // raya_change - owner design-system lock
@@ -643,6 +645,40 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         Effect.catchTag("RayaTaskInbox.Conflict", () => Effect.fail(new HttpApiError.Conflict({}))),
       )
     })
+    const agentInboxInfo = Effect.fn("KilocodeHttpApi.agentInboxInfo")(function* (ctx: {
+      params: { agentID: string }
+      query: { section: "shares" | "contacts"; cursor?: string; limit?: number }
+    }) {
+      yield* remembered(ctx.params.agentID)
+      if (ctx.query.section === "shares")
+        return yield* info
+          .shares(ctx.params.agentID, ctx.query.cursor, ctx.query.limit ?? 50)
+          .pipe(
+            Effect.catchTag("RayaTaskInfo.Invalid", (err) =>
+              Effect.fail(new InvalidRequestError({ message: err.message })),
+            ),
+          )
+      const identities = new Map<string, TaskIdentity>()
+      for (const agent of yield* runner.tasks.list())
+        identities.set(agent.id, { name: agent.name, role: agent.role, archived: false })
+      const resolve = Effect.fn("KilocodeHttpApi.agentInboxInfoIdentity")(function* (id: string) {
+        const found = identities.get(id)
+        if (found) return found
+        const archived = yield* runner.tasks.page({ agentID: id }).pipe(Effect.orDie)
+        const item = archived.items[0]
+        if (!item) return yield* Effect.die(new Error(`Routine delegation peer ${id} has no retained identity.`))
+        const identity = { name: item.definition.name, role: item.definition.role, archived: true }
+        identities.set(id, identity)
+        return identity
+      })
+      return yield* info
+        .contacts(ctx.params.agentID, resolve, ctx.query.cursor, ctx.query.limit ?? 50)
+        .pipe(
+          Effect.catchTag("RayaTaskInfo.Invalid", (err) =>
+            Effect.fail(new InvalidRequestError({ message: err.message })),
+          ),
+        )
+    })
     const agentInboxRead = Effect.fn("KilocodeHttpApi.agentInboxRead")(function* (ctx: {
       params: { agentID: string }
       payload: { at: number }
@@ -855,6 +891,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .handle("agentEvent", agentEvent)
         .handle("agentInbox", agentInbox)
         .handle("agentInboxPage", agentInboxPage)
+        .handle("agentInboxInfo", agentInboxInfo)
         .handle("agentInboxSend", agentInboxSend)
         .handle("agentInboxRead", agentInboxRead)
         .handle("agentInboxDraft", agentInboxDraft)

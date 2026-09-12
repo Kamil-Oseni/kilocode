@@ -32,8 +32,7 @@ test("routine inbox page send read and draft keep request identity and retry the
             state: "scheduled",
           },
         ])
-      if (url.pathname.endsWith("/inbox") && request.method === "GET")
-        return Response.json({ messages: [note] })
+      if (url.pathname.endsWith("/inbox") && request.method === "GET") return Response.json({ messages: [note] })
       if (url.pathname.endsWith("/inbox") && request.method === "POST") {
         payload = await request.json()
         return Response.json({
@@ -100,6 +99,65 @@ test("routine inbox page send read and draft keep request identity and retry the
     error: "Raya is not connected.",
   })
   expect(payload).toEqual({ source: "user:retry", body: "Why?" })
+})
+
+test("routine chat info keeps section and cursor identity across the bridge", async () => {
+  const messages: unknown[] = []
+  const urls: URL[] = []
+  const client = createKiloClient({
+    baseUrl: "http://localhost:4096",
+    fetch: async (input, init) => {
+      const request = new Request(input, init)
+      const url = new URL(request.url)
+      urls.push(url)
+      return Response.json({
+        section: "contacts",
+        items: [
+          {
+            peerID: "books",
+            name: "Books",
+            role: "accountant",
+            archived: false,
+            direction: "sent",
+            delegationID: "rdl_1",
+            source: "dlg_1",
+            state: "completed",
+            objective: "Review Friday expenses.",
+            time: 1,
+            updated: 2,
+          },
+        ],
+        next: "next_contact",
+      })
+    },
+  })
+  const message = {
+    type: "routineInboxInfo",
+    requestID: "info1",
+    agentID: "chief",
+    section: "contacts",
+    cursor: "prior_contact",
+  }
+  await handleRoutineMessage({ client, directory: "workspace", post: (msg) => messages.push(msg), message })
+  expect(urls[0]?.pathname).toBe("/kilocode/agent/chief/inbox/info")
+  expect(urls[0]?.searchParams.get("section")).toBe("contacts")
+  expect(urls[0]?.searchParams.get("cursor")).toBe("prior_contact")
+  expect(messages.at(-1)).toMatchObject({
+    type: "routineInboxInfo",
+    requestID: "info1",
+    agentID: "chief",
+    section: "contacts",
+    items: [{ delegationID: "rdl_1" }],
+    next: "next_contact",
+  })
+  await handleRoutineMessage({ client: null, directory: "workspace", post: (msg) => messages.push(msg), message })
+  expect(messages.at(-1)).toMatchObject({
+    type: "routineInboxInfo",
+    requestID: "info1",
+    agentID: "chief",
+    section: "contacts",
+    error: "Raya is not connected.",
+  })
 })
 
 test("routine delegate posts the same source on retry and refreshes inbox summaries", async () => {

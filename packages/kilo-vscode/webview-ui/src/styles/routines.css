@@ -605,6 +605,17 @@
   flex: 1;
 }
 
+.routines-conversation {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.routines-conversation[hidden] {
+  display: none;
+}
+
 .routines-thread-body {
   flex: 1;
   min-height: 0;
@@ -675,6 +686,9 @@
   background: transparent;
   color: inherit;
   text-align: left;
+}
+
+.routines-info-list button {
   cursor: pointer;
 }
 
@@ -728,6 +742,132 @@
   flex-direction: column;
   padding-top: var(--raya-space-8);
   border-top: 1px solid var(--border-weak, var(--vscode-widget-border));
+}
+
+.routines-info {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 var(--raya-space-4) var(--raya-space-16);
+  container-type: inline-size;
+}
+
+.routines-info-shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.routines-info-shell[hidden] {
+  display: none;
+}
+
+.routines-info-section {
+  padding: var(--raya-space-16) 0;
+}
+
+.routines-info-section + .routines-info-section {
+  border-top: 1px solid var(--border-weak, var(--vscode-widget-border));
+}
+
+.routines-info-section h3 {
+  margin: 0 0 var(--raya-space-8);
+  font-size: var(--kilo-font-size-13);
+}
+
+.routines-info-objective {
+  margin: 0 0 var(--raya-space-12);
+  max-width: 52rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.routines-info-facts {
+  margin: 0;
+}
+
+.routines-info-facts > div {
+  display: grid;
+  grid-template-columns: minmax(5rem, 8rem) minmax(0, 1fr);
+  gap: var(--raya-space-12);
+  padding: var(--raya-space-6) 0;
+}
+
+.routines-info-facts dt {
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+}
+
+.routines-info-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.routines-info-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--raya-space-4);
+  margin-top: var(--raya-space-12);
+}
+
+.routines-info-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.routines-info-list > li + li {
+  border-top: 1px solid var(--border-weak, var(--vscode-widget-border));
+}
+
+.routines-info-list button,
+.routines-info-contact {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--raya-space-2);
+  width: 100%;
+  padding: var(--raya-space-8) 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.routines-info-list button span,
+.routines-info-contact > span {
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-size: var(--kilo-font-size-12);
+  overflow-wrap: anywhere;
+}
+
+.routines-info-list button strong,
+.routines-info-contact > strong {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.routines-info-exchange {
+  padding: var(--raya-space-6) 0 var(--raya-space-8);
+}
+
+.routines-info-exchange p {
+  margin: var(--raya-space-4) 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@container (max-width: 16rem) {
+  .routines-info-facts > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--raya-space-2);
+  }
+
+  .routines-info-actions button {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
 }
 
 .routines-row[data-current="true"] {

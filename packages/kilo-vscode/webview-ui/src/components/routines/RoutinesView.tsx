@@ -1242,12 +1242,29 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                   agentID={item.id}
                   name={item.name}
                   role={item.role}
+                  objective={item.objective}
+                  schedule={whenLabel(item.schedule)}
+                  access={
+                    item.access === "full"
+                      ? "Full tool access"
+                      : item.access === "brief"
+                        ? "Read and report"
+                        : "Needs review"
+                  }
+                  output={item.output?.description?.trim() || "No required output"}
+                  enabled={item.enabled}
+                  canInspect={inspectable(item)}
                   box={boxes()[item.id]}
                   workspace={item.dir ? folder(item.dir) : undefined}
                   workers={others(item.id, agents())}
                   runID={held(item, runs())}
                   anchor={anchor(boxes()[item.id]?.conversationID)}
                   onAnchor={(value) => saveAnchor(boxes()[item.id]?.conversationID, value)}
+                  onEdit={() => edit(item)}
+                  onAccess={() => review(item)}
+                  onOutput={() => review(item, "output")}
+                  onInspect={() => inspect(item)}
+                  onToggle={() => toggle(item)}
                   onBack={leave}
                 />
               )}

@@ -1718,7 +1718,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   // raya_change end
 
   private async handleRoutineMessage(
-    message: TypedWebviewMessage & { requestID?: unknown; agentID?: unknown; runID?: unknown },
+    message: TypedWebviewMessage & { requestID?: unknown; agentID?: unknown; runID?: unknown; section?: unknown },
   ): Promise<boolean> {
     const client = this.client
     const directory = this.getWorkspaceDirectory()
@@ -1774,6 +1774,17 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           requestID: message.requestID,
           agentID: message.agentID,
           error: "Could not connect to save routine access. Reconnect and reload the routine.",
+        })
+        return true
+      }
+      if (message.type === "routineInboxInfo") {
+        if (message.section !== "shares" && message.section !== "contacts") return true
+        this.postMessage({
+          type: "routineInboxInfo",
+          requestID: message.requestID,
+          agentID: message.agentID,
+          section: message.section,
+          error: "Could not connect to the routine inbox. Reconnect and try again.",
         })
         return true
       }

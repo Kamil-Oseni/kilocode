@@ -108,6 +108,7 @@ function reply(type: string) {
   if (type === "routineScheduleUpdate") return "routineScheduleUpdated"
   if (type === "routineInboxPage") return "routineInboxPage"
   if (type === "routineInboxSend") return "routineInboxSent"
+  if (type === "routineInboxInfo") return "routineInboxInfo"
   if (type === "routineInboxRead") return "routineInboxRead"
   if (type === "routineInboxDraft") return "routineInboxDraft"
   if (type === "routineDelegate") return "routineDelegated"
@@ -143,6 +144,7 @@ function owned(type: string) {
     type === "routineRemove" ||
     type === "routineInboxPage" ||
     type === "routineInboxSend" ||
+    type === "routineInboxInfo" ||
     type === "routineInboxRead" ||
     type === "routineInboxDraft" ||
     type === "routineDelegate" ||
@@ -242,6 +244,34 @@ async function send(ctx: Ctx) {
   ctx.post({ type: "routineInboxSent", requestID: msg.requestID, agentID: msg.agentID, message: result.data })
 }
 
+async function info(ctx: Ctx) {
+  const msg = ctx.message
+  if (!token(msg.requestID) || !token(msg.agentID) || (msg.section !== "shares" && msg.section !== "contacts"))
+    throw new Error("Reload the conversation before opening its info.")
+  const cursor = msg.cursor === undefined ? undefined : String(msg.cursor)
+  if (cursor !== undefined && (cursor.length < 1 || cursor.length > 256))
+    throw new Error("This chat info page cursor is invalid.")
+  const result = await ctx.kilo.inbox2.info(
+    {
+      directory: ctx.dir,
+      agentID: String(msg.agentID),
+      section: msg.section,
+      ...(cursor ? { cursor } : {}),
+    },
+    { throwOnError: true },
+  )
+  if (!result.data || result.data.section !== msg.section)
+    throw new Error("The routine chat info response did not match this request.")
+  ctx.post({
+    type: "routineInboxInfo",
+    requestID: msg.requestID,
+    agentID: msg.agentID,
+    section: msg.section,
+    items: result.data.items,
+    next: result.data.next,
+  })
+}
+
 async function seen(ctx: Ctx) {
   const msg = ctx.message
   if (!token(msg.requestID) || !token(msg.agentID) || !Number.isSafeInteger(msg.at) || Number(msg.at) < 0)
@@ -262,7 +292,12 @@ async function scribble(ctx: Ctx) {
     { directory: ctx.dir, agentID: String(msg.agentID), draft: draft ?? "" },
     { throwOnError: true },
   )
-  ctx.post({ type: "routineInboxDraft", requestID: msg.requestID, agentID: msg.agentID, draft: result.data?.draft ?? null })
+  ctx.post({
+    type: "routineInboxDraft",
+    requestID: msg.requestID,
+    agentID: msg.agentID,
+    draft: result.data?.draft ?? null,
+  })
 }
 
 async function pass(ctx: Ctx) {
@@ -271,22 +306,25 @@ async function pass(ctx: Ctx) {
     throw new Error("Reload the conversation before asking another worker.")
   const text = typeof msg.objective === "string" ? msg.objective : ""
   if (!text.trim() || text.length > 8000) throw new Error("Write what the other worker should answer.")
-  const result = await ctx.kilo.delegate.create(
-    {
-      directory: ctx.dir,
-      agentID: String(msg.agentID),
-      source: String(msg.source),
-      senderID: String(msg.agentID),
-      recipientID: String(msg.recipientID),
-      objective: text,
-      ...(token(msg.parentRunID) ? { parentRunID: String(msg.parentRunID) } : {}),
-    },
-    { throwOnError: true },
-  ).catch((err: unknown) => {
-    const text = getErrorMessage(err)
-    if (/\b404\b|not found/i.test(text)) throw new Error("This worker is no longer available. Delegation is not started.")
-    throw err
-  })
+  const result = await ctx.kilo.delegate
+    .create(
+      {
+        directory: ctx.dir,
+        agentID: String(msg.agentID),
+        source: String(msg.source),
+        senderID: String(msg.agentID),
+        recipientID: String(msg.recipientID),
+        objective: text,
+        ...(token(msg.parentRunID) ? { parentRunID: String(msg.parentRunID) } : {}),
+      },
+      { throwOnError: true },
+    )
+    .catch((err: unknown) => {
+      const text = getErrorMessage(err)
+      if (/\b404\b|not found/i.test(text))
+        throw new Error("This worker is no longer available. Delegation is not started.")
+      throw err
+    })
   ctx.post({ type: "routineDelegated", requestID: msg.requestID, agentID: msg.agentID, record: result.data })
   await summaries(ctx)
 }
@@ -554,6 +592,7 @@ const routes: Record<string, (ctx: Ctx) => Promise<void>> = {
   routineForecast: forecast,
   routineInboxPage: page,
   routineInboxSend: send,
+  routineInboxInfo: info,
   routineInboxRead: seen,
   routineInboxDraft: scribble,
   routineDelegate: pass,
@@ -589,6 +628,7 @@ export async function handleRoutineMessage(input: {
       requestID: input.message.requestID,
       agentID: input.message.agentID,
       runID: input.message.runID,
+      section: input.message.section,
       error: "Raya is not connected.",
     })
     return true
@@ -610,6 +650,7 @@ export async function handleRoutineMessage(input: {
       requestID: ctx.message.requestID,
       agentID: ctx.message.agentID,
       runID: ctx.message.runID,
+      section: ctx.message.section,
       error: reason(err),
       recovery: recovery(err),
     })

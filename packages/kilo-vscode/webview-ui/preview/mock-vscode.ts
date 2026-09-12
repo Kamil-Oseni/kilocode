@@ -186,6 +186,49 @@ const reply = (message: WebviewMessage) => {
       agentID: message.agentID,
       messages: message.agentID === legal.id ? [] : [report],
     })
+    return
+  }
+  if (message.type === "routineInboxInfo") {
+    emit({
+      type: "routineInboxInfo",
+      requestID: message.requestID,
+      agentID: message.agentID,
+      section: message.section,
+      items:
+        message.section === "shares"
+          ? [
+              {
+                kind: "file",
+                messageID: report.id,
+                label: report.files[0].name,
+                path: report.files[0].path,
+                sessionID: "session_preview",
+                time: report.time,
+              },
+              {
+                kind: "link",
+                messageID: "rmg_link",
+                label: "stripe.com",
+                url: "https://stripe.com/docs/reports",
+                time: 2,
+              },
+            ]
+          : [
+              {
+                peerID: legal.id,
+                name: legal.name,
+                role: legal.role,
+                archived: false,
+                direction: "sent",
+                delegationID: "rdg_preview",
+                state: "completed",
+                objective: "Confirm the vendor contract allows the travel reimbursement.",
+                expected: "A cited approval or exception.",
+                response: "The policy permits reimbursement with the attached receipt.",
+                updated: 3,
+              },
+            ],
+    })
   }
 }
 

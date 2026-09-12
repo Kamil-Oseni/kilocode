@@ -2,6 +2,7 @@ import { Component, For, Show, createEffect, createSignal, onCleanup } from "sol
 import { Button } from "@kilocode/kilo-ui/button"
 import { useVSCode } from "../../context/vscode"
 import type { ExtensionMessage } from "../../types/messages"
+import { ChatInfo } from "./ChatInfo"
 
 const RESTORE_PAGE_LIMIT = 20
 
@@ -432,6 +433,17 @@ export const Inbox: Component<{
   workspace?: string
   workers?: Peer[]
   runID?: string
+  objective: string
+  schedule: string
+  access: string
+  output: string
+  enabled: boolean
+  canInspect: boolean
+  onEdit: () => void
+  onAccess: () => void
+  onOutput: () => void
+  onInspect: () => void
+  onToggle: () => void
   anchor?: Anchor
   onAnchor?: (value?: Anchor) => void
   onBack?: () => void
@@ -441,6 +453,8 @@ export const Inbox: Component<{
   const [cursor, setNext] = createSignal<string>()
   const [note, setNote] = createSignal("")
   const [passing, setPassing] = createSignal(false)
+  const [info, setInfo] = createSignal(false)
+  const [infoReady, setInfoReady] = createSignal(false)
   const [phase, setPhase] = createSignal<"idle" | "sending" | "failed">("idle")
   const [error, setError] = createSignal("")
   const [halt, setHalt] = createSignal<"idle" | "sending" | "failed">("idle")
@@ -461,6 +475,7 @@ export const Inbox: Component<{
   let seen = ""
   let pane: HTMLDivElement | undefined
   let frame: HTMLDivElement | undefined
+  let infoRef: HTMLButtonElement | undefined
   let timer: ReturnType<typeof setTimeout> | undefined
 
   const load = (after?: string) => {
@@ -538,6 +553,8 @@ export const Inbox: Component<{
       setFaults({})
       setError("")
       setNote(props.box?.draft ?? "")
+      setInfo(false)
+      setInfoReady(false)
       stick = true
       depth = 0
       load()
@@ -719,8 +736,14 @@ export const Inbox: Component<{
       tabIndex={-1}
       aria-label={`Conversation with ${props.name}`}
       onKeyDown={(event) => {
-        if (event.key !== "Escape" || !props.onBack) return
+        if (event.key !== "Escape") return
         event.preventDefault()
+        if (info()) {
+          setInfo(false)
+          queueMicrotask(() => infoRef?.focus())
+          return
+        }
+        if (!props.onBack) return
         props.onBack()
       }}
     >
@@ -739,98 +762,135 @@ export const Inbox: Component<{
             <Show when={props.box?.nextRun}>{(at) => <> · Next {stamp(at())}</>}</Show>
           </span>
         </div>
-        <Show when={props.workers && props.workers.length > 0}>
+        <Show when={!info() && props.workers && props.workers.length > 0}>
           <Button variant="ghost" size="small" aria-expanded={passing()} onClick={() => setPassing((value) => !value)}>
             Delegate
           </Button>
         </Show>
-      </header>
-      <div
-        ref={pane}
-        class="routines-thread-body"
-        role="log"
-        tabIndex={0}
-        aria-label={`Messages with ${props.name}`}
-        aria-relevant="additions"
-        onScroll={remember}
-      >
-        <Show when={cursor()}>
-          <Button
-            variant="ghost"
-            size="small"
-            onClick={() => {
-              const after = cursor()
-              if (after) load(after)
-            }}
-          >
-            Earlier messages
-          </Button>
-        </Show>
-        <Show when={!thread().length}>
-          <p class="routines-empty">Reports and follow-ups for this worker will appear here.</p>
-        </Show>
-        <For each={thread()}>
-          {(item) => {
-            const id = linked(item)
-            return (
-              <Line
-                item={item}
-                rows={thread()}
-                busy={halt() === "sending"}
-                look={look()}
-                tree={id ? trees()[id] : undefined}
-                fault={id ? faults()[id] : undefined}
-                onStop={stop}
-                onShow={show}
-              />
-            )
+        <Button
+          ref={infoRef}
+          variant="ghost"
+          size="small"
+          aria-expanded={info()}
+          aria-pressed={info()}
+          onClick={() => {
+            if (!info()) setInfoReady(true)
+            setInfo((value) => !value)
           }}
-        </For>
-      </div>
-      <Show when={error()}>
-        <p class="routines-error" role="alert">
-          {error()}
-        </p>
-      </Show>
-      <form
-        class="routines-composer"
-        onSubmit={(event) => {
-          event.preventDefault()
-          submit()
-        }}
-      >
-        <label class="routines-field routines-compose-field">
-          <span class="sr-only">Message this worker</span>
-          <textarea
-            value={note()}
-            rows={2}
-            aria-label="Message this worker"
-            placeholder="Ask about a report in this conversation."
-            onInput={(event) => change(event.currentTarget.value)}
-          />
-        </label>
-        <Show when={props.box?.state === "paused"}>
-          <p class="routines-hint">
-            This worker is paused. Follow-ups still arrive here. Scheduled starts stay off until it is enabled.
+        >
+          Info
+        </Button>
+      </header>
+      <div class="routines-conversation" hidden={info()}>
+        <div
+          ref={pane}
+          class="routines-thread-body"
+          role="log"
+          tabIndex={0}
+          aria-label={`Messages with ${props.name}`}
+          aria-relevant="additions"
+          onScroll={remember}
+        >
+          <Show when={cursor()}>
+            <Button
+              variant="ghost"
+              size="small"
+              onClick={() => {
+                const after = cursor()
+                if (after) load(after)
+              }}
+            >
+              Earlier messages
+            </Button>
+          </Show>
+          <Show when={!thread().length}>
+            <p class="routines-empty">Reports and follow-ups for this worker will appear here.</p>
+          </Show>
+          <For each={thread()}>
+            {(item) => {
+              const id = linked(item)
+              return (
+                <Line
+                  item={item}
+                  rows={thread()}
+                  busy={halt() === "sending"}
+                  look={look()}
+                  tree={id ? trees()[id] : undefined}
+                  fault={id ? faults()[id] : undefined}
+                  onStop={stop}
+                  onShow={show}
+                />
+              )
+            }}
+          </For>
+        </div>
+        <Show when={error()}>
+          <p class="routines-error" role="alert">
+            {error()}
           </p>
         </Show>
-        <div class="routines-compose-actions">
-          <Button type="button" size="small" disabled={phase() === "sending" || !note().trim()} onClick={submit}>
-            {phase() === "sending" ? "Sending" : phase() === "failed" ? "Retry" : "Send"}
-          </Button>
-        </div>
-      </form>
-      <Show when={passing() && props.workers && props.workers.length > 0}>
-        <Pass
-          agentID={props.agentID}
-          workers={props.workers!}
-          workspace={props.workspace}
-          runID={props.runID}
-          onDone={() => {
-            wait = false
-            load()
+        <form
+          class="routines-composer"
+          onSubmit={(event) => {
+            event.preventDefault()
+            submit()
           }}
-        />
+        >
+          <label class="routines-field routines-compose-field">
+            <span class="sr-only">Message this worker</span>
+            <textarea
+              value={note()}
+              rows={2}
+              aria-label="Message this worker"
+              placeholder="Ask about a report in this conversation."
+              onInput={(event) => change(event.currentTarget.value)}
+            />
+          </label>
+          <Show when={props.box?.state === "paused"}>
+            <p class="routines-hint">
+              This worker is paused. Follow-ups still arrive here. Scheduled starts stay off until it is enabled.
+            </p>
+          </Show>
+          <div class="routines-compose-actions">
+            <Button type="button" size="small" disabled={phase() === "sending" || !note().trim()} onClick={submit}>
+              {phase() === "sending" ? "Sending" : phase() === "failed" ? "Retry" : "Send"}
+            </Button>
+          </div>
+        </form>
+        <Show when={passing() && props.workers && props.workers.length > 0}>
+          <Pass
+            agentID={props.agentID}
+            workers={props.workers!}
+            workspace={props.workspace}
+            runID={props.runID}
+            onDone={() => {
+              wait = false
+              load()
+            }}
+          />
+        </Show>
+      </div>
+      <Show when={infoReady()}>
+        <div class="routines-info-shell" hidden={!info()}>
+          <ChatInfo
+            agentID={props.agentID}
+            name={props.name}
+            role={props.role}
+            objective={props.objective}
+            schedule={props.schedule}
+            access={props.access}
+            output={props.output}
+            state={status(props.box?.state ?? "scheduled")}
+            workspace={props.workspace}
+            enabled={props.enabled}
+            canInspect={props.canInspect}
+            onEdit={props.onEdit}
+            onAccess={props.onAccess}
+            onOutput={props.onOutput}
+            onInspect={props.onInspect}
+            onToggle={props.onToggle}
+          />
+        </div>
       </Show>
     </div>
   )

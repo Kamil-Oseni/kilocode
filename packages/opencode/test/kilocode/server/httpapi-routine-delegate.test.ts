@@ -3,6 +3,7 @@ import { Schema } from "effect"
 import { Server } from "@/server/server"
 import { RayaTask } from "@/kilocode/task"
 import { Lineage, Record } from "@/kilocode/task/delegation"
+import { Page as InfoPage } from "@/kilocode/task/info"
 import { resetDatabase } from "../../fixture/db"
 import { disposeAllInstances, tmpdir } from "../../fixture/fixture"
 
@@ -100,6 +101,32 @@ test("the shipped routine delegate route tracks a chief-to-accounting request", 
   expect(Schema.decodeUnknownSync(Schema.toCodecJson(Record))(await (await app.request(`/kilocode/agent/${chief.id}/delegate/${row.id}`, { headers })).json()).state).toBe(
     "cancelled",
   )
+  expect((await app.request(`/kilocode/agent/${chief.id}/inbox/info`, { headers })).status).toBe(400)
+  expect((await app.request(`/kilocode/agent/missing/inbox/info?section=contacts`, { headers })).status).toBe(404)
+  expect((await app.request(`/kilocode/agent/${books.id}`, { method: "DELETE", headers })).status).toBe(200)
+  const contacts = Schema.decodeUnknownSync(Schema.toCodecJson(InfoPage))(
+    await (await app.request(`/kilocode/agent/${chief.id}/inbox/info?section=contacts&limit=1`, { headers })).json(),
+  )
+  expect(contacts).toMatchObject({
+    section: "contacts",
+    items: [
+      {
+        peerID: books.id,
+        name: "Accounting",
+        role: "accountant",
+        archived: true,
+        direction: "sent",
+        delegationID: row.id,
+        source: "dlg_friday",
+        state: "cancelled",
+        objective: "List missing Friday receipts.",
+      },
+    ],
+  })
+  const shares = Schema.decodeUnknownSync(Schema.toCodecJson(InfoPage))(
+    await (await app.request(`/kilocode/agent/${chief.id}/inbox/info?section=shares`, { headers })).json(),
+  )
+  expect(shares).toEqual({ section: "shares", items: [] })
 }, 60_000)
 
 test("the shipped routine delegate chain returns stored parent and follow-on records", async () => {

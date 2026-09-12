@@ -273,6 +273,76 @@ try {
   draft.focus()
   draft.value = "Keep this draft"
   draft.dispatchEvent(new window.Event("input", { bubbles: true }))
+  const infoToggle = button("Info")
+  infoToggle.click()
+  assert.equal(infoToggle.getAttribute("aria-expanded"), "true")
+  await new Promise((resolve) => setImmediate(resolve))
+  const info = sent.filter((msg) => msg.type === "routineInboxInfo" && msg.agentID === agent.id)
+  const shares = info.find((msg) => msg.section === "shares")
+  const contacts = info.find((msg) => msg.section === "contacts")
+  assert.ok(shares)
+  assert.ok(contacts)
+  emit({
+    type: "routineInboxInfo",
+    requestID: shares.requestID,
+    agentID: agent.id,
+    section: "shares",
+    items: [
+      {
+        kind: "file",
+        messageID: note.id,
+        label: "ledger.pdf",
+        path: "receipts/Q3-close/ledger.pdf",
+        messageKind: note.kind,
+        source: note.source,
+        time: note.time,
+      },
+      {
+        kind: "link",
+        messageID: "rmg_link",
+        label: "https://example.com/receipt-policy",
+        url: "https://example.com/receipt-policy",
+        messageKind: "report",
+        source: "report:occ2",
+        time: 3,
+      },
+    ],
+  })
+  emit({
+    type: "routineInboxInfo",
+    requestID: contacts.requestID,
+    agentID: agent.id,
+    section: "contacts",
+    items: [
+      {
+        peerID: "legal",
+        name: "Counsel",
+        role: "reviewer",
+        archived: false,
+        direction: "sent",
+        delegationID: "rdl_1",
+        source: "dlg:legal",
+        state: "completed",
+        objective: "Review the travel receipt policy.",
+        response: "The exception is documented.",
+        time: 3,
+        updated: 4,
+      },
+    ],
+  })
+  assert.match(root.textContent, /Chat info for Books|About/)
+  assert.match(root.textContent, /Review the travel receipt policy/)
+  const sharedLink = [...root.querySelectorAll(".routines-info-list button")].find((item) =>
+    item.textContent.includes("receipt-policy"),
+  )
+  assert.ok(sharedLink)
+  sharedLink.click()
+  assert.equal(sent.findLast((msg) => msg.type === "openExternal").url, "https://example.com/receipt-policy")
+  assert.equal(draft.value, "Keep this draft")
+  infoToggle.click()
+  await Promise.resolve()
+  assert.equal(infoToggle.getAttribute("aria-expanded"), "false")
+  assert.equal(root.querySelector("textarea[aria-label='Message this worker']").value, "Keep this draft")
   const legal = {
     id: "legal",
     name: "Counsel",

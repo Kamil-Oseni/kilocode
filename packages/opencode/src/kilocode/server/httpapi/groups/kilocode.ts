@@ -38,6 +38,7 @@ import {
   Record as InboxRecord,
   Send as InboxSend,
 } from "@/kilocode/task/inbox"
+import { Page as InboxInfoPage, Query as InboxInfoQuery } from "@/kilocode/task/info"
 import { Lineage as DelegateLineage, Record as DelegateRecord, Request as DelegateAsk } from "@/kilocode/task/delegation"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
 import { Template as AgentTemplate } from "@/kilocode/task/templates"
@@ -187,6 +188,7 @@ export const KilocodePaths = {
   agentEvent: `${root}/agent-event`,
   agentInbox: `${root}/agent-inbox`,
   agentInboxItem: `${root}/agent/:agentID/inbox`,
+  agentInboxInfo: `${root}/agent/:agentID/inbox/info`,
   agentInboxRead: `${root}/agent/:agentID/inbox/read`,
   agentInboxDraft: `${root}/agent/:agentID/inbox/draft`,
   agentDelegate: `${root}/agent/:agentID/delegate`,
@@ -808,6 +810,19 @@ export const KilocodeApi = HttpApi.make("kilocode")
             identifier: "kilocode.routine.inbox.page",
             summary: "List messages in a routine conversation",
             description: "Return up to 50 persisted inbox messages, newest page first, without starting work.",
+          }),
+        ),
+        HttpApiEndpoint.get("agentInboxInfo", KilocodePaths.agentInboxInfo, {
+          params: { agentID: Schema.String },
+          query: Schema.Struct({ ...WorkspaceRoutingQueryFields, ...InboxInfoQuery.fields }),
+          success: described(InboxInfoPage, "Routine conversation shared items or worker communications"),
+          error: [InvalidRequestError, HttpApiError.NotFound],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.inbox.info",
+            summary: "Inspect persisted routine conversation information",
+            description:
+              "Page files and HTTP links recorded in inbox messages, or tracked sent and received worker delegations. Results retain source identities and do not infer unrecorded communication.",
           }),
         ),
         HttpApiEndpoint.post("agentInboxSend", KilocodePaths.agentInboxItem, {

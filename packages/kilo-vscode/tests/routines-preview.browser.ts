@@ -51,6 +51,28 @@ for (const theme of ["light", "dark"]) {
           return style.textOverflow === "ellipsis" && node.clientWidth > 0
         }),
       ).toBe(true)
+      const draft = page.getByLabel("Message this worker")
+      await draft.fill("Keep this follow-up draft")
+      await page.getByRole("button", { name: "Info", exact: true }).click()
+      const panel = page.getByLabel("Chat info for Books")
+      await expect(panel).toBeVisible()
+      await expect(panel.getByRole("heading", { name: "About" })).toBeVisible()
+      await expect(panel.getByRole("heading", { name: "Files" })).toBeVisible()
+      await expect(panel.getByRole("heading", { name: "Links" })).toBeVisible()
+      await expect(panel.getByRole("heading", { name: "Worker communication" })).toBeVisible()
+      await expect(panel.getByText("stripe.com", { exact: true })).toBeVisible()
+      await expect(panel.getByText("Counsel", { exact: true })).toBeVisible()
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+      const infoResult = await new AxeBuilder({ page })
+        .include(".routines-view")
+        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+        .analyze()
+      expect(infoResult.violations).toEqual([])
+      await page.screenshot({ path: info.outputPath("info.png"), fullPage: true })
+      await page.keyboard.press("Escape")
+      await expect(panel).toBeHidden()
+      await expect(page.getByRole("button", { name: "Info", exact: true })).toBeFocused()
+      await expect(draft).toHaveValue("Keep this follow-up draft")
       const result = await new AxeBuilder({ page })
         .include(".routines-view")
         .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
@@ -138,15 +160,30 @@ test("narrow routines restore the selected worker after reload", async ({ page }
   await page.screenshot({ path: info.outputPath("restored.png"), fullPage: true })
 })
 
-test("light routines at 200% zoom", async ({ page }, info) => {
-  await page.setViewportSize({ width: 900, height: 900 })
-  await page.goto("/?state=light-routines")
-  await page.evaluate(() => {
-    document.documentElement.style.zoom = "2"
+test("light routines at 200% zoom", async ({ browser }, info) => {
+  const context = await browser.newContext({
+    viewport: { width: 450, height: 450 },
+    deviceScaleFactor: 2,
+    reducedMotion: "reduce",
+    locale: "en-US",
+    timezoneId: "UTC",
   })
+  const page = await context.newPage()
+  await page.goto("http://127.0.0.1:5199/?state=light-routines")
   const books = page.locator('.routines-identity[data-routine-worker="routine"]')
   await expect(books).toBeVisible()
   await books.click()
   await expect(page.getByRole("region", { name: "Conversation with Books" })).toBeVisible()
+  await page.getByRole("button", { name: "Info", exact: true }).click()
+  const panel = page.getByLabel("Chat info for Books")
+  await expect(panel.getByRole("heading", { name: "Worker communication" })).toBeVisible()
+  const overflow = await panel.locator("*").evaluateAll((nodes) =>
+    nodes
+      .filter((node) => node.scrollWidth > node.clientWidth + 1)
+      .map((node) => ({ tag: node.tagName, className: node.className, client: node.clientWidth, scroll: node.scrollWidth })),
+  )
+  expect(overflow).toEqual([])
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await page.screenshot({ path: info.outputPath("zoom.png"), fullPage: true })
+  await context.close()
 })

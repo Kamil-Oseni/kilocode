@@ -309,6 +309,16 @@ export interface RoutineInboxSentMessage {
   error?: string
 }
 
+export interface RoutineInboxInfoResultMessage {
+  type: "routineInboxInfo"
+  requestID: string
+  agentID: string
+  section: "shares" | "contacts"
+  items?: unknown[]
+  next?: string
+  error?: string
+}
+
 export interface RoutineInboxReadResultMessage {
   type: "routineInboxRead"
   requestID: string
@@ -1781,7 +1791,13 @@ export type ExtensionMessage =
   | { type: "speechLiveMicChunk"; requestId: string; data: string }
   | { type: "speechLiveMicError"; requestId: string; error: string }
   | { type: "speechLiveUsage"; requestId: string; sessionID: string; usage: LiveUsage }
-  | { type: "speechLiveControlResult"; requestId: string; eventID: string; status: "accepted" | "unknown" | "failed"; error?: string }
+  | {
+      type: "speechLiveControlResult"
+      requestId: string
+      eventID: string
+      status: "accepted" | "unknown" | "failed"
+      error?: string
+    }
   | { type: "speechOpenAIUsage"; requestId: string; sessionID: string; usage: VoiceUsage }
   | DocumentResultMessage
   | DocumentOpenMessage
@@ -1810,6 +1826,7 @@ export type ExtensionMessage =
   | RoutineInboxMessage
   | RoutineInboxPageResultMessage
   | RoutineInboxSentMessage
+  | RoutineInboxInfoResultMessage
   | RoutineInboxReadResultMessage
   | RoutineInboxDraftResultMessage
   | RoutineDelegatedMessage

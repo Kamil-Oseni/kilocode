@@ -211,6 +211,14 @@ export interface RoutineInboxSendMessage {
   body: string
 }
 
+export interface RoutineInboxInfoMessage {
+  type: "routineInboxInfo"
+  requestID: string
+  agentID: string
+  section: "shares" | "contacts"
+  cursor?: string
+}
+
 export interface RoutineInboxReadMessage {
   type: "routineInboxRead"
   requestID: string
@@ -1873,6 +1881,7 @@ export type WebviewMessage =
   | RoutineRemoveMessage
   | RoutineInboxPageMessage
   | RoutineInboxSendMessage
+  | RoutineInboxInfoMessage
   | RoutineInboxReadMessage
   | RoutineInboxDraftMessage
   | RoutineDelegateMessage

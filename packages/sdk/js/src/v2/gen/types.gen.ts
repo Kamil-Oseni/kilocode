@@ -22423,6 +22423,100 @@ export type KilocodeRoutineInboxSendResponses = {
 export type KilocodeRoutineInboxSendResponse =
   KilocodeRoutineInboxSendResponses[keyof KilocodeRoutineInboxSendResponses]
 
+export type KilocodeRoutineInboxInfoData = {
+  body?: never
+  path: {
+    agentID: string
+  }
+  query: {
+    directory?: string
+    workspace?: string
+    section: "shares" | "contacts"
+    cursor?: string
+    limit?: string
+  }
+  url: "/kilocode/agent/{agentID}/inbox/info"
+}
+
+export type KilocodeRoutineInboxInfoErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeRoutineInboxInfoError = KilocodeRoutineInboxInfoErrors[keyof KilocodeRoutineInboxInfoErrors]
+
+export type KilocodeRoutineInboxInfoResponses = {
+  /**
+   * Routine conversation shared items or worker communications
+   */
+  200:
+    | {
+        section: "shares"
+        items: Array<
+          | {
+              kind: "file"
+              messageID: string
+              label: string
+              time: number
+              messageKind: "user" | "worker" | "report" | "decision" | "delegation"
+              source: string
+              occurrenceID?: string
+              sessionID?: string
+              path: string
+            }
+          | {
+              kind: "link"
+              messageID: string
+              label: string
+              time: number
+              messageKind: "user" | "worker" | "report" | "decision" | "delegation"
+              source: string
+              occurrenceID?: string
+              sessionID?: string
+              url: string
+            }
+        >
+        next?: string
+      }
+    | {
+        section: "contacts"
+        items: Array<{
+          peerID: string
+          name: string
+          role: string
+          archived: boolean
+          direction: "sent" | "received"
+          delegationID: string
+          source: string
+          state: "queued" | "accepted" | "running" | "needs_input" | "completed" | "failed" | "cancelled"
+          objective: string
+          expected?: string
+          context?: string
+          parentID?: string
+          parentRunID?: string
+          deadline?: number
+          budget?: number
+          time: number
+          updated: number
+          response?: string
+          reason?: string
+          cost?: number
+          occurrenceID?: string
+          sessionID?: string
+        }>
+        next?: string
+      }
+}
+
+export type KilocodeRoutineInboxInfoResponse =
+  KilocodeRoutineInboxInfoResponses[keyof KilocodeRoutineInboxInfoResponses]
+
 export type KilocodeRoutineInboxReadData = {
   body?: {
     at: number

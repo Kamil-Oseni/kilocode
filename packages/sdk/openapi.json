@@ -30817,6 +30817,28 @@
                             "type": "string",
                             "pattern": "^ses"
                           },
+                          "files": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256
+                                },
+                                "path": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1024
+                                }
+                              },
+                              "required": ["name", "path"],
+                              "additionalProperties": false
+                            },
+                            "minItems": 1,
+                            "maxItems": 8
+                          },
                           "time": {
                             "type": "integer",
                             "minimum": 0,
@@ -30982,6 +31004,28 @@
                             "type": "string",
                             "pattern": "^ses"
                           },
+                          "files": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256
+                                },
+                                "path": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1024
+                                }
+                              },
+                              "required": ["name", "path"],
+                              "additionalProperties": false
+                            },
+                            "minItems": 1,
+                            "maxItems": 8
+                          },
                           "time": {
                             "type": "integer",
                             "minimum": 0,
@@ -31109,6 +31153,28 @@
                       "type": "string",
                       "pattern": "^ses"
                     },
+                    "files": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "path": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1024
+                          }
+                        },
+                        "required": ["name", "path"],
+                        "additionalProperties": false
+                      },
+                      "minItems": 1,
+                      "maxItems": 8
+                    },
                     "time": {
                       "type": "integer",
                       "minimum": 0,
@@ -31188,6 +31254,365 @@
           {
             "lang": "js",
             "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.routine.inbox.send({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/agent/{agentID}/inbox/info": {
+      "get": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.routine.inbox.info",
+        "parameters": [
+          {
+            "name": "agentID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "section",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["shares", "contacts"]
+            },
+            "required": true
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "required": false
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Routine conversation shared items or worker communications",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "section": {
+                          "type": "string",
+                          "enum": ["shares"]
+                        },
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": ["file"]
+                                  },
+                                  "messageID": {
+                                    "type": "string",
+                                    "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                                  },
+                                  "label": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 1024
+                                  },
+                                  "time": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 8640000000000000
+                                  },
+                                  "messageKind": {
+                                    "type": "string",
+                                    "enum": ["user", "worker", "report", "decision", "delegation"]
+                                  },
+                                  "source": {
+                                    "type": "string",
+                                    "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                                  },
+                                  "occurrenceID": {
+                                    "type": "string",
+                                    "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                                  },
+                                  "sessionID": {
+                                    "type": "string",
+                                    "pattern": "^ses"
+                                  },
+                                  "path": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 1024
+                                  }
+                                },
+                                "required": ["kind", "messageID", "label", "time", "messageKind", "source", "path"],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": ["link"]
+                                  },
+                                  "messageID": {
+                                    "type": "string",
+                                    "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                                  },
+                                  "label": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 1024
+                                  },
+                                  "time": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 8640000000000000
+                                  },
+                                  "messageKind": {
+                                    "type": "string",
+                                    "enum": ["user", "worker", "report", "decision", "delegation"]
+                                  },
+                                  "source": {
+                                    "type": "string",
+                                    "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                                  },
+                                  "occurrenceID": {
+                                    "type": "string",
+                                    "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                                  },
+                                  "sessionID": {
+                                    "type": "string",
+                                    "pattern": "^ses"
+                                  },
+                                  "url": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 8000
+                                  }
+                                },
+                                "required": ["kind", "messageID", "label", "time", "messageKind", "source", "url"],
+                                "additionalProperties": false
+                              }
+                            ]
+                          }
+                        },
+                        "next": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        }
+                      },
+                      "required": ["section", "items"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "section": {
+                          "type": "string",
+                          "enum": ["contacts"]
+                        },
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "peerID": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              },
+                              "name": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "role": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "archived": {
+                                "type": "boolean"
+                              },
+                              "direction": {
+                                "type": "string",
+                                "enum": ["sent", "received"]
+                              },
+                              "delegationID": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                              },
+                              "source": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                              },
+                              "state": {
+                                "type": "string",
+                                "enum": [
+                                  "queued",
+                                  "accepted",
+                                  "running",
+                                  "needs_input",
+                                  "completed",
+                                  "failed",
+                                  "cancelled"
+                                ]
+                              },
+                              "objective": {
+                                "type": "string",
+                                "pattern": "\\S",
+                                "maxLength": 8000
+                              },
+                              "expected": {
+                                "type": "string"
+                              },
+                              "context": {
+                                "type": "string"
+                              },
+                              "parentID": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                              },
+                              "parentRunID": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                              },
+                              "deadline": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 8640000000000000
+                              },
+                              "budget": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 1000000
+                              },
+                              "time": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 8640000000000000
+                              },
+                              "updated": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 8640000000000000
+                              },
+                              "response": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "type": "string"
+                              },
+                              "cost": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "occurrenceID": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                              },
+                              "sessionID": {
+                                "type": "string",
+                                "pattern": "^ses"
+                              }
+                            },
+                            "required": [
+                              "peerID",
+                              "name",
+                              "role",
+                              "archived",
+                              "direction",
+                              "delegationID",
+                              "source",
+                              "state",
+                              "objective",
+                              "time",
+                              "updated"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "next": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        }
+                      },
+                      "required": ["section", "items"],
+                      "additionalProperties": false
+                    }
+                  ],
+                  "description": "Routine conversation shared items or worker communications"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Page files and HTTP links recorded in inbox messages, or tracked sent and received worker delegations. Results retain source identities and do not infer unrecorded communication.",
+        "summary": "Inspect persisted routine conversation information",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.routine.inbox.info({\n  ...\n})"
           }
         ]
       }
@@ -37490,6 +37915,30 @@
                   },
                   "properties": {
                     "type": "object"
+                  },
+                  "generation": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ],
+                    "description": "Consent generation that admitted this event"
                   }
                 },
                 "required": ["event"],
@@ -37568,6 +38017,30 @@
                 "properties": {
                   "enabled": {
                     "type": "boolean"
+                  },
+                  "generation": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ],
+                    "description": "Monotonic consent generation; stale enable cannot override a later opt-out"
                   }
                 },
                 "required": ["enabled"],

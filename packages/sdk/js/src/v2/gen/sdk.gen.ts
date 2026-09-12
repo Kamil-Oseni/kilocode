@@ -276,6 +276,8 @@ import type {
   KilocodeRoutineInboxDraftErrors,
   KilocodeRoutineInboxDraftResponses,
   KilocodeRoutineInboxErrors,
+  KilocodeRoutineInboxInfoErrors,
+  KilocodeRoutineInboxInfoResponses,
   KilocodeRoutineInboxPageErrors,
   KilocodeRoutineInboxPageResponses,
   KilocodeRoutineInboxReadErrors,
@@ -8974,6 +8976,48 @@ export class Inbox extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Inspect persisted routine conversation information
+   *
+   * Page files and HTTP links recorded in inbox messages, or tracked sent and received worker delegations. Results retain source identities and do not infer unrecorded communication.
+   */
+  public info<ThrowOnError extends boolean = false>(
+    parameters: {
+      agentID: string
+      directory?: string
+      workspace?: string
+      section: "shares" | "contacts"
+      cursor?: string
+      limit?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "agentID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "section" },
+            { in: "query", key: "cursor" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      KilocodeRoutineInboxInfoResponses,
+      KilocodeRoutineInboxInfoErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/agent/{agentID}/inbox/info",
+      ...options,
+      ...params,
     })
   }
 

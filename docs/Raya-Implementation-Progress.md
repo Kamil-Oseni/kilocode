@@ -22,6 +22,14 @@ Changed product paths: `.changeset/raya-routine-organizations.md`; core Routine 
 
 Evidence: organization service and real HTTP tests pass 4/4 with 55 assertions; the full focused Routine migration suite passes 8/8 with 35 assertions; core, OpenCode and SDK typechecks pass; Markdown-table and diff-integrity checks pass. SDK generation initially encountered a transient Windows write error while formatting one generated file; an unchanged rerun completed successfully and left only the intended generated API changes.
 
+## ChatGPT 2026-09-12 17:48 America/Toronto — Routine organization foundation delivery receipt
+
+Product commit `1b10793de9cf782ebf465b0c42a9ba4f9e57ed65` is on `origin/main`. The normal push hook passed 29 cross-package typechecks and the JetBrains Gradle typecheck. `bun run snapshot:install` regenerated the SDK without tracked drift, rebuilt the changed CLI, passed CLI version/model/sandbox-worker smoke checks, extension host/webview types, lint and production bundling, packaged the VSIX and installed it.
+
+Installed identity: `eden.raya@7.4.23-snapshot+1b10793de9.kamil-oseni.1789249170302`. VSIX: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-1b10793de9-kamil-oseni-1789249170302.vsix`; SHA-256 `1ACCB4A32C3576B11A03BB8A58D157621FE550BAAA44A829DDCACAA366BF64FE`; 517375693 bytes; 431 files reported by the packager. `code --list-extensions --show-versions` independently returned the exact installed identity. HEAD and `origin/main` match. No force push, hook bypass or forced VS Code reload was used.
+
+This checkpoint establishes persistence and API contracts; it does not yet expose organizations in the Routines UI or let the main chat provision them. Continue the organization chain described in the handoff before moving to unrelated audit rows.
+
 ## Current work
 
 Latest verified installed product checkpoint: `57fd94ecd89fd8b138d8ac45666b55ba0c5e43d1`, pushed to `origin/main` and installed as `eden.raya@7.4.23-snapshot+57fd94ecd8.kamil-oseni.1789245828863`. Routine worker DMs now persist attachment drafts, send file-bearing follow-ups, expose attachment history and Chat Info inventory, and recover admitted delivery after restart without replaying duplicate HTTP sends. Organizations, role/delegation graphs, main-chat creation, inline media thumbnails, full live rebuild-survival acceptance, Live voice/device acceptance, the Go companion rebuild and the remaining 39-requirement work remain open.

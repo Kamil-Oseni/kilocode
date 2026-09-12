@@ -2237,3 +2237,9 @@ Next, finish this same chain before opening unrelated work:
 6. Add tool-result actions that focus the created organization or worker in Routines, then run backend, SDK, extension and production-browser acceptance. Commit and push normally, run `snapshot:install`, independently verify installed identity/hash, and record the receipt in both documents.
 
 Codex-derived implementation remains deferred until the existing 39 outcomes, the complete Routines organization flow and GPT-Live are finished.
+
+## ChatGPT 2026-09-12 17:48 America/Toronto — organization foundation delivered
+
+Commit `1b10793de9cf782ebf465b0c42a9ba4f9e57ed65` is pushed to `origin/main` and installed as `eden.raya@7.4.23-snapshot+1b10793de9.kamil-oseni.1789249170302`. The VSIX SHA-256 is `1ACCB4A32C3576B11A03BB8A58D157621FE550BAAA44A829DDCACAA366BF64FE` and its size is 517375693 bytes. Push hooks passed 29 cross-package typechecks plus JetBrains; snapshot build, CLI smoke checks, extension/webview typechecks, lint, production bundle, package and installation passed.
+
+Resume at extension organization refresh/navigation, then organization-aware delegation and restart-safe main-chat provisioning. The two owner-authored untracked files `docs/Raya-Codex-Research-Deferred.md` and `docs/Raya-Features.md` remain intentionally uncommitted.

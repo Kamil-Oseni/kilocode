@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-12):** ChatGPT reviewed and repaired Grok's file-review checkpoints. The corrected product is committed, pushed, and installed as `6b97169dc1`. Remaining: leftover 39-requirement work that is still implementable here, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-12):** ChatGPT reviewed and repaired Grok's file-review checkpoints, then delivered the workspace-interaction batch as `1542d21460`. Remaining: the unfinished 39-requirement work, broader Routines product/UI work, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-12. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** ChatGPT installed snapshot `6b97169dc1` (`eden.raya@7.4.23-snapshot+6b97169dc1.kamil-oseni.1789232065802`). This repairs review persistence, session/worktree identity, deleted-file content, multiedit coverage, path privacy and the file-review UI. Reload VS Code to pick up the snapshot.
+**Latest delivered product:** ChatGPT installed snapshot `1542d21460` (`eden.raya@7.4.23-snapshot+1542d21460.kamil-oseni.1789234823997`). This includes the reviewed file-repair work plus routine selection/scroll restoration, correlated host-microphone readiness, reliable Keep all / Undo all review loading, the browser viewport grid fix and the simplified composer configuration disclosure. Reload VS Code normally to pick up the snapshot.
 
 ## Scope and reading order
 
@@ -19,9 +19,9 @@ Status excerpts below are historical records, not a fresh certification of every
 ## Checkpoint and standing authorization
 
 - Workspace: `C:\Users\User\Desktop\raya`; PowerShell; branch `main`; origin `https://github.com/Kamil-Oseni/kilocode.git`.
-- Last verified pushed product checkpoint: `8b01e7231172ad8916065bcef2e7dc78cb5ec76a`, pending-approval policy snapshot.
-- Installed: `eden.raya@7.4.23-snapshot+8b01e72311.kamil-oseni.1789091821099`.
-- VSIX: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-8b01e72311-kamil-oseni-1789091821099.vsix`; SHA-256 `446FC10C1FAA687194561707B5A49F55671FCD68B45ABCE07DD84121D85F9DE7`.
+- Last verified pushed product checkpoint: `1542d21460461413c68f21357f550d48bcc647df`, workspace-interaction reliability snapshot.
+- Installed: `eden.raya@7.4.23-snapshot+1542d21460.kamil-oseni.1789234823997`.
+- VSIX: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-1542d21460-kamil-oseni-1789234823997.vsix`; SHA-256 `A05F9F65F601D56E1502A842EF36A7C6E2883AFD13D6BCCACCF8B35431040F88`; 517135538 bytes; 431 entries.
 - The user authorizes two parallel workers plus root, batched checks, periodic normal commits/pushes to `origin/main`, and `snapshot:install` outside the sandbox. Do not ask again. No force push, hook bypass or forced VS Code reload.
 - At approximately $10 remaining, as reported by the user, stop opening broad work, settle current processes, update this handoff and give the continuation prompt below. Do not invent a credit balance.
 
@@ -772,7 +772,7 @@ Do not push/reinstall the current failing tree. Finish one coherent slice and re
 ### 6. Replacement continuation prompt
 
 ```text
-Continue Raya in C:\Users\User\Desktop\raya. This instruction is the authoritative continuation prompt stored inside docs/Raya-Remaining-Implementation-Handoff.md; follow it directly rather than asking the user to paste a separate prompt. Read AGENTS.md and this handoff beginning with the top current-status banner and newest ChatGPT entries, then read docs/Raya-Implementation-Progress.md, docs/Raya-Comprehensive-Audit.md and docs/Raya-Voice-Architecture.md. The scope is all 39 requirements plus RDM-01-06 and GPT-Live. The latest verified pushed and installed product checkpoint is 6b97169dc1e414fbececd9d13399d79dac301f70; repository HEAD may be a later documentation-only commit, so verify git and installed state before editing. ChatGPT's repair of the Grok file-review work is delivered. Live integration and the remaining acceptance work are UNFINISHED; do not claim them as verified.
+Continue Raya in C:\Users\User\Desktop\raya. This instruction is the authoritative continuation prompt stored inside docs/Raya-Remaining-Implementation-Handoff.md; follow it directly rather than asking the user to paste a separate prompt. Read AGENTS.md and this handoff beginning with the top current-status banner and newest ChatGPT entries, then read docs/Raya-Implementation-Progress.md, docs/Raya-Comprehensive-Audit.md and docs/Raya-Voice-Architecture.md. The scope is all 39 requirements plus RDM-01-06 and GPT-Live. The latest verified pushed and installed product checkpoint is 1542d21460461413c68f21357f550d48bcc647df; repository HEAD may be a later documentation-only commit, so verify git and installed state before editing. ChatGPT's repair of the Grok file-review work and the workspace-interaction reliability batch are delivered. Live integration and the remaining acceptance work are UNFINISHED; do not claim them as verified.
 
 Start LiveBroker HTTP/WebSocket loopback fixtures from the frozen host/backend order. GPT-Live 1 requires its own adapter and exact current official contract; no model-string substitution, history replay as new work, or generated-caption claims about heard audio. Keep parent ownership, existing permissions and durable receipts.
 
@@ -2130,7 +2130,7 @@ Installed `eden.raya@7.4.23-snapshot+6b97169dc1.kamil-oseni.1789232065802`. VSIX
 
 ## ChatGPT 2026-09-12 13:35 America/Toronto — workspace UX and Live correctness batch
 
-**State: verified locally; commit, push and snapshot installation are next.** This batch addresses RDM-01/RDM-06, OVR-01/EN-12, EN-05/UX-01, PR-01/OVR-07 and OVR-10.
+**State: committed, pushed and installed as `1542d21460461413c68f21357f550d48bcc647df`.** This batch addresses RDM-01/RDM-06, OVR-01/EN-12, EN-05/UX-01, PR-01/OVR-07 and OVR-10.
 
 - The routines messenger now preserves its selected worker per normalized workspace and restores a conversation-specific reading anchor using the first visible message ID plus viewport offset. It validates the saved worker against the current roster, pages backward at most 20 pages to find an older anchor, clears unreachable/stale anchors, caps stored anchors at 128 and preserves unrelated VS Code webview state. Cross-workspace state cannot open another workspace's worker. No new visual container or decorative layer was added; the existing flat DM hierarchy remains.
 - GPT-Live's extension-host microphone fallback no longer becomes `listening` before native capture is ready. Browser `getUserMedia` is ready immediately after acquisition; host fallback remains connecting with its audio track disabled until the exact active request receives `speechLiveMicReady`. Stale and post-stop readiness cannot enable or revive media.
@@ -2142,7 +2142,13 @@ Changed paths are `.changeset/raya-workspace-ux-reliability.md`; `packages/kilo-
 
 Verification from `packages/kilo-vscode`: combined host/webview unit/fixture run 37 pass, 0 fail, 207 assertions; GPT-Live routing/transport/VoiceProvider run 6 pass, 0 fail, with the real Chromium fixtures reporting 48 transport and 34 provider assertions; host and webview typechecks exit 0; targeted ESLint, Knip, Kilo marker guard and `git diff --check` exit 0. Production routines Chromium passes 11/11 across light/dark, 320/900px, empty/error/stale/loading, keyboard/file-card, reload restoration and 200% zoom cases. Production file-review Chromium passes 4/4 at light/dark 320/760px. Composer Chromium's six light/dark/forced-color width cases passed; its first voice case exposed an obsolete `Start hands-free voice` test label, which was corrected to the shipped `Start voice` label and then passed in isolation. ChatGPT inspected the final 320px expanded composer screenshot against `docs/designer.md`; the removed paragraph no longer competes with the controls.
 
-Limitations remain explicit: the routine anchor search is bounded to 20 older pages; routine user attachments and first-class organization graphs remain open. The browser fix has structural DOM/CSS regression coverage but still needs a packaged live frame smoke check. GPT-Live still needs a paid real-account/device acoustic run and VS Code iframe microphone consent remains host-dependent. The installed extension remains `6b97169dc1` until this batch is delivered.
+Limitations remain explicit: the routine anchor search is bounded to 20 older pages; routine user attachments and first-class organization graphs remain open. The browser fix has structural DOM/CSS regression coverage but still needs a packaged live frame smoke check. GPT-Live still needs a paid real-account/device acoustic run and VS Code iframe microphone consent remains host-dependent.
+
+## ChatGPT 2026-09-12 13:43 America/Toronto — workspace-interaction delivery receipt
+
+Product commit `1542d21460461413c68f21357f550d48bcc647df` is on `origin/main`. The normal push completed without force or hook bypass. `bun run snapshot:install` passed extension-host and webview type checks, lint, production bundling and packaging; SDK inputs/output were unchanged and the existing 228829184-byte `bin\kilo.exe` was reused.
+
+Installed identity: `eden.raya@7.4.23-snapshot+1542d21460.kamil-oseni.1789234823997`. VSIX: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-1542d21460-kamil-oseni-1789234823997.vsix`; SHA-256 `A05F9F65F601D56E1502A842EF36A7C6E2883AFD13D6BCCACCF8B35431040F88`; 517135538 bytes; 431 archive entries. `code --list-extensions --show-versions` independently returned the exact identity. VS Code was not force-reloaded. The only remaining working-tree files after installation are the intentionally preserved untracked `docs/Raya-Codex-Research-Deferred.md` and `docs/Raya-Features.md`.
 
 
 

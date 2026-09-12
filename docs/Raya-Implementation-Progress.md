@@ -3024,13 +3024,21 @@ Next: leftover implementable 39-requirement work, or a real-account GPT-Live cal
 
 ## 2026-09-12: Production goal result package and criteria editor in the visual harness
 
-Status: verified locally and committed as 65dbc2e9a9. The 5199 harness now mounts production GoalBannerView for a completed result package (outcome, command-bound checks, cited results, optional unverified caveats, recorded human review) and for the criteria editor. The banner header and audit rows wrap at 320px.
+Status: verified locally and committed as 65dbc2e9a9, documented as b52758bee3, and installed in the snapshot below. The 5199 harness now mounts production GoalBannerView for a completed result package (outcome, command-bound checks, cited results, optional unverified caveats, recorded human review) and for the criteria editor. The banner header and audit rows wrap at 320px.
 
 Changed files: packages/kilo-vscode/webview-ui/preview/index.tsx, packages/kilo-vscode/webview-ui/preview/preview.css, packages/kilo-vscode/webview-ui/src/styles/banners.css, packages/kilo-vscode/tests/surfaces-preview.browser.ts, .changeset/raya-preview-goal-result.md.
 
 Commands: packages/kilo-vscode bunx playwright test --config playwright.preview.config.ts -> 37 pass / 0 fail / exit 0. bun run check-types:webview -> exit 0. bun run check-types -> exit 0. bun run check-kilocode-change -> exit 0. bunx eslint --no-cache on touched preview TypeScript -> exit 0.
 
 This is not a paid GPT-Live call and does not unlock VS Code iframe microphone consent. Cited sources are summaries only in the harness; opening exact tool results still needs a session. Live packaged visual acceptance remains open. Codex-deferred research stays untracked.
+
+Next: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
+
+## 2026-09-12: Snapshot install b52758bee3
+
+Status: committed, pushed and installed as b52758bee3. Production goal result and criteria-editor fixtures are in this snapshot. CLI binary was already present and was not rebuilt.
+
+Installed eden.raya@7.4.23-snapshot+b52758bee3.kamil-oseni.1789195725262. VSIX C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-b52758bee3-kamil-oseni-1789195725262.vsix; SHA-256 999843A6BA51DCCB395C4350C1B4DFC4DFF9A54DD66F07517E1A660FCAB31292; 517102464 bytes, 431 files. VS Code was not force-reloaded.
 
 Next: leftover implementable 39-requirement work, or a real-account GPT-Live call on a device.
 

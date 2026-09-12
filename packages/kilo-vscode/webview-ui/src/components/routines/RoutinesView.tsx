@@ -229,6 +229,7 @@ const Person: Component<{
       <button
         type="button"
         class="routines-identity"
+        data-routine-worker={props.item.id}
         aria-current={flag(props.current)}
         onClick={props.onChoose}
       >
@@ -384,6 +385,23 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   let revision = 0
   let dirty = false
   let hold = false
+
+  const leave = () => {
+    const id = chosen()
+    setChosen()
+    queueMicrotask(() => {
+      if (chosen() || !root?.isConnected) return
+      const title = root.querySelector<HTMLElement>(".routines-title")
+      if (!id) {
+        title?.focus()
+        return
+      }
+      const token = typeof CSS !== "undefined" && typeof CSS.escape === "function" ? CSS.escape(id) : id
+      const button = root.querySelector<HTMLElement>(`.routines-identity[data-routine-worker="${token}"]`)
+      const target = button ?? title
+      target?.focus()
+    })
+  }
 
   const dismiss = () => {
     const id = reviewed()?.id
@@ -922,7 +940,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                   workspace={item.dir ? folder(item.dir) : undefined}
                   workers={others(item.id, agents())}
                   runID={held(item, runs())}
-                  onBack={() => setChosen()}
+                  onBack={leave}
                 />
               )}
             </Show>

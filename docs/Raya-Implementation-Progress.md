@@ -2756,5 +2756,15 @@ Installed eden.raya@7.4.23-snapshot+fd1882194a.kamil-oseni.1789170968855. VSIX C
 
 Next: leftover RDM-06 themes/a11y/performance/reviewer, or leftover Live microphone acceptance.
 
+## 2026-09-11: Routine conversation return and report arrival
+
+Status: verified locally, not yet committed. Back and Escape restore focus to the same worker. A report for another worker does not steal the open conversation or overwrite a draft. A later report does not jump scroll when the reader is not at the bottom. Leaving stores an unsent draft.
+
+Changed files: packages/kilo-vscode/webview-ui/src/components/routines/RoutinesView.tsx, packages/kilo-vscode/webview-ui/src/components/routines/Inbox.tsx, packages/kilo-vscode/tests/fixtures/routine-inbox-view.mjs, packages/kilo-vscode/tests/unit/routines-inbox-view.test.ts, .changeset/raya-routine-inbox-return.md.
+
+Commands (packages/kilo-vscode): bun test tests/unit/routines-inbox-view.test.ts tests/unit/routines-delegate-view.test.ts tests/unit/routines-edit-view.test.ts --timeout 90000 -> 3 pass / 0 fail / 3 expect / exit 0. bun run check-types -> exit 0. bun run check-types:webview -> exit 0. eslint RoutinesView.tsx Inbox.tsx -> exit 0. bun run check-kilocode-change -> exit 0.
+
+Next: leftover RDM-06 Chromium themes/narrow layout, inbox performance budget, or leftover Live microphone acceptance.
+
 
 

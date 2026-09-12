@@ -236,7 +236,213 @@ try {
   assert.match(root.textContent, /Why did expenses increase/)
   assert.match(root.textContent, /The next Friday close found the travel receipts/)
   assert.match(root.textContent, /Does not change the assignment/)
-  console.log("routine-inbox-view: 20 assertions passed")
+  const thread = root.querySelector(".routines-thread[role='region']")
+  assert.equal(thread.getAttribute("aria-label"), "Conversation with Books")
+  assert.equal(button("Back").getAttribute("aria-label"), "Back to Books")
+  const pane = root.querySelector(".routines-thread-body")
+  assert.equal(pane.getAttribute("role"), "log")
+  const draft = root.querySelector("textarea[aria-label='Message this worker']")
+  draft.focus()
+  draft.value = "Keep this draft"
+  draft.dispatchEvent(new window.Event("input", { bubbles: true }))
+  const legal = {
+    id: "legal",
+    name: "Counsel",
+    role: "counsel",
+    objective: "Review contracts",
+    capabilities: ["legal"],
+    schedule: { kind: "manual" },
+    enabled: true,
+    access: "brief",
+  }
+  const pages = sent.filter((msg) => msg.type === "routineInboxPage").length
+  emit({
+    type: "routineState",
+    requestID: request.requestID,
+    viewID: request.viewID,
+    refreshID: 1,
+    agents: [agent, legal],
+    templates: [],
+  })
+  emit({
+    type: "routineInbox",
+    requestID: request.requestID,
+    viewID: request.viewID,
+    refreshID: 1,
+    items: [
+      {
+        agentID: agent.id,
+        conversationID: "rcv_1",
+        name: agent.name,
+        role: agent.role,
+        latest: {
+          id: "rmg_3",
+          agentID: agent.id,
+          kind: "report",
+          source: "report:occ2",
+          body: "The next Friday close found the travel receipts.",
+          time: 3,
+        },
+        unread: 1,
+        state: "scheduled",
+      },
+      {
+        agentID: legal.id,
+        conversationID: "rcv_legal",
+        name: legal.name,
+        role: legal.role,
+        latest: {
+          id: "rmg_legal",
+          agentID: legal.id,
+          kind: "report",
+          source: "report:legal1",
+          body: "Counsel filed the motion.",
+          time: 4,
+        },
+        unread: 1,
+        state: "scheduled",
+      },
+    ],
+  })
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(
+    sent.filter((msg) => msg.type === "routineInboxPage").length,
+    pages,
+  )
+  assert.equal(
+    sent.filter((msg) => msg.type === "routineInboxPage" && msg.agentID === legal.id).length,
+    0,
+  )
+  assert.match(root.textContent, /Counsel/)
+  assert.equal(root.querySelector(".routines-thread[role='region']").getAttribute("aria-label"), "Conversation with Books")
+  assert.equal(document.activeElement, draft)
+  assert.equal(draft.value, "Keep this draft")
+  assert.doesNotMatch(thread.textContent, /Counsel filed the motion/)
+  let top = 40
+  Object.defineProperties(pane, {
+    scrollHeight: { configurable: true, get: () => 800 },
+    clientHeight: { configurable: true, get: () => 200 },
+    scrollTop: {
+      configurable: true,
+      get: () => top,
+      set: (value) => {
+        top = value
+      },
+    },
+  })
+  pane.dispatchEvent(new window.Event("scroll"))
+  emit({
+    type: "routineInbox",
+    requestID: request.requestID,
+    viewID: request.viewID,
+    refreshID: 1,
+    items: [
+      {
+        agentID: agent.id,
+        conversationID: "rcv_1",
+        name: agent.name,
+        role: agent.role,
+        latest: {
+          id: "rmg_4",
+          agentID: agent.id,
+          kind: "report",
+          source: "report:occ3",
+          body: "The later receipt stayed in place.",
+          time: 5,
+        },
+        unread: 2,
+        state: "scheduled",
+      },
+      {
+        agentID: legal.id,
+        conversationID: "rcv_legal",
+        name: legal.name,
+        role: legal.role,
+        latest: {
+          id: "rmg_legal",
+          agentID: legal.id,
+          kind: "report",
+          source: "report:legal1",
+          body: "Counsel filed the motion.",
+          time: 4,
+        },
+        unread: 1,
+        state: "scheduled",
+      },
+    ],
+  })
+  await new Promise((resolve) => setImmediate(resolve))
+  const later = sent.findLast((msg) => msg.type === "routineInboxPage")
+  emit({
+    type: "routineInboxPage",
+    requestID: later.requestID,
+    agentID: agent.id,
+    messages: [
+      note,
+      { id: "rmg_user", agentID: agent.id, kind: "user", source: retry.source, body: retry.body, time: 2 },
+      {
+        id: "rmg_3",
+        agentID: agent.id,
+        kind: "report",
+        source: "report:occ2",
+        body: "The next Friday close found the travel receipts.",
+        time: 3,
+      },
+      {
+        id: "rmg_4",
+        agentID: agent.id,
+        kind: "report",
+        source: "report:occ3",
+        body: "The later receipt stayed in place.",
+        time: 5,
+      },
+    ],
+  })
+  await Promise.resolve()
+  assert.equal(pane.scrollTop, 40)
+  assert.match(root.textContent, /The later receipt stayed in place/)
+  button("Back").click()
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(root.querySelector(".routines-thread[role='region']"), null)
+  assert.equal(document.activeElement, root.querySelector('[data-routine-worker="routine"]'))
+  const saved = sent.findLast((msg) => msg.type === "routineInboxDraft")
+  assert.equal(saved.agentID, agent.id)
+  assert.equal(saved.draft, "Keep this draft")
+  root.querySelector('[data-routine-worker="routine"]').click()
+  await new Promise((resolve) => setImmediate(resolve))
+  const reopen = sent.findLast((msg) => msg.type === "routineInboxPage")
+  emit({
+    type: "routineInboxPage",
+    requestID: reopen.requestID,
+    agentID: agent.id,
+    messages: [
+      note,
+      { id: "rmg_user", agentID: agent.id, kind: "user", source: retry.source, body: retry.body, time: 2 },
+      {
+        id: "rmg_3",
+        agentID: agent.id,
+        kind: "report",
+        source: "report:occ2",
+        body: "The next Friday close found the travel receipts.",
+        time: 3,
+      },
+      {
+        id: "rmg_4",
+        agentID: agent.id,
+        kind: "report",
+        source: "report:occ3",
+        body: "The later receipt stayed in place.",
+        time: 5,
+      },
+    ],
+  })
+  const open = root.querySelector(".routines-thread[role='region']")
+  assert.equal(open.getAttribute("aria-label"), "Conversation with Books")
+  open.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }))
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(root.querySelector(".routines-thread[role='region']"), null)
+  assert.equal(document.activeElement, root.querySelector('[data-routine-worker="routine"]'))
+  console.log("routine-inbox-view: conversation return and report arrival assertions passed")
 } finally {
   dispose()
   root.remove()

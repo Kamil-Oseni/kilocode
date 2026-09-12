@@ -509,23 +509,27 @@ export const Inbox: Component<{
     chained(msg)
   }
 
+  const persist = (value: string) => {
+    vscode.postMessage({
+      type: "routineInboxDraft",
+      requestID: crypto.randomUUID(),
+      agentID: props.agentID,
+      draft: value.trim() ? value : null,
+    })
+  }
+
   const unsub = vscode.onMessage(receive)
   onCleanup(() => {
     unsub()
-    if (timer) clearTimeout(timer)
+    if (!timer) return
+    clearTimeout(timer)
+    persist(note())
   })
 
   const change = (value: string) => {
     setNote(value)
     if (timer) clearTimeout(timer)
-    timer = setTimeout(() => {
-      vscode.postMessage({
-        type: "routineInboxDraft",
-        requestID: crypto.randomUUID(),
-        agentID: props.agentID,
-        draft: value.trim() ? value : null,
-      })
-    }, 400)
+    timer = setTimeout(() => persist(value), 400)
   }
 
   const submit = () => {
@@ -569,10 +573,19 @@ export const Inbox: Component<{
   }
 
   return (
-    <div class="routines-thread">
+    <div
+      class="routines-thread"
+      role="region"
+      aria-label={`Conversation with ${props.name}`}
+      onKeyDown={(event) => {
+        if (event.key !== "Escape" || !props.onBack) return
+        event.preventDefault()
+        props.onBack()
+      }}
+    >
       <header class="routines-thread-head">
         <Show when={props.onBack}>
-          <Button variant="ghost" size="small" onClick={props.onBack}>
+          <Button variant="ghost" size="small" aria-label={`Back to ${props.name}`} onClick={props.onBack}>
             Back
           </Button>
         </Show>
@@ -589,6 +602,8 @@ export const Inbox: Component<{
       <div
         ref={pane}
         class="routines-thread-body"
+        role="log"
+        aria-relevant="additions"
         onScroll={() => {
           if (!pane) return
           stick = pane.scrollHeight - pane.scrollTop - pane.clientHeight < 48

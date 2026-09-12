@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import path from "node:path"
 
-test("routine inbox conversation preserves drafts and retries the same follow-up source", () => {
+test("routine inbox conversation preserves drafts, restores focus, and keeps reports from stealing the reader", () => {
   const root = path.resolve(import.meta.dir, "../..")
   const child = Bun.spawnSync(["bun", "--conditions=browser", "tests/fixtures/routine-inbox-view.mjs"], {
     cwd: root,

@@ -60,6 +60,50 @@ test("routine chat info pages only persisted files and http links with message p
   )
 })
 
+test("routine chat info includes user attachment metadata without stored content", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const inbox = RayaTaskInbox.make(database)
+      const info = RayaTaskInfo.make(database)
+      const data = Buffer.from("private ledger").toString("base64")
+      const message = yield* inbox.publish({
+        agentID: "books",
+        source: "user_attachment",
+        kind: "user",
+        body: "Review this ledger",
+        sessionID: SessionID.make("ses_attachment"),
+        attachments: [
+          {
+            id: "2564b7ed-998b-411d-aa41-e4414bb51111",
+            name: "ledger.csv",
+            mime: "text/csv",
+            size: 14,
+            data,
+          },
+        ],
+      })
+      const page = yield* info.shares("books")
+      expect(page.items).toEqual([
+        {
+          kind: "attachment",
+          attachmentID: "2564b7ed-998b-411d-aa41-e4414bb51111",
+          label: "ledger.csv",
+          mime: "text/csv",
+          size: 14,
+          messageID: message.id,
+          messageKind: "user",
+          source: "user_attachment",
+          sessionID: SessionID.make("ses_attachment"),
+          time: message.time,
+        },
+      ])
+      expect(page.items[0]?.sessionID).toBe(SessionID.make("ses_attachment"))
+      expect(JSON.stringify(page)).not.toContain(data)
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
 test("routine chat info continues bounded sparse share scans", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {

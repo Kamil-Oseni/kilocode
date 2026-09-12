@@ -31,7 +31,9 @@ import { CommandFiles } from "@/kilocode/command-files"
 import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal API contracts
 import { RayaTask } from "@/kilocode/task"
 import {
+  AttachmentContent as InboxAttachmentContent,
   Draft as InboxDraft,
+  DraftState as InboxDraftState,
   Item as InboxItem,
   Page as InboxPage,
   Read as InboxRead,
@@ -39,7 +41,11 @@ import {
   Send as InboxSend,
 } from "@/kilocode/task/inbox"
 import { Page as InboxInfoPage, Query as InboxInfoQuery } from "@/kilocode/task/info"
-import { Lineage as DelegateLineage, Record as DelegateRecord, Request as DelegateAsk } from "@/kilocode/task/delegation"
+import {
+  Lineage as DelegateLineage,
+  Record as DelegateRecord,
+  Request as DelegateAsk,
+} from "@/kilocode/task/delegation"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
 import { Template as AgentTemplate } from "@/kilocode/task/templates"
 import { RayaCheckpoint } from "@/kilocode/checkpoint" // raya_change - named workspace checkpoints
@@ -191,6 +197,7 @@ export const KilocodePaths = {
   agentInboxInfo: `${root}/agent/:agentID/inbox/info`,
   agentInboxRead: `${root}/agent/:agentID/inbox/read`,
   agentInboxDraft: `${root}/agent/:agentID/inbox/draft`,
+  agentInboxAttachment: `${root}/agent/:agentID/inbox/attachment/:attachmentID`,
   agentDelegate: `${root}/agent/:agentID/delegate`,
   agentDelegateItem: `${root}/agent/:agentID/delegate/:id`,
   agentDelegateChain: `${root}/agent/:agentID/delegate/:id/chain`,
@@ -799,9 +806,7 @@ export const KilocodeApi = HttpApi.make("kilocode")
           query: Schema.Struct({
             ...WorkspaceRoutingQueryFields,
             cursor: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
-            limit: Schema.optional(
-              Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(50)),
-            ),
+            limit: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(50))),
           }),
           success: described(InboxPage, "Routine conversation page"),
           error: [InvalidRequestError, HttpApiError.NotFound],
@@ -849,20 +854,35 @@ export const KilocodeApi = HttpApi.make("kilocode")
           OpenApi.annotations({
             identifier: "kilocode.routine.inbox.read",
             summary: "Advance routine inbox read position",
-            description: "Persist a conversation read cursor that survives webview reload. Read position only advances.",
+            description:
+              "Persist a conversation read cursor that survives webview reload. Read position only advances.",
           }),
         ),
         HttpApiEndpoint.post("agentInboxDraft", KilocodePaths.agentInboxDraft, {
           params: { agentID: Schema.String },
           query: WorkspaceRoutingQuery,
           payload: InboxDraft,
-          success: described(InboxDraft, "Saved draft"),
-          error: [InvalidRequestError, HttpApiError.NotFound],
+          success: described(InboxDraftState, "Saved draft"),
+          error: [InvalidRequestError, HttpApiError.NotFound, HttpApiError.Conflict],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "kilocode.routine.inbox.draft",
             summary: "Save a per-conversation inbox draft",
-            description: "Replace or clear the draft for one roster worker. Drafts are not messages and do not admit work.",
+            description:
+              "Replace or clear the draft for one roster worker. Drafts are not messages and do not admit work.",
+          }),
+        ),
+        HttpApiEndpoint.get("agentInboxAttachment", KilocodePaths.agentInboxAttachment, {
+          params: { agentID: Schema.String, attachmentID: Schema.String },
+          query: WorkspaceRoutingQuery,
+          success: described(InboxAttachmentContent, "Routine attachment content"),
+          error: HttpApiError.NotFound,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.inbox.attachment",
+            summary: "Read one routine message attachment",
+            description:
+              "Return bounded attachment content only when the attachment belongs to the selected retained worker conversation.",
           }),
         ),
         HttpApiEndpoint.post("agentDelegate", KilocodePaths.agentDelegate, {

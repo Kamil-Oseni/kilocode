@@ -193,9 +193,30 @@ try {
   })
   assert.equal(document.activeElement, area)
   assert.equal(area.value, "Why did expenses increase?")
+  button("Attach").click()
+  const pick = sent.findLast((msg) => msg.type === "routineInboxFilesPick")
+  assert.equal(pick.agentID, agent.id)
+  assert.equal(pick.draft, "Why did expenses increase?")
+  assert.doesNotMatch(JSON.stringify(pick), /data:|filePath|AQID/)
+  assert.match(root.textContent, /Saving attachment/)
+  const attachment = {
+    id: "123e4567-e89b-42d3-a456-426614174000",
+    name: "receipt.pdf",
+    mime: "application/pdf",
+    size: 3,
+  }
+  emit({
+    type: "routineInboxFiles",
+    requestID: pick.requestID,
+    agentID: agent.id,
+    draft: pick.draft,
+    files: [attachment],
+  })
+  assert.match(root.textContent, /receipt.pdf/)
   button("Send").click()
   const first = sent.findLast((msg) => msg.type === "routineInboxSend")
   assert.equal(first.body, "Why did expenses increase?")
+  assert.deepEqual(first.attachmentIDs, [attachment.id])
   emit({
     type: "routineInboxSent",
     requestID: first.requestID,
@@ -207,14 +228,29 @@ try {
   const retry = sent.findLast((msg) => msg.type === "routineInboxSend")
   assert.equal(retry.source, first.source)
   assert.equal(retry.body, first.body)
+  assert.deepEqual(retry.attachmentIDs, first.attachmentIDs)
+  assert.match(root.textContent, /receipt.pdf/)
   emit({
     type: "routineInboxSent",
     requestID: retry.requestID,
     agentID: agent.id,
-    message: { id: "rmg_user", agentID: agent.id, kind: "user", source: retry.source, body: retry.body, time: 2 },
+    message: {
+      id: "rmg_user",
+      agentID: agent.id,
+      kind: "user",
+      source: retry.source,
+      body: retry.body,
+      attachments: [attachment],
+      time: 2,
+    },
   })
   assert.match(root.textContent, /You/)
   assert.equal(root.querySelector("textarea[aria-label='Message this worker']").value, "")
+  assert.match(root.querySelector('[data-routine-message="rmg_user"]').textContent, /receipt.pdf/)
+  root.querySelector('[data-routine-message="rmg_user"] [aria-label="Open receipt.pdf"]').click()
+  const openedAttachment = sent.findLast((msg) => msg.type === "routineInboxAttachmentOpen")
+  assert.equal(openedAttachment.agentID, agent.id)
+  assert.equal(openedAttachment.attachmentID, attachment.id)
   emit({
     type: "routineInbox",
     requestID: request.requestID,
@@ -306,6 +342,17 @@ try {
         source: "report:occ2",
         time: 3,
       },
+      {
+        kind: "attachment",
+        attachmentID: attachment.id,
+        messageID: "rmg_user",
+        label: attachment.name,
+        mime: attachment.mime,
+        size: attachment.size,
+        messageKind: "user",
+        source: retry.source,
+        time: 2,
+      },
     ],
   })
   emit({
@@ -338,6 +385,12 @@ try {
   assert.ok(sharedLink)
   sharedLink.click()
   assert.equal(sent.findLast((msg) => msg.type === "openExternal").url, "https://example.com/receipt-policy")
+  const sharedAttachment = [...root.querySelectorAll(".routines-info-list button")].find((item) =>
+    item.textContent.includes("receipt.pdf"),
+  )
+  assert.ok(sharedAttachment)
+  sharedAttachment.click()
+  assert.equal(sent.findLast((msg) => msg.type === "routineInboxAttachmentOpen").attachmentID, attachment.id)
   assert.equal(draft.value, "Keep this draft")
   infoToggle.click()
   await Promise.resolve()
@@ -572,6 +625,7 @@ try {
     agents: [agent, legal],
     templates: [],
   })
+  assert.equal(root.querySelector("textarea[aria-label='Message this worker']").disabled, true)
   assert.equal(
     root.querySelector(".routines-thread[role='region']").getAttribute("aria-label"),
     "Conversation with Books",
@@ -593,6 +647,7 @@ try {
       },
     ],
   })
+  assert.equal(root.querySelector("textarea[aria-label='Message this worker']").disabled, false)
   const firstPage = sent.findLast((msg) => msg.type === "routineInboxPage")
   emit({
     type: "routineInboxPage",

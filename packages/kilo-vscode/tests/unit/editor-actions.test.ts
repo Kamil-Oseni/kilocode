@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, spyOn } from "bun:test"
 import * as vscode from "vscode"
-import { handleEditorAction } from "../../src/kilo-provider/editor-actions"
+import { handleEditorAction, openAttachment } from "../../src/kilo-provider/editor-actions"
 
 const open = spyOn(vscode.workspace, "openTextDocument")
 const warn = spyOn(vscode.window, "showWarningMessage")
@@ -43,5 +43,63 @@ describe("openFile review ghost", () => {
     expect(open).not.toHaveBeenCalled()
     expect(warn).toHaveBeenCalledWith("File not found: gone.ts")
     stat.mockRestore()
+  })
+})
+
+describe("routine attachment open", () => {
+  it("rejects mismatched content before writing a preview", () => {
+    const write = spyOn(vscode.workspace.fs, "writeFile")
+    openAttachment(vscode.Uri.file("/storage"), {
+      name: "ledger.pdf",
+      mime: "application/pdf",
+      size: 2,
+      data: "AQ==",
+    })
+    openAttachment(vscode.Uri.file("/storage"), {
+      name: "../ledger.pdf",
+      mime: "application/pdf",
+      size: 1,
+      data: "AQ==",
+    })
+    openAttachment(vscode.Uri.file("/storage"), {
+      name: "ledger.pdf",
+      mime: "Application/PDF",
+      size: 1,
+      data: "AQ==",
+    })
+    openAttachment(vscode.Uri.file("/storage"), {
+      name: "empty.pdf",
+      mime: "application/pdf",
+      size: 0,
+      data: "",
+    })
+    expect(write).not.toHaveBeenCalled()
+    write.mockRestore()
+  })
+
+  it("opens valid content and trims stale preview files", async () => {
+    const mkdir = spyOn(vscode.workspace.fs, "createDirectory").mockResolvedValue()
+    const write = spyOn(vscode.workspace.fs, "writeFile").mockResolvedValue()
+    const read = spyOn(vscode.workspace.fs, "readDirectory").mockResolvedValue(
+      Array.from({ length: 21 }, (_, index) => [`${index.toString().padStart(2, "0")}.pdf`, vscode.FileType.File]),
+    )
+    const remove = spyOn(vscode.workspace.fs, "delete").mockResolvedValue()
+    const command = spyOn(vscode.commands, "executeCommand").mockResolvedValue(undefined)
+    openAttachment(vscode.Uri.file("/storage"), {
+      name: "ledger.pdf",
+      mime: "application/pdf",
+      size: 1,
+      data: "AQ==",
+    })
+    for (let attempt = 0; command.mock.calls.length === 0 && attempt < 50; attempt++) await Bun.sleep(1)
+    expect(mkdir).toHaveBeenCalled()
+    expect(write).toHaveBeenCalled()
+    expect(remove).toHaveBeenCalled()
+    expect(command).toHaveBeenCalledWith("vscode.open", expect.anything())
+    mkdir.mockRestore()
+    write.mockRestore()
+    read.mockRestore()
+    remove.mockRestore()
+    command.mockRestore()
   })
 })

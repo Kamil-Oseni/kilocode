@@ -6,12 +6,13 @@ import {
   RayaRoutineMessageTable as Message,
 } from "@opencode-ai/core/kilocode/routine.sql"
 import { SessionID } from "@/session/schema"
-import { Clip, Record as MessageRecord } from "./inbox"
+import { AttachmentMeta, Clip, Record as MessageRecord } from "./inbox"
 
 const token = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_.:-]{1,128}$/))
 const stamp = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(8.64e15))
 const Files = Schema.Array(Clip).check(Schema.isMaxLength(8))
 const decoded = Schema.decodeUnknownExit(Files)
+const decodedAttachments = Schema.decodeUnknownExit(Schema.Array(AttachmentMeta).check(Schema.isMaxLength(8)))
 const CAP = 500
 
 export const Section = Schema.Literals(["shares", "contacts"])
@@ -30,6 +31,13 @@ const ShareBase = {
   sessionID: Schema.optional(SessionID),
 }
 export const Share = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal("attachment"),
+    ...ShareBase,
+    attachmentID: AttachmentMeta.fields.id,
+    mime: AttachmentMeta.fields.mime,
+    size: AttachmentMeta.fields.size,
+  }),
   Schema.Struct({
     kind: Schema.Literal("file"),
     ...ShareBase,
@@ -112,6 +120,12 @@ function files(raw: string | null) {
   return Exit.isSuccess(result) ? result.value : []
 }
 
+function attachments(raw: string | null) {
+  if (!raw || raw[0] !== "[") return []
+  const result = decodedAttachments(JSON.parse(raw))
+  return Exit.isSuccess(result) ? result.value : []
+}
+
 function links(body: string) {
   const result: { label: string; url: string }[] = []
   for (const match of body.matchAll(/https?:\/\/[^\s<>"']+/gi)) {
@@ -136,6 +150,14 @@ function shares(row: typeof Message.$inferSelect): Share[] {
   }
   return [
     ...files(row.files).map((file) => ({ kind: "file" as const, label: file.name, path: file.path, ...meta })),
+    ...attachments(row.attachments).map((file) => ({
+      kind: "attachment" as const,
+      attachmentID: file.id,
+      label: file.name,
+      mime: file.mime,
+      size: file.size,
+      ...meta,
+    })),
     ...links(row.body).map((link) => ({ kind: "link" as const, ...link, ...meta })),
   ]
 }

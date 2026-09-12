@@ -734,7 +734,41 @@
 }
 
 .routines-compose-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--raya-space-4);
   padding-bottom: 1px;
+}
+
+.routines-draft-files {
+  grid-column: 1 / -1;
+  max-height: 6rem;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+  border-bottom: 1px solid var(--border-weak, var(--vscode-widget-border));
+}
+
+.routines-draft-files li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--raya-space-8);
+  min-width: 0;
+  padding: var(--raya-space-2) 0;
+}
+
+.routines-draft-files li + li {
+  border-top: 1px solid var(--border-weak, var(--vscode-widget-border));
+}
+
+.routines-draft-files span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--kilo-font-size-12);
 }
 
 .routines-delegate {

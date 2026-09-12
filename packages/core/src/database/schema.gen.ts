@@ -42,11 +42,29 @@ export default {
       // kilocode_change end
       // kilocode_change start
       yield* tx.run(`
+        CREATE TABLE \`raya_routine_attachment\` (
+          \`id\` text PRIMARY KEY,
+          \`agent_id\` text NOT NULL,
+          \`message_id\` text,
+          \`name\` text NOT NULL,
+          \`mime\` text NOT NULL,
+          \`size\` integer NOT NULL,
+          \`data\` text NOT NULL,
+          \`sha256\` text NOT NULL,
+          \`time_created\` integer NOT NULL,
+          CONSTRAINT \`fk_raya_routine_attachment_agent_id_raya_routine_conversation_agent_id_fk\` FOREIGN KEY (\`agent_id\`) REFERENCES \`raya_routine_conversation\`(\`agent_id\`) ON DELETE CASCADE,
+          CONSTRAINT \`fk_raya_routine_attachment_message_id_raya_routine_message_id_fk\` FOREIGN KEY (\`message_id\`) REFERENCES \`raya_routine_message\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(`
         CREATE TABLE \`raya_routine_conversation\` (
           \`agent_id\` text PRIMARY KEY,
           \`id\` text NOT NULL,
           \`read_at\` integer NOT NULL,
           \`draft\` text,
+          \`draft_attachments\` text,
           \`time_updated\` integer NOT NULL
         );
       `)
@@ -100,6 +118,9 @@ export default {
           \`occurrence_id\` text,
           \`session_id\` text,
           \`files\` text,
+          \`attachments\` text,
+          \`delivery_id\` text,
+          \`delivered_at\` integer,
           \`time_created\` integer NOT NULL,
           CONSTRAINT \`fk_raya_routine_message_agent_id_raya_routine_conversation_agent_id_fk\` FOREIGN KEY (\`agent_id\`) REFERENCES \`raya_routine_conversation\`(\`agent_id\`) ON DELETE CASCADE
         );
@@ -350,6 +371,11 @@ export default {
       // kilocode_change start
       yield* tx.run(
         `CREATE INDEX \`raya_routine_archive_order\` ON \`raya_routine_archive\` ("archived_at" desc,\`id\`);`,
+      )
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(
+        `CREATE INDEX \`raya_routine_attachment_owner\` ON \`raya_routine_attachment\` (\`agent_id\`,\`message_id\`,\`time_created\`);`,
       )
       // kilocode_change end
       // kilocode_change start

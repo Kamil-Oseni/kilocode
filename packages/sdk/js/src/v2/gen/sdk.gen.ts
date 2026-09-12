@@ -273,6 +273,8 @@ import type {
   KilocodeRoutineEventResponses,
   KilocodeRoutineForecastErrors,
   KilocodeRoutineForecastResponses,
+  KilocodeRoutineInboxAttachmentErrors,
+  KilocodeRoutineInboxAttachmentResponses,
   KilocodeRoutineInboxDraftErrors,
   KilocodeRoutineInboxDraftResponses,
   KilocodeRoutineInboxErrors,
@@ -8946,6 +8948,14 @@ export class Inbox extends HeyApiClient {
       workspace?: string
       source?: string
       body?: string
+      attachments?: Array<{
+        id: string
+        name: string
+        mime: string
+        size: number
+        data: string
+      }>
+      attachmentIDs?: Array<string>
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -8959,6 +8969,8 @@ export class Inbox extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "body", key: "source" },
             { in: "body", key: "body" },
+            { in: "body", key: "attachments" },
+            { in: "body", key: "attachmentIDs" },
           ],
         },
       ],
@@ -9075,6 +9087,14 @@ export class Inbox extends HeyApiClient {
       directory?: string
       workspace?: string
       draft?: string
+      attachments?: Array<{
+        id: string
+        name: string
+        mime: string
+        size: number
+        data: string
+      }>
+      attachmentIDs?: Array<string>
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -9087,6 +9107,8 @@ export class Inbox extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "body", key: "draft" },
+            { in: "body", key: "attachments" },
+            { in: "body", key: "attachmentIDs" },
           ],
         },
       ],
@@ -9104,6 +9126,44 @@ export class Inbox extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Read one routine message attachment
+   *
+   * Return bounded attachment content only when the attachment belongs to the selected retained worker conversation.
+   */
+  public attachment<ThrowOnError extends boolean = false>(
+    parameters: {
+      agentID: string
+      attachmentID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "agentID" },
+            { in: "path", key: "attachmentID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      KilocodeRoutineInboxAttachmentResponses,
+      KilocodeRoutineInboxAttachmentErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/agent/{agentID}/inbox/attachment/{attachmentID}",
+      ...options,
+      ...params,
     })
   }
 }

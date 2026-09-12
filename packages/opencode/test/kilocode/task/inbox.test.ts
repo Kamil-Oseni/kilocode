@@ -2,7 +2,11 @@ import { expect, test } from "bun:test"
 import { Effect, Exit } from "effect"
 import { eq, sql } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
-import { RayaRoutineConversationTable as Conversation } from "@opencode-ai/core/kilocode/routine.sql"
+import {
+  RayaRoutineAttachmentTable as Attachment,
+  RayaRoutineConversationTable as Conversation,
+  RayaRoutineMessageTable as Message,
+} from "@opencode-ai/core/kilocode/routine.sql"
 import { RayaTaskInbox, status, posted } from "@/kilocode/task/inbox"
 import type { RayaTask } from "@/kilocode/task"
 import { SessionID } from "@/session/schema"
@@ -26,9 +30,16 @@ test("routine inbox state stays separate from unread", () => {
   expect(status(agent("a", true, { state: "active" }))).toBe("running")
   expect(status(agent("a", false, { state: "active" }))).toBe("running")
   expect(status(agent("a", true, { state: "recovery" }))).toBe("failed")
-  expect(status(agent("a"), { id: "run", agentID: "a", at: 1, sessionID: SessionID.make("ses_test"), status: "blocked", blockedReason: "waiting on you" })).toBe(
-    "needs_input",
-  )
+  expect(
+    status(agent("a"), {
+      id: "run",
+      agentID: "a",
+      at: 1,
+      sessionID: SessionID.make("ses_test"),
+      status: "blocked",
+      blockedReason: "waiting on you",
+    }),
+  ).toBe("needs_input")
   expect(status(agent("a"))).toBe("scheduled")
 })
 
@@ -146,9 +157,9 @@ test("routine inbox publication is idempotent, unread ignores user messages, and
       expect(yield* inbox.read("agt_1", report.time)).toBe(report.time)
       expect((yield* inbox.summaries([agent("agt_1")], new Map()))[0].unread).toBe(0)
       expect(yield* inbox.read("agt_1", 0)).toBe(report.time)
-      yield* inbox.draft("agt_1", "Ask about travel")
+      yield* inbox.draft("agt_1", { draft: "Ask about travel" })
       expect((yield* inbox.summaries([agent("agt_1")], new Map()))[0].draft).toBe("Ask about travel")
-      expect(yield* inbox.draft("agt_1", "")).toBeNull()
+      expect(yield* inbox.draft("agt_1", { draft: "" })).toEqual({ draft: null })
       const page = yield* inbox.page("agt_1")
       expect(page.messages.map((item) => item.source)).toEqual(["user_1", "report:occ_1"])
       const renamed = yield* inbox.summaries([{ ...agent("agt_1"), name: "Accounting", role: "accountant" }], new Map())
@@ -213,12 +224,98 @@ test("routine inbox pages return at most 50 messages and refuse a larger limit",
       expect(second.next).toBeUndefined()
       const seen = new Set([...first.messages, ...second.messages].map((item) => item.source))
       expect(seen.size).toBe(60)
+      expect(Exit.isFailure(yield* inbox.page("agt_page", undefined, 51).pipe(Effect.exit))).toBe(true)
+      expect(Exit.isFailure(yield* inbox.page("agt_page", undefined, 0).pipe(Effect.exit))).toBe(true)
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
+test("routine draft attachments persist, reorder, promote atomically, and expose content only to their owner", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const inbox = RayaTaskInbox.make(database)
+      const first = {
+        id: "c6022fea-f828-4d8e-8833-c59dfc46f61b",
+        name: "ledger.txt",
+        mime: "text/plain",
+        size: 6,
+        data: Buffer.from("ledger").toString("base64"),
+      }
+      const second = {
+        id: "77e8e93b-81fb-4e2c-892c-8fc423b7c068",
+        name: "notes.txt",
+        mime: "text/plain",
+        size: 5,
+        data: Buffer.from("notes").toString("base64"),
+      }
+      const saved = yield* inbox.draft("books", { draft: "Review these", attachments: [first, second] })
+      expect(saved.attachments).toEqual([
+        { id: first.id, name: first.name, mime: first.mime, size: first.size },
+        { id: second.id, name: second.name, mime: second.mime, size: second.size },
+      ])
+      expect((yield* inbox.summaries([agent("books")], new Map()))[0].draftAttachments).toEqual(saved.attachments)
+      expect(yield* inbox.draft("books", { draft: "Text only save" })).toEqual({
+        draft: "Text only save",
+        attachments: saved.attachments,
+      })
       expect(
-        Exit.isFailure(yield* inbox.page("agt_page", undefined, 51).pipe(Effect.exit)),
-      ).toBe(true)
+        (yield* inbox.draft("books", { draft: "Review these", attachmentIDs: [second.id, first.id] })).attachments,
+      ).toEqual([saved.attachments![1]!, saved.attachments![0]!])
+      expect(yield* inbox.content("other", first.id)).toBeUndefined()
+      expect(yield* inbox.content("books", first.id)).toEqual(first)
+
+      const admitted = yield* inbox.admit({
+        agentID: "books",
+        source: "user_attachment",
+        kind: "user",
+        body: "Review these",
+        attachmentIDs: [second.id, first.id],
+      })
+      expect(admitted.record.attachments?.map((file) => file.id)).toEqual([second.id, first.id])
+      const summary = (yield* inbox.summaries([agent("books")], new Map()))[0]
+      expect(summary.draft).toBeUndefined()
+      expect(summary.draftAttachments).toBeUndefined()
+      expect(JSON.stringify(yield* inbox.page("books"))).not.toContain(first.data)
       expect(
-        Exit.isFailure(yield* inbox.page("agt_page", undefined, 0).pipe(Effect.exit)),
+        yield* inbox.admit({
+          agentID: "books",
+          source: "user_attachment",
+          kind: "user",
+          body: "Review these",
+          attachmentIDs: [second.id, first.id],
+        }),
+      ).toEqual({ record: admitted.record, created: false })
+      expect(
+        Exit.isFailure(yield* inbox.draft("other", { draft: "steal", attachmentIDs: [first.id] }).pipe(Effect.exit)),
       ).toBe(true)
+
+      const sid = SessionID.make("ses_attachment")
+      yield* inbox.attach("books", "user_attachment", sid)
+      const delivery = yield* inbox.delivery(sid, "msg_dispatch")
+      expect(delivery?.files).toEqual([
+        { type: "file", mime: second.mime, filename: second.name, url: `data:text/plain;base64,${second.data}` },
+        { type: "file", mime: first.mime, filename: first.name, url: `data:text/plain;base64,${first.data}` },
+      ])
+      expect((yield* inbox.delivery(sid, "msg_dispatch"))?.record.id).toBe(admitted.record.id)
+      yield* inbox.delivered(sid, "msg_dispatch")
+      expect((yield* inbox.delivery(sid, "msg_dispatch"))?.delivered).toBe(true)
+
+      expect(yield* inbox.draft("books", { draft: null, attachmentIDs: [] })).toEqual({ draft: null })
+      expect(
+        yield* database.db
+          .select({ message: Attachment.message_id })
+          .from(Attachment)
+          .where(eq(Attachment.agent_id, "books"))
+          .all(),
+      ).toEqual([{ message: admitted.record.id }, { message: admitted.record.id }])
+      expect(
+        yield* database.db
+          .select({ delivered: Message.delivered_at })
+          .from(Message)
+          .where(eq(Message.id, admitted.record.id))
+          .get(),
+      ).toMatchObject({ delivered: expect.any(Number) })
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })

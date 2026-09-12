@@ -5,6 +5,7 @@ import { Cause, Effect, Semaphore } from "effect"
 import type { Bus } from "@/bus"
 import type { Session } from "@/session/session"
 import { SessionID, type MessageID } from "@/session/schema"
+import type { SessionV1 } from "@opencode-ai/core/v1/session"
 import type { Storage } from "@/storage/storage"
 import { EffectBridge } from "@/effect/bridge"
 import { KiloSession } from "@/kilocode/session"
@@ -13,6 +14,7 @@ import * as Log from "@opencode-ai/core/util/log"
 import { RayaGoal } from "."
 import type { Database } from "@opencode-ai/core/database/database"
 import { continuation } from "@/kilocode/task/continuation"
+import { RayaTaskInbox } from "@/kilocode/task/inbox"
 
 const log = Log.create({ service: "raya-goal-continuation" })
 const recovery = Semaphore.makeUnsafe(2)
@@ -41,6 +43,7 @@ async function continueGoal(
   messageID: MessageID,
   queuedAt: number,
   signal: AbortSignal,
+  files?: readonly SessionV1.FilePartInput[],
 ): Promise<unknown> {
   const [{ AppRuntime }, { SessionPrompt }, { InstanceStore }] = await Promise.all([
     import("@/effect/app-runtime"),
@@ -57,7 +60,7 @@ async function continueGoal(
               sessionID,
               messageID,
               goalQueuedAt: queuedAt,
-              parts: [{ type: "text", text: prompt(objective), synthetic: true }],
+              parts: [...(files ?? []), { type: "text", text: prompt(objective), synthetic: true }],
               goalObjective: objective, // raya_change - route the latest steered objective, not the original turn
             })
             .pipe(
@@ -72,6 +75,23 @@ async function continueGoal(
   )
 }
 
+async function continueTurn(sessionID: SessionID, directory: string, signal: AbortSignal): Promise<unknown> {
+  const [{ AppRuntime }, { SessionPrompt }, { InstanceStore }] = await Promise.all([
+    import("@/effect/app-runtime"),
+    import("@/session/prompt"),
+    import("@/project/instance-store"),
+  ])
+  return AppRuntime.runPromise(
+    InstanceStore.Service.use((instances) =>
+      instances.provide(
+        { directory },
+        SessionPrompt.Service.use((service) => service.loop({ sessionID })),
+      ),
+    ),
+    { signal },
+  )
+}
+
 type Goals = ReturnType<typeof RayaGoal.make>
 type Run = (
   sessionID: SessionID,
@@ -80,7 +100,70 @@ type Run = (
   messageID: MessageID,
   queuedAt: number,
   signal: AbortSignal,
+  files?: readonly SessionV1.FilePartInput[],
 ) => Promise<unknown>
+type Loop = (sessionID: SessionID, directory: string, signal: AbortSignal) => Promise<unknown>
+
+function response(messages: readonly SessionV1.WithParts[], messageID: MessageID) {
+  return messages
+    .filter((row) => row.info.role === "assistant" && row.info.parentID === messageID)
+    .toSorted((a, b) => a.info.id.localeCompare(b.info.id))
+    .at(-1)
+}
+
+function invoke(input: {
+  goals: Goals
+  sessionID: SessionID
+  directory: string
+  objective: string
+  messageID: MessageID
+  queuedAt: number
+  revision?: string
+  run?: Run
+  quiet?: boolean
+  files?: readonly SessionV1.FilePartInput[]
+  complete?: () => Effect.Effect<void>
+}) {
+  return Effect.tryPromise({
+    try: (signal) =>
+      (input.run ?? continueGoal)(
+        input.sessionID,
+        input.objective,
+        input.directory,
+        input.messageID,
+        input.queuedAt,
+        signal,
+        input.files,
+      ),
+    catch: (err) => err,
+  }).pipe(
+    Effect.tap(() => input.complete?.() ?? Effect.void),
+    Effect.catch((err) =>
+      input.goals
+        .update(
+          input.sessionID,
+          {
+            status: "blocked",
+            reason: `Automatic continuation failed: ${err instanceof Error ? err.message : String(err)}`,
+          },
+          input.revision,
+        )
+        .pipe(
+          input.quiet
+            ? Effect.asVoid
+            : Effect.catchCause((cause) =>
+                Effect.sync(() =>
+                  log.error("failed to continue or block goal", {
+                    sessionID: input.sessionID,
+                    err: Cause.squash(cause),
+                  }),
+                ),
+              ),
+          Effect.asVoid,
+        ),
+    ),
+  )
+}
 
 function recover<A, E, R>(effect: Effect.Effect<A, E, R>, identity?: string) {
   return identity === undefined
@@ -98,52 +181,32 @@ function launch(input: {
   run?: Run
   quiet?: boolean
   dispatch: string
+  database?: Database.Interface
 }) {
   return input.permitted().pipe(
     Effect.flatMap((allowed) =>
       allowed ? input.goals.dispatched(input.sessionID, input.dispatch) : Effect.succeed(undefined),
     ),
-    Effect.flatMap((goal) =>
-      goal?.status === "active" && goal.dispatch?.messageID
-        ? Effect.tryPromise({
-            try: (signal) =>
-              (input.run ?? continueGoal)(
-                input.sessionID,
-                goal.objective,
-                input.directory,
-                goal.dispatch!.messageID!,
-                goal.dispatch!.queuedAt,
-                signal,
-              ),
-            catch: (err) => err,
-          }).pipe(
-            Effect.catch((err) =>
-              input.goals
-                .update(
-                  input.sessionID,
-                  {
-                    status: "blocked",
-                    reason: `Automatic continuation failed: ${err instanceof Error ? err.message : String(err)}`,
-                  },
-                  goal.revision,
-                )
-                .pipe(
-                  input.quiet
-                    ? Effect.asVoid
-                    : Effect.catchCause((cause) =>
-                        Effect.sync(() =>
-                          log.error("failed to continue or block goal", {
-                            sessionID: input.sessionID,
-                            err: Cause.squash(cause),
-                          }),
-                        ),
-                      ),
-                  Effect.asVoid,
-                ),
-            ),
-          )
-        : Effect.void,
-    ),
+    Effect.flatMap((goal) => {
+      if (goal?.status !== "active" || !goal.dispatch?.messageID) return Effect.void
+      const inbox = input.database ? RayaTaskInbox.make(input.database) : undefined
+      return Effect.gen(function* () {
+        const delivery = inbox ? yield* inbox.delivery(input.sessionID, goal.dispatch!.messageID!) : undefined
+        yield* invoke({
+          goals: input.goals,
+          sessionID: input.sessionID,
+          directory: input.directory,
+          objective: goal.objective,
+          messageID: goal.dispatch!.messageID!,
+          queuedAt: goal.dispatch!.queuedAt,
+          revision: goal.revision,
+          run: input.run,
+          quiet: input.quiet,
+          files: delivery?.files,
+          complete: delivery ? () => inbox!.delivered(input.sessionID, goal.dispatch!.messageID!) : undefined,
+        })
+      })
+    }),
   )
 }
 
@@ -173,6 +236,7 @@ export namespace RayaGoalContinuation {
     enabled: () => Effect.Effect<boolean>
     idle: (sessionID: SessionID) => Effect.Effect<boolean>
     run?: Run
+    loop?: Loop
   }) {
     return Effect.gen(function* () {
       if (!(yield* input.enabled())) return
@@ -218,6 +282,7 @@ export namespace RayaGoalContinuation {
     storage: Storage.Interface
     sessions: Pick<Session.Interface, "get" | "messages" | "children"> // raya_change - evidence spans child sessions
     run?: Run
+    loop?: Loop
     permitted?: () => Effect.Effect<boolean>
   }) {
     const goals = RayaGoal.make(input)
@@ -229,10 +294,66 @@ export namespace RayaGoalContinuation {
       if (!(yield* continuation({ ...input, session }))) return
       if (goal.dispatch?.phase === "started" && goal.dispatch.intent === (goal.intent ?? "unset")) {
         const messages = yield* input.sessions.messages({ sessionID: input.sessionID })
-        const reply = messages
-          .filter((row) => row.info.role === "assistant" && row.info.parentID === goal.dispatch?.messageID)
-          .toSorted((a, b) => a.info.id.localeCompare(b.info.id))
-          .at(-1)
+        const inbox = input.database ? RayaTaskInbox.make(input.database) : undefined
+        const delivery =
+          inbox && goal.dispatch.messageID ? yield* inbox.delivery(input.sessionID, goal.dispatch.messageID) : undefined
+        const user = messages.some((row) => row.info.role === "user" && row.info.id === goal.dispatch?.messageID)
+        // delivered_at means SessionPrompt persisted the owned user intake. It does not mean the model turn completed.
+        if (delivery && user) yield* inbox!.delivered(input.sessionID, goal.dispatch.messageID!)
+        if (delivery && !delivery.delivered && !user && goal.dispatch.messageID) {
+          yield* invoke({
+            goals,
+            sessionID: input.sessionID,
+            directory: session.directory,
+            objective: goal.objective,
+            messageID: goal.dispatch.messageID,
+            queuedAt: goal.dispatch.queuedAt,
+            revision: goal.revision,
+            run: input.run,
+            quiet: true,
+            files: delivery.files,
+            complete: () => inbox!.delivered(input.sessionID, goal.dispatch!.messageID!),
+          })
+          return
+        }
+        const found = response(messages, goal.dispatch.messageID!)
+        const reply = found
+          ? found
+          : delivery && user
+            ? yield* Effect.gen(function* () {
+                const current = yield* goals.get(input.sessionID)
+                if (
+                  !current ||
+                  current.status !== "active" ||
+                  current.dispatch?.phase !== "started" ||
+                  current.dispatch.messageID !== goal.dispatch?.messageID ||
+                  current.dispatch.intent !== (current.intent ?? "unset")
+                )
+                  return
+                if (input.permitted && !(yield* input.permitted())) return
+                const completed = yield* Effect.tryPromise({
+                  try: (signal) => (input.loop ?? continueTurn)(input.sessionID, session.directory, signal),
+                  catch: (err) => err,
+                }).pipe(
+                  Effect.as(true),
+                  Effect.catch((err) =>
+                    goals
+                      .update(
+                        input.sessionID,
+                        {
+                          status: "blocked",
+                          reason: `Automatic continuation failed: ${err instanceof Error ? err.message : String(err)}`,
+                        },
+                        current.revision,
+                      )
+                      .pipe(Effect.as(false)),
+                  ),
+                )
+                if (!completed) return
+                const refreshed = yield* input.sessions.messages({ sessionID: input.sessionID })
+                return response(refreshed, goal.dispatch!.messageID!)
+              })
+            : undefined
         if (!reply) return
         const settled = yield* recover(goals.finished(input.sessionID, reply.info.id), reply.info.id)
         if (!settled) return
@@ -267,6 +388,7 @@ export namespace RayaGoalContinuation {
         run: input.run,
         quiet: true,
         dispatch: queued.dispatch.id,
+        database: input.database,
       })
     })
   }

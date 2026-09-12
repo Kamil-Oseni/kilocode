@@ -7,6 +7,10 @@ import { SessionID } from "@/session/schema"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
+import { RayaGoal } from "@/kilocode/goal"
+import { RayaGoalContinuation } from "@/kilocode/goal/continuation"
+import type { MessageV2 } from "@/session/message-v2"
+import { MessageID } from "@/session/schema"
 
 function memory() {
   const data = new Map<string, unknown>()
@@ -179,6 +183,147 @@ test("a follow-up while waiting on you resumes the same session", async () => {
       expect(goal.objective).toContain("Review accounts")
       expect(goal.status).toBe("active")
       expect((yield* runner.tasks.get(agent.id)).objective).toBe("Review accounts")
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
+test("a persisted routine user turn resumes its dangling model loop without replaying attachment intake", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const sid = SessionID.make("ses_attachment_recovery")
+      const rows: MessageV2.WithParts[] = []
+      const sessions = {
+        get: () => Effect.succeed(session(sid)),
+        messages: () => Effect.succeed(rows),
+        children: () => Effect.succeed([]),
+      }
+      const inbox = RayaTaskInbox.make(database)
+      const goals = RayaGoal.make({ storage, sessions })
+      const file = {
+        id: "b95bb7ad-766b-4fbb-972d-bcfdd29a9bf0",
+        name: "ledger.txt",
+        mime: "text/plain",
+        size: 6,
+        data: Buffer.from("ledger").toString("base64"),
+      }
+      yield* inbox.publish({
+        agentID: "books",
+        source: "user_recovery",
+        kind: "user",
+        body: "Review ledger",
+        attachments: [file],
+      })
+      yield* inbox.attach("books", "user_recovery", sid)
+      yield* goals.create(sid, "Review the attached ledger")
+      const queued = yield* goals.continued(sid)
+      if (!queued?.dispatch) throw new Error("Missing queued dispatch")
+      const started = yield* goals.dispatched(sid, queued.dispatch.id)
+      if (!started?.dispatch?.messageID) throw new Error("Missing started dispatch")
+      const delivery = yield* inbox.delivery(sid, started.dispatch.messageID)
+      expect(delivery?.delivered).toBe(false)
+      expect(delivery?.files[0]).toMatchObject({ filename: file.name, url: `data:text/plain;base64,${file.data}` })
+      const user = {
+        info: {
+          id: started.dispatch.messageID,
+          sessionID: sid,
+          role: "user" as const,
+          time: { created: Date.now() },
+          agent: "generalist",
+          model: { providerID: "test", modelID: "test" },
+        },
+        parts: [],
+      } as unknown as MessageV2.WithParts
+      rows.push(user)
+      let loops = 0
+      yield* RayaGoalContinuation.resume({
+        database,
+        sessionID: sid,
+        storage,
+        sessions,
+        run: async () => {
+          throw new Error("must not enqueue the persisted user message again")
+        },
+        loop: async () => {
+          loops++
+          rows.push({
+            info: {
+              id: MessageID.ascending(),
+              parentID: started.dispatch!.messageID!,
+              sessionID: sid,
+              role: "assistant",
+              time: { created: Date.now(), completed: Date.now() },
+              agent: "generalist",
+              mode: "generalist",
+              path: { cwd: process.cwd(), root: process.cwd() },
+              cost: 0,
+              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              providerID: "test",
+              modelID: "test",
+              finish: "stop",
+            },
+            parts: [],
+          } as unknown as MessageV2.WithParts)
+        },
+      })
+      expect(loops).toBe(1)
+      expect((yield* inbox.delivery(sid, started.dispatch.messageID))?.delivered).toBe(true)
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
+test("routine startup claims an admitted follow-up that crashed before session attachment", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const created: string[] = []
+      const runner = RayaTaskRunner.make({
+        database,
+        storage,
+        sessions: {
+          create: () =>
+            Effect.sync(() => {
+              created.push("session")
+              return session("ses_recovered_admission")
+            }),
+          get: () => Effect.succeed(session("ses_recovered_admission")),
+          messages: () => Effect.succeed([]),
+          children: () => Effect.succeed([]),
+        },
+      })
+      const agent = yield* runner.tasks.create({
+        name: "Accounts",
+        role: "accountant",
+        objective: "Review accounts",
+        capabilities: ["accounting"],
+        access: "full",
+        enabled: false,
+        schedule: { kind: "manual" },
+      })
+      const inbox = RayaTaskInbox.make(database)
+      yield* inbox.admit({
+        agentID: agent.id,
+        source: "user_crash",
+        kind: "user",
+        body: "Resume this after restart",
+        attachments: [
+          {
+            id: "01f6781f-76ac-455b-8df7-21490a60c6dd",
+            name: "resume.txt",
+            mime: "text/plain",
+            size: 6,
+            data: Buffer.from("resume").toString("base64"),
+          },
+        ],
+      })
+      expect((yield* inbox.pending(agent.id))?.sessionID).toBeUndefined()
+      yield* runner.revive()
+      expect(created).toEqual(["session"])
+      expect(yield* inbox.pending(agent.id)).toBeUndefined()
+      expect((yield* inbox.page(agent.id)).messages[0]?.sessionID).toBe(SessionID.make("ses_recovered_admission"))
+      expect(yield* runner.tasks.runsFor(agent.id)).toHaveLength(1)
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })

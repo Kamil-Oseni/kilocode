@@ -4,13 +4,16 @@ import { useVSCode } from "../../context/vscode"
 import type { ExtensionMessage } from "../../types/messages"
 
 type Share = {
-  kind: "file" | "link"
+  kind: "file" | "link" | "attachment"
   messageID: string
   label: string
   time: number
   path?: string
   url?: string
   sessionID?: string
+  attachmentID?: string
+  mime?: string
+  size?: number
 }
 
 type Contact = {
@@ -37,10 +40,17 @@ function finite(value: unknown): value is number {
 function validShare(value: unknown): value is Share {
   if (!value || typeof value !== "object") return false
   const row = value as Record<string, unknown>
-  if (row.kind !== "file" && row.kind !== "link") return false
+  if (row.kind !== "file" && row.kind !== "link" && row.kind !== "attachment") return false
   if (typeof row.messageID !== "string" || typeof row.label !== "string" || !finite(row.time)) return false
   if (row.sessionID !== undefined && typeof row.sessionID !== "string") return false
   if (row.kind === "file") return typeof row.path === "string"
+  if (row.kind === "attachment")
+    return (
+      typeof row.attachmentID === "string" &&
+      typeof row.mime === "string" &&
+      typeof row.size === "number" &&
+      Number.isFinite(row.size)
+    )
   return typeof row.url === "string" && /^https?:\/\//i.test(row.url)
 }
 
@@ -68,6 +78,12 @@ function validContact(value: unknown): value is Contact {
 
 function stamp(at: number) {
   return new Date(at).toLocaleString()
+}
+
+function bytes(value: number) {
+  if (value < 1024) return `${value} B`
+  if (value < 1024 * 1024) return `${Math.ceil(value / 1024)} KB`
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`
 }
 
 export const ChatInfo: Component<{
@@ -168,7 +184,7 @@ export const ChatInfo: Component<{
   const unsub = vscode.onMessage(receive)
   onCleanup(unsub)
 
-  const files = createMemo(() => shares().filter((item) => item.kind === "file"))
+  const files = createMemo(() => shares().filter((item) => item.kind === "file" || item.kind === "attachment"))
   const links = createMemo(() => shares().filter((item) => item.kind === "link"))
 
   return (
@@ -233,15 +249,22 @@ export const ChatInfo: Component<{
                   <button
                     type="button"
                     onClick={() =>
-                      vscode.postMessage({
-                        type: "openFile",
-                        filePath: item.path!,
-                        ...(item.sessionID ? { sessionID: item.sessionID } : {}),
-                      })
+                      item.kind === "attachment"
+                        ? vscode.postMessage({
+                            type: "routineInboxAttachmentOpen",
+                            requestID: crypto.randomUUID(),
+                            agentID: props.agentID,
+                            attachmentID: item.attachmentID!,
+                          })
+                        : vscode.postMessage({
+                            type: "openFile",
+                            filePath: item.path!,
+                            ...(item.sessionID ? { sessionID: item.sessionID } : {}),
+                          })
                     }
                   >
                     <strong>{item.label}</strong>
-                    <span>{item.path}</span>
+                    <span>{item.kind === "attachment" ? `${item.mime} · ${bytes(item.size!)}` : item.path}</span>
                     <span>{stamp(item.time)}</span>
                   </button>
                 </li>

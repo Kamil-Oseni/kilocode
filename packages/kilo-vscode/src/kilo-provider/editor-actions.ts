@@ -3,6 +3,7 @@ import { buildPreviewPath, getPreviewCommand, getPreviewDir, parseImage, trimEnt
 import { escapeGlob, isAbsolutePath } from "../path-utils"
 import { validateFiles } from "./file-links"
 import type { DiffVirtualFile, DiffVirtualProvider } from "../DiffVirtualProvider"
+import { MAX_ROUTINE_FILE_BYTES } from "./routine-files"
 
 type EditorOpenMessage = {
   type?: string
@@ -67,6 +68,49 @@ function previewImage(dir: vscode.Uri | undefined, dataUrl: string, filename: st
     .then(open, (err) => console.error("[Kilo New] KiloProvider: Failed to preview image:", err))
 }
 
+export function openAttachment(
+  dir: vscode.Uri | undefined,
+  file: { name: string; mime: string; size: number; data: string },
+): void {
+  if (
+    !dir ||
+    !file.name ||
+    file.name.length > 256 ||
+    file.name !== file.name.trim() ||
+    /[\\/\u0000-\u001f\u007f]/.test(file.name)
+  )
+    return
+  if (!/^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/.test(file.mime)) return
+  if (!/^[a-zA-Z0-9+/]*={0,2}$/.test(file.data) || file.data.length % 4 !== 0) return
+  const data = Buffer.from(file.data, "base64")
+  if (file.size < 1 || file.size > MAX_ROUTINE_FILE_BYTES || data.byteLength !== file.size) return
+  if (data.toString("base64") !== file.data) return
+  if (file.mime.startsWith("image/")) {
+    previewImage(dir, `data:${file.mime};base64,${file.data}`, file.name)
+    return
+  }
+  const root = vscode.Uri.joinPath(dir, getPreviewDir())
+  const uri = vscode.Uri.joinPath(dir, buildPreviewPath(`${crypto.randomUUID()}-${file.name}`, Date.now()))
+  const clean = () =>
+    vscode.workspace.fs.readDirectory(root).then(
+      (items) =>
+        Promise.all(
+          trimEntries(items.map(([name]) => ({ path: name }))).map((name) =>
+            vscode.workspace.fs.delete(vscode.Uri.joinPath(root, name)).then(undefined, (err: unknown) => {
+              console.warn("[Kilo New] KiloProvider: Failed to delete stale routine attachment:", err)
+            }),
+          ),
+        ),
+      () => [],
+    )
+  void vscode.workspace.fs
+    .createDirectory(root)
+    .then(() => vscode.workspace.fs.writeFile(uri, data))
+    .then(clean)
+    .then(() => vscode.commands.executeCommand("vscode.open", uri))
+    .then(undefined, (err) => console.error("[Kilo New] KiloProvider: Failed to open routine attachment:", err))
+}
+
 export function handleEditorAction(
   message: EditorOpenMessage & {
     url?: unknown
@@ -92,7 +136,14 @@ export function handleEditorAction(
     // current — mirrors the validateFiles case below.
     if (message.filePath) {
       if (isMarkdownFile(message.filePath) && opts.openMarkdown?.(message.filePath, message.sessionID)) return true
-      openFile(opts.dir(message.sessionID), message.filePath, message.line, message.column, message.sessionID, opts.ghost)
+      openFile(
+        opts.dir(message.sessionID),
+        message.filePath,
+        message.line,
+        message.column,
+        message.sessionID,
+        opts.ghost,
+      )
     }
     return true
   }

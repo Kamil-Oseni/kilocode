@@ -62,9 +62,10 @@ test("the shipped routine inbox requires a roster worker and keeps follow-ups id
       })
     ).status,
   ).toBe(409)
-  expect((await app.request(route, { method: "POST", headers, body: JSON.stringify({ source: "user_2", body: "   " }) })).status).toBe(
-    400,
-  )
+  expect(
+    (await app.request(route, { method: "POST", headers, body: JSON.stringify({ source: "user_2", body: "   " }) }))
+      .status,
+  ).toBe(400)
   const page = Schema.decodeUnknownSync(Schema.toCodecJson(Page))(await (await app.request(route, { headers })).json())
   expect(page.messages).toHaveLength(1)
   expect(page.messages[0].id).toBe(message.id)
@@ -73,9 +74,7 @@ test("the shipped routine inbox requires a roster worker and keeps follow-ups id
   expect(Array.isArray(history)).toBe(true)
   expect(history).toHaveLength(1)
   expect(history[0].sessionID).toBe(message.sessionID)
-  expect(
-    (await (await app.request(`/kilocode/agent/${agent.id}/runs`, { headers })).json()),
-  ).toHaveLength(1)
+  expect(await (await app.request(`/kilocode/agent/${agent.id}/runs`, { headers })).json()).toHaveLength(1)
   const roster = await (await app.request("/kilocode/agent", { headers })).json()
   const worker = Array.isArray(roster) ? roster.find((item: { id: string }) => item.id === agent.id) : undefined
   expect(worker?.objective).toBe("Review accounts")
@@ -108,7 +107,9 @@ test("the shipped routine inbox requires a roster worker and keeps follow-ups id
       })
     ).status,
   ).toBe(200)
-  expect(await (await app.request(`${route}/read`, { method: "POST", headers, body: JSON.stringify({ at: 0 }) })).json()).toEqual({
+  expect(
+    await (await app.request(`${route}/read`, { method: "POST", headers, body: JSON.stringify({ at: 0 }) })).json(),
+  ).toEqual({
     at: message.time,
   })
 }, 30_000)
@@ -210,4 +211,91 @@ test("routine inbox HTTP pages refuse a limit above 50", async () => {
   expect((await app.request(`${route}?limit=0`, { headers })).status).toBe(400)
   const page = Schema.decodeUnknownSync(Schema.toCodecJson(Page))(await (await app.request(route, { headers })).json())
   expect(page.messages).toEqual([])
+}, 60_000)
+
+test("routine inbox HTTP stages durable attachment drafts and reads content through the owning worker", async () => {
+  await using directory = await tmpdir({ git: true })
+  const headers = { "content-type": "application/json", "x-kilo-directory": directory.path }
+  const app = Server.Default().app
+  const create = async (name: string) =>
+    Schema.decodeUnknownSync(Schema.toCodecJson(RayaTask.Agent))(
+      await (
+        await app.request("/kilocode/agent", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            name,
+            role: "accountant",
+            objective: "Review accounts",
+            capabilities: ["accounting"],
+            access: "full",
+            enabled: false,
+            schedule: { kind: "manual" },
+          }),
+        })
+      ).json(),
+    )
+  const books = await create("Books")
+  const other = await create("Other")
+  const route = `/kilocode/agent/${books.id}/inbox`
+  const file = {
+    id: "21813425-f33d-4a54-b4b9-7efcfc810750",
+    name: "ledger.csv",
+    mime: "text/csv",
+    size: 6,
+    data: Buffer.from("ledger").toString("base64"),
+  }
+  const staged = await app.request(`${route}/draft`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ draft: "Review ledger", attachments: [file] }),
+  })
+  expect(staged.status).toBe(200)
+  expect(await staged.json()).toEqual({
+    draft: "Review ledger",
+    attachments: [{ id: file.id, name: file.name, mime: file.mime, size: file.size }],
+  })
+  const roster = await (await app.request("/kilocode/agent-inbox", { headers })).text()
+  expect(roster).not.toContain(file.data)
+  expect(
+    JSON.parse(roster).find((item: { agentID: string }) => item.agentID === books.id).draftAttachments,
+  ).toHaveLength(1)
+
+  const sent = await app.request(route, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ source: "user_file", body: "Review ledger", attachmentIDs: [file.id] }),
+  })
+  expect(sent.status).toBe(200)
+  const message = await sent.json()
+  expect(message.attachments).toEqual([{ id: file.id, name: file.name, mime: file.mime, size: file.size }])
+  expect(
+    (
+      await app.request(route, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ source: "user_file", body: "Review ledger", attachmentIDs: [file.id] }),
+      })
+    ).status,
+  ).toBe(200)
+  expect(await (await app.request(`/kilocode/agent/${books.id}/runs`, { headers })).json()).toHaveLength(1)
+  const page = await (await app.request(route, { headers })).text()
+  expect(page).not.toContain(file.data)
+  expect(JSON.parse(page).messages[0].attachments).toEqual(message.attachments)
+  expect(await (await app.request(`${route}/attachment/${file.id}`, { headers })).json()).toEqual(file)
+  expect((await app.request(`/kilocode/agent/${other.id}/inbox/attachment/${file.id}`, { headers })).status).toBe(404)
+
+  const cleared = await app.request(`${route}/draft`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ draft: null, attachmentIDs: [] }),
+  })
+  expect(cleared.status).toBe(200)
+  expect(await cleared.json()).toEqual({ draft: null })
+  const invalid = await app.request(`${route}/draft`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ draft: "bad", attachments: [{ ...file, id: crypto.randomUUID(), size: 7 }] }),
+  })
+  expect(invalid.status).toBe(400)
 }, 60_000)

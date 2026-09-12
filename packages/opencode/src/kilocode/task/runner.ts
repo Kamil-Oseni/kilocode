@@ -128,7 +128,8 @@ export namespace RayaTaskRunner {
   type Runner = {
     tick: (from: number) => Effect.Effect<void>
     fire: (id: string) => Effect.Effect<RayaTask.Run, RayaTask.GuardError | RayaTask.NotFoundError>
-    ask: (id: string, question: string) => Effect.Effect<RayaTask.Run, RayaTask.GuardError | RayaTask.NotFoundError>
+    ask: (id: string, question: string, opts?: { defer?: boolean }) => Effect.Effect<RayaTask.Run, RayaTask.GuardError | RayaTask.NotFoundError>
+    resume: (sessionID: SessionID) => Effect.Effect<void>
     delegate: (
       input: Ask,
     ) => Effect.Effect<Errand, RayaTask.GuardError | RayaTask.NotFoundError | Invalid | Conflict>
@@ -278,7 +279,7 @@ export namespace RayaTaskRunner {
     })
 
     const fire = Effect.fn("RayaTaskRunner.fire")(
-      (id: string, trigger?: Trigger, note?: string, opts?: { follow?: boolean; view?: Pick<RayaTask.Agent, "role" | "access" | "tools"> }) =>
+      (id: string, trigger?: Trigger, note?: string, opts?: { follow?: boolean; view?: Pick<RayaTask.Agent, "role" | "access" | "tools">; defer?: boolean }) =>
       tasks.enforce(id).pipe(
         Effect.andThen(recoverable(id)),
         Effect.andThen(
@@ -350,12 +351,13 @@ export namespace RayaTaskRunner {
                   trigger: selected.trigger,
                 }
                 const stored = yield* tasks.record(run)
-                yield* kick({
-                  database: input.database,
-                  sessionID: created.id,
-                  storage: input.storage,
-                  sessions: input.sessions,
-                }).pipe(Effect.forkDetach)
+                if (!opts?.defer)
+                  yield* kick({
+                    database: input.database,
+                    sessionID: created.id,
+                    storage: input.storage,
+                    sessions: input.sessions,
+                  }).pipe(Effect.forkDetach)
                 return stored
               }),
             (selected) => selected.trigger,
@@ -385,7 +387,7 @@ export namespace RayaTaskRunner {
       }
     })
 
-    const steer = Effect.fn("RayaTaskRunner.steer")(function* (run: RayaTask.Run, note: string) {
+    const steer = Effect.fn("RayaTaskRunner.steer")(function* (run: RayaTask.Run, note: string, defer?: boolean) {
       const existing = yield* goals.get(run.sessionID)
       if (!existing || existing.status === "complete") {
         yield* goals.create(run.sessionID, note).pipe(
@@ -403,16 +405,17 @@ export namespace RayaTaskRunner {
         )
       }
       if (run.status === "blocked" && run.blockedReason === WAIT) yield* park(run.sessionID, false)
-      yield* kick({
-        database: input.database,
-        sessionID: run.sessionID,
-        storage: input.storage,
-        sessions: input.sessions,
-      }).pipe(Effect.forkDetach)
+      if (!defer)
+        yield* kick({
+          database: input.database,
+          sessionID: run.sessionID,
+          storage: input.storage,
+          sessions: input.sessions,
+        }).pipe(Effect.forkDetach)
       return run
     })
 
-    const ask = Effect.fn("RayaTaskRunner.ask")(function* (id: string, question: string) {
+    const ask = Effect.fn("RayaTaskRunner.ask")(function* (id: string, question: string, opts?: { defer?: boolean }) {
       const item = yield* tasks.get(id)
       if (item.access === undefined)
         return yield* new RayaTask.GuardError({
@@ -423,8 +426,13 @@ export namespace RayaTaskRunner {
       const reports = inbox ? (yield* inbox.page(id)).messages : []
       const note = brief(item, reports, question)
       const last = (yield* tasks.runsFor(id)).at(-1)
-      if (last && RayaTask.pending(last)) return yield* steer(last, note)
-      return yield* fire(id, undefined, note, { follow: true })
+      if (last && RayaTask.pending(last)) return yield* steer(last, note, opts?.defer)
+      return yield* fire(id, undefined, note, { follow: true, defer: opts?.defer })
+    })
+    const resume = Effect.fn("RayaTaskRunner.resume")(function* (sessionID: SessionID) {
+      yield* kick({ database: input.database, sessionID, storage: input.storage, sessions: input.sessions }).pipe(
+        Effect.forkDetach,
+      )
     })
 
     const start = Effect.fn("RayaTaskRunner.startErrand")(function* (taken: Errand) {
@@ -683,6 +691,11 @@ export namespace RayaTaskRunner {
       const items = yield* tasks.list()
       for (const item of items) {
         yield* reconcile(item.id)
+        const waiting = inbox ? yield* inbox.pending(item.id) : undefined
+        if (waiting && inbox) {
+          const resumed = yield* ask(item.id, waiting.body, { defer: true })
+          yield* inbox.attach(item.id, waiting.source, resumed.sessionID)
+        }
         const history = yield* tasks.runsFor(item.id)
         const run = history.findLast((entry) => entry.status === "running")
         if (!run) continue
@@ -813,6 +826,7 @@ export namespace RayaTaskRunner {
       preview,
       fire: fire as Runner["fire"],
       ask: ask as Runner["ask"],
+      resume,
       delegate: delegate as Runner["delegate"],
       stop: abort as Runner["stop"],
       settle: settle as Runner["settle"],

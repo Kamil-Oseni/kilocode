@@ -1,9 +1,9 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "39062738-382b-4893-97c2-e22a9f109c9b",
+  "id": "a0a21b54-d5a9-491d-90c5-f8fd2bb95454",
   "prevIds": [
-    "8628647d-d95f-429c-b7f4-4d27aaad5f41"
+    "39062738-382b-4893-97c2-e22a9f109c9b"
   ],
   "ddl": [
     {
@@ -20,6 +20,10 @@
     },
     {
       "name": "raya_routine_archive",
+      "entityType": "tables"
+    },
+    {
+      "name": "raya_routine_attachment",
       "entityType": "tables"
     },
     {
@@ -270,6 +274,96 @@
       "autoincrement": false,
       "default": null,
       "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "raya_routine_attachment"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "agent_id",
+      "entityType": "columns",
+      "table": "raya_routine_attachment"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "message_id",
+      "entityType": "columns",
+      "table": "raya_routine_attachment"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "raya_routine_attachment"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "mime",
+      "entityType": "columns",
+      "table": "raya_routine_attachment"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "size",
+      "entityType": "columns",
+      "table": "raya_routine_attachment"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "data",
+      "entityType": "columns",
+      "table": "raya_routine_attachment"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "sha256",
+      "entityType": "columns",
+      "table": "raya_routine_attachment"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_created",
+      "entityType": "columns",
+      "table": "raya_routine_attachment"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
       "name": "agent_id",
       "entityType": "columns",
       "table": "raya_routine_conversation"
@@ -301,6 +395,16 @@
       "default": null,
       "generated": null,
       "name": "draft",
+      "entityType": "columns",
+      "table": "raya_routine_conversation"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "draft_attachments",
       "entityType": "columns",
       "table": "raya_routine_conversation"
     },
@@ -631,6 +735,46 @@
       "default": null,
       "generated": null,
       "name": "session_id",
+      "entityType": "columns",
+      "table": "raya_routine_message"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "files",
+      "entityType": "columns",
+      "table": "raya_routine_message"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "attachments",
+      "entityType": "columns",
+      "table": "raya_routine_message"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "delivery_id",
+      "entityType": "columns",
+      "table": "raya_routine_message"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "delivered_at",
       "entityType": "columns",
       "table": "raya_routine_message"
     },
@@ -2130,6 +2274,36 @@
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
+      "name": "fk_raya_routine_attachment_agent_id_raya_routine_conversation_agent_id_fk",
+      "entityType": "fks",
+      "table": "raya_routine_attachment"
+    },
+    {
+      "columns": [
+        "message_id"
+      ],
+      "tableTo": "raya_routine_message",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_raya_routine_attachment_message_id_raya_routine_message_id_fk",
+      "entityType": "fks",
+      "table": "raya_routine_attachment"
+    },
+    {
+      "columns": [
+        "agent_id"
+      ],
+      "tableTo": "raya_routine_conversation",
+      "columnsTo": [
+        "agent_id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
       "name": "fk_raya_routine_message_agent_id_raya_routine_conversation_agent_id_fk",
       "entityType": "fks",
       "table": "raya_routine_message"
@@ -2407,6 +2581,15 @@
     },
     {
       "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "raya_routine_attachment_pk",
+      "table": "raya_routine_attachment",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
         "agent_id"
       ],
       "nameExplicit": false,
@@ -2593,6 +2776,28 @@
       "name": "raya_routine_archive_order",
       "entityType": "indexes",
       "table": "raya_routine_archive"
+    },
+    {
+      "columns": [
+        {
+          "value": "agent_id",
+          "isExpression": false
+        },
+        {
+          "value": "message_id",
+          "isExpression": false
+        },
+        {
+          "value": "time_created",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "raya_routine_attachment_owner",
+      "entityType": "indexes",
+      "table": "raya_routine_attachment"
     },
     {
       "columns": [

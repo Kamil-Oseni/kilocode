@@ -33,6 +33,14 @@ const report = {
   source: "report:occ1",
   body: `Friday expenses increased in travel. ${"receipts/Q3-close/vendor-travel-".repeat(18)}ledger.pdf`,
   files: [{ name: "vendor-travel-ledger-q3-close-final.pdf", path: "receipts/Q3-close/vendor-travel-ledger.pdf" }],
+  attachments: [
+    {
+      id: "123e4567-e89b-42d3-a456-426614174000",
+      name: "receipt.pdf",
+      mime: "application/pdf",
+      size: 42_240,
+    },
+  ],
   time: 1,
 }
 
@@ -211,6 +219,15 @@ const reply = (message: WebviewMessage) => {
                 label: "stripe.com",
                 url: "https://stripe.com/docs/reports",
                 time: 2,
+              },
+              {
+                kind: "attachment",
+                attachmentID: report.attachments[0].id,
+                messageID: report.id,
+                label: report.attachments[0].name,
+                mime: report.attachments[0].mime,
+                size: report.attachments[0].size,
+                time: report.time,
               },
             ]
           : [

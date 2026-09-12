@@ -27,7 +27,7 @@ import { ChatTextAreaAutocomplete } from "./services/autocomplete/chat-autocompl
 import { notebookUri } from "./services/autocomplete/continuedev/core/autocomplete/notebook"
 import { buildWebviewHtml, getWebviewFontSize, isCursorHost } from "./utils"
 import { saveImage } from "./kilo-provider/save-image"
-import { handleEditorAction } from "./kilo-provider/editor-actions"
+import { handleEditorAction, openAttachment } from "./kilo-provider/editor-actions"
 import { exportTranscript } from "./kilo-provider/export-transcript"
 import {
   TelemetryProxy,
@@ -67,6 +67,7 @@ import { removeAgent } from "./services/agent-removal"
 import { normalize, type SSEPayload, type SyncPayload, type WirePayload } from "./services/cli-backend/sdk-sse-adapter"
 import { slimInfo, slimPart, slimParts } from "./kilo-provider/slim-metadata"
 import { handleRoutineMessage as dispatchRoutine, reason } from "./kilo-provider/routines"
+import { encode as encodeRoutineFile, MAX_ROUTINE_FILE_BYTES } from "./kilo-provider/routine-files"
 import { RoutineRefresh } from "./kilo-provider/routine-refresh"
 import { editGoal, start as startGoal, stopGoal, stopResult } from "./kilo-provider/goal"
 import { evidence as goalEvidence } from "./kilo-provider/goal-evidence"
@@ -1733,6 +1734,28 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         post: (msg) => {
           if (current()) this.postMessage(msg)
         },
+        pick: async (limit) => {
+          const uris = await vscode.window.showOpenDialog({
+            canSelectFiles: true,
+            canSelectFolders: false,
+            canSelectMany: true,
+            openLabel: "Attach files",
+            title: "Attach files to this worker",
+          })
+          if (!uris?.length) return []
+          if (uris.length > limit)
+            throw new Error(limit === 1 ? "Choose one file or remove another first." : `Choose up to ${limit} files.`)
+          const files = []
+          for (const uri of uris) {
+            const stat = await vscode.workspace.fs.stat(uri)
+            if (!(stat.type & vscode.FileType.File)) throw new Error("Choose files, not folders.")
+            if (stat.size > MAX_ROUTINE_FILE_BYTES)
+              throw new Error(`${path.basename(uri.fsPath)} is too large to attach. Choose a file no larger than 5 MB.`)
+            files.push(encodeRoutineFile(path.basename(uri.fsPath), await vscode.workspace.fs.readFile(uri)))
+          }
+          return files
+        },
+        open: (file) => openAttachment(this.extensionContext?.globalStorageUri, file),
         track: (id) => {
           if (current()) this.trackSession(id)
         },
@@ -1793,6 +1816,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         message.type === "routineInboxSend" ||
         message.type === "routineInboxRead" ||
         message.type === "routineInboxDraft" ||
+        message.type === "routineInboxAttachmentOpen" ||
         message.type === "routineDelegate" ||
         message.type === "routineDelegateCancel" ||
         message.type === "routineDelegateChain"
@@ -1801,11 +1825,13 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           type:
             message.type === "routineInboxSend"
               ? "routineInboxSent"
-              : message.type === "routineDelegate"
-                ? "routineDelegated"
-                : message.type === "routineDelegateCancel"
-                  ? "routineDelegateStopped"
-                  : message.type,
+              : message.type === "routineInboxAttachmentOpen"
+                ? "routineInboxAttachmentOpened"
+                : message.type === "routineDelegate"
+                  ? "routineDelegated"
+                  : message.type === "routineDelegateCancel"
+                    ? "routineDelegateStopped"
+                    : message.type,
           requestID: message.requestID,
           agentID: message.agentID,
           error: "Could not connect to the routine inbox. Reconnect and try again.",

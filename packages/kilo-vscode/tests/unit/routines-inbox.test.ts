@@ -5,7 +5,9 @@ import { handleRoutineMessage } from "../../src/kilo-provider/routines"
 test("routine inbox page send read and draft keep request identity and retry the same source", async () => {
   const calls: Request[] = []
   const messages: unknown[] = []
-  let payload: { source?: string; body?: string } | undefined
+  let payload: { source?: string; body?: string; attachmentIDs?: string[] } | undefined
+  const drafts: Record<string, unknown>[] = []
+  const id = "123e4567-e89b-42d3-a456-426614174000"
   const note = {
     id: "rmg_1",
     agentID: "routine",
@@ -45,11 +47,42 @@ test("routine inbox page send read and draft keep request identity and retry the
         })
       }
       if (url.pathname.endsWith("/read")) return Response.json({ at: 200 })
-      if (url.pathname.endsWith("/draft")) return Response.json({ draft: "Why?" })
+      if (url.pathname.endsWith("/draft")) {
+        const body = (await request.json()) as Record<string, unknown>
+        drafts.push(body)
+        return Response.json({
+          draft: body.draft,
+          attachments:
+            Array.isArray(body.attachmentIDs) && body.attachmentIDs.length === 0 && !body.attachments
+              ? undefined
+              : [{ id, name: "ledger.pdf", mime: "application/pdf", size: 3 }],
+        })
+      }
       return new Response("missing", { status: 404 })
     },
   })
   const post = (msg: unknown) => messages.push(msg)
+  await handleRoutineMessage({
+    client,
+    directory: "workspace",
+    post,
+    pick: async () => [{ id, name: "ledger.pdf", mime: "application/pdf", size: 3, data: "AQID" }],
+    message: {
+      type: "routineInboxFilesPick",
+      requestID: "pick1",
+      agentID: "routine",
+      draft: "Why?",
+    },
+  })
+  expect(drafts.at(-1)).toMatchObject({
+    draft: "Why?",
+    attachments: [{ id, name: "ledger.pdf", mime: "application/pdf", size: 3, data: "AQID" }],
+  })
+  expect(messages.at(-1)).toMatchObject({
+    type: "routineInboxFiles",
+    files: [{ id, name: "ledger.pdf", mime: "application/pdf", size: 3 }],
+  })
+  expect(JSON.stringify(messages.at(-1))).not.toContain("AQID")
   await handleRoutineMessage({
     client,
     directory: "workspace",
@@ -66,7 +99,14 @@ test("routine inbox page send read and draft keep request identity and retry the
     client,
     directory: "workspace",
     post,
-    message: { type: "routineInboxSend", requestID: "send1", agentID: "routine", source: "user:retry", body: "Why?" },
+    message: {
+      type: "routineInboxSend",
+      requestID: "send1",
+      agentID: "routine",
+      source: "user:retry",
+      body: "Why?",
+      attachmentIDs: [id],
+    },
   })
   expect(messages.at(-1)).toMatchObject({
     type: "routineInboxSent",
@@ -84,7 +124,13 @@ test("routine inbox page send read and draft keep request identity and retry the
     client,
     directory: "workspace",
     post,
-    message: { type: "routineInboxDraft", requestID: "draft1", agentID: "routine", draft: "Why?" },
+    message: {
+      type: "routineInboxDraft",
+      requestID: "draft1",
+      agentID: "routine",
+      draft: "Why?",
+      attachmentIDs: [id],
+    },
   })
   expect(messages.at(-1)).toMatchObject({ type: "routineInboxDraft", requestID: "draft1", draft: "Why?" })
   await handleRoutineMessage({
@@ -98,7 +144,8 @@ test("routine inbox page send read and draft keep request identity and retry the
     requestID: "offline",
     error: "Raya is not connected.",
   })
-  expect(payload).toEqual({ source: "user:retry", body: "Why?" })
+  expect(payload).toEqual({ source: "user:retry", body: "Why?", attachmentIDs: [id] })
+  expect(drafts.at(-1)).toMatchObject({ draft: "Why?", attachmentIDs: [id] })
 })
 
 test("routine chat info keeps section and cursor identity across the bridge", async () => {
@@ -158,6 +205,60 @@ test("routine chat info keeps section and cursor identity across the bridge", as
     section: "contacts",
     error: "Raya is not connected.",
   })
+})
+
+test("routine attachment removal sends the ordered retained IDs and can clear the final file", async () => {
+  const calls: Record<string, unknown>[] = []
+  const messages: unknown[] = []
+  const ids = [
+    "123e4567-e89b-42d3-a456-426614174001",
+    "123e4567-e89b-42d3-a456-426614174002",
+    "123e4567-e89b-42d3-a456-426614174003",
+  ]
+  const client = createKiloClient({
+    baseUrl: "http://localhost:4096",
+    fetch: async (input, init) => {
+      const request = new Request(input, init)
+      const body = (await request.json()) as Record<string, unknown>
+      calls.push(body)
+      const kept = Array.isArray(body.attachmentIDs) ? body.attachmentIDs : []
+      return Response.json({
+        draft: body.draft,
+        ...(kept.length
+          ? { attachments: kept.map((id) => ({ id, name: `${id}.txt`, mime: "text/plain", size: 1 })) }
+          : {}),
+      })
+    },
+  })
+  const post = (msg: unknown) => messages.push(msg)
+  await handleRoutineMessage({
+    client,
+    directory: "workspace",
+    post,
+    message: {
+      type: "routineInboxFilesForget",
+      requestID: "remove1",
+      agentID: "routine",
+      draft: "Review",
+      attachmentIDs: [ids[0], ids[2]],
+    },
+  })
+  expect(calls.at(-1)).toMatchObject({ attachmentIDs: [ids[0], ids[2]] })
+  expect(messages.at(-1)).toMatchObject({ type: "routineInboxFiles", files: [{ id: ids[0] }, { id: ids[2] }] })
+  await handleRoutineMessage({
+    client,
+    directory: "workspace",
+    post,
+    message: {
+      type: "routineInboxFilesForget",
+      requestID: "remove2",
+      agentID: "routine",
+      draft: null,
+      attachmentIDs: null,
+    },
+  })
+  expect(calls.at(-1)).toMatchObject({ attachmentIDs: [] })
+  expect(messages.at(-1)).toMatchObject({ type: "routineInboxFiles", files: [] })
 })
 
 test("routine delegate posts the same source on retry and refreshes inbox summaries", async () => {

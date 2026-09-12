@@ -7,6 +7,7 @@ import { getErrorMessage } from "../kilo-provider-utils"
 import { Edit, Proposal, Schedule } from "../shared/routine-schedule"
 import { Output } from "../shared/routine-output"
 import { recovery } from "../shared/routine-error"
+import { bundle, MAX_ROUTINE_FILES, type RoutineUpload } from "./routine-files"
 
 type Msg = { type: string } & Record<string, unknown>
 type Kilo = KiloClient["kilocode"]["routine"]
@@ -15,6 +16,7 @@ type Ctx = {
   kilo: Kilo
   dir: string
   post: (msg: unknown) => void
+  open?: (file: { name: string; mime: string; size: number; data: string }) => void
   track?: (sessionID: string) => void
   refresh?: (requestID?: string, viewID?: string) => Promise<void>
 }
@@ -108,6 +110,9 @@ function reply(type: string) {
   if (type === "routineScheduleUpdate") return "routineScheduleUpdated"
   if (type === "routineInboxPage") return "routineInboxPage"
   if (type === "routineInboxSend") return "routineInboxSent"
+  if (type === "routineInboxFilesPick") return "routineInboxFiles"
+  if (type === "routineInboxFilesForget") return "routineInboxFiles"
+  if (type === "routineInboxAttachmentOpen") return "routineInboxAttachmentOpened"
   if (type === "routineInboxInfo") return "routineInboxInfo"
   if (type === "routineInboxRead") return "routineInboxRead"
   if (type === "routineInboxDraft") return "routineInboxDraft"
@@ -128,29 +133,34 @@ export function reason(err: unknown) {
   return "The routine request was not confirmed. Check its current state before trying again."
 }
 
+const messages = new Set([
+  "routineList",
+  "routineOutputUpdate",
+  "routineAccessUpdate",
+  "routineForecast",
+  "routineScheduleUpdate",
+  "routineCreate",
+  "routineUpdate",
+  "routineRun",
+  "routineRuns",
+  "routineSnapshot",
+  "routineArchive",
+  "routineRemove",
+  "routineInboxPage",
+  "routineInboxSend",
+  "routineInboxFilesPick",
+  "routineInboxFilesForget",
+  "routineInboxAttachmentOpen",
+  "routineInboxInfo",
+  "routineInboxRead",
+  "routineInboxDraft",
+  "routineDelegate",
+  "routineDelegateCancel",
+  "routineDelegateChain",
+])
+
 function owned(type: string) {
-  return (
-    type === "routineList" ||
-    type === "routineOutputUpdate" ||
-    type === "routineAccessUpdate" ||
-    type === "routineForecast" ||
-    type === "routineScheduleUpdate" ||
-    type === "routineCreate" ||
-    type === "routineUpdate" ||
-    type === "routineRun" ||
-    type === "routineRuns" ||
-    type === "routineSnapshot" ||
-    type === "routineArchive" ||
-    type === "routineRemove" ||
-    type === "routineInboxPage" ||
-    type === "routineInboxSend" ||
-    type === "routineInboxInfo" ||
-    type === "routineInboxRead" ||
-    type === "routineInboxDraft" ||
-    type === "routineDelegate" ||
-    type === "routineDelegateCancel" ||
-    type === "routineDelegateChain"
-  )
+  return messages.has(type)
 }
 
 function mode(msg: Msg) {
@@ -236,12 +246,30 @@ async function send(ctx: Ctx) {
   if (!token(msg.requestID) || !token(msg.agentID) || !token(msg.source))
     throw new Error("Reload the conversation before sending again.")
   const text = typeof msg.body === "string" ? msg.body : ""
-  if (!text.trim() || text.length > 8000) throw new Error("Write a follow-up before sending.")
+  const ids = attachmentIDs(msg.attachmentIDs)
+  if ((!text.trim() && ids.length === 0) || text.length > 8000)
+    throw new Error("Write a follow-up or attach a file before sending.")
   const result = await ctx.kilo.inbox2.send(
-    { directory: ctx.dir, agentID: String(msg.agentID), source: String(msg.source), body: text },
+    {
+      directory: ctx.dir,
+      agentID: String(msg.agentID),
+      source: String(msg.source),
+      body: text,
+      ...(ids.length ? { attachmentIDs: ids } : {}),
+    },
     { throwOnError: true },
   )
   ctx.post({ type: "routineInboxSent", requestID: msg.requestID, agentID: msg.agentID, message: result.data })
+}
+
+function attachmentIDs(value: unknown) {
+  if (value === undefined || value === null) return []
+  if (!Array.isArray(value) || value.length > MAX_ROUTINE_FILES)
+    throw new Error(`Attach up to ${MAX_ROUTINE_FILES} files.`)
+  const ids = value.filter((id): id is string => typeof id === "string" && /^[0-9a-f-]{36}$/i.test(id))
+  if (ids.length !== value.length || new Set(ids).size !== ids.length)
+    throw new Error("Reload the conversation before changing its attachments.")
+  return ids
 }
 
 async function info(ctx: Ctx) {
@@ -272,6 +300,23 @@ async function info(ctx: Ctx) {
   })
 }
 
+async function attachment(ctx: Ctx) {
+  const msg = ctx.message
+  if (!token(msg.requestID) || !token(msg.agentID) || !token(msg.attachmentID))
+    throw new Error("Reload the conversation before opening that attachment.")
+  const result = await ctx.kilo.inbox2.attachment(
+    {
+      directory: ctx.dir,
+      agentID: String(msg.agentID),
+      attachmentID: String(msg.attachmentID),
+    },
+    { throwOnError: true },
+  )
+  if (!result.data || result.data.id !== msg.attachmentID) throw new Error("That attachment is no longer available.")
+  ctx.open?.(result.data)
+  ctx.post({ type: "routineInboxAttachmentOpened", requestID: msg.requestID, agentID: msg.agentID })
+}
+
 async function seen(ctx: Ctx) {
   const msg = ctx.message
   if (!token(msg.requestID) || !token(msg.agentID) || !Number.isSafeInteger(msg.at) || Number(msg.at) < 0)
@@ -289,7 +334,12 @@ async function scribble(ctx: Ctx) {
   const draft = msg.draft === null || msg.draft === undefined ? null : String(msg.draft)
   if (draft !== null && draft.length > 8000) throw new Error("Inbox drafts are limited to 8000 characters.")
   const result = await ctx.kilo.inbox2.draft(
-    { directory: ctx.dir, agentID: String(msg.agentID), draft: draft ?? "" },
+    {
+      directory: ctx.dir,
+      agentID: String(msg.agentID),
+      draft: draft ?? "",
+      ...(msg.attachmentIDs === undefined ? {} : { attachmentIDs: attachmentIDs(msg.attachmentIDs) }),
+    },
     { throwOnError: true },
   )
   ctx.post({
@@ -297,6 +347,7 @@ async function scribble(ctx: Ctx) {
     requestID: msg.requestID,
     agentID: msg.agentID,
     draft: result.data?.draft ?? null,
+    files: result.data?.attachments,
   })
 }
 
@@ -593,6 +644,7 @@ const routes: Record<string, (ctx: Ctx) => Promise<void>> = {
   routineInboxPage: page,
   routineInboxSend: send,
   routineInboxInfo: info,
+  routineInboxAttachmentOpen: attachment,
   routineInboxRead: seen,
   routineInboxDraft: scribble,
   routineDelegate: pass,
@@ -605,16 +657,74 @@ const routes: Record<string, (ctx: Ctx) => Promise<void>> = {
   routineRun: fire,
 }
 
-export async function handleRoutineMessage(input: {
+type Input = {
   message: Msg
   client: KiloClient | null
   directory: string
   post: (msg: unknown) => void
+  pick?: (limit: number) => Promise<RoutineUpload[]>
+  open?: (file: { name: string; mime: string; size: number; data: string }) => void
   track?: (sessionID: string) => void
   refresh?: (requestID?: string, viewID?: string) => Promise<void>
-}): Promise<boolean> {
+}
+
+async function stage(input: Input, type: "routineInboxFilesPick" | "routineInboxFilesForget") {
+  const msg = input.message
+  if (!token(msg.requestID) || !token(msg.agentID)) {
+    input.post({
+      type: "routineInboxFiles",
+      requestID: msg.requestID,
+      agentID: msg.agentID,
+      error: "Reload the conversation before attaching files.",
+    })
+    return true
+  }
+  try {
+    if (!input.client) throw new Error("Raya is not connected.")
+    const ids = attachmentIDs(msg.attachmentIDs)
+    const draft = msg.draft === null || msg.draft === undefined ? "" : String(msg.draft)
+    if (draft.length > 8000) throw new Error("Inbox drafts are limited to 8000 characters.")
+    const limit = MAX_ROUTINE_FILES - ids.length
+    if (type === "routineInboxFilesPick" && limit < 1) throw new Error("Remove a file before attaching another.")
+    const selected =
+      type === "routineInboxFilesPick"
+        ? bundle(
+            await (input.pick?.(limit) ?? Promise.reject(new Error("File selection is unavailable in this host."))),
+            ids.length,
+          )
+        : []
+    const result = await input.client.kilocode.routine.inbox2.draft(
+      {
+        directory: input.directory,
+        agentID: String(msg.agentID),
+        draft,
+        attachmentIDs: ids,
+        ...(selected.length ? { attachments: selected } : {}),
+      },
+      { throwOnError: true },
+    )
+    input.post({
+      type: "routineInboxFiles",
+      requestID: msg.requestID,
+      agentID: msg.agentID,
+      draft: result.data?.draft ?? null,
+      files: result.data?.attachments ?? [],
+    })
+  } catch (err) {
+    input.post({
+      type: "routineInboxFiles",
+      requestID: msg.requestID,
+      agentID: msg.agentID,
+      error: reason(err),
+    })
+  }
+  return true
+}
+
+export async function handleRoutineMessage(input: Input): Promise<boolean> {
   const type = input.message.type
   if (!owned(type)) return false
+  if (type === "routineInboxFilesPick" || type === "routineInboxFilesForget") return stage(input, type)
   if (type === "routineList" && input.refresh) {
     await input.refresh(
       typeof input.message.requestID === "string" ? input.message.requestID : undefined,
@@ -638,6 +748,7 @@ export async function handleRoutineMessage(input: {
     kilo: input.client.kilocode.routine,
     dir: input.directory,
     post: input.post,
+    open: input.open,
     track: input.track,
     refresh: input.refresh,
   }

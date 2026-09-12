@@ -45,6 +45,7 @@ export const RayaRoutineConversationTable = sqliteTable("raya_routine_conversati
   id: text().notNull(),
   read_at: integer().notNull(),
   draft: text(),
+  draft_attachments: text(),
   time_updated: integer().notNull(),
 })
 
@@ -61,12 +62,33 @@ export const RayaRoutineMessageTable = sqliteTable(
     occurrence_id: text(),
     session_id: text(),
     files: text(),
+    attachments: text(),
+    delivery_id: text(),
+    delivered_at: integer(),
     time_created: integer().notNull(),
   },
   (table) => [
     uniqueIndex("raya_routine_message_source").on(table.agent_id, table.source),
     index("raya_routine_message_order").on(table.agent_id, table.time_created, table.id),
   ],
+)
+
+export const RayaRoutineAttachmentTable = sqliteTable(
+  "raya_routine_attachment",
+  {
+    id: text().primaryKey(),
+    agent_id: text()
+      .notNull()
+      .references(() => RayaRoutineConversationTable.agent_id, { onDelete: "cascade" }),
+    message_id: text().references(() => RayaRoutineMessageTable.id, { onDelete: "cascade" }),
+    name: text().notNull(),
+    mime: text().notNull(),
+    size: integer().notNull(),
+    data: text().notNull(),
+    sha256: text().notNull(),
+    time_created: integer().notNull(),
+  },
+  (table) => [index("raya_routine_attachment_owner").on(table.agent_id, table.message_id, table.time_created)],
 )
 
 export const RayaRoutineDelegationTable = sqliteTable(

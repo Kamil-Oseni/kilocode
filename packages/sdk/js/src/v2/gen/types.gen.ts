@@ -22304,12 +22304,24 @@ export type KilocodeRoutineInboxResponses = {
         name: string
         path: string
       }>
+      attachments?: Array<{
+        id: string
+        name: string
+        mime: string
+        size: number
+      }>
       time: number
     }
     unread: number
     state: "scheduled" | "running" | "waiting" | "needs_input" | "paused" | "failed"
     nextRun?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     draft?: string
+    draftAttachments?: Array<{
+      id: string
+      name: string
+      mime: string
+      size: number
+    }>
   }>
 }
 
@@ -22359,6 +22371,12 @@ export type KilocodeRoutineInboxPageResponses = {
         name: string
         path: string
       }>
+      attachments?: Array<{
+        id: string
+        name: string
+        mime: string
+        size: number
+      }>
       time: number
     }>
     next?: string
@@ -22372,6 +22390,14 @@ export type KilocodeRoutineInboxSendData = {
   body?: {
     source: string
     body: string
+    attachments?: Array<{
+      id: string
+      name: string
+      mime: string
+      size: number
+      data: string
+    }>
+    attachmentIDs?: Array<string>
   }
   path: {
     agentID: string
@@ -22416,6 +22442,12 @@ export type KilocodeRoutineInboxSendResponses = {
       name: string
       path: string
     }>
+    attachments?: Array<{
+      id: string
+      name: string
+      mime: string
+      size: number
+    }>
     time: number
   }
 }
@@ -22459,6 +22491,19 @@ export type KilocodeRoutineInboxInfoResponses = {
     | {
         section: "shares"
         items: Array<
+          | {
+              kind: "attachment"
+              messageID: string
+              label: string
+              time: number
+              messageKind: "user" | "worker" | "report" | "decision" | "delegation"
+              source: string
+              occurrenceID?: string
+              sessionID?: string
+              attachmentID: string
+              mime: string
+              size: number
+            }
           | {
               kind: "file"
               messageID: string
@@ -22559,6 +22604,14 @@ export type KilocodeRoutineInboxReadResponse =
 export type KilocodeRoutineInboxDraftData = {
   body?: {
     draft: string
+    attachments?: Array<{
+      id: string
+      name: string
+      mime: string
+      size: number
+      data: string
+    }>
+    attachmentIDs?: Array<string>
   }
   path: {
     agentID: string
@@ -22579,6 +22632,10 @@ export type KilocodeRoutineInboxDraftErrors = {
    * Not found
    */
   404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
 }
 
 export type KilocodeRoutineInboxDraftError = KilocodeRoutineInboxDraftErrors[keyof KilocodeRoutineInboxDraftErrors]
@@ -22589,11 +22646,60 @@ export type KilocodeRoutineInboxDraftResponses = {
    */
   200: {
     draft: string
+    attachments?: Array<{
+      id: string
+      name: string
+      mime: string
+      size: number
+    }>
   }
 }
 
 export type KilocodeRoutineInboxDraftResponse =
   KilocodeRoutineInboxDraftResponses[keyof KilocodeRoutineInboxDraftResponses]
+
+export type KilocodeRoutineInboxAttachmentData = {
+  body?: never
+  path: {
+    agentID: string
+    attachmentID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/agent/{agentID}/inbox/attachment/{attachmentID}"
+}
+
+export type KilocodeRoutineInboxAttachmentErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeRoutineInboxAttachmentError =
+  KilocodeRoutineInboxAttachmentErrors[keyof KilocodeRoutineInboxAttachmentErrors]
+
+export type KilocodeRoutineInboxAttachmentResponses = {
+  /**
+   * Routine attachment content
+   */
+  200: {
+    id: string
+    name: string
+    mime: string
+    size: number
+    data: string
+  }
+}
+
+export type KilocodeRoutineInboxAttachmentResponse =
+  KilocodeRoutineInboxAttachmentResponses[keyof KilocodeRoutineInboxAttachmentResponses]
 
 export type KilocodeRoutineDelegateCreateData = {
   body?: {

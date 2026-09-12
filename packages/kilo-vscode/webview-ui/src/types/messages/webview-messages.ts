@@ -209,6 +209,30 @@ export interface RoutineInboxSendMessage {
   agentID: string
   source: string
   body: string
+  attachmentIDs?: string[]
+}
+
+export interface RoutineInboxFilesPickMessage {
+  type: "routineInboxFilesPick"
+  requestID: string
+  agentID: string
+  draft: string | null
+  attachmentIDs?: string[]
+}
+
+export interface RoutineInboxFilesForgetMessage {
+  type: "routineInboxFilesForget"
+  requestID: string
+  agentID: string
+  draft: string | null
+  attachmentIDs: string[] | null
+}
+
+export interface RoutineInboxAttachmentOpenMessage {
+  type: "routineInboxAttachmentOpen"
+  requestID: string
+  agentID: string
+  attachmentID: string
 }
 
 export interface RoutineInboxInfoMessage {
@@ -231,6 +255,7 @@ export interface RoutineInboxDraftMessage {
   requestID: string
   agentID: string
   draft: string | null
+  attachmentIDs: string[] | null
 }
 
 export interface RoutineDelegateMessage {
@@ -1881,6 +1906,9 @@ export type WebviewMessage =
   | RoutineRemoveMessage
   | RoutineInboxPageMessage
   | RoutineInboxSendMessage
+  | RoutineInboxFilesPickMessage
+  | RoutineInboxFilesForgetMessage
+  | RoutineInboxAttachmentOpenMessage
   | RoutineInboxInfoMessage
   | RoutineInboxReadMessage
   | RoutineInboxDraftMessage

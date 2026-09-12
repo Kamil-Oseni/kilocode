@@ -45,8 +45,10 @@ for (const theme of ["light", "dark"]) {
         }),
       ).toBe(true)
       await expect(page.getByRole("button", { name: "Open vendor-travel-ledger-q3-close-final.pdf" })).toBeVisible()
+      await expect(page.getByRole("button", { name: "Open receipt.pdf" })).toBeVisible()
+      await expect(page.getByRole("button", { name: "Attach" })).toBeVisible()
       expect(
-        await page.locator(".routines-file-name").evaluate((node) => {
+        await page.locator(".routines-file-name").first().evaluate((node) => {
           const style = getComputedStyle(node)
           return style.textOverflow === "ellipsis" && node.clientWidth > 0
         }),
@@ -61,6 +63,7 @@ for (const theme of ["light", "dark"]) {
       await expect(panel.getByRole("heading", { name: "Links" })).toBeVisible()
       await expect(panel.getByRole("heading", { name: "Worker communication" })).toBeVisible()
       await expect(panel.getByText("stripe.com", { exact: true })).toBeVisible()
+      await expect(panel.getByText("receipt.pdf", { exact: true })).toBeVisible()
       await expect(panel.getByText("Counsel", { exact: true })).toBeVisible()
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
       const infoResult = await new AxeBuilder({ page })
@@ -177,11 +180,18 @@ test("light routines at 200% zoom", async ({ browser }, info) => {
   await page.getByRole("button", { name: "Info", exact: true }).click()
   const panel = page.getByLabel("Chat info for Books")
   await expect(panel.getByRole("heading", { name: "Worker communication" })).toBeVisible()
-  const overflow = await panel.locator("*").evaluateAll((nodes) =>
-    nodes
-      .filter((node) => node.scrollWidth > node.clientWidth + 1)
-      .map((node) => ({ tag: node.tagName, className: node.className, client: node.clientWidth, scroll: node.scrollWidth })),
-  )
+  const overflow = await panel
+    .locator("*")
+    .evaluateAll((nodes) =>
+      nodes
+        .filter((node) => node.scrollWidth > node.clientWidth + 1)
+        .map((node) => ({
+          tag: node.tagName,
+          className: node.className,
+          client: node.clientWidth,
+          scroll: node.scrollWidth,
+        })),
+    )
   expect(overflow).toEqual([])
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await page.screenshot({ path: info.outputPath("zoom.png"), fullPage: true })

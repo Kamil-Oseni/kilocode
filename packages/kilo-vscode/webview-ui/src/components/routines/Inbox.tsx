@@ -15,7 +15,72 @@ export type Note = {
   occurrenceID?: string
   sessionID?: string
   files?: { name: string; path: string }[]
+  attachments?: DraftFile[]
   time: number
+}
+
+export type DraftFile = { id: string; name: string; mime: string; size: number }
+
+type Draft = { body: string; files: DraftFile[]; at: number }
+
+type InboxState = Record<string, unknown> & {
+  routineInbox?: Record<string, unknown> & { drafts?: Record<string, Draft> }
+}
+
+function draftKey(agentID: string) {
+  return `agent:${agentID}`
+}
+
+function draftState(value: unknown): Draft | undefined {
+  if (!value || typeof value !== "object") return
+  const row = value as Record<string, unknown>
+  const files = Array.isArray(row.files)
+    ? row.files.flatMap((item) => {
+        if (!item || typeof item !== "object") return []
+        const id = (item as { id?: unknown }).id
+        const name = (item as { name?: unknown }).name
+        const mime = (item as { mime?: unknown }).mime
+        const size = (item as { size?: unknown }).size
+        return typeof id === "string" &&
+          typeof name === "string" &&
+          typeof mime === "string" &&
+          typeof size === "number" &&
+          Number.isFinite(size) &&
+          id &&
+          name
+          ? [{ id, name, mime, size }]
+          : []
+      })
+    : []
+  if (typeof row.body !== "string" || typeof row.at !== "number" || !Number.isFinite(row.at)) return
+  return { body: row.body, files: files.slice(0, 8), at: row.at }
+}
+
+function attachments(value: unknown): DraftFile[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((file): file is DraftFile => {
+    if (!file || typeof file !== "object") return false
+    const row = file as Record<string, unknown>
+    return (
+      typeof row.id === "string" &&
+      !!row.id &&
+      typeof row.name === "string" &&
+      !!row.name &&
+      typeof row.mime === "string" &&
+      typeof row.size === "number" &&
+      Number.isFinite(row.size)
+    )
+  })
+}
+
+function missing(id: string | undefined, rows: Note[]) {
+  return !!id && !rows.some((item) => item.id === id)
+}
+
+function removeLabel(id: string, active: string, failed: string) {
+  if (active === id) return "Removing"
+  if (failed === id) return "Retry remove"
+  return "Remove"
 }
 
 export type Box = {
@@ -28,6 +93,7 @@ export type Box = {
   state: "scheduled" | "running" | "waiting" | "needs_input" | "paused" | "failed"
   nextRun?: number
   draft?: string
+  draftAttachments?: DraftFile[]
 }
 
 export type Anchor = {
@@ -205,6 +271,7 @@ const Line: Component<{
       </span>
       <p class="routines-line-body">{props.item.body}</p>
       <Files items={props.item.files} session={props.item.sessionID} />
+      <Attachments agentID={props.item.agentID} items={props.item.attachments} />
       <Show when={live()}>
         <Button
           type="button"
@@ -271,6 +338,46 @@ export const Files: Component<{ items?: Note["files"]; session?: string }> = (pr
               >
                 <span class="routines-file-name">{file.name}</span>
                 <span class="routines-file-path">{file.path}</span>
+              </button>
+            </li>
+          )}
+        </For>
+      </ul>
+    </Show>
+  )
+}
+
+function size(value: number) {
+  if (value < 1024) return `${value} B`
+  if (value < 1024 * 1024) return `${Math.ceil(value / 1024)} KB`
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`
+}
+
+export const Attachments: Component<{ agentID: string; items?: DraftFile[] }> = (props) => {
+  const vscode = useVSCode()
+  return (
+    <Show when={props.items?.length}>
+      <ul class="routines-files" aria-label="Message attachments">
+        <For each={props.items}>
+          {(file) => (
+            <li>
+              <button
+                type="button"
+                class="routines-file"
+                aria-label={`Open ${file.name}`}
+                onClick={() =>
+                  vscode.postMessage({
+                    type: "routineInboxAttachmentOpen",
+                    requestID: crypto.randomUUID(),
+                    agentID: props.agentID,
+                    attachmentID: file.id,
+                  })
+                }
+              >
+                <span class="routines-file-name">{file.name}</span>
+                <span class="routines-file-path">
+                  {file.mime} · {size(file.size)}
+                </span>
               </button>
             </li>
           )}
@@ -449,9 +556,15 @@ export const Inbox: Component<{
   onBack?: () => void
 }> = (props) => {
   const vscode = useVSCode()
+  const ready = () => !!props.box
   const [thread, setThread] = createSignal<Note[]>([])
   const [cursor, setNext] = createSignal<string>()
   const [note, setNote] = createSignal("")
+  const [files, setFiles] = createSignal<DraftFile[]>([])
+  const [picking, setPicking] = createSignal(false)
+  const [pickFailed, setPickFailed] = createSignal(false)
+  const [removing, setRemoving] = createSignal("")
+  const [removeFailed, setRemoveFailed] = createSignal("")
   const [passing, setPassing] = createSignal(false)
   const [info, setInfo] = createSignal(false)
   const [infoReady, setInfoReady] = createSignal(false)
@@ -461,9 +574,13 @@ export const Inbox: Component<{
   const [look, setLook] = createSignal("")
   const [trees, setTrees] = createSignal<Record<string, Tree>>({})
   const [faults, setFaults] = createSignal<Record<string, string>>({})
+  const removeDisabled = (id: string) => !ready() || phase() === "sending" || (!!removing() && removing() !== id)
+  const attachDisabled = () => !ready() || phase() === "sending" || picking() || !!removing() || files().length >= 8
+  const sendDisabled = () => !ready() || phase() === "sending" || (!note().trim() && files().length === 0)
   let source = `user:${crypto.randomUUID()}`
   let pageID = ""
   let sendID = ""
+  let pickID = ""
   let haltID = ""
   let lookID = ""
   let older = false
@@ -473,10 +590,34 @@ export const Inbox: Component<{
   let mark = ""
   let depth = 0
   let seen = ""
+  let server = ""
   let pane: HTMLDivElement | undefined
   let frame: HTMLDivElement | undefined
   let infoRef: HTMLButtonElement | undefined
   let timer: ReturnType<typeof setTimeout> | undefined
+
+  const viewState = () => {
+    const value = vscode.getState<InboxState>()
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {} as InboxState
+    return value
+  }
+
+  const local = () => draftState(viewState().routineInbox?.drafts?.[draftKey(props.agentID)])
+
+  const rememberDraft = (body = note(), rows = files()) => {
+    const state = viewState()
+    const inbox = state.routineInbox ?? {}
+    const drafts = { ...(inbox.drafts ?? {}) }
+    const key = draftKey(props.agentID)
+    if (body || rows.length) drafts[key] = { body, files: rows.slice(0, 8), at: Date.now() }
+    else delete drafts[key]
+    const kept = Object.entries(drafts)
+      .map(([id, value]) => [id, draftState(value)] as const)
+      .filter((entry): entry is readonly [string, Draft] => !!entry[1])
+      .sort((a, b) => b[1].at - a[1].at)
+      .slice(0, 64)
+    vscode.setState<InboxState>({ ...state, routineInbox: { ...inbox, drafts: Object.fromEntries(kept) } })
+  }
 
   const load = (after?: string) => {
     if (wait && !after) return
@@ -552,16 +693,35 @@ export const Inbox: Component<{
       setTrees({})
       setFaults({})
       setError("")
-      setNote(props.box?.draft ?? "")
+      const draft = local()
+      setNote(draft?.body ?? "")
+      setFiles(draft?.files ?? [])
+      setPicking(false)
+      setPickFailed(false)
+      setRemoving("")
+      setRemoveFailed("")
       setInfo(false)
       setInfoReady(false)
       stick = true
       depth = 0
+      server = ""
+      if (props.box) {
+        server = id
+        setNote(props.box.draft ?? "")
+        setFiles(props.box.draftAttachments ?? [])
+        rememberDraft(props.box.draft ?? "", props.box.draftAttachments ?? [])
+      }
       load()
       queueMicrotask(() => frame?.focus())
       return
     }
-    if (latest && !thread().some((item) => item.id === latest)) load()
+    if (props.box && server !== id) {
+      server = id
+      setNote(props.box.draft ?? "")
+      setFiles(props.box.draftAttachments ?? [])
+      rememberDraft(props.box.draft ?? "", props.box.draftAttachments ?? [])
+    }
+    if (missing(latest, thread())) load()
   })
 
   const page = (msg: ExtensionMessage) => {
@@ -597,6 +757,8 @@ export const Inbox: Component<{
     if (saved?.id) setThread((prior) => (prior.some((item) => item.id === saved.id) ? prior : [...prior, saved]))
     source = `user:${crypto.randomUUID()}`
     setNote("")
+    setFiles([])
+    rememberDraft("", [])
     setPhase("idle")
     setError("")
     vscode.postMessage({
@@ -604,9 +766,29 @@ export const Inbox: Component<{
       requestID: crypto.randomUUID(),
       agentID: props.agentID,
       draft: null,
+      attachmentIDs: null,
     })
     stick = true
     queueMicrotask(pin)
+  }
+
+  const picked = (msg: ExtensionMessage) => {
+    if (msg.type !== "routineInboxFiles" || msg.requestID !== pickID || msg.agentID !== props.agentID) return
+    const removal = removing()
+    setPicking(false)
+    setRemoving("")
+    if (msg.error) {
+      if (removal) setRemoveFailed(removal)
+      else setPickFailed(true)
+      setError(msg.error)
+      return
+    }
+    const rows = attachments(msg.files)
+    setFiles(rows)
+    rememberDraft(typeof msg.draft === "string" ? msg.draft : note(), rows)
+    setPickFailed(false)
+    setRemoveFailed("")
+    setError("")
   }
 
   const halted = (msg: ExtensionMessage) => {
@@ -648,8 +830,10 @@ export const Inbox: Component<{
   const receive = (msg: ExtensionMessage) => {
     page(msg)
     sent(msg)
+    picked(msg)
     halted(msg)
     chained(msg)
+    if (msg.type === "routineInboxAttachmentOpened" && msg.agentID === props.agentID && msg.error) setError(msg.error)
   }
 
   const persist = (value: string) => {
@@ -658,6 +842,7 @@ export const Inbox: Component<{
       requestID: crypto.randomUUID(),
       agentID: props.agentID,
       draft: value.trim() ? value : null,
+      attachmentIDs: files().length ? files().map((file) => file.id) : null,
     })
   }
 
@@ -684,13 +869,14 @@ export const Inbox: Component<{
 
   const change = (value: string) => {
     setNote(value)
+    rememberDraft(value, files())
     if (timer) clearTimeout(timer)
     timer = setTimeout(() => persist(value), 400)
   }
 
   const submit = () => {
     const body = note().trim()
-    if (!body || phase() === "sending") return
+    if ((!body && files().length === 0) || phase() === "sending") return
     setPhase("sending")
     setError("")
     sendID = crypto.randomUUID()
@@ -700,6 +886,38 @@ export const Inbox: Component<{
       agentID: props.agentID,
       source,
       body,
+      ...(files().length ? { attachmentIDs: files().map((file) => file.id) } : {}),
+    })
+  }
+
+  const attach = () => {
+    if (picking() || files().length >= 8) return
+    setPicking(true)
+    setPickFailed(false)
+    setError("")
+    pickID = crypto.randomUUID()
+    vscode.postMessage({
+      type: "routineInboxFilesPick",
+      requestID: pickID,
+      agentID: props.agentID,
+      draft: note().trim() ? note() : null,
+      ...(files().length ? { attachmentIDs: files().map((file) => file.id) } : {}),
+    })
+  }
+
+  const remove = (id: string) => {
+    const next = files().filter((file) => file.id !== id)
+    if (removing() || phase() === "sending") return
+    setRemoving(id)
+    setRemoveFailed("")
+    setError("")
+    pickID = crypto.randomUUID()
+    vscode.postMessage({
+      type: "routineInboxFilesForget",
+      requestID: pickID,
+      agentID: props.agentID,
+      draft: note().trim() ? note() : null,
+      attachmentIDs: next.length ? next.map((file) => file.id) : null,
     })
   }
 
@@ -836,10 +1054,32 @@ export const Inbox: Component<{
             submit()
           }}
         >
+          <Show when={files().length}>
+            <ul class="routines-draft-files" aria-label="Files ready to send">
+              <For each={files()}>
+                {(file) => (
+                  <li>
+                    <span title={file.name}>{file.name}</span>
+                    <Button
+                      type="button"
+                      size="small"
+                      variant="ghost"
+                      disabled={removeDisabled(file.id)}
+                      aria-label={`Remove ${file.name}`}
+                      onClick={() => remove(file.id)}
+                    >
+                      {removeLabel(file.id, removing(), removeFailed())}
+                    </Button>
+                  </li>
+                )}
+              </For>
+            </ul>
+          </Show>
           <label class="routines-field routines-compose-field">
             <span class="sr-only">Message this worker</span>
             <textarea
               value={note()}
+              disabled={!ready()}
               rows={2}
               aria-label="Message this worker"
               placeholder="Ask about a report in this conversation."
@@ -852,7 +1092,10 @@ export const Inbox: Component<{
             </p>
           </Show>
           <div class="routines-compose-actions">
-            <Button type="button" size="small" disabled={phase() === "sending" || !note().trim()} onClick={submit}>
+            <Button type="button" size="small" variant="ghost" disabled={attachDisabled()} onClick={attach}>
+              {picking() ? "Saving attachment…" : pickFailed() ? "Retry attach" : "Attach"}
+            </Button>
+            <Button type="button" size="small" disabled={sendDisabled()} onClick={submit}>
               {phase() === "sending" ? "Sending" : phase() === "failed" ? "Retry" : "Send"}
             </Button>
           </div>

@@ -30806,7 +30806,6 @@
                           },
                           "body": {
                             "type": "string",
-                            "pattern": "\\S",
                             "maxLength": 8000
                           },
                           "occurrenceID": {
@@ -30834,6 +30833,39 @@
                                 }
                               },
                               "required": ["name", "path"],
+                              "additionalProperties": false
+                            },
+                            "minItems": 1,
+                            "maxItems": 8
+                          },
+                          "attachments": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                                  "format": "uuid"
+                                },
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256
+                                },
+                                "mime": {
+                                  "type": "string",
+                                  "minLength": 3,
+                                  "maxLength": 128,
+                                  "pattern": "^[a-z0-9][a-z0-9!#$&^_.+-]*\\/[a-z0-9][a-z0-9!#$&^_.+-]*$"
+                                },
+                                "size": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 5242880
+                                }
+                              },
+                              "required": ["id", "name", "mime", "size"],
                               "additionalProperties": false
                             },
                             "minItems": 1,
@@ -30881,6 +30913,39 @@
                       },
                       "draft": {
                         "type": "string"
+                      },
+                      "draftAttachments": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                              "format": "uuid"
+                            },
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256
+                            },
+                            "mime": {
+                              "type": "string",
+                              "minLength": 3,
+                              "maxLength": 128,
+                              "pattern": "^[a-z0-9][a-z0-9!#$&^_.+-]*\\/[a-z0-9][a-z0-9!#$&^_.+-]*$"
+                            },
+                            "size": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 5242880
+                            }
+                          },
+                          "required": ["id", "name", "mime", "size"],
+                          "additionalProperties": false
+                        },
+                        "minItems": 1,
+                        "maxItems": 8
                       }
                     },
                     "required": ["agentID", "conversationID", "name", "role", "unread", "state"],
@@ -30993,7 +31058,6 @@
                           },
                           "body": {
                             "type": "string",
-                            "pattern": "\\S",
                             "maxLength": 8000
                           },
                           "occurrenceID": {
@@ -31021,6 +31085,39 @@
                                 }
                               },
                               "required": ["name", "path"],
+                              "additionalProperties": false
+                            },
+                            "minItems": 1,
+                            "maxItems": 8
+                          },
+                          "attachments": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                                  "format": "uuid"
+                                },
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256
+                                },
+                                "mime": {
+                                  "type": "string",
+                                  "minLength": 3,
+                                  "maxLength": 128,
+                                  "pattern": "^[a-z0-9][a-z0-9!#$&^_.+-]*\\/[a-z0-9][a-z0-9!#$&^_.+-]*$"
+                                },
+                                "size": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 5242880
+                                }
+                              },
+                              "required": ["id", "name", "mime", "size"],
                               "additionalProperties": false
                             },
                             "minItems": 1,
@@ -31142,7 +31239,6 @@
                     },
                     "body": {
                       "type": "string",
-                      "pattern": "\\S",
                       "maxLength": 8000
                     },
                     "occurrenceID": {
@@ -31170,6 +31266,39 @@
                           }
                         },
                         "required": ["name", "path"],
+                        "additionalProperties": false
+                      },
+                      "minItems": 1,
+                      "maxItems": 8
+                    },
+                    "attachments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                            "format": "uuid"
+                          },
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "mime": {
+                            "type": "string",
+                            "minLength": 3,
+                            "maxLength": 128,
+                            "pattern": "^[a-z0-9][a-z0-9!#$&^_.+-]*\\/[a-z0-9][a-z0-9!#$&^_.+-]*$"
+                          },
+                          "size": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 5242880
+                          }
+                        },
+                        "required": ["id", "name", "mime", "size"],
                         "additionalProperties": false
                       },
                       "minItems": 1,
@@ -31240,8 +31369,54 @@
                   },
                   "body": {
                     "type": "string",
-                    "pattern": "\\S",
                     "maxLength": 8000
+                  },
+                  "attachments": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                          "format": "uuid"
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "mime": {
+                          "type": "string",
+                          "minLength": 3,
+                          "maxLength": 128,
+                          "pattern": "^[a-z0-9][a-z0-9!#$&^_.+-]*\\/[a-z0-9][a-z0-9!#$&^_.+-]*$"
+                        },
+                        "size": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 5242880
+                        },
+                        "data": {
+                          "type": "string",
+                          "maxLength": 6990508
+                        }
+                      },
+                      "required": ["id", "name", "mime", "size", "data"],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 8
+                  },
+                  "attachmentIDs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                      "format": "uuid"
+                    },
+                    "minItems": 1,
+                    "maxItems": 8
                   }
                 },
                 "required": ["source", "body"],
@@ -31334,6 +31509,73 @@
                           "type": "array",
                           "items": {
                             "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": ["attachment"]
+                                  },
+                                  "messageID": {
+                                    "type": "string",
+                                    "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                                  },
+                                  "label": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 1024
+                                  },
+                                  "time": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 8640000000000000
+                                  },
+                                  "messageKind": {
+                                    "type": "string",
+                                    "enum": ["user", "worker", "report", "decision", "delegation"]
+                                  },
+                                  "source": {
+                                    "type": "string",
+                                    "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                                  },
+                                  "occurrenceID": {
+                                    "type": "string",
+                                    "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                                  },
+                                  "sessionID": {
+                                    "type": "string",
+                                    "pattern": "^ses"
+                                  },
+                                  "attachmentID": {
+                                    "type": "string",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                                    "format": "uuid"
+                                  },
+                                  "mime": {
+                                    "type": "string",
+                                    "minLength": 3,
+                                    "maxLength": 128,
+                                    "pattern": "^[a-z0-9][a-z0-9!#$&^_.+-]*\\/[a-z0-9][a-z0-9!#$&^_.+-]*$"
+                                  },
+                                  "size": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 5242880
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "messageID",
+                                  "label",
+                                  "time",
+                                  "messageKind",
+                                  "source",
+                                  "attachmentID",
+                                  "mime",
+                                  "size"
+                                ],
+                                "additionalProperties": false
+                              },
                               {
                                 "type": "object",
                                 "properties": {
@@ -31765,6 +32007,39 @@
                     "draft": {
                       "type": "string",
                       "maxLength": 8000
+                    },
+                    "attachments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                            "format": "uuid"
+                          },
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "mime": {
+                            "type": "string",
+                            "minLength": 3,
+                            "maxLength": 128,
+                            "pattern": "^[a-z0-9][a-z0-9!#$&^_.+-]*\\/[a-z0-9][a-z0-9!#$&^_.+-]*$"
+                          },
+                          "size": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 5242880
+                          }
+                        },
+                        "required": ["id", "name", "mime", "size"],
+                        "additionalProperties": false
+                      },
+                      "minItems": 1,
+                      "maxItems": 8
                     }
                   },
                   "required": ["draft"],
@@ -31800,6 +32075,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_Conflict"
+                }
+              }
+            }
           }
         },
         "description": "Replace or clear the draft for one roster worker. Drafts are not messages and do not admit work.",
@@ -31813,6 +32098,51 @@
                   "draft": {
                     "type": "string",
                     "maxLength": 8000
+                  },
+                  "attachments": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                          "format": "uuid"
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "mime": {
+                          "type": "string",
+                          "minLength": 3,
+                          "maxLength": 128,
+                          "pattern": "^[a-z0-9][a-z0-9!#$&^_.+-]*\\/[a-z0-9][a-z0-9!#$&^_.+-]*$"
+                        },
+                        "size": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 5242880
+                        },
+                        "data": {
+                          "type": "string",
+                          "maxLength": 6990508
+                        }
+                      },
+                      "required": ["id", "name", "mime", "size", "data"],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 8
+                  },
+                  "attachmentIDs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                      "format": "uuid"
+                    },
+                    "maxItems": 8
                   }
                 },
                 "required": ["draft"],
@@ -31825,6 +32155,116 @@
           {
             "lang": "js",
             "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.routine.inbox.draft({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/agent/{agentID}/inbox/attachment/{attachmentID}": {
+      "get": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.routine.inbox.attachment",
+        "parameters": [
+          {
+            "name": "agentID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "attachmentID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Routine attachment content",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                      "format": "uuid"
+                    },
+                    "name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "mime": {
+                      "type": "string",
+                      "minLength": 3,
+                      "maxLength": 128,
+                      "pattern": "^[a-z0-9][a-z0-9!#$&^_.+-]*\\/[a-z0-9][a-z0-9!#$&^_.+-]*$"
+                    },
+                    "size": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 5242880
+                    },
+                    "data": {
+                      "type": "string",
+                      "maxLength": 6990508
+                    }
+                  },
+                  "required": ["id", "name", "mime", "size", "data"],
+                  "additionalProperties": false,
+                  "description": "Routine attachment content"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Return bounded attachment content only when the attachment belongs to the selected retained worker conversation.",
+        "summary": "Read one routine message attachment",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.routine.inbox.attachment({\n  ...\n})"
           }
         ]
       }

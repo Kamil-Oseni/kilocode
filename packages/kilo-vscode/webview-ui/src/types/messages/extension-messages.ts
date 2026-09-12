@@ -309,6 +309,22 @@ export interface RoutineInboxSentMessage {
   error?: string
 }
 
+export interface RoutineInboxFilesMessage {
+  type: "routineInboxFiles"
+  requestID: string
+  agentID: string
+  draft?: string | null
+  files?: { id: string; name: string; mime: string; size: number }[]
+  error?: string
+}
+
+export interface RoutineInboxAttachmentOpenedMessage {
+  type: "routineInboxAttachmentOpened"
+  requestID: string
+  agentID: string
+  error?: string
+}
+
 export interface RoutineInboxInfoResultMessage {
   type: "routineInboxInfo"
   requestID: string
@@ -332,6 +348,7 @@ export interface RoutineInboxDraftResultMessage {
   requestID: string
   agentID: string
   draft?: string | null
+  files?: { id: string; name: string; mime: string; size: number }[]
   error?: string
 }
 
@@ -1826,6 +1843,8 @@ export type ExtensionMessage =
   | RoutineInboxMessage
   | RoutineInboxPageResultMessage
   | RoutineInboxSentMessage
+  | RoutineInboxFilesMessage
+  | RoutineInboxAttachmentOpenedMessage
   | RoutineInboxInfoResultMessage
   | RoutineInboxReadResultMessage
   | RoutineInboxDraftResultMessage

@@ -89,6 +89,10 @@ const button = (text) => {
   assert.ok(found, `Missing button: ${text}`)
   return found
 }
+const reveal = () => {
+  const control = button("Delegate")
+  if (control.getAttribute("aria-expanded") !== "true") control.click()
+}
 const person = (name) => {
   const found = [...root.querySelectorAll(".routines-identity")].find((item) => item.textContent.includes(name))
   assert.ok(found, `Missing worker: ${name}`)
@@ -149,7 +153,13 @@ try {
       },
     ],
   })
-  emit({ type: "routineState", requestID: request.requestID, viewID: request.viewID, refreshID: 1, refresh: "complete" })
+  emit({
+    type: "routineState",
+    requestID: request.requestID,
+    viewID: request.viewID,
+    refreshID: 1,
+    refresh: "complete",
+  })
   person("Chief of Staff").click()
   await new Promise((resolve) => setImmediate(resolve))
   const page = sent.findLast((msg) => msg.type === "routineInboxPage")
@@ -160,6 +170,7 @@ try {
     agentID: chief.id,
     messages: [],
   })
+  reveal()
   assert.match(root.textContent, /Does not change either assignment/)
   const area = root.querySelector("textarea[aria-label='Ask another worker']")
   area.value = "Review Friday expenses."
@@ -345,6 +356,7 @@ try {
       },
     ],
   })
+  reveal()
   const area2 = root.querySelector("textarea[aria-label='Ask another worker']")
   area2.value = "Need the missing receipts."
   area2.dispatchEvent(new window.Event("input", { bubbles: true }))
@@ -367,6 +379,7 @@ try {
   assert.equal(area2.value, "Need the missing receipts.")
   assert.match(root.textContent, /This worker is paused/)
   emit({ type: "routineState", agents: [chief, { ...books, enabled: false }] })
+  reveal()
   assert.match(root.textContent, /Paused workers cannot start a new request/)
   assert.equal(button("Books is paused").disabled, true)
   const asks = sent.filter((msg) => msg.type === "routineDelegate").length
@@ -385,12 +398,9 @@ try {
   }
   emit({
     type: "routineState",
-    agents: [
-      { ...chief, dir: "/close" },
-      { ...books, enabled: false, dir: "/close" },
-      legal,
-    ],
+    agents: [{ ...chief, dir: "/close" }, { ...books, enabled: false, dir: "/close" }, legal],
   })
+  reveal()
   assert.match(root.textContent, /Workers in another folder cannot take this request/)
   assert.equal(button("Legal is in another folder").disabled, true)
   button("Legal is in another folder").click()

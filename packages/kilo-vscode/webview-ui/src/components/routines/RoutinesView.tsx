@@ -1,11 +1,20 @@
-import { Component, For, Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup, onMount } from "solid-js"
+import {
+  Component,
+  For,
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+  createUniqueId,
+  onCleanup,
+  onMount,
+} from "solid-js"
 import { Button } from "@kilocode/kilo-ui/button"
 import { Checkbox } from "@kilocode/kilo-ui/checkbox"
 import { Dialog } from "@kilocode/kilo-ui/dialog"
 import { IconButton } from "@kilocode/kilo-ui/icon-button"
 import { Select } from "@kilocode/kilo-ui/select"
 import { useDialog } from "@kilocode/kilo-ui/context/dialog"
-import { PresenceBadge } from "../chat/PresenceBadge"
 import { useVSCode } from "../../context/vscode"
 import { useLanguage } from "../../context/language"
 import { useSession } from "../../context/session"
@@ -203,6 +212,26 @@ function flag(on: boolean) {
   return on ? "true" : undefined
 }
 
+function initials(name: string) {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((word) => word.charAt(0))
+    .join("")
+    .toUpperCase()
+}
+
+function recent(time?: number) {
+  if (!time) return ""
+  const date = new Date(time)
+  if (Number.isNaN(date.valueOf())) return ""
+  const today = new Date()
+  if (date.toDateString() === today.toDateString())
+    return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+  return date.toLocaleDateString([], { month: "short", day: "numeric" })
+}
+
 function occupancy(item: Agent, box?: Box) {
   return status(box?.state ?? (item.enabled ? "scheduled" : "paused"))
 }
@@ -225,16 +254,15 @@ const Person: Component<{
   busy: boolean
   live: boolean
   picked: boolean
+  manage: boolean
   current: boolean
   panel: string
   inspectable: boolean
-  inspected: boolean
   canOpen: boolean
   presence: ReturnType<typeof runPresence>
   command: ReturnType<typeof action>
   onChoose: () => void
   onMark: (on: boolean) => void
-  onOpen: () => void
   onAct: () => void
   onToggle: () => void
   onEdit: () => void
@@ -243,31 +271,50 @@ const Person: Component<{
   onInspect: () => void
   onRemove: () => void
 }> = (props) => {
+  const [menu, setMenu] = createSignal(false)
+  let row: HTMLLIElement | undefined
   const resume = () => (!props.item.enabled ? `${props.panel}-${props.item.id}-resume` : undefined)
   const hold = () => (props.item.enabled && props.live ? `${props.panel}-${props.item.id}-hold` : undefined)
+  const call = (fn: () => void) => {
+    setMenu(false)
+    fn()
+  }
   return (
     <li
+      ref={row}
       class="routines-row"
       data-presence={props.presence}
       data-paused={flag(!props.item.enabled)}
       data-picked={flag(props.picked)}
       data-current={flag(props.current)}
+      onKeyDown={(event) => {
+        if (event.key !== "Escape" || !menu()) return
+        event.stopPropagation()
+        setMenu(false)
+        queueMicrotask(() => row?.querySelector<HTMLButtonElement>("[data-routine-options]")?.focus())
+      }}
     >
-      <Checkbox hideLabel checked={props.picked} onChange={props.onMark}>
-        Select {props.item.name}
-      </Checkbox>
+      <Show
+        when={props.manage}
+        fallback={
+          <span class="routines-avatar" data-presence={props.presence} aria-hidden="true">
+            {initials(props.item.name)}
+          </span>
+        }
+      >
+        <Checkbox hideLabel checked={props.picked} onChange={props.onMark}>
+          Select {props.item.name}
+        </Checkbox>
+      </Show>
       <button
         type="button"
         class="routines-identity"
         data-routine-worker={props.item.id}
         aria-current={flag(props.current)}
-        onClick={props.onChoose}
+        aria-label={`${props.item.name}, ${props.item.role}, ${occupancy(props.item, props.box)}${props.box?.unread ? `, ${props.box.unread} unread` : ""}`}
+        onClick={() => call(props.onChoose)}
       >
         <span class="routines-name">{props.item.name}</span>
-        <span class="routines-meta">
-          {props.item.role} · {occupancy(props.item, props.box)}
-          <Show when={props.box?.unread}>{(n) => <> · {n()} unread</>}</Show>
-        </span>
         <span class="routines-job">{props.box?.latest?.body ?? props.item.objective}</span>
         <Show when={props.stale}>
           <span class="routines-note" role="status">
@@ -295,47 +342,80 @@ const Person: Component<{
         </Show>
       </button>
       <div class="routines-side">
-        <PresenceBadge state={props.presence} onAck={props.canOpen ? props.onOpen : undefined} />
-        <div class="routines-actions">
+        <span class="routines-time">{recent(props.box?.latest?.time)}</span>
+        <Show when={props.box?.unread}>
+          {(count) => (
+            <span class="routines-unread" aria-label={`${count()} unread`}>
+              {count()}
+            </span>
+          )}
+        </Show>
+        <IconButton
+          icon="settings-gear"
+          size="small"
+          variant="ghost"
+          aria-label={`${props.item.name} options`}
+          aria-haspopup="menu"
+          aria-expanded={menu()}
+          aria-controls={menu() ? `${props.panel}-${props.item.id}-menu` : undefined}
+          data-routine-options={props.item.id}
+          onClick={() => setMenu((value) => !value)}
+        />
+        <div id={`${props.panel}-${props.item.id}-menu`} class="routines-menu" role="menu" hidden={!menu()}>
           <Button
             size="small"
             variant="ghost"
+            role="menuitem"
             disabled={blocked(props.command, props.item.access, props.canOpen)}
-            onClick={props.onAct}
+            onClick={() => call(props.onAct)}
           >
             {caption(props.command, props.item)}
           </Button>
-          <Button size="small" variant="ghost" aria-describedby={resume() ?? hold()} onClick={props.onToggle}>
+          <Button
+            size="small"
+            variant="ghost"
+            role="menuitem"
+            aria-describedby={resume() ?? hold()}
+            onClick={() => call(props.onToggle)}
+          >
             {props.item.enabled ? "Pause" : "Enable"}
           </Button>
-          <Button size="small" variant="ghost" onClick={props.onEdit}>
+          <Button size="small" variant="ghost" role="menuitem" onClick={() => call(props.onEdit)}>
             Edit schedule
           </Button>
-          <Button size="small" variant="ghost" data-routine-access={props.item.id} onClick={props.onAccess}>
+          <Button
+            size="small"
+            variant="ghost"
+            role="menuitem"
+            data-routine-access={props.item.id}
+            onClick={() => call(props.onAccess)}
+          >
             Review access
           </Button>
-          <Button size="small" variant="ghost" data-routine-output={props.item.id} onClick={props.onOutput}>
+          <Button
+            size="small"
+            variant="ghost"
+            role="menuitem"
+            data-routine-output={props.item.id}
+            onClick={() => call(props.onOutput)}
+          >
             Edit output
           </Button>
           <Show when={props.inspectable}>
             <Button
               size="small"
               variant="ghost"
-              aria-expanded={props.inspected}
-              aria-controls={props.inspected ? props.panel : undefined}
+              role="menuitem"
               data-routine-instructions={props.item.id}
-              onClick={props.onInspect}
+              onClick={() => call(props.onInspect)}
             >
-              {props.inspected ? "Hide review" : "Review runs"}
+              Review runs
             </Button>
           </Show>
-          <IconButton
-            icon="trash"
-            size="small"
-            variant="ghost"
-            aria-label={`Remove ${props.item.name}`}
-            onClick={props.onRemove}
-          />
+          <div class="routines-menu-separator" role="separator" />
+          <Button size="small" variant="ghost" role="menuitem" onClick={() => call(props.onRemove)}>
+            Remove worker
+          </Button>
         </div>
       </div>
       <Show when={!props.item.enabled}>
@@ -366,6 +446,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const session = useSession()
   const dialog = useDialog()
   const [agents, setAgents] = createSignal<Agent[]>([])
+  const [manage, setManage] = createSignal(false)
   const [templates, setTemplates] = createSignal<Template[]>([])
   const [runs, setRuns] = createSignal<Record<string, Run[]>>({})
   const [inspection, setInspection] = createSignal<{ agentID: string; name: string; runID?: string }>()
@@ -503,13 +584,12 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
 
   const dismiss = () => {
     const id = reviewed()?.id
-    const attribute = section() === "output" ? "data-routine-output" : "data-routine-access"
     setReviewed(undefined)
     load()
     queueMicrotask(() => {
       if (reviewed() || inspection() || !root?.isConnected) return
-      const button = [...(root?.querySelectorAll<HTMLButtonElement>(`[${attribute}]`) ?? [])].find(
-        (item) => item.getAttribute(attribute) === id,
+      const button = [...(root?.querySelectorAll<HTMLButtonElement>("[data-routine-options]") ?? [])].find(
+        (item) => item.dataset.routineOptions === id,
       )
       const target = button ?? root?.querySelector<HTMLElement>(".routines-title")
       target?.focus()
@@ -522,8 +602,8 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     setInspection(undefined)
     queueMicrotask(() => {
       if (inspection() || reviewed() || !root?.isConnected) return
-      const button = [...root.querySelectorAll<HTMLButtonElement>("[data-routine-instructions]")].find(
-        (item) => item.dataset.routineInstructions === id,
+      const button = [...root.querySelectorAll<HTMLButtonElement>("[data-routine-options]")].find(
+        (item) => item.dataset.routineOptions === id,
       )
       const target = button ?? root.querySelector<HTMLElement>(".routines-title")
       target?.focus()
@@ -620,7 +700,10 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
       setChosen()
       load()
     }
-    if ((msg.type === "routineState" || msg.type === "routineRuns" || msg.type === "routineInbox") && msg.refreshID !== undefined) {
+    if (
+      (msg.type === "routineState" || msg.type === "routineRuns" || msg.type === "routineInbox") &&
+      msg.refreshID !== undefined
+    ) {
       if (msg.viewID !== correlation || msg.requestID !== correlation || msg.refreshID < revision) return false
       revision = msg.refreshID
     }
@@ -719,8 +802,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     extras.sort((a, b) => a.label.localeCompare(b.label))
     const list = [chat, ...extras]
     const extra = editing()?.mode?.trim()
-    if (extra && extra !== "chat" && !list.some((item) => item.key === extra))
-      list.push({ key: extra, label: extra })
+    if (extra && extra !== "chat" && !list.some((item) => item.key === extra)) list.push({ key: extra, label: extra })
     return list
   })
 
@@ -993,7 +1075,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     const filter = attention()
     return agents().filter((item) => {
       const box = boxes()[item.id]
-      if (filter === "unread" && !(box?.unread)) return false
+      if (filter === "unread" && !box?.unread) return false
       if (filter === "needs" && box?.state !== "needs_input" && box?.state !== "failed" && box?.state !== "waiting")
         return false
       if (!text) return true
@@ -1013,7 +1095,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
             {language.t("common.goBack")}
           </Button>
         </Show>
-        <Show when={screen() === "roster" && !empty()}>
+        <Show when={screen() === "roster" && !empty() && manage()}>
           <Checkbox hideLabel checked={allOn()} indeterminate={someOn()} onChange={markAll}>
             Select all
           </Checkbox>
@@ -1021,15 +1103,34 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
         <h2 class="routines-title" tabIndex={-1}>
           {heading(!!editing(), screen())}
         </h2>
-        <Show when={screen() === "roster" && selected().length > 0}>
-          <Button class="routines-header-action" size="small" onClick={() => confirm(selected())}>
-            Remove {selected().length}
-          </Button>
-        </Show>
-        <Show when={screen() === "roster" && selected().length === 0}>
-          <Button class="routines-header-action" variant="ghost" size="small" onClick={() => setScreen("assign")}>
-            Assign
-          </Button>
+        <Show when={screen() === "roster"}>
+          <div class="routines-header-actions">
+            <Show when={manage()}>
+              <Show when={selected().length > 0}>
+                <Button size="small" onClick={() => confirm(selected())}>
+                  Remove {selected().length}
+                </Button>
+              </Show>
+              <Button
+                variant="ghost"
+                size="small"
+                onClick={() => {
+                  setManage(false)
+                  setPicked({})
+                }}
+              >
+                Done
+              </Button>
+            </Show>
+            <Show when={!manage()}>
+              <Button variant="ghost" size="small" onClick={() => setManage(true)}>
+                Manage
+              </Button>
+              <Button size="small" onClick={() => setScreen("assign")}>
+                Assign
+              </Button>
+            </Show>
+          </div>
         </Show>
         <Show when={screen() === "assign"}>
           <Button class="routines-header-action" variant="ghost" size="small" disabled={saving()} onClick={cancel}>
@@ -1047,84 +1148,93 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
           </p>
         </Show>
         <Show when={screen() === "roster"}>
-          <div role="status" aria-live="polite" aria-busy={refreshing()}>
+          <div class="sr-only" role="status" aria-live="polite" aria-busy={refreshing()}>
             {freshness()}
-            <Button variant="ghost" size="small" disabled={refreshing()} onClick={load}>
-              Refresh routines
-            </Button>
           </div>
-          <Archive onOpenSession={props.onOpenSession} />
           <Show when={vacant()}>
             <div class="routines-empty-block">
               <p class="routines-empty">No standing jobs yet. Assign one and it will sleep until it is time to work.</p>
-              <Button onClick={() => setScreen("assign")}>Assign a routine</Button>
-            </div>
-          </Show>
-          <Show when={!vacant()}>
-            <div class="routines-toolbar">
-              <label class="routines-field">
-                Search workers
-                <input
-                  value={query()}
-                  placeholder="Name, role, or message"
-                  onInput={(event) => setQuery(event.currentTarget.value)}
-                />
-              </label>
-              <div class="routines-filters" role="group" aria-label="Inbox filters">
-                <Button size="small" variant={tone(attention() === "all")} onClick={() => setAttention("all")}>
-                  All
-                </Button>
-                <Button
-                  size="small"
-                  variant={tone(attention() === "unread")}
-                  onClick={() => setAttention("unread")}
-                >
-                  Unread
-                </Button>
-                <Button size="small" variant={tone(attention() === "needs")} onClick={() => setAttention("needs")}>
-                  Needs attention
+              <div class="routines-empty-actions">
+                <Button onClick={() => setScreen("assign")}>Assign a routine</Button>
+                <Button variant="ghost" disabled={refreshing()} onClick={load}>
+                  Refresh
                 </Button>
               </div>
             </div>
           </Show>
           <div class="routines-inbox" data-open={chosen() ? "true" : undefined}>
             <div class="routines-people">
-          <ul class="routines-list">
-            <For each={shown()}>
-              {(item) => {
-                const run = () => latest(item, runs())
-                const command = () => action(run(), !!busy()[item.id], item.execution)
-                return (
-                  <Person
-                    item={item}
-                    run={run()}
-                    box={boxes()[item.id]}
-                    stale={stale()[item.id]}
-                    busy={!!busy()[item.id]}
-                    live={live(item, runs())}
-                    picked={!!picked()[item.id]}
-                    current={chosen() === item.id}
-                    panel={panel}
-                    inspectable={inspectable(item)}
-                    inspected={inspected(item.id)}
-                    canOpen={!!(item.execution ? item.execution.sessionID : run()?.sessionID) && !!props.onOpenSession}
-                    presence={state(item)}
-                    command={command()}
-                    onChoose={() => choose(item.id)}
-                    onMark={(value) => mark(item.id, value)}
-                    onOpen={() => open(item)}
-                    onAct={() => (command() === "open" ? open(item) : fire(item))}
-                    onToggle={() => toggle(item)}
-                    onEdit={() => edit(item)}
-                    onAccess={() => review(item)}
-                    onOutput={() => review(item, "output")}
-                    onInspect={() => inspect(item)}
-                    onRemove={() => confirm([item.id])}
-                  />
-                )
-              }}
-            </For>
-          </ul>
+              <Show when={!vacant()}>
+                <div class="routines-toolbar">
+                  <label class="routines-field routines-search">
+                    <span class="sr-only">Search workers</span>
+                    <input
+                      value={query()}
+                      aria-label="Search workers"
+                      placeholder="Search"
+                      onInput={(event) => setQuery(event.currentTarget.value)}
+                    />
+                  </label>
+                  <div class="routines-filters" role="group" aria-label="Inbox filters">
+                    <Button size="small" variant={tone(attention() === "all")} onClick={() => setAttention("all")}>
+                      All
+                    </Button>
+                    <Button
+                      size="small"
+                      variant={tone(attention() === "unread")}
+                      onClick={() => setAttention("unread")}
+                    >
+                      Unread
+                    </Button>
+                    <Button size="small" variant={tone(attention() === "needs")} onClick={() => setAttention("needs")}>
+                      Needs attention
+                    </Button>
+                  </div>
+                  <div class="routines-secondary">
+                    <Button variant="ghost" size="small" disabled={refreshing()} onClick={load}>
+                      Refresh
+                    </Button>
+                    <Archive onOpenSession={props.onOpenSession} />
+                  </div>
+                </div>
+              </Show>
+              <ul class="routines-list">
+                <For each={shown()}>
+                  {(item) => {
+                    const run = () => latest(item, runs())
+                    const command = () => action(run(), !!busy()[item.id], item.execution)
+                    return (
+                      <Person
+                        item={item}
+                        run={run()}
+                        box={boxes()[item.id]}
+                        stale={stale()[item.id]}
+                        busy={!!busy()[item.id]}
+                        live={live(item, runs())}
+                        picked={!!picked()[item.id]}
+                        manage={manage()}
+                        current={chosen() === item.id}
+                        panel={panel}
+                        inspectable={inspectable(item)}
+                        canOpen={
+                          !!(item.execution ? item.execution.sessionID : run()?.sessionID) && !!props.onOpenSession
+                        }
+                        presence={state(item)}
+                        command={command()}
+                        onChoose={() => choose(item.id)}
+                        onMark={(value) => mark(item.id, value)}
+                        onAct={() => (command() === "open" ? open(item) : fire(item))}
+                        onToggle={() => toggle(item)}
+                        onEdit={() => edit(item)}
+                        onAccess={() => review(item)}
+                        onOutput={() => review(item, "output")}
+                        onInspect={() => inspect(item)}
+                        onRemove={() => confirm([item.id])}
+                      />
+                    )
+                  }}
+                </For>
+              </ul>
             </div>
             <Show when={worker()} keyed>
               {(item) => (
@@ -1143,7 +1253,9 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
               )}
             </Show>
             <Show when={!worker()}>
-              <p class="routines-empty routines-thread">Select a worker to read reports and follow up in this conversation.</p>
+              <p class="routines-empty routines-thread">
+                Select a worker to read reports and follow up in this conversation.
+              </p>
             </Show>
           </div>
           <Show when={reviewed()} keyed>
@@ -1249,8 +1361,8 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
             </label>
             <Show when={editing()}>
               <p class="routines-hint">
-                Earlier reports stay in this conversation. This does not start a new worker. Role, write folder,
-                agent, and plan file changes apply to later runs.
+                Earlier reports stay in this conversation. This does not start a new worker. Role, write folder, agent,
+                and plan file changes apply to later runs.
               </p>
             </Show>
             <ScheduleEditor value={draft()} onChange={setDraft} disabled={saving()} />

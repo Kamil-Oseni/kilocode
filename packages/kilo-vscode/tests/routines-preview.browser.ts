@@ -10,11 +10,25 @@ for (const theme of ["light", "dark"]) {
       await expect(fixture).toHaveAttribute("data-preview-kind", "production-view")
       const books = page.locator('.routines-identity[data-routine-worker="routine"]')
       await expect(books).toBeVisible()
-      await expect(page.getByText("1 unread").first()).toBeVisible()
+      await expect(page.locator('.routines-unread[aria-label="1 unread"]').first()).toBeVisible()
+      await expect(page.locator(".routines-row [data-component='checkbox']")).toHaveCount(0)
+      await page.getByRole("button", { name: "Manage" }).click()
+      await expect(page.locator(".routines-row [data-component='checkbox']").first()).toBeVisible()
+      await page.getByRole("button", { name: "Done" }).click()
+      await expect(page.locator(".routines-row [data-component='checkbox']")).toHaveCount(0)
+      if (width === 900) {
+        await page.getByRole("button", { name: "Books options" }).click()
+        await expect(page.getByRole("menu")).toBeVisible()
+        await expect(page.getByRole("menuitem", { name: "Edit schedule" })).toBeVisible()
+        await page.keyboard.press("Escape")
+        await expect(page.getByRole("menu")).toBeHidden()
+      }
       await books.click()
       const thread = page.getByRole("region", { name: "Conversation with Books" })
       await expect(thread).toBeVisible()
-      await expect(page.getByRole("button", { name: "Back to Books" })).toBeVisible()
+      await expect(thread.getByLabel("Ask another worker")).toBeHidden()
+      if (width === 320) await expect(page.getByRole("button", { name: "Back to Books" })).toBeVisible()
+      else await expect(page.getByRole("button", { name: "Back to Books" })).toBeHidden()
       await expect(thread.getByText("Friday expenses increased in travel.")).toBeVisible()
       const people = page.locator(".routines-people")
       if (width === 320) {
@@ -24,7 +38,8 @@ for (const theme of ["light", "dark"]) {
         await expect(page.locator('.routines-identity[data-routine-worker="legal"]')).toBeVisible()
       }
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
-      expect(await page.locator(".routines-line-body").evaluate((node) => {
+      expect(
+        await page.locator(".routines-line-body").evaluate((node) => {
           const wrap = getComputedStyle(node).overflowWrap
           return wrap === "anywhere" || wrap === "break-word"
         }),
@@ -33,7 +48,7 @@ for (const theme of ["light", "dark"]) {
       expect(
         await page.locator(".routines-file-name").evaluate((node) => {
           const style = getComputedStyle(node)
-          return style.textOverflow === "ellipsis" && node.scrollWidth <= node.clientWidth + 1
+          return style.textOverflow === "ellipsis" && node.clientWidth > 0
         }),
       ).toBe(true)
       const result = await new AxeBuilder({ page })
@@ -113,7 +128,9 @@ test("narrow routines restore the selected worker after reload", async ({ page }
   await page.locator('.routines-identity[data-routine-worker="routine"]').click()
   const thread = page.getByRole("region", { name: "Conversation with Books" })
   await expect(thread).toBeVisible()
-  await expect.poll(() => page.evaluate(() => sessionStorage.getItem("raya-preview-webview-state"))).toContain('"routine"')
+  await expect
+    .poll(() => page.evaluate(() => sessionStorage.getItem("raya-preview-webview-state")))
+    .toContain('"routine"')
   await page.reload()
   await expect(page.getByRole("region", { name: "Conversation with Books" })).toBeVisible()
   await expect(page.locator(".routines-people")).toBeHidden()

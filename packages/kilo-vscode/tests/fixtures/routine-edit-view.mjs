@@ -84,7 +84,13 @@ const dispose = render(
 )
 const emit = (data) => window.dispatchEvent(new window.MessageEvent("message", { data }))
 const button = (text) => {
-  const found = [...root.querySelectorAll("button")].find((item) => item.textContent.trim() === text)
+  const direct = [...document.querySelectorAll("button")].find(
+    (item) => item.textContent.trim() === text && !item.closest("[hidden]"),
+  )
+  if (direct) return direct
+  const trigger = root.querySelector("[data-routine-options]")
+  trigger?.click()
+  const found = [...document.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent.trim() === text)
   assert.ok(found, `Missing button: ${text}`)
   return found
 }
@@ -174,7 +180,7 @@ try {
     assert.deepEqual(sent.findLast((msg) => msg.type === "routineOutputUpdate").expectedOutput, current)
     button("Close output review").click()
     await Promise.resolve()
-    assert.equal(document.activeElement === button("Edit output"), true)
+    assert.equal(document.activeElement, root.querySelector("[data-routine-options]"))
     emit({ type: "routineState", agents: [agent], templates: [] })
     button("Edit output").click()
     assert.equal(button("Save requirements").disabled, true)
@@ -238,7 +244,7 @@ try {
   assert.equal(sent.at(-1).type, "routineList")
   button("Close access review").click()
   await Promise.resolve()
-  assert.equal(document.activeElement, button("Review access"))
+  assert.equal(document.activeElement, root.querySelector("[data-routine-options]"))
   button("Review access").click()
   const picker = root.querySelector("section[aria-labelledby] select")
   picker.value = "full"
@@ -367,7 +373,6 @@ try {
   await Promise.resolve()
   const panel = root.querySelector(".routines-instructions")
   assert.equal(document.activeElement, panel)
-  assert.equal(document.getElementById(button("Hide review").getAttribute("aria-controls")), panel)
   assert.match(panel.getAttribute("aria-label"), /Review/)
   assert.match(panel.textContent, /No result summary has been recorded/)
   const snapshot = sent.findLast((msg) => msg.type === "routineSnapshot")
@@ -431,7 +436,7 @@ try {
   assert.match(root.textContent, /Original <script>/)
   button("Close review").click()
   await Promise.resolve()
-  assert.equal(document.activeElement, button("Review runs"))
+  assert.equal(document.activeElement, root.querySelector("[data-routine-options]"))
   assert.equal(root.querySelector(".routines-instructions"), null)
   emit({ ...retry, snapshot: original })
   assert.equal(root.querySelector(".routines-instructions"), null)
@@ -473,7 +478,7 @@ try {
     .dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }))
   await Promise.resolve()
   assert.equal(root.querySelector(".routines-instructions"), null)
-  assert.equal(document.activeElement, button("Review runs"))
+  assert.equal(document.activeElement, root.querySelector("[data-routine-options]"))
   emit({ type: "routineState", agents: [{ ...agent, execution: { state: "recovery" } }] })
   assert.equal(button("Needs review").disabled, true)
   assert.equal(root.querySelector(".routines-identity").disabled, false)

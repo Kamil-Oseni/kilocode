@@ -180,9 +180,11 @@ test("confirms the backend's exact schedule and scopes preview tokens to client 
   expect(messages.at(-1)).toMatchObject({ type: "routineState", error: expect.stringContaining("preview has expired") })
   await handleRoutineMessage({ client, directory: "workspace-a", post, message })
   expect(calls[1]).toMatchObject({ path: "/kilocode/agent", body: { schedule } })
-  expect(calls).toHaveLength(3)
+  expect(calls[2]).toMatchObject({ path: "/kilocode/agent" })
+  expect(calls[3]).toMatchObject({ path: "/kilocode/agent-inbox" })
+  expect(calls).toHaveLength(4)
   await handleRoutineMessage({ client, directory: "workspace-a", post, message })
-  expect(calls).toHaveLength(3)
+  expect(calls).toHaveLength(4)
   expect(messages.at(-1)).toMatchObject({ type: "routineState", error: expect.stringContaining("preview has expired") })
 })
 

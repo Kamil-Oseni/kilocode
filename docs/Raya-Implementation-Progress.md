@@ -3206,6 +3206,16 @@ Delivery evidence: the product commit is on `origin/main`. `bun run snapshot:ins
 
 Next: continue the routines attachment/organization/UI work and the PR-04 versioned authority envelope; do not start deferred Codex implementation. The only remaining working-tree files after installation are the intentionally preserved untracked `docs/Raya-Codex-Research-Deferred.md` and `docs/Raya-Features.md`.
 
+## ChatGPT 2026-09-12 14:26 America/Toronto — Routines messenger hierarchy
+
+**Status: verified locally; not yet committed, pushed or installed.** RDM-01/UI-01/UX-02 now present the routine roster as a compact worker inbox and the selected worker as a persistent DM. Worker rows show a neutral initial avatar with semantic presence, a one-line preview, latest time and unread count. Bulk selection appears only in Manage mode. The former six-action column is one options menu retaining run, pause/enable, schedule, access, output, run-review and removal actions. Search, filters, refresh and the collapsed archive are confined to the left rail.
+
+The right pane now starts at the conversation header, renders records as neutral message bubbles and ends in one compact Send composer. Desktop removes the redundant Back control; narrow mode retains Back and Escape. Delegation remains functional but its second composer appears only after choosing Delegate. The empty state retains both Assign and Refresh. Focus returns to the worker options control after access/output/run review closes, and mouse-opened conversations no longer show a pane-wide focus outline.
+
+Evidence: the full routine unit set passes 70 tests / 0 failures / 389 assertions. The production Routines Chromium suite passes 11/11 across light/dark, 320/900px, empty/error/stale/loading, keyboard/file cards, reload restoration and 200% zoom, including axe and overflow checks. ChatGPT inspected the final 320px and 900px screenshots against `docs/designer.md`. Webview typecheck and targeted ESLint pass. A pre-existing stale forecast assertion expected only create/list after creation; the shipped refresh also reads inbox summaries, so the test now verifies create, list and inbox explicitly and passes.
+
+This is a presentation and interaction hierarchy slice. It does not implement organizations, chat-created routines/orgs, chat info, shared-media/link inventories, user attachments or full restart/rebuild acceptance. Those remain next after this slice is committed, pushed and installed.
+
 
 
 

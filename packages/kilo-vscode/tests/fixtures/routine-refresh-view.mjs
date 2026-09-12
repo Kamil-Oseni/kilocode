@@ -84,7 +84,13 @@ const dispose = render(
 )
 const emit = (data) => window.dispatchEvent(new window.MessageEvent("message", { data }))
 const button = (text) => {
-  const found = [...root.querySelectorAll("button")].find((item) => item.textContent.trim() === text)
+  const direct = [...document.querySelectorAll("button")].find(
+    (item) => item.textContent.trim() === text && !item.closest("[hidden]"),
+  )
+  if (direct) return direct
+  const trigger = root.querySelector("[data-routine-options]")
+  trigger?.click()
+  const found = [...document.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent.trim() === text)
   assert.ok(found, `Missing button: ${text}`)
   return found
 }
@@ -120,8 +126,8 @@ try {
   assert.match(root.textContent, /History may be stale: History unavailable/)
   assert.match(root.textContent, /Some history could not be refreshed/)
   assert.match(root.textContent, /Retained report/)
-  assert.equal(button("Refresh routines").disabled, false)
-  button("Refresh routines").click()
+  assert.equal(button("Refresh").disabled, false)
+  button("Refresh").click()
   assert.equal(sent.filter((msg) => msg.type === "routineList").length, 3)
   reply({ type: "routineRuns", refreshID: 3, agentID: agent.id, runs: [] })
   reply({ type: "routineState", refreshID: 3, refresh: "complete" })
@@ -150,7 +156,7 @@ try {
   emit({ type: "connectionState", state: "disconnected" })
   assert.match(root.textContent, /Disconnected/)
   emit({ type: "connectionState", state: "connected" })
-  assert.equal(button("Refresh routines").disabled, true)
+  assert.equal(button("Refresh").disabled, true)
   assert.equal(
     sent.some((msg) => msg.type === "routineRun"),
     false,
@@ -167,7 +173,7 @@ try {
       post: emit,
       refresh: (id, view) => offline.request(id, view),
     })
-    assert.equal(button("Refresh routines").disabled, false)
+    assert.equal(button("Refresh").disabled, false)
     assert.match(root.textContent, /Refresh failed/)
   } finally {
     offline.dispose()

@@ -27,6 +27,13 @@
   flex-shrink: 0;
 }
 
+.routines-header-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--raya-space-4);
+}
+
 .routines-body {
   flex: 1;
   min-height: 0;
@@ -40,6 +47,12 @@
   align-items: flex-start;
   gap: var(--raya-space-12);
   padding: var(--raya-space-16) var(--raya-space-4) 0;
+}
+
+.routines-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--raya-space-8);
 }
 
 .routines-lede,
@@ -109,9 +122,7 @@
 
 .routines-instructions:focus-visible,
 .routines-title:focus-visible,
-.routines-identity:focus,
 .routines-identity:focus-visible,
-.routines-thread:focus,
 .routines-thread:focus-visible,
 .routines-thread-body:focus-visible,
 .routines-file:focus,
@@ -148,10 +159,10 @@
 
 .routines-row {
   display: grid;
-  grid-template-columns: auto minmax(8rem, 1fr) auto;
-  column-gap: var(--raya-space-8);
-  align-items: start;
-  padding: var(--raya-space-10) var(--raya-space-8);
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  column-gap: var(--raya-space-10);
+  align-items: center;
+  padding: var(--raya-space-10);
   border-radius: var(--raya-radius-md);
 }
 
@@ -177,7 +188,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
+  gap: var(--raya-space-2);
   appearance: none;
   border: 0;
   background: transparent;
@@ -198,50 +209,127 @@
   color: var(--text-base, var(--vscode-foreground));
 }
 
+.routines-avatar {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+  color: var(--text-base, var(--vscode-foreground));
+  background: color-mix(in srgb, var(--text-base, var(--vscode-foreground)) 9%, transparent);
+  font-family: var(--font-body);
+  font-size: var(--kilo-font-size-12);
+  font-weight: 600;
+}
+
+.routines-avatar::after {
+  content: "";
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 0.5rem;
+  height: 0.5rem;
+  border: 2px solid var(--surface-base, var(--vscode-editor-background));
+  border-radius: 50%;
+  background: var(--text-weak, var(--vscode-descriptionForeground));
+}
+
+.routines-avatar[data-presence="working"]::after {
+  background: var(--vscode-testing-iconPassed, #89d185);
+}
+
+.routines-avatar[data-presence="waiting"]::after {
+  background: var(--vscode-editorWarning-foreground, #d19a66);
+}
+
+.routines-avatar[data-presence="error"]::after {
+  background: var(--vscode-errorForeground);
+}
+
 .routines-job {
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
   min-width: 0;
   max-width: 100%;
   overflow-wrap: anywhere;
-  color: var(--text-base, var(--vscode-foreground));
+  color: var(--text-weak, var(--vscode-descriptionForeground));
 }
 
 .routines-side {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: var(--raya-space-6);
+  gap: var(--raya-space-2);
   min-width: 0;
-  max-width: 11rem;
+  width: 2.75rem;
+}
+
+.routines-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + var(--raya-space-4));
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  width: 10.5rem;
+  padding: var(--raya-space-4);
+  border: 1px solid var(--border-weak, var(--vscode-widget-border));
+  border-radius: var(--raya-radius-md);
+  background: var(--vscode-menu-background, var(--surface-raised, var(--vscode-editor-background)));
+  box-shadow: 0 4px 14px color-mix(in srgb, #000 24%, transparent);
+}
+
+.routines-menu [data-component="button"] {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.routines-menu-separator {
+  height: 1px;
+  margin: var(--raya-space-4) 0;
+  background: var(--border-weak, var(--vscode-widget-border));
+}
+
+.routines-time {
+  min-height: 1em;
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-family: var(--font-body);
+  font-size: var(--kilo-font-size-11);
+  white-space: nowrap;
+}
+
+.routines-unread {
+  display: grid;
+  place-items: center;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  padding: 0 var(--raya-space-4);
+  border-radius: 999px;
+  box-sizing: border-box;
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+  font-family: var(--font-body);
+  font-size: var(--kilo-font-size-11);
+  line-height: 1;
+}
+
+.routines-side [data-component="icon-button"] {
+  opacity: 0;
+}
+
+.routines-row:hover .routines-side [data-component="icon-button"],
+.routines-row:focus-within .routines-side [data-component="icon-button"] {
+  opacity: 1;
 }
 
 .routines-resume {
   grid-column: 2 / -1;
   margin-top: var(--raya-space-6);
-}
-
-.routines-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 2px;
-  opacity: 0;
-  transition: opacity var(--raya-duration-fast, 120ms) var(--raya-ease-out, ease);
-}
-
-.routines-row:hover .routines-actions,
-.routines-row:focus-within .routines-actions,
-.routines-row[data-picked="true"] .routines-actions {
-  opacity: 1;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .routines-actions {
-    transition: none;
-  }
 }
 
 .routines-suggest {
@@ -380,7 +468,7 @@
 }
 
 .routines-archive {
-  margin-bottom: var(--raya-space-12);
+  margin: 0;
   overflow-wrap: anywhere;
 }
 
@@ -457,29 +545,41 @@
 
 .routines-toolbar {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: var(--raya-space-8);
-  align-items: end;
-  margin-bottom: var(--raya-space-8);
+  align-items: stretch;
+  padding: 0 var(--raya-space-8) var(--raya-space-10);
+  border-bottom: 1px solid var(--border-weak, var(--vscode-widget-border));
+}
+
+.routines-search input {
+  border-radius: var(--raya-radius-md-plus);
 }
 
 .routines-filters {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--raya-space-8);
+  gap: var(--raya-space-2);
+}
+
+.routines-secondary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
 }
 
 .routines-inbox {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(14rem, 20rem) minmax(0, 1fr);
-  gap: var(--raya-space-8);
+  grid-template-columns: minmax(15rem, 19rem) minmax(0, 1fr);
+  gap: 0;
 }
 
 .routines-people {
   min-height: 0;
   overflow: auto;
+  padding-right: var(--raya-space-8);
 }
 
 .routines-thread {
@@ -487,20 +587,22 @@
   display: flex;
   flex-direction: column;
   border-left: 1px solid var(--border-weak, var(--vscode-widget-border));
-  padding-left: var(--raya-space-12);
+  padding-left: var(--raya-space-16);
 }
 
 .routines-thread-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--raya-space-8);
-  margin-bottom: var(--raya-space-8);
+  padding: 0 var(--raya-space-4) var(--raya-space-10);
+  border-bottom: 1px solid var(--border-weak, var(--vscode-widget-border));
 }
 
 .routines-thread-identity {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  flex: 1;
 }
 
 .routines-thread-body {
@@ -509,14 +611,19 @@
   overflow: auto;
   display: flex;
   flex-direction: column;
-  gap: var(--raya-space-12);
+  gap: var(--raya-space-10);
+  padding: var(--raya-space-16) var(--raya-space-4);
 }
 
 .routines-line {
   display: flex;
   flex-direction: column;
   gap: var(--raya-space-4);
-  max-width: 85%;
+  width: fit-content;
+  max-width: min(82%, 38rem);
+  padding: var(--raya-space-8) var(--raya-space-12);
+  border-radius: var(--raya-radius-lg, 12px);
+  background: color-mix(in srgb, var(--text-base, var(--vscode-foreground)) 8%, transparent);
 }
 
 .routines-line[data-kind="user"] {
@@ -526,14 +633,16 @@
 .routines-line[data-kind="report"],
 .routines-line[data-kind="decision"],
 .routines-line[data-kind="delegation"] {
-  max-width: 100%;
-  border-left: 2px solid var(--text-weak, var(--vscode-descriptionForeground));
-  padding-left: var(--raya-space-8);
+  max-width: min(90%, 42rem);
 }
 
 .routines-line-meta {
-  color: var(--text-weak, var(--vscode-descriptionForeground));
-  font-size: var(--kilo-font-size-12);
+  color: var(--text-base, var(--vscode-foreground));
+  font-size: var(--kilo-font-size-11);
+}
+
+.routines-line .routines-file-path {
+  color: var(--text-base, var(--vscode-foreground));
 }
 
 .routines-line-body {
@@ -595,10 +704,28 @@
 }
 
 .routines-composer {
-  margin-top: var(--raya-space-8);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--raya-space-8);
+  align-items: end;
+  margin-top: 0;
+  padding: var(--raya-space-10) var(--raya-space-4) 0;
+  border-top: 1px solid var(--border-weak, var(--vscode-widget-border));
+}
+
+.routines-compose-field textarea {
+  min-height: 2.5rem;
+  max-height: 8rem;
+  resize: vertical;
+}
+
+.routines-compose-actions {
+  padding-bottom: 1px;
 }
 
 .routines-delegate {
+  display: flex;
+  flex-direction: column;
   padding-top: var(--raya-space-8);
   border-top: 1px solid var(--border-weak, var(--vscode-widget-border));
 }
@@ -620,5 +747,11 @@
   .routines-thread {
     border-left: 0;
     padding-left: 0;
+  }
+}
+
+@media (min-width: 42.01rem) {
+  .routines-thread-head > [aria-label^="Back to"] {
+    display: none;
   }
 }

@@ -2150,5 +2150,19 @@ Product commit `1542d21460461413c68f21357f550d48bcc647df` is on `origin/main`. T
 
 Installed identity: `eden.raya@7.4.23-snapshot+1542d21460.kamil-oseni.1789234823997`. VSIX: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-1542d21460-kamil-oseni-1789234823997.vsix`; SHA-256 `A05F9F65F601D56E1502A842EF36A7C6E2883AFD13D6BCCACCF8B35431040F88`; 517135538 bytes; 431 archive entries. `code --list-extensions --show-versions` independently returned the exact identity. VS Code was not force-reloaded. The only remaining working-tree files after installation are the intentionally preserved untracked `docs/Raya-Codex-Research-Deferred.md` and `docs/Raya-Features.md`.
 
+## ChatGPT 2026-09-12 14:26 America/Toronto — Routines messenger hierarchy
+
+**State: verified locally; commit, push and snapshot installation are next.** This is the first broader RDM-01/UI-01/UX-02 correction against the owner direction in `docs/Raya-Features.md`; it does not claim the organization model, chat-created routines, chat-info/media inventory or rebuild-survival acceptance are complete.
+
+The production Routines roster now behaves as a worker inbox rather than an administration table. Search, attention filters, refresh and the collapsed archive stay in the left rail. Each worker row uses a neutral initial avatar with semantic presence, name, one-line message preview, latest time, unread count and a single options control. Bulk checkboxes appear only after choosing Manage. Run, pause/enable, schedule, access, output, run review and removal remain available through the options menu, with focus returning to that control after a review closes.
+
+The conversation owns the right pane from its header through its composer. Reports, decisions, delegation records and user replies render as neutral message bubbles; mouse selection no longer leaves a focus frame around the whole pane. Desktop omits the redundant Back control while the narrow single-pane journey retains Back and Escape. The composer is one compact message field with Send. Worker-to-worker delegation is preserved behind an explicit Delegate control, so its second form does not compete with ordinary conversation until requested. Empty, loading, stale and failure recovery remain available; an empty roster includes Refresh as well as Assign.
+
+Changed paths: `.changeset/raya-routines-messenger-ui.md`; `packages/kilo-vscode/webview-ui/src/components/routines/RoutinesView.tsx`, `Inbox.tsx`, and `styles/routines.css`; routine inbox/delegation/edit/refresh fixtures; `tests/routines-preview.browser.ts`; and a stale forecast assertion corrected to include the already-shipped post-create inbox refresh.
+
+Evidence: all routine unit tests pass 70/70 with 389 assertions. The production Chromium suite passes 11/11 across light/dark, 320/900px, empty/error/stale/loading, keyboard/file-card, selected-worker reload restoration and 200% zoom cases, with axe and horizontal-overflow checks. ChatGPT visually inspected the final 320px and 900px production screenshots under `docs/designer.md`: no emoji, gradient, tinted decorative section, nested card cluster or static pulsing status was introduced; accent remains limited to active filter/unread/primary action state. Webview typecheck and targeted ESLint pass. Final Knip, marker, diff and packaging checks remain before delivery.
+
+Next product steps after delivery: add first-class chat info with real shared-media/link and contact/delegation evidence, user attachments, organization entities and role graphs, create-routine/create-organization tools callable from main chat with `ask` clarification, and restart/rebuild lifecycle acceptance. Do not fabricate those views before their persisted contracts exist.
+
 
 

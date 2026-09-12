@@ -154,13 +154,7 @@ const Trace: Component<{
   }
   return (
     <>
-      <Button
-        type="button"
-        size="small"
-        variant="ghost"
-        disabled={props.busy}
-        onClick={() => props.onShow(props.id)}
-      >
+      <Button type="button" size="small" variant="ghost" disabled={props.busy} onClick={() => props.onShow(props.id)}>
         {props.busy ? "Loading request chain" : props.tree ? "Refresh request chain" : "Show request chain"}
       </Button>
       <Show when={props.error}>
@@ -303,7 +297,9 @@ function saved(value: unknown) {
   return { state, reason }
 }
 
-const Pass: Component<{ agentID: string; workers: Peer[]; workspace?: string; runID?: string; onDone?: () => void }> = (props) => {
+const Pass: Component<{ agentID: string; workers: Peer[]; workspace?: string; runID?: string; onDone?: () => void }> = (
+  props,
+) => {
   const vscode = useVSCode()
   const [ask, setAsk] = createSignal("")
   const [phase, setPhase] = createSignal<"idle" | "sending" | "failed">("idle")
@@ -444,6 +440,7 @@ export const Inbox: Component<{
   const [thread, setThread] = createSignal<Note[]>([])
   const [cursor, setNext] = createSignal<string>()
   const [note, setNote] = createSignal("")
+  const [passing, setPassing] = createSignal(false)
   const [phase, setPhase] = createSignal<"idle" | "sending" | "failed">("idle")
   const [error, setError] = createSignal("")
   const [halt, setHalt] = createSignal<"idle" | "sending" | "failed">("idle")
@@ -742,6 +739,11 @@ export const Inbox: Component<{
             <Show when={props.box?.nextRun}>{(at) => <> · Next {stamp(at())}</>}</Show>
           </span>
         </div>
+        <Show when={props.workers && props.workers.length > 0}>
+          <Button variant="ghost" size="small" aria-expanded={passing()} onClick={() => setPassing((value) => !value)}>
+            Delegate
+          </Button>
+        </Show>
       </header>
       <div
         ref={pane}
@@ -797,27 +799,28 @@ export const Inbox: Component<{
           submit()
         }}
       >
-        <label class="routines-field">
-          Message this worker
+        <label class="routines-field routines-compose-field">
+          <span class="sr-only">Message this worker</span>
           <textarea
             value={note()}
-            rows={3}
+            rows={2}
             aria-label="Message this worker"
             placeholder="Ask about a report in this conversation."
             onInput={(event) => change(event.currentTarget.value)}
           />
         </label>
-        <p class="routines-hint">Asks this worker about reports here. Does not change the assignment.</p>
         <Show when={props.box?.state === "paused"}>
           <p class="routines-hint">
             This worker is paused. Follow-ups still arrive here. Scheduled starts stay off until it is enabled.
           </p>
         </Show>
-        <Button type="button" size="small" disabled={phase() === "sending" || !note().trim()} onClick={submit}>
-          {phase() === "sending" ? "Asking this worker" : phase() === "failed" ? "Retry follow-up" : "Send"}
-        </Button>
+        <div class="routines-compose-actions">
+          <Button type="button" size="small" disabled={phase() === "sending" || !note().trim()} onClick={submit}>
+            {phase() === "sending" ? "Sending" : phase() === "failed" ? "Retry" : "Send"}
+          </Button>
+        </div>
       </form>
-      <Show when={props.workers && props.workers.length > 0}>
+      <Show when={passing() && props.workers && props.workers.length > 0}>
         <Pass
           agentID={props.agentID}
           workers={props.workers!}

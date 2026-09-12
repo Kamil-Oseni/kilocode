@@ -141,10 +141,16 @@ try {
       },
     ],
   })
-  emit({ type: "routineState", requestID: request.requestID, viewID: request.viewID, refreshID: 1, refresh: "complete" })
+  emit({
+    type: "routineState",
+    requestID: request.requestID,
+    viewID: request.viewID,
+    refreshID: 1,
+    refresh: "complete",
+  })
   assert.match(root.textContent, /Friday expenses increased in travel/)
-  assert.match(root.textContent, /1 unread/)
-  assert.match(root.textContent, /Scheduled/)
+  assert.equal(root.querySelector(".routines-unread").getAttribute("aria-label"), "1 unread")
+  assert.match(root.querySelector(".routines-identity").getAttribute("aria-label"), /Scheduled/)
   root.querySelector(".routines-identity").click()
   assert.equal(webview.unrelated, "keep me")
   assert.deepEqual(Object.values(webview.routineInbox.selected), [agent.id])
@@ -158,7 +164,7 @@ try {
     messages: [note],
   })
   assert.match(root.textContent, /Report/)
-  assert.match(root.textContent, /Does not change the assignment/)
+  assert.doesNotMatch(root.textContent, /Does not change the assignment/)
   const card = root.querySelector('[aria-label="Open ledger.pdf"]')
   assert.equal(card.querySelector(".routines-file-name").textContent, "ledger.pdf")
   card.click()
@@ -197,7 +203,7 @@ try {
     error: "Could not save that follow-up.",
   })
   assert.match(root.textContent, /Could not save that follow-up/)
-  button("Retry follow-up").click()
+  button("Retry").click()
   const retry = sent.findLast((msg) => msg.type === "routineInboxSend")
   assert.equal(retry.source, first.source)
   assert.equal(retry.body, first.body)
@@ -220,7 +226,14 @@ try {
         conversationID: "rcv_1",
         name: agent.name,
         role: agent.role,
-        latest: { id: "rmg_3", agentID: agent.id, kind: "report", source: "report:occ2", body: "The next Friday close found the travel receipts.", time: 3 },
+        latest: {
+          id: "rmg_3",
+          agentID: agent.id,
+          kind: "report",
+          source: "report:occ2",
+          body: "The next Friday close found the travel receipts.",
+          time: 3,
+        },
         unread: 1,
         state: "scheduled",
       },
@@ -248,7 +261,7 @@ try {
   assert.match(root.textContent, /Friday expenses increased in travel/)
   assert.match(root.textContent, /Why did expenses increase/)
   assert.match(root.textContent, /The next Friday close found the travel receipts/)
-  assert.match(root.textContent, /Does not change the assignment/)
+  assert.doesNotMatch(root.textContent, /Does not change the assignment/)
   const thread = root.querySelector(".routines-thread[role='region']")
   assert.equal(thread.getAttribute("aria-label"), "Conversation with Books")
   assert.equal(button("Back").getAttribute("aria-label"), "Back to Books")
@@ -320,16 +333,13 @@ try {
     ],
   })
   await new Promise((resolve) => setImmediate(resolve))
-  assert.equal(
-    sent.filter((msg) => msg.type === "routineInboxPage").length,
-    pages,
-  )
-  assert.equal(
-    sent.filter((msg) => msg.type === "routineInboxPage" && msg.agentID === legal.id).length,
-    0,
-  )
+  assert.equal(sent.filter((msg) => msg.type === "routineInboxPage").length, pages)
+  assert.equal(sent.filter((msg) => msg.type === "routineInboxPage" && msg.agentID === legal.id).length, 0)
   assert.match(root.textContent, /Counsel/)
-  assert.equal(root.querySelector(".routines-thread[role='region']").getAttribute("aria-label"), "Conversation with Books")
+  assert.equal(
+    root.querySelector(".routines-thread[role='region']").getAttribute("aria-label"),
+    "Conversation with Books",
+  )
   assert.equal(document.activeElement, draft)
   assert.equal(draft.value, "Keep this draft")
   assert.doesNotMatch(thread.textContent, /Counsel filed the motion/)
@@ -353,9 +363,10 @@ try {
     row.getBoundingClientRect = () => ({ top: -80, bottom: -40 })
   }
   pane.dispatchEvent(new window.Event("scroll"))
-  assert.deepEqual(Object.values(webview.routineInbox.anchors).map(({ id, offset }) => ({ id, offset })), [
-    { id: "rmg_user", offset: 20 },
-  ])
+  assert.deepEqual(
+    Object.values(webview.routineInbox.anchors).map(({ id, offset }) => ({ id, offset })),
+    [{ id: "rmg_user", offset: 20 }],
+  )
   emit({
     type: "routineInbox",
     requestID: request.requestID,
@@ -491,7 +502,10 @@ try {
     agents: [agent, legal],
     templates: [],
   })
-  assert.equal(root.querySelector(".routines-thread[role='region']").getAttribute("aria-label"), "Conversation with Books")
+  assert.equal(
+    root.querySelector(".routines-thread[role='region']").getAttribute("aria-label"),
+    "Conversation with Books",
+  )
   emit({
     type: "routineInbox",
     requestID: restored.requestID,
@@ -524,7 +538,10 @@ try {
     type: "routineInboxPage",
     requestID: older.requestID,
     agentID: agent.id,
-    messages: [note, { id: "rmg_user", agentID: agent.id, kind: "user", source: retry.source, body: retry.body, time: 2 }],
+    messages: [
+      note,
+      { id: "rmg_user", agentID: agent.id, kind: "user", source: retry.source, body: retry.body, time: 2 },
+    ],
   })
   const restoredPane = root.querySelector(".routines-thread-body")
   let restoredTop = 0
@@ -540,7 +557,10 @@ try {
     },
   })
   restoredPane.getBoundingClientRect = () => ({ top: 0, bottom: 200 })
-  restoredPane.querySelector('[data-routine-message="rmg_user"]').getBoundingClientRect = () => ({ top: 30, bottom: 70 })
+  restoredPane.querySelector('[data-routine-message="rmg_user"]').getBoundingClientRect = () => ({
+    top: 30,
+    bottom: 70,
+  })
   await new Promise((resolve) => setImmediate(resolve))
   assert.equal(restoredTop, 10)
   assert.equal(webview.unrelated, "keep me")

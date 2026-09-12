@@ -291,11 +291,7 @@ export const VoiceProvider: ParentComponent = (props) => {
     }
   }
 
-  function openaiMessage(message: ExtensionMessage) {
-    if (message.type === "speechLiveStarted") {
-      live.started(message.requestId)
-      return true
-    }
+  function host(message: ExtensionMessage) {
     if (message.type === "speechLiveMicChunk") {
       if (
         call?.id === message.requestId &&
@@ -306,10 +302,17 @@ export const VoiceProvider: ParentComponent = (props) => {
         feed.write(Uint8Array.from(atob(message.data), (char) => char.charCodeAt(0)).buffer)
       return true
     }
-    if (message.type === "speechLiveMicError") {
-      if (call?.id === message.requestId) failOpenAI(message.error)
+    if (message.type !== "speechLiveMicError") return false
+    if (call?.id === message.requestId) failOpenAI(message.error)
+    return true
+  }
+
+  function openaiMessage(message: ExtensionMessage) {
+    if (message.type === "speechLiveStarted") {
+      live.started(message.requestId)
       return true
     }
+    if (host(message)) return true
     if (message.type === "speechLiveUsage") {
       if (
         (call?.id === message.requestId || recovery.state()?.id === message.requestId) &&

@@ -2,6 +2,18 @@
 
 Source of scope: [Comprehensive audit](Raya-Comprehensive-Audit.md). All sections and all ten overhauls remain in scope. Work proceeds in dependency order, with broader validation batched at checkpoints. A completed subtask does not mean the overall overhaul is complete.
 
+## ChatGPT 2026-09-13 13:06 America/Toronto — cited Canvas goal deliverables
+
+**Status: delivered in product commit `860fabd437`; pushed and installed.** Accepted goal completion audits now retain ready `create_canvas` and `update_canvas` results as first-class non-file deliverables. Raya records the Canvas path, latest authoritative version, producing tool and exact cited evidence identity. It accepts only an exact completed tool part whose host receipt says `ready`, ignores malformed or stale versions, deduplicates a Canvas by normalized path, and preserves the result through reload, completed-goal history and requirement revisions. It does not infer a deliverable from arbitrary output text.
+
+The existing flat Deliverables section shows `Canvas version N recorded from tool` beneath its path. Copied reports include the version, tool, call ID and evidence summary, and their coverage statement now distinguishes revision-safe file mutations from ready Canvas versions. The UI retains the existing goal-card design and follows `docs/designer.md` with short state copy and no added decoration.
+
+Focused verification passes the new Canvas lifecycle test at 1 test / 3 assertions, the complete goal-state file at 93 tests / 1,131 assertions, and the extension report plus connected goal-card fixtures at 3 tests / 46 assertions. Extension-host, webview and generated-SDK typechecks passed sequentially. Prettier, targeted ESLint, targeted Oxlint with zero errors, generated-artifact, OpenCode annotation, forbidden-marker, Markdown-table and diff checks pass. No repository-wide `tsgolint`, root lint, broad Turbo graph, standalone CLI-wide `tsgo` or parallel validation ran.
+
+The authorized `RAYA_LOW_MEMORY=1` workflow regenerated the SDK without tracked drift, rebuilt and smoke-tested the Windows x64 CLI, repeated the extension-host and webview typechecks sequentially, ran cached ESLint, built production assets, packaged 431 files and installed `eden.raya@7.4.23-snapshot+860fabd437.kamil-oseni.1789319316174`. Artifact: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-860fabd437-kamil-oseni-1789319316174.vsix`; 517,822,551 bytes; SHA-256 `59D8C503A698A11ED3C0F5EC72B484EF49A70C5B67625FBD43C7F45351706CDA`. The extension directory independently contains the exact installed identity. The pinned `bunx` CLI build path reported a corrupted bin remap, and the workflow's active-Bun fallback completed successfully.
+
+OVR-06 remains **In progress** for authoritative external deliverable associations, currency-specific budget and reservation semantics, concurrent child limits, and its remaining packaged lifecycle/UI acceptance. Links, external records, uncited tool outputs and business-outcome sufficiency are not labeled as verified deliverables.
+
 ## ChatGPT 2026-09-13 12:50 America/Toronto — late GPT-Live charge ownership
 
 **Status: delivered in product commit `36cacd2ffb`; pushed.** The existing GPT-Live duration integration correctly retained authoritative seconds and deliberately left monetary coverage unknown, but its goal write addressed only the currently active goal. A call that began under one goal could therefore close after that goal had completed and a replacement goal had started; the voice receipt survived, while the goal ledger rejected the late settlement.

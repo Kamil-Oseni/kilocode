@@ -29,11 +29,11 @@ Status excerpts below are historical records, not a fresh certification of every
 
 Close the remaining parent requirements in this order, finishing a complete acceptance package before opening an unrelated slice. This order reflects verification cost; it does not waive original acceptance.
 
-Completed from this queue: PR-02, PR-03, EN-03, EN-05, EN-13, UX-01 and UI-01.
+Completed from this queue: PR-02, PR-03, PR-06, EN-03, EN-05, EN-13, UX-01 and UI-01.
 
 1. **Repository-deterministic:** EN-07; EN-14; EN-15; OVR-06; PR-04 + EN-02 + OVR-05; PR-05 + OVR-04; EN-06; EN-10; OVR-09; OVR-08.
 2. **Packaged local interaction or broad cross-surface review:** UX-03; EN-04; UX-02; UX-04; UX-05; UI-03; EN-09.
-3. **External, physical-device, multi-platform or moderated evidence:** EN-01; EN-11 + OVR-02 + OVR-10; EN-12 + OVR-01; OVR-03; PR-06; PR-01 + OVR-07; UI-02.
+3. **External, physical-device, multi-platform or moderated evidence:** EN-01; EN-11 + OVR-02 + OVR-10; EN-12 + OVR-01; OVR-03; PR-01 + OVR-07; UI-02.
 
 UI/UX work must follow `docs/designer.md`, consult the current official OpenAI Codex GitHub UI for interaction and information-architecture guidance, and preserve Raya's accent color plus Instrument Serif and Outfit. Do not begin deferred Codex-derived feature work before the existing audit is complete.
 
@@ -178,13 +178,13 @@ The following sections retain the full 39-item scope. Related findings and overh
 
 ### PR-06 — Publish a supported-client and feature matrix
 
-**Recorded status:** In progress. Source-backed client/platform/feature matrix and README entry point added. Company support ownership, non-Windows rollout and full client acceptance remain open.
+**Recorded status:** Verified by ChatGPT on 2026-09-12 23:17 America/Toronto. The public matrix identifies the correct Raya installer, supported editor/backend boundary, configured platform assets, evidence status and expected feature coverage without requiring source inspection. CI, release packaging and source-pinned release notes are checked against the same machine-readable contract.
 
 **Implementation and verification:**
 
-1. Review and finish the pending support-contract batch above; CI, release targets and notes must use that same contract.
-2. Keep exact source-pinned matrix references and distinguish configured build targets from verified installations.
-3. Test identity/editor/target/runner/asset drift; verify the actual installer on every certified OS and record company support ownership.
+1. Preserve `docs/Raya-Support-Contract.json` as the identity, editor, target, asset and installation-evidence source; run the support guard after changing any of those fields.
+2. Keep the generated matrix and source-pinned release-note link. A configured or built target must remain explicitly distinct from an installed and certified platform.
+3. Revalidate with the focused support test, workflow guard and generated-note inspection. Add macOS or Linux installation evidence only after an actual representative install succeeds there; company SLA/ownership is a separate release-policy decision, not an existing Raya support claim.
 
 **Source entry points:** [packages/kilo-jetbrains](../packages/kilo-jetbrains), [packages/extensions](../packages/extensions).
 
@@ -2371,3 +2371,9 @@ Writer-level recorder coverage rejects synthetic secrets across JSON, plain text
 PR-02 is fully Verified against its original acceptance. The exact backend contract rejects an unrelated successful command, altered command text, the right command in a different directory and a command without the required directory. Only the saved command and normalized directory with eligible successful evidence satisfy the bound criterion. File reads and multi-file patches retain current artifact identity, while partial or unknown inspection coverage cannot appear as full review.
 
 The production result package and copied report expose the objective, criteria, requested verification, exact command/directory, cited evidence identities, evidence-reference status, artifact/inspection limits, caveats, separate user-review state and explicit optional unverified outcomes. Exact historical evidence remains scoped to the selected goal, and source output renders as text. Evidence: one focused backend binding test / 10 assertions; six artifact/inspection tests / 48 assertions; six extension result/report/source/history tests / 68 assertions; and 5/5 production Chromium cases covering light/dark, 320/760 px and the actual criteria editor. ChatGPT inspected the 760 px dark result under `docs/designer.md`. Broader presentation redesign stays in its own UI requirements. No product source changed, so no changeset or snapshot reinstall is required.
+
+## ChatGPT 2026-09-12 23:17 America/Toronto — PR-06 verification receipt
+
+PR-06 is fully Verified against its original acceptance. `docs/Raya-Supported-Clients.md` lets a colleague identify the `eden.raya` installer, VS Code/backend compatibility boundary, platform-specific asset, installation path and expected feature limits without reading implementation source. Its status language is intentionally narrow: Windows x64 has a recorded local installation checkpoint, while the macOS ARM64 and Linux x64 rows are configured build targets whose installation remains unverified. This is the documented “VS Code first; inherited clients not Raya-certified” product boundary anticipated by the audit.
+
+CI and the release workflow consume `docs/Raya-Support-Contract.json` through `script/kilocode/raya-support.ts`. Release notes are generated from the same contract, link the matrix at the immutable checked-out commit and repeat the distinction between build targets and installation evidence. Verification passes 7 focused tests / 26 assertions, the live support guard, the 30-workflow allowlist and the 472-file Markdown-table check. An actual generated note at checkout `742c82fdfe2a531f2ff01ea56200db9fc3891777` names `eden.raya`, VS Code `^1.106.0`, all declared assets and the two unverified platforms. Preserve this contract/guard coupling; platform rollout evidence and company support SLA ownership remain future release-policy work rather than blockers to PR-06. No product source changed, so no changeset or snapshot reinstall is required.

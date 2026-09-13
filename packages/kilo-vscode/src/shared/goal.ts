@@ -13,6 +13,17 @@ export interface GoalEvidence {
   summary: string
 }
 
+type GoalArtifactRevision =
+  | { version: 1; status: "captured"; path: string; canonical: string; sha256: string; mode: number }
+  | { version: 1; status: "absent"; path: string; parent: string }
+
+interface GoalDeliverable {
+  path: string
+  revision: GoalArtifactRevision
+  tool: "write" | "edit" | "apply_patch"
+  evidence: GoalEvidence
+}
+
 export interface GoalSource {
   inspection?: ReturnType<typeof inspection>
   receipt?: "matching" | "unrecorded"
@@ -37,6 +48,7 @@ export interface GoalState {
     plan?: GoalState["plan"]
     budget?: GoalBudget | null
     budgetHit?: GoalBudgetHit
+    deliverables?: GoalDeliverable[]
     audit?: GoalState["audit"]
     auditAttempt?: GoalState["auditAttempt"]
   }>
@@ -102,6 +114,7 @@ export interface GoalState {
     }
   }
   blockedReason?: string
+  deliverables?: GoalDeliverable[]
   audit?: {
     requirements: Array<{
       criterionID?: string
@@ -137,6 +150,7 @@ export interface GoalState {
     budgetHit?: GoalBudgetHit
     usage?: GoalState["usage"]
     activeMs?: number
+    deliverables?: GoalDeliverable[]
     criteria?: GoalState["criteria"]
     audit?: GoalState["audit"]
     auditAttempt?: GoalState["auditAttempt"]

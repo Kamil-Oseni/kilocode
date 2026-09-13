@@ -733,7 +733,25 @@ describe("RayaGoal", () => {
               ],
             })
           if (mode === "unchanged") {
-            expect((yield* update()).status).toBe("complete")
+            const completed = yield* update()
+            expect(completed.status).toBe("complete")
+            if (scenario.tool === "read") {
+              expect(completed.deliverables).toEqual([])
+            } else {
+              expect(completed.deliverables).toEqual([
+                expect.objectContaining({
+                  path: file,
+                  revision,
+                  tool: scenario.tool,
+                  evidence: expect.objectContaining({
+                    callID: data.part!.callID,
+                    messageID: data.part!.messageID,
+                    partID: data.part!.id,
+                    sessionID: data.part!.sessionID,
+                  }),
+                }),
+              ])
+            }
             continue
           }
           expect((yield* update().pipe(Effect.flip)).message).toContain(
@@ -751,6 +769,94 @@ describe("RayaGoal", () => {
         }
       }),
     30_000,
+  )
+
+  it.live("retains cited file removals as deliverables across reload and goal history", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const fs = yield* FSUtil.Service
+      const directory = yield* tmpdirScoped()
+      const file = path.join(directory, "removed.txt")
+      yield* fs.writeFileString(file, "remove me")
+      const sessionID = SessionID.make(`ses_removed_${crypto.randomUUID()}`)
+      const rows: MessageV2.WithParts[] = []
+      const goals = setup(storage, () => rows)
+      yield* Effect.addFinalizer(() => goals.clear(sessionID))
+      yield* goals.create(sessionID, "Remove the obsolete file")
+      yield* fs.remove(file)
+      const revision = yield* Artifact.patch(fs, [{ filePath: file, type: "delete" }])
+      const data = transcript({ sessionID, tool: "apply_patch", metadata: { rayaRevision: revision } })
+      rows.push(...data.rows)
+      const completed = yield* goals.update(sessionID, {
+        status: "complete",
+        summary: "Obsolete file removed",
+        requirements: [
+          {
+            requirement: "The obsolete file is removed",
+            passed: true,
+            evidence: [{ callID: data.part!.callID, summary: "The cited patch removed the file" }],
+          },
+        ],
+      })
+      expect(completed.deliverables).toEqual([
+        expect.objectContaining({
+          path: file,
+          tool: "apply_patch",
+          revision: expect.objectContaining({ status: "absent", path: file }),
+        }),
+      ])
+      expect((yield* setup(storage, () => rows).get(sessionID))?.deliverables).toEqual(completed.deliverables)
+      const next = yield* goals.create(sessionID, "Create the replacement")
+      expect(next.history?.at(-1)?.deliverables).toEqual(completed.deliverables)
+    }),
+  )
+
+  it.live("moves a pending deliverable inventory into revision history when requirements change", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const fs = yield* FSUtil.Service
+      const directory = yield* tmpdirScoped()
+      const file = path.join(directory, "review.md")
+      yield* fs.writeFileString(file, "ready for review")
+      const sessionID = SessionID.make(`ses_review_deliverable_${crypto.randomUUID()}`)
+      const rows: MessageV2.WithParts[] = []
+      const goals = setup(storage, () => rows)
+      yield* Effect.addFinalizer(() => goals.clear(sessionID))
+      yield* goals.create(sessionID, "Prepare the review file", undefined, undefined, undefined, [
+        {
+          id: "review",
+          description: "The review file is ready",
+          verification: "Review the current file",
+          review: true,
+        },
+      ])
+      const data = transcript({
+        sessionID,
+        tool: "write",
+        metadata: { rayaRevision: yield* Artifact.capture(fs, file) },
+      })
+      rows.push(...data.rows)
+      const pending = yield* goals.update(sessionID, {
+        status: "complete",
+        summary: "Review file prepared",
+        requirements: [
+          {
+            criterionID: "review",
+            requirement: "The review file is ready",
+            passed: true,
+            evidence: [{ callID: data.part!.callID, summary: "The cited write created the review file" }],
+          },
+        ],
+      })
+      expect(pending.status).toBe("paused")
+      expect(pending.deliverables).toHaveLength(1)
+      const edited = yield* goals.edit(sessionID, {
+        expectedIntent: pending.intent!,
+        objective: "Prepare a revised review file",
+      })
+      expect(edited.state.deliverables).toBeUndefined()
+      expect(edited.state.revisions?.at(-1)?.deliverables).toEqual(pending.deliverables)
+    }),
   )
 
   it.live("delegated cancellation journals intent before action and retains uncertain results across reloads", () =>

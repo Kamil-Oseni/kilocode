@@ -649,10 +649,31 @@
 }
 
 .goal-banner__tasks,
+.goal-banner__deliverables,
 .goal-banner__history,
 .goal-banner__editor {
   display: grid;
   gap: var(--raya-space-6);
+}
+
+.goal-banner__deliverable {
+  min-width: 0;
+  padding-bottom: var(--raya-space-6);
+  border-bottom: var(--raya-hairline) solid var(--goal-line);
+  color: var(--goal-text);
+  font-size: var(--kilo-font-size-11);
+  line-height: var(--raya-leading-body);
+}
+
+.goal-banner__deliverable:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.goal-banner__deliverable-path {
+  display: block;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
 }
 
 .goal-banner__task {

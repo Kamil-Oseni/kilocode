@@ -4,7 +4,8 @@ type Goal = Pick<
   GoalState,
   "objective" | "status" | "createdAt" | "updatedAt" | "criteria" | "audit" | "auditAttempt" | "blockedReason"
 > &
-  Partial<Pick<GoalState, "usage" | "activeMs" | "plan" | "revisions" | "review" | "budget" | "budgetHit">>
+  Partial<Pick<GoalState, "usage" | "activeMs" | "plan" | "revisions" | "review" | "budget" | "budgetHit">> &
+  Partial<Pick<GoalState, "deliverables">>
 
 function limits(goal: Pick<Goal, "budget" | "budgetHit">) {
   const lines = ["", "## Saved limits", ""]
@@ -50,6 +51,38 @@ function activity(goal: Goal) {
   if (!goal.usage?.tokens) lines.push("Goal-session token totals were not retained.")
   lines.push(
     "Coverage: settled assistant messages in the goal session. Child-session spend, tool fees, GPT-Live usage and external service charges are not included unless separately recorded.",
+  )
+  return lines
+}
+
+function deliverables(goal: Pick<Goal, "deliverables">) {
+  const lines = ["", "## Deliverables", ""]
+  if (goal.deliverables === undefined) {
+    lines.push("No deliverable inventory was retained for this goal version.")
+    return lines
+  }
+  if (goal.deliverables.length === 0)
+    lines.push("No revision-safe file deliverables were present in the cited completion evidence.")
+  for (const item of goal.deliverables) {
+    lines.push(
+      "",
+      `### ${item.revision.status === "absent" ? "Removed file" : "File"}`,
+      "",
+      quote(item.path),
+      item.revision.status === "captured"
+        ? `Captured SHA-256: ${item.revision.sha256}`
+        : `Verified absent beneath: ${item.revision.parent}`,
+      `Source tool: ${item.tool}`,
+      quote(
+        `Session: ${item.evidence.sessionID ?? "not recorded"}\nMessage: ${item.evidence.messageID ?? "not recorded"}\nPart: ${item.evidence.partID ?? "not recorded"}\nCall: ${item.evidence.callID}`,
+      ),
+      "Evidence summary:",
+      quote(item.evidence.summary),
+    )
+  }
+  lines.push(
+    "",
+    "Coverage: revision-safe file mutations cited by the accepted completion audit. Links, external records and uncited outputs are not included.",
   )
   return lines
 }
@@ -188,7 +221,7 @@ function revisions(goal: Goal) {
       "",
       quote(item.objective),
     )
-    lines.push(quote([...planning(item), ...limits(item), ...contract(item)].join("\n")))
+    lines.push(quote([...planning(item), ...limits(item), ...deliverables(item), ...contract(item)].join("\n")))
   }
   return lines
 }
@@ -210,12 +243,13 @@ export function report(goal: Goal, sessionID?: string) {
   lines.push(...planning(goal))
   lines.push(...limits(goal))
   lines.push(...activity(goal))
+  lines.push(...deliverables(goal))
   lines.push(...contract(goal), ...revisions(goal))
   lines.push(
     "",
     "## Review limits and next action",
     "",
-    "This report copies saved goal records. It does not rerun checks, verify current files, include the original tool output, independently identify a reviewer, or provide a complete deliverable inventory. Goal-control acceptance is included only when saved. Recorded model usage has the coverage stated above and is not a complete project cost.",
+    "This report copies saved goal records. It does not rerun checks, verify current files, include the original tool output, independently identify a reviewer, or inventory external and uncited deliverables. Goal-control acceptance is included only when saved. Recorded model usage has the coverage stated above and is not a complete project cost.",
     "",
     "Review each criterion and open its cited source in Raya before relying on the result. Missing source records or criteria require further verification.",
     "Accepted references do not establish complete business-outcome coverage or user acceptance. A saved command binding checks the cited command and working directory; prose-only verification has no such binding.",

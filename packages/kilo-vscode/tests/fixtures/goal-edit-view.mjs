@@ -96,6 +96,21 @@ const goal = {
   createdAt: Date.now(),
   updatedAt: Date.now(),
   usage: { turns: 0, continuations: 0, toolCalls: 0 },
+  deliverables: [
+    {
+      path: "C:\\workspace\\report.md",
+      revision: {
+        version: 1,
+        status: "captured",
+        path: "C:\\workspace\\report.md",
+        canonical: "C:\\workspace\\report.md",
+        sha256: "a".repeat(64),
+        mode: 420,
+      },
+      tool: "write",
+      evidence: { callID: "deliverable", summary: "Created the report" },
+    },
+  ],
   progress: [],
 }
 try {
@@ -113,6 +128,10 @@ try {
   assert.ok(root.textContent.includes("Original goal"))
   assert.ok(!root.textContent.includes("Late old stop result"))
   root.querySelector('[aria-label="Expand goal details"]').click()
+  assert.ok(root.querySelector('[aria-label="Goal deliverables"]').textContent.includes("C:\\workspace\\report.md"))
+  assert.ok(
+    root.querySelector('[aria-label="Goal deliverables"]').textContent.includes("Revision aaaaaaaaaaaa recorded"),
+  )
   assert.equal(root.querySelector('[role="progressbar"]'), null)
   assert.ok(!root.querySelector(".goal-banner__usage").textContent.includes("%"))
   setTodos([

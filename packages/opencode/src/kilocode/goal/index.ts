@@ -45,6 +45,14 @@ export namespace RayaGoal {
   })
   export type Evidence = typeof Evidence.Type
 
+  const Deliverable = Schema.Struct({
+    path: Schema.String,
+    revision: Artifact.Entry,
+    tool: Schema.Literals(["write", "edit", "apply_patch"]),
+    evidence: Evidence,
+  }).annotate({ identifier: "RayaGoalDeliverable" })
+  type Deliverable = typeof Deliverable.Type
+
   export const Requirement = Schema.Struct({
     criterionID: Schema.optional(Schema.String).annotate({
       description:
@@ -108,6 +116,7 @@ export namespace RayaGoal {
     plan: Schema.optional(Planning.Plan),
     budget: Schema.optional(Budget),
     budgetHit: Schema.optional(BudgetHit),
+    deliverables: Schema.optional(Schema.Array(Deliverable)),
     audit: Schema.optional(Audit),
     auditAttempt: Schema.optional(AuditAttempt),
   })
@@ -151,6 +160,7 @@ export namespace RayaGoal {
     createdAt: Schema.Number,
     updatedAt: Schema.Number,
     blockedReason: Schema.optional(Schema.String),
+    deliverables: Schema.optional(Schema.Array(Deliverable)),
     audit: Schema.optional(Audit),
     auditAttempt: Schema.optional(AuditAttempt),
   })
@@ -198,6 +208,7 @@ export namespace RayaGoal {
     budget: Schema.optional(Budget),
     budgetHit: Schema.optional(BudgetHit),
     blockedReason: Schema.optional(Schema.String),
+    deliverables: Schema.optional(Schema.Array(Deliverable)),
     audit: Schema.optional(Audit),
     auditAttempt: Schema.optional(AuditAttempt), // raya_change - last completion attempt for the audit-log view
     progress: Schema.Array(Progress),
@@ -304,6 +315,7 @@ export namespace RayaGoal {
       plan: state.plan,
       budget: state.budget,
       budgetHit: state.budgetHit,
+      deliverables: state.deliverables,
       audit: state.audit,
       auditAttempt: state.auditAttempt,
     },
@@ -527,6 +539,7 @@ export namespace RayaGoal {
                 createdAt: existing.createdAt,
                 updatedAt: existing.updatedAt,
                 blockedReason: existing.blockedReason,
+                deliverables: existing.deliverables,
                 audit: existing.audit,
                 auditAttempt: existing.auditAttempt,
               },
@@ -622,6 +635,7 @@ export namespace RayaGoal {
         activeAt: state.status === "blocked" ? now : state.activeAt,
         audit: undefined,
         auditAttempt: undefined,
+        deliverables: undefined,
         progress: progress(state, {
           at: now,
           kind: "status",
@@ -727,6 +741,7 @@ export namespace RayaGoal {
           changed || (status === "active" && prior.status !== "active") ? { ...prior.usage, retries: 0 } : prior.usage,
         audit: changed ? undefined : prior.audit,
         auditAttempt: changed ? undefined : prior.auditAttempt,
+        deliverables: changed ? undefined : prior.deliverables,
         activeMs: input.status !== undefined ? elapsed(prior, now) : prior.activeMs,
         activeAt:
           status !== "active"
@@ -930,6 +945,37 @@ export namespace RayaGoal {
           ? message.parts.filter((part): part is SessionV1.ToolPart => part.type === "tool")
           : [],
       )
+
+    const inventory = (audit: Audit, messages: SessionV1.WithParts[]) => {
+      const id = (item: Pick<Evidence, "sessionID" | "messageID" | "partID" | "callID">) =>
+        JSON.stringify([item.sessionID, item.messageID, item.partID, item.callID])
+      const cited = new Map(
+        audit.requirements.flatMap((item) => item.evidence).map((item) => [id(item), item] as const),
+      )
+      const files = new Map<string, Deliverable>()
+      for (const part of tools(messages)) {
+        if (
+          part.state.status !== "completed" ||
+          (part.tool !== "write" && part.tool !== "edit" && part.tool !== "apply_patch")
+        )
+          continue
+        const evidence = cited.get(
+          id({
+            sessionID: part.sessionID,
+            messageID: part.messageID,
+            partID: part.id,
+            callID: part.callID,
+          }),
+        )
+        if (!evidence) continue
+        for (const revision of Artifact.entries(part.state.metadata["rayaRevision"])) {
+          const key =
+            process.platform === "win32" ? path.normalize(revision.path).toLowerCase() : path.normalize(revision.path)
+          files.set(key, { path: revision.path, revision, tool: part.tool, evidence })
+        }
+      }
+      return [...files.values()]
+    }
 
     const fingerprint = (part: SessionV1.ToolPart) =>
       JSON.stringify({
@@ -1169,6 +1215,7 @@ export namespace RayaGoal {
         : accepted
           ? { ...state.review!, status: "accepted" as const, acceptedAt: now }
           : undefined
+      const deliverables = inventory(audit, messages)
       const next = yield* save(
         sessionID,
         {
@@ -1177,6 +1224,7 @@ export namespace RayaGoal {
           intent: pending || accepted ? crypto.randomUUID() : state.intent,
           review,
           audit,
+          deliverables,
           auditAttempt: { at: now, accepted: true, requirements: audit.requirements },
           updatedAt: now,
           activeMs: elapsed(state, now),

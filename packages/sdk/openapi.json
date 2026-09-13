@@ -18121,6 +18121,12 @@
                             "required": ["kind", "limit", "observed", "at"],
                             "additionalProperties": false
                           },
+                          "deliverables": {
+                            "type": "array",
+                            "items": {
+                              "$ref": "#/components/schemas/RayaGoalDeliverable"
+                            }
+                          },
                           "audit": {
                             "type": "object",
                             "properties": {
@@ -18951,6 +18957,12 @@
                     "blockedReason": {
                       "type": "string"
                     },
+                    "deliverables": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/RayaGoalDeliverable"
+                      }
+                    },
                     "audit": {
                       "type": "object",
                       "properties": {
@@ -19603,6 +19615,12 @@
                                   },
                                   "required": ["kind", "limit", "observed", "at"],
                                   "additionalProperties": false
+                                },
+                                "deliverables": {
+                                  "type": "array",
+                                  "items": {
+                                    "$ref": "#/components/schemas/RayaGoalDeliverable"
+                                  }
                                 },
                                 "audit": {
                                   "type": "object",
@@ -20259,6 +20277,12 @@
                           },
                           "blockedReason": {
                             "type": "string"
+                          },
+                          "deliverables": {
+                            "type": "array",
+                            "items": {
+                              "$ref": "#/components/schemas/RayaGoalDeliverable"
+                            }
                           },
                           "audit": {
                             "type": "object",
@@ -20995,6 +21019,12 @@
                             "required": ["kind", "limit", "observed", "at"],
                             "additionalProperties": false
                           },
+                          "deliverables": {
+                            "type": "array",
+                            "items": {
+                              "$ref": "#/components/schemas/RayaGoalDeliverable"
+                            }
+                          },
                           "audit": {
                             "type": "object",
                             "properties": {
@@ -21825,6 +21855,12 @@
                     "blockedReason": {
                       "type": "string"
                     },
+                    "deliverables": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/RayaGoalDeliverable"
+                      }
+                    },
                     "audit": {
                       "type": "object",
                       "properties": {
@@ -22477,6 +22513,12 @@
                                   },
                                   "required": ["kind", "limit", "observed", "at"],
                                   "additionalProperties": false
+                                },
+                                "deliverables": {
+                                  "type": "array",
+                                  "items": {
+                                    "$ref": "#/components/schemas/RayaGoalDeliverable"
+                                  }
                                 },
                                 "audit": {
                                   "type": "object",
@@ -23133,6 +23175,12 @@
                           },
                           "blockedReason": {
                             "type": "string"
+                          },
+                          "deliverables": {
+                            "type": "array",
+                            "items": {
+                              "$ref": "#/components/schemas/RayaGoalDeliverable"
+                            }
                           },
                           "audit": {
                             "type": "object",
@@ -23823,6 +23871,12 @@
                             "required": ["kind", "limit", "observed", "at"],
                             "additionalProperties": false
                           },
+                          "deliverables": {
+                            "type": "array",
+                            "items": {
+                              "$ref": "#/components/schemas/RayaGoalDeliverable"
+                            }
+                          },
                           "audit": {
                             "type": "object",
                             "properties": {
@@ -24653,6 +24707,12 @@
                     "blockedReason": {
                       "type": "string"
                     },
+                    "deliverables": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/RayaGoalDeliverable"
+                      }
+                    },
                     "audit": {
                       "type": "object",
                       "properties": {
@@ -25305,6 +25365,12 @@
                                   },
                                   "required": ["kind", "limit", "observed", "at"],
                                   "additionalProperties": false
+                                },
+                                "deliverables": {
+                                  "type": "array",
+                                  "items": {
+                                    "$ref": "#/components/schemas/RayaGoalDeliverable"
+                                  }
                                 },
                                 "audit": {
                                   "type": "object",
@@ -25961,6 +26027,12 @@
                           },
                           "blockedReason": {
                             "type": "string"
+                          },
+                          "deliverables": {
+                            "type": "array",
+                            "items": {
+                              "$ref": "#/components/schemas/RayaGoalDeliverable"
+                            }
                           },
                           "audit": {
                             "type": "object",
@@ -69304,6 +69376,155 @@
           }
         },
         "required": ["code", "message"],
+        "additionalProperties": false
+      },
+      "RayaGoalDeliverable": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "number",
+                    "enum": [1]
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": ["captured"]
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "canonical": {
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "mode": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  }
+                },
+                "required": ["version", "status", "path", "canonical", "sha256", "mode"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "number",
+                    "enum": [1]
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": ["absent"]
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "parent": {
+                    "type": "string"
+                  }
+                },
+                "required": ["version", "status", "path", "parent"],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "tool": {
+            "type": "string",
+            "enum": ["write", "edit", "apply_patch"]
+          },
+          "evidence": {
+            "type": "object",
+            "properties": {
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg"
+              },
+              "partID": {
+                "type": "string",
+                "pattern": "^prt"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "callID": {
+                "type": "string"
+              },
+              "summary": {
+                "type": "string"
+              },
+              "record": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "number",
+                    "enum": [1]
+                  },
+                  "digest": {
+                    "type": "string"
+                  },
+                  "at": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  }
+                },
+                "required": ["version", "digest", "at"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["callID", "summary"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["path", "revision", "tool", "evidence"],
         "additionalProperties": false
       },
       "effect_HttpApiError_Conflict": {

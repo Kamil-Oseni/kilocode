@@ -5685,6 +5685,38 @@ export type AgentManagerFailure = {
   message: string
 }
 
+export type RayaGoalDeliverable = {
+  path: string
+  revision:
+    | {
+        version: 1
+        status: "captured"
+        path: string
+        canonical: string
+        sha256: string
+        mode: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
+    | {
+        version: 1
+        status: "absent"
+        path: string
+        parent: string
+      }
+  tool: "write" | "edit" | "apply_patch"
+  evidence: {
+    messageID?: string
+    partID?: string
+    sessionID?: string
+    callID: string
+    summary: string
+    record?: {
+      version: 1
+      digest: string
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
+  }
+}
+
 export type EffectHttpApiErrorConflict = {
   _tag: "Conflict"
 }
@@ -19823,6 +19855,7 @@ export type KilocodeGoalGetResponses = {
         observed: number
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       }
+      deliverables?: Array<RayaGoalDeliverable>
       audit?: {
         requirements: Array<{
           criterionID?: string
@@ -19951,6 +19984,7 @@ export type KilocodeGoalGetResponses = {
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     }
     blockedReason?: string
+    deliverables?: Array<RayaGoalDeliverable>
     audit?: {
       requirements: Array<{
         criterionID?: string
@@ -20055,6 +20089,7 @@ export type KilocodeGoalGetResponses = {
           observed: number
           at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
         }
+        deliverables?: Array<RayaGoalDeliverable>
         audit?: {
           requirements: Array<{
             criterionID?: string
@@ -20158,6 +20193,7 @@ export type KilocodeGoalGetResponses = {
       createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       blockedReason?: string
+      deliverables?: Array<RayaGoalDeliverable>
       audit?: {
         requirements: Array<{
           criterionID?: string
@@ -20318,6 +20354,7 @@ export type KilocodeGoalUpdateResponses = {
         observed: number
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       }
+      deliverables?: Array<RayaGoalDeliverable>
       audit?: {
         requirements: Array<{
           criterionID?: string
@@ -20446,6 +20483,7 @@ export type KilocodeGoalUpdateResponses = {
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     }
     blockedReason?: string
+    deliverables?: Array<RayaGoalDeliverable>
     audit?: {
       requirements: Array<{
         criterionID?: string
@@ -20550,6 +20588,7 @@ export type KilocodeGoalUpdateResponses = {
           observed: number
           at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
         }
+        deliverables?: Array<RayaGoalDeliverable>
         audit?: {
           requirements: Array<{
             criterionID?: string
@@ -20653,6 +20692,7 @@ export type KilocodeGoalUpdateResponses = {
       createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       blockedReason?: string
+      deliverables?: Array<RayaGoalDeliverable>
       audit?: {
         requirements: Array<{
           criterionID?: string
@@ -20795,6 +20835,7 @@ export type KilocodeGoalCreateResponses = {
         observed: number
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       }
+      deliverables?: Array<RayaGoalDeliverable>
       audit?: {
         requirements: Array<{
           criterionID?: string
@@ -20923,6 +20964,7 @@ export type KilocodeGoalCreateResponses = {
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     }
     blockedReason?: string
+    deliverables?: Array<RayaGoalDeliverable>
     audit?: {
       requirements: Array<{
         criterionID?: string
@@ -21027,6 +21069,7 @@ export type KilocodeGoalCreateResponses = {
           observed: number
           at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
         }
+        deliverables?: Array<RayaGoalDeliverable>
         audit?: {
           requirements: Array<{
             criterionID?: string
@@ -21130,6 +21173,7 @@ export type KilocodeGoalCreateResponses = {
       createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       blockedReason?: string
+      deliverables?: Array<RayaGoalDeliverable>
       audit?: {
         requirements: Array<{
           criterionID?: string

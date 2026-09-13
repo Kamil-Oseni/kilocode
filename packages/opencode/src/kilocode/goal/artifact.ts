@@ -19,12 +19,20 @@ const Absent = Schema.Struct({
   parent: Schema.String,
 })
 
-const Entry = Schema.Union([Revision, Absent])
+export const Entry = Schema.Union([Revision, Absent])
+export type Entry = typeof Entry.Type
 const Bundle = Schema.Struct({
   version: Schema.Literal(1),
   status: Schema.Literal("bundle"),
   revisions: Schema.Array(Entry).check(Schema.isMinLength(1)),
 })
+const Value = Schema.Union([Entry, Bundle])
+
+export const entries = (value: unknown): readonly Entry[] =>
+  Option.match(Schema.decodeUnknownOption(Value)(value), {
+    onNone: () => [],
+    onSome: (saved) => (saved.status === "bundle" ? saved.revisions : [saved]),
+  })
 
 const missing = (fs: FSUtil.Interface, file: string, expected?: string) =>
   Effect.gen(function* () {
@@ -117,7 +125,7 @@ export const capture = (fs: FSUtil.Interface, file: string, expected?: string) =
 
 export const current = (value: unknown) =>
   Effect.gen(function* () {
-    const saved = yield* Schema.decodeUnknownEffect(Schema.Union([Entry, Bundle]))(value)
+    const saved = yield* Schema.decodeUnknownEffect(Value)(value)
     const fs = yield* Effect.serviceOption(FSUtil.Service)
     if (Option.isNone(fs)) return false
     for (const entry of saved.status === "bundle" ? saved.revisions : [saved]) {

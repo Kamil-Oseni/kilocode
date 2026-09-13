@@ -2,6 +2,7 @@ import { For, Show } from "solid-js"
 import type { GoalState } from "../../../../src/shared/goal"
 import { GoalCriteria } from "./GoalCriteria"
 import { GoalAudit } from "./GoalAudit"
+import { GoalDeliverables } from "./GoalDeliverables"
 import { GoalPlan } from "./GoalPlan"
 import { GoalReview } from "./GoalReview"
 
@@ -21,6 +22,7 @@ export function GoalRevisions(props: { goal: Pick<GoalState, "createdAt" | "revi
               <p>Replaced: {new Date(item.at).toLocaleString()}</p>
               <p>{item.objective}</p>
               <GoalReview review={item.review} historical />
+              <GoalDeliverables items={item.deliverables} />
               <GoalCriteria criteria={item.criteria} />
               <GoalPlan goal={item} />
               <GoalAudit

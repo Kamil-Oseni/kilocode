@@ -10,6 +10,7 @@ test("goal reports preserve exact references and mark legacy records instead of 
   expect(text).toContain("Goal-session model cost was not retained.")
   expect(text).toContain("Goal-session token totals were not retained.")
   expect(text).toContain("No active-time or recorded model-cost limit was saved.")
+  expect(text).toContain("No deliverable inventory was retained for this goal version.")
   const saved = report(
     {
       objective: "Verified",
@@ -23,6 +24,28 @@ test("goal reports preserve exact references and mark legacy records instead of 
       activeMs: 12500,
       budget: { activeMs: 60_000, modelCost: 2 },
       budgetHit: { kind: "model-cost", limit: 2, observed: 2.25, at: 1 },
+      deliverables: [
+        {
+          path: "/workspace/output.md",
+          revision: {
+            version: 1,
+            status: "captured",
+            path: "/workspace/output.md",
+            canonical: "/workspace/output.md",
+            sha256: "a".repeat(64),
+            mode: 420,
+          },
+          tool: "write",
+          evidence: {
+            callID: "call",
+            sessionID: "child",
+            messageID: "message",
+            partID: "part",
+            summary: "Created the report",
+            record: { version: 1, digest: "digest", at: 1 },
+          },
+        },
+      ],
       status: "complete",
       createdAt: 0,
       updatedAt: 1,
@@ -60,6 +83,11 @@ test("goal reports preserve exact references and mark legacy records instead of 
   expect(saved).toContain("Goal-session recorded model-cost limit: $2.000000.")
   expect(saved).toContain("Limit reached: recorded model cost; limit 2; observed 2.25")
   expect(saved).toContain("does not recall a turn already running")
+  expect(saved).toContain("## Deliverables")
+  expect(saved).toContain("> /workspace/output.md")
+  expect(saved).toContain(`Captured SHA-256: ${"a".repeat(64)}`)
+  expect(saved).toContain("Source tool: write")
+  expect(saved).toContain("Coverage: revision-safe file mutations cited by the accepted completion audit")
   expect(saved).toContain("Tokens: input 10; output 20; reasoning 3; cache read 4; cache write 5.")
   expect(saved).toContain(
     "Child-session spend, tool fees, GPT-Live usage and external service charges are not included",

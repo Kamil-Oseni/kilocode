@@ -13,6 +13,7 @@ import { GoalReview } from "./GoalReview"
 import { GoalReport } from "./GoalReport"
 import { GoalPlan } from "./GoalPlan"
 import { GoalCriteriaEditor } from "./GoalCriteriaEditor"
+import { GoalDeliverables } from "./GoalDeliverables"
 import { valid, equal } from "../../../../src/shared/goal-criteria"
 
 // raya_change start - self-redesign: presentational goal banner. Split from the
@@ -342,6 +343,7 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
               <Show when={props.expanded && archive()}>
                 <div class="goal-banner__details">
                   <GoalReview review={viewing()!.review} historical />
+                  <GoalDeliverables items={viewing()!.deliverables} />
                   <GoalAudit goal={viewing()!} sessionID={props.sessionID} empty />
                   <GoalCriteria criteria={viewing()!.criteria} />
                   <GoalRevisions goal={viewing()!} sessionID={props.sessionID} />
@@ -389,6 +391,7 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                     error={props.editError}
                     onAccept={state().status === "paused" ? props.onAccept : undefined}
                   />
+                  <GoalDeliverables items={state().deliverables} />
                   <GoalAudit goal={state()} sessionID={props.sessionID} />
                   <GoalCriteria criteria={state().criteria} />
                   <GoalRevisions goal={state()} sessionID={props.sessionID} />

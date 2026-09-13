@@ -25,6 +25,8 @@ const GOAL_INTENT_GUIDANCE =
   'Treat ordinary phrases such as "done when", "keep working until", "do not stop until", "finish this completely and verify it", or "make this a goal" as durable-goal intent without requiring /goal. In VS Code the host normally arms that goal before the turn; otherwise call create_goal when no goal exists. Preserve the full objective, keep making verified progress across turns, and complete or block it through the goal tools rather than asking the user to remember goal commands.'
 const ASK_OPTIONS_GUIDANCE =
   "When a discrete choice genuinely belongs to the user, call ask_options instead of asking in prose. Use stable option ids, enable allow_multiple only when choices may be combined, and rely on the always-available Other response. Before an unapproved destructive action, use ask_options with explicit confirm and cancel choices."
+const ROUTINE_GUIDANCE =
+  "Treat ordinary requests to create or change a recurring worker, routine, team, or organization as Routines intent. For an existing assignment, call inspect_routines first and use its stable ID and current organization revision. Before any mutation, call ask_options for each decision the user has not supplied: organization name and purpose; every worker's name, role, job, schedule and timezone; read/notify or editing access; capabilities; output description and acceptance criteria; reporting lines; and each directional delegation permission. Never infer delegation authority from a supervisor relationship. Call schedule_task, create_organization, update_routine, or update_organization only after the assignment is complete enough to save."
 const DELEGATION_GUIDANCE =
   "Infer delegation from the work itself; never require the user to request a subagent or remember a specialist name. Delegate substantial specialist, research, design, accounting, architecture, or independently parallelizable work through task with automatic specialist selection. Fan out independent investigations in parallel and synthesize their evidence. Treat an explicit agent name only as an override."
 const BROWSER_GUIDANCE =
@@ -43,6 +45,7 @@ function choices(prompt?: string) {
     prompt,
     GOAL_INTENT_GUIDANCE,
     ASK_OPTIONS_GUIDANCE,
+    ROUTINE_GUIDANCE,
     DELEGATION_GUIDANCE,
     BROWSER_GUIDANCE,
     BROWSER_TEST_GUIDANCE,
@@ -646,6 +649,10 @@ export function patchAgents(
           update_goal: "allow",
           create_goal: "allow", // raya_change - primary sessions can close goals without Auto
           schedule_task: "allow", // raya_change - assign standing jobs from chat
+          inspect_routines: "allow",
+          create_organization: "allow",
+          update_routine: "allow",
+          update_organization: "allow",
         }),
       ),
     }
@@ -923,7 +930,7 @@ export function addAuto(
     name: "auto",
     displayName: "Auto",
     description: "Intelligently route each request to the best-fit specialist and model.",
-    prompt: RayaChief.prompt(specialists),
+    prompt: `${RayaChief.prompt(specialists)}\n\n${ASK_OPTIONS_GUIDANCE}\n\n${ROUTINE_GUIDANCE}`,
     options: {},
     permission: Permission.merge(
       defaults,
@@ -936,6 +943,10 @@ export function addAuto(
         update_goal: "allow",
         create_goal: "allow", // raya_change - Auto owns formal completion after delegated work
         schedule_task: "allow", // raya_change - assign standing jobs from chat
+        inspect_routines: "allow",
+        create_organization: "allow",
+        update_routine: "allow",
+        update_organization: "allow",
         refine_self_heal: "allow", // raya_change - Auto reconciles a self-heal item's classification in repair sessions
         ask_options: "allow", // raya_change - Auto must be able to ask the user a clarifying question directly
         question: "allow", // raya_change - legacy ask tool, allowed for parity

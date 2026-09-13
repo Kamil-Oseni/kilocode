@@ -242,15 +242,27 @@ export namespace RayaTaskOrganization {
       return yield* read(row)
     })
 
-    const create = Effect.fn("RayaTaskOrganization.create")(function* (input: Create) {
+    const create = Effect.fn("RayaTaskOrganization.create")(function* (
+      input: Create,
+      id = identifier(),
+      replay = false,
+    ) {
       const value = yield* Schema.decodeUnknownEffect(Create)(input).pipe(
         Effect.mapError(() => new Invalid({ message: "Provide a name and 1–50 valid organization members." })),
       )
+      const existing = yield* get(id).pipe(
+        Effect.catchTag("RayaTaskOrganization.NotFound", () => Effect.succeed(undefined)),
+      )
+      if (existing) {
+        if (replay) return existing
+        return yield* Effect.die(new Error("An organization already uses this ID."))
+      }
+      if (!Schema.is(Organization.fields.id)(id)) return yield* new Invalid({ message: "Organization ID is invalid." })
       const graph = yield* validate(value.members, value.delegations ?? [])
       const now = Date.now()
       const item: Organization = {
         version: 1,
-        id: identifier(),
+        id,
         name: value.name.trim(),
         ...(value.purpose ? { purpose: value.purpose.trim() } : {}),
         revision: 1,
@@ -595,7 +607,8 @@ export namespace RayaTaskOrganization {
     return {
       list,
       get,
-      create: (...args: Parameters<typeof create>) => mutate(storage, create(...args), "Organization"),
+      create: (input: Create) => mutate(storage, create(input), "Organization"),
+      provision: (input: Create, id: string) => mutate(storage, create(input, id, true), "Organization"),
       update: (...args: Parameters<typeof update>) => mutate(storage, update(...args), "Organization"),
       archive: (...args: Parameters<typeof archive>) => mutate(storage, archive(...args), "Organization"),
       hasActive,

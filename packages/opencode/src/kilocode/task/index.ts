@@ -552,7 +552,9 @@ export namespace RayaTask {
       return parsed
     })
 
-    const create = Effect.fn("RayaTask.create")(function* (input: Create) {
+    const draft = Effect.fn("RayaTask.draft")(function* (input: Create, id: string) {
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))
+        return yield* new GuardError({ message: "Routine ID is invalid." })
       const schedule = yield* scheduled(input.schedule)
       const contract = input.output === undefined ? undefined : yield* output(input.output)
       const role = (input.role ?? "generalist").trim() || "generalist"
@@ -566,7 +568,7 @@ export namespace RayaTask {
       }
       const now = Date.now()
       const agent: Agent = {
-        id: crypto.randomUUID(),
+        id,
         name: input.name.trim(),
         avatar: input.avatar,
         role,
@@ -587,7 +589,17 @@ export namespace RayaTask {
         createdAt: now,
         updatedAt: now,
       }
+      return agent
+    })
+
+    const create = Effect.fn("RayaTask.create")(function* (input: Create, id = crypto.randomUUID(), replay = false) {
       const items = yield* list()
+      const existing = items.find((item) => item.id === id)
+      if (existing) {
+        if (replay) return existing
+        return yield* new GuardError({ kind: "conflict", message: "A routine already uses this ID." })
+      }
+      const agent = yield* draft(input, id)
       yield* save([...items, agent])
       return agent
     })
@@ -921,7 +933,9 @@ export namespace RayaTask {
       preview,
       launchable,
       enforce: (id: string) => mutate(deps.storage, enforce(id)),
-      create: (...args: Parameters<typeof create>) => mutate(deps.storage, create(...args)),
+      check: (input: Create) => draft(input, crypto.randomUUID()).pipe(Effect.asVoid),
+      create: (input: Create) => mutate(deps.storage, create(input)),
+      provision: (input: Create, id: string) => mutate(deps.storage, create(input, id, true)),
       update: (...args: Parameters<typeof update>) => mutate(deps.storage, update(...args)),
       remove: (id: string) =>
         mutate(

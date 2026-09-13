@@ -1,0 +1,279 @@
+import { expect } from "bun:test"
+import path from "node:path"
+import { Effect, Exit, Layer } from "effect"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { Database } from "@opencode-ai/core/database/database"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Agent } from "@/agent/agent"
+import { Git } from "@/git"
+import { RayaTask } from "@/kilocode/task"
+import { RayaTaskOrganization } from "@/kilocode/task/organization"
+import { routineManagementTools } from "@/kilocode/tool/routine-management"
+import * as Permission from "@/permission"
+import { MessageID, SessionID } from "@/session/schema"
+import { Storage } from "@/storage/storage"
+import type * as Tool from "@/tool/tool"
+import { Truncate } from "@/tool/truncate"
+import { provideTmpdirInstance } from "../fixture/fixture"
+import { testEffect } from "../lib/effect"
+
+const it = testEffect(
+  Layer.mergeAll(
+    AppNodeBuilder.build(Agent.node),
+    AppNodeBuilder.build(Permission.node),
+    AppNodeBuilder.build(Truncate.node),
+    AppNodeBuilder.build(CrossSpawnSpawner.node),
+    AppNodeBuilder.build(FSUtil.node),
+    AppNodeBuilder.build(Git.node),
+  ),
+)
+
+const sessions = {
+  create: () => Effect.die("must not start a session"),
+  get: () => Effect.die("must not read a session"),
+  messages: () => Effect.succeed([]),
+  children: () => Effect.succeed([]),
+}
+
+function context(callID: string): Tool.Context {
+  return {
+    sessionID: SessionID.make("ses_routine_management"),
+    messageID: MessageID.make("msg_routine_management"),
+    callID,
+    agent: "build",
+    abort: AbortSignal.any([]),
+    messages: [],
+    metadata: () => Effect.void,
+    ask: () => Effect.void,
+  }
+}
+
+const output = (name: string) => ({
+  destination: "conversation" as const,
+  description: `${name} report`,
+  criteria: [{ id: "evidence", description: "Show the evidence", verification: "Cite the source" }],
+})
+
+it.live(
+  "main-chat organization creation recovers a lost result without duplicate workers",
+  () =>
+    provideTmpdirInstance((directory) =>
+      Effect.gen(function* () {
+        const storage = yield* Storage.Service
+        const database = yield* Database.Service
+        const failed = { saves: 0 }
+        const unreliable = {
+          ...storage,
+          replace: (key: string[], value: unknown) =>
+            key[0] === "raya" && key[1] === "agent" && ++failed.saves === 2
+              ? Effect.sync(() => {
+                  throw new Error("simulated crash after the first worker")
+                })
+              : storage.replace(key, value),
+        }
+        const params = {
+          name: "Website Builders",
+          purpose: "Find, design, build, and sell better business websites.",
+          workers: [
+            {
+              kind: "new" as const,
+              key: "chief",
+              name: "Chief of Staff",
+              role: "CEO",
+              objective: "Coordinate the company",
+              output: output("Company"),
+              capabilities: [],
+              access: "brief" as const,
+              when: "only when I ask",
+              delegatesTo: ["design"],
+            },
+            {
+              kind: "new" as const,
+              key: "design",
+              name: "Design Lead",
+              role: "Designer",
+              objective: "Design client websites",
+              output: output("Design"),
+              capabilities: [],
+              access: "full" as const,
+              when: "every Friday at 5pm",
+              timezone: "America/Toronto",
+              supervisorKey: "chief",
+            },
+          ],
+        }
+        const broken = routineManagementTools({ database, storage: unreliable, sessions })
+        const create = yield* (yield* broken.create).init()
+        const first = yield* create.execute(params, context("create-company")).pipe(Effect.exit)
+        expect(Exit.isFailure(first)).toBe(true)
+        expect(yield* RayaTask.make({ storage, database }).list()).toHaveLength(1)
+        expect(
+          (yield* RayaTaskOrganization.make(database, RayaTask.make({ storage, database }), storage).list()).items,
+        ).toHaveLength(0)
+
+        const tools = routineManagementTools({ database, storage, sessions })
+        const retry = yield* (yield* tools.create).init()
+        const recovered = yield* retry.execute(params, context("create-company"))
+        expect(recovered.title).toBe("Organization created")
+        expect(recovered.metadata).toMatchObject({ requestStatus: "complete", view: "routines" })
+        const agents = yield* RayaTask.make({ storage, database }).list()
+        const organizations = yield* RayaTaskOrganization.make(
+          database,
+          RayaTask.make({ storage, database }),
+          storage,
+        ).list()
+        expect(agents).toHaveLength(2)
+        expect(organizations.items).toHaveLength(1)
+        expect(organizations.items[0]?.delegations).toEqual([
+          { senderID: agents[0]?.id, recipientID: agents[1]?.id, position: 0 },
+        ])
+        expect(organizations.items[0]?.members[1]?.supervisorID).toBe(agents[0]?.id)
+        expect(
+          yield* retry.execute(params, {
+            ...context("create-company"),
+            ask: () => Effect.die("completed creation must not request permission again"),
+          }),
+        ).toEqual(JSON.parse(JSON.stringify(recovered)))
+
+        const conflict = yield* retry.execute({ ...params, purpose: "Different work" }, context("create-company"))
+        expect(conflict.title).toBe("Routine change needs review")
+        expect(conflict.metadata).toMatchObject({ requestStatus: "conflict" })
+        expect(yield* RayaTask.make({ storage, database }).list()).toHaveLength(2)
+
+        const parallel = {
+          name: "Research",
+          purpose: "Research markets every week.",
+          workers: [
+            {
+              kind: "new" as const,
+              key: "researcher",
+              name: "Researcher",
+              role: "Researcher",
+              objective: "Research target markets",
+              output: output("Research"),
+              capabilities: [],
+              access: "brief" as const,
+              when: "every Monday at 9am",
+              timezone: "UTC",
+            },
+          ],
+        }
+        const raced = yield* Effect.all(
+          [retry.execute(parallel, context("create-research")), retry.execute(parallel, context("create-research"))],
+          { concurrency: 2 },
+        )
+        expect(raced.every((item) => item.title === "Organization created")).toBe(true)
+        expect(yield* RayaTask.make({ storage, database }).list()).toHaveLength(3)
+        expect(
+          (yield* RayaTaskOrganization.make(database, RayaTask.make({ storage, database }), storage).list()).items,
+        ).toHaveLength(2)
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            Storage.layerFromDir(path.join(directory, "storage")),
+            Database.layerFromPath(path.join(directory, "queue.sqlite")),
+          ),
+        ),
+      ),
+    ),
+  30_000,
+)
+
+it.live(
+  "main-chat updates require stable identities and replay their completed receipts",
+  () =>
+    provideTmpdirInstance((directory) =>
+      Effect.gen(function* () {
+        const storage = yield* Storage.Service
+        const database = yield* Database.Service
+        const tasks = RayaTask.make({ storage, database })
+        const agent = yield* tasks.create({
+          name: "Accountant",
+          role: "accountant",
+          objective: "Review the books",
+          output: output("Accounts"),
+          capabilities: ["accounting"],
+          access: "brief",
+          schedule: { kind: "manual" },
+        })
+        const organizations = RayaTaskOrganization.make(database, tasks, storage)
+        const organization = yield* organizations.create({
+          name: "Finance",
+          purpose: "Keep the company books current.",
+          members: [{ agentID: agent.id, role: "Accountant" }],
+        })
+        const tools = routineManagementTools({ database, storage, sessions })
+        const updateRoutine = yield* (yield* tools.updateRoutine).init()
+        const routineParams = {
+          agentID: agent.id,
+          patch: { objective: "Review the books every week", when: "every Friday at 5pm", timezone: "UTC" },
+        }
+        const changed = yield* updateRoutine.execute(routineParams, context("update-routine"))
+        expect(changed.title).toBe("Routine updated")
+        expect((yield* tasks.get(agent.id)).schedule).toEqual({ kind: "cron", expr: "0 17 * * 5", tz: "UTC" })
+        expect(
+          yield* updateRoutine.execute(routineParams, {
+            ...context("update-routine"),
+            ask: () => Effect.die("completed routine update must not request permission again"),
+          }),
+        ).toEqual(JSON.parse(JSON.stringify(changed)))
+
+        const updateOrganization = yield* (yield* tools.updateOrganization).init()
+        const organizationParams = {
+          organizationID: organization.id,
+          expectedRevision: organization.revision,
+          purpose: "Keep the company books current and report every Friday.",
+        }
+        const revised = yield* updateOrganization.execute(organizationParams, context("update-organization"))
+        expect(revised.title).toBe("Organization updated")
+        expect((yield* organizations.get(organization.id)).revision).toBe(2)
+        expect(
+          yield* updateOrganization.execute(organizationParams, {
+            ...context("update-organization"),
+            ask: () => Effect.die("completed organization update must not request permission again"),
+          }),
+        ).toEqual(JSON.parse(JSON.stringify(revised)))
+
+        const inspect = yield* (yield* tools.inspect).init()
+        const listing = yield* inspect.execute({}, context("inspect"))
+        expect(listing.output).toContain(agent.id)
+        expect(listing.output).toContain(organization.id)
+
+        const failed = { pending: true }
+        const unreliable = {
+          ...storage,
+          replace: (key: string[], value: unknown) =>
+            key[1] === "agent-workflows" && failed.pending
+              ? Effect.sync(() => {
+                  failed.pending = false
+                  throw new Error("simulated update result loss")
+                })
+              : storage.replace(key, value),
+        }
+        const broken = routineManagementTools({ database, storage: unreliable, sessions })
+        const interrupted = yield* (yield* broken.updateRoutine).init()
+        const recoveryParams = { agentID: agent.id, patch: { name: "Weekly Accountant" } }
+        expect(
+          Exit.isFailure(
+            yield* interrupted.execute(recoveryParams, context("recover-routine-update")).pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        const stamp = (yield* tasks.get(agent.id)).updatedAt
+        const recovered = yield* updateRoutine.execute(recoveryParams, {
+          ...context("recover-routine-update"),
+          ask: () => Effect.die("a completed recovered update must not request permission again"),
+        })
+        expect(recovered.title).toBe("Routine updated")
+        expect((yield* tasks.get(agent.id)).updatedAt).toBe(stamp)
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            Storage.layerFromDir(path.join(directory, "storage")),
+            Database.layerFromPath(path.join(directory, "queue.sqlite")),
+          ),
+        ),
+      ),
+    ),
+  30_000,
+)

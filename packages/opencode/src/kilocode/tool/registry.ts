@@ -30,6 +30,7 @@ import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal sta
 import { RayaSelfHeal } from "@/kilocode/self-heal" // raya_change - hybrid self-heal classification refinement
 import { goalTools } from "./goal" // raya_change - Milestone A model-facing tools
 import { scheduleTaskTool } from "./schedule-task"
+import { routineManagementTools } from "./routine-management"
 import { Database } from "@opencode-ai/core/database/database"
 import { selfHealTools } from "./self-heal" // raya_change - repair agent reconciles its own classification
 import { selfHealVerify } from "./self-heal-verify"
@@ -134,10 +135,13 @@ export namespace KiloToolRegistry {
       const healRefine = heal ? yield* heal.refine : undefined
       const healVerify = goalState && goalDeps ? yield* selfHealVerify(goalState, goalDeps.storage) : undefined
       const goal = { goalCreate, goalGet, goalUpdate, goalPlan, healRefine, healVerify }
-      const scheduleTask = goalDeps
+      const routines = goalDeps
         ? yield* Effect.gen(function* () {
             const database = yield* Database.Service
-            return yield* scheduleTaskTool({ ...goalDeps, database })
+            return {
+              scheduleTask: yield* scheduleTaskTool({ ...goalDeps, database }),
+              ...(yield* Effect.all(routineManagementTools({ ...goalDeps, database }))),
+            }
           })
         : undefined
       // raya_change end
@@ -160,7 +164,11 @@ export namespace KiloToolRegistry {
           browser: browserTools, // raya_change - Milestone F browser tools
           canvas: canvasTools, // raya_change - Milestone E canvas tools
           ...goal,
-          scheduleTask,
+          scheduleTask: routines?.scheduleTask,
+          inspectRoutines: routines?.inspect,
+          createOrganization: routines?.create,
+          updateRoutine: routines?.updateRoutine,
+          updateOrganization: routines?.updateOrganization,
         }
       const tools = yield* Effect.all({
         notebookRead: NotebookReadTool,
@@ -185,7 +193,11 @@ export namespace KiloToolRegistry {
         browser: browserTools, // raya_change - Milestone F browser tools
         canvas: canvasTools, // raya_change - Milestone E canvas tools
         ...goal,
-        scheduleTask,
+        scheduleTask: routines?.scheduleTask,
+        inspectRoutines: routines?.inspect,
+        createOrganization: routines?.create,
+        updateRoutine: routines?.updateRoutine,
+        updateOrganization: routines?.updateOrganization,
         ...tools,
       }
     })
@@ -220,6 +232,10 @@ export namespace KiloToolRegistry {
       browser?: Tool.Info[] // raya_change - Milestone F
       canvas?: Tool.Info[] // raya_change - Milestone E
       scheduleTask?: Tool.Info
+      inspectRoutines?: Tool.Info
+      createOrganization?: Tool.Info
+      updateRoutine?: Tool.Info
+      updateOrganization?: Tool.Info
       discover?: Tool.Info
     },
     deps: Deps,
@@ -246,6 +262,10 @@ export namespace KiloToolRegistry {
       const browser = tools.browser ? yield* Effect.all(tools.browser.map(Tool.init)) : [] // raya_change - Milestone F
       const canvas = tools.canvas ? yield* Effect.all(tools.canvas.map(Tool.init)) : [] // raya_change - Milestone E
       const scheduleTask = tools.scheduleTask ? yield* Tool.init(tools.scheduleTask) : undefined
+      const inspectRoutines = tools.inspectRoutines ? yield* Tool.init(tools.inspectRoutines) : undefined
+      const createOrganization = tools.createOrganization ? yield* Tool.init(tools.createOrganization) : undefined
+      const updateRoutine = tools.updateRoutine ? yield* Tool.init(tools.updateRoutine) : undefined
+      const updateOrganization = tools.updateOrganization ? yield* Tool.init(tools.updateOrganization) : undefined
       const terminal = tools.terminal ? yield* Tool.init(tools.terminal) : undefined
       const notebooks =
         tools.notebookRead && tools.notebookEdit && tools.notebookExecute
@@ -283,6 +303,10 @@ export namespace KiloToolRegistry {
         browser, // raya_change - Milestone F
         canvas, // raya_change - Milestone E
         scheduleTask,
+        inspectRoutines,
+        createOrganization,
+        updateRoutine,
+        updateOrganization,
       }
     })
   }
@@ -327,7 +351,12 @@ export namespace KiloToolRegistry {
   /** Hide human-driven tools from agents that cannot interact with the user directly. */
   export function available(tool: Tool.Def, agent: Agent.Info) {
     if (tool.id === "chief_route") return agent.name === "auto" // raya_change - Milestone B
-    if (tool.id === "schedule_task") return agent.mode === "primary"
+    if (
+      ["schedule_task", "inspect_routines", "create_organization", "update_routine", "update_organization"].includes(
+        tool.id,
+      )
+    )
+      return agent.mode === "primary"
     if (tool.id === "refine_self_heal") return agent.mode === "primary" // raya_change - hybrid self-heal reconcile
     if (tool.id === "notify_user") return KiloSessions.remoteStatus().enabled
     if (tool.id === "send_file") return KiloSessions.remoteStatus().connected
@@ -364,6 +393,10 @@ export namespace KiloToolRegistry {
       browser?: Tool.Def[] // raya_change - Milestone F
       canvas?: Tool.Def[] // raya_change - Milestone E
       scheduleTask?: Tool.Def
+      inspectRoutines?: Tool.Def
+      createOrganization?: Tool.Def
+      updateRoutine?: Tool.Def
+      updateOrganization?: Tool.Def
       discover?: Tool.Def
     },
     cfg: { experimental?: { image_generation?: boolean; native_notebook_tools?: boolean } },
@@ -398,6 +431,10 @@ export namespace KiloToolRegistry {
       ...(Flag.KILO_CLIENT === "vscode" ? (tools.browser ?? []) : []), // raya_change - Milestone F
       ...(Flag.KILO_CLIENT === "vscode" ? (tools.canvas ?? []) : []), // raya_change - Milestone E
       ...(tools.scheduleTask ? [tools.scheduleTask] : []),
+      ...(tools.inspectRoutines ? [tools.inspectRoutines] : []),
+      ...(tools.createOrganization ? [tools.createOrganization] : []),
+      ...(tools.updateRoutine ? [tools.updateRoutine] : []),
+      ...(tools.updateOrganization ? [tools.updateOrganization] : []),
       tools.notify,
       tools.send,
     ]

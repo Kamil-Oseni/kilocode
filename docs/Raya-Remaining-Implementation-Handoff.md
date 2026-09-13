@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-12):** ChatGPT reviewed and repaired Grok's work, delivered durable Routine DMs, attachments, Chat Info, first-class organization persistence and navigation, then removed Browser capture/profile UI and model tools through installed commit `325dfdbbe5`. Organization-aware delegation is implemented locally and awaiting delivery. Remaining after it: restart-safe main-chat provisioning, the unfinished 39-requirement work, inline media treatment, full live rebuild-survival acceptance, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-12):** ChatGPT reviewed and repaired Grok's work, delivered durable Routine DMs, attachments, Chat Info, first-class organization persistence/navigation and explicit organization delegation authority, then removed Browser capture/profile UI and model tools. Latest installed commit: `4d8ae70fea`. Remaining: restart-safe main-chat provisioning and organization management UI, the unfinished 39-requirement work, inline media treatment, full live rebuild-survival acceptance, paid GPT-Live/device acoustic acceptance, and VS Code iframe microphone consent. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-12. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** ChatGPT installed snapshot `325dfdbbe5` (`eden.raya@7.4.23-snapshot+325dfdbbe5.kamil-oseni.1789253157384`). It includes the compact Routine DM/organization navigation and simplified persistent Raya Browser. Reload VS Code normally to pick up the snapshot.
+**Latest delivered product:** ChatGPT installed snapshot `4d8ae70fea` (`eden.raya@7.4.23-snapshot+4d8ae70fea.kamil-oseni.1789258236638`). It includes the compact Routine DM/organization navigation, explicit delegation authority/provenance and simplified persistent Raya Browser. Reload VS Code normally to pick up the snapshot.
 
 ## Scope and reading order
 
@@ -19,9 +19,9 @@ Status excerpts below are historical records, not a fresh certification of every
 ## Checkpoint and standing authorization
 
 - Workspace: `C:\Users\User\Desktop\raya`; PowerShell; branch `main`; origin `https://github.com/Kamil-Oseni/kilocode.git`.
-- Last verified pushed product checkpoint: `325dfdbbe596a07e6ecc3a71ba460eeceb3b5352`, simplified persistent Raya Browser over the delivered Routine organization navigation.
-- Installed: `eden.raya@7.4.23-snapshot+325dfdbbe5.kamil-oseni.1789253157384`.
-- VSIX: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-325dfdbbe5-kamil-oseni-1789253157384.vsix`; SHA-256 `4B8E53B7E9FC02259BD060AB8DD32E4A12B3A0F83287E40D622C4F01B3D40666`; 517367495 bytes; 431 entries.
+- Last verified pushed product checkpoint: `4d8ae70feac48327206020fa329442106195dde6`, explicit Routine organization delegation authority and provenance over the delivered organization navigation and simplified persistent Browser.
+- Installed: `eden.raya@7.4.23-snapshot+4d8ae70fea.kamil-oseni.1789258236638`.
+- VSIX: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-4d8ae70fea-kamil-oseni-1789258236638.vsix`; SHA-256 `76B61469ECB9EEF9871197FF4F3AFC8314CB05AAB7F064CAC22958B90A86AA21`; 517402637 bytes; 431 entries.
 - The user authorizes two parallel workers plus root, batched checks, periodic normal commits/pushes to `origin/main`, and `snapshot:install` outside the sandbox. Do not ask again. No force push, hook bypass or forced VS Code reload.
 - At approximately $10 remaining, as reported by the user, stop opening broad work, settle current processes, update this handoff and give the continuation prompt below. Do not invent a credit balance.
 
@@ -2267,3 +2267,9 @@ Scoped admission requires the stable organization ID and current revision, valid
 The provenance is included in both persisted worker DM cards and Chat Info communication records. OpenAPI and the generated SDK carry the contract. Focused evidence passes: migration 9/9 and 39 assertions; organization/delegation/info services 14/14 and 144 assertions; real HTTP organization/delegation path 1/1 and 31 assertions; combined backend 15/15 and 174 assertions; extension refresh/DM components 8/8 and 170 assertions; core, CLI, SDK and extension host/webview types. The production Routines Chromium suite passes 12/12 across theme, width, organization navigation, provenance, lifecycle, reload, zoom, axe and overflow cases. Lint, Knip, migration, marker, annotation, Promise-facade, Markdown-table and diff guards pass. Commit, push and install a snapshot next, then record the exact commit, installed identity, artifact hash, size and independent extension listing here and in the progress ledger.
 
 After delivery, proceed directly to restart-safe main-chat provisioning. Add visible clarification for incomplete organization/routine requests; durable receipts keyed by session/message/tool call; canonical inputs and planned stable worker IDs; replay that resumes missing steps or returns the completed receipt without duplicate workers; and tool-result actions that focus the created organization or worker in Routines.
+
+## ChatGPT 2026-09-12 20:18 America/Toronto — organization delegation authority delivered
+
+Commit `4d8ae70feac48327206020fa329442106195dde6` is pushed to `origin/main` and installed as `eden.raya@7.4.23-snapshot+4d8ae70fea.kamil-oseni.1789258236638`. The VSIX SHA-256 is `76B61469ECB9EEF9871197FF4F3AFC8314CB05AAB7F064CAC22958B90A86AA21`; size 517402637 bytes; 431 files; no `.env` or `.tmp` archive entries. The independent VS Code extension listing returned the exact identity, and HEAD matches `origin/main`.
+
+Normal push hooks passed 29 cross-package typechecks plus JetBrains. Snapshot generation rebuilt the SDK and CLI, passed CLI smoke checks, extension host/webview types, lint, production bundle, package and installation. Continue with restart-safe main-chat provisioning and the organization edit/archive/permission UI. Preserve the delivered rule that hierarchy never grants authority and every organization-scoped delegation is checked against explicit current directional permission.

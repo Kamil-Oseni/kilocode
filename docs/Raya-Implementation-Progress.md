@@ -78,9 +78,17 @@ Focused evidence: core typecheck and generated-migration consistency pass; the R
 
 Next after delivery: implement restart-safe main-chat `create_organization`, `update_organization` and `update_routine` tools with visible clarification and durable provisioning receipts, then tool-result navigation into the created organization/worker.
 
+## ChatGPT 2026-09-12 20:18 America/Toronto — organization delegation authority delivery receipt
+
+Product commit `4d8ae70feac48327206020fa329442106195dde6` is on `origin/main`. The normal push hook passed 29 cross-package typechecks plus the JetBrains Gradle typecheck. The production extension check passed host/webview types, lint and bundling. `bun run snapshot:install` regenerated the SDK without tracked drift, rebuilt the CLI, passed CLI version/model/sandbox-worker smoke checks, rebuilt the extension, packaged the VSIX and installed it.
+
+Installed identity: `eden.raya@7.4.23-snapshot+4d8ae70fea.kamil-oseni.1789258236638`. VSIX: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-4d8ae70fea-kamil-oseni-1789258236638.vsix`; SHA-256 `76B61469ECB9EEF9871197FF4F3AFC8314CB05AAB7F064CAC22958B90A86AA21`; 517402637 bytes; 431 files. Archive inspection found zero `.env` or `.tmp` entries. `code --list-extensions --show-versions` independently returned the exact installed identity. HEAD and `origin/main` match the product commit. No force push, hook bypass or forced VS Code reload was used.
+
+This checkpoint delivers explicit organization delegation permissions, admission and restart revalidation, bypass prevention and visible persisted provenance. It does not yet add the main-chat organization/routine provisioning tools or management UI for editing the new graph; those are the next chain.
+
 ## Current work
 
-Latest verified installed product checkpoint: `325dfdbbe596a07e6ecc3a71ba460eeceb3b5352`, pushed to `origin/main` and installed as `eden.raya@7.4.23-snapshot+325dfdbbe5.kamil-oseni.1789253157384`. It includes durable Routine DMs and organization navigation plus the simplified persistent Raya Browser. Organization-aware delegation is implemented locally and awaiting final delivery. Main-chat creation, inline media treatment, full live rebuild-survival acceptance, Live voice/device acceptance, the Go companion rebuild and the remaining 39-requirement work remain open.
+Latest verified installed product checkpoint: `4d8ae70feac48327206020fa329442106195dde6`, pushed to `origin/main` and installed as `eden.raya@7.4.23-snapshot+4d8ae70fea.kamil-oseni.1789258236638`. It includes durable Routine DMs, organization navigation, explicit organization delegation authority and provenance, plus the simplified persistent Raya Browser. Main-chat creation, organization management UI, inline media treatment, full live rebuild-survival acceptance, Live voice/device acceptance, the Go companion rebuild and the remaining 39-requirement work remain open.
 
 The browser simplification is delivered through source, tests, push and installed snapshot. Durable spoken snapshots, warm handoff, live device/provider acceptance, organization delegation/provisioning and the full 39-requirement audit remain open.
 

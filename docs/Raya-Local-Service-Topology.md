@@ -8,6 +8,8 @@ The extension launches its bundled CLI with an ephemeral port, explicit `127.0.0
 
 One connection service serves the sidebar, editor tabs and Agent Manager within an extension host. Requests include directory context where needed. Directory context selects workspace data; it does not authorize a different person, isolate every in-memory service, or start a separate backend. Other local processes running as the same OS user remain within the local trust boundary.
 
+Each extension host owns its own managed CLI process, ephemeral socket and generated password. A real dual-server acceptance uses separate state roots and credentials, rejects one host's credentials at the other host with `401`, and proves that hard parent exit shuts down only the corresponding server. The surviving host remains authenticated and healthy until its own parent exits. This process boundary does not turn the directory header within one shared backend into tenant authorization.
+
 The parent PID is passed to the backend watchdog. Graceful disposal and process-exit handling remain responsible for teardown. A loopback bind does not prove that every abrupt-exit or multi-window recovery path has passed acceptance.
 
 The contract regression imports the exact launch arguments used by `ServerManager` and evaluates them using the CLI's actual argument parser and network resolver, against a configuration requesting `0.0.0.0`, a fixed port and mDNS. It verifies loopback, port zero and disabled discovery. Packaged socket inspection is a separate acceptance step.
@@ -39,7 +41,7 @@ The regression uses in-memory storage adapters and synthetic credentials to test
 
 - Exercise the admission ceiling and provider setup deadline through an actually deployed authenticated companion container.
 - Preserve initial destination validation and redirect refusal before sending credentials. Endpoint authentication remains separate.
-- Exercise authenticated and unauthenticated requests on actual managed sockets, abrupt parent exit and cross-window ownership.
+- Preserve the real dual-server abrupt-parent and cross-window credential-isolation acceptance.
 - Test cross-directory data and execution ownership separately from authentication.
 - Keep remote/shared launch support unavailable as a product claim until its authentication, origin and isolation contract is implemented and exercised.
 

@@ -10,6 +10,14 @@ Updated 2026-09-13. This is a continuation guide, not a completion certificate.
 
 **Latest delivered product:** ChatGPT installed snapshot `f83096f7d6` (`eden.raya@7.4.23-snapshot+f83096f7d6.kamil-oseni.1789312194050`). It includes the earlier Routine, Browser, GPT-Live recovery and reconnect work plus durable direct/delegated goal usage totals, enforceable time, cost and automatic-recovery limits, revision-safe file deliverables, the non-model charge ledger, safe initial voice destinations, and authenticated media control described below. Reload VS Code normally to pick up the snapshot.
 
+## ChatGPT 2026-09-13 11:31 America/Toronto — active EN-10 managed-socket checkpoint
+
+**Local status: process-level acceptance passes; commit and push remain.** The focused serve acceptance now launches two actual authenticated CLI servers with independent loopback sockets, isolated state roots, passwords and declared editor-parent processes. Both report healthy. A credential from the first simulated window receives `401` from the second server. Hard-killing the first parent shuts down only its server while the second remains authenticated and healthy; killing the second parent then shuts down the second server. Cleanup retains exact handles for all four spawned processes.
+
+The fixture resolves the installed OpenTUI preload before entering its temporary working directory, avoiding a network package lookup. Combined evidence: 2/2 cases and seven assertions in 31.52 seconds; after removing a redundant child `HOME` override, the exact managed-parent case passes again at 1/1 with six assertions. The largest sampled Bun process was about 405 MB and combined observed Bun memory stayed below 1 GB; no `tsgo` or `tsgolint` ran. Prettier passes. Standalone Oxlint did not execute because package-directory invocation sees the repository type-aware option as nested configuration; do not route this single test through broad root lint under the user's memory constraint.
+
+Changed paths: `packages/opencode/test/kilocode/cli/cmd/serve.test.ts` and topology/progress/handoff documentation. This is acceptance coverage for existing managed-launch behavior and does not require an extension snapshot. EN-10 remains open for cross-directory data/execution ownership and an authenticated deployed-companion run.
+
 ## ChatGPT 2026-09-13 11:19 America/Toronto — active EN-10 resource-bound checkpoint
 
 **Delivered in product commit `ca11d701a9`; pushed.** The Go companion now reserves a maximum of eight concurrent session ownership claims before provider or room allocation. A ninth distinct start receives a typed capacity error and HTTP `503`; successful close releases the slot, while uncertain cleanup deliberately retains it until process restart. This prevents duplicate allocation and cleanup ambiguity from becoming unbounded resource growth.

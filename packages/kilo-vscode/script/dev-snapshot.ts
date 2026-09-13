@@ -69,7 +69,13 @@ await $`bun run prepare:sdk`.cwd(root)
 
 console.log("\n🔧 Preparing CLI binary and validating extension...")
 await $`bun script/local-bin.ts --compiled`.cwd(root)
-await $`bun run build:check:production`.cwd(root)
+const low = process.env.RAYA_LOW_MEMORY === "1"
+if (low) {
+  console.log("  Running extension validation sequentially (low-memory mode)")
+  for (const task of ["check-types", "check-types:webview", "lint", "bundle:production"])
+    await $`bun run ${task}`.cwd(root)
+}
+if (!low) await $`bun run build:check:production`.cwd(root)
 if (repair) {
   await load(join(root, "..", ".."))
   const binary = join(root, "bin", process.platform === "win32" ? "kilo.exe" : "kilo")

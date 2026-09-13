@@ -24,6 +24,11 @@ import { workflow } from "./workflow-request"
 const Key = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9_-]{0,63}$/))
 const Text = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(4000))
 const Label = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(120))
+const ToolName = Schema.String.check(Schema.isPattern(/^\S+$/), Schema.isMaxLength(128))
+const Tools = Schema.Array(ToolName).check(
+  Schema.isMaxLength(128),
+  Schema.makeFilter((value) => (new Set(value).size === value.length ? undefined : "Tool patterns must be unique.")),
+)
 const Provision = "organization:provision"
 const ScheduleFields = {
   when: Schema.optional(Schema.String),
@@ -50,6 +55,7 @@ const New = Schema.Struct({
   output: RayaTask.Output,
   capabilities: Schema.Array(Schema.String),
   access: Schema.Literals(["brief", "full"]),
+  tools: Tools,
   plan: Schema.optional(Schema.String),
   enabled: Schema.optional(Schema.Boolean),
   canCreateWorkers: Schema.optional(Schema.Boolean),
@@ -69,6 +75,7 @@ const RoutinePatch = Schema.Struct({
   capabilities: Schema.optional(Schema.Array(Schema.String)),
   canCreateWorkers: Schema.optional(Schema.Boolean),
   access: Schema.optional(Schema.Literals(["brief", "full"])),
+  tools: Schema.optional(Tools),
   plan: Schema.optional(Schema.String),
   enabled: Schema.optional(Schema.Boolean),
   ...ScheduleFields,
@@ -102,11 +109,13 @@ const RoutineMutation = Schema.Struct({
   capabilities: Schema.optional(Schema.Array(Schema.String)),
   provisioning: Schema.optional(RayaTask.Provisioning),
   access: Schema.optional(Schema.Literals(["brief", "full"])),
+  tools: Schema.optional(Tools),
   plan: Schema.optional(Schema.String),
   enabled: Schema.optional(Schema.Boolean),
   schedule: Schema.optional(RayaTask.Schedule),
   expectedScheduleVersion: Schema.Int,
   expectedAccess: Schema.Literals(["brief", "full", "unset"]),
+  expectedTools: Schema.optional(Schema.Union([Tools, Schema.Literal("unset")])),
   expectedOutput: Schema.Union([RayaTask.Output, Schema.Literal("unset")]),
   expectedProvisioning: Schema.optional(Schema.Boolean),
 })
@@ -124,6 +133,7 @@ const CreateSubordinate = Schema.Struct({
   output: RayaTask.Output,
   capabilities: Schema.Array(Schema.String),
   access: Schema.Literals(["brief", "full"]),
+  tools: Tools,
   plan: Schema.optional(Schema.String),
   enabled: Schema.optional(Schema.Boolean),
   canCreateWorkers: Schema.optional(Schema.Boolean),
@@ -207,7 +217,7 @@ function organizationResult(item: typeof Organization.Type) {
 function routineResult(agent: RayaTask.Agent, title = "Routine updated") {
   return {
     title,
-    output: `${agent.name} now has the saved role, job, schedule, access, capabilities, and output requirements. Open Routines to review the assignment.`,
+    output: `${agent.name} now has the saved role, job, schedule, access, tool scope, capabilities, and output requirements. Open Routines to review the assignment.`,
     metadata: { requestStatus: "complete", view: "routines", agentID: agent.id },
   }
 }
@@ -220,6 +230,7 @@ function matches(agent: RayaTask.Agent, patch: typeof RoutineMutation.Type) {
   if (patch.capabilities !== undefined && !isDeepStrictEqual(agent.capabilities, patch.capabilities)) return false
   if (patch.provisioning !== undefined && !isDeepStrictEqual(agent.provisioning, patch.provisioning)) return false
   if (patch.access !== undefined && agent.access !== patch.access) return false
+  if (patch.tools !== undefined && !isDeepStrictEqual(agent.tools, patch.tools)) return false
   if (patch.plan !== undefined && agent.plan !== patch.plan) return false
   if (patch.enabled !== undefined && agent.enabled !== patch.enabled) return false
   if (patch.schedule !== undefined && !isDeepStrictEqual(agent.schedule, patch.schedule)) return false
@@ -261,6 +272,7 @@ function matchesWorker(agent: RayaTask.Agent, input: typeof RayaTask.Create.Type
     isDeepStrictEqual(agent.capabilities, input.capabilities ?? []) &&
     isDeepStrictEqual(agent.schedule, input.schedule) &&
     agent.access === (input.access ?? "brief") &&
+    isDeepStrictEqual(agent.tools, input.tools) &&
     agent.enabled === (input.enabled ?? true) &&
     agent.plan === input.plan
   )
@@ -269,7 +281,7 @@ function matchesWorker(agent: RayaTask.Agent, input: typeof RayaTask.Create.Type
 function subordinateResult(item: typeof Organization.Type, agent: RayaTask.Agent, parentID: string) {
   return {
     title: "Subordinate created",
-    output: `Created ${agent.name} under its authorized worker in ${item.name}. The worker is durable, uses bounded access and capabilities, and can now receive delegated work.`,
+    output: `Created ${agent.name} under its authorized worker in ${item.name}. The worker is durable, uses bounded access, tools, and capabilities, and can now receive delegated work.`,
     metadata: {
       requestStatus: "complete",
       view: "routines",
@@ -336,6 +348,7 @@ export function routineManagementTools(input: {
                 schedule: agent.schedule,
                 enabled: agent.enabled,
                 access: agent.access,
+                tools: agent.tools,
                 capabilities: agent.capabilities,
                 canCreateWorkers: agent.capabilities.some((item) => item.toLowerCase() === Provision),
                 updatedAt: agent.updatedAt,
@@ -366,7 +379,7 @@ export function routineManagementTools(input: {
     "create_organization",
     Effect.succeed({
       description:
-        "Create a durable organization and any new standing workers from the main chat. Before calling, use ask_options for every missing name, purpose, worker role/job, schedule and timezone, access level, capabilities, output acceptance criteria, supervisor, directional delegation permission, or authority to create permanent subordinate workers. Never infer authority from reporting lines. Existing workers require IDs from inspect_routines. New workers require a complete output contract.",
+        'Create a durable organization and any new standing workers from the main chat. Before calling, use ask_options for every missing name, purpose, worker role/job, schedule and timezone, access level, exact tool scope, capabilities, output acceptance criteria, supervisor, directional delegation permission, or authority to create permanent subordinate workers. Use ["*"] only when the user chooses all tools and [] only when the user chooses question-only access. Never infer authority from reporting lines. Existing workers require IDs from inspect_routines. New workers require a complete output contract.',
       parameters: CreateOrganization,
       execute: (params: typeof CreateOrganization.Type, ctx: Tool.Context) => {
         const patterns = [
@@ -379,6 +392,9 @@ export function routineManagementTools(input: {
                   )
                 : [],
             ),
+          ),
+          ...new Set(
+            params.workers.flatMap((item) => (item.kind === "new" ? item.tools.map((value) => `tool:${value}`) : [])),
           ),
         ]
         return workflow({
@@ -430,6 +446,7 @@ export function routineManagementTools(input: {
                 output: item.output,
                 capabilities: [...new Set([...item.capabilities, ...(item.canCreateWorkers ? [Provision] : [])])],
                 access: item.access,
+                tools: item.tools,
                 schedule: yield* schedule(item),
                 plan: item.plan,
                 enabled: item.enabled,
@@ -495,7 +512,7 @@ export function routineManagementTools(input: {
     "create_subordinate",
     Effect.succeed({
       description:
-        "Create one durable subordinate inside the current routine worker's organization. The current worker must have the saved organization:provision capability. Use ask_options for every missing role, job, schedule/timezone, access, capabilities, output acceptance criteria, downstream delegation, or permission to let the child create workers. Child access and capabilities cannot exceed the current worker's saved authority.",
+        "Create one durable subordinate inside the current routine worker's organization. The current worker must have the saved organization:provision capability. Use ask_options for every missing role, job, schedule/timezone, access, exact tool scope, capabilities, output acceptance criteria, downstream delegation, or permission to let the child create workers. Use [\"*\"] only for all tools and [] only for question-only access. Child access, tools and capabilities cannot exceed the current worker's saved authority.",
       parameters: CreateSubordinate,
       execute: (params: typeof CreateSubordinate.Type, ctx: Tool.Context) =>
         workflow({
@@ -529,6 +546,14 @@ export function routineManagementTools(input: {
               )
             if (params.access === "full" && parent.access !== "full")
               return yield* Effect.fail(new Error("A read-only worker cannot create a worker with editing access."))
+            if (parent.tools !== undefined && !parent.tools.includes("*")) {
+              const allowed = new Set(parent.tools)
+              const excess = params.tools.find((item) => !allowed.has(item))
+              if (excess)
+                return yield* Effect.fail(
+                  new Error(`The current worker cannot grant the child tool pattern ${excess}.`),
+                )
+            }
             const requested = [...params.capabilities, ...(params.canCreateWorkers ? [Provision] : [])]
             const capabilities = [...new Set(requested)]
             const excess = capabilities.find((item) => !authority.has(item.toLowerCase()))
@@ -568,6 +593,7 @@ export function routineManagementTools(input: {
               output: params.output,
               capabilities,
               access: params.access,
+              tools: params.tools,
               schedule: yield* schedule(params),
               plan: params.plan,
               enabled: params.enabled,
@@ -633,6 +659,7 @@ export function routineManagementTools(input: {
                 patterns: [
                   `organization:${plan.organizationID}`,
                   `access:${plan.create.access ?? "brief"}`,
+                  ...(plan.create.tools ?? []).map((item) => `tool:${item}`),
                   ...(plan.create.capabilities ?? []).map((item) => `capability:${item.toLowerCase()}`),
                 ],
                 always: [`organization:${plan.organizationID}`],
@@ -875,7 +902,7 @@ export function routineManagementTools(input: {
     "update_routine",
     Effect.succeed({
       description:
-        "Update one saved routine using its ID from inspect_routines. Use ask_options before calling if the requested role, job, schedule/timezone, access, capabilities, worker-creation authority, output criteria, or enable state is missing or ambiguous.",
+        'Update one saved routine using its ID from inspect_routines. Use ask_options before calling if the requested role, job, schedule/timezone, access, exact tool scope, capabilities, worker-creation authority, output criteria, or enable state is missing or ambiguous. Use ["*"] only for all tools and [] only for question-only access.',
       parameters: UpdateRoutine,
       execute: (params: typeof UpdateRoutine.Type, ctx: Tool.Context) =>
         Effect.gen(function* () {
@@ -911,16 +938,19 @@ export function routineManagementTools(input: {
             capabilities,
             provisioning,
             access: params.patch.access,
+            tools: params.patch.tools,
             plan: params.patch.plan,
             enabled: params.patch.enabled,
             ...(nextSchedule ? { schedule: nextSchedule } : {}),
             expectedScheduleVersion: before.scheduleVersion ?? 1,
             expectedAccess: before.access ?? "unset",
+            expectedTools: before.tools ?? "unset",
             expectedOutput: before.output ?? "unset",
             expectedProvisioning: allowed,
           })
           const patterns = [
             `access:${params.patch.access ?? before.access ?? "brief"}`,
+            ...(params.patch.tools ?? before.tools ?? []).map((value) => `tool:${value}`),
             ...new Set((capabilities ?? before.capabilities).map((value) => `capability:${value.toLowerCase()}`)),
           ]
           return yield* workflow({

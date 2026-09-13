@@ -88,6 +88,7 @@ it.live(
               output: output("Company"),
               capabilities: [],
               access: "brief" as const,
+              tools: ["inspect_team", "delegate_work"],
               when: "only when I ask",
               delegatesTo: ["design"],
             },
@@ -100,6 +101,7 @@ it.live(
               output: output("Design"),
               capabilities: [],
               access: "full" as const,
+              tools: ["read", "browser_*"],
               when: "every Friday at 5pm",
               timezone: "America/Toronto",
               supervisorKey: "chief",
@@ -127,6 +129,10 @@ it.live(
           storage,
         ).list()
         expect(agents).toHaveLength(2)
+        expect(agents.map((item) => item.tools)).toEqual([
+          ["inspect_team", "delegate_work"],
+          ["read", "browser_*"],
+        ])
         expect(organizations.items).toHaveLength(1)
         expect(organizations.items[0]?.delegations).toEqual([
           { senderID: agents[0]?.id, recipientID: agents[1]?.id, position: 0 },
@@ -157,6 +163,7 @@ it.live(
               output: output("Research"),
               capabilities: [],
               access: "brief" as const,
+              tools: ["read", "websearch", "webfetch"],
               when: "every Monday at 9am",
               timezone: "UTC",
             },
@@ -198,6 +205,7 @@ it.live(
           output: output("Design lead"),
           capabilities: ["design", "organization:provision"],
           access: "brief",
+          tools: ["read", "inspect_team", "delegate_work"],
           schedule: { kind: "manual" },
         })
         const reviewer = yield* tasks.create({
@@ -253,6 +261,7 @@ it.live(
           output: output("Landing page"),
           capabilities: ["design"],
           access: "brief" as const,
+          tools: ["read"],
           when: "only when I ask",
           delegatesTo: [reviewer.id],
         }
@@ -280,6 +289,7 @@ it.live(
           role: "designer",
           access: "brief",
           capabilities: ["design"],
+          tools: ["read"],
           schedule: { kind: "manual" },
         })
         const revised = yield* organizations.get(organization.id)
@@ -315,6 +325,14 @@ it.live(
         )
         expect(denied.title).toBe("Subordinate creation needs review")
         expect(denied.output).toContain("cannot grant the child capability growth")
+        expect(yield* tasks.list()).toHaveLength(3)
+
+        const deniedTool = yield* retry.execute(
+          { ...params, expectedRevision: 2, name: "Shell Designer", tools: ["bash"] },
+          context("excess-tool"),
+        )
+        expect(deniedTool.title).toBe("Subordinate creation needs review")
+        expect(deniedTool.output).toContain("cannot grant the child tool pattern bash")
         expect(yield* tasks.list()).toHaveLength(3)
       }).pipe(
         Effect.provide(
@@ -565,6 +583,7 @@ it.live(
           output: output("Accounts"),
           capabilities: ["accounting"],
           access: "brief",
+          tools: ["read"],
           schedule: { kind: "manual" },
         })
         const organizations = RayaTaskOrganization.make(database, tasks, storage)
@@ -577,17 +596,34 @@ it.live(
         const updateRoutine = yield* (yield* tools.updateRoutine).init()
         const routineParams = {
           agentID: agent.id,
-          patch: { objective: "Review the books every week", when: "every Friday at 5pm", timezone: "UTC" },
+          patch: {
+            objective: "Review the books every week",
+            tools: ["read", "websearch"],
+            when: "every Friday at 5pm",
+            timezone: "UTC",
+          },
         }
         const changed = yield* updateRoutine.execute(routineParams, context("update-routine"))
         expect(changed.title).toBe("Routine updated")
         expect((yield* tasks.get(agent.id)).schedule).toEqual({ kind: "cron", expr: "0 17 * * 5", tz: "UTC" })
+        expect((yield* tasks.get(agent.id)).tools).toEqual(["read", "websearch"])
         expect(
           yield* updateRoutine.execute(routineParams, {
             ...context("update-routine"),
             ask: () => Effect.die("completed routine update must not request permission again"),
           }),
         ).toEqual(JSON.parse(JSON.stringify(changed)))
+
+        const stale = yield* updateRoutine.execute(
+          { agentID: agent.id, patch: { tools: ["bash"] } },
+          {
+            ...context("stale-tool-update"),
+            ask: () => tasks.update(agent.id, { tools: ["read", "webfetch"] }).pipe(Effect.asVoid),
+          },
+        )
+        expect(stale.title).toBe("Routine update needs review")
+        expect(stale.output).toContain("tool access changed")
+        expect((yield* tasks.get(agent.id)).tools).toEqual(["read", "webfetch"])
 
         const authorityParams = { agentID: agent.id, patch: { canCreateWorkers: true } }
         const authorized = yield* updateRoutine.execute(authorityParams, context("grant-worker-creation"))
@@ -689,6 +725,7 @@ it.live(
               capabilities: ["research"],
               canCreateWorkers: true,
               access: "brief" as const,
+              tools: ["inspect_team", "delegate_work", "create_subordinate"],
               when: "only when I ask",
               delegatesTo: ["books"],
             },
@@ -701,6 +738,7 @@ it.live(
               output: output("Accounts"),
               capabilities: ["accounting"],
               access: "brief" as const,
+              tools: ["read"],
               when: "every Friday at 5pm",
               timezone: "America/Toronto",
               supervisorKey: "chief",

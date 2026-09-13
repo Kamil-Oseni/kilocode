@@ -7,6 +7,7 @@ import type { Storage } from "@/storage/storage"
 import { VoiceReconstructor } from "./reconstructor"
 import { ContextItem, Failure, type Envelope, type Info, type Start, type State, VoiceSessionID } from "./protocol"
 import { post } from "./transport"
+import { local } from "./destination"
 
 type Entry = {
   info: typeof Info.Type
@@ -32,6 +33,10 @@ type Deps = {
 const key = (id: VoiceSessionID) => ["raya_voice", id]
 
 export namespace RayaVoice {
+  export class InputError extends Schema.TaggedErrorClass<InputError>()("RayaVoice.InputError", {
+    message: Schema.String,
+  }) {}
+
   export function make(deps: Deps) {
     const entries = new Map<VoiceSessionID, Entry>()
     const gates = new Map<VoiceSessionID, { semaphore: ReturnType<typeof Semaphore.makeUnsafe>; refs: number }>()
@@ -74,6 +79,9 @@ export namespace RayaVoice {
       }).pipe(Effect.orDie)
 
     const start = Effect.fn("RayaVoice.start")(function* (input: typeof Start.Type) {
+      const mediaURL = local(input.mediaURL)
+      if (!mediaURL)
+        return yield* new InputError({ message: "Voice media frontend must use a numeric loopback HTTP address." })
       const parent = yield* deps.sessions.get(input.parentSessionID)
       const id = VoiceSessionID.make(`rvs_${crypto.randomUUID()}`)
       const room = input.room ?? id
@@ -95,7 +103,7 @@ export namespace RayaVoice {
         livekitURL: livekit.url,
         clientToken,
         mediaToken,
-        mediaURL: input.mediaURL,
+        mediaURL,
         engine: "qwen-realtime" as const,
         acceptsTruncation: false,
         status: "starting" as const,

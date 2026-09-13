@@ -17,10 +17,10 @@ The contract regression imports the exact launch arguments used by `ServerManage
 | Link | Current behavior | Boundary or remaining work |
 |---|---|---|
 | Extension to CLI voice control | Managed backend HTTP with generated Basic credentials | Carries session and directory context, not independent tenant authentication. |
-| Extension to media frontend | Configurable HTTP URL; default `http://127.0.0.1:7890` | Control handlers currently have no service authentication. Arbitrary configured destinations are not a certified deployment. |
+| Extension to media frontend | Numeric loopback HTTP origin; default `http://127.0.0.1:7890` | Control handlers currently have no service authentication. Remote/shared deployment is unavailable. |
 | Media frontend listener | Native default `127.0.0.1:7890`; environment can override | Non-loopback configuration is not yet gated. |
 | Docker media frontend | Listens on `0.0.0.0` inside the container; Compose publishes host `127.0.0.1:7890` | Host publication and container-network reachability are different boundaries. Do not simply reject all wildcard container listeners without replacing this launch path. |
-| Media frontend to backend | Voice events carry the supplied backend authorization and directory | Redirects are refused; configured callback destination validation remains open. |
+| Media frontend to backend | Voice events carry the supplied backend authorization and directory to a validated numeric loopback HTTP origin | Redirects are refused. Remote callbacks are unavailable. |
 | LiveKit and voice engine | WebRTC/audio and provider connection are separate from CLI control | Tokens, provider keys, remote rooms and cleanup require their own lifecycle guarantees. |
 
 The Go control server limits request headers to 32 KiB, header reading to five seconds, total request reading to fifteen seconds, response writes to thirty seconds and idle connections to sixty seconds. Session-start and context-injection JSON bodies are limited to 1 MiB, including chunked bodies without a declared content length. The complete body is read within the limit and parsed before session side effects; trailing JSON is rejected. Audio travels through WebRTC and is not subject to this JSON body limit.
@@ -37,7 +37,7 @@ The regression uses in-memory storage adapters and synthetic credentials to test
 
 - Define and enforce the allowed media control deployment, including local native and container paths, service authentication and browser-origin handling.
 - Complete handler/provider lifecycle limits and observe cancellation and cleanup after HTTP transport deadlines, without applying short HTTP timeouts to long-lived audio sessions.
-- Validate callback and configured media destinations before sending credentials. Redirect refusal has loopback HTTP coverage; endpoint authorization remains separate.
+- Preserve initial destination validation and redirect refusal before sending credentials. Endpoint authentication remains separate.
 - Exercise authenticated and unauthenticated requests on actual managed sockets, abrupt parent exit and cross-window ownership.
 - Test cross-directory data and execution ownership separately from authentication.
 - Keep remote/shared launch support unavailable as a product claim until its authentication, origin and isolation contract is implemented and exercised.
@@ -58,3 +58,11 @@ The extension voice broker now uses manual redirect handling for backend/media a
 The media companion callback transport refuses redirects with a per-call copy of the HTTP client, preserving any injected caller client settings without mutating its redirect policy. The CLI context-injection transport similarly refuses redirects and reports the status without replaying the workspace result to another recipient. A direct successful endpoint remains supported. These changes do not validate the initially configured endpoint, authenticate the media service, or certify remote/shared deployment. The separate Go companion must be rebuilt before its callback change takes effect.
 
 The actual broker suite passed 46 tests and 342 assertions across admission/cleanup stages, all five redirect statuses, and same-origin/other-port destinations with synthetic credentials. The full Go service suite and `go vet ./...` passed with CGO disabled; callback tests verify original request identity/body, zero redirected requests, no replay and caller-client preservation. The CLI transport plus existing voice-failure suite passed 15 tests and 54 assertions (native zero); context tests cover direct success and both redirect destination classes. New transport source/test lint reports zero warnings/errors. Existing voice-service code retains three scoped warnings. Combined package gates are recorded with the next checkpoint.
+
+## Initial destination validation
+
+The Qwen broker now validates both its managed CLI backend and media frontend before its first network request. Each must be an `http` origin with no credentials, path, query or fragment and a numeric loopback address in `127.0.0.0/8` or `::1`. Names such as `localhost`, private-LAN addresses and lookalike domains are refused so DNS or configuration cannot redirect backend credentials, provider keys or media tokens. Accepted addresses are normalized once and the same origins are used for admission and cleanup.
+
+The CLI independently validates `mediaURL` before parent lookup, delegate creation, room-token minting or persistence. Its real authenticated HTTP route returns `400` for an unsafe destination. The Go media companion independently validates the callback backend before reserving a session, opening the voice engine or joining the media room. This is defense in depth across callers; it does not authenticate the media control listener or authorize a remote/shared topology.
+
+ChatGPT verified this boundary on 2026-09-13 with 48 extension broker tests and 359 assertions, two CLI destination tests with 13 assertions, the real voice HTTP test with 46 assertions, an uncached full `go test ./...`, `go vet ./...`, and a native 10,135,040-byte companion rebuild. No paid provider or microphone was used.

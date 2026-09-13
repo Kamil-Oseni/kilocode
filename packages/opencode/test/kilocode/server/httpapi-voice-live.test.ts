@@ -80,6 +80,14 @@ test("the shipped Live voice routes keep duration and delegation behind auth and
     const sibling = Schema.decodeUnknownSync(Schema.Struct({ id: SessionID }))(
       await (await request("POST", "/session", {})).json(),
     )
+    expect(
+      (
+        await request("POST", "/kilocode/voice/session", {
+          parentSessionID: parent.id,
+          mediaURL: "http://media.example",
+        })
+      ).status,
+    ).toBe(400)
     expect((await request("POST", `/session/${parent.id}/goal`, { objective: "Account for Live voice" })).status).toBe(
       200,
     )

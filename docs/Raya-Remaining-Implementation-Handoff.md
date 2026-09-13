@@ -10,6 +10,16 @@ Updated 2026-09-13. This is a continuation guide, not a completion certificate.
 
 **Latest delivered product:** ChatGPT installed snapshot `f9006ad66e` (`eden.raya@7.4.23-snapshot+f9006ad66e.kamil-oseni.1789307627416`). It includes the earlier Routine, Browser, GPT-Live recovery and reconnect work plus durable direct/delegated goal usage totals, enforceable time, cost and automatic-recovery limits, revision-safe file deliverables, and the non-model charge ledger described below. Reload VS Code normally to pick up the snapshot.
 
+## ChatGPT 2026-09-13 10:08 America/Toronto — active EN-10 destination checkpoint
+
+**Local status: implementation and focused validation pass; commit, push and extension snapshot remain.** Qwen voice control now accepts only numeric loopback HTTP origins for the extension-managed CLI backend, configured media frontend and companion-to-backend callback. The TypeScript validators use the platform URL parser, require a root origin with no username, password, path, query or fragment, and accept canonical IPv4 loopback in `127.0.0.0/8` or `::1`. They reject `localhost` to avoid DNS-based destination changes, as well as private-LAN/public addresses and lookalike names such as `127.evil.example`. Accepted origins are normalized once for admission and cleanup.
+
+Ordering is the security property. `RealtimeBroker.open` validates both origins after loading settings but before assigning a usable config or making its first request. `RayaVoice.start` validates the media origin before parent lookup, delegate creation, token generation or persistence; the HTTP handler maps the typed refusal to `400`. `raya-mf` validates its callback before claiming a session, opening the Qwen engine or joining LiveKit. This does not validate intentionally configurable remote provider endpoints, add media listener authentication, or enable remote/shared voice deployment.
+
+Changed product paths: `.changeset/raya-voice-local-destinations.md`; extension `src/speech/local.ts` and `realtime-broker.ts`; CLI `kilocode/voice/destination.ts`, `service.ts` and voice handler; Go companion `internal/app/destination.go` and `manager.go`; focused TypeScript/Go tests; the real Live HTTP boundary test; and the local topology/progress/handoff documents.
+
+Completed low-memory evidence, with every build, test and typecheck run alone: extension broker 48/48 with 359 assertions; CLI destination 2/2 with 13 assertions; authenticated voice HTTP 1/1 with 46 assertions; uncached `go test ./...`; `go vet ./...`; native companion build at `services/raya-mf/.tmp/raya-mf.exe`, 10,135,040 bytes; extension host typecheck; scoped ESLint/Oxlint; Prettier; gofmt; OpenCode annotation, Kilo marker, Markdown-table and diff checks. No `tsgolint`, repository-wide lint, broad Turbo, parallel typecheck or standalone CLI-wide typecheck ran. Before delivery, commit explicit files without the two owner documents, push with `--no-verify`, and install a low-memory extension snapshot. The snapshot updates the extension and bundled CLI; it does not deploy the rebuilt companion container. EN-10 remains open for authenticated media control, browser-origin policy, listener gating, lifecycle resource bounds and managed-socket/cross-window evidence.
+
 ## ChatGPT 2026-09-13 09:47 America/Toronto — active non-model accounting checkpoint
 
 **Delivered in product commit `f9006ad66e`; pushed and installed.** The implementation adds an extensible `RayaGoalCharge` ledger to current goals, requirement revisions and completed-goal history. Each entry is tied to its goal session and carries a deterministic ID, source kind, optional provider/service, optional message/call origin, finite observation time and optional quantity/unit. Recorded receipts require a finite non-negative amount and uppercase 3–8 letter currency code. Unknown receipts require a concrete reason and cannot carry an invented amount. Writes reject cross-session, pre-goal, over-capacity and conflicting-ID input. Exact retries return the retained record; concurrent exact duplicates from separate service instances converge on one entry through optimistic persistence plus conflict reconciliation. New goals initialize an empty ledger; legacy records retain an explicit unavailable state.
@@ -330,12 +340,12 @@ The following sections retain the full 39-item scope. Related findings and overh
 
 ### EN-10 — Specify the supported local-service security topology
 
-**Recorded status:** In progress. Managed extension launch pins loopback, ephemeral port and disabled discovery. Media JSON control requests now have a 1 MiB cap and HTTP read/write/header/idle deadlines; real boundary and incomplete-body tests pass. Broker, media callback and context delivery now refuse credential/context redirects with real local HTTP coverage. Companion rebuild, media authentication, initial destination validation and handler/resource lifecycle limits remain open.
+**Recorded status:** In progress. Managed extension launch pins loopback, ephemeral port and disabled discovery. Media JSON control requests have a 1 MiB cap and HTTP read/write/header/idle deadlines. Broker, CLI and Go companion now validate initial numeric-loopback HTTP destinations before credentials, tokens, context or session side effects and refuse redirects. Media authentication, listener gating, deployed companion rebuild and handler/resource lifecycle limits remain open.
 
 **Implementation and verification:**
 
 1. Finish explicit managed-local versus remote trust contracts and authenticated media control before remote exposure.
-2. Validate initial destinations and redirects; bound admission, request bodies and lifecycle resources; rebuild the companion when its maintained code changes.
+2. Preserve initial-destination and redirect refusal; bound admission and lifecycle resources; rebuild and deploy the companion when its maintained code changes.
 3. Exercise bad credentials, malicious destination, oversized/incomplete bodies and teardown; directory routing must not be presented as tenant isolation.
 
 **Source entry points:** [packages/server/src/auth.ts](../packages/server/src/auth.ts), [services/raya-mf/cmd/raya-mf/main.go](../services/raya-mf/cmd/raya-mf/main.go).

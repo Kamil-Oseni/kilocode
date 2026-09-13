@@ -1,4 +1,5 @@
 import type { SpeechSettings } from "../shared/speech"
+import { local } from "./local"
 
 type Session = {
   id: string
@@ -90,7 +91,18 @@ export class RealtimeBroker {
       const loaded = await load()
       if (claim.cancelled) return await this.abandon(claim, failure("cancelled", "Voice start cancelled."))
       if ("ok" in loaded) return await this.abandon(claim, loaded)
-      claim.config = loaded
+      const backend = local(loaded.backendURL)
+      const frontend = local(loaded.settings.mediaFrontendURL)
+      if (!backend || !frontend)
+        return await this.abandon(
+          claim,
+          failure("configuration", "Voice backend and media frontend must use numeric loopback HTTP addresses."),
+        )
+      claim.config = {
+        ...loaded,
+        backendURL: backend,
+        settings: { ...loaded.settings, mediaFrontendURL: frontend },
+      }
       const cfg = claim.config
       const response = await this.request(
         `${cfg.backendURL}/kilocode/voice/session?directory=${encodeURIComponent(cfg.directory)}`,

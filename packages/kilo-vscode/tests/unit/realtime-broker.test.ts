@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import { RealtimeBroker } from "../../src/speech/realtime-broker"
 import { DEFAULT_SPEECH_SETTINGS } from "../../src/shared/speech"
+import { local } from "../../src/speech/local"
 
 function gate() {
   let release!: () => void
@@ -51,6 +52,54 @@ function fixture(handle?: (request: Request) => Promise<Response | undefined>) {
   }
   return { calls, config, close: () => server.stop(true) }
 }
+
+test("managed voice control accepts only numeric loopback HTTP origins", () => {
+  expect(local("http://127.0.0.1:7890/")).toBe("http://127.0.0.1:7890")
+  expect(local("http://127.1:80")).toBe("http://127.0.0.1")
+  expect(local("http://[::1]:7890")).toBe("http://[::1]:7890")
+  for (const value of [
+    "https://127.0.0.1:7890",
+    "http://localhost:7890",
+    "http://127.evil.example:7890",
+    "http://192.168.1.2:7890",
+    "http://user:secret@127.0.0.1:7890",
+    "http://127.0.0.1:7890/path",
+    "http://127.0.0.1:7890?next=remote",
+    "not a URL",
+  ])
+    expect(local(value)).toBeUndefined()
+})
+
+test("broker rejects unsafe initial destinations before sending credentials", async () => {
+  for (const target of ["backend", "media"] as const) {
+    const site = fixture()
+    const broker = new RealtimeBroker()
+    const config = {
+      ...site.config,
+      ...(target === "backend" ? { backendURL: "http://backend.example" } : {}),
+      settings: {
+        ...site.config.settings,
+        ...(target === "media" ? { mediaFrontendURL: "http://media.example" } : {}),
+      },
+    }
+    try {
+      expect(
+        await broker.start(
+          async () => config,
+          () => {},
+        ),
+      ).toEqual({
+        ok: false,
+        code: "configuration",
+        error: "Voice backend and media frontend must use numeric loopback HTTP addresses.",
+      })
+      expect(site.calls).toEqual([])
+      expect(broker.active).toBe(false)
+    } finally {
+      site.close()
+    }
+  }
+})
 
 for (const status of [301, 302, 303, 307, 308]) {
   for (const remote of [false, true]) {

@@ -39,6 +39,13 @@ type ownership struct {
 }
 
 func (m *Manager) Start(ctx context.Context, input wire.Start) (wire.Started, error) {
+	if input.BackendURL != "" {
+		backend, err := local(input.BackendURL)
+		if err != nil {
+			return wire.Started{}, err
+		}
+		input.BackendURL = backend
+	}
 	id := input.ID
 	if id == "" {
 		id = identifier()

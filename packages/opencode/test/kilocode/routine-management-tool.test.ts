@@ -8,6 +8,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Agent } from "@/agent/agent"
 import { Git } from "@/git"
 import { RayaTask } from "@/kilocode/task"
+import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import { RayaTaskOrganization } from "@/kilocode/task/organization"
 import { routineManagementTools } from "@/kilocode/tool/routine-management"
 import * as Permission from "@/permission"
@@ -298,6 +299,13 @@ it.live(
           metadata: { requestStatus: "complete", organizationRevision: 2, parentID: parent.id, agentID: child.id },
         })
         expect(yield* tasks.list()).toHaveLength(3)
+        const inbox = RayaTaskInbox.make(database)
+        const parentUpdates = (yield* inbox.page(parent.id)).messages.filter((item) => item.kind === "system")
+        const childUpdates = (yield* inbox.page(child.id)).messages.filter((item) => item.kind === "system")
+        expect(parentUpdates).toHaveLength(1)
+        expect(parentUpdates[0]?.body).toContain(`${child.name} was added to ${organization.name}`)
+        expect(childUpdates).toHaveLength(1)
+        expect(childUpdates[0]?.body).toContain(`You were added to ${organization.name} by ${parent.name}`)
 
         const denied = yield* retry.execute(
           { ...params, expectedRevision: 2, name: "Growth Designer", capabilities: ["growth"] },

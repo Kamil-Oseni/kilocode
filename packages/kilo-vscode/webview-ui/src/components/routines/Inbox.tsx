@@ -9,7 +9,7 @@ const RESTORE_PAGE_LIMIT = 20
 export type Note = {
   id: string
   agentID: string
-  kind: "user" | "worker" | "report" | "decision" | "delegation"
+  kind: "user" | "worker" | "report" | "decision" | "delegation" | "system"
   source: string
   body: string
   occurrenceID?: string
@@ -140,6 +140,7 @@ function stamp(at: number) {
 }
 
 function kind(value: Note["kind"], source?: string) {
+  if (value === "system") return "Update"
   if (value === "report") return "Report"
   if (value === "decision") return "Needs a decision"
   if (value === "delegation") {

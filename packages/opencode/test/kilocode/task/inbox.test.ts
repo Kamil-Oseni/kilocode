@@ -148,24 +148,41 @@ test("routine inbox publication is idempotent, unread ignores user messages, and
         occurrenceID: "occ_1",
         files: [{ name: "ledger.pdf", path: "receipts/Q3-close/ledger.pdf" }],
       })
+      const update = yield* inbox.publish({
+        agentID: "agt_1",
+        source: "provision:worker_1",
+        kind: "system",
+        body: "A worker joined the organization.",
+      })
+      expect(
+        yield* inbox.publish({
+          agentID: "agt_1",
+          source: "provision:worker_1",
+          kind: "system",
+          body: "A worker joined the organization.",
+        }),
+      ).toEqual(update)
       const items = yield* inbox.summaries([agent("agt_1")], new Map())
       expect(items).toHaveLength(1)
       expect(items[0].conversationID.startsWith("rcv_")).toBe(true)
-      expect(items[0].unread).toBe(1)
-      expect(items[0].latest?.id).toBe(report.id)
+      expect(items[0].unread).toBe(2)
+      expect(items[0].latest).toBeDefined()
+      expect([report.id, update.id]).toContain(items[0].latest!.id)
       expect(items[0].state).toBe("scheduled")
-      expect(yield* inbox.read("agt_1", report.time)).toBe(report.time)
+      expect(yield* inbox.read("agt_1", update.time)).toBe(update.time)
       expect((yield* inbox.summaries([agent("agt_1")], new Map()))[0].unread).toBe(0)
-      expect(yield* inbox.read("agt_1", 0)).toBe(report.time)
+      expect(yield* inbox.read("agt_1", 0)).toBe(update.time)
       yield* inbox.draft("agt_1", { draft: "Ask about travel" })
       expect((yield* inbox.summaries([agent("agt_1")], new Map()))[0].draft).toBe("Ask about travel")
       expect(yield* inbox.draft("agt_1", { draft: "" })).toEqual({ draft: null })
       const page = yield* inbox.page("agt_1")
-      expect(page.messages.map((item) => item.source)).toEqual(["user_1", "report:occ_1"])
+      expect(page.messages.map((item) => item.source).sort()).toEqual(
+        ["user_1", "report:occ_1", "provision:worker_1"].sort(),
+      )
       const renamed = yield* inbox.summaries([{ ...agent("agt_1"), name: "Accounting", role: "accountant" }], new Map())
       expect(renamed[0].name).toBe("Accounting")
       expect(renamed[0].agentID).toBe("agt_1")
-      expect(renamed[0].latest?.body).toBe(report.body)
+      expect(renamed[0].latest?.body).toBe(update.body)
       expect(renamed[0].latest?.agentID).toBe("agt_1")
       expect((yield* inbox.page("agt_1")).messages.find((item) => item.kind === "report")?.body).toBe(report.body)
       expect((yield* inbox.page("agt_1")).messages.find((item) => item.kind === "report")?.files).toEqual([

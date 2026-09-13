@@ -22687,7 +22687,7 @@ export type KilocodeRoutineInboxResponses = {
     latest?: {
       id: string
       agentID: string
-      kind: "user" | "worker" | "report" | "decision" | "delegation"
+      kind: "user" | "worker" | "report" | "decision" | "delegation" | "system"
       source: string
       body: string
       occurrenceID?: string
@@ -22754,7 +22754,7 @@ export type KilocodeRoutineInboxPageResponses = {
     messages: Array<{
       id: string
       agentID: string
-      kind: "user" | "worker" | "report" | "decision" | "delegation"
+      kind: "user" | "worker" | "report" | "decision" | "delegation" | "system"
       source: string
       body: string
       occurrenceID?: string
@@ -22825,7 +22825,7 @@ export type KilocodeRoutineInboxSendResponses = {
   200: {
     id: string
     agentID: string
-    kind: "user" | "worker" | "report" | "decision" | "delegation"
+    kind: "user" | "worker" | "report" | "decision" | "delegation" | "system"
     source: string
     body: string
     occurrenceID?: string
@@ -22888,7 +22888,7 @@ export type KilocodeRoutineInboxInfoResponses = {
               messageID: string
               label: string
               time: number
-              messageKind: "user" | "worker" | "report" | "decision" | "delegation"
+              messageKind: "user" | "worker" | "report" | "decision" | "delegation" | "system"
               source: string
               occurrenceID?: string
               sessionID?: string
@@ -22901,7 +22901,7 @@ export type KilocodeRoutineInboxInfoResponses = {
               messageID: string
               label: string
               time: number
-              messageKind: "user" | "worker" | "report" | "decision" | "delegation"
+              messageKind: "user" | "worker" | "report" | "decision" | "delegation" | "system"
               source: string
               occurrenceID?: string
               sessionID?: string
@@ -22912,7 +22912,7 @@ export type KilocodeRoutineInboxInfoResponses = {
               messageID: string
               label: string
               time: number
-              messageKind: "user" | "worker" | "report" | "decision" | "delegation"
+              messageKind: "user" | "worker" | "report" | "decision" | "delegation" | "system"
               source: string
               occurrenceID?: string
               sessionID?: string

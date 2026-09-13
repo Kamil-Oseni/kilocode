@@ -4,6 +4,7 @@ import { Effect, Schema } from "effect"
 import { english } from "@opencode-ai/core/kilocode/schedule"
 import type { Database } from "@opencode-ai/core/database/database"
 import { RayaTask } from "@/kilocode/task"
+import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import {
   Create as OrganizationCreate,
   DelegationInput,
@@ -265,6 +266,32 @@ export function routineManagementTools(input: {
 }) {
   const tasks = RayaTask.make({ storage: input.storage, database: input.database })
   const organizations = RayaTaskOrganization.make(input.database, tasks, input.storage)
+  const inbox = RayaTaskInbox.make(input.database)
+
+  const announce = Effect.fn("RayaRoutineManagement.announceSubordinate")(function* (
+    item: typeof Organization.Type,
+    agent: RayaTask.Agent,
+    plan: typeof SubordinatePlan.Type,
+  ) {
+    const parent = yield* tasks.get(plan.parentID)
+    const abilities = agent.capabilities.length ? agent.capabilities.join(", ") : "none"
+    const downstream = plan.delegations.filter((edge) => edge.senderID === agent.id).length
+    const details = `${agent.role}; ${agent.access ?? "brief"} access; capabilities: ${abilities}; ${downstream} downstream delegation${downstream === 1 ? "" : "s"}.`
+    const source = (target: "parent" | "child") =>
+      `provision:${digest(JSON.stringify([item.id, agent.id, target])).slice(0, 48)}`
+    yield* inbox.publish({
+      agentID: parent.id,
+      source: source("parent"),
+      kind: "system",
+      body: `${agent.name} was added to ${item.name} and reports to you. ${details}`,
+    })
+    yield* inbox.publish({
+      agentID: agent.id,
+      source: source("child"),
+      kind: "system",
+      body: `You were added to ${item.name} by ${parent.name} and report to ${parent.name}. ${details}`,
+    })
+  })
 
   const inspect = Tool.define(
     "inspect_routines",
@@ -563,8 +590,10 @@ export function routineManagementTools(input: {
                     members: plan.members,
                     delegations: plan.delegations,
                   })
-                )
+                ) {
+                  yield* announce(organization, agent, plan)
                   return subordinateResult(organization, agent, plan.parentID)
+                }
               }
               return {
                 title: "Subordinate creation needs review",
@@ -594,7 +623,10 @@ export function routineManagementTools(input: {
                       members: plan.members,
                       delegations: plan.delegations,
                     })
-                    .pipe(Effect.map((organization) => subordinateResult(organization, agent, plan.parentID))),
+                    .pipe(
+                      Effect.tap((organization) => announce(organization, agent, plan)),
+                      Effect.map((organization) => subordinateResult(organization, agent, plan.parentID)),
+                    ),
                 ),
               ),
         }).pipe(

@@ -57,7 +57,7 @@ export const RayaRoutineMessageTable = sqliteTable(
       .notNull()
       .references(() => RayaRoutineConversationTable.agent_id, { onDelete: "cascade" }),
     source: text().notNull(),
-    kind: text({ enum: ["user", "worker", "report", "decision", "delegation"] }).notNull(),
+    kind: text({ enum: ["user", "worker", "report", "decision", "delegation", "system"] }).notNull(),
     body: text().notNull(),
     occurrence_id: text(),
     session_id: text(),

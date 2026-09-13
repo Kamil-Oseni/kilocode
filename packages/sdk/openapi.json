@@ -32304,7 +32304,7 @@
                           },
                           "kind": {
                             "type": "string",
-                            "enum": ["user", "worker", "report", "decision", "delegation"]
+                            "enum": ["user", "worker", "report", "decision", "delegation", "system"]
                           },
                           "source": {
                             "type": "string",
@@ -32556,7 +32556,7 @@
                           },
                           "kind": {
                             "type": "string",
-                            "enum": ["user", "worker", "report", "decision", "delegation"]
+                            "enum": ["user", "worker", "report", "decision", "delegation", "system"]
                           },
                           "source": {
                             "type": "string",
@@ -32737,7 +32737,7 @@
                     },
                     "kind": {
                       "type": "string",
-                      "enum": ["user", "worker", "report", "decision", "delegation"]
+                      "enum": ["user", "worker", "report", "decision", "delegation", "system"]
                     },
                     "source": {
                       "type": "string",
@@ -33039,7 +33039,7 @@
                                   },
                                   "messageKind": {
                                     "type": "string",
-                                    "enum": ["user", "worker", "report", "decision", "delegation"]
+                                    "enum": ["user", "worker", "report", "decision", "delegation", "system"]
                                   },
                                   "source": {
                                     "type": "string",
@@ -33106,7 +33106,7 @@
                                   },
                                   "messageKind": {
                                     "type": "string",
-                                    "enum": ["user", "worker", "report", "decision", "delegation"]
+                                    "enum": ["user", "worker", "report", "decision", "delegation", "system"]
                                   },
                                   "source": {
                                     "type": "string",
@@ -33152,7 +33152,7 @@
                                   },
                                   "messageKind": {
                                     "type": "string",
-                                    "enum": ["user", "worker", "report", "decision", "delegation"]
+                                    "enum": ["user", "worker", "report", "decision", "delegation", "system"]
                                   },
                                   "source": {
                                     "type": "string",

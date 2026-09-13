@@ -828,8 +828,18 @@
 
 .routines-line[data-kind="report"],
 .routines-line[data-kind="decision"],
-.routines-line[data-kind="delegation"] {
+.routines-line[data-kind="delegation"],
+.routines-line[data-kind="system"] {
   max-width: min(90%, 42rem);
+}
+
+.routines-line[data-kind="system"] {
+  align-self: center;
+  width: min(90%, 42rem);
+  padding: var(--raya-space-8) 0;
+  border-radius: 0;
+  background: transparent;
+  text-align: center;
 }
 
 .routines-line-meta {

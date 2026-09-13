@@ -12,7 +12,7 @@ import { RayaTask } from "./index"
 
 const token = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_.:-]{1,128}$/))
 const text = Schema.String.check(Schema.isMaxLength(8000))
-const Kind = Schema.Literals(["user", "worker", "report", "decision", "delegation"])
+const Kind = Schema.Literals(["user", "worker", "report", "decision", "delegation", "system"])
 export const State = Schema.Literals(["scheduled", "running", "waiting", "needs_input", "paused", "failed"])
 export const Clip = Schema.Struct({
   name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)),

@@ -8,11 +8,19 @@ import { Files, type Note } from "./Inbox"
 type Reply = Extract<ExtensionMessage, { type: "routineArchive" }>
 
 function kind(value: unknown): Note["kind"] | undefined {
-  if (value === "user" || value === "worker" || value === "report" || value === "decision" || value === "delegation")
+  if (
+    value === "user" ||
+    value === "worker" ||
+    value === "report" ||
+    value === "decision" ||
+    value === "delegation" ||
+    value === "system"
+  )
     return value
 }
 
 function label(kind: Note["kind"], source?: string) {
+  if (kind === "system") return "Update"
   if (kind === "report") return "Report"
   if (kind === "decision") return "Needs a decision"
   if (kind === "delegation") {
@@ -240,10 +248,18 @@ export function Archive(props: { onOpenSession?: (id: string) => void }) {
               <p role="status">No retained conversation is available for this routine.</p>
             </Show>
             <Show when={(notes()?.length ?? 0) > 0}>
-              <section class="routines-archive-thread" aria-label={`Retained conversation for ${entry().definition.name}`}>
+              <section
+                class="routines-archive-thread"
+                aria-label={`Retained conversation for ${entry().definition.name}`}
+              >
                 <For each={notes()}>
                   {(note) => (
-                    <article class="routines-line" data-kind={note.kind} data-source={note.source} data-agent={note.agentID}>
+                    <article
+                      class="routines-line"
+                      data-kind={note.kind}
+                      data-source={note.source}
+                      data-agent={note.agentID}
+                    >
                       <span class="routines-line-meta">
                         {label(note.kind, note.source)} · {new Date(note.time).toLocaleString()}
                       </span>

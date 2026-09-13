@@ -7,7 +7,7 @@ import { getErrorMessage } from "../kilo-provider-utils"
 import { Edit, Proposal, Schedule } from "../shared/routine-schedule"
 import { Output } from "../shared/routine-output"
 import { recovery } from "../shared/routine-error"
-import { bundle, MAX_ROUTINE_FILES, type RoutineUpload } from "./routine-files"
+import { bundle, MAX_ROUTINE_FILE_BYTES, MAX_ROUTINE_FILES, type RoutineUpload } from "./routine-files"
 import { organization } from "./routine-refresh"
 
 type Msg = { type: string } & Record<string, unknown>
@@ -114,6 +114,7 @@ const replies: Record<string, string> = {
   routineInboxFilesPick: "routineInboxFiles",
   routineInboxFilesForget: "routineInboxFiles",
   routineInboxAttachmentOpen: "routineInboxAttachmentOpened",
+  routineInboxAttachmentPreview: "routineInboxAttachmentPreviewed",
   routineInboxInfo: "routineInboxInfo",
   routineInboxRead: "routineInboxRead",
   routineInboxDraft: "routineInboxDraft",
@@ -158,6 +159,7 @@ const messages = new Set([
   "routineInboxFilesPick",
   "routineInboxFilesForget",
   "routineInboxAttachmentOpen",
+  "routineInboxAttachmentPreview",
   "routineInboxInfo",
   "routineInboxRead",
   "routineInboxDraft",
@@ -325,6 +327,35 @@ async function attachment(ctx: Ctx) {
   if (!result.data || result.data.id !== msg.attachmentID) throw new Error("That attachment is no longer available.")
   ctx.open?.(result.data)
   ctx.post({ type: "routineInboxAttachmentOpened", requestID: msg.requestID, agentID: msg.agentID })
+}
+
+const images = new Set(["image/gif", "image/jpeg", "image/png", "image/webp"])
+
+async function preview(ctx: Ctx) {
+  const msg = ctx.message
+  if (!token(msg.requestID) || !token(msg.agentID) || !token(msg.attachmentID))
+    throw new Error("Reload the conversation before previewing that image.")
+  const result = await ctx.kilo.inbox2.attachment(
+    {
+      directory: ctx.dir,
+      agentID: String(msg.agentID),
+      attachmentID: String(msg.attachmentID),
+    },
+    { throwOnError: true },
+  )
+  const file = result.data
+  if (!file || file.id !== msg.attachmentID) throw new Error("That attachment is no longer available.")
+  if (!images.has(file.mime)) throw new Error("This file does not have an inline preview.")
+  if (file.size < 1 || file.size > MAX_ROUTINE_FILE_BYTES)
+    throw new Error("This image is too large to preview in the conversation.")
+  const bytes = Buffer.from(file.data, "base64")
+  if (bytes.byteLength !== file.size) throw new Error("This image could not be verified for preview.")
+  ctx.post({
+    type: "routineInboxAttachmentPreviewed",
+    requestID: msg.requestID,
+    agentID: msg.agentID,
+    file,
+  })
 }
 
 async function seen(ctx: Ctx) {
@@ -767,6 +798,7 @@ const routes: Record<string, (ctx: Ctx) => Promise<void>> = {
   routineInboxSend: send,
   routineInboxInfo: info,
   routineInboxAttachmentOpen: attachment,
+  routineInboxAttachmentPreview: preview,
   routineInboxRead: seen,
   routineInboxDraft: scribble,
   routineDelegate: pass,

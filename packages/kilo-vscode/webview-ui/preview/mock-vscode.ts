@@ -36,6 +36,12 @@ const report = {
   files: [{ name: "vendor-travel-ledger-q3-close-final.pdf", path: "receipts/Q3-close/vendor-travel-ledger.pdf" }],
   attachments: [
     {
+      id: "123e4567-e89b-42d3-a456-426614174001",
+      name: "travel-receipt.png",
+      mime: "image/png",
+      size: 68,
+    },
+    {
       id: "123e4567-e89b-42d3-a456-426614174000",
       name: "receipt.pdf",
       mime: "application/pdf",
@@ -249,6 +255,21 @@ const reply = (message: WebviewMessage) => {
     })
     return
   }
+  if (message.type === "routineInboxAttachmentPreview") {
+    emit({
+      type: "routineInboxAttachmentPreviewed",
+      requestID: message.requestID,
+      agentID: message.agentID,
+      file: {
+        id: message.attachmentID,
+        name: "travel-receipt.png",
+        mime: "image/png",
+        size: 68,
+        data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+      },
+    })
+    return
+  }
   if (message.type === "routineInboxInfo") {
     emit({
       type: "routineInboxInfo",
@@ -275,11 +296,11 @@ const reply = (message: WebviewMessage) => {
               },
               {
                 kind: "attachment",
-                attachmentID: report.attachments[0].id,
+                attachmentID: report.attachments[1].id,
                 messageID: report.id,
-                label: report.attachments[0].name,
-                mime: report.attachments[0].mime,
-                size: report.attachments[0].size,
+                label: report.attachments[1].name,
+                mime: report.attachments[1].mime,
+                size: report.attachments[1].size,
                 time: report.time,
               },
             ]

@@ -1817,6 +1817,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         message.type === "routineInboxRead" ||
         message.type === "routineInboxDraft" ||
         message.type === "routineInboxAttachmentOpen" ||
+        message.type === "routineInboxAttachmentPreview" ||
         message.type === "routineDelegate" ||
         message.type === "routineDelegateCancel" ||
         message.type === "routineDelegateChain"
@@ -1827,11 +1828,13 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
               ? "routineInboxSent"
               : message.type === "routineInboxAttachmentOpen"
                 ? "routineInboxAttachmentOpened"
-                : message.type === "routineDelegate"
-                  ? "routineDelegated"
-                  : message.type === "routineDelegateCancel"
-                    ? "routineDelegateStopped"
-                    : message.type,
+                : message.type === "routineInboxAttachmentPreview"
+                  ? "routineInboxAttachmentPreviewed"
+                  : message.type === "routineDelegate"
+                    ? "routineDelegated"
+                    : message.type === "routineDelegateCancel"
+                      ? "routineDelegateStopped"
+                      : message.type,
           requestID: message.requestID,
           agentID: message.agentID,
           error: "Could not connect to the routine inbox. Reconnect and try again.",

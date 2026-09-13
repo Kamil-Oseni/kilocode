@@ -1,4 +1,4 @@
-import { Component, For, Show, createEffect, createSignal, onCleanup } from "solid-js"
+import { Component, For, Show, createEffect, createSignal, onCleanup, onMount } from "solid-js"
 import { Button } from "@kilocode/kilo-ui/button"
 import { useVSCode } from "../../context/vscode"
 import type { ExtensionMessage } from "../../types/messages"
@@ -354,34 +354,150 @@ function size(value: number) {
   return `${(value / (1024 * 1024)).toFixed(1)} MB`
 }
 
+const images = new Set(["image/gif", "image/jpeg", "image/png", "image/webp"])
+
+const ImageAttachment: Component<{ agentID: string; file: DraftFile }> = (props) => {
+  const vscode = useVSCode()
+  const [phase, setPhase] = createSignal<"idle" | "loading" | "ready" | "failed">("idle")
+  const [src, setSrc] = createSignal("")
+  const [error, setError] = createSignal("")
+  let root: HTMLLIElement | undefined
+  let requestID = ""
+  let observer: IntersectionObserver | undefined
+
+  const open = () =>
+    vscode.postMessage({
+      type: "routineInboxAttachmentOpen",
+      requestID: crypto.randomUUID(),
+      agentID: props.agentID,
+      attachmentID: props.file.id,
+    })
+
+  const load = () => {
+    if (phase() === "loading" || phase() === "ready") return
+    requestID = crypto.randomUUID()
+    setPhase("loading")
+    setError("")
+    vscode.postMessage({
+      type: "routineInboxAttachmentPreview",
+      requestID,
+      agentID: props.agentID,
+      attachmentID: props.file.id,
+    })
+  }
+
+  const receive = (msg: ExtensionMessage) => {
+    if (msg.type !== "routineInboxAttachmentPreviewed" || msg.requestID !== requestID || msg.agentID !== props.agentID)
+      return
+    const file = msg.file
+    if (msg.error) {
+      setError(msg.error)
+      setPhase("failed")
+      return
+    }
+    if (
+      !file ||
+      file.id !== props.file.id ||
+      file.mime !== props.file.mime ||
+      file.size !== props.file.size ||
+      !images.has(file.mime) ||
+      !/^[A-Za-z0-9+/]+={0,2}$/.test(file.data)
+    ) {
+      setError("This image couldn't be verified for preview.")
+      setPhase("failed")
+      return
+    }
+    setSrc(`data:${file.mime};base64,${file.data}`)
+    setPhase("ready")
+  }
+
+  const unsub = vscode.onMessage(receive)
+  onMount(() => {
+    if (!root || typeof IntersectionObserver === "undefined") {
+      load()
+      return
+    }
+    observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return
+        observer?.disconnect()
+        load()
+      },
+      { rootMargin: "160px" },
+    )
+    observer.observe(root)
+  })
+  onCleanup(() => {
+    observer?.disconnect()
+    unsub()
+  })
+
+  return (
+    <li ref={root} class="routines-image-item">
+      <button type="button" class="routines-image" aria-label={`Open ${props.file.name}`} onClick={open}>
+        <Show
+          when={phase() === "ready"}
+          fallback={
+            <span class="routines-image-state" role={phase() === "loading" ? "status" : undefined}>
+              {phase() === "failed" ? "Preview unavailable" : "Loading preview…"}
+            </span>
+          }
+        >
+          <img
+            src={src()}
+            alt={props.file.name}
+            onError={() => {
+              setError("This image couldn't be shown.")
+              setPhase("failed")
+            }}
+          />
+        </Show>
+        <span class="routines-file-name">{props.file.name}</span>
+        <span class="routines-file-path">
+          {props.file.mime} · {size(props.file.size)}
+        </span>
+      </button>
+      <Show when={phase() === "failed"}>
+        <Button type="button" size="small" variant="ghost" title={error()} onClick={load}>
+          Retry preview
+        </Button>
+      </Show>
+    </li>
+  )
+}
+
 export const Attachments: Component<{ agentID: string; items?: DraftFile[] }> = (props) => {
   const vscode = useVSCode()
   return (
     <Show when={props.items?.length}>
       <ul class="routines-files" aria-label="Message attachments">
         <For each={props.items}>
-          {(file) => (
-            <li>
-              <button
-                type="button"
-                class="routines-file"
-                aria-label={`Open ${file.name}`}
-                onClick={() =>
-                  vscode.postMessage({
-                    type: "routineInboxAttachmentOpen",
-                    requestID: crypto.randomUUID(),
-                    agentID: props.agentID,
-                    attachmentID: file.id,
-                  })
-                }
-              >
-                <span class="routines-file-name">{file.name}</span>
-                <span class="routines-file-path">
-                  {file.mime} · {size(file.size)}
-                </span>
-              </button>
-            </li>
-          )}
+          {(file) =>
+            images.has(file.mime) ? (
+              <ImageAttachment agentID={props.agentID} file={file} />
+            ) : (
+              <li>
+                <button
+                  type="button"
+                  class="routines-file"
+                  aria-label={`Open ${file.name}`}
+                  onClick={() =>
+                    vscode.postMessage({
+                      type: "routineInboxAttachmentOpen",
+                      requestID: crypto.randomUUID(),
+                      agentID: props.agentID,
+                      attachmentID: file.id,
+                    })
+                  }
+                >
+                  <span class="routines-file-name">{file.name}</span>
+                  <span class="routines-file-path">
+                    {file.mime} · {size(file.size)}
+                  </span>
+                </button>
+              </li>
+            )
+          }
         </For>
       </ul>
     </Show>

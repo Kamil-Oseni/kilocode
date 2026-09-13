@@ -47,6 +47,8 @@ for (const theme of ["light", "dark"]) {
       ).toBe(true)
       await expect(page.getByRole("button", { name: "Open vendor-travel-ledger-q3-close-final.pdf" })).toBeVisible()
       await expect(page.getByRole("button", { name: "Open receipt.pdf" })).toBeVisible()
+      const image = page.getByRole("button", { name: "Open travel-receipt.png" })
+      await expect(image.getByRole("img", { name: "travel-receipt.png" })).toBeVisible()
       await expect(page.getByRole("button", { name: "Attach" })).toBeVisible()
       expect(
         await page

@@ -903,6 +903,52 @@
   overflow-wrap: anywhere;
 }
 
+.routines-image-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--raya-space-2);
+  max-width: min(100%, 24rem);
+}
+
+.routines-image {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--raya-space-4);
+  width: 100%;
+  padding: 0 0 var(--raya-space-8);
+  appearance: none;
+  overflow: hidden;
+  border: 1px solid var(--border-weak, var(--vscode-widget-border));
+  border-radius: var(--raya-radius-md, 8px);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.routines-image img,
+.routines-image-state {
+  display: block;
+  width: 100%;
+  max-height: 20rem;
+  aspect-ratio: 4 / 3;
+  object-fit: contain;
+  background: color-mix(in srgb, var(--text-base, var(--vscode-foreground)) 5%, transparent);
+}
+
+.routines-image-state {
+  align-content: center;
+  padding: var(--raya-space-12);
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  text-align: center;
+}
+
+.routines-image .routines-file-name,
+.routines-image .routines-file-path {
+  margin-inline: var(--raya-space-8);
+}
+
 .routines-chain {
   margin: var(--raya-space-8) 0 0;
   padding-left: var(--raya-space-16);

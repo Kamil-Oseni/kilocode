@@ -327,6 +327,14 @@ export interface RoutineInboxAttachmentOpenedMessage {
   error?: string
 }
 
+export interface RoutineInboxAttachmentPreviewedMessage {
+  type: "routineInboxAttachmentPreviewed"
+  requestID: string
+  agentID: string
+  file?: { id: string; name: string; mime: string; size: number; data: string }
+  error?: string
+}
+
 export interface RoutineInboxInfoResultMessage {
   type: "routineInboxInfo"
   requestID: string
@@ -1874,6 +1882,7 @@ export type ExtensionMessage =
   | RoutineInboxSentMessage
   | RoutineInboxFilesMessage
   | RoutineInboxAttachmentOpenedMessage
+  | RoutineInboxAttachmentPreviewedMessage
   | RoutineInboxInfoResultMessage
   | RoutineInboxReadResultMessage
   | RoutineInboxDraftResultMessage

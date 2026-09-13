@@ -148,6 +148,58 @@ test("routine inbox page send read and draft keep request identity and retry the
   expect(drafts.at(-1)).toMatchObject({ draft: "Why?", attachmentIDs: [id] })
 })
 
+test("routine image preview returns verified bytes without opening an external editor", async () => {
+  const messages: unknown[] = []
+  const opened: unknown[] = []
+  const id = "123e4567-e89b-42d3-a456-426614174001"
+  const file = { id, name: "receipt.png", mime: "image/png", size: 3, data: "AQID" }
+  const client = createKiloClient({
+    baseUrl: "http://localhost:4096",
+    fetch: async () => Response.json(file),
+  })
+  await handleRoutineMessage({
+    client,
+    directory: "workspace",
+    post: (msg) => messages.push(msg),
+    open: (item) => opened.push(item),
+    message: {
+      type: "routineInboxAttachmentPreview",
+      requestID: "preview1",
+      agentID: "routine",
+      attachmentID: id,
+    },
+  })
+  expect(messages.at(-1)).toEqual({
+    type: "routineInboxAttachmentPreviewed",
+    requestID: "preview1",
+    agentID: "routine",
+    file,
+  })
+  expect(opened).toEqual([])
+
+  const unsupported = createKiloClient({
+    baseUrl: "http://localhost:4096",
+    fetch: async () => Response.json({ ...file, mime: "image/svg+xml" }),
+  })
+  await handleRoutineMessage({
+    client: unsupported,
+    directory: "workspace",
+    post: (msg) => messages.push(msg),
+    message: {
+      type: "routineInboxAttachmentPreview",
+      requestID: "preview2",
+      agentID: "routine",
+      attachmentID: id,
+    },
+  })
+  expect(messages.at(-1)).toMatchObject({
+    type: "routineInboxAttachmentPreviewed",
+    requestID: "preview2",
+    agentID: "routine",
+    error: "This file does not have an inline preview.",
+  })
+})
+
 test("routine chat info keeps section and cursor identity across the bridge", async () => {
   const messages: unknown[] = []
   const urls: URL[] = []

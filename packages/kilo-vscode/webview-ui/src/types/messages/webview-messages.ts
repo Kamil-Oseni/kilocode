@@ -235,6 +235,13 @@ export interface RoutineInboxAttachmentOpenMessage {
   attachmentID: string
 }
 
+export interface RoutineInboxAttachmentPreviewMessage {
+  type: "routineInboxAttachmentPreview"
+  requestID: string
+  agentID: string
+  attachmentID: string
+}
+
 export interface RoutineInboxInfoMessage {
   type: "routineInboxInfo"
   requestID: string
@@ -1935,6 +1942,7 @@ export type WebviewMessage =
   | RoutineInboxFilesPickMessage
   | RoutineInboxFilesForgetMessage
   | RoutineInboxAttachmentOpenMessage
+  | RoutineInboxAttachmentPreviewMessage
   | RoutineInboxInfoMessage
   | RoutineInboxReadMessage
   | RoutineInboxDraftMessage

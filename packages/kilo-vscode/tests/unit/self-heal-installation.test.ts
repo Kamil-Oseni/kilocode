@@ -79,6 +79,21 @@ async function fixture() {
     artifact: { digest: createHash("sha256").update(archive).digest("hex"), size: archive.length },
     binary: { digest: createHash("sha256").update(binary).digest("hex"), size: binary.length },
     previous: "1.2.2",
+    replay: {
+      attemptID: "attempt_ready",
+      sessionID: "ses_ready",
+      messageID: "msg_ready",
+      callID: "call_ready",
+      completion: "d".repeat(64),
+      report: {
+        title: "Install reviewed repair",
+        description: "The repaired behavior failed before this build.",
+        category: "test",
+        severity: "medium",
+        approach: "Repeat the original behavior and retain direct evidence.",
+        criteria: ["The original behavior completes successfully."],
+      },
+    },
   }
   return { root, output, binary, plan }
 }
@@ -97,6 +112,38 @@ function item(plan: Plan, digest = plan.artifact.digest) {
   return {
     id: plan.itemID,
     title: "Install reviewed repair",
+    description: plan.replay.report.description,
+    category: plan.replay.report.category,
+    severity: plan.replay.report.severity,
+    approach: plan.replay.report.approach,
+    completion: {
+      version: 1,
+      itemID: plan.itemID,
+      attemptID: pointer.attemptID,
+      sessionID: pointer.sessionID,
+      source: { root: "C:/source", commit: plan.head },
+      worktree: {
+        root: "C:/source",
+        directory: "C:/repair",
+        branch: "raya-repair",
+        common: "C:/source/.git",
+        commit: plan.head,
+      },
+      goal: {
+        intent: "intent_ready",
+        revision: "revision_ready",
+        completedRevision: "completed_ready",
+        createdAt: 1,
+        objective: "Repair the original behavior.",
+        audit: {
+          summary: "Accepted repair evidence.",
+          verifiedAt: 1,
+          requirements: plan.replay.report.criteria.map((requirement) => ({ requirement, passed: true, evidence: [] })),
+        },
+        review: { status: "accepted", at: 1, criteria: plan.replay.report.criteria, acceptedAt: 1 },
+      },
+      at: 1,
+    },
     artifact: {
       ...pointer,
       status: "install-ready",
@@ -154,6 +201,7 @@ test("persists exact install intent, suppresses replay, and verifies activation"
         approvalID: run.plan.approvalID,
         artifact: run.plan.artifact,
         binary: run.plan.binary,
+        replay: run.plan.replay,
         phase: "installing",
       })
       expect(await readFile(path)).toEqual(await readFile(run.output))
@@ -332,6 +380,32 @@ test("changed approval after install confirmation creates no intent", async () =
     let dispatched = false
     const result = await runInstall({
       client: client([item(run.plan), item(run.plan, "e".repeat(64))], calls),
+      itemID: run.plan.itemID,
+      directory: join(run.root, "backend"),
+      previous: run.plan.previous,
+      journal: new SelfHealInstallation(join(run.root, "state")),
+      confirm: async () => true,
+      dispatch: async () => {
+        dispatched = true
+      },
+    })
+    expect(result.notice).toContain("approved artifact changed")
+    expect(dispatched).toBe(false)
+    expect(await new SelfHealInstallation(join(run.root, "state")).inspect()).toBeUndefined()
+  } finally {
+    await rm(run.root, { recursive: true, force: true })
+  }
+})
+
+test("changed replay criteria after install confirmation creates no intent", async () => {
+  const run = await fixture()
+  try {
+    const calls: Request[] = []
+    let dispatched = false
+    const changed = item(run.plan)
+    changed.completion.goal.review!.criteria = ["A different requirement."]
+    const result = await runInstall({
+      client: client([item(run.plan), changed], calls),
       itemID: run.plan.itemID,
       directory: join(run.root, "backend"),
       previous: run.plan.previous,

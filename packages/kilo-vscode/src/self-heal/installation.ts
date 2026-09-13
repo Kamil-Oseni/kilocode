@@ -7,6 +7,21 @@ import { z } from "zod"
 import { checksum, verify } from "../services/update-vsix"
 
 const bytes = z.object({ digest: z.string().regex(/^[a-f0-9]{64}$/), size: z.number().int().nonnegative() })
+const replay = z.object({
+  attemptID: z.string().min(1),
+  sessionID: z.string().min(1),
+  messageID: z.string().min(1),
+  callID: z.string().min(1),
+  completion: z.string().regex(/^[a-f0-9]{64}$/),
+  report: z.object({
+    title: z.string().min(1),
+    description: z.string().min(1),
+    category: z.enum(["ui", "chat", "routing", "goal", "browser", "settings", "build", "test", "docs", "other"]),
+    severity: z.enum(["low", "medium", "high"]),
+    approach: z.string().min(1),
+    criteria: z.array(z.string().min(1)).min(1),
+  }),
+})
 const schema = z.object({
   version: z.literal(1),
   id: z.string().uuid(),
@@ -22,6 +37,7 @@ const schema = z.object({
   artifact: bytes,
   binary: bytes,
   previous: z.string().min(1),
+  replay,
   phase: z.enum(["validating", "installing", "awaiting-reload", "active", "failed"]),
   reason: z.string().optional(),
   createdAt: z.number().finite().nonnegative(),

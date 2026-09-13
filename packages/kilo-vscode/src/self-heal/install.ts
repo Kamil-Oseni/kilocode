@@ -24,7 +24,10 @@ async function load(client: KiloClient, id: string, directory: string) {
   )
   const artifact = item?.artifact?.artifact
   const approval = item?.artifact?.approval
-  if (!item || item.artifact?.status !== "install-ready" || !artifact || !approval) return
+  const completion = item?.completion
+  if (!item || item.artifact?.status !== "install-ready" || !artifact || !approval || !completion) return
+  const criteria = completion.goal.review?.criteria ?? completion.goal.audit.requirements.map((row) => row.requirement)
+  if (!criteria.length) return
   return {
     view: {
       itemID: item.id,
@@ -48,6 +51,21 @@ async function load(client: KiloClient, id: string, directory: string) {
       output: artifact.output,
       artifact: approval.artifact,
       binary: approval.binary,
+      replay: {
+        attemptID: approval.attemptID,
+        sessionID: approval.sessionID,
+        messageID: approval.messageID,
+        callID: approval.callID,
+        completion: approval.completion,
+        report: {
+          title: item.title,
+          description: item.description,
+          category: item.category,
+          severity: item.severity,
+          approach: item.approach,
+          criteria,
+        },
+      },
     },
   }
 }
@@ -65,7 +83,11 @@ export async function install(input: {
   if (!current) return { notice: `Self-heal item ${input.itemID} does not have an approved artifact ready to install.` }
   if (!(await input.confirm(current.view))) return { notice: "Installation closed. Nothing was installed." }
   const refreshed = await load(input.client, input.itemID, input.directory)
-  if (!refreshed || JSON.stringify(refreshed.view) !== JSON.stringify(current.view))
+  if (
+    !refreshed ||
+    JSON.stringify(refreshed.view) !== JSON.stringify(current.view) ||
+    JSON.stringify(refreshed.plan) !== JSON.stringify(current.plan)
+  )
     return { notice: "The approved artifact changed. Review it again before installation." }
   const plan: Plan = { ...refreshed.plan, previous: input.previous }
   const result = await input.journal.run(plan, input.dispatch).then(

@@ -17,9 +17,11 @@ export function GoalDeliverables(props: { items?: GoalState["deliverables"] }) {
                   <span class="goal-banner__task-status">
                     {item.kind === "canvas"
                       ? `Canvas version ${item.version} recorded from ${item.tool}.`
-                      : item.revision.status === "captured"
-                        ? `Revision ${item.revision.sha256.slice(0, 12)} recorded from ${item.tool}.`
-                        : `Removal recorded from ${item.tool}.`}
+                      : item.kind === "browser-download"
+                        ? `Verified download, ${item.bytes.toLocaleString()} bytes, SHA-256 ${item.sha256.slice(0, 12)}.`
+                        : item.revision.status === "captured"
+                          ? `Revision ${item.revision.sha256.slice(0, 12)} recorded from ${item.tool}.`
+                          : `Removal recorded from ${item.tool}.`}
                   </span>
                 </div>
               )}

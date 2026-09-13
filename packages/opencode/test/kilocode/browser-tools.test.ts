@@ -43,7 +43,28 @@ function result(input: Browser.Input): Result {
   if (input.operation === "profile") return { operation: "profile", profile }
   if (input.operation === "auth") return { operation: "auth", profile, captures: [] }
   if (input.operation === "upload") return { operation: "upload", uploads: [] }
-  if (input.operation === "download") return { operation: "download", transfers: [] }
+  if (input.operation === "download") {
+    if (input.action !== "inspect") return { operation: "download", transfers: [] }
+    return {
+      operation: "download",
+      artifact: "C:\\browser-artifacts\\transfer_seen\\artifact",
+      transfers: [
+        {
+          version: 1,
+          id: input.transferID,
+          tabID: "tab_seen",
+          profile: "workspace",
+          status: "completed",
+          filename: "report.csv",
+          url: "https://example.com/report.csv",
+          createdAt: 1,
+          updatedAt: 2,
+          bytes: 128,
+          sha256: "a".repeat(64),
+        },
+      ],
+    }
+  }
   if (input.operation === "dialog") return { operation: "dialog", tabID: input.tabID, dialogs: [], operations: [] }
   if (input.operation === "frames") return { operation: "frames", tabID: input.tabID, frames: [] }
   if (input.operation === "tabs") return { operation: "tabs", tabs: [] }
@@ -223,7 +244,7 @@ describe("browser host tools", () => {
           { action: "start", tab_id: "tab_seen", selector: { kind: "role", role: "button", name: "Export" } },
           ctx,
         )
-        yield* tool.execute({ action: "inspect", transfer_id: "transfer_seen" }, ctx)
+        const inspected = yield* tool.execute({ action: "inspect", transfer_id: "transfer_seen" }, ctx)
         yield* tool.execute({ action: "cancel", transfer_id: "transfer_seen" }, ctx)
         expect(calls).toHaveLength(3)
         expect(calls[0]).toMatchObject({
@@ -243,6 +264,15 @@ describe("browser host tools", () => {
           action: "cancel",
           sessionID: ctx.sessionID,
           transferID: "transfer_seen",
+        })
+        expect(inspected.metadata.rayaBrowserDownload).toEqual({
+          version: 1,
+          transferID: "transfer_seen",
+          artifact: "C:\\browser-artifacts\\transfer_seen\\artifact",
+          filename: "report.csv",
+          url: "https://example.com/report.csv",
+          bytes: 128,
+          sha256: "a".repeat(64),
         })
       }),
     60000,

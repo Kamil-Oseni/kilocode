@@ -109,6 +109,8 @@ for (const theme of ["light", "dark"]) {
       await expect(page.getByText("Evidence references accepted", { exact: true })).toBeVisible()
       await expect(page.getByText("bunx playwright test --config playwright.preview.config.ts").first()).toBeVisible()
       await expect(page.getByText("Not verified. Optional criteria do not prevent goal completion.")).toBeVisible()
+      await expect(page.getByText("C:\\browser-artifacts\\monthly-report\\artifact")).toBeVisible()
+      await expect(page.getByText("Verified download, 2,048 bytes, SHA-256 bbbbbbbbbbbb.")).toBeVisible()
       await expect(page.getByRole("button", { name: "Copy goal report" })).toBeVisible()
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
       await page.screenshot({ path: info.outputPath("result.png"), fullPage: true })

@@ -117,6 +117,17 @@ const goal = {
       tool: "update_canvas",
       evidence: { callID: "canvas", summary: "Updated the live report" },
     },
+    {
+      kind: "browser-download",
+      path: "C:\\browser-artifacts\\transfer-report\\artifact",
+      transferID: "transfer-report",
+      filename: "monthly-report.csv",
+      url: "https://example.com/monthly-report.csv",
+      bytes: 2048,
+      sha256: "b".repeat(64),
+      tool: "browser_download",
+      evidence: { callID: "download", summary: "Inspected the completed browser download" },
+    },
   ],
   progress: [],
 }
@@ -143,6 +154,11 @@ try {
     root
       .querySelector('[aria-label="Goal deliverables"]')
       .textContent.includes("Canvas version 3 recorded from update_canvas"),
+  )
+  assert.ok(
+    root
+      .querySelector('[aria-label="Goal deliverables"]')
+      .textContent.includes("Verified download, 2,048 bytes, SHA-256 bbbbbbbbbbbb"),
   )
   assert.equal(root.querySelector('[role="progressbar"]'), null)
   assert.ok(!root.querySelector(".goal-banner__usage").textContent.includes("%"))

@@ -69364,6 +69364,111 @@
             },
             "required": ["kind", "path", "version", "tool", "evidence"],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["browser-download"]
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              "transferID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "filename": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000
+              },
+              "bytes": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "tool": {
+                "type": "string",
+                "enum": ["browser_download"]
+              },
+              "evidence": {
+                "type": "object",
+                "properties": {
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg"
+                  },
+                  "partID": {
+                    "type": "string",
+                    "pattern": "^prt"
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "callID": {
+                    "type": "string"
+                  },
+                  "summary": {
+                    "type": "string"
+                  },
+                  "record": {
+                    "type": "object",
+                    "properties": {
+                      "version": {
+                        "type": "number",
+                        "enum": [1]
+                      },
+                      "digest": {
+                        "type": "string"
+                      },
+                      "at": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["NaN"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["-Infinity"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity", "-Infinity", "NaN"]
+                          }
+                        ]
+                      }
+                    },
+                    "required": ["version", "digest", "at"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["callID", "summary"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["kind", "path", "transferID", "filename", "url", "bytes", "sha256", "tool", "evidence"],
+            "additionalProperties": false
           }
         ]
       },

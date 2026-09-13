@@ -575,7 +575,18 @@ const DownloadParams = Schema.Union([
 ])
 export const BrowserDownloadTool = Tool.define<
   typeof DownloadParams,
-  { artifact?: string },
+  {
+    artifact?: string
+    rayaBrowserDownload?: {
+      version: 1
+      transferID: string
+      artifact: string
+      filename: string
+      url: string
+      bytes: number
+      sha256: string
+    }
+  },
   Browser.Service,
   "browser_download"
 >(
@@ -620,7 +631,27 @@ export const BrowserDownloadTool = Tool.define<
                   }
           const result = yield* run(browser, input, ctx.abort)
           if (result.operation !== "download") throw new Error("Browser returned an unrelated download result")
-          return { title: "Browser downloads", output: render(result), metadata: { artifact: result.artifact } }
+          const transfer =
+            params.action === "inspect"
+              ? result.transfers.find((item) => item.id === params.transfer_id && item.status === "completed")
+              : undefined
+          const receipt =
+            transfer && result.artifact && transfer.bytes !== undefined && transfer.sha256?.match(/^[a-f0-9]{64}$/)
+              ? {
+                  version: 1 as const,
+                  transferID: transfer.id,
+                  artifact: result.artifact,
+                  filename: transfer.filename,
+                  url: transfer.url,
+                  bytes: transfer.bytes,
+                  sha256: transfer.sha256,
+                }
+              : undefined
+          return {
+            title: "Browser downloads",
+            output: render(result),
+            metadata: { artifact: result.artifact, ...(receipt ? { rayaBrowserDownload: receipt } : {}) },
+          }
         }),
     }
   }),

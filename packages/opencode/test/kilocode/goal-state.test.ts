@@ -869,6 +869,89 @@ describe("RayaGoal", () => {
     }),
   )
 
+  it.live("retains only cited host-verified completed browser downloads", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const sessionID = SessionID.make(`ses_download_deliverable_${crypto.randomUUID()}`)
+      const rows: MessageV2.WithParts[] = []
+      const goals = setup(storage, () => rows)
+      yield* Effect.addFinalizer(() => goals.clear(sessionID))
+      yield* goals.create(sessionID, "Download the monthly report")
+      const completed = transcript({
+        sessionID,
+        tool: "browser_download",
+        metadata: {
+          artifact: "C:\\browser-artifacts\\transfer_report\\artifact",
+          rayaBrowserDownload: {
+            version: 1,
+            transferID: "transfer_report",
+            artifact: "C:\\browser-artifacts\\transfer_report\\artifact",
+            filename: "monthly-report.csv",
+            url: "https://example.com/monthly-report.csv",
+            bytes: 2048,
+            sha256: "b".repeat(64),
+          },
+        },
+      })
+      const pending = transcript({
+        sessionID,
+        tool: "browser_download",
+        metadata: { artifact: "C:\\browser-artifacts\\pending\\artifact" },
+      })
+      const malformed = transcript({
+        sessionID,
+        tool: "browser_download",
+        metadata: {
+          rayaBrowserDownload: {
+            version: 1,
+            transferID: "broken",
+            artifact: "C:\\browser-artifacts\\broken\\artifact",
+            filename: "broken.csv",
+            url: "https://example.com/broken.csv",
+            bytes: 1,
+            sha256: "invented",
+          },
+        },
+      })
+      rows.push(...completed.rows, ...pending.rows, ...malformed.rows)
+      const goal = yield* goals.update(sessionID, {
+        status: "complete",
+        summary: "Monthly report downloaded",
+        requirements: [
+          {
+            requirement: "The monthly report is downloaded",
+            passed: true,
+            evidence: [completed.part!, pending.part!, malformed.part!].map((part) => ({
+              callID: part.callID,
+              summary: "The cited browser tool result was inspected",
+            })),
+          },
+        ],
+      })
+      expect(goal.deliverables).toEqual([
+        {
+          kind: "browser-download",
+          path: "C:\\browser-artifacts\\transfer_report\\artifact",
+          transferID: "transfer_report",
+          filename: "monthly-report.csv",
+          url: "https://example.com/monthly-report.csv",
+          bytes: 2048,
+          sha256: "b".repeat(64),
+          tool: "browser_download",
+          evidence: expect.objectContaining({
+            callID: completed.part!.callID,
+            messageID: completed.part!.messageID,
+            partID: completed.part!.id,
+            sessionID,
+          }),
+        },
+      ])
+      expect((yield* setup(storage, () => rows).get(sessionID))?.deliverables).toEqual(goal.deliverables)
+      const next = yield* goals.create(sessionID, "Download the next report")
+      expect(next.history?.at(-1)?.deliverables).toEqual(goal.deliverables)
+    }),
+  )
+
   it.live("moves a pending deliverable inventory into revision history when requirements change", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service

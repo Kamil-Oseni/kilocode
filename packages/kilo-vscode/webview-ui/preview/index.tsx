@@ -209,6 +209,19 @@ const pack = (status: GoalStatus, extra?: Partial<GoalState>): GoalState =>
       verifiedAt: now - 45_000,
     },
     auditAttempt: { accepted: true, at: now - 45_000, requirements },
+    deliverables: [
+      {
+        kind: "browser-download",
+        path: "C:\\browser-artifacts\\monthly-report\\artifact",
+        transferID: "transfer-monthly-report",
+        filename: "monthly-report.csv",
+        url: "https://example.com/monthly-report.csv",
+        bytes: 2048,
+        sha256: "b".repeat(64),
+        tool: "browser_download",
+        evidence: { callID: "download-report", summary: "Inspected the completed browser download." },
+      },
+    ],
     ...extra,
   })
 

@@ -85,6 +85,23 @@ test("goal reports preserve exact references and mark legacy records instead of 
             summary: "Updated the live report",
           },
         },
+        {
+          kind: "browser-download",
+          path: "C:\\browser-artifacts\\transfer-report\\artifact",
+          transferID: "transfer-report",
+          filename: "monthly-report.csv",
+          url: "https://example.com/monthly-report.csv",
+          bytes: 2048,
+          sha256: "b".repeat(64),
+          tool: "browser_download",
+          evidence: {
+            callID: "download-call",
+            sessionID: "child",
+            messageID: "download-message",
+            partID: "download-part",
+            summary: "Inspected the completed browser download",
+          },
+        },
       ],
       status: "complete",
       createdAt: 0,
@@ -140,8 +157,18 @@ test("goal reports preserve exact references and mark legacy records instead of 
   expect(saved).toContain("Source tool: update_canvas")
   expect(saved).toContain("> Call: canvas-call")
   expect(saved).toContain("> Updated the live report")
+  expect(saved).toContain("### Browser download")
+  expect(saved).toContain("> monthly-report.csv")
+  expect(saved).toContain("Artifact path: C:\\browser-artifacts\\transfer-report\\artifact")
+  expect(saved).toContain("Source URL: https://example.com/monthly-report.csv")
+  expect(saved).toContain("Transfer: transfer-report")
+  expect(saved).toContain("Bytes: 2048")
+  expect(saved).toContain(`SHA-256: ${"b".repeat(64)}`)
+  expect(saved).toContain("Source tool: browser_download")
+  expect(saved).toContain("> Call: download-call")
+  expect(saved).toContain("> Inspected the completed browser download")
   expect(saved).toContain(
-    "Coverage: revision-safe file mutations and ready Canvas versions cited by the accepted completion audit",
+    "Coverage: revision-safe file mutations, ready Canvas versions and host-verified completed browser downloads cited by the accepted completion audit",
   )
   expect(saved).toContain("Tokens: input 10; output 20; reasoning 3; cache read 4; cache write 5.")
   expect(saved).toContain(

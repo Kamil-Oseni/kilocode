@@ -5798,6 +5798,28 @@ export type RayaGoalDeliverable =
         }
       }
     }
+  | {
+      kind: "browser-download"
+      path: string
+      transferID: string
+      filename: string
+      url: string
+      bytes: number
+      sha256: string
+      tool: "browser_download"
+      evidence: {
+        messageID?: string
+        partID?: string
+        sessionID?: string
+        callID: string
+        summary: string
+        record?: {
+          version: 1
+          digest: string
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+      }
+    }
 
 export type EffectHttpApiErrorConflict = {
   _tag: "Conflict"

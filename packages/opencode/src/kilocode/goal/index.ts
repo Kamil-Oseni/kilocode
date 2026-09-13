@@ -60,7 +60,27 @@ export namespace RayaGoal {
     tool: Schema.Literals(["create_canvas", "update_canvas"]),
     evidence: Evidence,
   })
-  const Deliverable = Schema.Union([FileDeliverable, CanvasDeliverable]).annotate({
+  const DownloadReceipt = Schema.Struct({
+    version: Schema.Literal(1),
+    transferID: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100)),
+    artifact: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(4096)),
+    filename: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(1024)),
+    url: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(20_000)),
+    bytes: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    sha256: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
+  })
+  const DownloadDeliverable = Schema.Struct({
+    kind: Schema.Literal("browser-download"),
+    path: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(4096)),
+    transferID: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100)),
+    filename: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(1024)),
+    url: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(20_000)),
+    bytes: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    sha256: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
+    tool: Schema.Literal("browser_download"),
+    evidence: Evidence,
+  })
+  const Deliverable = Schema.Union([FileDeliverable, CanvasDeliverable, DownloadDeliverable]).annotate({
     identifier: "RayaGoalDeliverable",
   })
   type Deliverable = typeof Deliverable.Type
@@ -1053,6 +1073,22 @@ export namespace RayaGoal {
               process.platform === "win32" ? path.normalize(revision.path).toLowerCase() : path.normalize(revision.path)
             artifacts.set(`file:${value}`, { kind: "file", path: revision.path, revision, tool: part.tool, evidence })
           }
+          continue
+        }
+        if (part.tool === "browser_download") {
+          const receipt = part.state.metadata["rayaBrowserDownload"]
+          if (!Schema.is(DownloadReceipt)(receipt)) continue
+          artifacts.set(`browser-download:${receipt.transferID}`, {
+            kind: "browser-download",
+            path: receipt.artifact,
+            transferID: receipt.transferID,
+            filename: receipt.filename,
+            url: receipt.url,
+            bytes: receipt.bytes,
+            sha256: receipt.sha256,
+            tool: part.tool,
+            evidence,
+          })
           continue
         }
         if (part.tool !== "create_canvas" && part.tool !== "update_canvas") continue

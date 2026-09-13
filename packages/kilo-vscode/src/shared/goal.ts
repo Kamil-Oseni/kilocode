@@ -37,6 +37,17 @@ type GoalDeliverable =
       tool: "create_canvas" | "update_canvas"
       evidence: GoalEvidence
     }
+  | {
+      kind: "browser-download"
+      path: string
+      transferID: string
+      filename: string
+      url: string
+      bytes: number
+      sha256: string
+      tool: "browser_download"
+      evidence: GoalEvidence
+    }
 
 export interface GoalSource {
   inspection?: ReturnType<typeof inspection>

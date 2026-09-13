@@ -64,6 +64,35 @@ export namespace KiloSessionRevert {
     return false
   }
 
+  /** Derive the exact snapshots an Undo would restore without touching the workspace. */
+  export function targets(
+    messages: MessageV2.WithParts[],
+    only?: string[],
+    kept?: Record<string, string>,
+    step = !!only?.length,
+  ) {
+    const filter = only && only.length > 0 ? new Set(only.map((file) => file.replaceAll("\\", "/"))) : undefined
+    const perFile = new Map<string, { id: string; hash: string }[]>()
+    for (const msg of messages)
+      for (const part of msg.parts)
+        if (part.type === "patch")
+          for (const file of part.files) {
+            const norm = file.replaceAll("\\", "/")
+            if (filter && !matches(norm, filter)) continue
+            const list = perFile.get(file) ?? (perFile.set(file, []), perFile.get(file)!)
+            list.push({ id: msg.info.id, hash: part.hash })
+          }
+    const result: Snapshot.Patch[] = []
+    for (const [file, list] of perFile) {
+      const boundary = kept?.[canonical(file)] ?? kept?.[file.replaceAll("\\", "/")]
+      const eligible = boundary ? list.filter((patch) => patch.id > boundary) : list
+      if (eligible.length === 0) continue
+      const target = step ? eligible[eligible.length - 1] : eligible[0]
+      result.push({ hash: target.hash, files: [file] })
+    }
+    return result
+  }
+
   /**
    * Discard file edits made in the session — without touching messages and
    * without arming a revert boundary (so nothing becomes "redoable").
@@ -101,29 +130,11 @@ export namespace KiloSessionRevert {
     step = !!only?.length,
     expected?: readonly Snapshot.Patch[],
   ) {
-    const filter = only && only.length > 0 ? new Set(only.map((file) => file.replaceAll("\\", "/"))) : undefined
     // raya_change - group each file's patches in message order, then honor the kept boundary and
     // scope. Undo-all targets the earliest still-undoable edit (= kept content); per-file Undo
     // targets the most recent one (step back exactly one edit). A file with nothing after its
     // boundary is skipped so accepted work is never rewound.
-    const perFile = new Map<string, { id: string; hash: string }[]>()
-    for (const msg of messages)
-      for (const part of msg.parts)
-        if (part.type === "patch")
-          for (const file of part.files) {
-            const norm = file.replaceAll("\\", "/")
-            if (filter && !matches(norm, filter)) continue
-            const list = perFile.get(file) ?? (perFile.set(file, []), perFile.get(file)!)
-            list.push({ id: msg.info.id, hash: part.hash })
-          }
-    const patches: Snapshot.Patch[] = []
-    for (const [file, list] of perFile) {
-      const boundary = kept?.[canonical(file)] ?? kept?.[file.replaceAll("\\", "/")]
-      const eligible = boundary ? list.filter((patch) => patch.id > boundary) : list
-      if (eligible.length === 0) continue
-      const target = step ? eligible[eligible.length - 1] : eligible[0]
-      patches.push({ hash: target.hash, files: [file] })
-    }
+    const patches = targets(messages, only, kept, step)
     const files = [...new Set(patches.flatMap((patch) => patch.files))]
     if (files.length === 0) return { files: [] as string[] }
     const baseline = yield* snap.track()

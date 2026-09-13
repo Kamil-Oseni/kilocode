@@ -349,7 +349,7 @@ describe("kept boundary integrity", () => {
   }
 
   it.live(
-    "an incomplete review receipt blocks replay after an unexpected storage failure",
+    "a failed review preparation leaves no receipt and permits a corrected retry",
     provideTmpdirInstance(
       (dir) =>
         Effect.gen(function* () {
@@ -365,11 +365,74 @@ describe("kept boundary integrity", () => {
           const input = { sessionID: state.session.id, expected, requestID: "interrupted-a" }
           yield* storage.write(["session_kept", state.session.id], { invalid: 123 })
           expect(Exit.isFailure(yield* Effect.exit(state.revert.discardChanges(input)))).toBe(true)
+          expect(yield* storage.list(["review_receipt", state.session.id])).toEqual([])
           yield* storage.write(["session_kept", state.session.id], {})
+          expect((yield* state.revert.discardChanges(input)).id).toBe(state.session.id)
+          expect(yield* Effect.promise(() => fs.readFile(state.writable, "utf8"))).toBe("before")
+        }),
+      { git: true },
+    ),
+    30_000,
+  )
+
+  for (const action of ["keepChanges", "discardChanges"] as const) {
+    it.live(
+      `${action} reconciles an incomplete receipt only from its authoritative postcondition`,
+      provideTmpdirInstance(
+        (dir) =>
+          Effect.gen(function* () {
+            const state = yield* setup(dir)
+            const storage = yield* Storage.Service
+            const diffs = yield* state.snapshot.diffFull(state.patch.hash, state.after)
+            yield* storage.write(["session_diff", state.session.id], diffs)
+            const expected = Object.fromEntries(
+              (yield* (yield* SessionSummary.Service).diff({ sessionID: state.session.id }))
+                .filter((diff) => diff.file)
+                .map((diff) => [diff.file!, revision(diff)]),
+            )
+            const input = { sessionID: state.session.id, expected, requestID: `recover-${action}` }
+            expect((yield* state.revert[action](input)).id).toBe(state.session.id)
+            const [key] = yield* storage.list(["review_receipt", state.session.id])
+            expect(key).toBeDefined()
+            const saved = yield* storage.read<Record<string, unknown>>(key)
+            yield* storage.replace(key, { ...saved, complete: false })
+            expect((yield* state.revert[action](input)).id).toBe(state.session.id)
+            expect(yield* storage.read(key)).toMatchObject({ complete: true })
+            expect(yield* Effect.promise(() => fs.readFile(state.writable, "utf8"))).toBe(
+              action === "keepChanges" ? "after" : "before",
+            )
+          }),
+        { git: true },
+      ),
+      30_000,
+    )
+  }
+
+  it.live(
+    "an incomplete Undo receipt stays uncertain after newer manual work",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const state = yield* setup(dir)
+          const storage = yield* Storage.Service
+          const diffs = yield* state.snapshot.diffFull(state.patch.hash, state.after)
+          yield* storage.write(["session_diff", state.session.id], diffs)
+          const expected = Object.fromEntries(
+            (yield* (yield* SessionSummary.Service).diff({ sessionID: state.session.id }))
+              .filter((diff) => diff.file)
+              .map((diff) => [diff.file!, revision(diff)]),
+          )
+          const input = { sessionID: state.session.id, expected, requestID: "recover-undo-edited" }
+          yield* state.revert.discardChanges(input)
+          const [key] = yield* storage.list(["review_receipt", state.session.id])
+          expect(key).toBeDefined()
+          const saved = yield* storage.read<Record<string, unknown>>(key)
+          yield* storage.replace(key, { ...saved, complete: false })
+          yield* Effect.promise(() => fs.writeFile(state.writable, "newer manual work"))
           const error = yield* Effect.flip(state.revert.discardChanges(input))
           expect(error._tag).toBe("ReviewConflict")
           expect("message" in error && error.message).toContain("outcome is uncertain")
-          expect(yield* Effect.promise(() => fs.readFile(state.writable, "utf8"))).toBe("after")
+          expect(yield* Effect.promise(() => fs.readFile(state.writable, "utf8"))).toBe("newer manual work")
         }),
       { git: true },
     ),

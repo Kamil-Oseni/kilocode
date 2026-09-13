@@ -15,7 +15,7 @@ import { KiloSessionRevert } from "@/kilocode/session/revert" // kilocode_change
 import { RayaRevertNote } from "@/kilocode/session/revert-note" // kilocode_change
 import { ReviewConflict, verify, workspace } from "@/kilocode/session/review-revision" // kilocode_change - reject stale review actions
 import { boundaries } from "@/kilocode/session/review-boundaries" // kilocode_change - honor child-session acceptance during parent Undo
-import { receipt } from "@/kilocode/session/review-receipt" // kilocode_change - durable review retries
+import { receipt, recovery } from "@/kilocode/session/review-receipt" // kilocode_change - durable review retries
 
 export const RevertInput = Schema.Struct({
   sessionID: SessionID,
@@ -346,11 +346,34 @@ const layer = Layer.effect(
     })
 
     // kilocode_change start - read/modify/write kept boundaries and workspace restores must not overlap
+    const receipts = recovery({ sessions, snap, storage, summary, state, gather })
     return Service.of({
       revert: (input) => gate.withPermits(1)(revert(input)),
       unrevert: (input) => gate.withPermits(1)(unrevert(input)),
-      discardChanges: (input) => gate.withPermits(1)(receipt(storage, input, "undo", discardChanges(input), sessions.get(input.sessionID).pipe(Effect.orDie))),
-      keepChanges: (input) => gate.withPermits(1)(receipt(storage, input, "keep", keepChanges(input), sessions.get(input.sessionID).pipe(Effect.orDie))),
+      discardChanges: (input) =>
+        gate.withPermits(1)(
+          receipt(
+            storage,
+            input,
+            "undo",
+            receipts.prepare(input, "undo"),
+            discardChanges(input),
+            sessions.get(input.sessionID).pipe(Effect.orDie),
+            (proof) => receipts.reconcile(input.sessionID, proof),
+          ),
+        ),
+      keepChanges: (input) =>
+        gate.withPermits(1)(
+          receipt(
+            storage,
+            input,
+            "keep",
+            receipts.prepare(input, "keep"),
+            keepChanges(input),
+            sessions.get(input.sessionID).pipe(Effect.orDie),
+            (proof) => receipts.reconcile(input.sessionID, proof),
+          ),
+        ),
       cleanup: (session) => gate.withPermits(1)(cleanup(session)),
     })
     // kilocode_change end

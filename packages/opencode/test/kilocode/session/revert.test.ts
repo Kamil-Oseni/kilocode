@@ -349,6 +349,32 @@ describe("kept boundary integrity", () => {
   }
 
   it.live(
+    "session deletion erases its review receipts after retaining them for delayed retries",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const state = yield* setup(dir)
+          const storage = yield* Storage.Service
+          const diffs = yield* state.snapshot.diffFull(state.patch.hash, state.after)
+          yield* storage.write(["session_diff", state.session.id], diffs)
+          const expected = Object.fromEntries(
+            (yield* (yield* SessionSummary.Service).diff({ sessionID: state.session.id }))
+              .filter((diff) => diff.file)
+              .map((diff) => [diff.file!, revision(diff)]),
+          )
+          yield* state.revert.keepChanges({ sessionID: state.session.id, expected, requestID: "retained-until-delete" })
+          yield* storage.write(["review_receipt", "other-session", "retained"], { complete: true })
+          expect(yield* storage.list(["review_receipt", state.session.id])).toHaveLength(1)
+          yield* state.sessions.remove(state.session.id)
+          expect(yield* storage.list(["review_receipt", state.session.id])).toEqual([])
+          expect(yield* storage.list(["review_receipt", "other-session"])).toHaveLength(1)
+        }),
+      { git: true },
+    ),
+    30_000,
+  )
+
+  it.live(
     "a failed review preparation leaves no receipt and permits a corrected retry",
     provideTmpdirInstance(
       (dir) =>

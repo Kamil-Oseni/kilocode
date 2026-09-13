@@ -112,11 +112,14 @@ export function scope(sender: Pick<RayaTask.Agent, "dir">, recipient: Pick<RayaT
 }
 
 export function ceiling(
-  sender: Pick<RayaTask.Agent, "role" | "access">,
+  sender: Pick<RayaTask.Agent, "role" | "access" | "tools">,
   recipient: Pick<RayaTask.Agent, "role" | "access" | "tools">,
 ) {
   if (RayaTask.brief(sender) || RayaTask.brief(recipient)) return { ...recipient, access: "brief" as const }
-  return recipient
+  if (sender.tools === undefined) return recipient
+  if (recipient.tools === undefined) return { ...recipient, tools: [...sender.tools] }
+  const allowed = new Set(sender.tools)
+  return { ...recipient, tools: recipient.tools.filter((tool) => allowed.has(tool)) }
 }
 
 export function prompt(sender: RayaTask.Agent, recipient: RayaTask.Agent, request: Request) {

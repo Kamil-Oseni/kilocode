@@ -355,9 +355,10 @@ export namespace RayaTask {
         "update_goal",
         "update_goal_plan",
       ]
-      const selected = agent.tools?.length
-        ? Permission.fromConfig(Object.fromEntries(agent.tools.map((tool) => [tool, "allow" as const])))
-        : undefined
+      const selected =
+        agent.tools !== undefined
+          ? Permission.fromConfig(Object.fromEntries(agent.tools.map((tool) => [tool, "allow" as const])))
+          : undefined
       for (const tool of reads) {
         if (!selected || Permission.evaluate(tool, "*", selected).action === "allow") cfg[tool] = "allow"
       }
@@ -365,7 +366,7 @@ export namespace RayaTask {
         cfg.create_subordinate = "allow"
       return Permission.fromConfig(cfg)
     }
-    if (agent.tools?.length) {
+    if (agent.tools !== undefined) {
       const cfg: Record<string, "allow" | "deny"> = { "*": "deny", question: "allow" }
       for (const tool of agent.tools) cfg[tool] = "allow"
       if (agent.capabilities?.some((item) => item.toLowerCase() === "organization:provision"))

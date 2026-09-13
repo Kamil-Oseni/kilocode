@@ -43,6 +43,17 @@ test("delegation policy intersects access and workspace without granting broader
   const books = agent("books", "accountant", { access: "full" })
   expect(ceiling(chief, books).access).toBe("brief")
   expect(ceiling(books, books).access).toBe("full")
+  expect(ceiling(agent("sender", "generalist", { tools: ["read", "browser_*"] }), books).tools).toEqual([
+    "read",
+    "browser_*",
+  ])
+  expect(
+    ceiling(
+      agent("sender", "generalist", { tools: ["read", "browser_*"] }),
+      agent("recipient", "generalist", { tools: ["read", "write", "browser_*"] }),
+    ).tools,
+  ).toEqual(["read", "browser_*"])
+  expect(ceiling(agent("sender", "generalist", { tools: [] }), books).tools).toEqual([])
   expect(scope(chief, books)).toBeUndefined()
   expect(scope({ dir: "/a" }, { dir: "/b" })).toBeUndefined()
   expect(scope({ dir: "/a" }, { dir: "/a/" })).toBe("/a")

@@ -9,7 +9,7 @@ test("goal reports preserve exact references and mark legacy records instead of 
   expect(text).toContain("Execution counters were not retained.")
   expect(text).toContain("Goal-session model cost was not retained.")
   expect(text).toContain("Goal-session token totals were not retained.")
-  expect(text).toContain("No active-time or recorded model-cost limit was saved.")
+  expect(text).toContain("No active-time, recorded model-cost, or recovery-attempt limit was saved.")
   expect(text).toContain("No deliverable inventory was retained for this goal version.")
   const saved = report(
     {
@@ -22,8 +22,8 @@ test("goal reports preserve exact references and mark legacy records instead of 
         tokens: { input: 10, output: 20, reasoning: 3, cache: { read: 4, write: 5 } },
       },
       activeMs: 12500,
-      budget: { activeMs: 60_000, modelCost: 2 },
-      budgetHit: { kind: "model-cost", limit: 2, observed: 2.25, at: 1 },
+      budget: { activeMs: 60_000, modelCost: 2, recoveryAttempts: 3 },
+      budgetHit: { kind: "recovery-attempts", limit: 3, observed: 3, at: 1 },
       deliverables: [
         {
           path: "/workspace/output.md",
@@ -81,7 +81,9 @@ test("goal reports preserve exact references and mark legacy records instead of 
   expect(saved).toContain("Goal-session model cost: $1.250000")
   expect(saved).toContain("Active-time limit: 60.0 seconds.")
   expect(saved).toContain("Goal-session recorded model-cost limit: $2.000000.")
-  expect(saved).toContain("Limit reached: recorded model cost; limit 2; observed 2.25")
+  expect(saved).toContain("Consecutive automatic recovery-attempt limit: 3.")
+  expect(saved).toContain("Limit reached: automatic recovery attempts; limit 3; observed 3")
+  expect(saved).toContain("Recovery attempts are consecutive and renew after successful work or a revised approach")
   expect(saved).toContain("does not recall a turn already running")
   expect(saved).toContain("## Deliverables")
   expect(saved).toContain("> /workspace/output.md")

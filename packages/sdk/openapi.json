@@ -18077,6 +18077,11 @@
                                 "type": "number",
                                 "exclusiveMinimum": 0,
                                 "maximum": 1000000
+                              },
+                              "recoveryAttempts": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 100
                               }
                             },
                             "additionalProperties": false
@@ -18086,7 +18091,7 @@
                             "properties": {
                               "kind": {
                                 "type": "string",
-                                "enum": ["active-time", "model-cost"]
+                                "enum": ["active-time", "model-cost", "recovery-attempts"]
                               },
                               "limit": {
                                 "type": "number"
@@ -18476,6 +18481,11 @@
                           "type": "number",
                           "exclusiveMinimum": 0,
                           "maximum": 1000000
+                        },
+                        "recoveryAttempts": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100
                         }
                       },
                       "additionalProperties": false
@@ -18919,7 +18929,7 @@
                       "properties": {
                         "kind": {
                           "type": "string",
-                          "enum": ["active-time", "model-cost"]
+                          "enum": ["active-time", "model-cost", "recovery-attempts"]
                         },
                         "limit": {
                           "type": "number"
@@ -19572,6 +19582,11 @@
                                       "type": "number",
                                       "exclusiveMinimum": 0,
                                       "maximum": 1000000
+                                    },
+                                    "recoveryAttempts": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 100
                                     }
                                   },
                                   "additionalProperties": false
@@ -19581,7 +19596,7 @@
                                   "properties": {
                                     "kind": {
                                       "type": "string",
-                                      "enum": ["active-time", "model-cost"]
+                                      "enum": ["active-time", "model-cost", "recovery-attempts"]
                                     },
                                     "limit": {
                                       "type": "number"
@@ -19971,6 +19986,11 @@
                                 "type": "number",
                                 "exclusiveMinimum": 0,
                                 "maximum": 1000000
+                              },
+                              "recoveryAttempts": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 100
                               }
                             },
                             "additionalProperties": false
@@ -19980,7 +20000,7 @@
                             "properties": {
                               "kind": {
                                 "type": "string",
-                                "enum": ["active-time", "model-cost"]
+                                "enum": ["active-time", "model-cost", "recovery-attempts"]
                               },
                               "limit": {
                                 "type": "number"
@@ -20592,6 +20612,11 @@
                         "type": "number",
                         "exclusiveMinimum": 0,
                         "maximum": 1000000
+                      },
+                      "recoveryAttempts": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 100
                       }
                     },
                     "additionalProperties": false
@@ -20975,6 +21000,11 @@
                                 "type": "number",
                                 "exclusiveMinimum": 0,
                                 "maximum": 1000000
+                              },
+                              "recoveryAttempts": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 100
                               }
                             },
                             "additionalProperties": false
@@ -20984,7 +21014,7 @@
                             "properties": {
                               "kind": {
                                 "type": "string",
-                                "enum": ["active-time", "model-cost"]
+                                "enum": ["active-time", "model-cost", "recovery-attempts"]
                               },
                               "limit": {
                                 "type": "number"
@@ -21374,6 +21404,11 @@
                           "type": "number",
                           "exclusiveMinimum": 0,
                           "maximum": 1000000
+                        },
+                        "recoveryAttempts": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100
                         }
                       },
                       "additionalProperties": false
@@ -21817,7 +21852,7 @@
                       "properties": {
                         "kind": {
                           "type": "string",
-                          "enum": ["active-time", "model-cost"]
+                          "enum": ["active-time", "model-cost", "recovery-attempts"]
                         },
                         "limit": {
                           "type": "number"
@@ -22470,6 +22505,11 @@
                                       "type": "number",
                                       "exclusiveMinimum": 0,
                                       "maximum": 1000000
+                                    },
+                                    "recoveryAttempts": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 100
                                     }
                                   },
                                   "additionalProperties": false
@@ -22479,7 +22519,7 @@
                                   "properties": {
                                     "kind": {
                                       "type": "string",
-                                      "enum": ["active-time", "model-cost"]
+                                      "enum": ["active-time", "model-cost", "recovery-attempts"]
                                     },
                                     "limit": {
                                       "type": "number"
@@ -22869,6 +22909,11 @@
                                 "type": "number",
                                 "exclusiveMinimum": 0,
                                 "maximum": 1000000
+                              },
+                              "recoveryAttempts": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 100
                               }
                             },
                             "additionalProperties": false
@@ -22878,7 +22923,7 @@
                             "properties": {
                               "kind": {
                                 "type": "string",
-                                "enum": ["active-time", "model-cost"]
+                                "enum": ["active-time", "model-cost", "recovery-attempts"]
                               },
                               "limit": {
                                 "type": "number"
@@ -23827,6 +23872,11 @@
                                 "type": "number",
                                 "exclusiveMinimum": 0,
                                 "maximum": 1000000
+                              },
+                              "recoveryAttempts": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 100
                               }
                             },
                             "additionalProperties": false
@@ -23836,7 +23886,7 @@
                             "properties": {
                               "kind": {
                                 "type": "string",
-                                "enum": ["active-time", "model-cost"]
+                                "enum": ["active-time", "model-cost", "recovery-attempts"]
                               },
                               "limit": {
                                 "type": "number"
@@ -24226,6 +24276,11 @@
                           "type": "number",
                           "exclusiveMinimum": 0,
                           "maximum": 1000000
+                        },
+                        "recoveryAttempts": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100
                         }
                       },
                       "additionalProperties": false
@@ -24669,7 +24724,7 @@
                       "properties": {
                         "kind": {
                           "type": "string",
-                          "enum": ["active-time", "model-cost"]
+                          "enum": ["active-time", "model-cost", "recovery-attempts"]
                         },
                         "limit": {
                           "type": "number"
@@ -25322,6 +25377,11 @@
                                       "type": "number",
                                       "exclusiveMinimum": 0,
                                       "maximum": 1000000
+                                    },
+                                    "recoveryAttempts": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 100
                                     }
                                   },
                                   "additionalProperties": false
@@ -25331,7 +25391,7 @@
                                   "properties": {
                                     "kind": {
                                       "type": "string",
-                                      "enum": ["active-time", "model-cost"]
+                                      "enum": ["active-time", "model-cost", "recovery-attempts"]
                                     },
                                     "limit": {
                                       "type": "number"
@@ -25721,6 +25781,11 @@
                                 "type": "number",
                                 "exclusiveMinimum": 0,
                                 "maximum": 1000000
+                              },
+                              "recoveryAttempts": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 100
                               }
                             },
                             "additionalProperties": false
@@ -25730,7 +25795,7 @@
                             "properties": {
                               "kind": {
                                 "type": "string",
-                                "enum": ["active-time", "model-cost"]
+                                "enum": ["active-time", "model-cost", "recovery-attempts"]
                               },
                               "limit": {
                                 "type": "number"
@@ -26406,6 +26471,11 @@
                         "type": "number",
                         "exclusiveMinimum": 0,
                         "maximum": 1000000
+                      },
+                      "recoveryAttempts": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 100
                       }
                     },
                     "additionalProperties": false

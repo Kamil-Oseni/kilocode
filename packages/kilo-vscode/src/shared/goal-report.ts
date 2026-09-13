@@ -9,17 +9,19 @@ type Goal = Pick<
 
 function limits(goal: Pick<Goal, "budget" | "budgetHit">) {
   const lines = ["", "## Saved limits", ""]
-  if (!goal.budget) lines.push("No active-time or recorded model-cost limit was saved.")
+  if (!goal.budget) lines.push("No active-time, recorded model-cost, or recovery-attempt limit was saved.")
   if (goal.budget?.activeMs !== undefined)
     lines.push(`Active-time limit: ${(goal.budget.activeMs / 1000).toFixed(1)} seconds.`)
   if (goal.budget?.modelCost !== undefined)
     lines.push(`Goal-session recorded model-cost limit: $${goal.budget.modelCost.toFixed(6)}.`)
+  if (goal.budget?.recoveryAttempts !== undefined)
+    lines.push(`Consecutive automatic recovery-attempt limit: ${goal.budget.recoveryAttempts}.`)
   if (goal.budgetHit)
     lines.push(
-      `Limit reached: ${goal.budgetHit.kind === "active-time" ? "active time" : "recorded model cost"}; limit ${goal.budgetHit.limit}; observed ${goal.budgetHit.observed}; recorded ${date(goal.budgetHit.at)}.`,
+      `Limit reached: ${goal.budgetHit.kind === "active-time" ? "active time" : goal.budgetHit.kind === "model-cost" ? "recorded model cost" : "automatic recovery attempts"}; limit ${goal.budgetHit.limit}; observed ${goal.budgetHit.observed}; recorded ${date(goal.budgetHit.at)}.`,
     )
   lines.push(
-    "Enforcement pauses before another continuation after observation. It does not recall a turn already running. The model-cost limit has the recorded coverage stated below.",
+    "Enforcement pauses before another continuation after observation. It does not recall a turn already running. Recovery attempts are consecutive and renew after successful work or a revised approach. Raya may stop earlier when repeated work is unsafe. The model-cost limit has the recorded coverage stated below.",
   )
   return lines
 }

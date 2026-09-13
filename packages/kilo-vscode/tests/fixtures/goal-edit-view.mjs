@@ -429,7 +429,7 @@ try {
       ...goal,
       status: "paused",
       intent: "budget",
-      budget: { activeMs: 1_800_000, modelCost: 1 },
+      budget: { activeMs: 1_800_000, modelCost: 1, recoveryAttempts: 2 },
       budgetHit: { kind: "model-cost", limit: 1, observed: 1.25, at: Date.now() },
     },
   })
@@ -437,12 +437,15 @@ try {
   button("Steer").click()
   assert.equal(root.querySelector("#goal-time-limit").value, "30")
   assert.equal(root.querySelector("#goal-cost-limit").value, "1")
+  assert.equal(root.querySelector("#goal-recovery-limit").value, "2")
   root.querySelector("#goal-cost-limit").value = "3"
   root.querySelector("#goal-cost-limit").dispatchEvent(new window.Event("input", { bubbles: true }))
+  root.querySelector("#goal-recovery-limit").value = "4"
+  root.querySelector("#goal-recovery-limit").dispatchEvent(new window.Event("input", { bubbles: true }))
   assert.equal(button("Update goal").disabled, false)
   button("Update goal").click()
   const budget = sent.findLast((msg) => msg.type === "goalEdit")
-  assert.deepEqual(budget.budget, { activeMs: 1_800_000, modelCost: 3 })
+  assert.deepEqual(budget.budget, { activeMs: 1_800_000, modelCost: 3, recoveryAttempts: 4 })
   assert.equal(budget.expectedIntent, "budget")
   emit({
     type: "goalEdited",
@@ -454,10 +457,13 @@ try {
   button("Steer").click()
   const time = root.querySelector("#goal-time-limit")
   const money = root.querySelector("#goal-cost-limit")
+  const recovery = root.querySelector("#goal-recovery-limit")
   time.value = ""
   time.dispatchEvent(new window.Event("input", { bubbles: true }))
   money.value = ""
   money.dispatchEvent(new window.Event("input", { bubbles: true }))
+  recovery.value = ""
+  recovery.dispatchEvent(new window.Event("input", { bubbles: true }))
   button("Update goal").click()
   const cleared = sent.findLast((msg) => msg.type === "goalEdit")
   assert.equal(cleared.budget, null)

@@ -51,6 +51,9 @@ describe("native goal command", () => {
     const text = goalPrompt("ship goal mode")
     expect(text).toContain("first concrete unit of work now in this same turn")
     expect(goalPrompt("ship within the limit", { activeMs: 60_000 })).toContain("60000 milliseconds")
+    expect(goalPrompt("recover within the limit", { recoveryAttempts: 2 })).toContain(
+      "Automatic recovery-attempt limit: 2 consecutive attempts",
+    )
     expect(text).toContain("call get_goal")
     expect(text).toContain('update_goal(status="complete")')
     expect(text).toContain("real successful tool calls")

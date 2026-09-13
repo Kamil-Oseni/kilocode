@@ -6,25 +6,36 @@ import { valid, equal } from "../shared/goal-criteria"
 const identifier = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0 && value.length <= 256
 const finite = (value: unknown) => typeof value === "number" && Number.isFinite(value)
+const retries = (value: unknown) =>
+  value === undefined || (typeof value === "number" && Number.isSafeInteger(value) && value >= 1 && value <= 100)
 const budget = (value: unknown): value is GoalBudget | null => {
   if (value === null) return true
   if (!value || typeof value !== "object") return false
   const item = value as Record<string, unknown>
-  if (!Object.keys(item).length || Object.keys(item).some((key) => key !== "activeMs" && key !== "modelCost"))
+  if (
+    !Object.keys(item).length ||
+    Object.keys(item).some((key) => key !== "activeMs" && key !== "modelCost" && key !== "recoveryAttempts")
+  )
     return false
   const active = item.activeMs
   const cost = item.modelCost
-  if (active === undefined && cost === undefined) return false
+  const attempts = item.recoveryAttempts
+  if (active === undefined && cost === undefined && attempts === undefined) return false
   if (
     active !== undefined &&
     (typeof active !== "number" || !Number.isSafeInteger(active) || active < 1_000 || active > 31_536_000_000)
   )
     return false
-  return cost === undefined || (finite(cost) && Number(cost) > 0 && Number(cost) <= 1_000_000)
+  if (cost !== undefined && (!finite(cost) || Number(cost) <= 0 || Number(cost) > 1_000_000)) return false
+  return retries(attempts)
 }
 const sameBudget = (left: GoalBudget | null | undefined, right: GoalBudget | null | undefined) => {
   const expected = right ?? undefined
-  return left?.activeMs === expected?.activeMs && left?.modelCost === expected?.modelCost
+  return (
+    left?.activeMs === expected?.activeMs &&
+    left?.modelCost === expected?.modelCost &&
+    left?.recoveryAttempts === expected?.recoveryAttempts
+  )
 }
 
 function operations(value: unknown): string | undefined {
@@ -292,7 +303,7 @@ function editError(message: {
   if (message.criteria !== undefined && !valid(message.criteria))
     return "Use 1-20 criteria with unique IDs, descriptions and verification instructions."
   if (message.budget !== undefined && !budget(message.budget))
-    return "Use a valid active-time or recorded model-cost limit."
+    return "Use a valid active-time, recorded model-cost, or recovery-attempt limit."
   if (message.status !== undefined && message.status !== "active" && message.status !== "paused")
     return "Choose pause or resume for the goal status."
   if (!identifier(message.expectedIntent) || typeof message.objective !== "string" || !message.objective.trim())

@@ -19848,9 +19848,10 @@ export type KilocodeGoalGetResponses = {
       budget?: {
         activeMs?: number
         modelCost?: number
+        recoveryAttempts?: number
       }
       budgetHit?: {
-        kind: "active-time" | "model-cost"
+        kind: "active-time" | "model-cost" | "recovery-attempts"
         limit: number
         observed: number
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -19918,6 +19919,7 @@ export type KilocodeGoalGetResponses = {
     budget?: {
       activeMs?: number
       modelCost?: number
+      recoveryAttempts?: number
     }
     objective: string
     revision?: string
@@ -19978,7 +19980,7 @@ export type KilocodeGoalGetResponses = {
       }
     }
     budgetHit?: {
-      kind: "active-time" | "model-cost"
+      kind: "active-time" | "model-cost" | "recovery-attempts"
       limit: number
       observed: number
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -20082,9 +20084,10 @@ export type KilocodeGoalGetResponses = {
         budget?: {
           activeMs?: number
           modelCost?: number
+          recoveryAttempts?: number
         }
         budgetHit?: {
-          kind: "active-time" | "model-cost"
+          kind: "active-time" | "model-cost" | "recovery-attempts"
           limit: number
           observed: number
           at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -20152,9 +20155,10 @@ export type KilocodeGoalGetResponses = {
       budget?: {
         activeMs?: number
         modelCost?: number
+        recoveryAttempts?: number
       }
       budgetHit?: {
-        kind: "active-time" | "model-cost"
+        kind: "active-time" | "model-cost" | "recovery-attempts"
         limit: number
         observed: number
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -20263,6 +20267,7 @@ export type KilocodeGoalUpdateData = {
     budget?: {
       activeMs?: number
       modelCost?: number
+      recoveryAttempts?: number
     }
     clearBudget?: true
     expectedIntent?: string
@@ -20347,9 +20352,10 @@ export type KilocodeGoalUpdateResponses = {
       budget?: {
         activeMs?: number
         modelCost?: number
+        recoveryAttempts?: number
       }
       budgetHit?: {
-        kind: "active-time" | "model-cost"
+        kind: "active-time" | "model-cost" | "recovery-attempts"
         limit: number
         observed: number
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -20417,6 +20423,7 @@ export type KilocodeGoalUpdateResponses = {
     budget?: {
       activeMs?: number
       modelCost?: number
+      recoveryAttempts?: number
     }
     objective: string
     revision?: string
@@ -20477,7 +20484,7 @@ export type KilocodeGoalUpdateResponses = {
       }
     }
     budgetHit?: {
-      kind: "active-time" | "model-cost"
+      kind: "active-time" | "model-cost" | "recovery-attempts"
       limit: number
       observed: number
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -20581,9 +20588,10 @@ export type KilocodeGoalUpdateResponses = {
         budget?: {
           activeMs?: number
           modelCost?: number
+          recoveryAttempts?: number
         }
         budgetHit?: {
-          kind: "active-time" | "model-cost"
+          kind: "active-time" | "model-cost" | "recovery-attempts"
           limit: number
           observed: number
           at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -20651,9 +20659,10 @@ export type KilocodeGoalUpdateResponses = {
       budget?: {
         activeMs?: number
         modelCost?: number
+        recoveryAttempts?: number
       }
       budgetHit?: {
-        kind: "active-time" | "model-cost"
+        kind: "active-time" | "model-cost" | "recovery-attempts"
         limit: number
         observed: number
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -20750,6 +20759,7 @@ export type KilocodeGoalCreateData = {
     budget?: {
       activeMs?: number
       modelCost?: number
+      recoveryAttempts?: number
     }
   }
   path: {
@@ -20828,9 +20838,10 @@ export type KilocodeGoalCreateResponses = {
       budget?: {
         activeMs?: number
         modelCost?: number
+        recoveryAttempts?: number
       }
       budgetHit?: {
-        kind: "active-time" | "model-cost"
+        kind: "active-time" | "model-cost" | "recovery-attempts"
         limit: number
         observed: number
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -20898,6 +20909,7 @@ export type KilocodeGoalCreateResponses = {
     budget?: {
       activeMs?: number
       modelCost?: number
+      recoveryAttempts?: number
     }
     objective: string
     revision?: string
@@ -20958,7 +20970,7 @@ export type KilocodeGoalCreateResponses = {
       }
     }
     budgetHit?: {
-      kind: "active-time" | "model-cost"
+      kind: "active-time" | "model-cost" | "recovery-attempts"
       limit: number
       observed: number
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -21062,9 +21074,10 @@ export type KilocodeGoalCreateResponses = {
         budget?: {
           activeMs?: number
           modelCost?: number
+          recoveryAttempts?: number
         }
         budgetHit?: {
-          kind: "active-time" | "model-cost"
+          kind: "active-time" | "model-cost" | "recovery-attempts"
           limit: number
           observed: number
           at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -21132,9 +21145,10 @@ export type KilocodeGoalCreateResponses = {
       budget?: {
         activeMs?: number
         modelCost?: number
+        recoveryAttempts?: number
       }
       budgetHit?: {
-        kind: "active-time" | "model-cost"
+        kind: "active-time" | "model-cost" | "recovery-attempts"
         limit: number
         observed: number
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"

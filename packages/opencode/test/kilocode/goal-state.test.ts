@@ -3352,6 +3352,90 @@ describe("RayaGoal", () => {
     }),
   )
 
+  it.live("persists a recovery-attempt limit and requires a revised approach or limit before resume", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const sessionID = SessionID.make(`ses_goal_${crypto.randomUUID()}`)
+      const goals = setup(storage, () => [])
+      yield* Effect.addFinalizer(() => goals.clear(sessionID))
+      const created = yield* goals.create(
+        sessionID,
+        "Bound automatic recovery",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { recoveryAttempts: 2 },
+      )
+      const first = yield* goals.retried(sessionID, "a provider error", "first")
+      expect(first?.status).toBe("active")
+      expect(first?.usage.retries).toBe(1)
+      expect(first?.usage.continuations).toBe(1)
+      const second = yield* goals.retried(sessionID, "another provider error", "second")
+      expect(second?.status).toBe("paused")
+      expect(second?.usage.retries).toBe(2)
+      expect(second?.usage.continuations).toBe(1)
+      expect(second?.budgetHit).toMatchObject({ kind: "recovery-attempts", limit: 2, observed: 2 })
+      expect(second?.retryEvents).toEqual(["first", "second"])
+      expect(yield* setup(storage, () => []).retried(sessionID, "duplicate", "second")).toBeUndefined()
+      expect((yield* goals.update(sessionID, { status: "active" }).pipe(Effect.flip)).message).toContain(
+        "recovery-attempt limit",
+      )
+      const cost = yield* goals.edit(sessionID, {
+        budget: { modelCost: 5, recoveryAttempts: 2 },
+        expectedIntent: created.intent,
+      })
+      expect(cost.state.usage.retries).toBe(2)
+      expect(
+        (yield* goals.edit(sessionID, { status: "active", expectedIntent: cost.state.intent }).pipe(Effect.flip))
+          .message,
+      ).toContain("recovery-attempt limit")
+      const raised = yield* goals.edit(sessionID, {
+        budget: { modelCost: 5, recoveryAttempts: 3 },
+        expectedIntent: cost.state.intent,
+      })
+      expect(raised.state.usage.retries).toBe(0)
+      expect(raised.state.budgetHit).toBeUndefined()
+      const resumed = yield* goals.edit(sessionID, {
+        status: "active",
+        expectedIntent: raised.state.intent,
+      })
+      expect(resumed.state.status).toBe("active")
+      expect(resumed.state.budget).toEqual({ modelCost: 5, recoveryAttempts: 3 })
+    }),
+  )
+
+  it.live("pauses failed turns at a saved recovery-attempt limit before the hard safety stop", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const sessionID = SessionID.make(`ses_goal_${crypto.randomUUID()}`)
+      let rows: MessageV2.WithParts[] = []
+      const goals = setup(storage, () => rows)
+      yield* Effect.addFinalizer(() => goals.clear(sessionID))
+      const created = yield* goals.create(
+        sessionID,
+        "Pause after two failed turns",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { recoveryAttempts: 2 },
+      )
+      for (const count of [1, 2]) {
+        const data = transcript({ sessionID, tool: "bash", exit: 1, output: `Failure ${count}` })
+        data.rows[0].info.time.created = created.createdAt + count
+        rows = [...rows, ...data.rows]
+        const turn = yield* goals.recordTurn(sessionID, data.rows[1].info.id)
+        expect(turn?.retry).toBe(count === 1)
+        expect(turn?.state.status).toBe(count === 1 ? "active" : "paused")
+      }
+      const saved = yield* setup(storage, () => rows).get(sessionID)
+      expect(saved?.budgetHit).toMatchObject({ kind: "recovery-attempts", limit: 2, observed: 2 })
+      expect(saved?.blockedReason).toBeUndefined()
+      expect(saved?.usage.retries).toBe(2)
+    }),
+  )
+
   it.live("accounts a settled turn without reopening a goal completed at its limit", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service

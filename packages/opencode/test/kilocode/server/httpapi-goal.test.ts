@@ -201,14 +201,14 @@ describe("goal HTTP API", () => {
     const created = await request(first, "POST", `/session/${session.id}/goal`, {
       objective: "Persist through a client reload",
       messageID: "msg_goal_start",
-      budget: { activeMs: 1_800_000, modelCost: 5 },
+      budget: { activeMs: 1_800_000, modelCost: 5, recoveryAttempts: 2 },
     })
     expect(created.status).toBe(200)
     const initial = (await created.json()) as { status: string; intent: string }
     expect(initial).toMatchObject({
       status: "active",
       startMessageID: "msg_goal_start",
-      budget: { activeMs: 1_800_000, modelCost: 5 },
+      budget: { activeMs: 1_800_000, modelCost: 5, recoveryAttempts: 2 },
       usage: {
         turns: 0,
         continuations: 0,
@@ -223,17 +223,17 @@ describe("goal HTTP API", () => {
     expect(restored.status).toBe(200)
     expect((await restored.json()) as { objective: string }).toMatchObject({
       objective: "Persist through a client reload",
-      budget: { activeMs: 1_800_000, modelCost: 5 },
+      budget: { activeMs: 1_800_000, modelCost: 5, recoveryAttempts: 2 },
     })
 
     const limited = await request(reloaded, "PATCH", `/session/${session.id}/goal`, {
       objective: "Persist through a client reload",
       expectedIntent: initial.intent,
-      budget: { modelCost: 8 },
+      budget: { modelCost: 8, recoveryAttempts: 4 },
     })
     expect(limited.status).toBe(200)
     const changed = (await limited.json()) as { intent: string }
-    expect(changed).toMatchObject({ budget: { modelCost: 8 } })
+    expect(changed).toMatchObject({ budget: { modelCost: 8, recoveryAttempts: 4 } })
 
     const clearedBudget = await request(reloaded, "PATCH", `/session/${session.id}/goal`, {
       objective: "Persist through a client reload",

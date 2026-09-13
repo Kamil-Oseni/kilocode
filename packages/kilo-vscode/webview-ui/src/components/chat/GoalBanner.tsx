@@ -77,7 +77,9 @@ const span = (ms: number) => {
   return `${rest}s`
 }
 const sameBudget = (left: GoalBudget | null | undefined, right: GoalBudget | null | undefined) =>
-  left?.activeMs === right?.activeMs && left?.modelCost === right?.modelCost
+  left?.activeMs === right?.activeMs &&
+  left?.modelCost === right?.modelCost &&
+  left?.recoveryAttempts === right?.recoveryAttempts
 
 function label(goal: Pick<GoalState, "status" | "review">) {
   return goal.status === "paused" && goal.review?.status === "pending" ? "Ready for review" : statusWord[goal.status]
@@ -90,6 +92,8 @@ function paused(goal: Pick<GoalState, "review" | "budgetHit">) {
     return "Paused after reaching the saved active-time limit. Increase or remove it before resuming."
   if (goal.budgetHit?.kind === "model-cost")
     return "Paused after reaching the saved recorded model-cost limit. Increase or remove it before resuming."
+  if (goal.budgetHit?.kind === "recovery-attempts")
+    return "Paused after reaching the saved recovery-attempt limit. Revise the approach or change the limit before resuming."
   return "Paused. Resume when ready, or steer the goal before continuing."
 }
 
@@ -137,18 +141,23 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
   const [saved, setSaved] = createSignal<GoalState["criteria"]>()
   const [minutes, setMinutes] = createSignal("")
   const [cost, setCost] = createSignal("")
+  const [attempts, setAttempts] = createSignal("")
   const [savedBudget, setSavedBudget] = createSignal<GoalBudget>()
   const required = () => (!criteria().length && saved() === undefined ? undefined : criteria())
   const revised = () => !equal(required(), saved())
   const active = () => (minutes().trim() ? Number(minutes()) * 60_000 : undefined)
   const amount = () => (cost().trim() ? Number(cost()) : undefined)
+  const recoveries = () => (attempts().trim() ? Number(attempts()) : undefined)
   const limits = (): GoalBudget => ({
     ...(active() === undefined ? {} : { activeMs: Math.round(active()!) }),
     ...(amount() === undefined ? {} : { modelCost: amount() }),
+    ...(recoveries() === undefined ? {} : { recoveryAttempts: recoveries() }),
   })
   const budget = () => {
     const value = limits()
-    return value.activeMs === undefined && value.modelCost === undefined ? undefined : value
+    return value.activeMs === undefined && value.modelCost === undefined && value.recoveryAttempts === undefined
+      ? undefined
+      : value
   }
   const limited = () => !sameBudget(budget(), savedBudget())
   const invalidBudget = () =>
@@ -157,7 +166,8 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
         !Number.isSafeInteger(Math.round(active()!)) ||
         active()! < 1_000 ||
         active()! > 31_536_000_000)) ||
-    (amount() !== undefined && (!Number.isFinite(amount()) || amount()! <= 0 || amount()! > 1_000_000))
+    (amount() !== undefined && (!Number.isFinite(amount()) || amount()! <= 0 || amount()! > 1_000_000)) ||
+    (recoveries() !== undefined && (!Number.isSafeInteger(recoveries()) || recoveries()! < 1 || recoveries()! > 100))
   const invalid = () => (revised() && !valid(required())) || invalidBudget()
   const [now, setNow] = createSignal(Date.now())
   const runtime = () => {
@@ -200,6 +210,7 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
         setSavedBudget(props.goal.budget ? { ...props.goal.budget } : undefined)
         setMinutes(props.goal.budget?.activeMs === undefined ? "" : String(props.goal.budget.activeMs / 60_000))
         setCost(props.goal.budget?.modelCost === undefined ? "" : String(props.goal.budget.modelCost))
+        setAttempts(props.goal.budget?.recoveryAttempts === undefined ? "" : String(props.goal.budget.recoveryAttempts))
         queueMicrotask(() => editor?.focus())
       },
     ),
@@ -382,6 +393,10 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                         {limit().modelCost === undefined
                           ? "No recorded model-cost limit"
                           : `$${limit().modelCost!.toFixed(2)} recorded model cost`}
+                        {" · "}
+                        {limit().recoveryAttempts === undefined
+                          ? "No recovery-attempt limit"
+                          : plural(limit().recoveryAttempts!, "recovery attempt")}
                       </div>
                     )}
                   </Show>
@@ -479,7 +494,21 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                           onInput={(event) => setCost(event.currentTarget.value)}
                         />
                       </label>
-                      <p>Leave a field blank for no limit. Child, tool, voice and external charges are not included.</p>
+                      <label for="goal-recovery-limit">
+                        Automatic recovery attempts
+                        <input
+                          id="goal-recovery-limit"
+                          inputMode="numeric"
+                          value={attempts()}
+                          readOnly={props.saving}
+                          onInput={(event) => setAttempts(event.currentTarget.value)}
+                        />
+                      </label>
+                      <p>
+                        Leave a field blank for no saved limit. Recovery attempts are consecutive; successful work or a
+                        revised approach renews them. Raya may stop earlier when repeated work is unsafe. Child, tool,
+                        voice and external charges are not included in model cost.
+                      </p>
                     </fieldset>
                     <GoalCriteriaEditor
                       value={criteria()}
@@ -488,8 +517,8 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                     />
                     <Show when={invalid()}>
                       <p role="status">
-                        Use complete criteria, positive limits, no more than 1 year of active time, and no more than
-                        $1,000,000 of recorded model cost.
+                        Use complete criteria, positive limits, no more than 1 year of active time, no more than
+                        $1,000,000 of recorded model cost, and 1 to 100 recovery attempts.
                       </p>
                     </Show>
                     <Show when={props.editError}>

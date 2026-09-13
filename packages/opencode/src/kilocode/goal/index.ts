@@ -94,11 +94,14 @@ export namespace RayaGoal {
       Schema.Int.check(Schema.isGreaterThanOrEqualTo(1_000), Schema.isLessThanOrEqualTo(31_536_000_000)),
     ),
     modelCost: Schema.optional(Schema.Finite.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(1_000_000))),
+    recoveryAttempts: Schema.optional(
+      Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(100)),
+    ),
   })
   export type Budget = typeof Budget.Type
 
   export const BudgetHit = Schema.Struct({
-    kind: Schema.Literals(["active-time", "model-cost"]),
+    kind: Schema.Literals(["active-time", "model-cost", "recovery-attempts"]),
     limit: Schema.Finite,
     observed: Schema.Finite,
     at: Schema.Number,
@@ -287,8 +290,16 @@ export namespace RayaGoal {
   const elapsed = (state: State, now: number) =>
     (state.activeMs ?? 0) + (state.status === "active" ? Math.max(0, now - (state.activeAt ?? state.updatedAt)) : 0)
   const emptyBudget = (value: Budget | undefined) =>
-    value !== undefined && value.activeMs === undefined && value.modelCost === undefined
-  const exhausted = (state: State, now: number, cost = state.usage.cost ?? 0): BudgetHit | undefined => {
+    value !== undefined &&
+    value.activeMs === undefined &&
+    value.modelCost === undefined &&
+    value.recoveryAttempts === undefined
+  const exhausted = (
+    state: State,
+    now: number,
+    cost = state.usage.cost ?? 0,
+    attempts = state.usage.retries ?? 0,
+  ): BudgetHit | undefined => {
     const active = state.budget?.activeMs
     if (active !== undefined) {
       const observed = elapsed(state, now)
@@ -296,11 +307,16 @@ export namespace RayaGoal {
     }
     const limit = state.budget?.modelCost
     if (limit !== undefined && cost >= limit) return { kind: "model-cost", limit, observed: cost, at: now }
+    const recoveries = state.budget?.recoveryAttempts
+    if (recoveries !== undefined && attempts >= recoveries)
+      return { kind: "recovery-attempts", limit: recoveries, observed: attempts, at: now }
   }
   const budgetReason = (hit: BudgetHit) =>
     hit.kind === "active-time"
       ? "The saved active-time limit was reached. Increase or remove it before resuming."
-      : "The saved goal-session model-cost limit was reached. Increase or remove it before resuming."
+      : hit.kind === "model-cost"
+        ? "The saved goal-session model-cost limit was reached. Increase or remove it before resuming."
+        : "The saved automatic recovery-attempt limit was reached. Revise the approach, increase the limit, or remove it before resuming."
 
   const revisions = (state: State, at: number, source: typeof Revision.Type.source) => [
     ...(state.revisions ?? []),
@@ -506,7 +522,9 @@ export namespace RayaGoal {
       if (required && new Set(required.map((item) => item.id)).size !== required.length)
         return yield* new AuditError({ message: "Goal criterion IDs must be unique." })
       if (emptyBudget(budget))
-        return yield* new AuditError({ message: "A goal budget requires an active-time or model-cost limit." })
+        return yield* new AuditError({
+          message: "A goal budget requires an active-time, model-cost, or recovery-attempt limit.",
+        })
       const existing = yield* get(sessionID)
       if (existing && existing.status !== "complete" && existing.selfHealID !== selfHealID)
         return yield* new AuditError({ message: "An existing goal cannot be linked to a different self-heal item." })
@@ -710,9 +728,12 @@ export namespace RayaGoal {
         return yield* new AuditError({ message: "Set a goal budget or clear it, not both." })
       const budget = input.clearBudget ? undefined : (input.budget ?? prior.budget)
       if (emptyBudget(budget))
-        return yield* new AuditError({ message: "A goal budget requires an active-time or model-cost limit." })
+        return yield* new AuditError({
+          message: "A goal budget requires an active-time, model-cost, or recovery-attempt limit.",
+        })
       const revised = !isDeepStrictEqual(criteria, prior.criteria)
       const limited = !isDeepStrictEqual(budget, prior.budget)
+      const recovered = budget?.recoveryAttempts !== prior.budget?.recoveryAttempts
       const changed = objective !== prior.objective || revised || limited
       const status = input.status ?? (changed && prior.status === "blocked" ? "active" : prior.status)
       if (status === "paused" && prior.status === "blocked" && !changed) {
@@ -738,7 +759,9 @@ export namespace RayaGoal {
         blockedReason: changed || (status === "active" && prior.status !== "active") ? undefined : prior.blockedReason,
         budgetHit: limited || status === "active" ? undefined : prior.budgetHit,
         usage:
-          changed || (status === "active" && prior.status !== "active") ? { ...prior.usage, retries: 0 } : prior.usage,
+          objective !== prior.objective || revised || recovered || (status === "active" && prior.status !== "active")
+            ? { ...prior.usage, retries: 0 }
+            : prior.usage,
         audit: changed ? undefined : prior.audit,
         auditAttempt: changed ? undefined : prior.auditAttempt,
         deliverables: changed ? undefined : prior.deliverables,
@@ -1553,7 +1576,7 @@ export namespace RayaGoal {
             : "The turn ended without work, verification, or a goal status update. Steer the goal or stop it."
       const blocked = invalid || repeated || stalled
       const total = (state.usage.cost ?? 0) + cost
-      const hit = blocked || state.status !== "active" ? undefined : exhausted(state, now, total)
+      const hit = blocked || state.status !== "active" ? undefined : exhausted(state, now, total, retries)
       const stopped = blocked || hit !== undefined
       const retry = !stopped && state.status === "active" && (idle || failed)
       const next = yield* save(sessionID, {
@@ -1784,12 +1807,14 @@ export namespace RayaGoal {
       const now = Date.now()
       if (yield* pauseBudget(sessionID, state, now)) return
       const count = (state.usage.retries ?? 0) + 1
-      const stopped = count > retryLimit
+      const hit = exhausted(state, now, state.usage.cost ?? 0, count)
+      const stopped = !hit && count > retryLimit
+      const halted = stopped || hit !== undefined
       const reason = `Automatic continuation stopped after ${retryLimit} provider errors. Resume the goal or send a message to continue.`
       const next = yield* save(sessionID, {
         ...state,
         retryEvents: eventID === undefined ? state.retryEvents : [...(state.retryEvents ?? []), eventID],
-        dispatch: stopped
+        dispatch: halted
           ? state.dispatch
           : {
               id: crypto.randomUUID(),
@@ -1798,20 +1823,25 @@ export namespace RayaGoal {
               phase: "queued",
               queuedAt: now,
             },
-        status: stopped ? "blocked" : state.status,
+        status: stopped ? "blocked" : hit ? "paused" : state.status,
         blockedReason: stopped ? reason : state.blockedReason,
-        activeMs: stopped ? elapsed(state, now) : state.activeMs,
-        activeAt: stopped ? undefined : state.activeAt,
+        budgetHit: hit ?? state.budgetHit,
+        activeMs: halted ? elapsed(state, now) : state.activeMs,
+        activeAt: halted ? undefined : state.activeAt,
         updatedAt: now,
         usage: {
           ...state.usage,
-          continuations: state.usage.continuations + (stopped ? 0 : 1),
+          continuations: state.usage.continuations + (halted ? 0 : 1),
           retries: stopped ? state.usage.retries : count,
         },
         progress: progress(state, {
           at: now,
-          kind: stopped ? "status" : "continuation",
-          message: stopped ? `Blocked: ${reason}` : `Retry ${count} after ${detail}.`,
+          kind: halted ? "status" : "continuation",
+          message: stopped
+            ? `Blocked: ${reason}`
+            : hit
+              ? `Paused: ${budgetReason(hit)}`
+              : `Retry ${count} after ${detail}.`,
         }),
       })
       if (stopped && state.selfHealID) {

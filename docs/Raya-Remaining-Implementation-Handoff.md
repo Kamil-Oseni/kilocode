@@ -569,11 +569,11 @@ The following sections retain the full 39-item scope. Related findings and overh
 
 ### OVR-06 — An outcome-driven Goal system
 
-**Recorded status:** In progress. Goal ownership, continuation, review/evidence and repair completion have targeted and checkpoint verification. The full outcome-driven lifecycle and UI acceptance remain open.
+**Recorded status:** In progress. Goal ownership, continuation, review/evidence and repair completion have targeted and checkpoint verification. Goal usage now retains exactly-once settled goal-session model cost and input/output/reasoning/cache token totals across retries, reloads and concurrent accounting; copied reports disclose their partial coverage. Descendant/tool/Live/external costs, enforceable budgets, deliverable inventory and full lifecycle/UI acceptance remain open.
 
 **Implementation and verification:**
 
-1. Complete outcome criteria, artifacts, decomposition and steering while preserving historical evidence. Share continuation ownership and budget accounting.
+1. Complete outcome criteria, artifacts, decomposition and steering while preserving historical evidence. Preserve the new exactly-once goal-session model cost/token counters, then extend accounting to descendant sessions and separately typed tool, GPT-Live and external charges without converting unknown historical usage to zero. Share continuation ownership and add enforceable monetary, time and concurrency budgets.
 2. Keep current relevant evidence distinct from human acceptance; failure learning must not silently rewrite the requested goal.
 3. Verify concurrent owners, criteria edits, restart, budget exhaustion, cancellation and review through the actual lifecycle and UI.
 
@@ -2857,3 +2857,12 @@ Product commit `3cf43876f7` (`fix(vscode): reconcile transcripts after reconnect
 The authorized `RAYA_LOW_MEMORY=1` installer reused the existing 229,218,816-byte Windows CLI and ran its extension-host typecheck, webview typecheck, cached ESLint, production bundle and package steps sequentially. Observed working set stayed near 676 MB during extension validation, 823 MB during packaging and approximately 1.2 GB at the installation stage. It installed `eden.raya@7.4.23-snapshot+3cf43876f7.kamil-oseni.1789298226474`. Artifact: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-3cf43876f7-kamil-oseni-1789298226474.vsix`; 517,718,415 bytes; 431 entries; SHA-256 `B655253EB079B8BBD5F6DC45A8D09016484BDC1568E02B66B3C919CAA14CD748`; zero `.env` or `.tmp` entries. The installed-extension inventory independently reports the same version.
 
 Reload VS Code before manually forcing a backend/SSE reconnect. EN-14 remains In progress for actual Chromium or packaged-webview input latency, render latency, peak heap and live reconnect timing under representative large histories.
+## ChatGPT 2026-09-13 07:26 America/Toronto — goal-session cost and token accounting
+
+**Status: implemented and verified with focused low-memory checks; commit, push and snapshot installation remain.** OVR-06 goal usage now retains the settled model cost and input, output, reasoning, cache-read and cache-write token totals from each newly accounted assistant message. The existing durable `accounted` receipt remains the idempotency boundary: retries sharing one user turn add only previously unseen assistant messages; reloads and concurrent copies cannot add the same message twice. New goals begin at explicit zero totals, while older stored goals decode without invented historical values.
+
+Copied goal reports now include the retained goal-session cost to six decimal places, every retained token bucket, and a plain coverage statement. The report explicitly excludes child-session spend, tool fees, GPT-Live usage and external service charges unless those are recorded separately. Legacy reports say that cost and token totals were not retained. The review-limits section now calls this a partial recorded model total instead of claiming that all cost data is absent.
+
+The versioned API schema and generated TypeScript SDK carry the optional usage fields for current and historical goal records. Focused verification passes 3 CLI tests / 39 assertions for reload, same-user retry and concurrent accounting, plus 2 extension report tests / 19 assertions. Targeted Prettier, extension ESLint, changeset status, generated-artifact, annotation and diff checks pass. The first SDK generation attempt was denied access to the user's normal Raya state directories by the sandbox; the authorized rerun completed successfully. No `tsgo`, `tsgolint`, root lint, Turbo command or broad test suite ran.
+
+OVR-06 remains In progress. Goal totals do not yet aggregate descendant sessions or non-model charges, enforce a saved monetary/time budget, inventory deliverables, or complete the actual lifecycle/UI acceptance. Extend the same durable receipt model for those sources rather than treating this partial total as project spend.

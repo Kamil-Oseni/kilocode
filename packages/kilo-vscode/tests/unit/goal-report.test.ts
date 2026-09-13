@@ -7,10 +7,18 @@ test("goal reports preserve exact references and mark legacy records instead of 
   expect(text).toContain("No structured acceptance criteria were retained.")
   expect(text).toContain("No completion audit was retained.")
   expect(text).toContain("Execution counters were not retained.")
+  expect(text).toContain("Goal-session model cost was not retained.")
+  expect(text).toContain("Goal-session token totals were not retained.")
   const saved = report(
     {
       objective: "Verified",
-      usage: { turns: 3, toolCalls: 7, continuations: 2 },
+      usage: {
+        turns: 3,
+        toolCalls: 7,
+        continuations: 2,
+        cost: 1.25,
+        tokens: { input: 10, output: 20, reasoning: 3, cache: { read: 4, write: 5 } },
+      },
       activeMs: 12500,
       status: "complete",
       createdAt: 0,
@@ -44,6 +52,11 @@ test("goal reports preserve exact references and mark legacy records instead of 
   expect(saved).toContain("does not rerun checks")
   expect(saved).toContain("Turns: 3\nTool calls: 7\nContinuations: 2")
   expect(saved).toContain("Accumulated active time: 12.5 seconds")
+  expect(saved).toContain("Goal-session model cost: $1.250000")
+  expect(saved).toContain("Tokens: input 10; output 20; reasoning 3; cache read 4; cache write 5.")
+  expect(saved).toContain(
+    "Child-session spend, tool fees, GPT-Live usage and external service charges are not included",
+  )
 })
 
 test("copied reports retain current and historical command bindings without upgrading prose-only criteria", () => {

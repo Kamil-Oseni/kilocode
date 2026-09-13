@@ -3076,10 +3076,20 @@ describe("RayaGoal", () => {
       yield* Effect.addFinalizer(() => goals.clear(sessionID))
       yield* goals.create(sessionID, "Continue with new evidence")
       const first = transcript({ sessionID, tool: "bash", exit: 0 })
+      if (first.rows[1].info.role !== "assistant") throw new Error("Expected assistant")
+      first.rows[1].info.cost = 1.25
+      first.rows[1].info.tokens = { input: 10, output: 20, reasoning: 3, cache: { read: 4, write: 5 } }
       rows = first.rows
       const initial = yield* goals.recordTurn(sessionID, first.rows[1].info.id)
       expect(initial?.state.usage.turns).toBe(1)
       expect(initial?.state.usage.toolCalls).toBe(1)
+      expect(initial?.state.usage.cost).toBe(1.25)
+      expect(initial?.state.usage.tokens).toEqual({
+        input: 10,
+        output: 20,
+        reasoning: 3,
+        cache: { read: 4, write: 5 },
+      })
       expect(yield* goals.recordTurn(sessionID, first.rows[1].info.id)).toBeUndefined()
       expect(yield* setup(storage, () => rows).recordTurn(sessionID)).toBeUndefined()
       expect(yield* goals.get(sessionID)).toEqual(initial?.state)
@@ -3087,6 +3097,8 @@ describe("RayaGoal", () => {
       const second = transcript({ sessionID, tool: "bash", exit: 0, output: "New evidence" })
       if (second.rows[1].info.role !== "assistant") throw new Error("Expected assistant")
       second.rows[1].info.parentID = first.rows[0].info.id
+      second.rows[1].info.cost = 0.75
+      second.rows[1].info.tokens = { input: 6, output: 8, reasoning: 2, cache: { read: 1, write: 0 } }
       rows = [...rows, second.rows[1]]
       expect(yield* goals.recordTurn(sessionID, first.rows[1].info.id)).toBeUndefined()
       expect(yield* goals.recordTurn(sessionID, MessageID.ascending())).toBeUndefined()
@@ -3095,14 +3107,31 @@ describe("RayaGoal", () => {
       expect(retry?.productive).toBe(true)
       expect(retry?.state.usage.turns).toBe(2)
       expect(retry?.state.usage.toolCalls).toBe(2)
+      expect(retry?.state.usage.cost).toBe(2)
+      expect(retry?.state.usage.tokens).toEqual({
+        input: 16,
+        output: 28,
+        reasoning: 5,
+        cache: { read: 5, write: 5 },
+      })
       expect(retry?.state.accounted?.messages).toEqual([first.rows[1].info.id, second.rows[1].info.id])
 
       const third = transcript({ sessionID, tool: "bash", exit: 0, output: "Third evidence" })
+      if (third.rows[1].info.role !== "assistant") throw new Error("Expected assistant")
+      third.rows[1].info.cost = 0.5
+      third.rows[1].info.tokens = { input: 2, output: 4, reasoning: 1, cache: { read: 3, write: 2 } }
       third.rows[0].info.time.created = first.rows[0].info.time.created + 1
       rows = [...rows, ...third.rows]
       expect(yield* goals.recordTurn(sessionID, second.rows[1].info.id)).toBeUndefined()
       const next = yield* goals.recordTurn(sessionID, third.rows[1].info.id)
       expect(next?.state.usage.toolCalls).toBe(3)
+      expect(next?.state.usage.cost).toBe(2.5)
+      expect(next?.state.usage.tokens).toEqual({
+        input: 18,
+        output: 32,
+        reasoning: 6,
+        cache: { read: 8, write: 7 },
+      })
       expect(next?.state.accounted).toEqual({ userID: third.rows[0].info.id, messages: [third.rows[1].info.id] })
     }),
   )
@@ -3112,6 +3141,9 @@ describe("RayaGoal", () => {
       const storage = yield* Storage.Service
       const sessionID = SessionID.make(`ses_goal_${crypto.randomUUID()}`)
       const data = transcript({ sessionID, tool: "bash", exit: 0 })
+      if (data.rows[1].info.role !== "assistant") throw new Error("Expected assistant")
+      data.rows[1].info.cost = 2
+      data.rows[1].info.tokens = { input: 5, output: 7, reasoning: 1, cache: { read: 3, write: 2 } }
       const entered = yield* Deferred.make<void>()
       const release = yield* Deferred.make<void>()
       let reads = 0
@@ -3140,6 +3172,13 @@ describe("RayaGoal", () => {
       const saved = yield* goals.get(sessionID)
       expect(saved?.usage.turns).toBe(1)
       expect(saved?.usage.toolCalls).toBe(1)
+      expect(saved?.usage.cost).toBe(2)
+      expect(saved?.usage.tokens).toEqual({
+        input: 5,
+        output: 7,
+        reasoning: 1,
+        cache: { read: 3, write: 2 },
+      })
       expect(yield* goals.recordTurn(sessionID, data.rows[1].info.id)).toBeUndefined()
     }),
   )

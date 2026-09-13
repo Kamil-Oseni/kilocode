@@ -20,6 +20,20 @@ function activity(goal: Goal) {
     lines.push(
       `Accumulated active time: ${(goal.activeMs / 1000).toFixed(1)} seconds (saved value; excludes any unsaved active interval).`,
     )
+  lines.push("", "## Recorded model usage", "")
+  if (goal.usage?.cost !== undefined && Number.isFinite(goal.usage.cost))
+    lines.push(`Goal-session model cost: $${goal.usage.cost.toFixed(6)}`)
+  if (goal.usage?.cost === undefined) lines.push("Goal-session model cost was not retained.")
+  if (goal.usage?.tokens) {
+    const tokens = goal.usage.tokens
+    lines.push(
+      `Tokens: input ${tokens.input}; output ${tokens.output}; reasoning ${tokens.reasoning}; cache read ${tokens.cache.read}; cache write ${tokens.cache.write}.`,
+    )
+  }
+  if (!goal.usage?.tokens) lines.push("Goal-session token totals were not retained.")
+  lines.push(
+    "Coverage: settled assistant messages in the goal session. Child-session spend, tool fees, GPT-Live usage and external service charges are not included unless separately recorded.",
+  )
   return lines
 }
 
@@ -183,7 +197,7 @@ export function report(goal: Goal, sessionID?: string) {
     "",
     "## Review limits and next action",
     "",
-    "This report copies saved goal records. It does not rerun checks, verify current files, include the original tool output, or independently identify a reviewer. Goal-control acceptance is included only when saved. Cost and deliverable inventories are not included in this report.",
+    "This report copies saved goal records. It does not rerun checks, verify current files, include the original tool output, independently identify a reviewer, or provide a complete deliverable inventory. Goal-control acceptance is included only when saved. Recorded model usage has the coverage stated above and is not a complete project cost.",
     "",
     "Review each criterion and open its cited source in Raya before relying on the result. Missing source records or criteria require further verification.",
     "Accepted references do not establish complete business-outcome coverage or user acceptance. A saved command binding checks the cited command and working directory; prose-only verification has no such binding.",

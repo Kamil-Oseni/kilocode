@@ -18799,6 +18799,38 @@
                               "enum": ["Infinity", "-Infinity", "NaN"]
                             }
                           ]
+                        },
+                        "cost": {
+                          "type": "number"
+                        },
+                        "tokens": {
+                          "type": "object",
+                          "properties": {
+                            "input": {
+                              "type": "number"
+                            },
+                            "output": {
+                              "type": "number"
+                            },
+                            "reasoning": {
+                              "type": "number"
+                            },
+                            "cache": {
+                              "type": "object",
+                              "properties": {
+                                "read": {
+                                  "type": "number"
+                                },
+                                "write": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": ["read", "write"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["input", "output", "reasoning", "cache"],
+                          "additionalProperties": false
                         }
                       },
                       "required": ["turns", "continuations", "toolCalls"],
@@ -19835,6 +19867,38 @@
                                     "enum": ["Infinity", "-Infinity", "NaN"]
                                   }
                                 ]
+                              },
+                              "cost": {
+                                "type": "number"
+                              },
+                              "tokens": {
+                                "type": "object",
+                                "properties": {
+                                  "input": {
+                                    "type": "number"
+                                  },
+                                  "output": {
+                                    "type": "number"
+                                  },
+                                  "reasoning": {
+                                    "type": "number"
+                                  },
+                                  "cache": {
+                                    "type": "object",
+                                    "properties": {
+                                      "read": {
+                                        "type": "number"
+                                      },
+                                      "write": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": ["read", "write"],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": ["input", "output", "reasoning", "cache"],
+                                "additionalProperties": false
                               }
                             },
                             "required": ["turns", "continuations", "toolCalls"],
@@ -21369,6 +21433,38 @@
                               "enum": ["Infinity", "-Infinity", "NaN"]
                             }
                           ]
+                        },
+                        "cost": {
+                          "type": "number"
+                        },
+                        "tokens": {
+                          "type": "object",
+                          "properties": {
+                            "input": {
+                              "type": "number"
+                            },
+                            "output": {
+                              "type": "number"
+                            },
+                            "reasoning": {
+                              "type": "number"
+                            },
+                            "cache": {
+                              "type": "object",
+                              "properties": {
+                                "read": {
+                                  "type": "number"
+                                },
+                                "write": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": ["read", "write"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["input", "output", "reasoning", "cache"],
+                          "additionalProperties": false
                         }
                       },
                       "required": ["turns", "continuations", "toolCalls"],
@@ -22405,6 +22501,38 @@
                                     "enum": ["Infinity", "-Infinity", "NaN"]
                                   }
                                 ]
+                              },
+                              "cost": {
+                                "type": "number"
+                              },
+                              "tokens": {
+                                "type": "object",
+                                "properties": {
+                                  "input": {
+                                    "type": "number"
+                                  },
+                                  "output": {
+                                    "type": "number"
+                                  },
+                                  "reasoning": {
+                                    "type": "number"
+                                  },
+                                  "cache": {
+                                    "type": "object",
+                                    "properties": {
+                                      "read": {
+                                        "type": "number"
+                                      },
+                                      "write": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": ["read", "write"],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": ["input", "output", "reasoning", "cache"],
+                                "additionalProperties": false
                               }
                             },
                             "required": ["turns", "continuations", "toolCalls"],
@@ -23909,6 +24037,38 @@
                               "enum": ["Infinity", "-Infinity", "NaN"]
                             }
                           ]
+                        },
+                        "cost": {
+                          "type": "number"
+                        },
+                        "tokens": {
+                          "type": "object",
+                          "properties": {
+                            "input": {
+                              "type": "number"
+                            },
+                            "output": {
+                              "type": "number"
+                            },
+                            "reasoning": {
+                              "type": "number"
+                            },
+                            "cache": {
+                              "type": "object",
+                              "properties": {
+                                "read": {
+                                  "type": "number"
+                                },
+                                "write": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": ["read", "write"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["input", "output", "reasoning", "cache"],
+                          "additionalProperties": false
                         }
                       },
                       "required": ["turns", "continuations", "toolCalls"],
@@ -24945,6 +25105,38 @@
                                     "enum": ["Infinity", "-Infinity", "NaN"]
                                   }
                                 ]
+                              },
+                              "cost": {
+                                "type": "number"
+                              },
+                              "tokens": {
+                                "type": "object",
+                                "properties": {
+                                  "input": {
+                                    "type": "number"
+                                  },
+                                  "output": {
+                                    "type": "number"
+                                  },
+                                  "reasoning": {
+                                    "type": "number"
+                                  },
+                                  "cache": {
+                                    "type": "object",
+                                    "properties": {
+                                      "read": {
+                                        "type": "number"
+                                      },
+                                      "write": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": ["read", "write"],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": ["input", "output", "reasoning", "cache"],
+                                "additionalProperties": false
                               }
                             },
                             "required": ["turns", "continuations", "toolCalls"],

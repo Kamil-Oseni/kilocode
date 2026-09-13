@@ -87,6 +87,13 @@ export interface GoalState {
     continuations: number
     toolCalls: number
     retries?: number
+    cost?: number
+    tokens?: {
+      input: number
+      output: number
+      reasoning: number
+      cache: { read: number; write: number }
+    }
   }
   blockedReason?: string
   audit?: {

@@ -106,6 +106,15 @@ export namespace RayaGoal {
     continuations: Schema.Number,
     toolCalls: Schema.Number,
     retries: Schema.optional(Schema.Number), // consecutive recoveries; reset after success, steering, or resume
+    cost: Schema.optional(Schema.Finite), // settled assistant-message cost recorded exactly once per goal turn
+    tokens: Schema.optional(
+      Schema.Struct({
+        input: Schema.Finite,
+        output: Schema.Finite,
+        reasoning: Schema.Finite,
+        cache: Schema.Struct({ read: Schema.Finite, write: Schema.Finite }),
+      }),
+    ),
   })
   export type Usage = typeof Usage.Type
 
@@ -474,7 +483,14 @@ export namespace RayaGoal {
           updatedAt: now,
           activeMs: 0,
           activeAt: now,
-          usage: { turns: 0, continuations: 0, toolCalls: 0, retries: 0 },
+          usage: {
+            turns: 0,
+            continuations: 0,
+            toolCalls: 0,
+            retries: 0,
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          },
           progress: [{ at: now, kind: "status", message: "Goal armed." }],
           history: prior,
         },
@@ -1280,7 +1296,7 @@ export namespace RayaGoal {
               return false
             const normalize = (value: string) =>
               process.platform === "win32" ? path.normalize(value).toLowerCase() : path.normalize(value)
-              return command === check.command && normalize(directory) === normalize(check.directory)
+            return command === check.command && normalize(directory) === normalize(check.directory)
           })
         )
           return yield* new AuditError({
@@ -1356,6 +1372,31 @@ export namespace RayaGoal {
       const idle = state.status === "active" && calls.length === 0
       const failed = state.status === "active" && calls.length > 0 && succeeded.length === 0
       const retries = idle || failed ? (state.usage.retries ?? 0) + 1 : 0
+      const cost = assistants.reduce(
+        (sum, message) => sum + (message.info.role === "assistant" ? message.info.cost : 0),
+        0,
+      )
+      const tokens = assistants.reduce(
+        (sum, message) => {
+          if (message.info.role !== "assistant") return sum
+          return {
+            input: sum.input + message.info.tokens.input,
+            output: sum.output + message.info.tokens.output,
+            reasoning: sum.reasoning + message.info.tokens.reasoning,
+            cache: {
+              read: sum.cache.read + message.info.tokens.cache.read,
+              write: sum.cache.write + message.info.tokens.cache.write,
+            },
+          }
+        },
+        { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      )
+      const priorTokens = state.usage.tokens ?? {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cache: { read: 0, write: 0 },
+      }
       const stalled = (idle || failed) && retries >= idleLimit
       const now = Date.now()
       const reason = invalid
@@ -1380,6 +1421,16 @@ export namespace RayaGoal {
           turns: state.usage.turns + 1,
           toolCalls: state.usage.toolCalls + calls.length,
           retries: stopped ? retries : retry ? retries : 0,
+          cost: (state.usage.cost ?? 0) + cost,
+          tokens: {
+            input: priorTokens.input + tokens.input,
+            output: priorTokens.output + tokens.output,
+            reasoning: priorTokens.reasoning + tokens.reasoning,
+            cache: {
+              read: priorTokens.cache.read + tokens.cache.read,
+              write: priorTokens.cache.write + tokens.cache.write,
+            },
+          },
         },
         progress: progress(state, {
           at: now,

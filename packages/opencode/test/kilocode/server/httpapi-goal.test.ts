@@ -206,6 +206,13 @@ describe("goal HTTP API", () => {
     expect((await created.json()) as { status: string }).toMatchObject({
       status: "active",
       startMessageID: "msg_goal_start",
+      usage: {
+        turns: 0,
+        continuations: 0,
+        toolCalls: 0,
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      },
     })
 
     const reloaded = app()

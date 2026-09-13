@@ -2684,3 +2684,9 @@ After delivery, continue in this order:
 3. **Continue the easiest-to-hardest audit queue.** Re-read the requirement ledger after these bounded OVR-05 slices, select the lowest human-dependency item, and update both documents as work proceeds. Codex-derived feature expansion stays deferred until all original audit requirements are implemented.
 
 For each checkpoint, append `ChatGPT` plus Toronto date/time, exact behavior and trust boundaries, corrections, commands/results, product/docs commit hashes, push state, installed extension identity, VSIX size/entry count/hash, bundled CLI size, archive hygiene, and the next concrete edit. Never mark the overall audit complete from these Routine increments alone.
+
+## ChatGPT 2026-09-13 04:59 America/Toronto — follow-on assignment delivered
+
+Product and ledger commit `7f6d4a32480e85cdac9ab15730a5bb1ea7c1c7d2` is on `origin/main`. Its one-task push gate passed all 29 TypeScript package checks with 28 cached; only Raya ran uncached, and JetBrains reused cache. `TURBO_CONCURRENCY=1` was set throughout. The low-memory installer reused the existing 219 MB CLI, found no generated SDK drift, then ran host/webview typechecks, cached extension ESLint, production bundling, packaging and installation sequentially.
+
+Installed identity: `eden.raya@7.4.23-snapshot+7f6d4a3248.kamil-oseni.1789289903671`. VSIX: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-7f6d4a3248-kamil-oseni-1789289903671.vsix`; 517,635,001 bytes; 431 entries; SHA-256 `06AA63C91BA53555D0B8385C44863C593D51B2814FC267EBBACDBC986470D500`; bundled CLI 229,147,136 bytes; zero `.env`/`.tmp` entries. HEAD and `origin/main` match. Only the two owner-authored reference documents remain untracked. Reload VS Code before inspecting the installed follow-on flow. Resume at **Work search and filters** above; both root and per-row organization assignment are complete and must not be reimplemented.

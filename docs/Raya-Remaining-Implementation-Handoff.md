@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-13):** ChatGPT reviewed and repaired Grok's work, delivered durable Routine DMs, attachments, Chat Info, first-class organization persistence/navigation, explicit delegation authority, restart-safe main-chat provisioning, organization editing/archive, one-click chat-result navigation, simplified Browser behavior, actionable GPT-Live microphone recovery, durable goal usage totals, enforceable goal limits including bounded automatic recovery, and revision-safe goal file deliverables. Latest installed commit: `c473ee39e5`. Remaining: the unfinished 39-requirement work, broader goal accounting and non-file deliverables, inline media treatment, full live rebuild-survival acceptance, paid GPT-Live/device acoustic acceptance, and packaged VS Code microphone consent. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-13):** ChatGPT reviewed and repaired Grok's work, delivered durable Routine DMs, attachments, Chat Info, first-class organization persistence/navigation, explicit delegation authority, restart-safe main-chat provisioning, organization editing/archive, one-click chat-result navigation, simplified Browser behavior, actionable GPT-Live microphone recovery, durable goal usage totals including delegated sessions, enforceable goal limits including bounded automatic recovery, and revision-safe goal file deliverables. Latest installed commit: `20274f4623`. Remaining: the unfinished 39-requirement work, tool/Live/external goal accounting and non-file deliverables, inline media treatment, full live rebuild-survival acceptance, paid GPT-Live/device acoustic acceptance, and packaged VS Code microphone consent. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-13. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** ChatGPT installed snapshot `c473ee39e5` (`eden.raya@7.4.23-snapshot+c473ee39e5.kamil-oseni.1789304451923`). It includes the earlier Routine, Browser, GPT-Live recovery and reconnect work plus durable goal usage totals, enforceable time, cost and automatic-recovery limits, and revision-safe file deliverables in current, historical and copied goal details. Reload VS Code normally to pick up the snapshot.
+**Latest delivered product:** ChatGPT installed snapshot `20274f4623` (`eden.raya@7.4.23-snapshot+20274f4623.kamil-oseni.1789306187148`). It includes the earlier Routine, Browser, GPT-Live recovery and reconnect work plus durable direct/delegated goal usage totals, enforceable time, cost and automatic-recovery limits, and revision-safe file deliverables in current, historical and copied goal details. Reload VS Code normally to pick up the snapshot.
 
 ## Scope and reading order
 
@@ -19,9 +19,9 @@ Status excerpts below are historical records, not a fresh certification of every
 ## Checkpoint and standing authorization
 
 - Workspace: `C:\Users\User\Desktop\raya`; PowerShell; branch `main`; origin `https://github.com/Kamil-Oseni/kilocode.git`.
-- Last verified pushed product checkpoint: `c473ee39e5`, including durable goal-session usage totals, enforceable active-time, recorded model-cost and consecutive automatic-recovery limits, and revision-safe file deliverables in addition to the earlier Routine, Browser, GPT-Live recovery and reconnect work.
-- Installed: `eden.raya@7.4.23-snapshot+c473ee39e5.kamil-oseni.1789304451923`.
-- VSIX: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-c473ee39e5-kamil-oseni-1789304451923.vsix`; SHA-256 `072BE3BD03A67B6184305BB20B11E2EACE8108FBD0616F8C9687EB0CA421D76B`; 517771239 bytes; 431 entries; bundled CLI 229241344 bytes; zero `.env` or `.tmp` entries.
+- Last verified pushed product checkpoint: `20274f4623`, including durable direct and delegated goal-tree model usage totals, enforceable active-time, recorded model-cost and consecutive automatic-recovery limits, and revision-safe file deliverables in addition to the earlier Routine, Browser, GPT-Live recovery and reconnect work.
+- Installed: `eden.raya@7.4.23-snapshot+20274f4623.kamil-oseni.1789306187148`.
+- VSIX: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-20274f4623-kamil-oseni-1789306187148.vsix`; SHA-256 `19F4904D6A1B879209E539F84FD60A5F21E4FD2ABFFADD5ED7EA7593B1B31676`; 517781802 bytes; 431 entries; bundled CLI 229248000 bytes; zero `.env` or `.tmp` entries.
 - The user authorizes two parallel workers plus root, batched checks, periodic normal commits/pushes to `origin/main`, and `snapshot:install` outside the sandbox. Do not ask again. No force push, hook bypass or forced VS Code reload.
 - At approximately $10 remaining, as reported by the user, stop opening broad work, settle current processes, update this handoff and give the continuation prompt below. Do not invent a credit balance.
 
@@ -2950,3 +2950,11 @@ Focused evidence passes the complete accounting-named goal regression at 10 test
 No repository-wide `tsgolint`, root lint, broad Turbo command, standalone CLI-wide `tsgo`, parallel typecheck or broad test suite ran. No `tsgolint` process appeared and only the existing approximately 21 MB Node process remained after checks. OVR-06 remains In progress for tool, GPT-Live and external-service charge accounting and reservations, non-file/external deliverable associations, other lifecycle semantics and packaged UI acceptance.
 
 Next add an extensible non-model charge ledger before integrating any provider. Define a source-qualified schema for tool, GPT-Live and external-service charges with deterministic receipt IDs, amount, currency, source kind, optional provider/service identity, originating session/message/tool call, observed time and coverage status. Accept charges only through a Kilo-owned runtime boundary, reject negative/non-finite amounts and conflicting receipt reuse, persist idempotently through reload/revisions/history, and display recorded versus unknown coverage without implying every provider reports cost. Keep model cost and non-model charges separate until currency and provider semantics are explicit. Add focused concurrent/reload/conflict tests and one report/UI fixture, regenerate the SDK, and continue every check sequentially under `RAYA_LOW_MEMORY=1`.
+
+## ChatGPT 2026-09-13 09:32 America/Toronto — delegated goal usage delivered
+
+Product commit `20274f4623` (`feat(goals): attribute delegated model usage`) is on `origin/main`. Goal accounting now follows persisted task edges, includes descendant tokens, attributes recursively propagated delegated cost without adding it twice, enforces the model-cost limit against the reconciled goal-tree total, and retains usage in superseded requirement revisions. The current and historical goal card plus copied reports state direct, delegated and total coverage.
+
+The authorized `RAYA_LOW_MEMORY=1` workflow regenerated the SDK, rebuilt the Windows x64 CLI, passed CLI version, model-snapshot and sandbox-worker smoke checks, then ran extension-host typecheck, webview typecheck, cached ESLint, production bundle, packaging and installation sequentially. It installed `eden.raya@7.4.23-snapshot+20274f4623.kamil-oseni.1789306187148`. Artifact: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-20274f4623-kamil-oseni-1789306187148.vsix`; 517781802 bytes; 431 entries; SHA-256 `19F4904D6A1B879209E539F84FD60A5F21E4FD2ABFFADD5ED7EA7593B1B31676`; bundled CLI 229248000 bytes; zero `.env` or `.tmp` entries. The installed extension directory reports the exact same version.
+
+No repository-wide `tsgolint`, root lint, broad Turbo command, standalone CLI-wide `tsgo`, parallel typecheck or broad test suite ran. No `tsgolint` process appeared, and no build process remained afterward. Reload VS Code before reviewing direct and delegated model usage in the expanded goal card.

@@ -36,7 +36,7 @@ function delegation(value: unknown, position: number, ids: ReadonlySet<string>):
   )
 }
 
-export function organization(value: unknown, archived = false): value is Organization {
+export function organization(value: unknown, archived: boolean): value is Organization {
   if (!value || typeof value !== "object") return false
   const item = value as Partial<Organization>
   if (item.version !== 1 || typeof item.id !== "string" || !/^org_[a-f0-9]{32}$/.test(item.id)) return false
@@ -61,7 +61,7 @@ export function organization(value: unknown, archived = false): value is Organiz
 
 function organizations(value: unknown) {
   if (!value || typeof value !== "object" || !("items" in value) || !Array.isArray(value.items)) return
-  if (!value.items.every((item) => organization(item))) return
+  if (!value.items.every((item) => organization(item, false))) return
   return value.items
 }
 

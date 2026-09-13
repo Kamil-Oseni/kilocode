@@ -472,7 +472,7 @@ async function revise(ctx: Ctx) {
     },
     { throwOnError: true },
   )
-  if (!organization(result.data) || result.data.id !== msg.organizationID)
+  if (!organization(result.data, false) || result.data.id !== msg.organizationID)
     throw new Error("The saved organization response could not be verified. Refresh before trying again.")
   ctx.post({
     type: "routineOrganizationUpdated",

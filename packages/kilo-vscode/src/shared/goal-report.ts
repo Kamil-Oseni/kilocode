@@ -40,10 +40,24 @@ function activity(goal: Goal) {
     lines.push(
       `Accumulated active time: ${(goal.activeMs / 1000).toFixed(1)} seconds (saved value; excludes any unsaved active interval).`,
     )
-  lines.push("", "## Recorded model usage", "")
+  lines.push(...models(goal))
+  return lines
+}
+
+function models(goal: Pick<Goal, "usage">) {
+  const lines = ["", "## Recorded model usage", ""]
   if (goal.usage?.cost !== undefined && Number.isFinite(goal.usage.cost))
-    lines.push(`Goal-session model cost: $${goal.usage.cost.toFixed(6)}`)
+    lines.push(`Recorded goal-tree model cost: $${goal.usage.cost.toFixed(6)}`)
   if (goal.usage?.cost === undefined) lines.push("Goal-session model cost was not retained.")
+  if (goal.usage?.cost !== undefined && goal.usage.descendantCost !== undefined) {
+    const direct = Math.max(0, goal.usage.cost - goal.usage.descendantCost)
+    lines.push(
+      `Direct goal-session model cost: $${direct.toFixed(6)}.`,
+      `Delegated-session model cost: $${goal.usage.descendantCost.toFixed(6)} (first-hop child totals include deeper descendants recursively).`,
+    )
+  }
+  if (goal.usage && goal.usage.descendantCost === undefined)
+    lines.push("Delegated-session cost attribution was not retained for this goal version.")
   if (goal.usage?.tokens) {
     const tokens = goal.usage.tokens
     lines.push(
@@ -51,8 +65,16 @@ function activity(goal: Goal) {
     )
   }
   if (!goal.usage?.tokens) lines.push("Goal-session token totals were not retained.")
+  if (goal.usage?.descendantTokens) {
+    const tokens = goal.usage.descendantTokens
+    lines.push(
+      `Delegated-session tokens included above: input ${tokens.input}; output ${tokens.output}; reasoning ${tokens.reasoning}; cache read ${tokens.cache.read}; cache write ${tokens.cache.write}.`,
+    )
+  }
+  if (goal.usage && !goal.usage.descendantTokens)
+    lines.push("Delegated-session token attribution was not retained for this goal version.")
   lines.push(
-    "Coverage: settled assistant messages in the goal session. Child-session spend, tool fees, GPT-Live usage and external service charges are not included unless separately recorded.",
+    "Coverage: settled assistant messages in the goal and its admitted task-session tree. Parent message cost already contains descendant cost recursively, so delegated cost is attributed without adding it twice. Tool fees, GPT-Live usage and external service charges are not included unless separately recorded.",
   )
   return lines
 }
@@ -223,7 +245,9 @@ function revisions(goal: Goal) {
       "",
       quote(item.objective),
     )
-    lines.push(quote([...planning(item), ...limits(item), ...deliverables(item), ...contract(item)].join("\n")))
+    lines.push(
+      quote([...planning(item), ...limits(item), ...models(item), ...deliverables(item), ...contract(item)].join("\n")),
+    )
   }
   return lines
 }

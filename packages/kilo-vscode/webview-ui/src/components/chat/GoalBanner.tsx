@@ -418,6 +418,21 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                       {plural(state().usage.turns, "turn")} · {plural(state().usage.toolCalls, "tool call")}. These
                       counts describe activity, not goal completion.
                     </p>
+                    <Show
+                      when={
+                        state().usage.cost !== undefined && state().usage.descendantCost !== undefined
+                          ? state().usage
+                          : undefined
+                      }
+                    >
+                      {(usage) => (
+                        <p>
+                          Recorded model cost: ${usage().cost!.toFixed(2)} total, $
+                          {Math.max(0, usage().cost! - usage().descendantCost!).toFixed(2)} in this chat and $
+                          {usage().descendantCost!.toFixed(2)} in delegated chats.
+                        </p>
+                      )}
+                    </Show>
                   </details>
                   <Show when={!state().plan && todos().length}>
                     <div class="goal-banner__tasks" aria-label="Goal tasks">

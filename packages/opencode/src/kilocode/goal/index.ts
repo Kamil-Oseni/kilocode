@@ -22,6 +22,7 @@ import { settle } from "./owned-jobs"
 import * as Artifact from "./artifact"
 import { inspection } from "@opencode-ai/core/kilocode/evidence-inspection"
 import { digest } from "@opencode-ai/core/kilocode/evidence-digest"
+import * as Accounting from "./accounting"
 import { collect } from "./evidence-scope"
 import { verification, identity as sourceIdentity } from "@/kilocode/self-heal/verification"
 
@@ -108,6 +109,32 @@ export namespace RayaGoal {
   })
   export type BudgetHit = typeof BudgetHit.Type
 
+  export const Usage = Schema.Struct({
+    turns: Schema.Number,
+    continuations: Schema.Number,
+    toolCalls: Schema.Number,
+    retries: Schema.optional(Schema.Number), // consecutive recoveries; reset after success, steering, or resume
+    cost: Schema.optional(Schema.Finite), // parent total already includes recursively propagated child cost
+    descendantCost: Schema.optional(Schema.Finite), // first-hop child totals already included recursively in cost
+    tokens: Schema.optional(
+      Schema.Struct({
+        input: Schema.Finite,
+        output: Schema.Finite,
+        reasoning: Schema.Finite,
+        cache: Schema.Struct({ read: Schema.Finite, write: Schema.Finite }),
+      }),
+    ),
+    descendantTokens: Schema.optional(
+      Schema.Struct({
+        input: Schema.Finite,
+        output: Schema.Finite,
+        reasoning: Schema.Finite,
+        cache: Schema.Struct({ read: Schema.Finite, write: Schema.Finite }),
+      }),
+    ),
+  }).annotate({ identifier: "RayaGoalUsage" })
+  export type Usage = typeof Usage.Type
+
   export const Revision = Schema.Struct({
     review: Schema.optional(Review),
     id: Schema.String,
@@ -119,6 +146,7 @@ export namespace RayaGoal {
     plan: Schema.optional(Planning.Plan),
     budget: Schema.optional(Budget),
     budgetHit: Schema.optional(BudgetHit),
+    usage: Schema.optional(Usage),
     deliverables: Schema.optional(Schema.Array(Deliverable)),
     audit: Schema.optional(Audit),
     auditAttempt: Schema.optional(AuditAttempt),
@@ -130,23 +158,6 @@ export namespace RayaGoal {
     message: Schema.String,
   })
   export type Progress = typeof Progress.Type
-
-  export const Usage = Schema.Struct({
-    turns: Schema.Number,
-    continuations: Schema.Number,
-    toolCalls: Schema.Number,
-    retries: Schema.optional(Schema.Number), // consecutive recoveries; reset after success, steering, or resume
-    cost: Schema.optional(Schema.Finite), // settled assistant-message cost recorded exactly once per goal turn
-    tokens: Schema.optional(
-      Schema.Struct({
-        input: Schema.Finite,
-        output: Schema.Finite,
-        reasoning: Schema.Finite,
-        cache: Schema.Struct({ read: Schema.Finite, write: Schema.Finite }),
-      }),
-    ),
-  })
-  export type Usage = typeof Usage.Type
 
   // Completed goals stay visible in the session carousel after a new one is armed.
   export const HistoryItem = Schema.Struct({
@@ -331,6 +342,7 @@ export namespace RayaGoal {
       plan: state.plan,
       budget: state.budget,
       budgetHit: state.budgetHit,
+      usage: state.usage,
       deliverables: state.deliverables,
       audit: state.audit,
       auditAttempt: state.auditAttempt,
@@ -586,7 +598,9 @@ export namespace RayaGoal {
             toolCalls: 0,
             retries: 0,
             cost: 0,
+            descendantCost: 0,
             tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            descendantTokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           },
           progress: [{ at: now, kind: "status", message: "Goal armed." }],
           history: prior,
@@ -1565,6 +1579,8 @@ export namespace RayaGoal {
         reasoning: 0,
         cache: { read: 0, write: 0 },
       }
+      const inputs = [...new Set([...(state.inputs ?? []), user.info.id])]
+      const accounting = yield* Accounting.totals(deps.sessions, sessionID, state.createdAt, inputs, messages)
       const stalled = (idle || failed) && retries >= idleLimit
       const now = Date.now()
       const reason = invalid
@@ -1575,12 +1591,13 @@ export namespace RayaGoal {
             ? `Automatic continuation stopped after ${idleLimit} turns without a successful tool result. Review the failures and choose a different approach.`
             : "The turn ended without work, verification, or a goal status update. Steer the goal or stop it."
       const blocked = invalid || repeated || stalled
-      const total = (state.usage.cost ?? 0) + cost
+      const total = Math.max((state.usage.cost ?? 0) + cost, accounting.cost)
       const hit = blocked || state.status !== "active" ? undefined : exhausted(state, now, total, retries)
       const stopped = blocked || hit !== undefined
       const retry = !stopped && state.status === "active" && (idle || failed)
       const next = yield* save(sessionID, {
         ...state,
+        inputs,
         accounted: { userID: user.info.id, messages: [...recorded, ...assistants.map((message) => message.info.id)] },
         status: blocked ? "blocked" : hit ? "paused" : state.status,
         blockedReason: blocked ? reason : hit ? undefined : state.blockedReason,
@@ -1594,15 +1611,17 @@ export namespace RayaGoal {
           toolCalls: state.usage.toolCalls + calls.length,
           retries: stopped ? retries : retry ? retries : 0,
           cost: total,
+          descendantCost: accounting.descendantCost,
           tokens: {
-            input: priorTokens.input + tokens.input,
-            output: priorTokens.output + tokens.output,
-            reasoning: priorTokens.reasoning + tokens.reasoning,
+            input: Math.max(priorTokens.input + tokens.input, accounting.tokens.input),
+            output: Math.max(priorTokens.output + tokens.output, accounting.tokens.output),
+            reasoning: Math.max(priorTokens.reasoning + tokens.reasoning, accounting.tokens.reasoning),
             cache: {
-              read: priorTokens.cache.read + tokens.cache.read,
-              write: priorTokens.cache.write + tokens.cache.write,
+              read: Math.max(priorTokens.cache.read + tokens.cache.read, accounting.tokens.cache.read),
+              write: Math.max(priorTokens.cache.write + tokens.cache.write, accounting.tokens.cache.write),
             },
           },
+          descendantTokens: accounting.descendantTokens,
         },
         progress: progress(state, {
           at: now,

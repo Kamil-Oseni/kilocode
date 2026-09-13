@@ -95,7 +95,7 @@ const goal = {
   status: "active",
   createdAt: Date.now(),
   updatedAt: Date.now(),
-  usage: { turns: 0, continuations: 0, toolCalls: 0 },
+  usage: { turns: 0, continuations: 0, toolCalls: 0, cost: 1.5, descendantCost: 0.4 },
   deliverables: [
     {
       path: "C:\\workspace\\report.md",
@@ -147,6 +147,7 @@ try {
   assert.equal(activity.open, false)
   assert.equal(activity.querySelector("summary").textContent, "Activity counts")
   assert.ok(activity.textContent.includes("not goal completion"))
+  assert.ok(activity.textContent.includes("$1.50 total, $1.10 in this chat and $0.40 in delegated chats"))
   assert.equal(
     root.querySelector(".goal-banner__progress").textContent,
     "Plan: Second task and 1 other task are marked in progress.",

@@ -18126,6 +18126,9 @@
                             "required": ["kind", "limit", "observed", "at"],
                             "additionalProperties": false
                           },
+                          "usage": {
+                            "$ref": "#/components/schemas/RayaGoalUsage"
+                          },
                           "deliverables": {
                             "type": "array",
                             "items": {
@@ -18794,135 +18797,7 @@
                       ]
                     },
                     "usage": {
-                      "type": "object",
-                      "properties": {
-                        "turns": {
-                          "anyOf": [
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["NaN"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["-Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity", "-Infinity", "NaN"]
-                            }
-                          ]
-                        },
-                        "continuations": {
-                          "anyOf": [
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["NaN"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["-Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity", "-Infinity", "NaN"]
-                            }
-                          ]
-                        },
-                        "toolCalls": {
-                          "anyOf": [
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["NaN"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["-Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity", "-Infinity", "NaN"]
-                            }
-                          ]
-                        },
-                        "retries": {
-                          "anyOf": [
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["NaN"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["-Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity", "-Infinity", "NaN"]
-                            }
-                          ]
-                        },
-                        "cost": {
-                          "type": "number"
-                        },
-                        "tokens": {
-                          "type": "object",
-                          "properties": {
-                            "input": {
-                              "type": "number"
-                            },
-                            "output": {
-                              "type": "number"
-                            },
-                            "reasoning": {
-                              "type": "number"
-                            },
-                            "cache": {
-                              "type": "object",
-                              "properties": {
-                                "read": {
-                                  "type": "number"
-                                },
-                                "write": {
-                                  "type": "number"
-                                }
-                              },
-                              "required": ["read", "write"],
-                              "additionalProperties": false
-                            }
-                          },
-                          "required": ["input", "output", "reasoning", "cache"],
-                          "additionalProperties": false
-                        }
-                      },
-                      "required": ["turns", "continuations", "toolCalls"],
-                      "additionalProperties": false
+                      "$ref": "#/components/schemas/RayaGoalUsage"
                     },
                     "budgetHit": {
                       "type": "object",
@@ -19631,6 +19506,9 @@
                                   "required": ["kind", "limit", "observed", "at"],
                                   "additionalProperties": false
                                 },
+                                "usage": {
+                                  "$ref": "#/components/schemas/RayaGoalUsage"
+                                },
                                 "deliverables": {
                                   "type": "array",
                                   "items": {
@@ -20036,135 +19914,7 @@
                             "additionalProperties": false
                           },
                           "usage": {
-                            "type": "object",
-                            "properties": {
-                              "turns": {
-                                "anyOf": [
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["NaN"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["Infinity"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["-Infinity"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["Infinity", "-Infinity", "NaN"]
-                                  }
-                                ]
-                              },
-                              "continuations": {
-                                "anyOf": [
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["NaN"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["Infinity"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["-Infinity"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["Infinity", "-Infinity", "NaN"]
-                                  }
-                                ]
-                              },
-                              "toolCalls": {
-                                "anyOf": [
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["NaN"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["Infinity"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["-Infinity"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["Infinity", "-Infinity", "NaN"]
-                                  }
-                                ]
-                              },
-                              "retries": {
-                                "anyOf": [
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["NaN"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["Infinity"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["-Infinity"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["Infinity", "-Infinity", "NaN"]
-                                  }
-                                ]
-                              },
-                              "cost": {
-                                "type": "number"
-                              },
-                              "tokens": {
-                                "type": "object",
-                                "properties": {
-                                  "input": {
-                                    "type": "number"
-                                  },
-                                  "output": {
-                                    "type": "number"
-                                  },
-                                  "reasoning": {
-                                    "type": "number"
-                                  },
-                                  "cache": {
-                                    "type": "object",
-                                    "properties": {
-                                      "read": {
-                                        "type": "number"
-                                      },
-                                      "write": {
-                                        "type": "number"
-                                      }
-                                    },
-                                    "required": ["read", "write"],
-                                    "additionalProperties": false
-                                  }
-                                },
-                                "required": ["input", "output", "reasoning", "cache"],
-                                "additionalProperties": false
-                              }
-                            },
-                            "required": ["turns", "continuations", "toolCalls"],
-                            "additionalProperties": false
+                            "$ref": "#/components/schemas/RayaGoalUsage"
                           },
                           "activeMs": {
                             "anyOf": [
@@ -21049,6 +20799,9 @@
                             "required": ["kind", "limit", "observed", "at"],
                             "additionalProperties": false
                           },
+                          "usage": {
+                            "$ref": "#/components/schemas/RayaGoalUsage"
+                          },
                           "deliverables": {
                             "type": "array",
                             "items": {
@@ -21717,135 +21470,7 @@
                       ]
                     },
                     "usage": {
-                      "type": "object",
-                      "properties": {
-                        "turns": {
-                          "anyOf": [
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["NaN"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["-Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity", "-Infinity", "NaN"]
-                            }
-                          ]
-                        },
-                        "continuations": {
-                          "anyOf": [
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["NaN"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["-Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity", "-Infinity", "NaN"]
-                            }
-                          ]
-                        },
-                        "toolCalls": {
-                          "anyOf": [
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["NaN"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["-Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity", "-Infinity", "NaN"]
-                            }
-                          ]
-                        },
-                        "retries": {
-                          "anyOf": [
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["NaN"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["-Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity", "-Infinity", "NaN"]
-                            }
-                          ]
-                        },
-                        "cost": {
-                          "type": "number"
-                        },
-                        "tokens": {
-                          "type": "object",
-                          "properties": {
-                            "input": {
-                              "type": "number"
-                            },
-                            "output": {
-                              "type": "number"
-                            },
-                            "reasoning": {
-                              "type": "number"
-                            },
-                            "cache": {
-                              "type": "object",
-                              "properties": {
-                                "read": {
-                                  "type": "number"
-                                },
-                                "write": {
-                                  "type": "number"
-                                }
-                              },
-                              "required": ["read", "write"],
-                              "additionalProperties": false
-                            }
-                          },
-                          "required": ["input", "output", "reasoning", "cache"],
-                          "additionalProperties": false
-                        }
-                      },
-                      "required": ["turns", "continuations", "toolCalls"],
-                      "additionalProperties": false
+                      "$ref": "#/components/schemas/RayaGoalUsage"
                     },
                     "budgetHit": {
                       "type": "object",
@@ -22554,6 +22179,9 @@
                                   "required": ["kind", "limit", "observed", "at"],
                                   "additionalProperties": false
                                 },
+                                "usage": {
+                                  "$ref": "#/components/schemas/RayaGoalUsage"
+                                },
                                 "deliverables": {
                                   "type": "array",
                                   "items": {
@@ -22959,135 +22587,7 @@
                             "additionalProperties": false
                           },
                           "usage": {
-                            "type": "object",
-                            "properties": {
-                              "turns": {
-                                "anyOf": [
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["NaN"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["Infinity"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["-Infinity"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["Infinity", "-Infinity", "NaN"]
-                                  }
-                                ]
-                              },
-                              "continuations": {
-                                "anyOf": [
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["NaN"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["Infinity"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["-Infinity"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["Infinity", "-Infinity", "NaN"]
-                                  }
-                                ]
-                              },
-                              "toolCalls": {
-                                "anyOf": [
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["NaN"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["Infinity"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["-Infinity"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["Infinity", "-Infinity", "NaN"]
-                                  }
-                                ]
-                              },
-                              "retries": {
-                                "anyOf": [
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["NaN"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["Infinity"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["-Infinity"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["Infinity", "-Infinity", "NaN"]
-                                  }
-                                ]
-                              },
-                              "cost": {
-                                "type": "number"
-                              },
-                              "tokens": {
-                                "type": "object",
-                                "properties": {
-                                  "input": {
-                                    "type": "number"
-                                  },
-                                  "output": {
-                                    "type": "number"
-                                  },
-                                  "reasoning": {
-                                    "type": "number"
-                                  },
-                                  "cache": {
-                                    "type": "object",
-                                    "properties": {
-                                      "read": {
-                                        "type": "number"
-                                      },
-                                      "write": {
-                                        "type": "number"
-                                      }
-                                    },
-                                    "required": ["read", "write"],
-                                    "additionalProperties": false
-                                  }
-                                },
-                                "required": ["input", "output", "reasoning", "cache"],
-                                "additionalProperties": false
-                              }
-                            },
-                            "required": ["turns", "continuations", "toolCalls"],
-                            "additionalProperties": false
+                            "$ref": "#/components/schemas/RayaGoalUsage"
                           },
                           "activeMs": {
                             "anyOf": [
@@ -23921,6 +23421,9 @@
                             "required": ["kind", "limit", "observed", "at"],
                             "additionalProperties": false
                           },
+                          "usage": {
+                            "$ref": "#/components/schemas/RayaGoalUsage"
+                          },
                           "deliverables": {
                             "type": "array",
                             "items": {
@@ -24589,135 +24092,7 @@
                       ]
                     },
                     "usage": {
-                      "type": "object",
-                      "properties": {
-                        "turns": {
-                          "anyOf": [
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["NaN"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["-Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity", "-Infinity", "NaN"]
-                            }
-                          ]
-                        },
-                        "continuations": {
-                          "anyOf": [
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["NaN"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["-Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity", "-Infinity", "NaN"]
-                            }
-                          ]
-                        },
-                        "toolCalls": {
-                          "anyOf": [
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["NaN"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["-Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity", "-Infinity", "NaN"]
-                            }
-                          ]
-                        },
-                        "retries": {
-                          "anyOf": [
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["NaN"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["-Infinity"]
-                            },
-                            {
-                              "type": "string",
-                              "enum": ["Infinity", "-Infinity", "NaN"]
-                            }
-                          ]
-                        },
-                        "cost": {
-                          "type": "number"
-                        },
-                        "tokens": {
-                          "type": "object",
-                          "properties": {
-                            "input": {
-                              "type": "number"
-                            },
-                            "output": {
-                              "type": "number"
-                            },
-                            "reasoning": {
-                              "type": "number"
-                            },
-                            "cache": {
-                              "type": "object",
-                              "properties": {
-                                "read": {
-                                  "type": "number"
-                                },
-                                "write": {
-                                  "type": "number"
-                                }
-                              },
-                              "required": ["read", "write"],
-                              "additionalProperties": false
-                            }
-                          },
-                          "required": ["input", "output", "reasoning", "cache"],
-                          "additionalProperties": false
-                        }
-                      },
-                      "required": ["turns", "continuations", "toolCalls"],
-                      "additionalProperties": false
+                      "$ref": "#/components/schemas/RayaGoalUsage"
                     },
                     "budgetHit": {
                       "type": "object",
@@ -25426,6 +24801,9 @@
                                   "required": ["kind", "limit", "observed", "at"],
                                   "additionalProperties": false
                                 },
+                                "usage": {
+                                  "$ref": "#/components/schemas/RayaGoalUsage"
+                                },
                                 "deliverables": {
                                   "type": "array",
                                   "items": {
@@ -25831,135 +25209,7 @@
                             "additionalProperties": false
                           },
                           "usage": {
-                            "type": "object",
-                            "properties": {
-                              "turns": {
-                                "anyOf": [
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["NaN"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["Infinity"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["-Infinity"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["Infinity", "-Infinity", "NaN"]
-                                  }
-                                ]
-                              },
-                              "continuations": {
-                                "anyOf": [
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["NaN"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["Infinity"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["-Infinity"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["Infinity", "-Infinity", "NaN"]
-                                  }
-                                ]
-                              },
-                              "toolCalls": {
-                                "anyOf": [
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["NaN"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["Infinity"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["-Infinity"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["Infinity", "-Infinity", "NaN"]
-                                  }
-                                ]
-                              },
-                              "retries": {
-                                "anyOf": [
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["NaN"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["Infinity"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["-Infinity"]
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": ["Infinity", "-Infinity", "NaN"]
-                                  }
-                                ]
-                              },
-                              "cost": {
-                                "type": "number"
-                              },
-                              "tokens": {
-                                "type": "object",
-                                "properties": {
-                                  "input": {
-                                    "type": "number"
-                                  },
-                                  "output": {
-                                    "type": "number"
-                                  },
-                                  "reasoning": {
-                                    "type": "number"
-                                  },
-                                  "cache": {
-                                    "type": "object",
-                                    "properties": {
-                                      "read": {
-                                        "type": "number"
-                                      },
-                                      "write": {
-                                        "type": "number"
-                                      }
-                                    },
-                                    "required": ["read", "write"],
-                                    "additionalProperties": false
-                                  }
-                                },
-                                "required": ["input", "output", "reasoning", "cache"],
-                                "additionalProperties": false
-                              }
-                            },
-                            "required": ["turns", "continuations", "toolCalls"],
-                            "additionalProperties": false
+                            "$ref": "#/components/schemas/RayaGoalUsage"
                           },
                           "activeMs": {
                             "anyOf": [
@@ -69446,6 +68696,169 @@
           }
         },
         "required": ["code", "message"],
+        "additionalProperties": false
+      },
+      "RayaGoalUsage": {
+        "type": "object",
+        "properties": {
+          "turns": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "continuations": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "toolCalls": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "retries": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "cost": {
+            "type": "number"
+          },
+          "descendantCost": {
+            "type": "number"
+          },
+          "tokens": {
+            "type": "object",
+            "properties": {
+              "input": {
+                "type": "number"
+              },
+              "output": {
+                "type": "number"
+              },
+              "reasoning": {
+                "type": "number"
+              },
+              "cache": {
+                "type": "object",
+                "properties": {
+                  "read": {
+                    "type": "number"
+                  },
+                  "write": {
+                    "type": "number"
+                  }
+                },
+                "required": ["read", "write"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["input", "output", "reasoning", "cache"],
+            "additionalProperties": false
+          },
+          "descendantTokens": {
+            "type": "object",
+            "properties": {
+              "input": {
+                "type": "number"
+              },
+              "output": {
+                "type": "number"
+              },
+              "reasoning": {
+                "type": "number"
+              },
+              "cache": {
+                "type": "object",
+                "properties": {
+                  "read": {
+                    "type": "number"
+                  },
+                  "write": {
+                    "type": "number"
+                  }
+                },
+                "required": ["read", "write"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["input", "output", "reasoning", "cache"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["turns", "continuations", "toolCalls"],
         "additionalProperties": false
       },
       "RayaGoalDeliverable": {

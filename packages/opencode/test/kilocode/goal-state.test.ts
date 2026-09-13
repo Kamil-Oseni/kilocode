@@ -3289,6 +3289,95 @@ describe("RayaGoal", () => {
     }),
   )
 
+  it.live("attributes descendant usage without adding recursively propagated cost twice", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const parentID = SessionID.make(`ses_goal_${crypto.randomUUID()}`)
+      const childID = SessionID.make(`ses_child_${crypto.randomUUID()}`)
+      const grandID = SessionID.make(`ses_grand_${crypto.randomUUID()}`)
+      const parent = transcript({
+        sessionID: parentID,
+        tool: "task",
+        metadata: { parentSessionId: parentID, sessionId: childID },
+      })
+      const child = transcript({
+        sessionID: childID,
+        tool: "task",
+        metadata: { parentSessionId: childID, sessionId: grandID },
+      })
+      const grand = transcript({ sessionID: grandID, tool: "bash", exit: 0 })
+      if (
+        parent.rows[1].info.role !== "assistant" ||
+        child.rows[1].info.role !== "assistant" ||
+        grand.rows[1].info.role !== "assistant"
+      )
+        throw new Error("Expected assistant messages")
+      parent.part!.state.metadata.childMessageID = child.rows[0].info.id
+      child.part!.state.metadata.childMessageID = grand.rows[0].info.id
+      parent.rows[1].info.cost = 3.5
+      child.rows[1].info.cost = 2.5
+      grand.rows[1].info.cost = 2
+      parent.rows[1].info.tokens = { input: 10, output: 11, reasoning: 1, cache: { read: 2, write: 3 } }
+      child.rows[1].info.tokens = { input: 4, output: 5, reasoning: 1, cache: { read: 1, write: 1 } }
+      grand.rows[1].info.tokens = { input: 6, output: 7, reasoning: 2, cache: { read: 3, write: 2 } }
+      const rows = new Map([
+        [parentID, parent.rows],
+        [childID, child.rows],
+        [grandID, grand.rows],
+      ])
+      const goals = setup(storage, () => parent.rows, {
+        messagesFor: (id) => rows.get(id) ?? [],
+        children: (id) =>
+          id === parentID ? [{ id: childID } as Session.Info] : id === childID ? [{ id: grandID } as Session.Info] : [],
+      })
+      yield* Effect.addFinalizer(() => goals.clear(parentID))
+      const created = yield* goals.create(
+        parentID,
+        "Account for delegated work",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { modelCost: 3 },
+      )
+      parent.part!.state.time.start = created.createdAt + 1
+      child.part!.state.time.start = created.createdAt + 2
+      child.rows[0].info.time.created = created.createdAt + 2
+      grand.rows[0].info.time.created = created.createdAt + 3
+      const turn = yield* goals.recordTurn(parentID, parent.rows[1].info.id)
+      expect(turn?.state.usage.cost).toBe(3.5)
+      expect(turn?.state.usage.descendantCost).toBe(2.5)
+      expect(turn?.state.usage.tokens).toEqual({
+        input: 20,
+        output: 23,
+        reasoning: 4,
+        cache: { read: 6, write: 6 },
+      })
+      expect(turn?.state.usage.descendantTokens).toEqual({
+        input: 10,
+        output: 12,
+        reasoning: 3,
+        cache: { read: 4, write: 3 },
+      })
+      expect(turn?.state.status).toBe("paused")
+      expect(turn?.state.budgetHit).toMatchObject({ kind: "model-cost", limit: 3, observed: 3.5 })
+      expect(
+        (yield* setup(storage, () => parent.rows, {
+          messagesFor: (id) => rows.get(id) ?? [],
+          children: (id) =>
+            id === parentID
+              ? [{ id: childID } as Session.Info]
+              : id === childID
+                ? [{ id: grandID } as Session.Info]
+                : [],
+        }).get(parentID))?.usage,
+      ).toEqual(turn?.state.usage)
+      const revised = yield* goals.revise(parentID, "Account for delegated work with a revised approach")
+      expect(revised.revisions?.at(-1)?.usage).toEqual(turn?.state.usage)
+      expect(yield* goals.recordTurn(parentID, parent.rows[1].info.id)).toBeUndefined()
+    }),
+  )
+
   it.live("pauses at the recorded model-cost limit and requires a reviewed limit change before resume", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service

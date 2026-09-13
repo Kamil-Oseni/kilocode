@@ -19,7 +19,9 @@ test("goal reports preserve exact references and mark legacy records instead of 
         toolCalls: 7,
         continuations: 2,
         cost: 1.25,
+        descendantCost: 0.4,
         tokens: { input: 10, output: 20, reasoning: 3, cache: { read: 4, write: 5 } },
+        descendantTokens: { input: 2, output: 5, reasoning: 1, cache: { read: 1, write: 2 } },
       },
       activeMs: 12500,
       budget: { activeMs: 60_000, modelCost: 2, recoveryAttempts: 3 },
@@ -78,7 +80,9 @@ test("goal reports preserve exact references and mark legacy records instead of 
   expect(saved).toContain("does not rerun checks")
   expect(saved).toContain("Turns: 3\nTool calls: 7\nContinuations: 2")
   expect(saved).toContain("Accumulated active time: 12.5 seconds")
-  expect(saved).toContain("Goal-session model cost: $1.250000")
+  expect(saved).toContain("Recorded goal-tree model cost: $1.250000")
+  expect(saved).toContain("Direct goal-session model cost: $0.850000.")
+  expect(saved).toContain("Delegated-session model cost: $0.400000")
   expect(saved).toContain("Active-time limit: 60.0 seconds.")
   expect(saved).toContain("Goal-session recorded model-cost limit: $2.000000.")
   expect(saved).toContain("Consecutive automatic recovery-attempt limit: 3.")
@@ -92,7 +96,10 @@ test("goal reports preserve exact references and mark legacy records instead of 
   expect(saved).toContain("Coverage: revision-safe file mutations cited by the accepted completion audit")
   expect(saved).toContain("Tokens: input 10; output 20; reasoning 3; cache read 4; cache write 5.")
   expect(saved).toContain(
-    "Child-session spend, tool fees, GPT-Live usage and external service charges are not included",
+    "Delegated-session tokens included above: input 2; output 5; reasoning 1; cache read 1; cache write 2.",
+  )
+  expect(saved).toContain(
+    "Parent message cost already contains descendant cost recursively, so delegated cost is attributed without adding it twice",
   )
 })
 

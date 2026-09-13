@@ -9,6 +9,7 @@ export const collect = (
   sessionID: SessionID,
   createdAt: number,
   inputs?: readonly MessageID[],
+  root?: readonly SessionV1.WithParts[],
 ) =>
   Effect.gen(function* () {
     const result: SessionV1.WithParts[] = []
@@ -20,7 +21,7 @@ export const collect = (
       const item = queue.shift()!
       if (seen.has(item.id)) continue
       seen.add(item.id)
-      const saved = yield* sessions.messages({ sessionID: item.id })
+      const saved = item.id === sessionID && root ? root : yield* sessions.messages({ sessionID: item.id })
       const ids = new Map<string, number>()
       for (const row of saved) ids.set(row.info.id, (ids.get(row.info.id) ?? 0) + 1)
       const unique = saved.filter((row) => row.info.sessionID === item.id && ids.get(row.info.id) === 1)

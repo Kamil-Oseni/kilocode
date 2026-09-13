@@ -53,6 +53,7 @@ export interface GoalState {
     plan?: GoalState["plan"]
     budget?: GoalBudget | null
     budgetHit?: GoalBudgetHit
+    usage?: GoalState["usage"]
     deliverables?: GoalDeliverable[]
     audit?: GoalState["audit"]
     auditAttempt?: GoalState["auditAttempt"]
@@ -111,7 +112,14 @@ export interface GoalState {
     toolCalls: number
     retries?: number
     cost?: number
+    descendantCost?: number
     tokens?: {
+      input: number
+      output: number
+      reasoning: number
+      cache: { read: number; write: number }
+    }
+    descendantTokens?: {
       input: number
       output: number
       reasoning: number

@@ -5685,6 +5685,33 @@ export type AgentManagerFailure = {
   message: string
 }
 
+export type RayaGoalUsage = {
+  turns: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  continuations: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  toolCalls: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  retries?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  cost?: number
+  descendantCost?: number
+  tokens?: {
+    input: number
+    output: number
+    reasoning: number
+    cache: {
+      read: number
+      write: number
+    }
+  }
+  descendantTokens?: {
+    input: number
+    output: number
+    reasoning: number
+    cache: {
+      read: number
+      write: number
+    }
+  }
+}
+
 export type RayaGoalDeliverable = {
   path: string
   revision:
@@ -19856,6 +19883,7 @@ export type KilocodeGoalGetResponses = {
         observed: number
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       }
+      usage?: RayaGoalUsage
       deliverables?: Array<RayaGoalDeliverable>
       audit?: {
         requirements: Array<{
@@ -19963,22 +19991,7 @@ export type KilocodeGoalGetResponses = {
     updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     activeMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     activeAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    usage: {
-      turns: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      continuations: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      toolCalls: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      retries?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      cost?: number
-      tokens?: {
-        input: number
-        output: number
-        reasoning: number
-        cache: {
-          read: number
-          write: number
-        }
-      }
-    }
+    usage: RayaGoalUsage
     budgetHit?: {
       kind: "active-time" | "model-cost" | "recovery-attempts"
       limit: number
@@ -20092,6 +20105,7 @@ export type KilocodeGoalGetResponses = {
           observed: number
           at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
         }
+        usage?: RayaGoalUsage
         deliverables?: Array<RayaGoalDeliverable>
         audit?: {
           requirements: Array<{
@@ -20163,22 +20177,7 @@ export type KilocodeGoalGetResponses = {
         observed: number
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       }
-      usage?: {
-        turns: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        continuations: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        toolCalls: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        retries?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        cost?: number
-        tokens?: {
-          input: number
-          output: number
-          reasoning: number
-          cache: {
-            read: number
-            write: number
-          }
-        }
-      }
+      usage?: RayaGoalUsage
       activeMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       objective: string
       criteria?: Array<{
@@ -20360,6 +20359,7 @@ export type KilocodeGoalUpdateResponses = {
         observed: number
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       }
+      usage?: RayaGoalUsage
       deliverables?: Array<RayaGoalDeliverable>
       audit?: {
         requirements: Array<{
@@ -20467,22 +20467,7 @@ export type KilocodeGoalUpdateResponses = {
     updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     activeMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     activeAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    usage: {
-      turns: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      continuations: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      toolCalls: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      retries?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      cost?: number
-      tokens?: {
-        input: number
-        output: number
-        reasoning: number
-        cache: {
-          read: number
-          write: number
-        }
-      }
-    }
+    usage: RayaGoalUsage
     budgetHit?: {
       kind: "active-time" | "model-cost" | "recovery-attempts"
       limit: number
@@ -20596,6 +20581,7 @@ export type KilocodeGoalUpdateResponses = {
           observed: number
           at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
         }
+        usage?: RayaGoalUsage
         deliverables?: Array<RayaGoalDeliverable>
         audit?: {
           requirements: Array<{
@@ -20667,22 +20653,7 @@ export type KilocodeGoalUpdateResponses = {
         observed: number
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       }
-      usage?: {
-        turns: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        continuations: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        toolCalls: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        retries?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        cost?: number
-        tokens?: {
-          input: number
-          output: number
-          reasoning: number
-          cache: {
-            read: number
-            write: number
-          }
-        }
-      }
+      usage?: RayaGoalUsage
       activeMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       objective: string
       criteria?: Array<{
@@ -20846,6 +20817,7 @@ export type KilocodeGoalCreateResponses = {
         observed: number
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       }
+      usage?: RayaGoalUsage
       deliverables?: Array<RayaGoalDeliverable>
       audit?: {
         requirements: Array<{
@@ -20953,22 +20925,7 @@ export type KilocodeGoalCreateResponses = {
     updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     activeMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     activeAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    usage: {
-      turns: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      continuations: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      toolCalls: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      retries?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      cost?: number
-      tokens?: {
-        input: number
-        output: number
-        reasoning: number
-        cache: {
-          read: number
-          write: number
-        }
-      }
-    }
+    usage: RayaGoalUsage
     budgetHit?: {
       kind: "active-time" | "model-cost" | "recovery-attempts"
       limit: number
@@ -21082,6 +21039,7 @@ export type KilocodeGoalCreateResponses = {
           observed: number
           at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
         }
+        usage?: RayaGoalUsage
         deliverables?: Array<RayaGoalDeliverable>
         audit?: {
           requirements: Array<{
@@ -21153,22 +21111,7 @@ export type KilocodeGoalCreateResponses = {
         observed: number
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       }
-      usage?: {
-        turns: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        continuations: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        toolCalls: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        retries?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        cost?: number
-        tokens?: {
-          input: number
-          output: number
-          reasoning: number
-          cache: {
-            read: number
-            write: number
-          }
-        }
-      }
+      usage?: RayaGoalUsage
       activeMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       objective: string
       criteria?: Array<{

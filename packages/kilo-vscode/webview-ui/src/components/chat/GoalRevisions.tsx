@@ -21,6 +21,12 @@ export function GoalRevisions(props: { goal: Pick<GoalState, "createdAt" | "revi
               <p>Replaced through {item.source === "steering" ? "conversation steering" : "goal controls"}.</p>
               <p>Replaced: {new Date(item.at).toLocaleString()}</p>
               <p>{item.objective}</p>
+              <Show when={item.usage?.cost !== undefined && item.usage.descendantCost !== undefined}>
+                <p>
+                  Recorded model cost at replacement: ${item.usage!.cost!.toFixed(2)} total, $
+                  {item.usage!.descendantCost!.toFixed(2)} delegated.
+                </p>
+              </Show>
               <GoalReview review={item.review} historical />
               <GoalDeliverables items={item.deliverables} />
               <GoalCriteria criteria={item.criteria} />

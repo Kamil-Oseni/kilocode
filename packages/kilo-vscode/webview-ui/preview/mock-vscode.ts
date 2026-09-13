@@ -82,22 +82,47 @@ const calendar = (message: WebviewMessage) => {
   return true
 }
 
-const attachment = (message: WebviewMessage) => {
-  if (message.type !== "routineInboxAttachmentPreview") return false
-  const sound = message.attachmentID === "123e4567-e89b-42d3-a456-426614174002"
+const preview = (message: WebviewMessage) => {
+  if (message.type === "routineInboxAttachmentPreview") {
+    const sound = message.attachmentID === "123e4567-e89b-42d3-a456-426614174002"
+    emit({
+      type: "routineInboxAttachmentPreviewed",
+      requestID: message.requestID,
+      agentID: message.agentID,
+      file: {
+        id: message.attachmentID,
+        name: sound ? "finance-update.wav" : "travel-receipt.png",
+        mime: sound ? "audio/wav" : "image/png",
+        size: sound ? 44 : 68,
+        data: sound
+          ? "UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="
+          : "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+      },
+    })
+    return true
+  }
+  if (message.type !== "routineOrganizationActivity") return false
   emit({
-    type: "routineInboxAttachmentPreviewed",
+    type: "routineOrganizationActivity",
     requestID: message.requestID,
-    agentID: message.agentID,
-    file: {
-      id: message.attachmentID,
-      name: sound ? "finance-update.wav" : "travel-receipt.png",
-      mime: sound ? "audio/wav" : "image/png",
-      size: sound ? 44 : 68,
-      data: sound
-        ? "UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="
-        : "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
-    },
+    organizationID: message.organizationID,
+    items: [
+      {
+        id: "rdg_org_preview",
+        sender: { id: legal.id, name: legal.name, role: "Chief of Staff", archived: false },
+        recipient: { id: books.id, name: books.name, role: "Accounting", archived: false },
+        organizationID: message.organizationID,
+        organizationName: "Website Builders",
+        organizationRevision: 1,
+        source: "org_preview",
+        state: "completed",
+        objective: "Review Friday travel expenses and return a reconciled ledger.",
+        response: "The ledger is reconciled and the receipt exception is documented.",
+        time: 1,
+        updated: 3,
+        cost: 0.42,
+      },
+    ],
   })
   return true
 }
@@ -281,7 +306,7 @@ const reply = (message: WebviewMessage) => {
     })
     return
   }
-  if (attachment(message)) return
+  if (preview(message)) return
   if (message.type === "routineInboxInfo") {
     emit({
       type: "routineInboxInfo",
@@ -352,31 +377,6 @@ const reply = (message: WebviewMessage) => {
                 updated: 3,
               },
             ],
-    })
-    return
-  }
-  if (message.type === "routineOrganizationActivity") {
-    emit({
-      type: "routineOrganizationActivity",
-      requestID: message.requestID,
-      organizationID: message.organizationID,
-      items: [
-        {
-          id: "rdg_org_preview",
-          sender: { id: legal.id, name: legal.name, role: "Chief of Staff", archived: false },
-          recipient: { id: books.id, name: books.name, role: "Accounting", archived: false },
-          organizationID: message.organizationID,
-          organizationName: "Website Builders",
-          organizationRevision: 1,
-          source: "org_preview",
-          state: "completed",
-          objective: "Review Friday travel expenses and return a reconciled ledger.",
-          response: "The ledger is reconciled and the receipt exception is documented.",
-          time: 1,
-          updated: 3,
-          cost: 0.42,
-        },
-      ],
     })
     return
   }

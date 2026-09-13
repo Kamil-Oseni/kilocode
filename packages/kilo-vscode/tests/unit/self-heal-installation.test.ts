@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto"
 import { createWriteStream } from "node:fs"
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { spawn } from "node:child_process"
+import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
 import { createRequire } from "node:module"
 import { join } from "node:path"
 import { pipeline } from "node:stream/promises"
@@ -13,6 +14,36 @@ import { SelfHealInstallation, type Plan } from "../../src/self-heal/installatio
 const require = createRequire(import.meta.url)
 const writer = createRequire(require.resolve("@vscode/vsce"))("yazl") as {
   ZipFile: new () => { addBuffer(buffer: Buffer, name: string): void; end(): void; outputStream: Readable }
+}
+const worker = join(import.meta.dir, "../fixtures/self-heal-install-worker.ts")
+
+async function exists(file: string) {
+  return stat(file).then(
+    () => true,
+    () => false,
+  )
+}
+
+async function wait(file: string) {
+  const end = Date.now() + 10_000
+  while (Date.now() < end) {
+    if (await exists(file)) return
+    await Bun.sleep(20)
+  }
+  throw new Error(`Timed out waiting for ${file}`)
+}
+
+function launch(input: Record<string, string>) {
+  const child = spawn(process.execPath, [worker, JSON.stringify(input)], {
+    cwd: join(import.meta.dir, "../.."),
+    stdio: ["ignore", "ignore", "pipe"],
+    windowsHide: true,
+  })
+  return new Promise<{ code: number | null; error: string }>((resolve) => {
+    const errors: Buffer[] = []
+    child.stderr.on("data", (data) => errors.push(Buffer.from(data)))
+    child.on("close", (code) => resolve({ code, error: Buffer.concat(errors).toString("utf8") }))
+  })
 }
 
 async function fixture() {
@@ -317,3 +348,35 @@ test("changed approval after install confirmation creates no intent", async () =
     await rm(run.root, { recursive: true, force: true })
   }
 })
+
+test("independent extension processes retain one installation and dispatch once", async () => {
+  const run = await fixture()
+  try {
+    const root = join(run.root, "state")
+    const plan = join(run.root, "plan.json")
+    const go = join(run.root, "go")
+    await writeFile(plan, JSON.stringify(run.plan))
+    const inputs = ["first", "second"].map((tag) => ({
+      root,
+      plan,
+      go,
+      ready: join(run.root, `${tag}-ready`),
+      result: join(run.root, `${tag}-result`),
+      dispatch: join(run.root, `${tag}-dispatch`),
+    }))
+    const children = inputs.map(launch)
+    await Promise.all(inputs.map((input) => wait(input.ready)))
+    await writeFile(go, "go")
+    expect(await Promise.all(children)).toEqual([
+      { code: 0, error: "" },
+      { code: 0, error: "" },
+    ])
+    const results = await Promise.all(inputs.map(async (input) => JSON.parse(await readFile(input.result, "utf8"))))
+    expect(results.filter((result) => result.dispatched)).toHaveLength(1)
+    expect(new Set(results.map((result) => result.id)).size).toBe(1)
+    expect((await readdir(run.root)).filter((name) => name.endsWith("-dispatch"))).toHaveLength(1)
+    expect(await new SelfHealInstallation(root).inspect()).toMatchObject({ phase: "awaiting-reload" })
+  } finally {
+    await rm(run.root, { recursive: true, force: true })
+  }
+}, 30_000)

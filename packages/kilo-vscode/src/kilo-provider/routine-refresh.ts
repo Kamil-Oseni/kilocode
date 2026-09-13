@@ -4,6 +4,7 @@ type Scope = { client: KiloClient | null; directory: string; generation: number 
 type Post = (message: Record<string, unknown>) => void
 
 type Organization = import("@kilocode/sdk/v2/client").KilocodeRoutineOrganizationListResponse["items"][number]
+type Histories = import("@kilocode/sdk/v2/client").KilocodeRoutineHistoriesResponse
 
 type Member = Organization["members"][number]
 type Delegation = Organization["delegations"][number]
@@ -72,39 +73,20 @@ async function groups(kilo: KiloClient["kilocode"]["routine"], directory: string
     .catch(() => undefined)
 }
 
-async function histories(
-  kilo: KiloClient["kilocode"]["routine"],
-  agents: readonly { id: string }[],
-  directory: string,
-  options: { throwOnError: true; signal: AbortSignal },
-  valid: () => boolean,
-  post: Post,
-) {
-  const failed: string[] = []
-  for (const item of agents) {
-    if (!valid()) return
-    if (options.signal.aborted) {
-      failed.push(item.id)
-      post({
-        type: "routineRuns",
-        agentID: item.id,
-        error: "History refresh timed out. Previously loaded history is retained.",
-      })
-      continue
-    }
-    const runs = await kilo.runs({ directory, agentID: item.id }, options).catch(() => undefined)
-    if (Array.isArray(runs?.data) && runs.data.every((run) => run.agentID === item.id)) {
-      post({ type: "routineRuns", agentID: item.id, runs: runs.data })
-      continue
-    }
-    failed.push(item.id)
-    post({
-      type: "routineRuns",
-      agentID: item.id,
-      error: "History could not be refreshed. Previously loaded history is retained.",
-    })
+function history(value: Histories | undefined, agents: readonly { id: string }[]) {
+  if (!value || !Array.isArray(value.items) || !Array.isArray(value.failed)) throw new Error("Invalid histories")
+  const ids = new Set(agents.map((agent) => agent.id))
+  const rows = new Map<string, Histories["items"][number]>()
+  for (const item of value.items) {
+    if (!ids.has(item.agentID) || rows.has(item.agentID) || !item.runs.every((run) => run.agentID === item.agentID))
+      throw new Error("Invalid histories")
+    rows.set(item.agentID, item)
   }
-  return failed
+  const failed = new Set(value.failed)
+  if (failed.size !== value.failed.length) throw new Error("Invalid histories")
+  if ([...failed].some((id) => !ids.has(id) || rows.has(id))) throw new Error("Invalid histories")
+  if (rows.size + failed.size !== ids.size) throw new Error("Invalid histories")
+  return { rows, failed: [...failed] }
 }
 
 /** One active read and one coalesced invalidation per provider. Never owns mutations. */
@@ -230,9 +212,23 @@ export class RoutineRefresh {
               organizationError: "Organizations could not be refreshed. Previously loaded organizations are retained.",
             },
       )
-      const failed = await histories(kilo, agents.data, scope.directory, options, valid, post)
-      if (!failed) return
-      post({ type: "routineState", refresh: failed.length || !group ? "partial" : "complete", failed })
+      const histories = await kilo.histories({ directory: scope.directory }, options)
+      if (!valid()) return
+      const bundle = history(histories.data, agents.data)
+      for (const item of bundle.rows.values()) {
+        post({ type: "routineRuns", agentID: item.agentID, runs: item.runs })
+      }
+      for (const agentID of bundle.failed)
+        post({
+          type: "routineRuns",
+          agentID,
+          error: "History could not be refreshed. Previously loaded history is retained.",
+        })
+      post({
+        type: "routineState",
+        refresh: bundle.failed.length || !group ? "partial" : "complete",
+        failed: bundle.failed,
+      })
     } catch {
       post({
         type: "routineState",

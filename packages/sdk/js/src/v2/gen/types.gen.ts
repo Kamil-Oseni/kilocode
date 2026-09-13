@@ -22038,6 +22038,84 @@ export type KilocodeRoutineRunsResponses = {
 
 export type KilocodeRoutineRunsResponse = KilocodeRoutineRunsResponses[keyof KilocodeRoutineRunsResponses]
 
+export type KilocodeRoutineHistoriesData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/agent-runs"
+}
+
+export type KilocodeRoutineHistoriesErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type KilocodeRoutineHistoriesError = KilocodeRoutineHistoriesErrors[keyof KilocodeRoutineHistoriesErrors]
+
+export type KilocodeRoutineHistoriesResponses = {
+  /**
+   * Aggregate routine run histories
+   */
+  200: {
+    items: Array<{
+      agentID: string
+      runs: Array<{
+        id: string
+        agentID: string
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        sessionID: string
+        status: "running" | "complete" | "blocked" | "error"
+        scheduleVersion?: number
+        trigger?:
+          | {
+              kind: "manual"
+            }
+          | {
+              kind: "timer"
+              id: string
+              scheduledAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+              observedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+              tz?: string
+            }
+          | {
+              kind: "event"
+              source: string
+              filter?: string
+              receivedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            }
+        revision?: number
+        outcome?: {
+          kind: "code" | "notify"
+          summary: string
+          evidence?: Array<string>
+          verification?: {
+            at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            requirements: Array<{
+              criterionID?: string
+              requirement: string
+              verification?: string
+              required: boolean
+              passed: boolean
+              evidence: Array<string>
+            }>
+          }
+          cost: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+        blockedReason?: string
+      }>
+    }>
+    failed: Array<string>
+  }
+}
+
+export type KilocodeRoutineHistoriesResponse =
+  KilocodeRoutineHistoriesResponses[keyof KilocodeRoutineHistoriesResponses]
+
 export type KilocodeRoutineSnapshotData = {
   body?: never
   path: {

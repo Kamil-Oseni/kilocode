@@ -29797,6 +29797,366 @@
         ]
       }
     },
+    "/kilocode/agent-runs": {
+      "get": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.routine.histories",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Aggregate routine run histories",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "agentID": {
+                            "type": "string"
+                          },
+                          "runs": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "agentID": {
+                                  "type": "string"
+                                },
+                                "at": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["NaN"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["-Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity", "-Infinity", "NaN"]
+                                    }
+                                  ]
+                                },
+                                "sessionID": {
+                                  "type": "string",
+                                  "pattern": "^ses"
+                                },
+                                "status": {
+                                  "type": "string",
+                                  "enum": ["running", "complete", "blocked", "error"]
+                                },
+                                "scheduleVersion": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 9007199254740991
+                                },
+                                "trigger": {
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": ["manual"]
+                                        }
+                                      },
+                                      "required": ["kind"],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": ["timer"]
+                                        },
+                                        "id": {
+                                          "type": "string"
+                                        },
+                                        "scheduledAt": {
+                                          "anyOf": [
+                                            {
+                                              "type": "number"
+                                            },
+                                            {
+                                              "type": "string",
+                                              "enum": ["NaN"]
+                                            },
+                                            {
+                                              "type": "string",
+                                              "enum": ["Infinity"]
+                                            },
+                                            {
+                                              "type": "string",
+                                              "enum": ["-Infinity"]
+                                            },
+                                            {
+                                              "type": "string",
+                                              "enum": ["Infinity", "-Infinity", "NaN"]
+                                            }
+                                          ]
+                                        },
+                                        "observedAt": {
+                                          "anyOf": [
+                                            {
+                                              "type": "number"
+                                            },
+                                            {
+                                              "type": "string",
+                                              "enum": ["NaN"]
+                                            },
+                                            {
+                                              "type": "string",
+                                              "enum": ["Infinity"]
+                                            },
+                                            {
+                                              "type": "string",
+                                              "enum": ["-Infinity"]
+                                            },
+                                            {
+                                              "type": "string",
+                                              "enum": ["Infinity", "-Infinity", "NaN"]
+                                            }
+                                          ]
+                                        },
+                                        "tz": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": ["kind", "id", "scheduledAt", "observedAt"],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": ["event"]
+                                        },
+                                        "source": {
+                                          "type": "string"
+                                        },
+                                        "filter": {
+                                          "type": "string"
+                                        },
+                                        "receivedAt": {
+                                          "anyOf": [
+                                            {
+                                              "type": "number"
+                                            },
+                                            {
+                                              "type": "string",
+                                              "enum": ["NaN"]
+                                            },
+                                            {
+                                              "type": "string",
+                                              "enum": ["Infinity"]
+                                            },
+                                            {
+                                              "type": "string",
+                                              "enum": ["-Infinity"]
+                                            },
+                                            {
+                                              "type": "string",
+                                              "enum": ["Infinity", "-Infinity", "NaN"]
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "required": ["kind", "source", "receivedAt"],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                },
+                                "revision": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 9007199254740991
+                                },
+                                "outcome": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": ["code", "notify"]
+                                    },
+                                    "summary": {
+                                      "type": "string"
+                                    },
+                                    "evidence": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "verification": {
+                                      "type": "object",
+                                      "properties": {
+                                        "at": {
+                                          "anyOf": [
+                                            {
+                                              "type": "number"
+                                            },
+                                            {
+                                              "type": "string",
+                                              "enum": ["NaN"]
+                                            },
+                                            {
+                                              "type": "string",
+                                              "enum": ["Infinity"]
+                                            },
+                                            {
+                                              "type": "string",
+                                              "enum": ["-Infinity"]
+                                            },
+                                            {
+                                              "type": "string",
+                                              "enum": ["Infinity", "-Infinity", "NaN"]
+                                            }
+                                          ]
+                                        },
+                                        "requirements": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "object",
+                                            "properties": {
+                                              "criterionID": {
+                                                "type": "string"
+                                              },
+                                              "requirement": {
+                                                "type": "string"
+                                              },
+                                              "verification": {
+                                                "type": "string"
+                                              },
+                                              "required": {
+                                                "type": "boolean"
+                                              },
+                                              "passed": {
+                                                "type": "boolean"
+                                              },
+                                              "evidence": {
+                                                "type": "array",
+                                                "items": {
+                                                  "type": "string"
+                                                }
+                                              }
+                                            },
+                                            "required": ["requirement", "required", "passed", "evidence"],
+                                            "additionalProperties": false
+                                          }
+                                        }
+                                      },
+                                      "required": ["at", "requirements"],
+                                      "additionalProperties": false
+                                    },
+                                    "cost": {
+                                      "anyOf": [
+                                        {
+                                          "type": "number"
+                                        },
+                                        {
+                                          "type": "string",
+                                          "enum": ["NaN"]
+                                        },
+                                        {
+                                          "type": "string",
+                                          "enum": ["Infinity"]
+                                        },
+                                        {
+                                          "type": "string",
+                                          "enum": ["-Infinity"]
+                                        },
+                                        {
+                                          "type": "string",
+                                          "enum": ["Infinity", "-Infinity", "NaN"]
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": ["kind", "summary", "cost"],
+                                  "additionalProperties": false
+                                },
+                                "blockedReason": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["id", "agentID", "at", "sessionID", "status"],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": ["agentID", "runs"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "failed": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": ["items", "failed"],
+                  "additionalProperties": false,
+                  "description": "Aggregate routine run histories"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Read bounded run histories for every active routine in one request, retaining explicit worker IDs whose history could not be decoded.",
+        "summary": "List all active routine histories",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.routine.histories({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/kilocode/agent/{agentID}/runs/{runID}/snapshot": {
       "get": {
         "tags": ["kilocode"],

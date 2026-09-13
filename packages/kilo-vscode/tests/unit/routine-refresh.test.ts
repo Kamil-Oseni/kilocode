@@ -39,6 +39,8 @@ test("a mutation during an active read is acknowledged once and requests one tra
         return Response.json([{ id: "routine" }])
       }
       if (new URL(request.url).pathname.endsWith("/organization")) return Response.json({ items: [] })
+      if (new URL(request.url).pathname.endsWith("/agent-runs"))
+        return Response.json({ items: [{ agentID: "routine", runs: [] }], failed: [] })
       return Response.json([])
     },
   })
@@ -107,9 +109,19 @@ test("real SDK HTTP refresh burst is bounded, partial histories remain explicit,
         if (url.pathname.endsWith("/agent-templates")) return Response.json([])
         if (url.pathname.endsWith("/agent-inbox")) return Response.json([])
         if (url.pathname.endsWith("/organization")) return Response.json({ items: [] })
-        const id = url.pathname.split("/").at(-2)!
-        if (cycle === 2 && id === "agent-7") return new Response("unavailable", { status: 503 })
-        return Response.json([{ id: `run-${id}`, agentID: id, status: "complete", at: cycle }])
+        if (url.pathname.endsWith("/agent-runs")) {
+          const failed = cycle === 2 ? ["agent-7"] : []
+          return Response.json({
+            items: Array.from({ length: 40 }, (_, i) => `agent-${i}`)
+              .filter((id) => !failed.includes(id))
+              .map((id) => ({
+                agentID: id,
+                runs: [{ id: `run-${id}`, agentID: id, status: "complete", at: cycle }],
+              })),
+            failed,
+          })
+        }
+        return Response.json([])
       } finally {
         active--
       }
@@ -127,7 +139,7 @@ test("real SDK HTTP refresh burst is bounded, partial histories remain explicit,
     const comparison = refresh.request("comparison")
     blocked.release()
     await Promise.all([first, ...requests, comparison])
-    expect(calls).toHaveLength(88)
+    expect(calls).toHaveLength(10)
     expect(maximum).toBeLessThanOrEqual(2)
     expect(cycle).toBe(2)
     expect(messages.filter((msg) => msg.requestID === "view" && msg.refresh === "partial")).toHaveLength(1)
@@ -148,7 +160,7 @@ test("real SDK HTTP refresh burst is bounded, partial histories remain explicit,
       message: { type: "routineUpdate", agentID: "agent-0", enabled: false },
     })
     expect(calls.filter((call) => call.startsWith("PATCH"))).toHaveLength(1)
-    expect(calls).toHaveLength(133)
+    expect(calls).toHaveLength(16)
     const saved = messages.findIndex((msg) => msg.saved === true)
     const loading = messages.findIndex((msg) => msg.refreshID === 3 && msg.refresh === "loading")
     expect(saved).toBeGreaterThan(-1)
@@ -178,6 +190,7 @@ for (const change of ["client", "directory", "generation"] as const)
           await blocked.promise
         }
         if (url.pathname.endsWith("/organization")) return Response.json({ items: [] })
+        if (url.pathname.endsWith("/agent-runs")) return Response.json({ items: [], failed: [] })
         return Response.json([])
       },
     })
@@ -222,6 +235,7 @@ test("a stalled real HTTP refresh ends with explicit failure and allows retry", 
     async fetch(request) {
       if (stall) await blocked.promise
       if (new URL(request.url).pathname.endsWith("/organization")) return Response.json({ items: [] })
+      if (new URL(request.url).pathname.endsWith("/agent-runs")) return Response.json({ items: [], failed: [] })
       return Response.json([])
     },
   })
@@ -267,6 +281,7 @@ test("invalid organization responses are retained as an explicit partial refresh
             },
           ],
         })
+      if (path.endsWith("/agent-runs")) return Response.json({ items: [], failed: [] })
       return Response.json([])
     },
   })

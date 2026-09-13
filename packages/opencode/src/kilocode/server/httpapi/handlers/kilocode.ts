@@ -571,6 +571,9 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     const agentRuns = Effect.fn("KilocodeHttpApi.agentRuns")(function* (ctx: { params: { agentID: string } }) {
       return yield* runner.tasks.runsFor(ctx.params.agentID)
     })
+    const agentHistories = Effect.fn("KilocodeHttpApi.agentHistories")(function* () {
+      return yield* runner.tasks.histories()
+    })
     const agentSnapshot = Effect.fn("KilocodeHttpApi.agentSnapshot")(function* (ctx: {
       params: { agentID: string; runID: string }
     }) {
@@ -1003,6 +1006,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .handle("agentRemove", agentRemove)
         .handle("agentRun", agentRun)
         .handle("agentRuns", agentRuns)
+        .handle("agentHistories", agentHistories)
         .handle("agentSnapshot", agentSnapshot)
         .handle("agentTemplates", agentTemplateList)
         .handle("organizationList", organizationList)

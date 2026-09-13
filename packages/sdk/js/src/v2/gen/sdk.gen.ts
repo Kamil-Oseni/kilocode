@@ -273,6 +273,8 @@ import type {
   KilocodeRoutineEventResponses,
   KilocodeRoutineForecastErrors,
   KilocodeRoutineForecastResponses,
+  KilocodeRoutineHistoriesErrors,
+  KilocodeRoutineHistoriesResponses,
   KilocodeRoutineInboxAttachmentErrors,
   KilocodeRoutineInboxAttachmentResponses,
   KilocodeRoutineInboxDraftErrors,
@@ -10051,6 +10053,40 @@ export class Routine extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<KilocodeRoutineRunsResponses, KilocodeRoutineRunsErrors, ThrowOnError>({
       url: "/kilocode/agent/{agentID}/runs",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List all active routine histories
+   *
+   * Read bounded run histories for every active routine in one request, retaining explicit worker IDs whose history could not be decoded.
+   */
+  public histories<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      KilocodeRoutineHistoriesResponses,
+      KilocodeRoutineHistoriesErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/agent-runs",
       ...options,
       ...params,
     })

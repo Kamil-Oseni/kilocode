@@ -374,11 +374,11 @@ The following sections retain the full 39-item scope. Related findings and overh
 
 ### EN-14 — Measure recovery and streaming performance across client boundaries
 
-**Recorded status:** In progress. Routine refresh now coalesces bursts, cancels obsolete client/directory reads, bounds deadlines and preserves explicitly stale partial history. Actual SDK/HTTP workload: 40 routines plus 100 invalidations produces 84 reads/max two concurrent; rendered comparison/recovery checks pass. Repair source copying now uses bounded batches with integrity/failure-drain coverage; a local 1,003-file benchmark reduces median copy time 16.56%. O(N) per-cycle reads, aggregate summaries and general streaming/reconnect performance budgets remain open.
+**Recorded status:** In progress. Routine refresh coalesces bursts, fences obsolete client/directory reads, bounds deadlines and preserves explicitly stale partial history. ChatGPT's aggregate history contract reduces the measured 40-worker/100-invalidation workload from 88 to 10 refresh reads and the post-mutation total from 133 to 16. Repair source copying uses bounded batches with integrity/failure-drain coverage; a local 1,003-file benchmark reduces median copy time 16.56%. General streaming-render and reconnect performance budgets remain open.
 
 **Implementation and verification:**
 
-1. Add aggregate routine/history queries where current O(N) reads dominate; retain cancellation, coalescing and honest stale-state display.
+1. Preserve the aggregate Routine history endpoint, its eight-read backend concurrency cap, exact worker accounting, cancellation, coalescing and honest stale-state display.
 2. Set measured budgets for streaming rendering, reconnect recovery and bounded queues using representative histories.
 3. Record dataset size, request/concurrency counts and latency distributions before/after with the same real workload; avoid tiny-fixture performance claims.
 
@@ -2391,3 +2391,13 @@ Extension and console delivery boundaries contain an individual handler's unknow
 ## ChatGPT 2026-09-12 23:58 America/Toronto — EN-07 pushed and installed
 
 Commit `edb48b2bc5` (`feat: negotiate supported Raya client generations`) is on `origin/main`. The pre-push gate passed all 29 TypeScript package checks and the JetBrains typecheck. The authorized `snapshot:install` workflow regenerated the SDK, rebuilt and smoke-tested the Windows x64 CLI, passed extension typechecks/lint/production bundling, packaged 431 entries, and installed `eden.raya@7.4.23-snapshot+edb48b2bc5.kamil-oseni.1789271695207`. Artifact: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-edb48b2bc5-kamil-oseni.1789271695207.vsix`; 517,505,434 bytes; SHA-256 `C099A186FE82F08B966176F5F327DF0BB1ABCA40E3A269564656DF8EB4B8180A`; 229,089,792-byte bundled `extension/bin/kilo.exe`; zero `.env` or `.tmp` entries. No force push or hook bypass occurred. Reload the extension host before manual smoke testing; no reinstall is needed after the documentation-only receipt commit.
+
+## ChatGPT 2026-09-13 00:11 America/Toronto — Routines capability truth and required end state
+
+Treat the owner's four numbered Routines capabilities as mandatory acceptance, not future inspiration. Durable workers, organizations, schedules, history, inbox, attachments and delegations; main-chat management tools with required `ask_options` clarification; worker DMs and Info files, links and contacts; explicit organization role graphs; and permitted worker-to-worker delegation exist. Still require a packaged before/after reinstall carry-over walkthrough and paid live-model proof that supported primary models actually ask for missing organization and routine decisions.
+
+Do not call the end state complete until the Routines inbox, thread, composer, Info and organization experience has been redesigned under `docs/designer.md` and current official Codex UI/UX patterns; inline media is handled coherently; organization-wide work and handoffs are visible; an authorized running organization worker can safely create durable subordinate workers without exceeding organization, delegation or tool authority; and representative discovery-to-delivery workflows have real integrations and evidence. Preserve only Raya's accent, Instrument Serif and Outfit, and the existing goal card design.
+
+## ChatGPT 2026-09-13 00:11 America/Toronto — EN-14 aggregate history checkpoint
+
+`GET /kilocode/agent-runs` now aggregates every active worker's bounded run history with at most eight backend history reads in flight. The extension accepts a response only when every active worker appears exactly once in a valid row or explicit failure list. Individual failures keep stale history visible and yield partial status. The generated-SDK 40-worker workload plus 100 invalidations falls from 88 to 10 refresh requests; adding one mutation and its trailing refresh reaches 16 total requests instead of 133. Focused extension evidence passes 7 tests / 52 assertions and the actual server endpoint passes 1 / 6; OpenCode, extension and SDK typechecks, generated-artifact guard and annotation guard pass. Commit, push, snapshot install and artifact receipt remain before this slice is delivered. EN-14 stays open afterward for general streaming-render and reconnect budgets.

@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect"
+import { Effect, Exit, Schema } from "effect"
 import { isDeepStrictEqual } from "node:util"
 import { Storage } from "@/storage/storage"
 import { SessionID } from "@/session/schema"
@@ -209,6 +209,12 @@ export namespace RayaTask {
     blockedReason: Schema.optional(Schema.String),
   })
   export type Run = typeof Run.Type
+
+  export const Histories = Schema.Struct({
+    items: Schema.Array(Schema.Struct({ agentID: Schema.String, runs: Schema.Array(Run) })),
+    failed: Schema.Array(Schema.String),
+  })
+  export type Histories = typeof Histories.Type
 
   export const Create = Schema.Struct({
     name: Schema.String,
@@ -502,6 +508,23 @@ export namespace RayaTask {
         Effect.orDie,
       )
       return yield* runs(raw).pipe(Effect.orDie)
+    })
+
+    const histories = Effect.fn("RayaTask.histories")(function* () {
+      const roster = yield* list()
+      const results = yield* Effect.forEach(
+        roster,
+        (agent) => runsFor(agent.id).pipe(Effect.exit, Effect.map((result) => ({ agentID: agent.id, result }))),
+        { concurrency: 8 },
+      )
+      return results.reduce<{ items: Array<{ agentID: string; runs: readonly Run[] }>; failed: string[] }>(
+        (output, item) => {
+          if (Exit.isSuccess(item.result)) output.items.push({ agentID: item.agentID, runs: item.result.value })
+          else output.failed.push(item.agentID)
+          return output
+        },
+        { items: [], failed: [] },
+      )
     })
 
     const writeRuns = Effect.fn("RayaTask.writeRuns")(function* (id: string, items: Run[]) {
@@ -924,6 +947,7 @@ export namespace RayaTask {
       page,
       get,
       runsFor,
+      histories,
       recall,
       ready,
       eligible,

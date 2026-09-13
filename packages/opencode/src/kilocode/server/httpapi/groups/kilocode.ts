@@ -196,6 +196,7 @@ export const KilocodePaths = {
   agentItem: `${root}/agent/:agentID`,
   agentRun: `${root}/agent/:agentID/run`,
   agentRuns: `${root}/agent/:agentID/runs`,
+  agentHistories: `${root}/agent-runs`,
   agentArchive: `${root}/agent-archive`,
   agentSnapshot: `${root}/agent/:agentID/runs/:runID/snapshot`,
   agentTemplates: `${root}/agent-templates`,
@@ -763,6 +764,17 @@ export const KilocodeApi = HttpApi.make("kilocode")
             identifier: "kilocode.routine.runs",
             summary: "List agent runs",
             description: "Bounded run history with outcome and cost.",
+          }),
+        ),
+        HttpApiEndpoint.get("agentHistories", KilocodePaths.agentHistories, {
+          query: WorkspaceRoutingQuery,
+          success: described(RayaTask.Histories, "Aggregate routine run histories"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.histories",
+            summary: "List all active routine histories",
+            description:
+              "Read bounded run histories for every active routine in one request, retaining explicit worker IDs whose history could not be decoded.",
           }),
         ),
         HttpApiEndpoint.get("agentSnapshot", KilocodePaths.agentSnapshot, {

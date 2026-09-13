@@ -131,6 +131,20 @@ export function scheduler(input: { database: Database.Interface; storage: Storag
     if (!row || row.claim_id !== run.id || row.session_id !== run.sessionID) return
     yield* queue.settle({ id: row.id, claimID: run.id, sessionID: run.sessionID, now: Date.now() }).pipe(Effect.orDie)
   })
+  const resolve = Effect.fn("RayaTaskScheduler.resolve")(function* (input: {
+    id: string
+    claimID: string
+    sessionID?: string
+    reason: string
+    now: number
+    requireExpired: boolean
+  }) {
+    if (yield* queue.resolve(input).pipe(Effect.orDie)) return
+    return yield* new RayaTask.GuardError({
+      kind: "conflict",
+      message: "This interrupted start changed. Reload its recovery review before closing it.",
+    })
+  })
   const pulse = Effect.fn("RayaTaskScheduler.pulse")(function* (id: string) {
     const now = Date.now()
     const history = yield* tasks.runsFor(id)
@@ -165,5 +179,5 @@ export function scheduler(input: { database: Database.Interface; storage: Storag
         ? "starting"
         : "active"
   const queued = (id: string, version: number) => queue.pending(id, version).pipe(Effect.orDie)
-  return { prepare, check, reserve, link, settle, pulse, owned, active, queued, status, retire, clean }
+  return { prepare, check, reserve, link, settle, resolve, pulse, owned, active, queued, status, retire, clean }
 }

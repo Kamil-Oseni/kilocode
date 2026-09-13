@@ -123,6 +123,13 @@ export const AgentManagerReplyPayload = Schema.Struct({ result: AgentManagerResu
 export const AgentManagerRejectPayload = Schema.Struct({ error: AgentManagerFailure })
 export const TaskCreatePayload = RayaTask.Create
 export const TaskAuthorityPayload = RayaTask.Authority
+export const TaskRecoveryReceipt = Schema.Struct({
+  agentID: Schema.String,
+  runID: Schema.String,
+  sessionID: Schema.optional(SessionID),
+  closedAt: Schema.Number,
+  reason: Schema.String,
+})
 export const TaskUpdatePayload = Schema.Struct({
   name: Schema.optional(Schema.String),
   role: Schema.optional(Schema.String),
@@ -202,6 +209,7 @@ export const KilocodePaths = {
   agentItem: `${root}/agent/:agentID`,
   agentAuthority: `${root}/agent/:agentID/provisioning`,
   agentRun: `${root}/agent/:agentID/run`,
+  agentRecovery: `${root}/agent/:agentID/runs/:runID/recovery`,
   agentRuns: `${root}/agent/:agentID/runs`,
   agentHistories: `${root}/agent-runs`,
   agentArchive: `${root}/agent-archive`,
@@ -775,6 +783,19 @@ export const KilocodeApi = HttpApi.make("kilocode")
             identifier: "kilocode.routine.run",
             summary: "Run an assigned agent now",
             description: "Start one background goal run for the agent without waiting for its schedule.",
+          }),
+        ),
+        HttpApiEndpoint.post("agentRecovery", KilocodePaths.agentRecovery, {
+          params: { agentID: Schema.String, runID: Schema.String },
+          query: WorkspaceRoutingQuery,
+          success: described(TaskRecoveryReceipt, "Closed interrupted routine start"),
+          error: [InvalidRequestError, HttpApiError.NotFound],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.recovery.close",
+            summary: "Close an interrupted routine start",
+            description:
+              "After review, close the exact interrupted startup without accepting a result or replaying work. Retains run and conversation evidence and requires a stopped owner or expired schedule lease.",
           }),
         ),
         HttpApiEndpoint.get("agentRuns", KilocodePaths.agentRuns, {

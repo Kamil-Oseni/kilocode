@@ -1897,6 +1897,12 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                 onOpenSession={props.onOpenSession}
                 agentID={item.agentID}
                 selected={item.runID}
+                recovery={agents().some(
+                  (agent) =>
+                    agent.id === item.agentID &&
+                    agent.execution?.state === "recovery" &&
+                    agent.execution.runID === item.runID,
+                )}
                 runs={runs()[item.agentID] ?? []}
               />
             )}

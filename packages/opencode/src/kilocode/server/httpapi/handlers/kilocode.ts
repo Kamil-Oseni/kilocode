@@ -588,6 +588,16 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         ),
       )
     })
+    const agentRecovery = Effect.fn("KilocodeHttpApi.agentRecovery")(function* (ctx: {
+      params: { agentID: string; runID: string }
+    }) {
+      return yield* runner.resolve(ctx.params.agentID, ctx.params.runID).pipe(
+        Effect.catchTag("RayaTask.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+        Effect.catchTag("RayaTask.GuardError", (err) =>
+          Effect.fail(new InvalidRequestError({ message: err.message, kind: err.kind, field: err.field })),
+        ),
+      )
+    })
     const agentRuns = Effect.fn("KilocodeHttpApi.agentRuns")(function* (ctx: { params: { agentID: string } }) {
       return yield* runner.tasks.runsFor(ctx.params.agentID)
     })
@@ -1051,6 +1061,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .handle("agentAuthority", agentAuthority)
         .handle("agentRemove", agentRemove)
         .handle("agentRun", agentRun)
+        .handle("agentRecovery", agentRecovery)
         .handle("agentRuns", agentRuns)
         .handle("agentHistories", agentHistories)
         .handle("agentSnapshot", agentSnapshot)

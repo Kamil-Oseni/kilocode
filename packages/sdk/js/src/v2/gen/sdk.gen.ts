@@ -305,6 +305,8 @@ import type {
   KilocodeRoutineOrganizationListResponses,
   KilocodeRoutineOrganizationUpdateErrors,
   KilocodeRoutineOrganizationUpdateResponses,
+  KilocodeRoutineRecoveryCloseErrors,
+  KilocodeRoutineRecoveryCloseResponses,
   KilocodeRoutineRemoveErrors,
   KilocodeRoutineRemoveResponses,
   KilocodeRoutineRunErrors,
@@ -8937,6 +8939,46 @@ export class Checkpoint extends HeyApiClient {
   }
 }
 
+export class Recovery extends HeyApiClient {
+  /**
+   * Close an interrupted routine start
+   *
+   * After review, close the exact interrupted startup without accepting a result or replaying work. Retains run and conversation evidence and requires a stopped owner or expired schedule lease.
+   */
+  public close<ThrowOnError extends boolean = false>(
+    parameters: {
+      agentID: string
+      runID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "agentID" },
+            { in: "path", key: "runID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeRoutineRecoveryCloseResponses,
+      KilocodeRoutineRecoveryCloseErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/agent/{agentID}/runs/{runID}/recovery",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Organization2 extends HeyApiClient {
   /**
    * List routine organizations
@@ -10356,6 +10398,11 @@ export class Routine extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  private _recovery?: Recovery
+  get recovery(): Recovery {
+    return (this._recovery ??= new Recovery({ client: this.client }))
   }
 
   private _organization?: Organization2

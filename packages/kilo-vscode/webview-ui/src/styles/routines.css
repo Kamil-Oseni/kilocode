@@ -182,6 +182,20 @@
   margin-block: var(--raya-space-12);
 }
 
+.routines-recovery {
+  margin-block: var(--raya-space-12);
+  padding-top: var(--raya-space-12);
+  border-top: 1px solid var(--border-weak, var(--vscode-widget-border));
+}
+
+.routines-recovery h3 {
+  margin: 0 0 var(--raya-space-6);
+}
+
+.routines-recovery > [data-component="button"] {
+  margin-top: var(--raya-space-10);
+}
+
 .routines-row {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;

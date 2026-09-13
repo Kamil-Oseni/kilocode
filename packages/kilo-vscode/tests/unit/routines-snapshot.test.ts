@@ -86,3 +86,64 @@ test("snapshot messages use the generated read API and preserve correlation on a
     error: "Raya is not connected.",
   })
 })
+
+test("recovery close uses the exact run and refreshes only after a verified receipt", async () => {
+  const calls: Request[] = []
+  const messages: unknown[] = []
+  const refreshed: string[] = []
+  const client = createKiloClient({
+    baseUrl: "http://localhost:4096",
+    fetch: async (input, init) => {
+      const request = new Request(input, init)
+      calls.push(request)
+      const path = new URL(request.url).pathname
+      if (path.includes("/stale/"))
+        return Response.json(
+          {
+            name: "InvalidRequestError",
+            message: "This interrupted start is no longer current.",
+            kind: "conflict",
+          },
+          { status: 400 },
+        )
+      return Response.json({
+        agentID: path.includes("/mismatch/") ? "another" : "routine",
+        runID: path.includes("/mismatch/") ? "another" : "interrupted",
+        closedAt: 1234,
+        reason: "Closed after review.",
+      })
+    },
+  })
+  for (const runID of ["interrupted", "stale", "mismatch"]) {
+    await handleRoutineMessage({
+      client,
+      directory: "workspace",
+      post: (msg) => messages.push(msg),
+      refresh: async () => {
+        refreshed.push(runID)
+      },
+      message: { type: "routineRecoveryClose", requestID: runID, agentID: "routine", runID },
+    })
+  }
+  expect(calls.map((request) => request.method)).toEqual(["POST", "POST", "POST"])
+  expect(new URL(calls[0]!.url).pathname).toBe("/kilocode/agent/routine/runs/interrupted/recovery")
+  expect(new URL(calls[0]!.url).searchParams.get("directory")).toBe("workspace")
+  expect(messages[0]).toMatchObject({
+    type: "routineRecoveryClosed",
+    requestID: "interrupted",
+    agentID: "routine",
+    runID: "interrupted",
+    receipt: { closedAt: 1234 },
+  })
+  expect(messages[1]).toMatchObject({
+    type: "routineRecoveryClosed",
+    requestID: "stale",
+    error: expect.stringContaining("no longer current"),
+  })
+  expect(messages[2]).toMatchObject({
+    type: "routineRecoveryClosed",
+    requestID: "mismatch",
+    error: expect.stringContaining("did not match"),
+  })
+  expect(refreshed).toEqual(["interrupted"])
+})

@@ -220,7 +220,7 @@ try {
   button("Review access").click()
   await Promise.resolve()
   assert.match(document.activeElement.textContent, /Tool access for Review/)
-  assert.match(root.textContent, /no saved access choice/)
+  assert.match(root.textContent, /Access hasn't been reviewed/)
   assert.doesNotMatch(root.textContent, /Writable location/)
   assert.equal(button("Save access").disabled, true)
   const access = root.querySelector("section[aria-labelledby] select")
@@ -233,16 +233,36 @@ try {
     requestID: review.requestID,
     agentID: "routine",
     access: "brief",
+    tools: [
+      "read",
+      "glob",
+      "grep",
+      "list",
+      "skill",
+      "todoread",
+      "todowrite",
+      "get_goal",
+      "update_goal",
+      "update_goal_plan",
+      "inspect_team",
+    ],
     expectedAccess: "unset",
+    expectedTools: "unset",
   })
   emit({ type: "routineAccessUpdated", requestID: "stale", agentID: "routine", access: "brief" })
   assert.ok(button("Saving access").disabled)
   emit({ type: "routineState", agents: [{ ...agent }], templates: [] })
   assert.ok(button("Saving access").disabled)
-  emit({ type: "routineAccessUpdated", requestID: review.requestID, agentID: "routine", access: "brief" })
+  emit({
+    type: "routineAccessUpdated",
+    requestID: review.requestID,
+    agentID: "routine",
+    access: "brief",
+    tools: review.tools,
+  })
   assert.match(root.textContent, /Access saved/)
   assert.equal(sent.at(-1).type, "routineList")
-  button("Close access review").click()
+  button("Close").click()
   await Promise.resolve()
   assert.equal(document.activeElement, root.querySelector("[data-routine-options]"))
   button("Review access").click()
@@ -261,7 +281,7 @@ try {
   assert.match(root.textContent, /Access changed; reload/)
   assert.match(root.textContent, /Compare the current access with your choice/)
   assert.ok(button("Save access").disabled)
-  button("Close access review").click()
+  button("Close").click()
   emit({ type: "routineAccessUpdated", requestID: conflict.requestID, agentID: "routine", access: "full" })
   assert.doesNotMatch(root.textContent, /Access saved/)
   button("Review access").click()
@@ -273,9 +293,15 @@ try {
   await new Promise((resolve) => setTimeout(resolve, 15_100))
   assert.match(root.textContent, /save could not be confirmed/)
   assert.ok(button("Save access").disabled)
-  emit({ type: "routineAccessUpdated", requestID: uncertain.requestID, agentID: "routine", access: "brief" })
+  emit({
+    type: "routineAccessUpdated",
+    requestID: uncertain.requestID,
+    agentID: "routine",
+    access: "brief",
+    tools: uncertain.tools,
+  })
   assert.doesNotMatch(root.textContent, /Access saved/)
-  button("Close access review").click()
+  button("Close").click()
   assert.match(root.textContent, /Enabling allows future runs and starts a fresh consecutive-block count/)
   assert.match(root.textContent, /Earlier runs remain in history/)
   assert.match(
@@ -314,7 +340,7 @@ try {
   assert.match(root.querySelector(".routines-result-summary").textContent, /Reviewed the release changes/)
   emit({
     type: "routineState",
-    agents: [{ ...agent, execution: { state: "recovery", sessionID: "recovered-session" } }],
+    agents: [{ ...agent, execution: { state: "recovery", sessionID: "recovered-session", runID: "recovered" } }],
   })
   emit({
     type: "routineRuns",
@@ -391,9 +417,27 @@ try {
   emit({ ...snapshot, snapshot: original })
   assert.match(root.textContent, /Original <script>instructions<\/script>/)
   assert.equal(root.querySelector(".routines-instructions script"), null)
+  assert.match(panel.textContent, /couldn't prove whether this start reached the model/)
+  button("Close interrupted start").click()
+  assert.match(panel.textContent, /accepts no result and won't replay work/)
+  button("Close start").click()
+  const recovery = sent.findLast((msg) => msg.type === "routineRecoveryClose")
+  assert.deepEqual({ agentID: recovery.agentID, runID: recovery.runID }, { agentID: "routine", runID: "recovered" })
+  emit({ ...recovery, type: "routineRecoveryClosed", error: "A newer recovery owner exists." })
+  assert.match(panel.textContent, /newer recovery owner/)
+  button("Close start").click()
+  const closed = sent.findLast((msg) => msg.type === "routineRecoveryClose")
+  assert.notEqual(closed.requestID, recovery.requestID)
+  emit({
+    ...closed,
+    type: "routineRecoveryClosed",
+    receipt: { agentID: "routine", runID: "recovered", closedAt: 1234, reason: "Closed after review." },
+  })
+  emit({ type: "routineState", agents: [agent] })
+  assert.match(panel.textContent, /interrupted start is closed/)
   emit({
     type: "routineState",
-    agents: [{ ...agent, execution: { state: "recovery", sessionID: "recovered-session" } }],
+    agents: [{ ...agent, execution: { state: "recovery", sessionID: "recovered-session", runID: "recovered" } }],
   })
   assert.match(root.textContent, /Original <script>/)
   assert.equal(sent.filter((msg) => msg.type === "routineSnapshot").length, 1)
@@ -684,10 +728,9 @@ try {
   {
     button("Review access").click()
     await Promise.resolve()
-    assert.match(root.textContent, /Writable location: C:\/tmp\/review-writes/)
-    assert.match(root.textContent, /cannot write in parent folders/)
-    assert.match(root.textContent, /Shell is not confined/)
-    button("Close access review").click()
+    assert.match(root.textContent, /File changes stay in C:\/tmp\/review-writes/)
+    assert.match(root.textContent, /Commands aren't confined to this folder/)
+    button("Close").click()
     await Promise.resolve()
   }
   const legacy = { ...agent, enabled: true, schedule: { kind: "cron", expr: "0 9 * * *" } }

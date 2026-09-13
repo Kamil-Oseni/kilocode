@@ -14,6 +14,7 @@ export function RunReview(props: {
   onOpenSession?: (id: string) => void
   agentID: string
   selected?: string
+  recovery?: boolean
   runs: {
     id: string
     at: number
@@ -28,6 +29,10 @@ export function RunReview(props: {
   const [selected, setSelected] = createSignal(props.selected ?? props.runs.at(-1)?.id ?? "")
   const [request, setRequest] = createSignal("")
   const [reply, setReply] = createSignal<Reply>()
+  const [confirm, setConfirm] = createSignal(false)
+  const [closing, setClosing] = createSignal("")
+  const [closed, setClosed] = createSignal(false)
+  const [failure, setFailure] = createSignal("")
   const run = createMemo(() => props.runs.find((run) => run.id === selected()))
   let timer: ReturnType<typeof setTimeout> | undefined
   let panel: HTMLElement | undefined
@@ -35,6 +40,10 @@ export function RunReview(props: {
   const load = () => {
     clearTimeout(timer)
     setReply(undefined)
+    setConfirm(false)
+    setClosing("")
+    setClosed(false)
+    setFailure("")
     const runID = selected()
     if (!runID) return
     const requestID = crypto.randomUUID()
@@ -52,6 +61,22 @@ export function RunReview(props: {
   }
   const unsub = vscode.onMessage((msg) => {
     if (
+      msg.type === "routineRecoveryClosed" &&
+      msg.requestID === closing() &&
+      msg.agentID === props.agentID &&
+      msg.runID === selected()
+    ) {
+      setClosing("")
+      if (msg.error || !msg.receipt) {
+        setFailure([msg.error, msg.recovery?.next].filter(Boolean).join(" ") || "The interrupted start stayed open.")
+        return
+      }
+      setFailure("")
+      setConfirm(false)
+      setClosed(true)
+      return
+    }
+    if (
       msg.type !== "routineSnapshot" ||
       msg.requestID !== request() ||
       msg.agentID !== props.agentID ||
@@ -65,6 +90,18 @@ export function RunReview(props: {
     }
     setReply(msg)
   })
+  const closeRecovery = () => {
+    if (closing()) return
+    const requestID = crypto.randomUUID()
+    setFailure("")
+    setClosing(requestID)
+    vscode.postMessage({
+      type: "routineRecoveryClose",
+      requestID,
+      agentID: props.agentID,
+      runID: selected(),
+    })
+  }
   createEffect(load)
   onCleanup(() => {
     clearTimeout(timer)
@@ -149,6 +186,45 @@ export function RunReview(props: {
             </Show>
           </div>
         )}
+      </Show>
+      <Show when={props.recovery || closed()}>
+        <section class="routines-recovery" aria-labelledby={`${props.id}-recovery`}>
+          <h3 id={`${props.id}-recovery`}>Interrupted start</h3>
+          <Show
+            when={!closed()}
+            fallback={<p role="status">This interrupted start is closed. Saved history remains available.</p>}
+          >
+            <p class="routines-note">
+              Raya couldn't prove whether this start reached the model. Review the saved run and conversation before
+              closing it.
+            </p>
+            <Show
+              when={confirm()}
+              fallback={
+                <Button size="small" variant="secondary" onClick={() => setConfirm(true)}>
+                  Close interrupted start
+                </Button>
+              }
+            >
+              <div class="routines-review-actions" role="group" aria-label="Confirm closing interrupted start">
+                <Button size="small" variant="ghost" disabled={!!closing()} onClick={() => setConfirm(false)}>
+                  Keep reviewing
+                </Button>
+                <Button size="small" variant="destructive" disabled={!!closing()} onClick={closeRecovery}>
+                  {closing() ? "Closing" : "Close start"}
+                </Button>
+              </div>
+              <p class="routines-hint">
+                This accepts no result and won't replay work. You can start fresh after the recovery record closes.
+              </p>
+            </Show>
+            <Show when={failure()}>
+              <p class="routines-error" role="alert">
+                {failure()}
+              </p>
+            </Show>
+          </Show>
+        </section>
       </Show>
       <p class="routines-hint">Instructions saved when this run started. Later routine edits are not included.</p>
       <Show when={!reply()}>

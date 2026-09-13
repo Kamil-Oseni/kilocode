@@ -48,6 +48,7 @@ export function recover<E, R, F = never, S = never>(
   id: string,
   inspect: (record: typeof Record.Type) => Effect.Effect<boolean, E, R>,
   repair?: (record: typeof Record.Type) => Effect.Effect<boolean, F, S>,
+  authorize?: (record: typeof Record.Type) => Effect.Effect<boolean>,
 ) {
   const read = (key: string[]) =>
     storage.read(key).pipe(
@@ -60,7 +61,9 @@ export function recover<E, R, F = never, S = never>(
     Effect.gen(function* () {
       const key = ["raya", "agent-claims", hash(id)]
       const record = yield* read(key).pipe(Effect.flatMap(decode))
-      if (!record || record.agentID !== id || !stopped(record.owner)) return false
+      if (!record || record.agentID !== id) return false
+      const allowed = authorize ? yield* authorize(record) : stopped(record.owner)
+      if (!allowed) return false
       if (!(yield* inspect(record))) return false
       let prior = record.id
       for (let depth = 0; depth < 64; depth++) {
@@ -78,7 +81,9 @@ export function recover<E, R, F = never, S = never>(
         return yield* Effect.gen(function* () {
           const current = yield* read(key).pipe(Effect.flatMap(decode))
           // Immutable permit ancestry excludes other recovery workers. A new startup has a different claim ID.
-          if (JSON.stringify(current) !== JSON.stringify(record) || !stopped(record.owner)) return false
+          if (JSON.stringify(current) !== JSON.stringify(record)) return false
+          const allowed = authorize ? yield* authorize(record) : stopped(record.owner)
+          if (!allowed) return false
           if (!(yield* inspect(record))) return false
           if (repair && !(yield* repair(record))) return false
           yield* storage.remove(key).pipe(Effect.orDie)

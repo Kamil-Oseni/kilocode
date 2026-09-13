@@ -23,6 +23,15 @@ const lease = Schema.Struct({ id: name, claimID: name, owner: name, until: times
 type Lease = typeof lease.Type
 const transition = Schema.Struct({ id: name, claimID: name, sessionID: name, now: timestamp })
 type Transition = typeof transition.Type
+const resolution = Schema.Struct({
+  id: name,
+  claimID: name,
+  sessionID: Schema.optional(name),
+  now: timestamp,
+  reason: name,
+  requireExpired: Schema.Boolean,
+})
+type Resolution = typeof resolution.Type
 
 export namespace RayaTaskQueue {
   export class Conflict extends Schema.TaggedErrorClass<Conflict>()("RayaTaskQueue.Conflict", {
@@ -167,6 +176,24 @@ export namespace RayaTaskQueue {
         .all()
         .pipe(Effect.map((rows) => rows.length === 1))
     })
+    const resolve = Effect.fn("RayaTaskQueue.resolve")(function* (input: Resolution) {
+      yield* Schema.decodeUnknownEffect(resolution)(input)
+      const rows = yield* db
+        .update(Occurrence)
+        .set({ state: "skipped", reason: input.reason, lease_until: null, time_updated: input.now })
+        .where(
+          and(
+            eq(Occurrence.id, input.id),
+            eq(Occurrence.claim_id, input.claimID),
+            inArray(Occurrence.state, ["starting", "linked"]),
+            input.requireExpired ? lte(Occurrence.lease_until, input.now) : undefined,
+            input.sessionID ? eq(Occurrence.session_id, input.sessionID) : undefined,
+          ),
+        )
+        .returning()
+        .all()
+      return rows.length === 1
+    })
     const stale = (now: number) =>
       db
         .select()
@@ -210,7 +237,22 @@ export namespace RayaTaskQueue {
         .set({ state: "skipped", reason: "Routine removed from the roster.", time_updated: Date.now() })
         .where(and(eq(Occurrence.agent_id, agentID), eq(Occurrence.state, "queued")))
         .run()
-    return { cursor, publish, pending, claim, heartbeat, link, settle, stale, get, active, skip, retire, discard }
+    return {
+      cursor,
+      publish,
+      pending,
+      claim,
+      heartbeat,
+      link,
+      settle,
+      resolve,
+      stale,
+      get,
+      active,
+      skip,
+      retire,
+      discard,
+    }
   }
 }
 

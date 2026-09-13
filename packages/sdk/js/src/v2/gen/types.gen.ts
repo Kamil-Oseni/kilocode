@@ -22524,6 +22524,49 @@ export type KilocodeRoutineRunResponses = {
 
 export type KilocodeRoutineRunResponse = KilocodeRoutineRunResponses[keyof KilocodeRoutineRunResponses]
 
+export type KilocodeRoutineRecoveryCloseData = {
+  body?: never
+  path: {
+    agentID: string
+    runID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/agent/{agentID}/runs/{runID}/recovery"
+}
+
+export type KilocodeRoutineRecoveryCloseErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeRoutineRecoveryCloseError =
+  KilocodeRoutineRecoveryCloseErrors[keyof KilocodeRoutineRecoveryCloseErrors]
+
+export type KilocodeRoutineRecoveryCloseResponses = {
+  /**
+   * Closed interrupted routine start
+   */
+  200: {
+    agentID: string
+    runID: string
+    sessionID?: string
+    closedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    reason: string
+  }
+}
+
+export type KilocodeRoutineRecoveryCloseResponse =
+  KilocodeRoutineRecoveryCloseResponses[keyof KilocodeRoutineRecoveryCloseResponses]
+
 export type KilocodeRoutineRunsData = {
   body?: never
   path: {

@@ -26,6 +26,7 @@ import {
 } from "./delegation"
 import { claim } from "./claim"
 import { inspect, recover } from "./recovery"
+import { stopped } from "./owner"
 import { poll } from "./poll"
 import { InstanceState } from "@/effect/instance-state"
 import type { Database } from "@opencode-ai/core/database/database"
@@ -138,6 +139,13 @@ export namespace RayaTaskRunner {
     delegate: (input: Ask) => Effect.Effect<Errand, RayaTask.GuardError | RayaTask.NotFoundError | Invalid | Conflict>
     stop: (id: string) => Effect.Effect<Errand, RayaTask.GuardError | RayaTask.NotFoundError | Invalid>
     settle: (sessionID: SessionID) => Effect.Effect<void>
+    resolve: (
+      id: string,
+      runID: string,
+    ) => Effect.Effect<
+      { agentID: string; runID: string; sessionID?: SessionID; closedAt: number; reason: string },
+      RayaTask.GuardError | RayaTask.NotFoundError
+    >
     park: (sessionID: SessionID, waiting: boolean) => Effect.Effect<void>
     revive: () => Effect.Effect<void>
     announce: (source: string, filter?: string) => Effect.Effect<RayaTask.Run[]>
@@ -700,6 +708,106 @@ export namespace RayaTaskRunner {
       }
     })
 
+    const resolve = Effect.fn("RayaTaskRunner.resolve")(function* (id: string, runID: string) {
+      yield* tasks.get(id)
+      const reason = "Closed after reviewing an interrupted start. No unverified result was accepted."
+      const source = `recovery:${runID}`
+      const now = Date.now()
+      const history = yield* tasks.runsFor(id)
+      const prior = history.find((run) => run.id === runID)
+      const page = inbox ? yield* inbox.page(id) : undefined
+      const receipt = page?.messages.find((item) => item.source === source)
+      if (receipt)
+        return {
+          agentID: id,
+          runID,
+          ...(receipt.sessionID ? { sessionID: receipt.sessionID } : {}),
+          closedAt: receipt.time,
+          reason,
+        }
+      const rows = schedule ? yield* schedule.active(id) : []
+      const row = rows.find((item) => item.claim_id === runID)
+      const execution = yield* inspect(input.storage, id)
+      if (!row && execution?.runID !== runID)
+        return yield* new RayaTask.GuardError({
+          kind: "conflict",
+          message: "This interrupted start is no longer current. Reload its recovery review.",
+        })
+      const expired = !!row && (row.lease_until ?? 0) <= now
+      const sid = prior?.sessionID ?? (row?.session_id ? SessionID.make(row.session_id) : undefined)
+      const result = Effect.fn("RayaTaskRunner.resolve.result")(function* () {
+        const current = inbox ? yield* inbox.page(id) : undefined
+        const saved = current?.messages.find((item) => item.source === source)
+        return {
+          agentID: id,
+          runID,
+          ...(sid ? { sessionID: sid } : {}),
+          closedAt: saved?.time ?? now,
+          reason,
+        }
+      })
+      const finish = Effect.fn("RayaTaskRunner.resolve.finish")(function* (trusted: boolean) {
+        const sessionID = sid
+        if (sessionID) {
+          const goal = yield* goals.get(sessionID)
+          if (goal?.status === "active" || goal?.status === "paused")
+            yield* goals.update(sessionID, { status: "blocked", reason }, goal.revision).pipe(
+              Effect.catchTag("RayaGoal.AuditError", (err) =>
+                Effect.fail(new RayaTask.GuardError({ kind: "conflict", message: err.message })),
+              ),
+              Effect.catchTag("RayaGoal.NotFoundError", () => Effect.void),
+            )
+          yield* settle(sessionID)
+          const current = (yield* tasks.runsFor(id)).find((run) => run.id === runID)
+          if (current && RayaTask.pending(current))
+            yield* tasks.transition(current, { ...current, status: "error", blockedReason: reason })
+        }
+        const active = schedule ? (yield* schedule.active(id)).find((item) => item.claim_id === runID) : undefined
+        if (active && schedule)
+          yield* schedule.resolve({
+            id: active.id,
+            claimID: runID,
+            ...(active.session_id ? { sessionID: active.session_id } : {}),
+            reason,
+            now,
+            requireExpired: !trusted,
+          })
+        if (inbox)
+          yield* inbox.publish({
+            agentID: id,
+            source,
+            kind: "system",
+            body: reason,
+            ...(sessionID ? { sessionID } : {}),
+          })
+        return true
+      })
+      if (execution?.runID === runID) {
+        const closed = yield* recover(
+          input.storage,
+          id,
+          (claim) => Effect.succeed(claim.id === runID),
+          (claim) => finish(stopped(claim.owner)),
+          (claim) =>
+            Effect.gen(function* () {
+              if (stopped(claim.owner)) return true
+              if (!schedule) return false
+              const current = (yield* schedule.active(id)).find((item) => item.claim_id === runID)
+              return !!current && (current.lease_until ?? 0) <= now
+            }),
+        )
+        if (closed) return yield* result()
+      }
+      if (row && expired) {
+        yield* finish(false)
+        return yield* result()
+      }
+      return yield* new RayaTask.GuardError({
+        kind: "conflict",
+        message: "This start may still have a live owner. Wait for its recovery lease before closing it.",
+      })
+    })
+
     const reconcile = Effect.fn("RayaTaskRunner.reconcile")(function* (id: string) {
       if (restore) yield* restore(id)
       if (!schedule) return
@@ -867,6 +975,7 @@ export namespace RayaTaskRunner {
       delegate: delegate as Runner["delegate"],
       stop: abort as Runner["stop"],
       settle: settle as Runner["settle"],
+      resolve: resolve as Runner["resolve"],
       park: park as Runner["park"],
       revive: revive as Runner["revive"],
       announce: announce as Runner["announce"],

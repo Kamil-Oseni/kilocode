@@ -186,6 +186,13 @@ export interface RoutineSnapshotRequestMessage {
   runID: string
 }
 
+export interface RoutineRecoveryCloseMessage {
+  type: "routineRecoveryClose"
+  requestID: string
+  agentID: string
+  runID: string
+}
+
 export interface RoutineArchiveRequestMessage {
   type: "routineArchive"
   requestID: string
@@ -1952,6 +1959,7 @@ export type WebviewMessage =
   | RoutineRunMessage
   | RoutineRunsMessage
   | RoutineSnapshotRequestMessage
+  | RoutineRecoveryCloseMessage
   | RoutineArchiveRequestMessage
   | RoutineRemoveMessage
   | RoutineInboxPageMessage

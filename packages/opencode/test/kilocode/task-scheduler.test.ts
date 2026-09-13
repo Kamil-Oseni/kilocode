@@ -13,6 +13,7 @@ import { SessionID } from "@/session/schema"
 import { Permission } from "@/permission"
 import { RayaTask } from "@/kilocode/task"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
+import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import { claim } from "@/kilocode/task/claim"
 import { RayaTaskQueue } from "@/kilocode/task/queue"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
@@ -607,6 +608,25 @@ for (const stage of ["linked", "starting", "unknown"] as const) {
             runID: claim.id,
           })
           expect((yield* runner.fire(agent.id).pipe(Effect.flip))._tag).toBe("RayaTask.GuardError")
+          const early = yield* runner.resolve(agent.id, claim.id).pipe(Effect.flip)
+          expect(early._tag).toBe("RayaTask.GuardError")
+          expect(early.message).toContain("live owner")
+          yield* input.database.db
+            .update(RayaRoutineOccurrenceTable)
+            .set({ lease_until: Date.now() - 1 })
+            .where(eq(RayaRoutineOccurrenceTable.id, trigger.id))
+            .run()
+          const closed = yield* runner.resolve(agent.id, claim.id)
+          expect(closed).toMatchObject({ agentID: agent.id, runID: claim.id, sessionID: sid })
+          expect((yield* queue.get(trigger.id))?.state).toBe("skipped")
+          expect((yield* runner.preview(Date.now()))[0]?.execution).toBeUndefined()
+          expect((yield* runner.tasks.runsFor(agent.id))[0]).toMatchObject({
+            id: claim.id,
+            status: "error",
+          })
+          const messages = (yield* RayaTaskInbox.make(input.database).page(agent.id)).messages
+          expect(messages.filter((item) => item.source === `recovery:${claim.id}`)).toHaveLength(1)
+          expect(yield* runner.resolve(agent.id, claim.id)).toEqual(closed)
         }).pipe(Effect.provide(state(directory)))
       }),
     30_000,

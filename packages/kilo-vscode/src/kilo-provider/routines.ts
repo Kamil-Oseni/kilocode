@@ -122,6 +122,7 @@ const replies: Record<string, string> = {
   routineAccessUpdate: "routineAccessUpdated",
   routineArchive: "routineArchive",
   routineSnapshot: "routineSnapshot",
+  routineRecoveryClose: "routineRecoveryClosed",
   routineForecast: "routineForecast",
   routineScheduleUpdate: "routineScheduleUpdated",
   routineInboxPage: "routineInboxPage",
@@ -242,6 +243,7 @@ const messages = new Set([
   "routineRun",
   "routineRuns",
   "routineSnapshot",
+  "routineRecoveryClose",
   "routineArchive",
   "routineRemove",
   "routineInboxPage",
@@ -901,6 +903,33 @@ async function snapshot(ctx: Ctx) {
   ctx.post({ ...base, snapshot: result.data })
 }
 
+async function resolve(ctx: Ctx) {
+  const msg = ctx.message
+  if (!token(msg.requestID) || !token(msg.agentID) || !token(msg.runID))
+    throw new Error("Reload this recovery review before closing it.")
+  const result = await ctx.kilo.recovery.close(
+    { directory: ctx.dir, agentID: String(msg.agentID), runID: String(msg.runID) },
+    { throwOnError: true },
+  )
+  const receipt = result.data
+  if (
+    !receipt ||
+    receipt.agentID !== msg.agentID ||
+    receipt.runID !== msg.runID ||
+    !Number.isFinite(receipt.closedAt) ||
+    !receipt.reason.trim()
+  )
+    throw new Error("The recovery receipt did not match this interrupted start.")
+  ctx.post({
+    type: "routineRecoveryClosed",
+    requestID: msg.requestID,
+    agentID: msg.agentID,
+    runID: msg.runID,
+    receipt,
+  })
+  await ctx.refresh?.()
+}
+
 async function retained(ctx: Ctx, id: string) {
   const runs = await ctx.kilo.runs({ directory: ctx.dir, agentID: id }, { throwOnError: true })
   if (
@@ -945,6 +974,7 @@ const routes: Record<string, (ctx: Ctx) => Promise<void>> = {
   routineAccessUpdate: review,
   routineArchive: archive,
   routineSnapshot: snapshot,
+  routineRecoveryClose: resolve,
   routineScheduleUpdate: reschedule,
   routineForecast: forecast,
   routineInboxPage: page,

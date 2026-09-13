@@ -268,6 +268,16 @@ export interface RoutineSnapshotMessage {
   recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
 }
 
+export interface RoutineRecoveryClosedMessage {
+  type: "routineRecoveryClosed"
+  requestID: string
+  agentID: string
+  runID: string
+  receipt?: import("@kilocode/sdk/v2/client").KilocodeRoutineRecoveryCloseResponse
+  error?: string
+  recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
+}
+
 export interface RoutineArchiveMessage {
   type: "routineArchive"
   requestID: string
@@ -1883,6 +1893,7 @@ export type ExtensionMessage =
   | RoutineScheduleUpdatedMessage
   | RoutineRunsLoadedMessage
   | RoutineSnapshotMessage
+  | RoutineRecoveryClosedMessage
   | RoutineAccessUpdatedMessage
   | RoutineOutputUpdatedMessage
   | RoutineArchiveMessage

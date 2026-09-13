@@ -163,3 +163,9 @@ ChatGPT added the next OVR-09 boundary in product commit `04d550d60e` on 2026-09
 Artifact reads continue to hash the current archive and bundled CLI. They return `install-ready` only while those bytes, the retained artifact receipt and every approval identity field still agree. Otherwise the result is `artifact-unavailable`. Approval is therefore a durable release decision for exact bytes; it is not installation or evidence that the approved version is active. The endpoint performs no install action.
 
 The focused artifact case passes 1 test / 32 assertions, the HTTP boundary passes 1 / 8, and the extension summary suite passes 18 / 117. Generated SDK, extension host typecheck, scoped lint, Knip, formatting, annotations and diff checks pass. A future extension modal must provide the human review evidence before calling this endpoint. Durable install intent, uncertain-install reconciliation, active-version and embedded-CLI verification, original-failure replay, rollback and cleanup remain open.
+
+## Human review surface
+
+ChatGPT added `/self-heal review <itemID>` in product commit `231439993a` on 2026-09-13. The native modal shows the target extension version, source commit and captured-source digest, VSIX and bundled CLI sizes and SHA-256 values, accepted audit summary, requirement results and retained evidence summaries. It states that approval does not install and exposes one affirmative action: **Approve for installation**.
+
+Closing the modal writes nothing. After the user action, the extension rereads the item and compares every displayed artifact identity field before calling the approval endpoint. Changed or unavailable output requires a new review and sends no approval request. Existing approval opens no second confirmation. Focused command and SDK-backed review tests pass 6 / 31 assertions; host typecheck, scoped lint, Knip, formatting and extension guards pass. Installation intent and recovery remain separate future work.

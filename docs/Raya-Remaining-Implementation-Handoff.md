@@ -10,6 +10,12 @@ Updated 2026-09-13. This is a continuation guide, not a completion certificate.
 
 **Latest delivered product:** ChatGPT installed snapshot `f83096f7d6` (`eden.raya@7.4.23-snapshot+f83096f7d6.kamil-oseni.1789312194050`). It includes the earlier Routine, Browser, GPT-Live recovery and reconnect work plus durable direct/delegated goal usage totals, enforceable time, cost and automatic-recovery limits, revision-safe file deliverables, the non-model charge ledger, safe initial voice destinations, and authenticated media control described below. Reload VS Code normally to pick up the snapshot.
 
+## ChatGPT 2026-09-13 11:40 America/Toronto — active EN-10 cross-directory checkpoint
+
+**Local status: process-level acceptance passes; commit and push remain.** On one real authenticated shared backend, the test creates a session in project A and proves directory-filtered discovery includes it for A but excludes it for B. It then submits the session shell request with project B in the caller header. The server resolves the session's persisted location, executes in A, reports A as its working directory, writes the marker only under A, and leaves B unchanged. This verifies actual command execution ownership without presenting a directory header as user authentication.
+
+The final focused case passes 1/1 with 13 assertions in 35.04 seconds. All spawned Bun processes exited, and no `tsgo` or `tsgolint` ran. Changed paths are the existing managed-server acceptance and topology/progress/handoff documentation. This verification-only follow-up requires no extension snapshot. EN-10 remains open only for an authenticated deployed-companion acceptance run with exact image/runtime evidence.
+
 ## ChatGPT 2026-09-13 11:31 America/Toronto — active EN-10 managed-socket checkpoint
 
 **Delivered in verification commit `f8b3f6503c`; pushed.** The focused serve acceptance now launches two actual authenticated CLI servers with independent loopback sockets, isolated state roots, passwords and declared editor-parent processes. Both report healthy. A credential from the first simulated window receives `401` from the second server. Hard-killing the first parent shuts down only its server while the second remains authenticated and healthy; killing the second parent then shuts down the second server. Cleanup retains exact handles for all four spawned processes.

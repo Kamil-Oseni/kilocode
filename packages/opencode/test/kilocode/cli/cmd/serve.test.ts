@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import fs from "node:fs/promises"
 import path from "node:path"
 import { tmpdir } from "../../../fixture/fixture"
 
@@ -70,7 +71,7 @@ test("prints the local IPv6 URL for wildcard binds", async () => {
   )
 }, 30_000)
 
-test("hard parent exit stops only its authenticated managed server", async () => {
+test("hard parent exit preserves authenticated server and session ownership", async () => {
   await using first = await tmpdir()
   await using second = await tmpdir()
   const parentA = Bun.spawn([process.execPath, "-e", "await Bun.sleep(30000)"], {
@@ -162,6 +163,46 @@ test("hard parent exit stops only its authenticated managed server", async () =>
     expect((await fetch(`${urlA}/global/health`, { headers: auth("window-a") })).status).toBe(200)
     expect((await fetch(`${urlB}/global/health`, { headers: auth("window-b") })).status).toBe(200)
     expect((await fetch(`${urlB}/global/health`, { headers: auth("window-a") })).status).toBe(401)
+
+    const dirA = path.join(second.path, "project-a")
+    const dirB = path.join(second.path, "project-b")
+    await fs.mkdir(dirA, { recursive: true })
+    await fs.mkdir(dirB, { recursive: true })
+    const scoped = (dir: string) => ({
+      ...auth("window-b"),
+      "Content-Type": "application/json",
+      "x-kilo-directory": dir,
+    })
+    const created = await fetch(`${urlB}/session`, {
+      method: "POST",
+      headers: scoped(dirA),
+      body: JSON.stringify({ title: "Directory A" }),
+    })
+    expect(created.status).toBe(200)
+    const session = (await created.json()) as { id: string }
+    const listA = (await (
+      await fetch(`${urlB}/session?directory=${encodeURIComponent(dirA)}`, { headers: scoped(dirA) })
+    ).json()) as Array<{ id: string }>
+    const listB = (await (
+      await fetch(`${urlB}/session?directory=${encodeURIComponent(dirB)}`, { headers: scoped(dirB) })
+    ).json()) as Array<{ id: string }>
+    expect(listA.some((item) => item.id === session.id)).toBe(true)
+    expect(listB.some((item) => item.id === session.id)).toBe(false)
+
+    const shell = await fetch(`${urlB}/session/${session.id}/shell`, {
+      method: "POST",
+      headers: scoped(dirB),
+      body: JSON.stringify({
+        agent: "build",
+        model: { providerID: "test", modelID: "test" },
+        command: `bun -e "await Bun.write('owner.txt', process.cwd()); process.stdout.write(process.cwd())"`,
+      }),
+    })
+    expect(shell.status).toBe(200)
+    const result = (await shell.json()) as { parts: Array<{ state: { output?: string } }> }
+    expect(result.parts[0]?.state.output?.trim()).toBe(dirA)
+    expect(await Bun.file(path.join(dirA, "owner.txt")).text()).toBe(dirA)
+    expect(await Bun.file(path.join(dirB, "owner.txt")).exists()).toBe(false)
 
     parentA.kill("SIGKILL")
     await parentA.exited

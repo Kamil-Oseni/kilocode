@@ -10,6 +10,8 @@ One connection service serves the sidebar, editor tabs and Agent Manager within 
 
 Each extension host owns its own managed CLI process, ephemeral socket and generated password. A real dual-server acceptance uses separate state roots and credentials, rejects one host's credentials at the other host with `401`, and proves that hard parent exit shuts down only the corresponding server. The surviving host remains authenticated and healthy until its own parent exits. This process boundary does not turn the directory header within one shared backend into tenant authorization.
 
+Within one authenticated shared backend, directory-filtered session discovery is scoped to the requested project. Session-bound routes resolve the persisted session location before entering the runtime: a shell request carrying project B in its caller header still executes in the owning project A and cannot write its relative output into B. This is routing and execution ownership under one trusted local user, not cross-user access control.
+
 The parent PID is passed to the backend watchdog. Graceful disposal and process-exit handling remain responsible for teardown. A loopback bind does not prove that every abrupt-exit or multi-window recovery path has passed acceptance.
 
 The contract regression imports the exact launch arguments used by `ServerManager` and evaluates them using the CLI's actual argument parser and network resolver, against a configuration requesting `0.0.0.0`, a fixed port and mDNS. It verifies loopback, port zero and disabled discovery. Packaged socket inspection is a separate acceptance step.
@@ -42,7 +44,7 @@ The regression uses in-memory storage adapters and synthetic credentials to test
 - Exercise the admission ceiling and provider setup deadline through an actually deployed authenticated companion container.
 - Preserve initial destination validation and redirect refusal before sending credentials. Endpoint authentication remains separate.
 - Preserve the real dual-server abrupt-parent and cross-window credential-isolation acceptance.
-- Test cross-directory data and execution ownership separately from authentication.
+- Preserve directory-filtered discovery and persisted session execution-ownership acceptance separately from authentication.
 - Keep remote/shared launch support unavailable as a product claim until its authentication, origin and isolation contract is implemented and exercised.
 
 ## Source references

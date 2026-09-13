@@ -13,7 +13,7 @@ import { inspect } from "./artifact-inspect"
 
 const Hash = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/))
 const Bytes = Schema.Struct({ digest: Hash, size: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)) })
-const Receipt = Schema.Struct({
+export const Receipt = Schema.Struct({
   version: Schema.Literal(1),
   id: Schema.String,
   itemID: Schema.String,
@@ -36,15 +36,48 @@ const Receipt = Schema.Struct({
   at: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
 }).annotate({ identifier: "Raya.SelfHealArtifact" })
 
-export function artifacts(storage: Pick<Storage.Interface, "read" | "create">, root?: string) {
+const Pointer = Schema.Struct({
+  version: Schema.Literal(1),
+  itemID: Schema.String,
+  attemptID: Schema.String,
+  sessionID: SessionID,
+  messageID: MessageID,
+  callID: Schema.String,
+  completion: Hash,
+  at: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
+})
+
+const Terminal = Schema.Struct({
+  status: Schema.Literals(["failed", "interrupted"]),
+  reason: Schema.String,
+  at: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
+})
+
+export const Delivery = Schema.Struct({
+  ...Pointer.fields,
+  status: Schema.Literals([
+    "preparing",
+    "building",
+    "ready-for-review",
+    "artifact-unavailable",
+    "failed",
+    "interrupted",
+  ]),
+  artifact: Schema.optional(Receipt),
+  reason: Schema.optional(Schema.String),
+}).annotate({ identifier: "Raya.SelfHealDelivery" })
+
+export function artifacts(storage: Pick<Storage.Interface, "list" | "read" | "create">, root?: string) {
   const completion = completions(storage, repairs(storage))
   const checks = verification(storage, root)
+  const cache = { legacy: undefined as Map<string, Array<typeof Receipt.Type>> | undefined }
   const key = (session: string, message: string, call: string) => [
     "raya",
     "self-heal",
     "artifact",
     hash(JSON.stringify([session, message, call])),
   ]
+  const itemkey = (id: string) => ["raya", "self-heal", "artifact-item", id]
   const read = (session: string, message: string, call: string, stage: string) =>
     storage.read<unknown>([...key(session, message, call), stage]).pipe(
       Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(undefined)),
@@ -110,6 +143,62 @@ export function artifacts(storage: Pick<Storage.Interface, "read" | "create">, r
         "A retained artifact is ready for review only. Publication and installation are separate. Missing terminal acknowledgement is unknown; inspection never repeats a build.",
     }
   })
+  const legacy = Effect.fn(function* (id: string) {
+    if (cache.legacy) return cache.legacy.get(id) ?? []
+    const keys = yield* storage.list(["raya", "self-heal", "artifact"]).pipe(Effect.orDie)
+    const rows = yield* Effect.forEach(
+      keys.filter((key) => key.length === 5 && key.at(-1) === "result"),
+      (key) => storage.read<unknown>(key).pipe(Effect.flatMap(Schema.decodeUnknownEffect(Receipt)), Effect.orDie),
+    )
+    const grouped = new Map<string, Array<typeof Receipt.Type>>()
+    for (const row of rows) grouped.set(row.itemID, [...(grouped.get(row.itemID) ?? []), row])
+    cache.legacy = grouped
+    return grouped.get(id) ?? []
+  })
+  const find = Effect.fn(function* (id: string) {
+    const saved = yield* storage.read<unknown>(itemkey(id)).pipe(
+      Effect.flatMap(Schema.decodeUnknownEffect(Pointer)),
+      Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(undefined)),
+      Effect.orDie,
+    )
+    const previous = saved ? undefined : yield* legacy(id)
+    if (previous && previous.length > 1)
+      throw new Error("Repair has multiple legacy artifact receipts; reconcile them before delivery")
+    const prior = previous?.[0]
+    const pointer = saved ?? (prior ? Schema.decodeUnknownSync(Pointer)(prior) : undefined)
+    if (!pointer) return undefined
+    if (pointer.itemID !== id) throw new Error("Retained artifact pointer belongs to another repair")
+    const state = yield* status(pointer.sessionID, pointer.messageID, pointer.callID)
+    if (!state) throw new Error("Retained artifact pointer has no invocation journal")
+    if (state.result && state.observed?.status === "matches-receipt")
+      return Schema.decodeUnknownSync(Delivery)({
+        ...pointer,
+        status: "ready-for-review",
+        artifact: Schema.decodeUnknownSync(Receipt)(state.result),
+      })
+    if (state.result)
+      return Schema.decodeUnknownSync(Delivery)({
+        ...pointer,
+        status: "artifact-unavailable",
+        reason:
+          state.observed?.status === "unavailable-or-changed"
+            ? state.observed.reason
+            : "Artifact bytes could not be verified against the retained receipt",
+      })
+    if (state.terminal) {
+      const terminal = Schema.decodeUnknownSync(Terminal)(state.terminal)
+      return Schema.decodeUnknownSync(Delivery)({
+        ...pointer,
+        status: terminal.status,
+        reason: terminal.reason,
+        at: terminal.at,
+      })
+    }
+    return Schema.decodeUnknownSync(Delivery)({
+      ...pointer,
+      status: state.dispatch ? "building" : "preparing",
+    })
+  })
   const run = Effect.fn(function* (input: {
     outcome: typeof Outcome.Type
     sessionID: SessionID
@@ -138,6 +227,21 @@ export function artifacts(storage: Pick<Storage.Interface, "read" | "create">, r
       if (!receipt || receipt.attemptID !== input.outcome.id || receipt.sessionID !== input.sessionID)
         throw new Error("Artifact preparation requires this session's authoritative completed repair")
       const source = yield* checks.lineage(receipt)
+      const previous = yield* legacy(input.outcome.itemID)
+      if (previous.length)
+        throw new Error("This repair already has a retained artifact; inspect it instead of rebuilding")
+      const pointer = Schema.decodeUnknownSync(Pointer)({
+        version: 1,
+        itemID: receipt.itemID,
+        attemptID: receipt.attemptID,
+        sessionID: input.sessionID,
+        messageID: input.messageID,
+        callID: input.callID,
+        completion: hash(JSON.stringify(receipt)),
+        at: Date.now(),
+      })
+      if (!(yield* storage.create(itemkey(receipt.itemID), pointer).pipe(Effect.orDie)))
+        throw new Error("This repair already has retained artifact intent; inspect it instead of rebuilding")
       const directory = yield* Effect.promise(() => materialize(source.store, source.snapshot))
       const pkg = yield* Effect.promise(() =>
         Bun.file(path.join(directory, "packages/kilo-vscode/package.json")).json(),
@@ -212,5 +316,5 @@ export function artifacts(storage: Pick<Storage.Interface, "read" | "create">, r
       ),
     )
   })
-  return { run, status }
+  return { run, status, find }
 }

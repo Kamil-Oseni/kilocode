@@ -146,4 +146,12 @@ The receipt is immutable and has no client write endpoint. An identical internal
 
 The display says **Fix tested; not released or installed**. Completion no longer sets `reloadRequired`. Historical verified rows without receipts remain readable as legacy verification claims requiring review; they do not gain fabricated receipts or automatic repair admission. Release artifacts, publication, installation and active-version verification remain required future delivery work. This increment does not establish those outcomes.
 
+## One owned review artifact
+
+ChatGPT extended the tracked delivery contract on 2026-09-13. Each authoritative tested repair can reserve one review-artifact attempt through an exclusive item-level pointer. The pointer is durable before captured-source materialization, dependency preparation or build dispatch and retains the repair attempt, session, message, call and completion hash. Another tool call cannot reach its executor after that ownership exists. A failed or interrupted attempt remains inspectable and cannot be silently replayed.
+
+Backlog and repair-outcome reads derive `preparing`, `building`, `ready-for-review`, `artifact-unavailable`, `failed` or `interrupted` from the pointer and immutable invocation stages. `ready-for-review` requires the current archive and bundled CLI bytes to match the retained receipt. Old successful artifact receipts remain readable through a cached compatibility index. The user-facing summary keeps **ready for review**, **ready to install** and **installed** as separate meanings; this checkpoint establishes only the first.
+
+The earlier forced exit after a successful real artifact build came from the ignored acceptance probe at `packages/opencode/.tmp/raya-artifact-probe.ts`. Its own 30-second watchdog fired after production returned and `AppRuntime.dispose()` logged completion. That is an acceptance-harness lifecycle defect, not evidence that shipped self-heal returns a failed build. It still needs a clean tracked replacement or repair before its native process exit is valid acceptance evidence.
+
 The receipt records the existing goal evidence gate's accepted result; it is not an independent human or semantic proof that every possible product regression was fixed. It does not add filesystem execution confinement or protect storage from an actor with direct local write access. Repair journal state and worktree source identity remain retained; no cleanup, takeover or release authority is introduced.

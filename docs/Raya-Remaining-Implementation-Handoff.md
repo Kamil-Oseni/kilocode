@@ -10,6 +10,16 @@ Updated 2026-09-13. This is a continuation guide, not a completion certificate.
 
 **Latest delivered product:** ChatGPT installed snapshot `f83096f7d6` (`eden.raya@7.4.23-snapshot+f83096f7d6.kamil-oseni.1789312194050`). It includes the earlier Routine, Browser, GPT-Live recovery and reconnect work plus durable direct/delegated goal usage totals, enforceable time, cost and automatic-recovery limits, revision-safe file deliverables, the non-model charge ledger, safe initial voice destinations, and authenticated media control described below. Reload VS Code normally to pick up the snapshot.
 
+## ChatGPT 2026-09-13 12:08 America/Toronto — active OVR-09 artifact-ownership checkpoint
+
+**Implemented and verified locally; commit, push and low-memory snapshot installation remain.** A completed self-heal repair now publishes one exclusive item-level artifact claim before any source copy, setup or build dispatch. Concurrent or later tool calls cannot build a competing artifact and fail before reaching the executor. The claim retains exact repair attempt, session, message, call and completion identity. Do not delete or overwrite it to retry: `failed` and `interrupted` are retained outcomes that require a future reviewed recovery transition.
+
+Item and repair-outcome responses now carry a derived artifact delivery state: `preparing`, `building`, `ready-for-review`, `artifact-unavailable`, `failed` or `interrupted`. Review readiness requires the current VSIX and embedded CLI to match the retained receipt and captured-source lineage. Old successful receipts without an item pointer are discovered by one cached compatibility scan. `/self-heal list` and `/self-heal inspect` present the state in plain copy and explicitly distinguish ready for review from ready to install and installed.
+
+Validation is intentionally memory-bounded. The CLI completion file passes 13 tests / 108 assertions at about 511 MB sampled Bun memory; the real HTTP case passes 1 / 6; the extension source/summary file passes 18 / 113; extension-host `tsgo --noEmit` passes; SDK/OpenAPI regeneration completed with the largest generator process around 912 MB; marker and annotation guards pass. No `tsgolint`, root typecheck/lint, Turbo graph or parallel check ran.
+
+The recorded exit-2 watchdog is in the ignored `packages/opencode/.tmp/raya-artifact-probe.ts` acceptance harness, after `AppRuntime.dispose()` returned and production had retained a valid `ready-for-review` artifact. It is not shipped runtime behavior. Replace that probe with a tracked bounded acceptance harness or correct its lifecycle before using its process exit as evidence. Do not edit product shutdown code merely to silence this ignored helper.
+
 ## ChatGPT 2026-09-13 11:46 America/Toronto — EN-10 container-runtime handoff
 
 **Acceptance unavailable on this machine; EN-10 remains In progress.** The remaining companion check must run against a real built container. This Windows environment has no `docker` command, Docker Desktop/backend or `vmmem` process, and no Podman, nerdctl or Finch alternative. Source inspection of `services/raya-mf/Dockerfile`, `services/raya-mf/docker-compose.yml` and `.dockerignore` is complete, but it is not runtime evidence. No image/container was built or replaced.
@@ -689,12 +699,12 @@ The following sections retain the full 39-item scope. Related findings and overh
 
 ### OVR-09 — Self-heal as verified recovery and repair
 
-**Recorded status:** In progress. Captured-source completion now produced a real review artifact with verified archive/CLI hashes and source-check lineage. Fresh read-only inspection exits0; original build helper hit its shutdown watchdog after producing the valid artifact (exit2). Publication/install/rollback/post-install acceptance and full-build cleanup remain open.
+**Recorded status:** In progress. Captured-source completion produces a verified review artifact, and each repair now owns one durable artifact attempt with item-level preparing/building/review/unavailable/failure states. Item and outcome reads expose that state without claiming installation. The prior exit-2 watchdog is confined to an ignored acceptance probe rather than shipped self-heal code. Reviewed publication, install-ready approval, installation intent tied to the repair artifact, post-install verification, original-failure replay, rollback and tracked harness cleanup remain open.
 
 **Implementation and verification:**
 
 1. Keep diagnosis, recovery and isolated source repair separate. Preserve the existing captured-source lineage and archive/CLI hash checks.
-2. Fix the build-helper shutdown watchdog: producing a valid artifact followed by exit 2 is not a clean build. Then implement reviewed publication, install intent, post-install verification and rollback.
+2. Replace or repair the ignored acceptance probe so a valid artifact is followed by a clean helper exit. Keep that harness issue separate from shipped runtime behavior. Then implement reviewed publication, install-ready approval, install intent tied to the exact artifact, post-install verification and rollback.
 3. Reproduce the original failure after installation and reload before claiming repair success. Archive validity alone does not establish product recovery.
 
 **Source entry points:** [self-heal/index.ts](../packages/opencode/src/kilocode/self-heal/index.ts); [shared/self-heal.ts](../packages/kilo-vscode/src/shared/self-heal.ts); [the refinement tool](../packages/opencode/src/kilocode/tool/self-heal.ts); [KiloProvider.ts](../packages/kilo-vscode/src/KiloProvider.ts)

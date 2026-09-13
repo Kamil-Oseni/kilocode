@@ -9089,6 +9089,49 @@ export type RayaSelfHealCompletion = {
   at: number
 }
 
+export type RayaSelfHealArtifact = {
+  version: 1
+  id: string
+  itemID: string
+  attemptID: string
+  sessionID: string
+  messageID: string
+  callID: string
+  completion: string
+  checks: Array<string>
+  source: string
+  head: string
+  target: "win32-x64" | "win32-arm64" | "linux-x64" | "linux-arm64" | "darwin-x64" | "darwin-arm64"
+  extension: string
+  cli: string
+  contract: string
+  status: "ready-for-review"
+  output: string
+  artifact: {
+    digest: string
+    size: number
+  }
+  binary: {
+    digest: string
+    size: number
+  }
+  at: number
+}
+
+export type RayaSelfHealDelivery = {
+  version: 1
+  itemID: string
+  attemptID: string
+  sessionID: string
+  messageID: string
+  callID: string
+  completion: string
+  at: number
+  status: "preparing" | "building" | "ready-for-review" | "artifact-unavailable" | "failed" | "interrupted"
+  artifact?: RayaSelfHealArtifact
+  reason?: string
+}
+
 export type LocationInfo = {
   directory: string
   workspaceID?: string
@@ -23973,6 +24016,7 @@ export type KilocodeSelfHealListResponses = {
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     }
     completion?: RayaSelfHealCompletion
+    artifact?: RayaSelfHealDelivery
     legacyVerification?: boolean
     id: string
     fingerprint: string
@@ -24065,6 +24109,7 @@ export type KilocodeSelfHealCreateResponses = {
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     }
     completion?: RayaSelfHealCompletion
+    artifact?: RayaSelfHealDelivery
     legacyVerification?: boolean
     id: string
     fingerprint: string
@@ -24158,6 +24203,7 @@ export type KilocodeSelfHealOutcomeResponses = {
     reason?: string
     at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     completion?: RayaSelfHealCompletion
+    artifact?: RayaSelfHealDelivery
   }
 }
 
@@ -24303,6 +24349,7 @@ export type KilocodeSelfHealPrepareResponses = {
     reason?: string
     at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     completion?: RayaSelfHealCompletion
+    artifact?: RayaSelfHealDelivery
   }
 }
 
@@ -24388,6 +24435,7 @@ export type KilocodeSelfHealAdvanceResponses = {
     reason?: string
     at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     completion?: RayaSelfHealCompletion
+    artifact?: RayaSelfHealDelivery
   }
 }
 
@@ -24457,6 +24505,7 @@ export type KilocodeSelfHealGetResponses = {
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     }
     completion?: RayaSelfHealCompletion
+    artifact?: RayaSelfHealDelivery
     legacyVerification?: boolean
     id: string
     fingerprint: string
@@ -24575,6 +24624,7 @@ export type KilocodeSelfHealUpdateResponses = {
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     }
     completion?: RayaSelfHealCompletion
+    artifact?: RayaSelfHealDelivery
     legacyVerification?: boolean
     id: string
     fingerprint: string

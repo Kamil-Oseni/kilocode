@@ -36677,6 +36677,9 @@
                     "completion": {
                       "$ref": "#/components/schemas/RayaSelfHealCompletion"
                     },
+                    "artifact": {
+                      "$ref": "#/components/schemas/RayaSelfHealDelivery"
+                    },
                     "legacyVerification": {
                       "type": "boolean"
                     },
@@ -37088,6 +37091,9 @@
                       "completion": {
                         "$ref": "#/components/schemas/RayaSelfHealCompletion"
                       },
+                      "artifact": {
+                        "$ref": "#/components/schemas/RayaSelfHealDelivery"
+                      },
                       "legacyVerification": {
                         "type": "boolean"
                       },
@@ -37484,6 +37490,9 @@
                     },
                     "completion": {
                       "$ref": "#/components/schemas/RayaSelfHealCompletion"
+                    },
+                    "artifact": {
+                      "$ref": "#/components/schemas/RayaSelfHealDelivery"
                     }
                   },
                   "required": ["id", "itemID", "source", "phase", "revision", "at"],
@@ -37900,6 +37909,9 @@
                     },
                     "completion": {
                       "$ref": "#/components/schemas/RayaSelfHealCompletion"
+                    },
+                    "artifact": {
+                      "$ref": "#/components/schemas/RayaSelfHealDelivery"
                     }
                   },
                   "required": ["id", "itemID", "source", "phase", "revision", "at"],
@@ -38130,6 +38142,9 @@
                     },
                     "completion": {
                       "$ref": "#/components/schemas/RayaSelfHealCompletion"
+                    },
+                    "artifact": {
+                      "$ref": "#/components/schemas/RayaSelfHealDelivery"
                     }
                   },
                   "required": ["id", "itemID", "source", "phase", "revision", "at"],
@@ -38389,6 +38404,9 @@
                     },
                     "completion": {
                       "$ref": "#/components/schemas/RayaSelfHealCompletion"
+                    },
+                    "artifact": {
+                      "$ref": "#/components/schemas/RayaSelfHealDelivery"
                     },
                     "legacyVerification": {
                       "type": "boolean"
@@ -38789,6 +38807,9 @@
                     },
                     "completion": {
                       "$ref": "#/components/schemas/RayaSelfHealCompletion"
+                    },
+                    "artifact": {
+                      "$ref": "#/components/schemas/RayaSelfHealDelivery"
                     },
                     "legacyVerification": {
                       "type": "boolean"
@@ -80557,6 +80578,187 @@
           }
         },
         "required": ["version", "itemID", "attemptID", "sessionID", "source", "worktree", "goal", "at"],
+        "additionalProperties": false
+      },
+      "RayaSelfHealArtifact": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "number",
+            "enum": [1]
+          },
+          "id": {
+            "type": "string"
+          },
+          "itemID": {
+            "type": "string"
+          },
+          "attemptID": {
+            "type": "string"
+          },
+          "sessionID": {
+            "type": "string",
+            "pattern": "^ses"
+          },
+          "messageID": {
+            "type": "string",
+            "pattern": "^msg"
+          },
+          "callID": {
+            "type": "string"
+          },
+          "completion": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "source": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "head": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string",
+            "enum": ["win32-x64", "win32-arm64", "linux-x64", "linux-arm64", "darwin-x64", "darwin-arm64"]
+          },
+          "extension": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+\\.\\d+-repair\\+[a-f0-9.]+$"
+          },
+          "cli": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+\\.\\d+-repair\\+[a-f0-9.]+$"
+          },
+          "contract": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["ready-for-review"]
+          },
+          "output": {
+            "type": "string"
+          },
+          "artifact": {
+            "type": "object",
+            "properties": {
+              "digest": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "size": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": ["digest", "size"],
+            "additionalProperties": false
+          },
+          "binary": {
+            "type": "object",
+            "properties": {
+              "digest": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "size": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": ["digest", "size"],
+            "additionalProperties": false
+          },
+          "at": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "version",
+          "id",
+          "itemID",
+          "attemptID",
+          "sessionID",
+          "messageID",
+          "callID",
+          "completion",
+          "checks",
+          "source",
+          "head",
+          "target",
+          "extension",
+          "cli",
+          "contract",
+          "status",
+          "output",
+          "artifact",
+          "binary",
+          "at"
+        ],
+        "additionalProperties": false
+      },
+      "RayaSelfHealDelivery": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "number",
+            "enum": [1]
+          },
+          "itemID": {
+            "type": "string"
+          },
+          "attemptID": {
+            "type": "string"
+          },
+          "sessionID": {
+            "type": "string",
+            "pattern": "^ses"
+          },
+          "messageID": {
+            "type": "string",
+            "pattern": "^msg"
+          },
+          "callID": {
+            "type": "string"
+          },
+          "completion": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "at": {
+            "type": "number",
+            "minimum": 0
+          },
+          "status": {
+            "type": "string",
+            "enum": ["preparing", "building", "ready-for-review", "artifact-unavailable", "failed", "interrupted"]
+          },
+          "artifact": {
+            "$ref": "#/components/schemas/RayaSelfHealArtifact"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "itemID",
+          "attemptID",
+          "sessionID",
+          "messageID",
+          "callID",
+          "completion",
+          "at",
+          "status"
+        ],
         "additionalProperties": false
       },
       "LocationInfo": {

@@ -5,10 +5,15 @@ import { createHash } from "node:crypto"
 import { repairs, Outcome, Admission, Granted, Advance, Prepare } from "./repair"
 import { Completion, completions } from "./completion"
 import { SessionID } from "@/session/schema"
+import { artifacts, Delivery } from "./artifact"
 
 export namespace RayaSelfHeal {
   export const CompletionReceipt = Completion
-  export const Repair = Schema.Struct({ ...Outcome.fields, completion: Schema.optional(Completion) })
+  export const Repair = Schema.Struct({
+    ...Outcome.fields,
+    completion: Schema.optional(Completion),
+    artifact: Schema.optional(Delivery),
+  })
   export const RepairAdmission = Admission
   export const RepairGranted = Granted
   export const RepairAdvance = Advance
@@ -52,6 +57,7 @@ export namespace RayaSelfHeal {
   export const Item = Schema.Struct({
     repair: Schema.optional(Outcome),
     completion: Schema.optional(Completion),
+    artifact: Schema.optional(Delivery),
     legacyVerification: Schema.optional(Schema.Boolean),
     id: Schema.String,
     fingerprint: Schema.String,
@@ -189,6 +195,7 @@ export namespace RayaSelfHeal {
   ) {
     const repair = repairs(storage, root)
     const completion = completions(storage, repair)
+    const delivery = artifacts(storage, root)
     const decorate = Effect.fn(function* (item: Item) {
       const receipts = yield* storage.list(["raya", "self-heal", "reports", item.id]).pipe(Effect.orDie)
       const baseline = yield* storage.read<number>(["raya", "self-heal", "reports", item.id, "base"]).pipe(
@@ -208,6 +215,7 @@ export namespace RayaSelfHeal {
         status: tested ? ("verified" as const) : item.status === "verified" ? ("blocked" as const) : item.status,
         legacyVerification: (!tested && (item.status === "verified" || item.legacyVerification)) || undefined,
         completion: tested,
+        artifact: yield* delivery.find(item.id),
         reloadRequired: false,
         reports: Math.max(item.reports, baseline + reports.length),
         updatedAt: times.reduce((latest, at) => Math.max(latest, at), item.updatedAt),
@@ -372,7 +380,7 @@ export namespace RayaSelfHeal {
     const outcome = Effect.fn(function* (id: string) {
       const retained = yield* repair.get(id)
       if (!retained) return
-      return { ...retained, completion: yield* completion.get(id) }
+      return { ...retained, completion: yield* completion.get(id), artifact: yield* delivery.find(id) }
     })
     return {
       create,

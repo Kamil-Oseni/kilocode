@@ -480,4 +480,43 @@ test("self-heal summary distinguishes tested evidence, legacy claims and deliver
   expect(summary({ ...item, completion: { attemptID: "attempt", at: 1 } })).toContain(
     "Fix tested; not released or installed",
   )
+  expect(
+    summary({
+      ...item,
+      completion: { attemptID: "attempt", at: 1 },
+      artifact: { status: "ready-for-review" },
+    }),
+  ).toContain("Fix tested; artifact ready for review")
+})
+
+test("self-heal inspection keeps review, installation and failure states distinct", async () => {
+  const response = (status: string) =>
+    createKiloClient({
+      baseUrl: "http://unused.invalid",
+      fetch: async () =>
+        Response.json({
+          id: "attempt",
+          itemID: "heal_delivery",
+          phase: "submitted",
+          artifact: {
+            version: 1,
+            itemID: "heal_delivery",
+            attemptID: "attempt",
+            sessionID: "ses_delivery",
+            messageID: "msg_delivery",
+            callID: "call_delivery",
+            completion: "a".repeat(64),
+            at: 1,
+            status,
+            ...(status === "ready-for-review"
+              ? { artifact: { id: "artifact_delivery", status: "ready-for-review" } }
+              : {}),
+          },
+        }),
+    })
+  expect(await inspect(response("ready-for-review"), "heal_delivery", "global")).toContain(
+    "ready for review, not ready to install or installed",
+  )
+  expect(await inspect(response("artifact-unavailable"), "heal_delivery", "global")).toContain("can't be installed")
+  expect(await inspect(response("interrupted"), "heal_delivery", "global")).toContain("prevents automatic replay")
 })

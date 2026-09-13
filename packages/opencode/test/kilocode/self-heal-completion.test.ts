@@ -255,14 +255,36 @@ for (const changed of [false, true])
             expect((yield* delivery.status(sessionID, request.messageID, request.callID))?.observed?.status).toBe(
               "matches-receipt",
             )
+            expect(yield* delivery.find(item.id)).toMatchObject({
+              itemID: item.id,
+              attemptID: outcome.id,
+              sessionID,
+              messageID: request.messageID,
+              callID: request.callID,
+              status: "ready-for-review",
+              artifact: { status: "ready-for-review" },
+            })
+            const itempath = ["raya", "self-heal", "artifact-item", item.id]
+            const pointer = yield* storage.read<unknown>(itempath).pipe(Effect.orDie)
+            yield* storage.remove(itempath).pipe(Effect.orDie)
+            expect(yield* artifacts(storage, path.join(directory, "snapshots")).find(item.id)).toMatchObject({
+              status: "ready-for-review",
+              artifact: { itemID: item.id },
+            })
+            expect(yield* storage.create(itempath, pointer).pipe(Effect.orDie)).toBe(true)
             expect(Exit.isFailure(yield* delivery.run(request).pipe(Effect.exit))).toBe(true)
+            let dispatched = false
             const failed = {
               ...request,
               callID: "failed-artifact",
-              execute: () => Effect.succeed({ output: "setup failed", metadata: { exit: 1 } }),
+              execute: () => {
+                dispatched = true
+                return Effect.succeed({ output: "unexpected duplicate dispatch", metadata: { exit: 0 } })
+              },
             }
             expect(Exit.isFailure(yield* delivery.run(failed).pipe(Effect.exit))).toBe(true)
             expect((yield* delivery.status(sessionID, failed.messageID, failed.callID))?.terminal).toBeTruthy()
+            expect(dispatched).toBe(false)
             expect(yield* delivery.status("unrelated-session", request.messageID, request.callID)).toBeUndefined()
             const retained = yield* delivery.status(sessionID, request.messageID, request.callID)
             const built = Schema.decodeUnknownSync(Build)(retained?.build)
@@ -293,27 +315,6 @@ for (const changed of [false, true])
             expect((yield* delivery.status(sessionID, request.messageID, request.callID))?.observed?.status).toBe(
               "unavailable-or-changed",
             )
-            for (const mode of ["source", "build", "lost"] as const) {
-              const rejected = {
-                ...request,
-                callID: `${mode}-artifact`,
-                execute: (command: string, cwd: string) =>
-                  mode === "lost"
-                    ? Effect.die("lost build acknowledgement")
-                    : Effect.promise(async () => {
-                        if (mode === "source")
-                          await fs.writeFile(path.join(cwd, "tracked.txt"), "unverified build input")
-                        return {
-                          output: "fixture",
-                          metadata: { exit: mode === "build" && command !== "fixture-prepare" ? 1 : 0 },
-                        }
-                      }),
-              }
-              expect(Exit.isFailure(yield* delivery.run(rejected).pipe(Effect.exit))).toBe(true)
-              const retained = yield* delivery.status(sessionID, rejected.messageID, rejected.callID)
-              expect(retained?.result).toBeUndefined()
-              expect(retained?.terminal).toBeTruthy()
-            }
             const coordinate = [
               "raya",
               "self-heal",

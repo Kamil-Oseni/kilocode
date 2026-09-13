@@ -4,11 +4,13 @@ Source of scope: [Comprehensive audit](Raya-Comprehensive-Audit.md). All section
 
 ## ChatGPT 2026-09-13 11:19 America/Toronto — bounded media admission and setup
 
-**Status: implemented and verified locally; commit and push remain.** EN-10 now admits at most eight concurrent Qwen media sessions per companion process. The ownership claim is reserved before provider or room allocation, so simultaneous starts cannot race past the ceiling. Claims with uncertain cleanup continue consuming capacity until process restart; successfully closed sessions release capacity for reuse. The router returns `503` when the ceiling is reached.
+**Status: delivered in product commit `ca11d701a9`; pushed.** EN-10 now admits at most eight concurrent Qwen media sessions per companion process. The ownership claim is reserved before provider or room allocation, so simultaneous starts cannot race past the ceiling. Claims with uncertain cleanup continue consuming capacity until process restart; successfully closed sessions release capacity for reuse. The router returns `503` when the ceiling is reached.
 
 Provider and room setup now share a 15-second deadline. If either phase stalls, the manager cancels the lifetime context, closes any engine that was already opened, releases the claim after successful cleanup, and returns a typed setup-timeout error that the router maps to `504`. The deadline is stopped after setup, so it does not impose a short TTL on an active voice conversation. Request cancellation and shutdown retain their existing ownership and cleanup behavior.
 
 Focused manager tests prove ceiling refusal, capacity reuse and prompt cleanup after a stalled provider. The focused app and router packages pass; the uncached full companion suite, `go vet ./...` and a 10,176,000-byte native rebuild pass. No Bun, TypeScript tool, Docker build, paid provider or microphone ran. EN-10 remains **In progress** for authenticated container acceptance, actual managed-socket abrupt-exit and cross-window ownership evidence, and cross-directory execution-ownership evidence.
+
+Delivery completed by ChatGPT at 2026-09-13 11:21 America/Toronto. Product commit `ca11d701a9c2a1f1a7b6fe27c2b5203a017bbf45` (`fix(voice): bound media session setup`) is on `origin/main`. This checkpoint changes only the companion service, its tests and documentation, so it does not require another extension snapshot. The installed extension remains `eden.raya@7.4.23-snapshot+f83096f7d6.kamil-oseni.1789312194050`. The rebuilt native binary is ignored local output, and no companion container was built or replaced.
 
 ## ChatGPT 2026-09-13 10:51 America/Toronto — authenticated media control and browser boundary
 

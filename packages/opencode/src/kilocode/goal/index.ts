@@ -1914,19 +1914,27 @@ export namespace RayaGoal {
       )
       if (charge.origin.sessionID !== sessionID)
         return yield* new AuditError({ message: "The non-model charge belongs to another session." })
-      if (charge.at < state.createdAt)
-        return yield* new AuditError({ message: "The non-model charge predates the current goal." })
-      const prior = state.charges?.find((item) => item.id === charge.id)
+      const owner =
+        charge.at >= state.createdAt
+          ? state
+          : state.history?.findLast((item) => charge.at >= item.createdAt && charge.at <= item.updatedAt)
+      if (!owner) return yield* new AuditError({ message: "The non-model charge does not belong to a retained goal." })
+      const prior = owner.charges?.find((item) => item.id === charge.id)
       if (prior) {
         if (!isDeepStrictEqual(prior, charge))
           return yield* new AuditError({ message: "The non-model charge ID was reused with different details." })
         return { state, charge: prior }
       }
-      if ((state.charges?.length ?? 0) >= 512)
+      if ((owner.charges?.length ?? 0) >= 512)
         return yield* new AuditError({ message: "The goal non-model charge ledger is full." })
+      const append = [...(owner.charges ?? []), charge]
       const next = yield* save(sessionID, {
         ...state,
-        charges: [...(state.charges ?? []), charge],
+        charges: owner === state ? append : state.charges,
+        history:
+          owner === state
+            ? state.history
+            : state.history?.map((item) => (item === owner ? { ...item, charges: append } : item)),
         updatedAt: Date.now(),
       }).pipe(
         Effect.catchIf(
@@ -1934,7 +1942,11 @@ export namespace RayaGoal {
           (error) =>
             Effect.gen(function* () {
               const latest = yield* requireGoal(sessionID)
-              const saved = latest.charges?.find((item) => item.id === charge.id)
+              const target =
+                charge.at >= latest.createdAt
+                  ? latest
+                  : latest.history?.findLast((item) => charge.at >= item.createdAt && charge.at <= item.updatedAt)
+              const saved = target?.charges?.find((item) => item.id === charge.id)
               if (saved && isDeepStrictEqual(saved, charge)) return latest
               return yield* error
             }),

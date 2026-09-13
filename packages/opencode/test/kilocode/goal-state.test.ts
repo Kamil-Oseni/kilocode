@@ -4232,6 +4232,24 @@ describe("RayaGoal", () => {
       const revised = yield* goals.get(sessionID)
       expect(revised?.charges).toEqual([charge])
       expect(revised?.revisions?.at(-1)?.charges).toEqual([charge])
+
+      const old = yield* goals.get(sessionID)
+      if (!old) yield* Effect.die("expected retained goal")
+      yield* Effect.sleep("2 millis")
+      yield* storage.replace(["raya", "goal", sessionID], {
+        ...old,
+        status: "complete",
+        updatedAt: Date.now(),
+      })
+      yield* Effect.sleep("2 millis")
+      const current = yield* goals.create(sessionID, "Account for the next goal")
+      const late = { ...charge, id: "gpt-live:binding:late" }
+      expect((yield* goals.charged(sessionID, late)).charge).toEqual(late)
+      expect((yield* goals.charged(sessionID, late)).charge).toEqual(late)
+      const retained = yield* goals.get(sessionID)
+      expect(retained?.createdAt).toBe(current.createdAt)
+      expect(retained?.charges).toEqual([])
+      expect(retained?.history?.at(-1)?.charges).toEqual([charge, late])
     }),
   )
 })

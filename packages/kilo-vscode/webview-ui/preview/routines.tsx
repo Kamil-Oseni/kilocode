@@ -7,6 +7,13 @@ import { SessionContext } from "../src/context/session"
 import { VSCodeProvider } from "../src/context/vscode"
 
 const session = { agents: () => [] }
+const target = new URLSearchParams(location.search).get("target")
+const focus =
+  target === "organization"
+    ? { nonce: "preview-organization", organizationID: "org_11111111111111111111111111111111" }
+    : target === "worker"
+      ? { nonce: "preview-worker", agentID: "routine" }
+      : undefined
 
 export const RoutinesPreview: Component = () =>
   createComponent(VSCodeProvider, {
@@ -18,7 +25,7 @@ export const RoutinesPreview: Component = () =>
             get children() {
               return createComponent(DialogProvider, {
                 get children() {
-                  return createComponent(RoutinesView, { workspace: "C:/Projects/preview" })
+                  return createComponent(RoutinesView, { workspace: "C:/Projects/preview", focus })
                 },
               })
             },

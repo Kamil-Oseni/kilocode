@@ -33,6 +33,7 @@ import { cycleAgent as cycle } from "./context/session-agent"
 import "./styles/chat.css"
 
 type ViewType = "newTask" | "history" | "routines" | "profile" | "settings" | "subAgentViewer"
+type RoutineTarget = { nonce: string; organizationID?: string; agentID?: string }
 const VALID_VIEWS = new Set<string>(["newTask", "history", "routines", "profile", "settings", "subAgentViewer"])
 
 /**
@@ -223,6 +224,7 @@ const AppContent: Component = () => {
   const [currentView, setCurrentView] = createSignal<ViewType>("newTask")
   const [settingsTab, setSettingsTab] = createSignal<string | undefined>()
   const [agentManagerProjectId, setAgentManagerProjectId] = createSignal<string | undefined>()
+  const [routineTarget, setRoutineTarget] = createSignal<RoutineTarget>()
   // legacy-migration: state-driven flag independent of currentView to avoid
   // race conditions with SettingsEditorProvider's navigate messages.
   const [migrationNeeded, setMigrationNeeded] = createSignal(false)
@@ -231,6 +233,21 @@ const AppContent: Component = () => {
   const tabs = useLocalTabs()
   const server = useServer()
   const vscode = useVSCode()
+
+  onMount(() => {
+    const open = (event: Event) => {
+      const detail = (event as CustomEvent<{ organizationID?: unknown; agentID?: unknown }>).detail
+      const organizationID = typeof detail?.organizationID === "string" ? detail.organizationID : undefined
+      const agentID = typeof detail?.agentID === "string" ? detail.agentID : undefined
+      if (organizationID && !/^org_[a-f0-9]{32}$/.test(organizationID)) return
+      if (agentID && !/^[0-9a-f-]{36}$/i.test(agentID)) return
+      if (!organizationID && !agentID) return
+      setRoutineTarget({ nonce: crypto.randomUUID(), organizationID, agentID })
+      setCurrentView("routines")
+    }
+    window.addEventListener("raya:open-routines", open)
+    onCleanup(() => window.removeEventListener("raya:open-routines", open))
+  })
 
   const handleViewAction = (action: string) => {
     switch (action) {
@@ -396,6 +413,8 @@ const AppContent: Component = () => {
             <Match when={currentView() === "routines"}>
               <RoutinesView
                 workspace={server.workspaceDirectory()}
+                focus={routineTarget()}
+                onFocusConsumed={() => setRoutineTarget()}
                 onBack={() => setCurrentView("newTask")}
                 onOpenSession={(id) => {
                   handleSelectSession(id)

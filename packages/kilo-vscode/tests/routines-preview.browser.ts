@@ -109,6 +109,71 @@ test("wide routines organization filters and opens worker DMs", async ({ page },
   await page.screenshot({ path: info.outputPath("organization.png"), fullPage: true })
 })
 
+test("routines organization editor separates reporting, delegation, and archive", async ({ page }, info) => {
+  await page.setViewportSize({ width: 900, height: 900 })
+  await page.goto("/?state=light-routines")
+  await page.getByRole("button", { name: "Website Builders 2" }).click()
+  await page.getByRole("button", { name: "Edit organization" }).click()
+  await expect(page.getByRole("heading", { name: "Team and reporting" })).toBeVisible()
+  await expect(
+    page.getByText("Reporting lines organize the team. They don’t grant permission to delegate work."),
+  ).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Delegation permissions" })).toBeVisible()
+  const lead = page.getByRole("group", { name: "Counsel can assign work to" })
+  await expect(lead.getByRole("checkbox", { name: "Books" })).toBeChecked()
+  await lead.getByText("Books", { exact: true }).click()
+  await expect(lead.getByRole("checkbox", { name: "Books" })).not.toBeChecked()
+  await page.getByLabel("Name").fill("Website Studio")
+  await page.getByRole("button", { name: "Save", exact: true }).click()
+  await expect(page.getByRole("heading", { name: "Edit organization" })).toBeHidden()
+
+  await page.getByRole("button", { name: "Edit organization" }).click()
+  await page.getByRole("button", { name: "Archive", exact: true }).click()
+  await expect(page.getByRole("dialog", { name: "Archive Website Builders?" })).toContainText(
+    "Scheduled workers keep their current schedules",
+  )
+  await page.getByRole("button", { name: "Keep organization" }).click()
+  await expect(page.getByRole("dialog", { name: "Archive Website Builders?" })).toBeHidden()
+  const result = await new AxeBuilder({ page })
+    .include(".routines-view")
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+    .analyze()
+  expect(result.violations).toEqual([])
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await page.screenshot({ path: info.outputPath("organization-editor.png"), fullPage: true })
+})
+
+test("narrow organization overview can return to the organization list", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 900 })
+  await page.goto("/?state=light-routines")
+  await page.getByRole("button", { name: "Website Builders 2" }).click()
+  await expect(page.getByRole("heading", { name: "Website Builders" })).toBeVisible()
+  await expect(page.locator(".routines-people")).toBeHidden()
+  await page.getByRole("button", { name: "Back to organizations from Website Builders" }).click()
+  await expect(page.getByRole("button", { name: "Website Builders 2" })).toBeFocused()
+  await expect(page.locator(".routines-people")).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+})
+
+test("chat result target opens the matching organization", async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 900 })
+  await page.goto("/?state=light-routines&target=organization")
+  await expect(page.getByRole("heading", { name: "Website Builders" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Website Builders" })).toBeFocused()
+})
+
+test("organization revision conflict stays in the editor with recovery guidance", async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 900 })
+  await page.goto("/?state=light-routines&scene=conflict")
+  await page.getByRole("button", { name: "Website Builders 2" }).click()
+  await page.getByRole("button", { name: "Edit organization" }).click()
+  await page.getByLabel("Purpose").fill("A newer purpose")
+  await page.getByRole("button", { name: "Save", exact: true }).click()
+  await expect(page.getByRole("alert")).toContainText("This organization changed after you opened it.")
+  await expect(page.getByRole("alert")).toContainText("Review the refreshed team before saving again.")
+  await expect(page.getByRole("heading", { name: "Edit organization" })).toBeVisible()
+})
+
 test("light routines empty state", async ({ page }, info) => {
   await page.setViewportSize({ width: 320, height: 900 })
   await page.goto("/?state=light-routines&scene=empty")

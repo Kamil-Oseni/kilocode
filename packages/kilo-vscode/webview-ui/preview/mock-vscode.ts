@@ -278,6 +278,45 @@ const reply = (message: WebviewMessage) => {
               },
             ],
     })
+    return
+  }
+  if (message.type === "routineOrganizationUpdate") {
+    if (scene === "conflict") {
+      emit({
+        type: "routineOrganizationUpdated",
+        requestID: message.requestID,
+        organizationID: message.organizationID,
+        error: "This organization changed after you opened it.",
+        recovery: { kind: "conflict", next: "Review the refreshed team before saving again." },
+      })
+      return
+    }
+    emit({
+      type: "routineOrganizationUpdated",
+      requestID: message.requestID,
+      organizationID: message.organizationID,
+      organization: {
+        version: 1,
+        id: message.organizationID,
+        name: message.name,
+        purpose: message.purpose || undefined,
+        revision: message.expectedRevision + 1,
+        archived: false,
+        createdAt: 1,
+        updatedAt: Date.now(),
+        members: message.members.map((item, position) => ({ ...item, position })),
+        delegations: message.delegations.map((item, position) => ({ ...item, position })),
+      },
+    })
+    return
+  }
+  if (message.type === "routineOrganizationArchive") {
+    emit({
+      type: "routineOrganizationArchived",
+      requestID: message.requestID,
+      organizationID: message.organizationID,
+      revision: message.expectedRevision + 1,
+    })
   }
 }
 

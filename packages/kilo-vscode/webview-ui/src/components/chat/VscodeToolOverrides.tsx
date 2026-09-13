@@ -22,6 +22,7 @@ import { note, targets, type Kind } from "./review-files"
 const DEFAULT_OPEN_TOOLS = ["bash"]
 /** File-mutating tools that get the inline review chrome (Undo/Keep + navigator). */
 const REVIEW_TOOLS = ["edit", "write", "apply_patch", "multiedit"]
+const ROUTINE_TOOLS = ["create_organization", "update_routine", "update_organization"]
 const registered = new Set<string>()
 
 const TITLE: Record<string, string> = {
@@ -97,6 +98,50 @@ function output(text?: string) {
 function expanded(status?: string, open?: boolean) {
   if (open !== undefined) return open
   return status === "pending" || status === "running" || status === "completed"
+}
+
+function RoutineResultTool(props: ToolProps) {
+  const target = createMemo(() => {
+    if (props.status !== "completed" || props.metadata.view !== "routines") return
+    const organizationID = text(props.metadata.organizationID)
+    const agentID = text(props.metadata.agentID)
+    if (organizationID && !/^org_[a-f0-9]{32}$/.test(organizationID)) return
+    if (agentID && !/^[0-9a-f-]{36}$/i.test(agentID)) return
+    if (!organizationID && !agentID) return
+    return { organizationID, agentID }
+  })
+  const title = () => {
+    if (props.tool === "create_organization") return "Create organization"
+    if (props.tool === "update_organization") return "Update organization"
+    return "Update routine"
+  }
+  return (
+    <BasicTool
+      {...props}
+      icon="task"
+      trigger={{ title: title(), subtitle: text(props.metadata.requestStatus), args: [] }}
+      defaultOpen={props.defaultOpen ?? true}
+    >
+      <Show when={output(props.output)}>
+        {(value) => (
+          <div data-component="tool-output" data-variant="preview">
+            <p>{value()}</p>
+          </div>
+        )}
+      </Show>
+      <Show when={target()}>
+        {(value) => (
+          <Button
+            variant="secondary"
+            size="small"
+            onClick={() => window.dispatchEvent(new CustomEvent("raya:open-routines", { detail: value() }))}
+          >
+            Open in Routines
+          </Button>
+        )}
+      </Show>
+    </BasicTool>
+  )
 }
 
 function BackgroundProcessTool(props: ToolProps) {
@@ -317,6 +362,12 @@ export function registerVscodeToolOverrides() {
       render: BackgroundProcessTool,
     })
     registered.add("background_process")
+  }
+
+  for (const name of ROUTINE_TOOLS) {
+    if (registered.has(name)) continue
+    ToolRegistry.register({ name, render: RoutineResultTool })
+    registered.add(name)
   }
 
   for (const name of DEFAULT_OPEN_TOOLS) {

@@ -77,6 +77,8 @@ type Template = {
 }
 
 type Organization = import("@kilocode/sdk/v2/client").KilocodeRoutineOrganizationListResponse["items"][number]
+type Member = Omit<Organization["members"][number], "position">
+type Delegation = Omit<Organization["delegations"][number], "position">
 
 type Choice = { key: string; label: string }
 
@@ -87,6 +89,214 @@ type Saved = {
 }
 
 type ViewState = Record<string, unknown> & { routineInbox?: Saved }
+
+function OrganizationEditor(props: {
+  item: Organization
+  agents: Agent[]
+  saving: boolean
+  error?: string
+  onClose: () => void
+  onSave: (value: { name: string; purpose: string; members: Member[]; delegations: Delegation[] }) => void
+  onArchive: () => void
+}) {
+  const [name, setName] = createSignal(props.item.name)
+  const [purpose, setPurpose] = createSignal(props.item.purpose ?? "")
+  const [members, setMembers] = createSignal<Member[]>(
+    props.item.members.map((item) => ({
+      agentID: item.agentID,
+      role: item.role,
+      ...(item.supervisorID ? { supervisorID: item.supervisorID } : {}),
+    })),
+  )
+  const [delegations, setDelegations] = createSignal<Delegation[]>(
+    props.item.delegations.map((item) => ({ senderID: item.senderID, recipientID: item.recipientID })),
+  )
+  const [candidate, setCandidate] = createSignal("")
+  const available = createMemo(() =>
+    props.agents.filter((item) => !members().some((member) => member.agentID === item.id)),
+  )
+  const label = (id: string) => props.agents.find((item) => item.id === id)?.name ?? "Archived worker"
+  const revise = (id: string, update: Partial<Member>) =>
+    setMembers((items) => items.map((item) => (item.agentID === id ? { ...item, ...update } : item)))
+  const remove = (id: string) => {
+    setMembers((items) =>
+      items
+        .filter((item) => item.agentID !== id)
+        .map((item) => (item.supervisorID === id ? { ...item, supervisorID: undefined } : item)),
+    )
+    setDelegations((items) => items.filter((item) => item.senderID !== id && item.recipientID !== id))
+  }
+  const add = () => {
+    const agent = props.agents.find((item) => item.id === candidate())
+    if (!agent) return
+    setMembers((items) => [...items, { agentID: agent.id, role: agent.role }])
+    setCandidate("")
+  }
+  const allowed = (senderID: string, recipientID: string) =>
+    delegations().some((item) => item.senderID === senderID && item.recipientID === recipientID)
+  const permit = (senderID: string, recipientID: string, on: boolean) =>
+    setDelegations((items) =>
+      on
+        ? [...items, { senderID, recipientID }]
+        : items.filter((item) => item.senderID !== senderID || item.recipientID !== recipientID),
+    )
+  const valid = createMemo(() => !!name().trim() && members().length > 0 && members().every((item) => item.role.trim()))
+
+  return (
+    <section class="routines-thread routines-organization-editor" aria-labelledby={`edit-${props.item.id}`}>
+      <div class="routines-thread-head">
+        <div class="routines-thread-identity">
+          <h3 id={`edit-${props.item.id}`}>Edit organization</h3>
+          <span>Revision {props.item.revision}</span>
+        </div>
+        <Button variant="ghost" size="small" disabled={props.saving} onClick={props.onClose}>
+          Cancel
+        </Button>
+        <Button
+          size="small"
+          disabled={props.saving || !valid()}
+          onClick={() =>
+            props.onSave({
+              name: name().trim(),
+              purpose: purpose().trim(),
+              members: members(),
+              delegations: delegations(),
+            })
+          }
+        >
+          {props.saving ? "Saving" : "Save"}
+        </Button>
+      </div>
+      <div class="routines-thread-body routines-organization-form">
+        <Show when={props.error}>
+          <p class="routines-error" role="alert">
+            {props.error}
+          </p>
+        </Show>
+        <label class="routines-field">
+          Name
+          <input value={name()} maxlength={120} onInput={(event) => setName(event.currentTarget.value)} />
+        </label>
+        <label class="routines-field">
+          Purpose
+          <textarea
+            value={purpose()}
+            maxlength={2000}
+            rows={3}
+            placeholder="What this team owns and reports back"
+            onInput={(event) => setPurpose(event.currentTarget.value)}
+          />
+        </label>
+
+        <section class="routines-organization-section" aria-labelledby={`team-${props.item.id}`}>
+          <div class="routines-organization-section-head">
+            <div>
+              <h4 id={`team-${props.item.id}`}>Team and reporting</h4>
+              <p>Reporting lines organize the team. They don’t grant permission to delegate work.</p>
+            </div>
+          </div>
+          <ol class="routines-organization-edit-members">
+            <For each={members()}>
+              {(member) => (
+                <li>
+                  <strong>{label(member.agentID)}</strong>
+                  <label class="routines-field">
+                    Role
+                    <input
+                      value={member.role}
+                      maxlength={120}
+                      onInput={(event) => revise(member.agentID, { role: event.currentTarget.value })}
+                    />
+                  </label>
+                  <label class="routines-field">
+                    Reports to
+                    <select
+                      value={member.supervisorID ?? ""}
+                      onChange={(event) =>
+                        revise(member.agentID, { supervisorID: event.currentTarget.value || undefined })
+                      }
+                    >
+                      <option value="">No supervisor</option>
+                      <For each={members().filter((item) => item.agentID !== member.agentID)}>
+                        {(item) => <option value={item.agentID}>{label(item.agentID)}</option>}
+                      </For>
+                    </select>
+                  </label>
+                  <Button
+                    variant="ghost"
+                    size="small"
+                    disabled={members().length === 1}
+                    onClick={() => remove(member.agentID)}
+                  >
+                    Remove
+                  </Button>
+                </li>
+              )}
+            </For>
+          </ol>
+          <Show when={available().length > 0}>
+            <div class="routines-organization-add">
+              <label class="routines-field">
+                Add worker
+                <select value={candidate()} onChange={(event) => setCandidate(event.currentTarget.value)}>
+                  <option value="">Choose a worker</option>
+                  <For each={available()}>{(item) => <option value={item.id}>{item.name}</option>}</For>
+                </select>
+              </label>
+              <Button variant="secondary" size="small" disabled={!candidate()} onClick={add}>
+                Add
+              </Button>
+            </div>
+          </Show>
+        </section>
+
+        <section class="routines-organization-section" aria-labelledby={`authority-${props.item.id}`}>
+          <div class="routines-organization-section-head">
+            <div>
+              <h4 id={`authority-${props.item.id}`}>Delegation permissions</h4>
+              <p>Choose each direction explicitly. A checked worker can assign work to that recipient.</p>
+            </div>
+          </div>
+          <div class="routines-authority">
+            <For each={members()}>
+              {(sender) => (
+                <fieldset>
+                  <legend>{label(sender.agentID)} can assign work to</legend>
+                  <For each={members().filter((item) => item.agentID !== sender.agentID)}>
+                    {(recipient) => (
+                      <Checkbox
+                        checked={allowed(sender.agentID, recipient.agentID)}
+                        onChange={(on) => permit(sender.agentID, recipient.agentID, on)}
+                      >
+                        {label(recipient.agentID)}
+                      </Checkbox>
+                    )}
+                  </For>
+                  <Show when={members().length === 1}>
+                    <span class="routines-hint">Add another worker to delegate work.</span>
+                  </Show>
+                </fieldset>
+              )}
+            </For>
+          </div>
+        </section>
+
+        <section
+          class="routines-organization-section routines-organization-danger"
+          aria-labelledby={`archive-${props.item.id}`}
+        >
+          <div>
+            <h4 id={`archive-${props.item.id}`}>Archive organization</h4>
+            <p>Workers, conversations, reports, and organization history stay saved.</p>
+          </div>
+          <Button variant="destructive" size="small" disabled={props.saving} onClick={props.onArchive}>
+            Archive
+          </Button>
+        </section>
+      </div>
+    </section>
+  )
+}
 
 function scope(value: string) {
   const path = value.trim().replaceAll("\\", "/").replace(/\/+$/, "")
@@ -441,6 +651,8 @@ interface RoutinesViewProps {
   onBack?: () => void
   onOpenSession?: (id: string) => void
   workspace?: string
+  focus?: { nonce: string; organizationID?: string; agentID?: string }
+  onFocusConsumed?: () => void
 }
 
 const RoutinesView: Component<RoutinesViewProps> = (props) => {
@@ -452,6 +664,10 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const [organizations, setOrganizations] = createSignal<Organization[]>([])
   const [organization, setOrganization] = createSignal<string>()
   const [organizationError, setOrganizationError] = createSignal("")
+  const [organizationsLoaded, setOrganizationsLoaded] = createSignal(false)
+  const [editingOrganization, setEditingOrganization] = createSignal<Organization>()
+  const [organizationRequest, setOrganizationRequest] = createSignal<{ id: string; action: "update" | "archive" }>()
+  const [organizationNotice, setOrganizationNotice] = createSignal("")
   const [manage, setManage] = createSignal(false)
   const [templates, setTemplates] = createSignal<Template[]>([])
   const [runs, setRuns] = createSignal<Record<string, Run[]>>({})
@@ -460,6 +676,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const [section, setSection] = createSignal<"access" | "output">("access")
   const panel = createUniqueId()
   let root: HTMLDivElement | undefined
+  let focused = ""
   const [error, setError] = createSignal("")
   const [name, setName] = createSignal("")
   const [role, setRole] = createSignal("briefer")
@@ -596,6 +813,106 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     if (chosen() && !item?.members.some((member) => member.agentID === chosen())) choose()
   }
 
+  const leaveOrganization = () => {
+    const id = organization()
+    setEditingOrganization()
+    chooseOrganization()
+    queueMicrotask(() => {
+      if (organization() || !root?.isConnected) return
+      const token = id && typeof CSS !== "undefined" && typeof CSS.escape === "function" ? CSS.escape(id) : id
+      const button = token
+        ? root.querySelector<HTMLElement>(`.routines-organization[data-routine-organization="${token}"]`)
+        : undefined
+      const target = button ?? root.querySelector<HTMLElement>(".routines-title")
+      target?.focus()
+    })
+  }
+
+  createEffect(() => {
+    const target = props.focus
+    if (!target || target.nonce === focused || !loaded() || (target.organizationID && !organizationsLoaded())) return
+    focused = target.nonce
+    props.onFocusConsumed?.()
+    if (target.organizationID) {
+      const item = organizations().find((entry) => entry.id === target.organizationID)
+      if (!item) {
+        setError("That organization is no longer in the active list.")
+        return
+      }
+      setEditingOrganization()
+      choose()
+      chooseOrganization(item.id)
+      queueMicrotask(() => root?.querySelector<HTMLElement>(`#organization-${item.id}`)?.focus())
+      return
+    }
+    if (!target.agentID || !agents().some((item) => item.id === target.agentID)) {
+      setError("That routine is no longer in the active list.")
+      return
+    }
+    const item = organizations().find((entry) => entry.members.some((member) => member.agentID === target.agentID))
+    chooseOrganization(item?.id)
+    choose(target.agentID)
+    queueMicrotask(() => root?.querySelector<HTMLElement>(".routines-thread-identity strong")?.focus())
+  })
+
+  const editOrganization = (item: Organization) => {
+    setEditingOrganization(item)
+    setOrganizationNotice("")
+  }
+
+  const saveOrganization = (value: { name: string; purpose: string; members: Member[]; delegations: Delegation[] }) => {
+    const item = editingOrganization()
+    if (!item || organizationRequest()) return
+    const id = crypto.randomUUID()
+    setOrganizationNotice("")
+    setOrganizationRequest({ id, action: "update" })
+    vscode.postMessage({
+      type: "routineOrganizationUpdate",
+      requestID: id,
+      organizationID: item.id,
+      expectedRevision: item.revision,
+      ...value,
+    })
+  }
+
+  const archiveOrganization = () => {
+    const item = editingOrganization()
+    if (!item || organizationRequest()) return
+    dialog.show(() => (
+      <Dialog title={`Archive ${item.name}?`} fit>
+        <div class="dialog-confirm-body">
+          <span>
+            The organization leaves the active list. Its workers, conversations, reports, and organization history stay
+            saved. Scheduled workers keep their current schedules until you pause or remove them separately.
+          </span>
+          <div class="dialog-confirm-actions">
+            <Button variant="secondary" size="large" onClick={() => dialog.close()} autofocus>
+              Keep organization
+            </Button>
+            <Button
+              variant="destructive"
+              size="large"
+              onClick={() => {
+                const id = crypto.randomUUID()
+                setOrganizationNotice("")
+                setOrganizationRequest({ id, action: "archive" })
+                vscode.postMessage({
+                  type: "routineOrganizationArchive",
+                  requestID: id,
+                  organizationID: item.id,
+                  expectedRevision: item.revision,
+                })
+                dialog.close()
+              }}
+            >
+              Archive organization
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+    ))
+  }
+
   const leave = () => {
     const id = chosen()
     choose()
@@ -728,6 +1045,10 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
       setOrganizations([])
       setOrganization()
       setOrganizationError("")
+      setOrganizationsLoaded(false)
+      setEditingOrganization()
+      setOrganizationRequest()
+      setOrganizationNotice("")
       setRuns({})
       setStale({})
       setBoxes({})
@@ -777,6 +1098,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     if (msg.organizations) {
       const items = msg.organizations as Organization[]
       setOrganizations(items)
+      setOrganizationsLoaded(true)
       setOrganizationError("")
       const current = organization()
       if (current && !items.some((item) => item.id === current)) chooseOrganization()
@@ -785,6 +1107,8 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
         if (saved && items.some((item) => item.id === saved)) setOrganization(saved)
         else if (saved) rememberOrganization()
       }
+      const editing = editingOrganization()
+      if (editing) setEditingOrganization(items.find((item) => item.id === editing.id))
     }
     if (msg.organizationError) setOrganizationError(msg.organizationError)
   }
@@ -820,6 +1144,34 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     grouped(msg)
   }
 
+  const organizationResult = (
+    msg: Extract<ExtensionMessage, { type: "routineOrganizationUpdated" | "routineOrganizationArchived" }>,
+  ) => {
+    const request = organizationRequest()
+    const item = editingOrganization()
+    if (!request || msg.requestID !== request.id || !item || msg.organizationID !== item.id) return
+    if (request.action === "update" && msg.type !== "routineOrganizationUpdated") return
+    if (request.action === "archive" && msg.type !== "routineOrganizationArchived") return
+    setOrganizationRequest()
+    if (msg.error) {
+      setOrganizationNotice([msg.error, msg.recovery?.next].filter(Boolean).join(" "))
+      load()
+      return
+    }
+    if (msg.type === "routineOrganizationUpdated" && msg.organization) {
+      setOrganizations((items) => items.map((entry) => (entry.id === msg.organizationID ? msg.organization! : entry)))
+      setEditingOrganization()
+      setOrganizationNotice("")
+      load()
+      return
+    }
+    if (msg.type === "routineOrganizationArchived") {
+      setEditingOrganization()
+      chooseOrganization()
+      load()
+    }
+  }
+
   const boxed = (msg: Extract<ExtensionMessage, { type: "routineInbox" }>) => {
     if (msg.error) return
     if (!Array.isArray(msg.items)) return
@@ -835,6 +1187,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     if (msg.type === "routineForecast") receive(msg)
     if (msg.type === "routineScheduleUpdated") updated(msg)
     if (msg.type === "routineState") received(msg)
+    if (msg.type === "routineOrganizationUpdated" || msg.type === "routineOrganizationArchived") organizationResult(msg)
     if (msg.type === "routineInbox") boxed(msg)
     if (msg.type === "folderPickerResult" && msg.requestId === wait() && msg.path) {
       setDir(msg.path)
@@ -1220,7 +1573,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
               </div>
             </div>
           </Show>
-          <div class="routines-inbox" data-open={chosen() ? "true" : undefined}>
+          <div class="routines-inbox" data-open={chosen() || currentOrganization() ? "true" : undefined}>
             <div class="routines-people">
               <Show when={!vacant()}>
                 <div class="routines-toolbar">
@@ -1239,6 +1592,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                           <button
                             type="button"
                             class="routines-organization"
+                            data-routine-organization={item.id}
                             aria-current={organization() === item.id ? "page" : undefined}
                             onClick={() => chooseOrganization(item.id)}
                           >
@@ -1360,17 +1714,43 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                 />
               )}
             </Show>
-            <Show when={!worker() && currentOrganization()} keyed>
+            <Show when={!worker() && editingOrganization()}>
+              <OrganizationEditor
+                item={editingOrganization()!}
+                agents={agents()}
+                saving={!!organizationRequest()}
+                error={organizationNotice()}
+                onClose={() => {
+                  setEditingOrganization()
+                  setOrganizationNotice("")
+                }}
+                onSave={saveOrganization}
+                onArchive={archiveOrganization}
+              />
+            </Show>
+            <Show when={!worker() && !editingOrganization() ? currentOrganization() : undefined} keyed>
               {(item) => (
                 <section
                   class="routines-thread routines-organization-overview"
                   aria-labelledby={`organization-${item.id}`}
                 >
                   <div class="routines-thread-head">
+                    <Button
+                      variant="ghost"
+                      size="small"
+                      icon="arrow-left"
+                      aria-label={`Back to organizations from ${item.name}`}
+                      onClick={leaveOrganization}
+                    />
                     <div class="routines-thread-identity">
-                      <h3 id={`organization-${item.id}`}>{item.name}</h3>
+                      <h3 id={`organization-${item.id}`} tabIndex={-1}>
+                        {item.name}
+                      </h3>
                       <span>{item.members.length} workers</span>
                     </div>
+                    <Button variant="ghost" size="small" onClick={() => editOrganization(item)}>
+                      Edit organization
+                    </Button>
                   </div>
                   <div class="routines-thread-body">
                     <Show when={item.purpose}>
@@ -1405,7 +1785,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                 </section>
               )}
             </Show>
-            <Show when={!worker() && !currentOrganization()}>
+            <Show when={!worker() && !currentOrganization() && !editingOrganization()}>
               <p class="routines-empty routines-thread">Select a worker to read reports and follow up here.</p>
             </Show>
           </div>

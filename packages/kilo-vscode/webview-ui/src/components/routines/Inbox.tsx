@@ -972,7 +972,7 @@ export const Inbox: Component<{
           </Button>
         </Show>
         <div class="routines-thread-identity">
-          <strong>{props.name}</strong>
+          <strong tabIndex={-1}>{props.name}</strong>
           <span class="routines-meta">
             {props.role}
             <Show when={props.workspace}> · {props.workspace}</Show>

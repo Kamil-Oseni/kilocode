@@ -8,6 +8,7 @@ import { Edit, Proposal, Schedule } from "../shared/routine-schedule"
 import { Output } from "../shared/routine-output"
 import { recovery } from "../shared/routine-error"
 import { bundle, MAX_ROUTINE_FILES, type RoutineUpload } from "./routine-files"
+import { organization } from "./routine-refresh"
 
 type Msg = { type: string } & Record<string, unknown>
 type Kilo = KiloClient["kilocode"]["routine"]
@@ -119,6 +120,8 @@ function reply(type: string) {
   if (type === "routineDelegate") return "routineDelegated"
   if (type === "routineDelegateCancel") return "routineDelegateStopped"
   if (type === "routineDelegateChain") return "routineDelegateChain"
+  if (type === "routineOrganizationUpdate") return "routineOrganizationUpdated"
+  if (type === "routineOrganizationArchive") return "routineOrganizationArchived"
   return "routineState"
 }
 
@@ -157,6 +160,8 @@ const messages = new Set([
   "routineDelegate",
   "routineDelegateCancel",
   "routineDelegateChain",
+  "routineOrganizationUpdate",
+  "routineOrganizationArchive",
 ])
 
 function owned(type: string) {
@@ -411,6 +416,92 @@ async function trace(ctx: Ctx) {
   })
 }
 
+function graph(value: unknown) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 100)
+    throw new Error("Keep at least 1 and at most 100 workers in this organization.")
+  return value.map((value) => {
+    if (!value || typeof value !== "object") throw new Error("Reload the organization before saving it.")
+    const item = value as Record<string, unknown>
+    if (!token(item.agentID) || typeof item.role !== "string" || !item.role.trim() || item.role.length > 120)
+      throw new Error("Give every organization worker a valid role.")
+    if (item.supervisorID !== undefined && !token(item.supervisorID))
+      throw new Error("Choose a valid reporting line for every worker.")
+    return {
+      agentID: String(item.agentID),
+      role: item.role.trim(),
+      ...(item.supervisorID === undefined ? {} : { supervisorID: String(item.supervisorID) }),
+    }
+  })
+}
+
+function authority(value: unknown) {
+  if (!Array.isArray(value) || value.length > 500)
+    throw new Error("Keep at most 500 directional delegation permissions in an organization.")
+  return value.map((value) => {
+    if (!value || typeof value !== "object") throw new Error("Reload the organization before saving it.")
+    const item = value as Record<string, unknown>
+    if (!token(item.senderID) || !token(item.recipientID) || item.senderID === item.recipientID)
+      throw new Error("Choose valid workers for every delegation permission.")
+    return { senderID: String(item.senderID), recipientID: String(item.recipientID) }
+  })
+}
+
+function revision(msg: Msg) {
+  if (!Number.isSafeInteger(msg.expectedRevision) || Number(msg.expectedRevision) < 1)
+    throw new Error("Reload the organization before saving it.")
+  return Number(msg.expectedRevision)
+}
+
+async function revise(ctx: Ctx) {
+  const msg = ctx.message
+  if (!token(msg.requestID) || typeof msg.organizationID !== "string" || !/^org_[a-f0-9]{32}$/.test(msg.organizationID))
+    throw new Error("Reload the organization before saving it.")
+  if (typeof msg.name !== "string" || !msg.name.trim() || msg.name.length > 120)
+    throw new Error("Give this organization a name.")
+  if (typeof msg.purpose !== "string" || msg.purpose.length > 2000)
+    throw new Error("Keep the organization purpose under 2000 characters.")
+  const result = await ctx.kilo.organization.update(
+    {
+      directory: ctx.dir,
+      organizationID: msg.organizationID,
+      expectedRevision: revision(msg),
+      name: msg.name.trim(),
+      purpose: msg.purpose.trim(),
+      members: graph(msg.members),
+      delegations: authority(msg.delegations),
+    },
+    { throwOnError: true },
+  )
+  if (!organization(result.data) || result.data.id !== msg.organizationID)
+    throw new Error("The saved organization response could not be verified. Refresh before trying again.")
+  ctx.post({
+    type: "routineOrganizationUpdated",
+    requestID: msg.requestID,
+    organizationID: msg.organizationID,
+    organization: result.data,
+  })
+  await ctx.refresh?.()
+}
+
+async function retire(ctx: Ctx) {
+  const msg = ctx.message
+  if (!token(msg.requestID) || typeof msg.organizationID !== "string" || !/^org_[a-f0-9]{32}$/.test(msg.organizationID))
+    throw new Error("Reload the organization before archiving it.")
+  const result = await ctx.kilo.organization.archive(
+    { directory: ctx.dir, organizationID: msg.organizationID, expectedRevision: revision(msg) },
+    { throwOnError: true },
+  )
+  if (!organization(result.data, true) || result.data.id !== msg.organizationID)
+    throw new Error("The archived organization response could not be verified. Refresh before trying again.")
+  ctx.post({
+    type: "routineOrganizationArchived",
+    requestID: msg.requestID,
+    organizationID: msg.organizationID,
+    revision: result.data.revision,
+  })
+  await ctx.refresh?.()
+}
+
 async function list(ctx: Ctx) {
   if (ctx.refresh)
     return ctx.refresh(
@@ -650,6 +741,8 @@ const routes: Record<string, (ctx: Ctx) => Promise<void>> = {
   routineDelegate: pass,
   routineDelegateCancel: halt,
   routineDelegateChain: trace,
+  routineOrganizationUpdate: revise,
+  routineOrganizationArchive: retire,
   routineList: list,
   routineCreate: create,
   routineUpdate: update,

@@ -281,6 +281,24 @@ export interface RoutineDelegateChainMessage {
   agentID: string
   id: string
 }
+
+export interface RoutineOrganizationUpdateMessage {
+  type: "routineOrganizationUpdate"
+  requestID: string
+  organizationID: string
+  expectedRevision: number
+  name: string
+  purpose: string
+  members: { agentID: string; role: string; supervisorID?: string }[]
+  delegations: { senderID: string; recipientID: string }[]
+}
+
+export interface RoutineOrganizationArchiveMessage {
+  type: "routineOrganizationArchive"
+  requestID: string
+  organizationID: string
+  expectedRevision: number
+}
 // raya_change end
 
 export interface RequestBackgroundJobsMessage {
@@ -1915,6 +1933,8 @@ export type WebviewMessage =
   | RoutineDelegateMessage
   | RoutineDelegateCancelMessage
   | RoutineDelegateChainMessage
+  | RoutineOrganizationUpdateMessage
+  | RoutineOrganizationArchiveMessage
   | RequestBackgroundJobsMessage
   | CancelBackgroundJobMessage
   | BackgroundSubagentsMessage

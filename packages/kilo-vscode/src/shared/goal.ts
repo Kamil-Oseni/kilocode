@@ -1,6 +1,8 @@
 // raya_change - Milestone A shared goal command and UI contracts
 import type { inspection } from "@opencode-ai/core/kilocode/evidence-inspection"
 export type GoalStatus = "active" | "paused" | "complete" | "blocked"
+export type GoalBudget = { activeMs?: number; modelCost?: number }
+export type GoalBudgetHit = { kind: "active-time" | "model-cost"; limit: number; observed: number; at: number }
 
 export interface GoalEvidence {
   record?: { version: 1; digest: string; at: number }
@@ -33,6 +35,8 @@ export interface GoalState {
     objective: string
     criteria?: GoalState["criteria"]
     plan?: GoalState["plan"]
+    budget?: GoalBudget | null
+    budgetHit?: GoalBudgetHit
     audit?: GoalState["audit"]
     auditAttempt?: GoalState["auditAttempt"]
   }>
@@ -82,6 +86,8 @@ export interface GoalState {
   updatedAt: number
   activeMs?: number // raya_change - accumulated running time excluding pauses
   activeAt?: number // raya_change - current active interval start
+  budget?: GoalBudget | null
+  budgetHit?: GoalBudgetHit
   usage: {
     turns: number
     continuations: number
@@ -127,6 +133,8 @@ export interface GoalState {
     review?: GoalState["review"]
     revisions?: GoalState["revisions"]
     plan?: GoalState["plan"]
+    budget?: GoalBudget | null
+    budgetHit?: GoalBudgetHit
     usage?: GoalState["usage"]
     activeMs?: number
     criteria?: GoalState["criteria"]
@@ -140,10 +148,18 @@ export interface GoalState {
   }>
 }
 
-export type GoalCommand = { kind: "usage"; notice: string } | { kind: "start"; objective: string; notice?: string }
+export type GoalCommand =
+  | { kind: "usage"; notice: string }
+  | { kind: "start"; objective: string; budget?: GoalBudget; notice?: string }
 
-const usage = "Usage: /goal <objective>"
+const usage = "Usage: /goal [30m] <objective>"
 const limit = /^(\d+(?:\.\d+)?(?:m|h))(?:\s+([\s\S]+))?$/i
+const duration = (value: string) => {
+  const amount = Number(value.slice(0, -1))
+  const unit = value.at(-1)?.toLowerCase()
+  const activeMs = Math.round(amount * (unit === "h" ? 3_600_000 : 60_000))
+  return Number.isSafeInteger(activeMs) && activeMs >= 1_000 && activeMs <= 31_536_000_000 ? activeMs : undefined
+}
 // raya_change start - infer durable goal intent from ordinary language without arming routine requests
 const durable = [
   /\bdone when\b/i,
@@ -195,17 +211,26 @@ export function parseGoalCommand(text: string): GoalCommand | undefined {
   const timed = raw.match(limit)
   if (!timed) return { kind: "start", objective: raw }
   const objective = timed[2]?.trim()
-  const notice = `Time-limited goals are not supported yet. The ${timed[1]} limit was removed.`
-  if (!objective) return { kind: "usage", notice: `${notice} ${usage}` }
-  return { kind: "start", objective, notice }
+  const activeMs = duration(timed[1])
+  if (!objective) return { kind: "usage", notice: usage }
+  if (activeMs === undefined)
+    return { kind: "usage", notice: `Choose an active-time limit between 1 minute and 1 year. ${usage}` }
+  return {
+    kind: "start",
+    objective,
+    budget: { activeMs },
+    notice: `Active-time limit saved: ${timed[1]}. Raya will pause before starting more work after the limit is reached.`,
+  }
 }
 
-export function goalPrompt(objective: string) {
+export function goalPrompt(objective: string, budget?: GoalBudget) {
   return `<system-reminder>
 A persistent goal has just been armed for this session.
 
 Objective:
 ${objective}
+
+${budget?.activeMs ? `Active-time limit: ${budget.activeMs} milliseconds of accumulated active goal time. Pause before starting more work when it is reached.` : "No active-time limit was saved."}
 
 Perform the first concrete unit of work now in this same turn. Do not stop after planning or restating the objective. Preserve the full objective and its constraints across turns. For a goal with dependencies, prefer update_goal_plan when available: read get_goal first, preserve stable task IDs, and use its current intent and plan revision. Reconcile plans marked for review or saved for an earlier objective before relying on them. A saved owner does not authorize delegation, and task status is not completion evidence. When using todowrite and a task list is useful, keep it current and identify the work actually in progress. Independent authorized tasks may be in progress together; keep dependent tasks pending until their prerequisites finish. Do not serialize genuinely parallel work merely to show one active task. Delegate only when authorized and useful, and wait for a task's result before relying on it. Give concise progress updates without exposing private chain-of-thought.
 

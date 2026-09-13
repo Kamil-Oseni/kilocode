@@ -403,6 +403,51 @@ try {
   assert.ok(root.textContent.includes("Replacement"))
   assert.ok(root.textContent.includes("changed while stopping"))
   button("Cancel").click()
+  emit({
+    type: "goalState",
+    sessionID: "session",
+    goal: {
+      ...goal,
+      status: "paused",
+      intent: "budget",
+      budget: { activeMs: 1_800_000, modelCost: 1 },
+      budgetHit: { kind: "model-cost", limit: 1, observed: 1.25, at: Date.now() },
+    },
+  })
+  assert.ok(root.textContent.includes("saved recorded model-cost limit"))
+  button("Steer").click()
+  assert.equal(root.querySelector("#goal-time-limit").value, "30")
+  assert.equal(root.querySelector("#goal-cost-limit").value, "1")
+  root.querySelector("#goal-cost-limit").value = "3"
+  root.querySelector("#goal-cost-limit").dispatchEvent(new window.Event("input", { bubbles: true }))
+  assert.equal(button("Update goal").disabled, false)
+  button("Update goal").click()
+  const budget = sent.findLast((msg) => msg.type === "goalEdit")
+  assert.deepEqual(budget.budget, { activeMs: 1_800_000, modelCost: 3 })
+  assert.equal(budget.expectedIntent, "budget")
+  emit({
+    type: "goalEdited",
+    sessionID: "session",
+    requestID: budget.requestID,
+    goal: { ...goal, status: "paused", intent: "budget-confirmed", budget: budget.budget },
+  })
+  assert.equal(root.querySelector("#goal-cost-limit"), null)
+  button("Steer").click()
+  const time = root.querySelector("#goal-time-limit")
+  const money = root.querySelector("#goal-cost-limit")
+  time.value = ""
+  time.dispatchEvent(new window.Event("input", { bubbles: true }))
+  money.value = ""
+  money.dispatchEvent(new window.Event("input", { bubbles: true }))
+  button("Update goal").click()
+  const cleared = sent.findLast((msg) => msg.type === "goalEdit")
+  assert.equal(cleared.budget, null)
+  emit({
+    type: "goalEdited",
+    sessionID: "session",
+    requestID: cleared.requestID,
+    goal: { ...goal, status: "paused", intent: "budget-cleared" },
+  })
   emit({ type: "goalState", sessionID: "session", goal: { ...goal, intent: "criteria" } })
   button("Steer").click()
   button("Add criterion").click()

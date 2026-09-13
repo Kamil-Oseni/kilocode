@@ -9,6 +9,7 @@ test("goal reports preserve exact references and mark legacy records instead of 
   expect(text).toContain("Execution counters were not retained.")
   expect(text).toContain("Goal-session model cost was not retained.")
   expect(text).toContain("Goal-session token totals were not retained.")
+  expect(text).toContain("No active-time or recorded model-cost limit was saved.")
   const saved = report(
     {
       objective: "Verified",
@@ -20,6 +21,8 @@ test("goal reports preserve exact references and mark legacy records instead of 
         tokens: { input: 10, output: 20, reasoning: 3, cache: { read: 4, write: 5 } },
       },
       activeMs: 12500,
+      budget: { activeMs: 60_000, modelCost: 2 },
+      budgetHit: { kind: "model-cost", limit: 2, observed: 2.25, at: 1 },
       status: "complete",
       createdAt: 0,
       updatedAt: 1,
@@ -53,6 +56,10 @@ test("goal reports preserve exact references and mark legacy records instead of 
   expect(saved).toContain("Turns: 3\nTool calls: 7\nContinuations: 2")
   expect(saved).toContain("Accumulated active time: 12.5 seconds")
   expect(saved).toContain("Goal-session model cost: $1.250000")
+  expect(saved).toContain("Active-time limit: 60.0 seconds.")
+  expect(saved).toContain("Goal-session recorded model-cost limit: $2.000000.")
+  expect(saved).toContain("Limit reached: recorded model cost; limit 2; observed 2.25")
+  expect(saved).toContain("does not recall a turn already running")
   expect(saved).toContain("Tokens: input 10; output 20; reasoning 3; cache read 4; cache write 5.")
   expect(saved).toContain(
     "Child-session spend, tool fees, GPT-Live usage and external service charges are not included",
@@ -78,7 +85,9 @@ test("copied reports retain current and historical command bindings without upgr
     createdAt: 0,
     updatedAt: 1,
     criteria,
-    revisions: [{ id: "prior", at: 1, source: "control", objective: "Earlier", criteria }],
+    revisions: [
+      { id: "prior", at: 1, source: "control", objective: "Earlier", criteria, budget: { activeMs: 30_000 } },
+    ],
   })
   expect(text).toContain(
     "Required command:\n> bun run check\n> # literal second line\nWorking directory:\n> /workspace/report",
@@ -86,4 +95,5 @@ test("copied reports retain current and historical command bindings without upgr
   expect(text).toContain("> Required command:\n> > bun run check\n> > # literal second line")
   expect(text).toContain("User review: no separate acceptance was recorded.")
   expect(text).toContain("prose-only verification has no such binding")
+  expect(text).toContain("> Active-time limit: 30.0 seconds.")
 })

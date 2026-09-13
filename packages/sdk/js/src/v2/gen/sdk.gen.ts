@@ -8568,6 +8568,11 @@ export class Goal extends HeyApiClient {
       }>
       status?: "active" | "paused"
       objective?: string
+      budget?: {
+        activeMs?: number
+        modelCost?: number
+      }
+      clearBudget?: true
       expectedIntent?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -8584,6 +8589,8 @@ export class Goal extends HeyApiClient {
             { in: "body", key: "criteria" },
             { in: "body", key: "status" },
             { in: "body", key: "objective" },
+            { in: "body", key: "budget" },
+            { in: "body", key: "clearBudget" },
             { in: "body", key: "expectedIntent" },
           ],
         },
@@ -8614,6 +8621,10 @@ export class Goal extends HeyApiClient {
       objective?: string
       messageID?: string
       selfHealID?: string
+      budget?: {
+        activeMs?: number
+        modelCost?: number
+      }
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -8628,6 +8639,7 @@ export class Goal extends HeyApiClient {
             { in: "body", key: "objective" },
             { in: "body", key: "messageID" },
             { in: "body", key: "selfHealID" },
+            { in: "body", key: "budget" },
           ],
         },
       ],

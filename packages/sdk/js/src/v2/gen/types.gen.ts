@@ -19813,6 +19813,16 @@ export type KilocodeGoalGetResponses = {
           dependencies: Array<string>
         }>
       }
+      budget?: {
+        activeMs?: number
+        modelCost?: number
+      }
+      budgetHit?: {
+        kind: "active-time" | "model-cost"
+        limit: number
+        observed: number
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
       audit?: {
         requirements: Array<{
           criterionID?: string
@@ -19872,6 +19882,10 @@ export type KilocodeGoalGetResponses = {
         dependencies: Array<string>
       }>
     }
+    budget?: {
+      activeMs?: number
+      modelCost?: number
+    }
     objective: string
     revision?: string
     intent?: string
@@ -19929,6 +19943,12 @@ export type KilocodeGoalGetResponses = {
           write: number
         }
       }
+    }
+    budgetHit?: {
+      kind: "active-time" | "model-cost"
+      limit: number
+      observed: number
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     }
     blockedReason?: string
     audit?: {
@@ -20025,6 +20045,16 @@ export type KilocodeGoalGetResponses = {
             dependencies: Array<string>
           }>
         }
+        budget?: {
+          activeMs?: number
+          modelCost?: number
+        }
+        budgetHit?: {
+          kind: "active-time" | "model-cost"
+          limit: number
+          observed: number
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
         audit?: {
           requirements: Array<{
             criterionID?: string
@@ -20083,6 +20113,16 @@ export type KilocodeGoalGetResponses = {
           status: "pending" | "in_progress" | "completed" | "cancelled"
           dependencies: Array<string>
         }>
+      }
+      budget?: {
+        activeMs?: number
+        modelCost?: number
+      }
+      budgetHit?: {
+        kind: "active-time" | "model-cost"
+        limit: number
+        observed: number
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       }
       usage?: {
         turns: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -20184,6 +20224,11 @@ export type KilocodeGoalUpdateData = {
     }>
     status?: "active" | "paused"
     objective?: string
+    budget?: {
+      activeMs?: number
+      modelCost?: number
+    }
+    clearBudget?: true
     expectedIntent?: string
   }
   path: {
@@ -20263,6 +20308,16 @@ export type KilocodeGoalUpdateResponses = {
           dependencies: Array<string>
         }>
       }
+      budget?: {
+        activeMs?: number
+        modelCost?: number
+      }
+      budgetHit?: {
+        kind: "active-time" | "model-cost"
+        limit: number
+        observed: number
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
       audit?: {
         requirements: Array<{
           criterionID?: string
@@ -20322,6 +20377,10 @@ export type KilocodeGoalUpdateResponses = {
         dependencies: Array<string>
       }>
     }
+    budget?: {
+      activeMs?: number
+      modelCost?: number
+    }
     objective: string
     revision?: string
     intent?: string
@@ -20379,6 +20438,12 @@ export type KilocodeGoalUpdateResponses = {
           write: number
         }
       }
+    }
+    budgetHit?: {
+      kind: "active-time" | "model-cost"
+      limit: number
+      observed: number
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     }
     blockedReason?: string
     audit?: {
@@ -20475,6 +20540,16 @@ export type KilocodeGoalUpdateResponses = {
             dependencies: Array<string>
           }>
         }
+        budget?: {
+          activeMs?: number
+          modelCost?: number
+        }
+        budgetHit?: {
+          kind: "active-time" | "model-cost"
+          limit: number
+          observed: number
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
         audit?: {
           requirements: Array<{
             criterionID?: string
@@ -20533,6 +20608,16 @@ export type KilocodeGoalUpdateResponses = {
           status: "pending" | "in_progress" | "completed" | "cancelled"
           dependencies: Array<string>
         }>
+      }
+      budget?: {
+        activeMs?: number
+        modelCost?: number
+      }
+      budgetHit?: {
+        kind: "active-time" | "model-cost"
+        limit: number
+        observed: number
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       }
       usage?: {
         turns: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -20622,6 +20707,10 @@ export type KilocodeGoalCreateData = {
     objective: string
     messageID?: string
     selfHealID?: string
+    budget?: {
+      activeMs?: number
+      modelCost?: number
+    }
   }
   path: {
     sessionID: string
@@ -20696,6 +20785,16 @@ export type KilocodeGoalCreateResponses = {
           dependencies: Array<string>
         }>
       }
+      budget?: {
+        activeMs?: number
+        modelCost?: number
+      }
+      budgetHit?: {
+        kind: "active-time" | "model-cost"
+        limit: number
+        observed: number
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
       audit?: {
         requirements: Array<{
           criterionID?: string
@@ -20755,6 +20854,10 @@ export type KilocodeGoalCreateResponses = {
         dependencies: Array<string>
       }>
     }
+    budget?: {
+      activeMs?: number
+      modelCost?: number
+    }
     objective: string
     revision?: string
     intent?: string
@@ -20812,6 +20915,12 @@ export type KilocodeGoalCreateResponses = {
           write: number
         }
       }
+    }
+    budgetHit?: {
+      kind: "active-time" | "model-cost"
+      limit: number
+      observed: number
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     }
     blockedReason?: string
     audit?: {
@@ -20908,6 +21017,16 @@ export type KilocodeGoalCreateResponses = {
             dependencies: Array<string>
           }>
         }
+        budget?: {
+          activeMs?: number
+          modelCost?: number
+        }
+        budgetHit?: {
+          kind: "active-time" | "model-cost"
+          limit: number
+          observed: number
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
         audit?: {
           requirements: Array<{
             criterionID?: string
@@ -20966,6 +21085,16 @@ export type KilocodeGoalCreateResponses = {
           status: "pending" | "in_progress" | "completed" | "cancelled"
           dependencies: Array<string>
         }>
+      }
+      budget?: {
+        activeMs?: number
+        modelCost?: number
+      }
+      budgetHit?: {
+        kind: "active-time" | "model-cost"
+        limit: number
+        observed: number
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       }
       usage?: {
         turns: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"

@@ -3183,6 +3183,109 @@ describe("RayaGoal", () => {
     }),
   )
 
+  it.live("pauses at the recorded model-cost limit and requires a reviewed limit change before resume", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const sessionID = SessionID.make(`ses_goal_${crypto.randomUUID()}`)
+      const data = transcript({ sessionID, tool: "bash", exit: 0 })
+      if (data.rows[1].info.role !== "assistant") throw new Error("Expected assistant")
+      data.rows[1].info.cost = 2
+      const goals = setup(storage, () => data.rows)
+      yield* Effect.addFinalizer(() => goals.clear(sessionID))
+      const created = yield* goals.create(
+        sessionID,
+        "Stop before spending more",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { modelCost: 1 },
+      )
+      const turn = yield* goals.recordTurn(sessionID, data.rows[1].info.id)
+      expect(turn?.state.status).toBe("paused")
+      expect(turn?.state.usage.cost).toBe(2)
+      expect(turn?.state.budget).toEqual({ modelCost: 1 })
+      expect(turn?.state.budgetHit).toMatchObject({ kind: "model-cost", limit: 1, observed: 2 })
+      expect(turn?.retry).toBe(false)
+      expect((yield* goals.update(sessionID, { status: "active" }).pipe(Effect.flip)).message).toContain(
+        "model-cost limit",
+      )
+      const changed = yield* goals.edit(sessionID, { budget: { modelCost: 3 }, expectedIntent: created.intent })
+      expect(changed.state.status).toBe("paused")
+      expect(changed.state.budgetHit).toBeUndefined()
+      expect(changed.state.revisions?.at(-1)?.budget).toEqual({ modelCost: 1 })
+      const resumed = yield* goals.edit(sessionID, {
+        status: "active",
+        objective: changed.state.objective,
+        expectedIntent: changed.state.intent,
+      })
+      expect(resumed.state.status).toBe("active")
+      expect(resumed.state.budget).toEqual({ modelCost: 3 })
+      expect((yield* setup(storage, () => data.rows).get(sessionID))?.budget).toEqual({ modelCost: 3 })
+    }),
+  )
+
+  it.live("persists an active-time limit and pauses before queueing more work", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const sessionID = SessionID.make(`ses_goal_${crypto.randomUUID()}`)
+      const goals = setup(storage, () => [])
+      yield* Effect.addFinalizer(() => goals.clear(sessionID))
+      yield* goals.create(sessionID, "Work within the saved time", undefined, undefined, undefined, undefined, {
+        activeMs: 1_000,
+      })
+      yield* Effect.sleep(1_050)
+      expect(yield* goals.continued(sessionID)).toBeUndefined()
+      const saved = yield* setup(storage, () => []).get(sessionID)
+      expect(saved?.status).toBe("paused")
+      expect(saved?.budget).toEqual({ activeMs: 1_000 })
+      expect(saved?.budgetHit?.kind).toBe("active-time")
+      expect(saved?.budgetHit?.observed).toBeGreaterThanOrEqual(1_000)
+      expect(saved?.usage.continuations).toBe(0)
+      expect(saved?.dispatch).toBeUndefined()
+    }),
+  )
+
+  it.live("accounts a settled turn without reopening a goal completed at its limit", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const sessionID = SessionID.make(`ses_goal_${crypto.randomUUID()}`)
+      const data = transcript({ sessionID, tool: "bash", exit: 0 })
+      if (!data.part || data.rows[1].info.role !== "assistant") throw new Error("Expected completed assistant tool")
+      data.rows[1].info.cost = 2
+      const goals = setup(storage, () => data.rows)
+      yield* Effect.addFinalizer(() => goals.clear(sessionID))
+      const created = yield* goals.create(
+        sessionID,
+        "Finish within the model-cost limit",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { modelCost: 1 },
+      )
+      data.part.state.time.start = created.createdAt + 1
+      const complete = yield* goals.update(sessionID, {
+        status: "complete",
+        audit: {
+          summary: "Verified result",
+          requirements: [
+            {
+              requirement: "Finish within the model-cost limit",
+              passed: true,
+              evidence: [{ callID: data.part.callID, summary: "The command completed successfully." }],
+            },
+          ],
+        },
+      })
+      expect(complete.status).toBe("complete")
+      const turn = yield* goals.recordTurn(sessionID, data.rows[1].info.id)
+      expect(turn?.state.status).toBe("complete")
+      expect(turn?.state.usage.cost).toBe(2)
+      expect(turn?.state.budgetHit).toBeUndefined()
+    }),
+  )
+
   it.live("bounds changing failures and resets recovery after a successful result", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service

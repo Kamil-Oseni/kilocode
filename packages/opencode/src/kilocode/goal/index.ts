@@ -81,6 +81,22 @@ export namespace RayaGoal {
     acceptedAt: Schema.optional(Schema.Number),
   })
 
+  export const Budget = Schema.Struct({
+    activeMs: Schema.optional(
+      Schema.Int.check(Schema.isGreaterThanOrEqualTo(1_000), Schema.isLessThanOrEqualTo(31_536_000_000)),
+    ),
+    modelCost: Schema.optional(Schema.Finite.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(1_000_000))),
+  })
+  export type Budget = typeof Budget.Type
+
+  export const BudgetHit = Schema.Struct({
+    kind: Schema.Literals(["active-time", "model-cost"]),
+    limit: Schema.Finite,
+    observed: Schema.Finite,
+    at: Schema.Number,
+  })
+  export type BudgetHit = typeof BudgetHit.Type
+
   export const Revision = Schema.Struct({
     review: Schema.optional(Review),
     id: Schema.String,
@@ -90,6 +106,8 @@ export namespace RayaGoal {
     objective: Schema.String,
     criteria: Schema.optional(Criteria),
     plan: Schema.optional(Planning.Plan),
+    budget: Schema.optional(Budget),
+    budgetHit: Schema.optional(BudgetHit),
     audit: Schema.optional(Audit),
     auditAttempt: Schema.optional(AuditAttempt),
   })
@@ -123,6 +141,8 @@ export namespace RayaGoal {
     review: Schema.optional(Review),
     revisions: Schema.optional(Schema.Array(Revision)),
     plan: Schema.optional(Planning.Plan),
+    budget: Schema.optional(Budget),
+    budgetHit: Schema.optional(BudgetHit),
     usage: Schema.optional(Usage),
     activeMs: Schema.optional(Schema.Number),
     objective: Schema.String,
@@ -140,6 +160,7 @@ export namespace RayaGoal {
     review: Schema.optional(Review),
     revisions: Schema.optional(Schema.Array(Revision)),
     plan: Schema.optional(Planning.Plan),
+    budget: Schema.optional(Budget),
     objective: Schema.String,
     revision: Schema.optional(Schema.String),
     intent: Schema.optional(Schema.String),
@@ -174,6 +195,8 @@ export namespace RayaGoal {
     activeMs: Schema.optional(Schema.Number), // raya_change - accumulated execution time excluding paused/terminal time
     activeAt: Schema.optional(Schema.Number), // raya_change - start of the current active interval
     usage: Usage,
+    budget: Schema.optional(Budget),
+    budgetHit: Schema.optional(BudgetHit),
     blockedReason: Schema.optional(Schema.String),
     audit: Schema.optional(Audit),
     auditAttempt: Schema.optional(AuditAttempt), // raya_change - last completion attempt for the audit-log view
@@ -186,6 +209,7 @@ export namespace RayaGoal {
     objective: Schema.String,
     messageID: Schema.optional(MessageID), // raya_change - bind review/discard to the goal's first turn
     selfHealID: Schema.optional(Schema.String), // raya_change - autonomous feedback work linkage
+    budget: Schema.optional(Budget),
   })
 
   export const Control = Schema.Struct({
@@ -193,6 +217,8 @@ export namespace RayaGoal {
     criteria: Schema.optional(Criteria),
     status: Schema.optional(Schema.Literals(["active", "paused"])),
     objective: Schema.optional(Schema.String), // raya_change - steer the next goal turn without cancelling this one
+    budget: Schema.optional(Budget),
+    clearBudget: Schema.optional(Schema.Literal(true)),
     expectedIntent: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
   })
 
@@ -249,6 +275,21 @@ export namespace RayaGoal {
   const retention = 30 * 24 * 60 * 60 * 1000 // Unreferenced completed goals expire after one month.
   const elapsed = (state: State, now: number) =>
     (state.activeMs ?? 0) + (state.status === "active" ? Math.max(0, now - (state.activeAt ?? state.updatedAt)) : 0)
+  const emptyBudget = (value: Budget | undefined) =>
+    value !== undefined && value.activeMs === undefined && value.modelCost === undefined
+  const exhausted = (state: State, now: number, cost = state.usage.cost ?? 0): BudgetHit | undefined => {
+    const active = state.budget?.activeMs
+    if (active !== undefined) {
+      const observed = elapsed(state, now)
+      if (observed >= active) return { kind: "active-time", limit: active, observed, at: now }
+    }
+    const limit = state.budget?.modelCost
+    if (limit !== undefined && cost >= limit) return { kind: "model-cost", limit, observed: cost, at: now }
+  }
+  const budgetReason = (hit: BudgetHit) =>
+    hit.kind === "active-time"
+      ? "The saved active-time limit was reached. Increase or remove it before resuming."
+      : "The saved goal-session model-cost limit was reached. Increase or remove it before resuming."
 
   const revisions = (state: State, at: number, source: typeof Revision.Type.source) => [
     ...(state.revisions ?? []),
@@ -261,6 +302,8 @@ export namespace RayaGoal {
       review: state.review,
       criteria: state.criteria,
       plan: state.plan,
+      budget: state.budget,
+      budgetHit: state.budgetHit,
       audit: state.audit,
       auditAttempt: state.auditAttempt,
     },
@@ -409,6 +452,22 @@ export namespace RayaGoal {
         }),
       )
 
+    const pauseBudget = Effect.fn("RayaGoal.pauseBudget")(function* (sessionID: SessionID, state: State, now: number) {
+      const hit = exhausted(state, now)
+      if (!hit || state.status !== "active") return false
+      yield* save(sessionID, {
+        ...state,
+        status: "paused",
+        blockedReason: undefined,
+        budgetHit: hit,
+        updatedAt: now,
+        activeMs: elapsed(state, now),
+        activeAt: undefined,
+        progress: progress(state, { at: now, kind: "status", message: `Paused: ${budgetReason(hit)}` }),
+      })
+      return true
+    })
+
     const create = Effect.fn("RayaGoal.create")(function* (
       sessionID: SessionID,
       objective: string,
@@ -416,6 +475,7 @@ export namespace RayaGoal {
       startSnapshot?: string,
       selfHealID?: string,
       criteria?: Criteria,
+      budget?: Budget,
     ) {
       const linked = selfHealID ? yield* ownership(sessionID, selfHealID) : undefined
       const text = clean(objective)
@@ -433,13 +493,16 @@ export namespace RayaGoal {
             )
       if (required && new Set(required.map((item) => item.id)).size !== required.length)
         return yield* new AuditError({ message: "Goal criterion IDs must be unique." })
+      if (emptyBudget(budget))
+        return yield* new AuditError({ message: "A goal budget requires an active-time or model-cost limit." })
       const existing = yield* get(sessionID)
       if (existing && existing.status !== "complete" && existing.selfHealID !== selfHealID)
         return yield* new AuditError({ message: "An existing goal cannot be linked to a different self-heal item." })
       if (
         existing?.objective === text &&
         existing.status === "active" &&
-        isDeepStrictEqual(existing.criteria, required)
+        isDeepStrictEqual(existing.criteria, required) &&
+        isDeepStrictEqual(existing.budget, budget)
       )
         return existing // raya_change - retry failed first request without changing requirements
       // A completed goal must not block the next /goal. Archive it so the banner
@@ -455,6 +518,8 @@ export namespace RayaGoal {
                 revisions: existing.revisions,
                 review: existing.review,
                 plan: existing.plan,
+                budget: existing.budget,
+                budgetHit: existing.budgetHit,
                 usage: existing.usage,
                 activeMs: existing.activeMs,
                 criteria: existing.criteria,
@@ -474,6 +539,7 @@ export namespace RayaGoal {
           objective: text,
           intent: crypto.randomUUID(),
           criteria: required,
+          budget,
           startMessageID,
           startSnapshot,
           selfHealID,
@@ -509,12 +575,17 @@ export namespace RayaGoal {
         return yield* new AuditError({ message: "A blocked goal cannot be paused." })
       }
       const now = Date.now()
+      if (status === "active") {
+        const hit = exhausted(state, now)
+        if (hit) return yield* new AuditError({ message: budgetReason(hit) })
+      }
       return yield* save(sessionID, {
         ...state,
         status,
         review: status === "active" ? undefined : state.review,
         intent: crypto.randomUUID(),
         blockedReason: status === "active" ? undefined : state.blockedReason,
+        budgetHit: status === "active" ? undefined : state.budgetHit,
         usage: status === "active" && state.status !== "active" ? { ...state.usage, retries: 0 } : state.usage,
         updatedAt: now,
         activeMs: elapsed(state, now),
@@ -576,6 +647,8 @@ export namespace RayaGoal {
           return yield* new AuditError({ message: "Review the current pending goal before accepting it." })
         if (
           input.criteria !== undefined ||
+          input.budget !== undefined ||
+          input.clearBudget !== undefined ||
           input.status !== undefined ||
           (input.objective !== undefined && clean(input.objective) !== prior.objective)
         )
@@ -585,17 +658,26 @@ export namespace RayaGoal {
         const state = yield* complete(sessionID, prior, { status: "complete", audit: prior.audit }, true)
         return { prior, state }
       }
-      if (input.status === undefined && input.objective === undefined && input.criteria === undefined) {
-        return yield* new AuditError({ message: "A goal edit requires an objective, criteria or status." })
+      if (
+        input.status === undefined &&
+        input.objective === undefined &&
+        input.criteria === undefined &&
+        input.budget === undefined &&
+        input.clearBudget === undefined
+      ) {
+        return yield* new AuditError({ message: "A goal edit requires an objective, criteria, budget or status." })
       }
       if (prior.status === "complete") {
         return yield* new AuditError({ message: "A completed goal cannot be edited." })
       }
       const objective = input.objective === undefined ? prior.objective : clean(input.objective)
       if (!objective) return yield* new AuditError({ message: "A goal objective is required." })
-      if (input.criteria !== undefined && input.expectedIntent === undefined)
+      if (
+        (input.criteria !== undefined || input.budget !== undefined || input.clearBudget !== undefined) &&
+        input.expectedIntent === undefined
+      )
         return yield* new AuditError({
-          message: "Review the current goal revision before editing acceptance criteria.",
+          message: "Review the current goal revision before editing acceptance criteria or limits.",
         })
       const criteria =
         input.criteria === undefined
@@ -610,18 +692,29 @@ export namespace RayaGoal {
             )
       if (criteria && new Set(criteria.map((item) => item.id)).size !== criteria.length)
         return yield* new AuditError({ message: "Acceptance criterion IDs must be unique." })
+      if (input.budget !== undefined && input.clearBudget)
+        return yield* new AuditError({ message: "Set a goal budget or clear it, not both." })
+      const budget = input.clearBudget ? undefined : (input.budget ?? prior.budget)
+      if (emptyBudget(budget))
+        return yield* new AuditError({ message: "A goal budget requires an active-time or model-cost limit." })
       const revised = !isDeepStrictEqual(criteria, prior.criteria)
-      const changed = objective !== prior.objective || revised
+      const limited = !isDeepStrictEqual(budget, prior.budget)
+      const changed = objective !== prior.objective || revised || limited
       const status = input.status ?? (changed && prior.status === "blocked" ? "active" : prior.status)
       if (status === "paused" && prior.status === "blocked" && !changed) {
         return yield* new AuditError({ message: "A blocked goal cannot be paused." })
       }
       if (!changed && input.status === undefined) return { prior, state: prior }
       const now = Date.now()
+      if (status === "active") {
+        const hit = exhausted({ ...prior, budget }, now)
+        if (hit) return yield* new AuditError({ message: budgetReason(hit) })
+      }
       const next = yield* save(sessionID, {
         ...prior,
         objective,
         criteria,
+        budget,
         plan: revised && prior.plan ? { ...prior.plan, review: true } : prior.plan,
         revisions: changed ? revisions(prior, now, "control") : prior.revisions,
         review: changed || status === "active" ? undefined : prior.review,
@@ -629,6 +722,7 @@ export namespace RayaGoal {
         intent: crypto.randomUUID(),
         updatedAt: now,
         blockedReason: changed || (status === "active" && prior.status !== "active") ? undefined : prior.blockedReason,
+        budgetHit: limited || status === "active" ? undefined : prior.budgetHit,
         usage:
           changed || (status === "active" && prior.status !== "active") ? { ...prior.usage, retries: 0 } : prior.usage,
         audit: changed ? undefined : prior.audit,
@@ -906,6 +1000,8 @@ export namespace RayaGoal {
         if (state.status !== "blocked" && state.status !== "paused") {
           return yield* new AuditError({ message: `Only a blocked or paused goal can be marked active.` })
         }
+        const hit = exhausted(state, now)
+        if (hit) return yield* new AuditError({ message: budgetReason(hit) })
         return yield* save(sessionID, {
           ...state,
           status: "active",
@@ -913,6 +1009,7 @@ export namespace RayaGoal {
           intent: crypto.randomUUID(),
           usage: { ...state.usage, retries: 0 },
           blockedReason: undefined,
+          budgetHit: undefined,
           updatedAt: now,
           activeAt: now,
           progress: progress(state, { at: now, kind: "status", message: "Goal resumed." }),
@@ -1406,13 +1503,17 @@ export namespace RayaGoal {
           : failed
             ? `Automatic continuation stopped after ${idleLimit} turns without a successful tool result. Review the failures and choose a different approach.`
             : "The turn ended without work, verification, or a goal status update. Steer the goal or stop it."
-      const stopped = invalid || repeated || stalled
+      const blocked = invalid || repeated || stalled
+      const total = (state.usage.cost ?? 0) + cost
+      const hit = blocked || state.status !== "active" ? undefined : exhausted(state, now, total)
+      const stopped = blocked || hit !== undefined
       const retry = !stopped && state.status === "active" && (idle || failed)
       const next = yield* save(sessionID, {
         ...state,
         accounted: { userID: user.info.id, messages: [...recorded, ...assistants.map((message) => message.info.id)] },
-        status: stopped ? "blocked" : state.status,
-        blockedReason: stopped ? reason : state.blockedReason,
+        status: blocked ? "blocked" : hit ? "paused" : state.status,
+        blockedReason: blocked ? reason : hit ? undefined : state.blockedReason,
+        budgetHit: hit ?? state.budgetHit,
         updatedAt: now,
         activeMs: stopped ? elapsed(state, now) : state.activeMs,
         activeAt: stopped ? undefined : state.activeAt,
@@ -1421,7 +1522,7 @@ export namespace RayaGoal {
           turns: state.usage.turns + 1,
           toolCalls: state.usage.toolCalls + calls.length,
           retries: stopped ? retries : retry ? retries : 0,
-          cost: (state.usage.cost ?? 0) + cost,
+          cost: total,
           tokens: {
             input: priorTokens.input + tokens.input,
             output: priorTokens.output + tokens.output,
@@ -1436,7 +1537,9 @@ export namespace RayaGoal {
           at: now,
           kind: stopped ? "status" : "turn",
           message: stopped
-            ? `Blocked: ${reason}`
+            ? blocked
+              ? `Blocked: ${reason}`
+              : `Paused: ${budgetReason(hit!)}`
             : failed
               ? `No successful tool result; recovery ${retries}/${idleLimit}. Review the failure before retrying work.`
               : calls.length > 0
@@ -1555,6 +1658,7 @@ export namespace RayaGoal {
     const dispatched = Effect.fn("RayaGoal.dispatched")(function* (sessionID: SessionID, id: string) {
       const state = yield* get(sessionID)
       if (!state) return
+      if (yield* pauseBudget(sessionID, state, Date.now())) return
       const dispatch = state.dispatch
       if (
         state.status !== "active" ||
@@ -1592,11 +1696,12 @@ export namespace RayaGoal {
       if (state.status !== "active") {
         return yield* new AuditError({ message: `A ${state.status} goal cannot continue automatically.` })
       }
+      const now = Date.now()
+      if (yield* pauseBudget(sessionID, state, now)) return
       if (state.dispatch?.intent === (state.intent ?? "unset")) {
         if (state.dispatch.phase === "queued") return state
         if (state.dispatch.phase === "started") return
       }
-      const now = Date.now()
       return yield* save(sessionID, {
         ...state,
         updatedAt: now,
@@ -1628,8 +1733,9 @@ export namespace RayaGoal {
       if (state.status !== "active") {
         return yield* new AuditError({ message: `A ${state.status} goal cannot continue automatically.` })
       }
-      const count = (state.usage.retries ?? 0) + 1
       const now = Date.now()
+      if (yield* pauseBudget(sessionID, state, now)) return
+      const count = (state.usage.retries ?? 0) + 1
       const stopped = count > retryLimit
       const reason = `Automatic continuation stopped after ${retryLimit} provider errors. Resume the goal or send a message to continue.`
       const next = yield* save(sessionID, {

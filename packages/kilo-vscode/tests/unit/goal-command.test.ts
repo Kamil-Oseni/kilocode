@@ -6,20 +6,26 @@ describe("native goal command", () => {
   it("prints usage for an empty objective", () => {
     expect(parseGoalCommand("/goal")).toEqual({
       kind: "usage",
-      notice: "Usage: /goal <objective>",
+      notice: "Usage: /goal [30m] <objective>",
     })
   })
 
-  it("strips unsupported leading time limits without weakening the objective", () => {
+  it("retains leading active-time limits as an enforceable goal budget", () => {
     expect(parseGoalCommand("/goal 30m make the tests green")).toEqual({
       kind: "start",
       objective: "make the tests green",
-      notice: "Time-limited goals are not supported yet. The 30m limit was removed.",
+      budget: { activeMs: 1_800_000 },
+      notice: "Active-time limit saved: 30m. Raya will pause before starting more work after the limit is reached.",
     })
     expect(parseGoalCommand("/goal 2h prove reload persistence")).toEqual({
       kind: "start",
       objective: "prove reload persistence",
-      notice: "Time-limited goals are not supported yet. The 2h limit was removed.",
+      budget: { activeMs: 7_200_000 },
+      notice: "Active-time limit saved: 2h. Raya will pause before starting more work after the limit is reached.",
+    })
+    expect(parseGoalCommand("/goal 9000h exceed the limit")).toEqual({
+      kind: "usage",
+      notice: "Choose an active-time limit between 1 minute and 1 year. Usage: /goal [30m] <objective>",
     })
   })
 
@@ -44,6 +50,7 @@ describe("native goal command", () => {
   it("requires concrete work and a real evidence audit in the same turn", () => {
     const text = goalPrompt("ship goal mode")
     expect(text).toContain("first concrete unit of work now in this same turn")
+    expect(goalPrompt("ship within the limit", { activeMs: 60_000 })).toContain("60000 milliseconds")
     expect(text).toContain("call get_goal")
     expect(text).toContain('update_goal(status="complete")')
     expect(text).toContain("real successful tool calls")

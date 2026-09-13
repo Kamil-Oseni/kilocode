@@ -1,11 +1,31 @@
 import type { KiloClient, KilocodeGoalUpdateResponse } from "@kilocode/sdk/v2/client"
 import type { GoalEditedMessage, GoalStoppedMessage } from "../../webview-ui/src/types/messages/extension-messages"
-import type { GoalState } from "../shared/goal"
+import type { GoalBudget, GoalState } from "../shared/goal"
 import { valid, equal } from "../shared/goal-criteria"
 
 const identifier = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0 && value.length <= 256
 const finite = (value: unknown) => typeof value === "number" && Number.isFinite(value)
+const budget = (value: unknown): value is GoalBudget | null => {
+  if (value === null) return true
+  if (!value || typeof value !== "object") return false
+  const item = value as Record<string, unknown>
+  if (!Object.keys(item).length || Object.keys(item).some((key) => key !== "activeMs" && key !== "modelCost"))
+    return false
+  const active = item.activeMs
+  const cost = item.modelCost
+  if (active === undefined && cost === undefined) return false
+  if (
+    active !== undefined &&
+    (typeof active !== "number" || !Number.isSafeInteger(active) || active < 1_000 || active > 31_536_000_000)
+  )
+    return false
+  return cost === undefined || (finite(cost) && Number(cost) > 0 && Number(cost) <= 1_000_000)
+}
+const sameBudget = (left: GoalBudget | null | undefined, right: GoalBudget | null | undefined) => {
+  const expected = right ?? undefined
+  return left?.activeMs === expected?.activeMs && left?.modelCost === expected?.modelCost
+}
 
 function operations(value: unknown): string | undefined {
   if (value === undefined) return
@@ -225,6 +245,7 @@ export async function start(input: {
   sessionID: string
   directory: string
   objective: string
+  budget?: GoalBudget
   messageID?: string
   current: () => boolean
 }) {
@@ -236,6 +257,7 @@ export async function start(input: {
         sessionID: input.sessionID,
         directory: input.directory,
         objective: input.objective.trim(),
+        budget: input.budget,
         messageID: input.messageID,
       },
       { throwOnError: true, signal: AbortSignal.timeout(30_000) },
@@ -243,7 +265,12 @@ export async function start(input: {
     .catch((cause: unknown) => {
       throw new Error(failure, { cause })
     })
-  if (!input.current() || !matches(result.data, input.objective.trim())) throw new Error(failure)
+  if (
+    !input.current() ||
+    !matches(result.data, input.objective.trim()) ||
+    (input.budget !== undefined && !sameBudget(result.data?.budget, input.budget))
+  )
+    throw new Error(failure)
   return result
 }
 
@@ -251,6 +278,25 @@ function guidance(message: { status?: unknown; accept?: unknown }) {
   return message.status === undefined && !message.accept
     ? "Copy your draft, then cancel and reopen to review the saved goal."
     : "Review the refreshed goal before trying again."
+}
+
+function editError(message: {
+  accept?: unknown
+  criteria?: unknown
+  budget?: unknown
+  status?: unknown
+  expectedIntent?: unknown
+  objective?: unknown
+}) {
+  if (message.accept !== undefined && message.accept !== true) return "Use the reviewed goal's acceptance action."
+  if (message.criteria !== undefined && !valid(message.criteria))
+    return "Use 1-20 criteria with unique IDs, descriptions and verification instructions."
+  if (message.budget !== undefined && !budget(message.budget))
+    return "Use a valid active-time or recorded model-cost limit."
+  if (message.status !== undefined && message.status !== "active" && message.status !== "paused")
+    return "Choose pause or resume for the goal status."
+  if (!identifier(message.expectedIntent) || typeof message.objective !== "string" || !message.objective.trim())
+    return `The goal change is incomplete. ${guidance(message)}`
 }
 
 async function capability(
@@ -274,6 +320,7 @@ export async function editGoal(input: {
     expectedIntent?: unknown
     status?: unknown
     criteria?: unknown
+    budget?: unknown
     accept?: unknown
   }
   post: (message: GoalEditedMessage) => void
@@ -281,22 +328,19 @@ export async function editGoal(input: {
   const message = input.message
   if (!identifier(message.requestID) || !identifier(message.sessionID)) return
   const reply = { type: "goalEdited" as const, requestID: message.requestID, sessionID: message.sessionID }
-  if (message.accept !== undefined && message.accept !== true) {
-    input.post({ ...reply, error: "Use the reviewed goal's acceptance action." })
-    return
-  }
-  if (message.criteria !== undefined && !valid(message.criteria)) {
-    input.post({ ...reply, error: "Use 1-20 criteria with unique IDs, descriptions and verification instructions." })
-    return
-  }
   const recovery = guidance(message)
-  if (message.status !== undefined && message.status !== "active" && message.status !== "paused") {
-    input.post({ ...reply, error: "Choose pause or resume for the goal status." })
+  const invalid = editError(message)
+  if (invalid) {
+    input.post({ ...reply, error: invalid })
     return
   }
-  if (!identifier(message.expectedIntent) || typeof message.objective !== "string" || !message.objective.trim()) {
-    input.post({ ...reply, error: `The goal change is incomplete. ${recovery}` })
-    return
+  const edit = message as typeof message & {
+    objective: string
+    expectedIntent: string
+    status?: "active" | "paused"
+    criteria?: GoalState["criteria"]
+    budget?: GoalBudget | null
+    accept?: true
   }
   if (!input.client) {
     input.post({
@@ -306,7 +350,7 @@ export async function editGoal(input: {
     return
   }
   try {
-    const permit = await capability(input.client, message.criteria, input.authorize)
+    const permit = await capability(input.client, edit.criteria, input.authorize)
     if (!permit()) {
       input.post({
         ...reply,
@@ -318,11 +362,13 @@ export async function editGoal(input: {
     const result = await input.client.kilocode.goal.update({
       sessionID: message.sessionID,
       directory: input.directory,
-      objective: message.objective.trim(),
-      expectedIntent: message.expectedIntent,
-      status: message.status,
-      criteria: message.criteria,
-      accept: message.accept === true ? true : undefined,
+      objective: edit.objective.trim(),
+      expectedIntent: edit.expectedIntent,
+      status: edit.status,
+      criteria: edit.criteria,
+      budget: edit.budget ?? undefined,
+      clearBudget: edit.budget === null ? true : undefined,
+      accept: edit.accept === true ? true : undefined,
     })
     if (result.error) {
       input.post({
@@ -335,7 +381,10 @@ export async function editGoal(input: {
       return
     }
     const goal = result.data
-    if (!confirmation(goal, message.objective.trim(), message.status, message.accept === true, message.criteria)) {
+    if (
+      !confirmation(goal, edit.objective.trim(), edit.status, edit.accept === true, edit.criteria) ||
+      (edit.budget !== undefined && !sameBudget(goal?.budget, edit.budget))
+    ) {
       input.post({
         ...reply,
         error: `The confirmation did not match this change. ${recovery}`,

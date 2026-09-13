@@ -50,7 +50,7 @@ export function goalTools(
         "Create one persistent goal for this session only when none exists. After creating it, perform concrete work in the same turn; never stop after merely creating or planning the goal.",
       parameters: RayaGoal.Create,
       execute: (input: typeof RayaGoal.Create.Type, ctx) =>
-        goals.create(ctx.sessionID, input.objective, ctx.messageID).pipe(
+        goals.create(ctx.sessionID, input.objective, ctx.messageID, undefined, undefined, undefined, input.budget).pipe(
           Effect.tap(() => (runs ? associate(goals, runs, ctx.sessionID) : Effect.void)),
           // raya_change - preserve discard checkpoint for tool-created goals
           Effect.match({

@@ -4636,6 +4636,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
               sessionID: sid,
               directory: dir,
               objective: command.objective,
+              budget: command.budget,
               messageID,
               current,
             })
@@ -4658,7 +4659,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       }
       parts.push({ type: "text", text, metadata: review ? reviewMetadata(review) : undefined })
       if (command?.kind === "start") {
-        parts.push({ type: "text", text: goalPrompt(command.objective), synthetic: true })
+        parts.push({ type: "text", text: goalPrompt(command.objective, command.budget), synthetic: true })
       } // raya_change - Milestone A same-turn work reminder
       if (heal.context) parts.push({ type: "text", text: heal.context, synthetic: true }) // raya_change - intake receipt
 

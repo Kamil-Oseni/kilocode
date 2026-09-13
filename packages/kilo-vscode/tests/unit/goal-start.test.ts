@@ -74,6 +74,7 @@ test("goal start gates actual prompt dispatch and preserves the submitted draft 
       if (mode === "client") state.client = createKiloClient({ baseUrl: url.origin })
       return Response.json({
         objective: mode === "mismatch" ? "Another task" : body.objective,
+        budget: body.budget,
         intent: "saved-intent",
         status: mode === "complete" ? "complete" : "active",
         createdAt: 1,
@@ -108,6 +109,18 @@ test("goal start gates actual prompt dispatch and preserves the submitted draft 
     expect(requests[1].body).toMatchObject({ model: { providerID: "provider", modelID: "model" }, agent: "auto" })
     expect(requests[1].body.parts).toContainEqual({ type: "file", ...files[0] })
     expect(messages[0]).toMatchObject({ type: "goalState", goal: { intent: "saved-intent" } })
+    requests.length = 0
+    messages.length = 0
+    await state.handleSendMessage("/goal 30m Finish the report", "timed", "session", "draft", "provider", "model")
+    expect(requests[0]).toMatchObject({
+      path: "/session/session/goal",
+      body: { objective: "Finish the report", budget: { activeMs: 1_800_000 }, messageID: "timed" },
+    })
+    expect(requests[1].body.parts).toContainEqual({
+      type: "text",
+      text: expect.stringContaining("1800000 milliseconds"),
+      synthetic: true,
+    })
     for (const failure of [
       "failure",
       "malformed",

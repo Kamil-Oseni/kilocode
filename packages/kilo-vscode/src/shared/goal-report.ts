@@ -4,7 +4,24 @@ type Goal = Pick<
   GoalState,
   "objective" | "status" | "createdAt" | "updatedAt" | "criteria" | "audit" | "auditAttempt" | "blockedReason"
 > &
-  Partial<Pick<GoalState, "usage" | "activeMs" | "plan" | "revisions" | "review">>
+  Partial<Pick<GoalState, "usage" | "activeMs" | "plan" | "revisions" | "review" | "budget" | "budgetHit">>
+
+function limits(goal: Pick<Goal, "budget" | "budgetHit">) {
+  const lines = ["", "## Saved limits", ""]
+  if (!goal.budget) lines.push("No active-time or recorded model-cost limit was saved.")
+  if (goal.budget?.activeMs !== undefined)
+    lines.push(`Active-time limit: ${(goal.budget.activeMs / 1000).toFixed(1)} seconds.`)
+  if (goal.budget?.modelCost !== undefined)
+    lines.push(`Goal-session recorded model-cost limit: $${goal.budget.modelCost.toFixed(6)}.`)
+  if (goal.budgetHit)
+    lines.push(
+      `Limit reached: ${goal.budgetHit.kind === "active-time" ? "active time" : "recorded model cost"}; limit ${goal.budgetHit.limit}; observed ${goal.budgetHit.observed}; recorded ${date(goal.budgetHit.at)}.`,
+    )
+  lines.push(
+    "Enforcement pauses before another continuation after observation. It does not recall a turn already running. The model-cost limit has the recorded coverage stated below.",
+  )
+  return lines
+}
 
 function activity(goal: Goal) {
   const lines = ["", "## Recorded activity", ""]
@@ -171,7 +188,7 @@ function revisions(goal: Goal) {
       "",
       quote(item.objective),
     )
-    lines.push(quote([...planning(item), ...contract(item)].join("\n")))
+    lines.push(quote([...planning(item), ...limits(item), ...contract(item)].join("\n")))
   }
   return lines
 }
@@ -191,6 +208,7 @@ export function report(goal: Goal, sessionID?: string) {
   if (sessionID) lines.push("", "Session:", quote(sessionID))
   if (goal.blockedReason) lines.push("", "## Blocker", "", quote(goal.blockedReason))
   lines.push(...planning(goal))
+  lines.push(...limits(goal))
   lines.push(...activity(goal))
   lines.push(...contract(goal), ...revisions(goal))
   lines.push(

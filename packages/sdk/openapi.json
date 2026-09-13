@@ -18065,6 +18065,62 @@
                             "required": ["objective", "revision", "at", "tasks"],
                             "additionalProperties": false
                           },
+                          "budget": {
+                            "type": "object",
+                            "properties": {
+                              "activeMs": {
+                                "type": "integer",
+                                "minimum": 1000,
+                                "maximum": 31536000000
+                              },
+                              "modelCost": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "maximum": 1000000
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "budgetHit": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["active-time", "model-cost"]
+                              },
+                              "limit": {
+                                "type": "number"
+                              },
+                              "observed": {
+                                "type": "number"
+                              },
+                              "at": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["NaN"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["Infinity"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["-Infinity"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["Infinity", "-Infinity", "NaN"]
+                                  }
+                                ]
+                              }
+                            },
+                            "required": ["kind", "limit", "observed", "at"],
+                            "additionalProperties": false
+                          },
                           "audit": {
                             "type": "object",
                             "properties": {
@@ -18400,6 +18456,22 @@
                         }
                       },
                       "required": ["objective", "revision", "at", "tasks"],
+                      "additionalProperties": false
+                    },
+                    "budget": {
+                      "type": "object",
+                      "properties": {
+                        "activeMs": {
+                          "type": "integer",
+                          "minimum": 1000,
+                          "maximum": 31536000000
+                        },
+                        "modelCost": {
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "maximum": 1000000
+                        }
+                      },
                       "additionalProperties": false
                     },
                     "objective": {
@@ -18834,6 +18906,46 @@
                         }
                       },
                       "required": ["turns", "continuations", "toolCalls"],
+                      "additionalProperties": false
+                    },
+                    "budgetHit": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": ["active-time", "model-cost"]
+                        },
+                        "limit": {
+                          "type": "number"
+                        },
+                        "observed": {
+                          "type": "number"
+                        },
+                        "at": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["NaN"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["-Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity", "-Infinity", "NaN"]
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["kind", "limit", "observed", "at"],
                       "additionalProperties": false
                     },
                     "blockedReason": {
@@ -19436,6 +19548,62 @@
                                   "required": ["objective", "revision", "at", "tasks"],
                                   "additionalProperties": false
                                 },
+                                "budget": {
+                                  "type": "object",
+                                  "properties": {
+                                    "activeMs": {
+                                      "type": "integer",
+                                      "minimum": 1000,
+                                      "maximum": 31536000000
+                                    },
+                                    "modelCost": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                },
+                                "budgetHit": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": ["active-time", "model-cost"]
+                                    },
+                                    "limit": {
+                                      "type": "number"
+                                    },
+                                    "observed": {
+                                      "type": "number"
+                                    },
+                                    "at": {
+                                      "anyOf": [
+                                        {
+                                          "type": "number"
+                                        },
+                                        {
+                                          "type": "string",
+                                          "enum": ["NaN"]
+                                        },
+                                        {
+                                          "type": "string",
+                                          "enum": ["Infinity"]
+                                        },
+                                        {
+                                          "type": "string",
+                                          "enum": ["-Infinity"]
+                                        },
+                                        {
+                                          "type": "string",
+                                          "enum": ["Infinity", "-Infinity", "NaN"]
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": ["kind", "limit", "observed", "at"],
+                                  "additionalProperties": false
+                                },
                                 "audit": {
                                   "type": "object",
                                   "properties": {
@@ -19771,6 +19939,62 @@
                               }
                             },
                             "required": ["objective", "revision", "at", "tasks"],
+                            "additionalProperties": false
+                          },
+                          "budget": {
+                            "type": "object",
+                            "properties": {
+                              "activeMs": {
+                                "type": "integer",
+                                "minimum": 1000,
+                                "maximum": 31536000000
+                              },
+                              "modelCost": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "maximum": 1000000
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "budgetHit": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["active-time", "model-cost"]
+                              },
+                              "limit": {
+                                "type": "number"
+                              },
+                              "observed": {
+                                "type": "number"
+                              },
+                              "at": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["NaN"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["Infinity"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["-Infinity"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["Infinity", "-Infinity", "NaN"]
+                                  }
+                                ]
+                              }
+                            },
+                            "required": ["kind", "limit", "observed", "at"],
                             "additionalProperties": false
                           },
                           "usage": {
@@ -20331,6 +20555,22 @@
                   },
                   "selfHealID": {
                     "type": "string"
+                  },
+                  "budget": {
+                    "type": "object",
+                    "properties": {
+                      "activeMs": {
+                        "type": "integer",
+                        "minimum": 1000,
+                        "maximum": 31536000000
+                      },
+                      "modelCost": {
+                        "type": "number",
+                        "exclusiveMinimum": 0,
+                        "maximum": 1000000
+                      }
+                    },
+                    "additionalProperties": false
                   }
                 },
                 "required": ["objective"],
@@ -20699,6 +20939,62 @@
                             "required": ["objective", "revision", "at", "tasks"],
                             "additionalProperties": false
                           },
+                          "budget": {
+                            "type": "object",
+                            "properties": {
+                              "activeMs": {
+                                "type": "integer",
+                                "minimum": 1000,
+                                "maximum": 31536000000
+                              },
+                              "modelCost": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "maximum": 1000000
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "budgetHit": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["active-time", "model-cost"]
+                              },
+                              "limit": {
+                                "type": "number"
+                              },
+                              "observed": {
+                                "type": "number"
+                              },
+                              "at": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["NaN"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["Infinity"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["-Infinity"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["Infinity", "-Infinity", "NaN"]
+                                  }
+                                ]
+                              }
+                            },
+                            "required": ["kind", "limit", "observed", "at"],
+                            "additionalProperties": false
+                          },
                           "audit": {
                             "type": "object",
                             "properties": {
@@ -21034,6 +21330,22 @@
                         }
                       },
                       "required": ["objective", "revision", "at", "tasks"],
+                      "additionalProperties": false
+                    },
+                    "budget": {
+                      "type": "object",
+                      "properties": {
+                        "activeMs": {
+                          "type": "integer",
+                          "minimum": 1000,
+                          "maximum": 31536000000
+                        },
+                        "modelCost": {
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "maximum": 1000000
+                        }
+                      },
                       "additionalProperties": false
                     },
                     "objective": {
@@ -21468,6 +21780,46 @@
                         }
                       },
                       "required": ["turns", "continuations", "toolCalls"],
+                      "additionalProperties": false
+                    },
+                    "budgetHit": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": ["active-time", "model-cost"]
+                        },
+                        "limit": {
+                          "type": "number"
+                        },
+                        "observed": {
+                          "type": "number"
+                        },
+                        "at": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["NaN"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["-Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity", "-Infinity", "NaN"]
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["kind", "limit", "observed", "at"],
                       "additionalProperties": false
                     },
                     "blockedReason": {
@@ -22070,6 +22422,62 @@
                                   "required": ["objective", "revision", "at", "tasks"],
                                   "additionalProperties": false
                                 },
+                                "budget": {
+                                  "type": "object",
+                                  "properties": {
+                                    "activeMs": {
+                                      "type": "integer",
+                                      "minimum": 1000,
+                                      "maximum": 31536000000
+                                    },
+                                    "modelCost": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                },
+                                "budgetHit": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": ["active-time", "model-cost"]
+                                    },
+                                    "limit": {
+                                      "type": "number"
+                                    },
+                                    "observed": {
+                                      "type": "number"
+                                    },
+                                    "at": {
+                                      "anyOf": [
+                                        {
+                                          "type": "number"
+                                        },
+                                        {
+                                          "type": "string",
+                                          "enum": ["NaN"]
+                                        },
+                                        {
+                                          "type": "string",
+                                          "enum": ["Infinity"]
+                                        },
+                                        {
+                                          "type": "string",
+                                          "enum": ["-Infinity"]
+                                        },
+                                        {
+                                          "type": "string",
+                                          "enum": ["Infinity", "-Infinity", "NaN"]
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": ["kind", "limit", "observed", "at"],
+                                  "additionalProperties": false
+                                },
                                 "audit": {
                                   "type": "object",
                                   "properties": {
@@ -22405,6 +22813,62 @@
                               }
                             },
                             "required": ["objective", "revision", "at", "tasks"],
+                            "additionalProperties": false
+                          },
+                          "budget": {
+                            "type": "object",
+                            "properties": {
+                              "activeMs": {
+                                "type": "integer",
+                                "minimum": 1000,
+                                "maximum": 31536000000
+                              },
+                              "modelCost": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "maximum": 1000000
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "budgetHit": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["active-time", "model-cost"]
+                              },
+                              "limit": {
+                                "type": "number"
+                              },
+                              "observed": {
+                                "type": "number"
+                              },
+                              "at": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["NaN"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["Infinity"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["-Infinity"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["Infinity", "-Infinity", "NaN"]
+                                  }
+                                ]
+                              }
+                            },
+                            "required": ["kind", "limit", "observed", "at"],
                             "additionalProperties": false
                           },
                           "usage": {
@@ -23303,6 +23767,62 @@
                             "required": ["objective", "revision", "at", "tasks"],
                             "additionalProperties": false
                           },
+                          "budget": {
+                            "type": "object",
+                            "properties": {
+                              "activeMs": {
+                                "type": "integer",
+                                "minimum": 1000,
+                                "maximum": 31536000000
+                              },
+                              "modelCost": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "maximum": 1000000
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "budgetHit": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["active-time", "model-cost"]
+                              },
+                              "limit": {
+                                "type": "number"
+                              },
+                              "observed": {
+                                "type": "number"
+                              },
+                              "at": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["NaN"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["Infinity"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["-Infinity"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["Infinity", "-Infinity", "NaN"]
+                                  }
+                                ]
+                              }
+                            },
+                            "required": ["kind", "limit", "observed", "at"],
+                            "additionalProperties": false
+                          },
                           "audit": {
                             "type": "object",
                             "properties": {
@@ -23638,6 +24158,22 @@
                         }
                       },
                       "required": ["objective", "revision", "at", "tasks"],
+                      "additionalProperties": false
+                    },
+                    "budget": {
+                      "type": "object",
+                      "properties": {
+                        "activeMs": {
+                          "type": "integer",
+                          "minimum": 1000,
+                          "maximum": 31536000000
+                        },
+                        "modelCost": {
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "maximum": 1000000
+                        }
+                      },
                       "additionalProperties": false
                     },
                     "objective": {
@@ -24072,6 +24608,46 @@
                         }
                       },
                       "required": ["turns", "continuations", "toolCalls"],
+                      "additionalProperties": false
+                    },
+                    "budgetHit": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": ["active-time", "model-cost"]
+                        },
+                        "limit": {
+                          "type": "number"
+                        },
+                        "observed": {
+                          "type": "number"
+                        },
+                        "at": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["NaN"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["-Infinity"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity", "-Infinity", "NaN"]
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["kind", "limit", "observed", "at"],
                       "additionalProperties": false
                     },
                     "blockedReason": {
@@ -24674,6 +25250,62 @@
                                   "required": ["objective", "revision", "at", "tasks"],
                                   "additionalProperties": false
                                 },
+                                "budget": {
+                                  "type": "object",
+                                  "properties": {
+                                    "activeMs": {
+                                      "type": "integer",
+                                      "minimum": 1000,
+                                      "maximum": 31536000000
+                                    },
+                                    "modelCost": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                },
+                                "budgetHit": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": ["active-time", "model-cost"]
+                                    },
+                                    "limit": {
+                                      "type": "number"
+                                    },
+                                    "observed": {
+                                      "type": "number"
+                                    },
+                                    "at": {
+                                      "anyOf": [
+                                        {
+                                          "type": "number"
+                                        },
+                                        {
+                                          "type": "string",
+                                          "enum": ["NaN"]
+                                        },
+                                        {
+                                          "type": "string",
+                                          "enum": ["Infinity"]
+                                        },
+                                        {
+                                          "type": "string",
+                                          "enum": ["-Infinity"]
+                                        },
+                                        {
+                                          "type": "string",
+                                          "enum": ["Infinity", "-Infinity", "NaN"]
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": ["kind", "limit", "observed", "at"],
+                                  "additionalProperties": false
+                                },
                                 "audit": {
                                   "type": "object",
                                   "properties": {
@@ -25009,6 +25641,62 @@
                               }
                             },
                             "required": ["objective", "revision", "at", "tasks"],
+                            "additionalProperties": false
+                          },
+                          "budget": {
+                            "type": "object",
+                            "properties": {
+                              "activeMs": {
+                                "type": "integer",
+                                "minimum": 1000,
+                                "maximum": 31536000000
+                              },
+                              "modelCost": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "maximum": 1000000
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "budgetHit": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["active-time", "model-cost"]
+                              },
+                              "limit": {
+                                "type": "number"
+                              },
+                              "observed": {
+                                "type": "number"
+                              },
+                              "at": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["NaN"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["Infinity"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["-Infinity"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["Infinity", "-Infinity", "NaN"]
+                                  }
+                                ]
+                              }
+                            },
+                            "required": ["kind", "limit", "observed", "at"],
                             "additionalProperties": false
                           },
                           "usage": {
@@ -25633,6 +26321,26 @@
                   },
                   "objective": {
                     "type": "string"
+                  },
+                  "budget": {
+                    "type": "object",
+                    "properties": {
+                      "activeMs": {
+                        "type": "integer",
+                        "minimum": 1000,
+                        "maximum": 31536000000
+                      },
+                      "modelCost": {
+                        "type": "number",
+                        "exclusiveMinimum": 0,
+                        "maximum": 1000000
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "clearBudget": {
+                    "type": "boolean",
+                    "enum": [true]
                   },
                   "expectedIntent": {
                     "type": "string",

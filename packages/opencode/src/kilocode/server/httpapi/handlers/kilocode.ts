@@ -403,7 +403,15 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         sessionID: ctx.params.sessionID,
       })
       return yield* goals
-        .create(ctx.params.sessionID, ctx.payload.objective, ctx.payload.messageID, checkpoint, ctx.payload.selfHealID)
+        .create(
+          ctx.params.sessionID,
+          ctx.payload.objective,
+          ctx.payload.messageID,
+          checkpoint,
+          ctx.payload.selfHealID,
+          undefined,
+          ctx.payload.budget,
+        )
         .pipe(
           Effect.catchTag("RayaGoal.ExistsError", () =>
             // Steer the live goal. The client still sends the user prompt, so do

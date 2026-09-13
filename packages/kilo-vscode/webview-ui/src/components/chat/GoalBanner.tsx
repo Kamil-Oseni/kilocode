@@ -4,7 +4,7 @@ import { Button } from "@kilocode/kilo-ui/button"
 import { Icon } from "@kilocode/kilo-ui/icon" // raya_change - self-redesign status icons
 import { useSession } from "../../context/session"
 import { useVSCode } from "../../context/vscode"
-import type { GoalState, GoalStatus } from "../../../../src/shared/goal"
+import type { GoalBudget, GoalState, GoalStatus } from "../../../../src/shared/goal"
 import type { GoalEditedMessage, GoalStoppedMessage, TodoItem } from "../../types/messages"
 import { GoalAudit } from "./GoalAudit"
 import { GoalCriteria } from "./GoalCriteria"
@@ -50,7 +50,12 @@ export interface GoalBannerProps {
   onEdit?: () => void
   onCancelEdit?: () => void
   onAccept?: () => void
-  onRevise?: (objective: string, expectedIntent: string, criteria?: GoalState["criteria"]) => void
+  onRevise?: (
+    objective: string,
+    expectedIntent: string,
+    criteria?: GoalState["criteria"],
+    budget?: GoalBudget | null,
+  ) => void
   onStop?: () => void
   onCancelStop?: () => void
   onPause?: () => void
@@ -61,9 +66,30 @@ export interface GoalBannerProps {
 
 // raya_change - avoid "1 turns"; pluralize the metric label off its count
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`
+const span = (ms: number) => {
+  const seconds = Math.floor(ms / 1000)
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  const rest = seconds % 60
+  if (hours) return `${hours}h ${minutes}m`
+  if (minutes) return `${minutes}m ${rest}s`
+  return `${rest}s`
+}
+const sameBudget = (left: GoalBudget | null | undefined, right: GoalBudget | null | undefined) =>
+  left?.activeMs === right?.activeMs && left?.modelCost === right?.modelCost
 
 function label(goal: Pick<GoalState, "status" | "review">) {
   return goal.status === "paused" && goal.review?.status === "pending" ? "Ready for review" : statusWord[goal.status]
+}
+
+function paused(goal: Pick<GoalState, "review" | "budgetHit">) {
+  if (goal.review?.status === "pending")
+    return "Your review is needed. Inspect the result, then accept it or request changes."
+  if (goal.budgetHit?.kind === "active-time")
+    return "Paused after reaching the saved active-time limit. Increase or remove it before resuming."
+  if (goal.budgetHit?.kind === "model-cost")
+    return "Paused after reaching the saved recorded model-cost limit. Increase or remove it before resuming."
+  return "Paused. Resume when ready, or steer the goal before continuing."
 }
 
 export const GoalBannerView: Component<GoalBannerProps> = (props) => {
@@ -93,10 +119,7 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
     if (props.goal?.status === "complete") return props.goal.audit?.summary ?? latest()
     if (props.goal?.status === "blocked")
       return `Blocked: ${props.goal.blockedReason ?? "Review the latest result and steer or resume when the blocker is resolved."}`
-    if (props.goal?.status === "paused")
-      return props.goal.review?.status === "pending"
-        ? "Your review is needed. Inspect the result, then accept it or request changes."
-        : "Paused. Resume when ready, or steer the goal before continuing."
+    if (props.goal?.status === "paused") return paused(props.goal)
     if (props.goal?.plan && (props.goal.plan.review || props.goal.plan.objective !== props.goal.objective))
       return "The saved work plan needs review after the requirements changed."
     const tasks = current()
@@ -111,9 +134,30 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
   const [basis, setBasis] = createSignal("unset")
   const [criteria, setCriteria] = createSignal<NonNullable<GoalState["criteria"]>>([])
   const [saved, setSaved] = createSignal<GoalState["criteria"]>()
+  const [minutes, setMinutes] = createSignal("")
+  const [cost, setCost] = createSignal("")
+  const [savedBudget, setSavedBudget] = createSignal<GoalBudget>()
   const required = () => (!criteria().length && saved() === undefined ? undefined : criteria())
   const revised = () => !equal(required(), saved())
-  const invalid = () => revised() && !valid(required())
+  const active = () => (minutes().trim() ? Number(minutes()) * 60_000 : undefined)
+  const amount = () => (cost().trim() ? Number(cost()) : undefined)
+  const limits = (): GoalBudget => ({
+    ...(active() === undefined ? {} : { activeMs: Math.round(active()!) }),
+    ...(amount() === undefined ? {} : { modelCost: amount() }),
+  })
+  const budget = () => {
+    const value = limits()
+    return value.activeMs === undefined && value.modelCost === undefined ? undefined : value
+  }
+  const limited = () => !sameBudget(budget(), savedBudget())
+  const invalidBudget = () =>
+    (active() !== undefined &&
+      (!Number.isFinite(active()) ||
+        !Number.isSafeInteger(Math.round(active()!)) ||
+        active()! < 1_000 ||
+        active()! > 31_536_000_000)) ||
+    (amount() !== undefined && (!Number.isFinite(amount()) || amount()! <= 0 || amount()! > 1_000_000))
+  const invalid = () => (revised() && !valid(required())) || invalidBudget()
   const [now, setNow] = createSignal(Date.now())
   const runtime = () => {
     const goal = props.goal
@@ -125,13 +169,7 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
     return goal.activeMs + (goal.status === "active" ? Math.max(0, now() - (goal.activeAt ?? goal.updatedAt)) : 0)
   }
   const duration = () => {
-    const seconds = Math.floor(runtime() / 1000)
-    const hours = Math.floor(seconds / 3600)
-    const minutes = Math.floor((seconds % 3600) / 60)
-    const rest = seconds % 60
-    if (hours) return `${hours}h ${minutes}m`
-    if (minutes) return `${minutes}m ${rest}s`
-    return `${rest}s`
+    return span(runtime())
   }
 
   onMount(() => {
@@ -158,6 +196,9 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
         setBasis(props.goal.intent ?? "unset")
         setSaved(props.goal.criteria?.map((item) => ({ ...item })))
         setCriteria(props.goal.criteria?.map((item) => ({ ...item })) ?? [])
+        setSavedBudget(props.goal.budget ? { ...props.goal.budget } : undefined)
+        setMinutes(props.goal.budget?.activeMs === undefined ? "" : String(props.goal.budget.activeMs / 60_000))
+        setCost(props.goal.budget?.modelCost === undefined ? "" : String(props.goal.budget.modelCost))
         queueMicrotask(() => editor?.focus())
       },
     ),
@@ -170,19 +211,24 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
     props.saving ||
     !!props.editError ||
     !draft().trim() ||
-    (draft().trim() === original() && !revised()) ||
+    (draft().trim() === original() && !revised() && !limited()) ||
     invalid()
   const submit = () => {
     const objective = draft().trim()
     if (
       objective &&
-      (objective !== original() || revised()) &&
+      (objective !== original() || revised() || limited()) &&
       !invalid() &&
       !props.disabled &&
       !props.saving &&
       !props.editError
     )
-      props.onRevise?.(objective, basis(), revised() ? required() : undefined)
+      props.onRevise?.(
+        objective,
+        basis(),
+        revised() ? required() : undefined,
+        limited() ? (budget() ?? null) : undefined,
+      )
   }
 
   return (
@@ -323,6 +369,20 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                   <Show when={state().blockedReason}>
                     {(reason) => <div class="goal-banner__reason">Blocked: {reason()}</div>}
                   </Show>
+                  <Show when={state().budget}>
+                    {(limit) => (
+                      <div class="goal-banner__reason" aria-label="Goal limits">
+                        Limits:{" "}
+                        {limit().activeMs === undefined
+                          ? "No active-time limit"
+                          : `${span(limit().activeMs!)} active time`}
+                        {" · "}
+                        {limit().modelCost === undefined
+                          ? "No recorded model-cost limit"
+                          : `$${limit().modelCost!.toFixed(2)} recorded model cost`}
+                      </div>
+                    )}
+                  </Show>
                   <GoalReview
                     review={state().review}
                     disabled={props.disabled || props.editing}
@@ -394,13 +454,40 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                         requirements.
                       </p>
                     </div>
+                    <fieldset class="goal-banner__limits">
+                      <legend>Limits</legend>
+                      <label for="goal-time-limit">
+                        Active time (minutes)
+                        <input
+                          id="goal-time-limit"
+                          inputMode="decimal"
+                          value={minutes()}
+                          readOnly={props.saving}
+                          onInput={(event) => setMinutes(event.currentTarget.value)}
+                        />
+                      </label>
+                      <label for="goal-cost-limit">
+                        Recorded model cost (USD)
+                        <input
+                          id="goal-cost-limit"
+                          inputMode="decimal"
+                          value={cost()}
+                          readOnly={props.saving}
+                          onInput={(event) => setCost(event.currentTarget.value)}
+                        />
+                      </label>
+                      <p>Leave a field blank for no limit. Child, tool, voice and external charges are not included.</p>
+                    </fieldset>
                     <GoalCriteriaEditor
                       value={criteria()}
                       disabled={props.saving || props.disabled}
                       onChange={setCriteria}
                     />
                     <Show when={invalid()}>
-                      <p role="status">Keep 1 to 20 criteria and fill in each description and verification method.</p>
+                      <p role="status">
+                        Use complete criteria, positive limits, no more than 1 year of active time, and no more than
+                        $1,000,000 of recorded model cost.
+                      </p>
                     </Show>
                     <Show when={props.editError}>
                       <div role="alert">{props.editError}</div>
@@ -535,6 +622,7 @@ export const GoalBanner: Component = () => {
     intent: string
     status?: "active" | "paused"
     criteria?: GoalState["criteria"]
+    budget?: GoalBudget | null
     accept?: true
   }>()
   const [failure, setFailure] = createSignal<string>()
@@ -572,6 +660,7 @@ export const GoalBanner: Component = () => {
   const consistent = (goal: GoalState, request: NonNullable<ReturnType<typeof pending>>) =>
     goal.objective === request.objective &&
     (request.criteria === undefined || equal(goal.criteria, request.criteria)) &&
+    (request.budget === undefined || sameBudget(goal.budget, request.budget ?? undefined)) &&
     !!goal.intent &&
     (request.status === undefined || goal.status === request.status) &&
     (!request.accept || (goal.status === "complete" && goal.review?.status === "accepted"))
@@ -675,11 +764,12 @@ export const GoalBanner: Component = () => {
     criteria?: GoalState["criteria"],
     status?: "active" | "paused",
     accept?: true,
+    budget?: GoalBudget | null,
   ) => {
     const sessionID = sid()
     if (!sessionID || busy() || (!status && !accept && failure())) return
     const requestID = crypto.randomUUID()
-    setPending({ requestID, objective, intent: expectedIntent, status, criteria, accept })
+    setPending({ requestID, objective, intent: expectedIntent, status, criteria, budget, accept })
     if (accept) setNotice("Checking evidence and recording acceptance...")
     if (status) setNotice(status === "paused" ? "Pausing goal…" : "Resuming goal…")
     timer = setTimeout(() => {
@@ -695,7 +785,17 @@ export const GoalBanner: Component = () => {
         accept,
       )
     }, 15_000)
-    vscode.postMessage({ type: "goalEdit", sessionID, requestID, objective, expectedIntent, status, criteria, accept })
+    vscode.postMessage({
+      type: "goalEdit",
+      sessionID,
+      requestID,
+      objective,
+      expectedIntent,
+      status,
+      criteria,
+      budget,
+      accept,
+    })
   }
   const transition = (status: "active" | "paused") => {
     const current = goal()
@@ -757,7 +857,9 @@ export const GoalBanner: Component = () => {
         setFailure(undefined)
         revise(current.objective, current.intent ?? "unset", undefined, undefined, true)
       }}
-      onRevise={revise}
+      onRevise={(objective, intent, criteria, budget) =>
+        revise(objective, intent, criteria, undefined, undefined, budget)
+      }
       onStop={stop}
       onCancelStop={() => {
         if (busy()) return

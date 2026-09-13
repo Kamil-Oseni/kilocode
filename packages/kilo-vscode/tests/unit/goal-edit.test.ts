@@ -121,6 +121,52 @@ test("goal criteria edits validate drafts and require matching saved criteria", 
   expect(messages.at(-1)).toMatchObject({ error: expect.stringContaining("criteria") })
 })
 
+test("goal limit edits validate and require an exact saved acknowledgement", async () => {
+  const calls: Request[] = []
+  const messages: unknown[] = []
+  const saved = { activeMs: 60_000, modelCost: 4 }
+  let returned: typeof saved | undefined = saved
+  const client = createKiloClient({
+    baseUrl: "http://localhost:4096",
+    fetch: async (input, init) => {
+      calls.push(new Request(input, init))
+      return Response.json({
+        objective: "Goal",
+        intent: "saved",
+        status: "paused",
+        createdAt: 1,
+        updatedAt: 2,
+        usage: { turns: 0, toolCalls: 0, continuations: 0 },
+        progress: [],
+        budget: returned,
+      })
+    },
+  })
+  const message: GoalEditMessage = {
+    type: "goalEdit",
+    sessionID: "session",
+    requestID: "limits",
+    objective: "Goal",
+    expectedIntent: "reviewed",
+    budget: saved,
+  }
+  const context = { client, message, post: (value: unknown) => messages.push(value) }
+  await editGoal(context)
+  expect(await calls[0].json()).toMatchObject({ budget: saved, expectedIntent: "reviewed" })
+  expect(messages.at(-1)).toMatchObject({ goal: { budget: saved } })
+  returned = { activeMs: 60_000, modelCost: 5 }
+  await editGoal(context)
+  expect(messages.at(-1)).toMatchObject({ error: expect.stringContaining("did not match") })
+  returned = undefined
+  await editGoal({ ...context, message: { ...message, budget: null } })
+  expect(await calls[2].json()).toMatchObject({ clearBudget: true, expectedIntent: "reviewed" })
+  expect(messages.at(-1)).toMatchObject({ goal: expect.not.objectContaining({ budget: expect.anything() }) })
+  for (const budget of [{}, { activeMs: 1 }, { modelCost: 0 }, { modelCost: Number.NaN }])
+    await editGoal({ ...context, message: { ...message, budget } as GoalEditMessage })
+  expect(calls).toHaveLength(3)
+  expect(messages.at(-1)).toMatchObject({ error: expect.stringContaining("valid") })
+})
+
 test("review acceptance sends current intent and requires an accepted completion", async () => {
   const calls: Request[] = []
   const messages: unknown[] = []

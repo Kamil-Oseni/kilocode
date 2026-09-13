@@ -201,11 +201,14 @@ describe("goal HTTP API", () => {
     const created = await request(first, "POST", `/session/${session.id}/goal`, {
       objective: "Persist through a client reload",
       messageID: "msg_goal_start",
+      budget: { activeMs: 1_800_000, modelCost: 5 },
     })
     expect(created.status).toBe(200)
-    expect((await created.json()) as { status: string }).toMatchObject({
+    const initial = (await created.json()) as { status: string; intent: string }
+    expect(initial).toMatchObject({
       status: "active",
       startMessageID: "msg_goal_start",
+      budget: { activeMs: 1_800_000, modelCost: 5 },
       usage: {
         turns: 0,
         continuations: 0,
@@ -220,7 +223,25 @@ describe("goal HTTP API", () => {
     expect(restored.status).toBe(200)
     expect((await restored.json()) as { objective: string }).toMatchObject({
       objective: "Persist through a client reload",
+      budget: { activeMs: 1_800_000, modelCost: 5 },
     })
+
+    const limited = await request(reloaded, "PATCH", `/session/${session.id}/goal`, {
+      objective: "Persist through a client reload",
+      expectedIntent: initial.intent,
+      budget: { modelCost: 8 },
+    })
+    expect(limited.status).toBe(200)
+    const changed = (await limited.json()) as { intent: string }
+    expect(changed).toMatchObject({ budget: { modelCost: 8 } })
+
+    const clearedBudget = await request(reloaded, "PATCH", `/session/${session.id}/goal`, {
+      objective: "Persist through a client reload",
+      expectedIntent: changed.intent,
+      clearBudget: true,
+    })
+    expect(clearedBudget.status).toBe(200)
+    expect(await clearedBudget.json()).toHaveProperty("budget", null)
 
     const revised = await request(reloaded, "PATCH", `/session/${session.id}/goal`, {
       objective: "Apply steering on the next turn",

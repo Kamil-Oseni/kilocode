@@ -8,6 +8,7 @@ import { resetDatabase } from "../../fixture/db"
 import { OpenAIBinding, OpenAICall } from "@/kilocode/voice/openai-protocol"
 import { LiveDuration } from "@/kilocode/voice/live-protocol"
 import { SessionID } from "@/session/schema"
+import { RayaGoal } from "@/kilocode/goal"
 
 test("the shipped Live voice routes keep duration and delegation behind auth and parent ownership", async () => {
   await using dir = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
@@ -47,7 +48,12 @@ test("the shipped Live voice routes keep duration and delegation behind auth and
       }),
       HttpApiServer.context,
     )
-  const context = (generation: string, delegation: string, sequence: number, text = "Please summarize the current file") => ({
+  const context = (
+    generation: string,
+    delegation: string,
+    sequence: number,
+    text = "Please summarize the current file",
+  ) => ({
     generation,
     context: {
       version: 1 as const,
@@ -73,6 +79,9 @@ test("the shipped Live voice routes keep duration and delegation behind auth and
     const parent = Schema.decodeUnknownSync(Schema.Struct({ id: SessionID }))(await created.json())
     const sibling = Schema.decodeUnknownSync(Schema.Struct({ id: SessionID }))(
       await (await request("POST", "/session", {})).json(),
+    )
+    expect((await request("POST", `/session/${parent.id}/goal`, { objective: "Account for Live voice" })).status).toBe(
+      200,
     )
     const openai = "/kilocode/voice/openai/session"
     const live = "/kilocode/voice/live/session"
@@ -134,9 +143,9 @@ test("the shipped Live voice routes keep duration and delegation behind auth and
     expect((await request("POST", duration, { ...meter, generation: "stale_generation_1" })).status).toBe(409)
     expect((await request("POST", duration, { ...meter, receipt: { ...receipt, seconds: -1 } })).status).toBe(400)
     expect((await request("POST", duration, { ...meter, receipt: { ...receipt, seconds: 86401 } })).status).toBe(400)
-    expect((await request("POST", duration, { ...meter, receipt: { ...receipt, model: "gpt-realtime-2.1" } })).status).toBe(
-      400,
-    )
+    expect(
+      (await request("POST", duration, { ...meter, receipt: { ...receipt, model: "gpt-realtime-2.1" } })).status,
+    ).toBe(400)
     const closed = await request("DELETE", `${openai}/${binding.id}?generation=${binding.generation}`)
     expect(closed.status).toBe(200)
     expect(Schema.decodeUnknownSync(OpenAIBinding)(await closed.json()).status).toBe("closed")
@@ -147,6 +156,23 @@ test("the shipped Live voice routes keep duration and delegation behind auth and
     const same = await request("POST", duration, meter)
     expect(same.status).toBe(200)
     expect(Schema.decodeUnknownSync(LiveDuration)(await same.json())).toEqual(receipt)
+    const goal = Schema.decodeUnknownSync(RayaGoal.State)(
+      await (await request("GET", `/session/${parent.id}/goal`)).json(),
+    )
+    expect(goal.charges).toEqual([
+      {
+        id: `gpt-live:${binding.id}:${receipt.id}`,
+        kind: "gpt-live",
+        provider: "OpenAI",
+        service: "GPT-Live 1",
+        origin: { sessionID: parent.id, callID: binding.id },
+        at: binding.createdAt,
+        quantity: receipt.seconds,
+        unit: "seconds",
+        coverage: "unknown",
+        reason: "The provider duration was retained, but a monetary amount was not reported.",
+      },
+    ])
     expect((await request("POST", duration, { ...meter, receipt: { ...receipt, seconds: 9 } })).status).toBe(409)
     const realtime = Schema.decodeUnknownSync(OpenAIBinding)(
       await (

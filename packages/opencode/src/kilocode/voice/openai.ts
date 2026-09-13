@@ -32,6 +32,13 @@ type Deps = {
   sessions: { get: (id: SessionID) => Effect.Effect<Pick<Session.Info, "id" | "directory">, Session.NotFound> }
   prompts: Pick<SessionPrompt.Interface, "prompt">
   workers: Pick<TaskWorker.Interface, "cancel">
+  charges?: (input: {
+    sessionID: SessionID
+    id: string
+    callID: string
+    at: number
+    seconds: number
+  }) => Effect.Effect<void, VoiceError>
 }
 
 export class VoiceError extends Schema.TaggedErrorClass<VoiceError>()("VoiceError", {
@@ -498,13 +505,24 @@ export const make = (deps: Deps) =>
           const stored = yield* load(id, secret, directory, input.generation)
           if (stored.owner !== owner || stored.binding.model !== "gpt-live-1")
             return yield* refuse("conflict", "Live duration belongs to another voice binding.")
+          const retain = deps.charges
+            ? deps.charges({
+                sessionID: stored.binding.parentSessionID,
+                id: `gpt-live:${stored.binding.id}:${input.receipt.id}`,
+                callID: stored.binding.id,
+                at: stored.binding.createdAt,
+                seconds: input.receipt.seconds,
+              })
+            : Effect.void
           if (stored.duration) {
             if (JSON.stringify(stored.duration) !== JSON.stringify(input.receipt))
               return yield* refuse("conflict", "Final Live duration is immutable.")
+            yield* retain
             return stored.duration
           }
           stored.duration = input.receipt
           yield* save(stored)
+          yield* retain
           return input.receipt
         }).pipe(Effect.uninterruptible),
       )

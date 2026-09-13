@@ -11,6 +11,7 @@ import { Envelope, Start, type VoiceSessionID } from "@/kilocode/voice/protocol"
 import * as OpenAIVoice from "@/kilocode/voice/openai"
 import * as TaskWorker from "@/kilocode/session/task-worker"
 import { InstanceState } from "@/effect/instance-state"
+import { RayaGoal } from "@/kilocode/goal"
 
 const failure = (error: OpenAIVoice.VoiceError) => {
   if (error.code === "unauthorized") return new HttpApiError.Unauthorized({})
@@ -27,7 +28,33 @@ export const voiceHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-voice",
     const voice = RayaVoice.make({ sessions, prompts, storage })
     const workers = yield* TaskWorker.Service
     const database = yield* Database.Service
-    const openai = yield* OpenAIVoice.make({ sessions, prompts, storage, workers, database })
+    const goals = RayaGoal.make({ sessions, storage })
+    const openai = yield* OpenAIVoice.make({
+      sessions,
+      prompts,
+      storage,
+      workers,
+      database,
+      charges: (input) =>
+        goals
+          .charged(input.sessionID, {
+            id: input.id,
+            kind: "gpt-live",
+            provider: "OpenAI",
+            service: "GPT-Live 1",
+            origin: { sessionID: input.sessionID, callID: input.callID },
+            at: input.at,
+            quantity: input.seconds,
+            unit: "seconds",
+            coverage: "unknown",
+            reason: "The provider duration was retained, but a monetary amount was not reported.",
+          })
+          .pipe(
+            Effect.asVoid,
+            Effect.catchTag("RayaGoal.NotFoundError", () => Effect.void),
+            Effect.mapError((error) => new OpenAIVoice.VoiceError({ code: "conflict", message: error.message })),
+          ),
+    })
 
     return handlers
       .handle("voiceLiveCall", (ctx) =>

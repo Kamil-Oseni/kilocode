@@ -135,6 +135,35 @@ export namespace RayaGoal {
   }).annotate({ identifier: "RayaGoalUsage" })
   export type Usage = typeof Usage.Type
 
+  const chargeFields = {
+    id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)),
+    kind: Schema.Literals(["tool", "gpt-live", "external"]),
+    provider: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(120))),
+    service: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(120))),
+    origin: Schema.Struct({
+      sessionID: SessionID,
+      messageID: Schema.optional(MessageID),
+      callID: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
+    }),
+    at: Schema.Finite,
+    quantity: Schema.optional(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))),
+    unit: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(40))),
+  }
+  export const Charge = Schema.Union([
+    Schema.Struct({
+      ...chargeFields,
+      coverage: Schema.Literal("recorded"),
+      amount: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(1_000_000)),
+      currency: Schema.String.check(Schema.isPattern(/^[A-Z]{3,8}$/)),
+    }),
+    Schema.Struct({
+      ...chargeFields,
+      coverage: Schema.Literal("unknown"),
+      reason: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(240)),
+    }),
+  ]).annotate({ identifier: "RayaGoalCharge" })
+  export type Charge = typeof Charge.Type
+
   export const Revision = Schema.Struct({
     review: Schema.optional(Review),
     id: Schema.String,
@@ -147,6 +176,7 @@ export namespace RayaGoal {
     budget: Schema.optional(Budget),
     budgetHit: Schema.optional(BudgetHit),
     usage: Schema.optional(Usage),
+    charges: Schema.optional(Schema.Array(Charge).check(Schema.isMaxLength(512))),
     deliverables: Schema.optional(Schema.Array(Deliverable)),
     audit: Schema.optional(Audit),
     auditAttempt: Schema.optional(AuditAttempt),
@@ -167,6 +197,7 @@ export namespace RayaGoal {
     budget: Schema.optional(Budget),
     budgetHit: Schema.optional(BudgetHit),
     usage: Schema.optional(Usage),
+    charges: Schema.optional(Schema.Array(Charge).check(Schema.isMaxLength(512))),
     activeMs: Schema.optional(Schema.Number),
     objective: Schema.String,
     criteria: Schema.optional(Criteria),
@@ -219,6 +250,7 @@ export namespace RayaGoal {
     activeMs: Schema.optional(Schema.Number), // raya_change - accumulated execution time excluding paused/terminal time
     activeAt: Schema.optional(Schema.Number), // raya_change - start of the current active interval
     usage: Usage,
+    charges: Schema.optional(Schema.Array(Charge).check(Schema.isMaxLength(512))),
     budget: Schema.optional(Budget),
     budgetHit: Schema.optional(BudgetHit),
     blockedReason: Schema.optional(Schema.String),
@@ -343,6 +375,7 @@ export namespace RayaGoal {
       budget: state.budget,
       budgetHit: state.budgetHit,
       usage: state.usage,
+      charges: state.charges,
       deliverables: state.deliverables,
       audit: state.audit,
       auditAttempt: state.auditAttempt,
@@ -563,6 +596,7 @@ export namespace RayaGoal {
                 budget: existing.budget,
                 budgetHit: existing.budgetHit,
                 usage: existing.usage,
+                charges: existing.charges,
                 activeMs: existing.activeMs,
                 criteria: existing.criteria,
                 status: existing.status,
@@ -602,6 +636,7 @@ export namespace RayaGoal {
             tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
             descendantTokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           },
+          charges: [],
           progress: [{ at: now, kind: "status", message: "Goal armed." }],
           history: prior,
         },
@@ -1872,6 +1907,42 @@ export namespace RayaGoal {
       return next
     })
 
+    const charged = Effect.fn("RayaGoal.charged")(function* (sessionID: SessionID, input: Charge) {
+      const state = yield* requireGoal(sessionID)
+      const charge = yield* Schema.decodeUnknownEffect(Charge)(input).pipe(
+        Effect.mapError(() => new AuditError({ message: "The non-model charge receipt is invalid." })),
+      )
+      if (charge.origin.sessionID !== sessionID)
+        return yield* new AuditError({ message: "The non-model charge belongs to another session." })
+      if (charge.at < state.createdAt)
+        return yield* new AuditError({ message: "The non-model charge predates the current goal." })
+      const prior = state.charges?.find((item) => item.id === charge.id)
+      if (prior) {
+        if (!isDeepStrictEqual(prior, charge))
+          return yield* new AuditError({ message: "The non-model charge ID was reused with different details." })
+        return { state, charge: prior }
+      }
+      if ((state.charges?.length ?? 0) >= 512)
+        return yield* new AuditError({ message: "The goal non-model charge ledger is full." })
+      const next = yield* save(sessionID, {
+        ...state,
+        charges: [...(state.charges ?? []), charge],
+        updatedAt: Date.now(),
+      }).pipe(
+        Effect.catchIf(
+          (error) => AuditError.isInstance(error) && error.conflict === true,
+          (error) =>
+            Effect.gen(function* () {
+              const latest = yield* requireGoal(sessionID)
+              const saved = latest.charges?.find((item) => item.id === charge.id)
+              if (saved && isDeepStrictEqual(saved, charge)) return latest
+              return yield* error
+            }),
+        ),
+      )
+      return { state: next, charge }
+    })
+
     return {
       get,
       repair,
@@ -1888,6 +1959,7 @@ export namespace RayaGoal {
       recordTurn,
       continued,
       retried,
+      charged,
       dispatched,
       finished,
       bound,

@@ -5712,6 +5712,41 @@ export type RayaGoalUsage = {
   }
 }
 
+export type RayaGoalCharge =
+  | {
+      id: string
+      kind: "tool" | "gpt-live" | "external"
+      provider?: string
+      service?: string
+      origin: {
+        sessionID: string
+        messageID?: string
+        callID?: string
+      }
+      at: number
+      quantity?: number
+      unit?: string
+      coverage: "recorded"
+      amount: number
+      currency: string
+    }
+  | {
+      id: string
+      kind: "tool" | "gpt-live" | "external"
+      provider?: string
+      service?: string
+      origin: {
+        sessionID: string
+        messageID?: string
+        callID?: string
+      }
+      at: number
+      quantity?: number
+      unit?: string
+      coverage: "unknown"
+      reason: string
+    }
+
 export type RayaGoalDeliverable = {
   path: string
   revision:
@@ -19884,6 +19919,7 @@ export type KilocodeGoalGetResponses = {
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       }
       usage?: RayaGoalUsage
+      charges?: Array<RayaGoalCharge>
       deliverables?: Array<RayaGoalDeliverable>
       audit?: {
         requirements: Array<{
@@ -19992,6 +20028,7 @@ export type KilocodeGoalGetResponses = {
     activeMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     activeAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     usage: RayaGoalUsage
+    charges?: Array<RayaGoalCharge>
     budgetHit?: {
       kind: "active-time" | "model-cost" | "recovery-attempts"
       limit: number
@@ -20106,6 +20143,7 @@ export type KilocodeGoalGetResponses = {
           at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
         }
         usage?: RayaGoalUsage
+        charges?: Array<RayaGoalCharge>
         deliverables?: Array<RayaGoalDeliverable>
         audit?: {
           requirements: Array<{
@@ -20178,6 +20216,7 @@ export type KilocodeGoalGetResponses = {
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       }
       usage?: RayaGoalUsage
+      charges?: Array<RayaGoalCharge>
       activeMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       objective: string
       criteria?: Array<{
@@ -20360,6 +20399,7 @@ export type KilocodeGoalUpdateResponses = {
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       }
       usage?: RayaGoalUsage
+      charges?: Array<RayaGoalCharge>
       deliverables?: Array<RayaGoalDeliverable>
       audit?: {
         requirements: Array<{
@@ -20468,6 +20508,7 @@ export type KilocodeGoalUpdateResponses = {
     activeMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     activeAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     usage: RayaGoalUsage
+    charges?: Array<RayaGoalCharge>
     budgetHit?: {
       kind: "active-time" | "model-cost" | "recovery-attempts"
       limit: number
@@ -20582,6 +20623,7 @@ export type KilocodeGoalUpdateResponses = {
           at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
         }
         usage?: RayaGoalUsage
+        charges?: Array<RayaGoalCharge>
         deliverables?: Array<RayaGoalDeliverable>
         audit?: {
           requirements: Array<{
@@ -20654,6 +20696,7 @@ export type KilocodeGoalUpdateResponses = {
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       }
       usage?: RayaGoalUsage
+      charges?: Array<RayaGoalCharge>
       activeMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       objective: string
       criteria?: Array<{
@@ -20818,6 +20861,7 @@ export type KilocodeGoalCreateResponses = {
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       }
       usage?: RayaGoalUsage
+      charges?: Array<RayaGoalCharge>
       deliverables?: Array<RayaGoalDeliverable>
       audit?: {
         requirements: Array<{
@@ -20926,6 +20970,7 @@ export type KilocodeGoalCreateResponses = {
     activeMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     activeAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     usage: RayaGoalUsage
+    charges?: Array<RayaGoalCharge>
     budgetHit?: {
       kind: "active-time" | "model-cost" | "recovery-attempts"
       limit: number
@@ -21040,6 +21085,7 @@ export type KilocodeGoalCreateResponses = {
           at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
         }
         usage?: RayaGoalUsage
+        charges?: Array<RayaGoalCharge>
         deliverables?: Array<RayaGoalDeliverable>
         audit?: {
           requirements: Array<{
@@ -21112,6 +21158,7 @@ export type KilocodeGoalCreateResponses = {
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       }
       usage?: RayaGoalUsage
+      charges?: Array<RayaGoalCharge>
       activeMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       objective: string
       criteria?: Array<{

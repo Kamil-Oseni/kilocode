@@ -9,6 +9,7 @@ import type { GoalEditedMessage, GoalStoppedMessage, TodoItem } from "../../type
 import { GoalAudit } from "./GoalAudit"
 import { GoalCriteria } from "./GoalCriteria"
 import { GoalRevisions } from "./GoalRevisions"
+import { GoalCharges } from "./GoalCharges"
 import { GoalReview } from "./GoalReview"
 import { GoalReport } from "./GoalReport"
 import { GoalPlan } from "./GoalPlan"
@@ -412,6 +413,7 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                   <GoalRevisions goal={state()} sessionID={props.sessionID} />
                   <GoalPlan goal={state()} />
                   <GoalReport goal={state()} sessionID={props.sessionID} />
+                  <GoalCharges items={state().charges} />
                   <details class="goal-banner__activity">
                     <summary>Activity counts</summary>
                     <p>

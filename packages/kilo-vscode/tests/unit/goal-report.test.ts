@@ -26,6 +26,31 @@ test("goal reports preserve exact references and mark legacy records instead of 
       activeMs: 12500,
       budget: { activeMs: 60_000, modelCost: 2, recoveryAttempts: 3 },
       budgetHit: { kind: "recovery-attempts", limit: 3, observed: 3, at: 1 },
+      charges: [
+        {
+          id: "tool-charge",
+          kind: "tool",
+          provider: "Example",
+          service: "Research",
+          origin: { sessionID: "parent", callID: "call" },
+          at: 1,
+          coverage: "recorded",
+          amount: 0.25,
+          currency: "USD",
+        },
+        {
+          id: "live-duration",
+          kind: "gpt-live",
+          provider: "OpenAI",
+          service: "GPT-Live 1",
+          origin: { sessionID: "parent", callID: "voice" },
+          at: 1,
+          quantity: 4.5,
+          unit: "seconds",
+          coverage: "unknown",
+          reason: "The provider duration was retained, but a monetary amount was not reported.",
+        },
+      ],
       deliverables: [
         {
           path: "/workspace/output.md",
@@ -89,6 +114,9 @@ test("goal reports preserve exact references and mark legacy records instead of 
   expect(saved).toContain("Limit reached: automatic recovery attempts; limit 3; observed 3")
   expect(saved).toContain("Recovery attempts are consecutive and renew after successful work or a revised approach")
   expect(saved).toContain("does not recall a turn already running")
+  expect(saved).toContain("Recorded USD: 0.250000.")
+  expect(saved).toContain("GPT-Live 1: monetary cost unknown. Quantity: 4.5 seconds.")
+  expect(saved).toContain("Unknown amounts and non-model charges are not added to the recorded model-cost limit")
   expect(saved).toContain("## Deliverables")
   expect(saved).toContain("> /workspace/output.md")
   expect(saved).toContain(`Captured SHA-256: ${"a".repeat(64)}`)

@@ -18129,6 +18129,13 @@
                           "usage": {
                             "$ref": "#/components/schemas/RayaGoalUsage"
                           },
+                          "charges": {
+                            "type": "array",
+                            "items": {
+                              "$ref": "#/components/schemas/RayaGoalCharge"
+                            },
+                            "maxItems": 512
+                          },
                           "deliverables": {
                             "type": "array",
                             "items": {
@@ -18798,6 +18805,13 @@
                     },
                     "usage": {
                       "$ref": "#/components/schemas/RayaGoalUsage"
+                    },
+                    "charges": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/RayaGoalCharge"
+                      },
+                      "maxItems": 512
                     },
                     "budgetHit": {
                       "type": "object",
@@ -19509,6 +19523,13 @@
                                 "usage": {
                                   "$ref": "#/components/schemas/RayaGoalUsage"
                                 },
+                                "charges": {
+                                  "type": "array",
+                                  "items": {
+                                    "$ref": "#/components/schemas/RayaGoalCharge"
+                                  },
+                                  "maxItems": 512
+                                },
                                 "deliverables": {
                                   "type": "array",
                                   "items": {
@@ -19915,6 +19936,13 @@
                           },
                           "usage": {
                             "$ref": "#/components/schemas/RayaGoalUsage"
+                          },
+                          "charges": {
+                            "type": "array",
+                            "items": {
+                              "$ref": "#/components/schemas/RayaGoalCharge"
+                            },
+                            "maxItems": 512
                           },
                           "activeMs": {
                             "anyOf": [
@@ -20802,6 +20830,13 @@
                           "usage": {
                             "$ref": "#/components/schemas/RayaGoalUsage"
                           },
+                          "charges": {
+                            "type": "array",
+                            "items": {
+                              "$ref": "#/components/schemas/RayaGoalCharge"
+                            },
+                            "maxItems": 512
+                          },
                           "deliverables": {
                             "type": "array",
                             "items": {
@@ -21471,6 +21506,13 @@
                     },
                     "usage": {
                       "$ref": "#/components/schemas/RayaGoalUsage"
+                    },
+                    "charges": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/RayaGoalCharge"
+                      },
+                      "maxItems": 512
                     },
                     "budgetHit": {
                       "type": "object",
@@ -22182,6 +22224,13 @@
                                 "usage": {
                                   "$ref": "#/components/schemas/RayaGoalUsage"
                                 },
+                                "charges": {
+                                  "type": "array",
+                                  "items": {
+                                    "$ref": "#/components/schemas/RayaGoalCharge"
+                                  },
+                                  "maxItems": 512
+                                },
                                 "deliverables": {
                                   "type": "array",
                                   "items": {
@@ -22588,6 +22637,13 @@
                           },
                           "usage": {
                             "$ref": "#/components/schemas/RayaGoalUsage"
+                          },
+                          "charges": {
+                            "type": "array",
+                            "items": {
+                              "$ref": "#/components/schemas/RayaGoalCharge"
+                            },
+                            "maxItems": 512
                           },
                           "activeMs": {
                             "anyOf": [
@@ -23424,6 +23480,13 @@
                           "usage": {
                             "$ref": "#/components/schemas/RayaGoalUsage"
                           },
+                          "charges": {
+                            "type": "array",
+                            "items": {
+                              "$ref": "#/components/schemas/RayaGoalCharge"
+                            },
+                            "maxItems": 512
+                          },
                           "deliverables": {
                             "type": "array",
                             "items": {
@@ -24093,6 +24156,13 @@
                     },
                     "usage": {
                       "$ref": "#/components/schemas/RayaGoalUsage"
+                    },
+                    "charges": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/RayaGoalCharge"
+                      },
+                      "maxItems": 512
                     },
                     "budgetHit": {
                       "type": "object",
@@ -24804,6 +24874,13 @@
                                 "usage": {
                                   "$ref": "#/components/schemas/RayaGoalUsage"
                                 },
+                                "charges": {
+                                  "type": "array",
+                                  "items": {
+                                    "$ref": "#/components/schemas/RayaGoalCharge"
+                                  },
+                                  "maxItems": 512
+                                },
                                 "deliverables": {
                                   "type": "array",
                                   "items": {
@@ -25210,6 +25287,13 @@
                           },
                           "usage": {
                             "$ref": "#/components/schemas/RayaGoalUsage"
+                          },
+                          "charges": {
+                            "type": "array",
+                            "items": {
+                              "$ref": "#/components/schemas/RayaGoalCharge"
+                            },
+                            "maxItems": 512
                           },
                           "activeMs": {
                             "anyOf": [
@@ -68860,6 +68944,148 @@
         },
         "required": ["turns", "continuations", "toolCalls"],
         "additionalProperties": false
+      },
+      "RayaGoalCharge": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["tool", "gpt-live", "external"]
+              },
+              "provider": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "service": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "origin": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg"
+                  },
+                  "callID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  }
+                },
+                "required": ["sessionID"],
+                "additionalProperties": false
+              },
+              "at": {
+                "type": "number"
+              },
+              "quantity": {
+                "type": "number",
+                "minimum": 0
+              },
+              "unit": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40
+              },
+              "coverage": {
+                "type": "string",
+                "enum": ["recorded"]
+              },
+              "amount": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1000000
+              },
+              "currency": {
+                "type": "string",
+                "pattern": "^[A-Z]{3,8}$"
+              }
+            },
+            "required": ["id", "kind", "origin", "at", "coverage", "amount", "currency"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["tool", "gpt-live", "external"]
+              },
+              "provider": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "service": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "origin": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg"
+                  },
+                  "callID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  }
+                },
+                "required": ["sessionID"],
+                "additionalProperties": false
+              },
+              "at": {
+                "type": "number"
+              },
+              "quantity": {
+                "type": "number",
+                "minimum": 0
+              },
+              "unit": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40
+              },
+              "coverage": {
+                "type": "string",
+                "enum": ["unknown"]
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 240
+              }
+            },
+            "required": ["id", "kind", "origin", "at", "coverage", "reason"],
+            "additionalProperties": false
+          }
+        ]
       },
       "RayaGoalDeliverable": {
         "type": "object",

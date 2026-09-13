@@ -4,7 +4,9 @@ type Goal = Pick<
   GoalState,
   "objective" | "status" | "createdAt" | "updatedAt" | "criteria" | "audit" | "auditAttempt" | "blockedReason"
 > &
-  Partial<Pick<GoalState, "usage" | "activeMs" | "plan" | "revisions" | "review" | "budget" | "budgetHit">> &
+  Partial<
+    Pick<GoalState, "usage" | "charges" | "activeMs" | "plan" | "revisions" | "review" | "budget" | "budgetHit">
+  > &
   Partial<Pick<GoalState, "deliverables">>
 
 function limits(goal: Pick<Goal, "budget" | "budgetHit">) {
@@ -75,6 +77,33 @@ function models(goal: Pick<Goal, "usage">) {
     lines.push("Delegated-session token attribution was not retained for this goal version.")
   lines.push(
     "Coverage: settled assistant messages in the goal and its admitted task-session tree. Parent message cost already contains descendant cost recursively, so delegated cost is attributed without adding it twice. Tool fees, GPT-Live usage and external service charges are not included unless separately recorded.",
+  )
+  return lines
+}
+
+function charges(goal: Pick<Goal, "charges">) {
+  const lines = ["", "## Recorded non-model charges", ""]
+  if (goal.charges === undefined) {
+    lines.push("No non-model charge ledger was retained for this goal version.")
+    return lines
+  }
+  if (!goal.charges.length) lines.push("No non-model charges were recorded.")
+  const sums = new Map<string, number>()
+  for (const item of goal.charges) {
+    if (item.coverage === "recorded") sums.set(item.currency, (sums.get(item.currency) ?? 0) + item.amount)
+  }
+  for (const [currency, amount] of sums) lines.push(`Recorded ${currency}: ${amount.toFixed(6)}.`)
+  for (const item of goal.charges) {
+    const source = item.service ?? item.provider ?? item.kind
+    const quantity = item.quantity === undefined ? "" : ` Quantity: ${item.quantity} ${item.unit ?? "units"}.`
+    lines.push(
+      item.coverage === "recorded"
+        ? `${source}: ${item.currency} ${item.amount.toFixed(6)}.${quantity}`
+        : `${source}: monetary cost unknown.${quantity} ${item.reason}`,
+    )
+  }
+  lines.push(
+    "Coverage: only explicit retained receipts. Currencies remain separate. Unknown amounts and non-model charges are not added to the recorded model-cost limit.",
   )
   return lines
 }
@@ -246,7 +275,16 @@ function revisions(goal: Goal) {
       quote(item.objective),
     )
     lines.push(
-      quote([...planning(item), ...limits(item), ...models(item), ...deliverables(item), ...contract(item)].join("\n")),
+      quote(
+        [
+          ...planning(item),
+          ...limits(item),
+          ...models(item),
+          ...charges(item),
+          ...deliverables(item),
+          ...contract(item),
+        ].join("\n"),
+      ),
     )
   }
   return lines
@@ -269,6 +307,7 @@ export function report(goal: Goal, sessionID?: string) {
   lines.push(...planning(goal))
   lines.push(...limits(goal))
   lines.push(...activity(goal))
+  lines.push(...charges(goal))
   lines.push(...deliverables(goal))
   lines.push(...contract(goal), ...revisions(goal))
   lines.push(

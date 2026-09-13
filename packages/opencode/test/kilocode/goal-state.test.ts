@@ -4176,4 +4176,62 @@ describe("RayaGoal", () => {
       expect(yield* goals.get(doneID)).toBeUndefined()
     }),
   )
+
+  it.live("retains idempotent non-model charge receipts without inventing unknown prices", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const sessionID = SessionID.make(`ses_goal_${crypto.randomUUID()}`)
+      const goals = setup(storage, () => [])
+      yield* Effect.addFinalizer(() => goals.clear(sessionID))
+      const created = yield* goals.create(sessionID, "Account for non-model charges")
+      const charge: RayaGoal.Charge = {
+        id: "gpt-live:binding:duration",
+        kind: "gpt-live",
+        provider: "OpenAI",
+        service: "GPT-Live 1",
+        origin: { sessionID, callID: "binding" },
+        at: created.createdAt,
+        quantity: 4.5,
+        unit: "seconds",
+        coverage: "unknown",
+        reason: "The provider duration was retained, but a monetary amount was not reported.",
+      }
+      const first = yield* goals.charged(sessionID, charge)
+      const same = yield* goals.charged(sessionID, charge)
+      expect(first.charge).toEqual(charge)
+      expect(same.charge).toEqual(charge)
+      expect((yield* goals.get(sessionID))?.charges).toEqual([charge])
+      const concurrent = setup(storage, () => [])
+      const parallel = yield* Effect.all([goals.charged(sessionID, charge), concurrent.charged(sessionID, charge)], {
+        concurrency: "unbounded",
+      })
+      expect(parallel.map((item) => item.charge)).toEqual([charge, charge])
+      expect((yield* goals.get(sessionID))?.charges).toEqual([charge])
+      const conflict = yield* goals.charged(sessionID, { ...charge, quantity: 9 }).pipe(Effect.flip)
+      expect(conflict.message).toContain("reused with different details")
+      for (const invalid of [
+        { ...charge, id: "invalid-time", at: Number.NaN },
+        {
+          ...charge,
+          id: "invalid-amount",
+          coverage: "recorded" as const,
+          amount: -1,
+          currency: "USD",
+        },
+        {
+          ...charge,
+          id: "invalid-currency",
+          coverage: "recorded" as const,
+          amount: 1,
+          currency: "usd",
+        },
+      ]) {
+        expect((yield* goals.charged(sessionID, invalid).pipe(Effect.flip)).message).toContain("receipt is invalid")
+      }
+      yield* goals.revise(sessionID, "Account for the same charges after revision")
+      const revised = yield* goals.get(sessionID)
+      expect(revised?.charges).toEqual([charge])
+      expect(revised?.revisions?.at(-1)?.charges).toEqual([charge])
+    }),
+  )
 })

@@ -40,6 +40,20 @@ export interface GoalSource {
   truncated: boolean
 }
 
+type GoalChargeBase = {
+  id: string
+  kind: "tool" | "gpt-live" | "external"
+  provider?: string
+  service?: string
+  origin: { sessionID: string; messageID?: string; callID?: string }
+  at: number
+  quantity?: number
+  unit?: string
+}
+
+export type GoalCharge = GoalChargeBase &
+  ({ coverage: "recorded"; amount: number; currency: string } | { coverage: "unknown"; reason: string })
+
 export interface GoalState {
   review?: { status: "pending" | "accepted"; at: number; criteria: string[]; acceptedAt?: number }
   revisions?: Array<{
@@ -54,6 +68,7 @@ export interface GoalState {
     budget?: GoalBudget | null
     budgetHit?: GoalBudgetHit
     usage?: GoalState["usage"]
+    charges?: GoalCharge[]
     deliverables?: GoalDeliverable[]
     audit?: GoalState["audit"]
     auditAttempt?: GoalState["auditAttempt"]
@@ -126,6 +141,7 @@ export interface GoalState {
       cache: { read: number; write: number }
     }
   }
+  charges?: GoalCharge[]
   blockedReason?: string
   deliverables?: GoalDeliverable[]
   audit?: {
@@ -162,6 +178,7 @@ export interface GoalState {
     budget?: GoalBudget | null
     budgetHit?: GoalBudgetHit
     usage?: GoalState["usage"]
+    charges?: GoalCharge[]
     activeMs?: number
     deliverables?: GoalDeliverable[]
     criteria?: GoalState["criteria"]

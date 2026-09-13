@@ -185,6 +185,52 @@ func TestManagerRequiresExactSessionCapability(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestManagerBoundsConcurrentAdmission(t *testing.T) {
+	manager := NewManager(joining{join: func(context.Context) (room.Room, error) { return newFakeRoom(), nil }})
+	manager.engine = opening{open: func(context.Context) (engine.Session, error) { return newFakeEngine(), nil }}
+	manager.limit = 2
+	for _, id := range []string{"first", "second"} {
+		if _, err := manager.Start(context.Background(), wire.Start{ID: id}, mediaAuth); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := manager.Start(context.Background(), wire.Start{ID: "third"}, mediaAuth); !errors.Is(err, ErrCapacity) {
+		t.Fatalf("capacity error = %v", err)
+	}
+	if err := manager.Close("first", mediaAuth); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Start(context.Background(), wire.Start{ID: "third"}, mediaAuth); err != nil {
+		t.Fatalf("released capacity was not reusable: %v", err)
+	}
+	if err := manager.CloseAll(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestManagerBoundsProviderSetupLifetime(t *testing.T) {
+	manager := NewManager(joining{join: func(context.Context) (room.Room, error) { return newFakeRoom(), nil }})
+	manager.timeout = 20 * time.Millisecond
+	manager.engine = opening{open: func(ctx context.Context) (engine.Session, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}}
+	started := time.Now()
+	_, err := manager.Start(context.Background(), wire.Start{ID: "stalled"}, mediaAuth)
+	if !errors.Is(err, ErrSetupTimeout) || !errors.Is(err, context.Canceled) {
+		t.Fatalf("setup error = %v", err)
+	}
+	if time.Since(started) > time.Second {
+		t.Fatal("setup deadline did not settle promptly")
+	}
+	manager.mu.RLock()
+	remaining := len(manager.sessions)
+	manager.mu.RUnlock()
+	if remaining != 0 {
+		t.Fatal("timed-out setup retained capacity")
+	}
+}
 func TestConcurrentSessionCloseRetainsError(t *testing.T) {
 	failure := errors.New("engine close failed")
 	voice := &closing{fakeEngine: newFakeEngine(), close: func() error { return failure }}

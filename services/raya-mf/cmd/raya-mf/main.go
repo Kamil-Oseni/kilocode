@@ -41,6 +41,14 @@ func routes(manager *app.Manager, key control.Key) http.Handler {
 		}
 		started, err := manager.Start(request.Context(), input, token)
 		if err != nil {
+			if errors.Is(err, app.ErrCapacity) {
+				write(writer, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+				return
+			}
+			if errors.Is(err, app.ErrSetupTimeout) {
+				write(writer, http.StatusGatewayTimeout, map[string]string{"error": err.Error()})
+				return
+			}
 			write(writer, http.StatusBadGateway, map[string]string{"error": err.Error()})
 			return
 		}

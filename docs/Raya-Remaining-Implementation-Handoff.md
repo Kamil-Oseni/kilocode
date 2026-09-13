@@ -10,6 +10,14 @@ Updated 2026-09-13. This is a continuation guide, not a completion certificate.
 
 **Latest delivered product:** ChatGPT installed snapshot `f83096f7d6` (`eden.raya@7.4.23-snapshot+f83096f7d6.kamil-oseni.1789312194050`). It includes the earlier Routine, Browser, GPT-Live recovery and reconnect work plus durable direct/delegated goal usage totals, enforceable time, cost and automatic-recovery limits, revision-safe file deliverables, the non-model charge ledger, safe initial voice destinations, and authenticated media control described below. Reload VS Code normally to pick up the snapshot.
 
+## ChatGPT 2026-09-13 11:19 America/Toronto — active EN-10 resource-bound checkpoint
+
+**Local status: implementation and focused validation pass; commit and push remain.** The Go companion now reserves a maximum of eight concurrent session ownership claims before provider or room allocation. A ninth distinct start receives a typed capacity error and HTTP `503`; successful close releases the slot, while uncertain cleanup deliberately retains it until process restart. This prevents duplicate allocation and cleanup ambiguity from becoming unbounded resource growth.
+
+Each provider-plus-room setup receives a 15-second deadline. A stalled phase cancels its lifetime context, closes any engine already opened, and releases its claim only after cleanup succeeds. The route returns `504` for the typed deadline. The timer is stopped once setup succeeds, preserving long-lived active voice sessions. Focused app and router packages, the uncached full companion suite, `go vet ./...` and a 10,176,000-byte native rebuild pass. No Bun, TypeScript tool, Docker build, paid provider or microphone ran.
+
+Changed paths: companion manager, router mapping and manager tests; changeset; local topology and both ledgers. This companion-only checkpoint does not require an extension snapshot. The rebuilt native binary is ignored local output; Docker/container deployment remains separate. EN-10 stays open for authenticated container acceptance, managed-socket abrupt-exit/cross-window evidence and cross-directory execution ownership.
+
 ## ChatGPT 2026-09-13 10:51 America/Toronto — active EN-10 authenticated-control checkpoint
 
 **Delivered in product commit `f83096f7d6`; pushed and installed.** Media control now requires a shared service credential and a distinct per-session capability. Set `RAYA_MF_TOKEN` to a 32-byte base64url key in the environment that launches VS Code and `raya-mf`; `bun run --silent voice:key` generates one. Compose refuses a missing key. The extension checks its format before backend admission and sends it to the authenticated loopback CLI through `X-Raya-Media-Key`; the managed launcher removes it from the CLI environment so tool children cannot inherit it. The CLI retains the key only in the live voice entry, mints and persists a separate random `controlToken`, returns that capability to the extension host, and uses both headers for context injection. The service key is absent from JSON bodies and persisted voice state.
@@ -369,7 +377,7 @@ The following sections retain the full 39-item scope. Related findings and overh
 **Implementation and verification:**
 
 1. Finish explicit managed-local versus remote trust contracts and authenticated media control before remote exposure.
-2. Preserve initial-destination and redirect refusal; bound admission and lifecycle resources; rebuild and deploy the companion when its maintained code changes.
+2. Preserve initial-destination and redirect refusal; keep the eight-session admission ceiling and 15-second setup deadline covered; rebuild and deploy the companion when its maintained code changes.
 3. Exercise bad credentials, malicious destination, oversized/incomplete bodies and teardown; directory routing must not be presented as tenant isolation.
 
 **Source entry points:** [packages/server/src/auth.ts](../packages/server/src/auth.ts), [services/raya-mf/cmd/raya-mf/main.go](../services/raya-mf/cmd/raya-mf/main.go).

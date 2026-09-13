@@ -23,13 +23,27 @@ type Manager struct {
 	engine   engine.Engine
 	mu       sync.RWMutex
 	sessions map[string]*ownership
+	limit    int
+	timeout  time.Duration
 	closed   bool
 }
 
-var ErrAuthorization = errors.New("media control authorization failed")
+var (
+	ErrAuthorization = errors.New("media control authorization failed")
+	ErrCapacity      = errors.New("media frontend session capacity reached")
+	ErrSetupTimeout  = errors.New("voice session setup timed out")
+)
+
+const (
+	sessionLimit = 8
+	setupTimeout = 15 * time.Second
+)
 
 func NewManager(rooms room.Factory) *Manager {
-	return &Manager{rooms: rooms, engine: qwen.Engine{}, sessions: map[string]*ownership{}}
+	return &Manager{
+		rooms: rooms, engine: qwen.Engine{}, sessions: map[string]*ownership{},
+		limit: sessionLimit, timeout: setupTimeout,
+	}
 }
 
 // An ownership claim exists throughout setup and teardown. A replacement cannot
@@ -61,6 +75,15 @@ func (m *Manager) Start(ctx context.Context, input wire.Start, token string) (wi
 	run, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	stop := context.AfterFunc(ctx, cancel)
 	defer stop()
+	expired := false
+	var expiry sync.Mutex
+	timer := time.AfterFunc(m.timeout, func() {
+		expiry.Lock()
+		expired = true
+		expiry.Unlock()
+		cancel()
+	})
+	defer timer.Stop()
 	claim := &ownership{ready: make(chan struct{}), cancel: cancel, token: sha256.Sum256([]byte(token))}
 	m.mu.Lock()
 	if m.closed {
@@ -72,6 +95,11 @@ func (m *Manager) Start(ctx context.Context, input wire.Start, token string) (wi
 		m.mu.Unlock()
 		cancel()
 		return wire.Started{}, errors.New("voice session already exists; close it before reconnecting, or restart the media frontend if cleanup failed")
+	}
+	if len(m.sessions) >= m.limit {
+		m.mu.Unlock()
+		cancel()
+		return wire.Started{}, ErrCapacity
 	}
 	m.sessions[id] = claim
 	m.mu.Unlock()
@@ -86,13 +114,26 @@ func (m *Manager) Start(ctx context.Context, input wire.Start, token string) (wi
 	}()
 	voice, err := m.engine.Open(run, input.Engine)
 	if err != nil {
+		expiry.Lock()
+		timedout := expired
+		expiry.Unlock()
+		if timedout {
+			return wire.Started{}, errors.Join(ErrSetupTimeout, err)
+		}
 		return wire.Started{}, err
 	}
 	media, err := m.rooms.Join(run, input.LiveKitURL, input.LiveKitToken, input.Room)
 	if err != nil {
 		claim.closed = voice.Close()
+		expiry.Lock()
+		timedout := expired
+		expiry.Unlock()
+		if timedout {
+			return wire.Started{}, errors.Join(ErrSetupTimeout, err, cleanup(claim.closed))
+		}
 		return wire.Started{}, errors.Join(err, cleanup(claim.closed))
 	}
+	timer.Stop()
 	stop()
 	m.mu.Lock()
 	if claim.stopped || ctx.Err() != nil || run.Err() != nil {

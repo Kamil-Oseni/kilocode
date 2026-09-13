@@ -25,7 +25,9 @@ The contract regression imports the exact launch arguments used by `ServerManage
 
 The Go control server limits request headers to 32 KiB, header reading to five seconds, total request reading to fifteen seconds, response writes to thirty seconds and idle connections to sixty seconds. Session-start and context-injection JSON bodies are limited to 1 MiB, including chunked bodies without a declared content length. The complete body is read within the limit and parsed before session side effects; trailing JSON is rejected. Audio travels through WebRTC and is not subject to this JSON body limit.
 
-These are HTTP transport limits, not a claim that every provider operation or cleanup routine terminates by the response deadline. The extension broker separately bounds its requests and retains uncertain cleanup ownership. The media companion must be rebuilt to apply these service changes; installing a VS Code snapshot alone does not replace a running companion container.
+One companion process admits at most eight concurrent session ownership claims. Admission reserves the claim before opening a provider or joining a room. A full process returns HTTP `503`; a successful close releases capacity, while an uncertain cleanup keeps its claim until restart. Provider-plus-room setup has a 15-second deadline and returns HTTP `504` after cancellation and cleanup. The setup timer is stopped after admission, so an active WebRTC conversation does not inherit this short deadline.
+
+These limits do not claim that third-party close calls always terminate. The extension broker and companion both retain uncertain cleanup ownership rather than allocating replacement resources. The media companion must be rebuilt to apply these service changes; installing a VS Code snapshot alone does not replace a running companion container.
 
 ### Speech credential roles
 
@@ -35,7 +37,7 @@ The regression uses in-memory storage adapters and synthetic credentials to test
 
 ## Remaining acceptance work
 
-- Complete handler/provider lifecycle limits and observe cancellation and cleanup after HTTP transport deadlines, without applying short HTTP timeouts to long-lived audio sessions.
+- Exercise the admission ceiling and provider setup deadline through an actually deployed authenticated companion container.
 - Preserve initial destination validation and redirect refusal before sending credentials. Endpoint authentication remains separate.
 - Exercise authenticated and unauthenticated requests on actual managed sockets, abrupt parent exit and cross-window ownership.
 - Test cross-directory data and execution ownership separately from authentication.

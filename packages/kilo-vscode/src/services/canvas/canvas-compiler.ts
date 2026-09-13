@@ -55,6 +55,7 @@ const record = z.object({
   }),
 })
 const manifest = record.extend({ previous: record.optional() })
+type Saved = z.infer<typeof record>
 
 function message(error: unknown) {
   if (error && typeof error === "object" && "errors" in error && Array.isArray(error.errors)) {
@@ -175,13 +176,26 @@ export class CanvasCompiler {
         if (error.code !== "ENOENT") throw error
       })
     }
+    const saved = record.parse({
+      source: candidate.source,
+      code: candidate.code,
+      build: candidate.build,
+    })
+    await this.copy(this.backup(candidate.root, build.name), saved).catch((error) => {
+      console.error("[Raya] Canvas recovery copy could not be saved:", error)
+      build.warning = "The canvas was saved, but its recovery copy could not be updated."
+    })
     const projected = await reconcile(candidate.files, () => this.owns(build), writable).catch((error) => {
       console.error("[Raya] Canvas editable files could not be synchronized:", error)
       return false
     })
     if (!projected)
-      build.warning =
-        "The canvas was saved, but source/data files may differ because local edits or a file error prevented synchronization."
+      build.warning = [
+        build.warning,
+        "The canvas was saved, but source/data files may differ because local edits or a file error prevented synchronization.",
+      ]
+        .filter(Boolean)
+        .join(" ")
     this.candidates.delete(build.revision!)
   }
 
@@ -274,23 +288,16 @@ export class CanvasCompiler {
   /** Recover the saved source, data and executable bundle without recompilation. */
   async restore(root: string, name: string): Promise<CanvasBuild | undefined> {
     this.validate(name)
-    const raw = await readFile(this.manifest(root, name), "utf8").catch((error: NodeJS.ErrnoException) => {
+    const target = this.manifest(root, name)
+    const raw = await readFile(target, "utf8").catch((error: NodeJS.ErrnoException) => {
       if (error.code === "ENOENT") return undefined
       throw error
     })
     if (raw === undefined) return
-    const parsed = record.safeParse(
-      (() => {
-        try {
-          return JSON.parse(raw) as unknown
-        } catch {
-          throw new Error("Saved canvas revision contains invalid JSON. Its saved files have been retained.")
-        }
-      })(),
-    )
-    if (!parsed.success || parsed.data.build.name !== name)
-      throw new Error("Saved canvas revision is invalid. Its saved files have been retained.")
-    const saved = parsed.data
+    const current = this.decode(raw, name)
+    const recovered = current ? undefined : await this.recover(root, name, target, raw)
+    const saved = current ?? recovered?.saved
+    if (!saved) throw new Error("The saved canvas and its recovery copy are invalid. Their files have been retained.")
     const path = this.source(root, name)
     const bundle = join(this.directory(root), `${name}.${saved.build.revision}.js`)
     await mkdir(dirname(bundle), { recursive: true })
@@ -304,11 +311,65 @@ export class CanvasCompiler {
         }),
       ),
     )
-    const warning =
+    const divergence =
       files[0] !== saved.source || files[1] !== JSON.stringify(saved.build.data, null, 2)
         ? "This saved canvas differs from its editable source/data files, or those files could not be read. Local files have been retained; review them before editing this canvas."
         : undefined
+    const warning = [recovered?.warning, divergence].filter(Boolean).join(" ") || undefined
     return { ...saved.build, path, bundle, warning }
+  }
+
+  private decode(raw: string, name: string): Saved | undefined {
+    const value = (() => {
+      try {
+        return JSON.parse(raw) as unknown
+      } catch {
+        return undefined
+      }
+    })()
+    const parsed = record.safeParse(value)
+    if (!parsed.success || parsed.data.build.name !== name) return
+    return parsed.data
+  }
+
+  private async recover(root: string, name: string, target: string, damaged: string) {
+    const raw = await readFile(this.backup(root, name), "utf8").catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return undefined
+      throw error
+    })
+    const saved = raw === undefined ? undefined : this.decode(raw, name)
+    if (!saved) return
+    const corrupt = `${target}.corrupt`
+    await this.queue(this.source(root, name), async () => {
+      const latest = await readFile(target, "utf8")
+      if (latest !== damaged) {
+        if (this.decode(latest, name)) return
+        throw new Error("The saved canvas changed while Raya was recovering it. Its files have been retained.")
+      }
+      await writeFile(corrupt, damaged)
+      await this.copy(target, saved)
+    })
+    const latest = await readFile(target, "utf8")
+    const restored = this.decode(latest, name)
+    if (!restored)
+      throw new Error("The saved canvas changed while Raya was recovering it. Its files have been retained.")
+    return {
+      saved: restored,
+      warning:
+        "Raya restored the last working canvas because its saved record was damaged. The damaged record was retained for inspection.",
+    }
+  }
+
+  private async copy(path: string, saved: Saved) {
+    const temp = `${path}.${randomUUID()}.tmp`
+    try {
+      await writeFile(temp, JSON.stringify(record.parse(saved)), { flag: "wx" })
+      await rename(temp, path)
+    } finally {
+      await unlink(temp).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== "ENOENT") throw error
+      })
+    }
   }
 
   private directory(root: string) {
@@ -317,6 +378,10 @@ export class CanvasCompiler {
 
   private manifest(root: string, name: string) {
     return join(this.directory(root), `${name}.current.json`)
+  }
+
+  private backup(root: string, name: string) {
+    return join(this.directory(root), `${name}.recovery.json`)
   }
 
   async rebuild(path: string): Promise<CanvasBuild> {

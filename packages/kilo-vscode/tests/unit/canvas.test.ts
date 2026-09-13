@@ -110,13 +110,15 @@ describe("Raya canvas compiler", () => {
     },
   )
 
-  it("rejects malformed saved records without overwriting the bundle or editable artifact", async () => {
+  it("recovers malformed saved records from a validated copy and retains the damaged bytes", async () => {
     const root = await temp()
     const compiler = new CanvasCompiler(join(root, "bundles"))
     const source = "export default function Report() { return <p>Saved</p> }"
     const first = await compiler.create(root, "validated", source, { value: 1 })
     await compiler.commit(first)
     const manifest = join(dirname(first.bundle!), "validated.current.json")
+    const recovery = join(dirname(first.bundle!), "validated.recovery.json")
+    const corrupt = `${manifest}.corrupt`
     const raw = await readFile(manifest, "utf8")
     const saved = JSON.parse(raw)
     const invalid = [
@@ -139,14 +141,25 @@ describe("Raya canvas compiler", () => {
         ].map((build) => ({ ...saved, build: { ...saved.build, ...build } })),
       ].map((value) => JSON.stringify(value)),
     ]
-    await writeFile(first.bundle!, "bundle sentinel")
     for (const value of invalid) {
       await writeFile(manifest, value)
-      await expect(compiler.restore(root, "validated")).rejects.toThrow("Saved canvas revision")
-      expect(await readFile(manifest, "utf8")).toBe(value)
-      expect(await readFile(first.bundle!, "utf8")).toBe("bundle sentinel")
+      await writeFile(first.bundle!, "damaged bundle")
+      const restored = await compiler.restore(root, "validated")
+      expect(restored?.revision).toBe(first.revision)
+      expect(restored?.warning).toContain("restored the last working canvas")
+      expect(await readFile(corrupt, "utf8")).toBe(value)
+      expect(JSON.parse(await readFile(manifest, "utf8"))).toEqual(JSON.parse(await readFile(recovery, "utf8")))
+      expect(await readFile(first.bundle!, "utf8")).toBe(saved.code)
       expect(await readFile(first.path, "utf8")).toBe(source)
     }
+    await writeFile(manifest, "{damaged current")
+    await writeFile(recovery, "{damaged recovery")
+    await writeFile(first.bundle!, "bundle sentinel")
+    await expect(compiler.restore(root, "validated")).rejects.toThrow("saved canvas and its recovery copy")
+    expect(await readFile(manifest, "utf8")).toBe("{damaged current")
+    expect(await readFile(recovery, "utf8")).toBe("{damaged recovery")
+    expect(await readFile(first.bundle!, "utf8")).toBe("bundle sentinel")
+    await writeFile(recovery, raw)
     await writeFile(
       manifest,
       JSON.stringify({

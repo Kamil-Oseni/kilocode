@@ -108,9 +108,8 @@ export class CanvasService implements vscode.Disposable {
         void vscode.window.showWarningMessage(build.warning)
     } catch (error) {
       console.error("[Raya] Could not restore the saved canvas:", error)
-      void vscode.window.showErrorMessage(
-        "The saved canvas could not be restored. Its saved revision has been retained.",
-      )
+      const detail = error instanceof Error ? error.message.slice(0, 600) : "The saved record could not be read."
+      void vscode.window.showErrorMessage(`Canvas couldn't reopen. Your saved files are still available. ${detail}`)
     }
   }
 

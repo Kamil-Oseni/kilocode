@@ -58,6 +58,39 @@ const report = {
 }
 
 const scene = new URLSearchParams(window.location.search).get("scene") ?? "ready"
+let stopped = false
+
+const work = (organizationID: string) => [
+  {
+    id: "rdg_org_preview",
+    sender: { id: legal.id, name: legal.name, role: "Chief of Staff", archived: false },
+    recipient: { id: books.id, name: books.name, role: "Accounting", archived: false },
+    organizationID,
+    organizationName: "Website Builders",
+    organizationRevision: 1,
+    source: "org_preview",
+    state: "completed" as const,
+    objective: "Review Friday travel expenses and return a reconciled ledger.",
+    response: "The ledger is reconciled and the receipt exception is documented.",
+    time: 1,
+    updated: 3,
+    cost: 0.42,
+  },
+  {
+    id: "rdg_org_follow",
+    sender: { id: books.id, name: books.name, role: "Accounting", archived: false },
+    recipient: { id: legal.id, name: legal.name, role: "Chief of Staff", archived: false },
+    organizationID,
+    organizationName: "Website Builders",
+    organizationRevision: 1,
+    source: "org_follow",
+    state: (stopped ? "cancelled" : "running") as "cancelled" | "running",
+    parentID: "rdg_org_preview",
+    objective: "Ask Counsel to approve the documented receipt exception.",
+    time: 2,
+    updated: stopped ? 4 : 3,
+  },
+]
 
 const calendar = (message: WebviewMessage) => {
   if (message.type === "routineForecast") {
@@ -101,28 +134,48 @@ const preview = (message: WebviewMessage) => {
     })
     return true
   }
-  if (message.type !== "routineOrganizationActivity") return false
+  if (message.type === "routineOrganizationActivity") {
+    emit({
+      type: "routineOrganizationActivity",
+      requestID: message.requestID,
+      organizationID: message.organizationID,
+      items: work(message.organizationID),
+    })
+    return true
+  }
+  if (message.type === "routineDelegateChain") {
+    const org = "org_11111111111111111111111111111111"
+    const rows = work(org)
+    const current = rows.find((item) => item.id === message.id)
+    if (!current) return false
+    const record = {
+      ...current,
+      senderID: current.sender.id,
+      recipientID: current.recipient.id,
+    }
+    const root = rows[0]!
+    const child = rows[1]!
+    const prior = { ...root, senderID: root.sender.id, recipientID: root.recipient.id }
+    const follow = { ...child, senderID: child.sender.id, recipientID: child.recipient.id }
+    emit({
+      type: "routineDelegateChain",
+      requestID: message.requestID,
+      agentID: message.agentID,
+      id: message.id,
+      record,
+      above: message.id === child.id ? [prior] : [],
+      below: message.id === root.id ? [follow] : [],
+    })
+    return true
+  }
+  if (message.type !== "routineDelegateCancel" || message.id !== "rdg_org_follow") return false
+  stopped = true
+  const item = work("org_11111111111111111111111111111111")[1]!
   emit({
-    type: "routineOrganizationActivity",
+    type: "routineDelegateStopped",
     requestID: message.requestID,
-    organizationID: message.organizationID,
-    items: [
-      {
-        id: "rdg_org_preview",
-        sender: { id: legal.id, name: legal.name, role: "Chief of Staff", archived: false },
-        recipient: { id: books.id, name: books.name, role: "Accounting", archived: false },
-        organizationID: message.organizationID,
-        organizationName: "Website Builders",
-        organizationRevision: 1,
-        source: "org_preview",
-        state: "completed",
-        objective: "Review Friday travel expenses and return a reconciled ledger.",
-        response: "The ledger is reconciled and the receipt exception is documented.",
-        time: 1,
-        updated: 3,
-        cost: 0.42,
-      },
-    ],
+    agentID: message.agentID,
+    record: { ...item, senderID: item.sender.id, recipientID: item.recipient.id },
   })
   return true
 }

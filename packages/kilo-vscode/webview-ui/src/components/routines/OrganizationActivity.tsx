@@ -4,6 +4,11 @@ import { useVSCode } from "../../context/vscode"
 import type { ExtensionMessage } from "../../types/messages"
 
 type Work = import("@kilocode/sdk/v2/client").KilocodeRoutineOrganizationActivityResponse["items"][number]
+type Step = Pick<Work, "id" | "state" | "objective" | "organizationID"> & {
+  senderID: string
+  recipientID: string
+}
+type Tree = { record: Step; above: Step[]; below: Step[] }
 
 const states = new Set(["queued", "accepted", "running", "needs_input", "completed", "failed", "cancelled"])
 
@@ -47,6 +52,42 @@ function valid(value: unknown): value is Work {
   )
 }
 
+function step(value: unknown): Step | undefined {
+  if (!value || typeof value !== "object") return
+  const row = value as Record<string, unknown>
+  if (
+    typeof row.id !== "string" ||
+    typeof row.senderID !== "string" ||
+    typeof row.recipientID !== "string" ||
+    typeof row.organizationID !== "string" ||
+    typeof row.state !== "string" ||
+    !states.has(row.state) ||
+    typeof row.objective !== "string"
+  )
+    return
+  return row as Step
+}
+
+function chain(value: { record?: unknown; above?: unknown; below?: unknown }, item: Work): Tree | undefined {
+  const record = step(value.record)
+  if (
+    !record ||
+    record.id !== item.id ||
+    record.senderID !== item.sender.id ||
+    record.recipientID !== item.recipient.id
+  )
+    return
+  if (!Array.isArray(value.above) || !Array.isArray(value.below)) return
+  const above = value.above.map(step)
+  const below = value.below.map(step)
+  if ([record, ...above, ...below].some((row) => !row || row.organizationID !== item.organizationID)) return
+  return { record, above: above as Step[], below: below as Step[] }
+}
+
+function live(state: Work["state"]) {
+  return state === "queued" || state === "accepted" || state === "running" || state === "needs_input"
+}
+
 function label(state: Work["state"]) {
   if (state === "needs_input") return "Needs input"
   if (state === "accepted") return "Starting"
@@ -67,6 +108,12 @@ export const OrganizationActivity: Component<{
   const [next, setNext] = createSignal<string>()
   const [busy, setBusy] = createSignal(true)
   const [error, setError] = createSignal("")
+  const [open, setOpen] = createSignal("")
+  const [trees, setTrees] = createSignal<Record<string, Tree>>({})
+  const [faults, setFaults] = createSignal<Record<string, string>>({})
+  const [trace, setTrace] = createSignal<{ request: string; id: string; agent: string }>()
+  const [confirm, setConfirm] = createSignal("")
+  const [stopping, setStopping] = createSignal<{ request: string; id: string; agent: string; recipient: string }>()
   let request = ""
   let after: string | undefined
 
@@ -83,10 +130,11 @@ export const OrganizationActivity: Component<{
     })
   }
 
-  const receive = (msg: ExtensionMessage) => {
-    if (msg.type !== "routineOrganizationActivity" || msg.requestID !== request || msg.organizationID !== props.id)
-      return
+  const page = (msg: Extract<ExtensionMessage, { type: "routineOrganizationActivity" }>) => {
+    if (msg.requestID !== request || msg.organizationID !== props.id) return
     setBusy(false)
+    setStopping()
+    setConfirm("")
     if (msg.error) {
       setError(msg.error)
       return
@@ -95,6 +143,63 @@ export const OrganizationActivity: Component<{
     if (!after) setItems(rows)
     else setItems((prior) => [...prior, ...rows.filter((row) => !prior.some((item) => item.id === row.id))])
     setNext(msg.next)
+  }
+
+  const lineage = (msg: Extract<ExtensionMessage, { type: "routineDelegateChain" }>) => {
+    const active = trace()
+    if (!active || msg.requestID !== active.request || msg.agentID !== active.agent || msg.id !== active.id) return
+    const item = items().find((row) => row.id === active.id)
+    const found = item ? chain({ record: msg.record, above: msg.above, below: msg.below }, item) : undefined
+    setTrace()
+    if (msg.error || !found) {
+      setFaults((prior) => ({
+        ...prior,
+        [active.id]: msg.error || "The stored request chain could not be verified.",
+      }))
+      return
+    }
+    setFaults((prior) => {
+      const next = { ...prior }
+      delete next[active.id]
+      return next
+    })
+    setTrees((prior) => ({ ...prior, [active.id]: found }))
+  }
+
+  const halted = (msg: Extract<ExtensionMessage, { type: "routineDelegateStopped" }>) => {
+    const active = stopping()
+    if (!active || msg.requestID !== active.request || msg.agentID !== active.agent) return
+    const row = msg.record && typeof msg.record === "object" ? (msg.record as Record<string, unknown>) : undefined
+    if (
+      msg.error ||
+      !row ||
+      row.id !== active.id ||
+      row.senderID !== active.agent ||
+      row.recipientID !== active.recipient ||
+      row.organizationID !== props.id ||
+      (row.state !== "cancelled" && row.state !== "completed" && row.state !== "failed")
+    ) {
+      setFaults((prior) => ({
+        ...prior,
+        [active.id]: msg.error || "The stopped work response could not be verified. Refresh before trying again.",
+      }))
+      setStopping()
+      setConfirm("")
+      return
+    }
+    setOpen("")
+    setTrees((prior) => {
+      const next = { ...prior }
+      delete next[active.id]
+      return next
+    })
+    load()
+  }
+
+  const receive = (msg: ExtensionMessage) => {
+    if (msg.type === "routineOrganizationActivity") return page(msg)
+    if (msg.type === "routineDelegateChain") return lineage(msg)
+    if (msg.type === "routineDelegateStopped") return halted(msg)
   }
 
   const unsub = vscode.onMessage(receive)
@@ -107,6 +212,49 @@ export const OrganizationActivity: Component<{
   const attention = createMemo(
     () => items().filter((item) => item.state === "needs_input" || item.state === "failed").length,
   )
+
+  const name = (id: string) => {
+    for (const item of items()) {
+      if (item.sender.id === id) return item.sender.name
+      if (item.recipient.id === id) return item.recipient.name
+    }
+    return "Retained worker"
+  }
+
+  const inspect = (item: Work) => {
+    if (trace() && trace()?.id !== item.id) return
+    if (open() === item.id) {
+      setOpen("")
+      return
+    }
+    setOpen(item.id)
+    if (trees()[item.id] || trace()?.id === item.id) return
+    const request = crypto.randomUUID()
+    setTrace({ request, id: item.id, agent: item.sender.id })
+    vscode.postMessage({
+      type: "routineDelegateChain",
+      requestID: request,
+      agentID: item.sender.id,
+      id: item.id,
+    })
+  }
+
+  const stop = (item: Work) => {
+    if (stopping()) return
+    const request = crypto.randomUUID()
+    setStopping({ request, id: item.id, agent: item.sender.id, recipient: item.recipient.id })
+    setFaults((prior) => {
+      const next = { ...prior }
+      delete next[item.id]
+      return next
+    })
+    vscode.postMessage({
+      type: "routineDelegateCancel",
+      requestID: request,
+      agentID: item.sender.id,
+      id: item.id,
+    })
+  }
 
   return (
     <section class="routines-organization-work" aria-labelledby={`organization-work-${props.id}`}>
@@ -161,6 +309,67 @@ export const OrganizationActivity: Component<{
                     </button>
                   </Show>
                 </div>
+                <div class="routines-organization-work-actions">
+                  <Button
+                    variant="ghost"
+                    size="small"
+                    aria-expanded={open() === item.id}
+                    aria-controls={`organization-chain-${item.id}`}
+                    disabled={!!trace()}
+                    onClick={() => inspect(item)}
+                  >
+                    {trace()?.id === item.id ? "Loading chain" : open() === item.id ? "Hide chain" : "Show chain"}
+                  </Button>
+                  <Show when={live(item.state) && confirm() !== item.id}>
+                    <Button variant="ghost" size="small" disabled={!!stopping()} onClick={() => setConfirm(item.id)}>
+                      Stop work
+                    </Button>
+                  </Show>
+                </div>
+                <Show when={faults()[item.id]}>
+                  <p class="routines-error" role="alert">
+                    {faults()[item.id]}
+                  </p>
+                </Show>
+                <Show when={confirm() === item.id}>
+                  <div class="routines-organization-work-confirm" role="group" aria-label="Confirm stopping work">
+                    <p>This stops this request and live follow-on work. Completed results stay saved.</p>
+                    <div>
+                      <Button variant="ghost" size="small" disabled={!!stopping()} onClick={() => setConfirm("")}>
+                        Keep running
+                      </Button>
+                      <Button variant="destructive" size="small" disabled={!!stopping()} onClick={() => stop(item)}>
+                        {stopping()?.id === item.id ? "Stopping" : "Stop work and follow-ons"}
+                      </Button>
+                    </div>
+                  </div>
+                </Show>
+                <Show when={open() === item.id}>
+                  <div id={`organization-chain-${item.id}`}>
+                    <Show when={trees()[item.id]}>
+                      {(tree) => (
+                        <ol class="routines-chain routines-organization-chain" aria-label="Request chain">
+                          <For
+                            each={[
+                              ...tree().above.map((row) => ({ ...row, role: "Prior request" })),
+                              { ...tree().record, role: "This request" },
+                              ...tree().below.map((row) => ({ ...row, role: "Follow-on request" })),
+                            ]}
+                          >
+                            {(row) => (
+                              <li>
+                                <span class="routines-line-meta">
+                                  {row.role} · {label(row.state)} · {name(row.senderID)} to {name(row.recipientID)}
+                                </span>
+                                <p class="routines-line-body">{row.objective}</p>
+                              </li>
+                            )}
+                          </For>
+                        </ol>
+                      )}
+                    </Show>
+                  </div>
+                </Show>
               </li>
             )}
           </For>

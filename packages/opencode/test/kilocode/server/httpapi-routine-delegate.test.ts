@@ -65,9 +65,10 @@ test("the shipped routine delegate route tracks a chief-to-accounting request", 
   expect(row.senderID).toBe(chief.id)
   expect(row.recipientID).toBe(books.id)
   expect(row.state).toBe("running")
-  expect((await app.request(`/kilocode/agent/${chief.id}/delegate`, { method: "POST", headers, body: JSON.stringify(send) })).status).toBe(
-    200,
-  )
+  expect(
+    (await app.request(`/kilocode/agent/${chief.id}/delegate`, { method: "POST", headers, body: JSON.stringify(send) }))
+      .status,
+  ).toBe(200)
   expect(
     (
       await app.request(`/kilocode/agent/${chief.id}/delegate`, {
@@ -98,12 +99,18 @@ test("the shipped routine delegate route tracks a chief-to-accounting request", 
       })
     ).status,
   ).toBe(200)
-  expect(Schema.decodeUnknownSync(Schema.toCodecJson(Record))(await (await app.request(`/kilocode/agent/${chief.id}/delegate/${row.id}`, { headers })).json()).state).toBe(
-    "cancelled",
-  )
+  expect(
+    Schema.decodeUnknownSync(Schema.toCodecJson(Record))(
+      await (await app.request(`/kilocode/agent/${chief.id}/delegate/${row.id}`, { headers })).json(),
+    ).state,
+  ).toBe("cancelled")
   expect((await app.request(`/kilocode/agent/${chief.id}/inbox/info`, { headers })).status).toBe(400)
   expect((await app.request(`/kilocode/agent/missing/inbox/info?section=contacts`, { headers })).status).toBe(404)
   expect((await app.request(`/kilocode/agent/${books.id}`, { method: "DELETE", headers })).status).toBe(200)
+  const retained = Schema.decodeUnknownSync(Schema.toCodecJson(Lineage))(
+    await (await app.request(`/kilocode/agent/${books.id}/delegate/${row.id}/chain`, { headers })).json(),
+  )
+  expect(retained.record.id).toBe(row.id)
   const contacts = Schema.decodeUnknownSync(Schema.toCodecJson(InfoPage))(
     await (await app.request(`/kilocode/agent/${chief.id}/inbox/info?section=contacts&limit=1`, { headers })).json(),
   )
@@ -201,7 +208,12 @@ test("the shipped routine delegate route denies archived and other-folder worker
   await using directory = await tmpdir({ git: true })
   const headers = { "content-type": "application/json", "x-kilo-directory": directory.path }
   const app = Server.Default().app
-  const spawn = async (name: string, role: string, objective: string, extra?: { capabilities?: string[]; dir?: string }) =>
+  const spawn = async (
+    name: string,
+    role: string,
+    objective: string,
+    extra?: { capabilities?: string[]; dir?: string },
+  ) =>
     Schema.decodeUnknownSync(Schema.toCodecJson(RayaTask.Agent))(
       await (
         await app.request("/kilocode/agent", {

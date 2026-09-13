@@ -877,7 +877,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     const agentDelegateChain = Effect.fn("KilocodeHttpApi.agentDelegateChain")(function* (ctx: {
       params: { agentID: string; id: string }
     }) {
-      yield* owned(ctx.params.agentID)
+      yield* remembered(ctx.params.agentID)
       const found = yield* errands
         .tree(ctx.params.id)
         .pipe(

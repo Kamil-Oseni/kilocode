@@ -70,6 +70,27 @@ const report = {
 }
 
 const scene = new URLSearchParams(window.location.search).get("scene") ?? "ready"
+const workload = Array.from({ length: 39 }, (_, index) => {
+  const count = index + 1
+  return {
+    id: `worker-${count}`,
+    name: `Worker ${count}`,
+    role: "specialist",
+    objective: `Handle representative work stream ${count}`,
+    capabilities: ["research"],
+    schedule: { kind: "manual" as const },
+    enabled: true,
+    access: "brief" as const,
+  }
+})
+const transcript = Array.from({ length: 1_000 }, (_, index) => ({
+  id: `rmg_perf_${index}`,
+  agentID: books.id,
+  kind: "report" as const,
+  source: `report:perf-${index}`,
+  body: `Recorded report ${index + 1} for the representative large-history workload.`,
+  time: index + 1,
+}))
 let stopped = false
 let assignment:
   | {
@@ -314,15 +335,65 @@ const preview = (message: WebviewMessage) => {
   return true
 }
 
-const reply = (message: WebviewMessage) => {
-  if (message.type === "webviewReady") {
+const stress = (message: WebviewMessage) => {
+  if (scene !== "performance") return false
+  if (message.type === "routineList") {
+    const agents = [books, ...workload]
     emit({
-      type: "ready",
-      serverInfo: { port: 0, version: "preview" },
-      workspaceDirectory: "C:/Projects/preview",
+      type: "routineState",
+      requestID: message.requestID,
+      viewID: message.viewID,
+      refreshID: 1,
+      agents,
+      templates: [],
+      organizations: [],
     })
-    return
+    emit({
+      type: "routineInbox",
+      requestID: message.requestID,
+      viewID: message.viewID,
+      refreshID: 1,
+      items: agents.map((agent, index) => ({
+        agentID: agent.id,
+        conversationID: `rcv_perf_${index}`,
+        name: agent.name,
+        role: agent.role,
+        latest: index === 0 ? transcript.at(-1) : undefined,
+        unread: index % 3,
+        state: "scheduled",
+      })),
+    })
+    emit({
+      type: "routineState",
+      requestID: message.requestID,
+      viewID: message.viewID,
+      refreshID: 1,
+      refresh: "complete",
+    })
+    return true
   }
+  if (message.type !== "routineInboxPage") return false
+  emit({
+    type: "routineInboxPage",
+    requestID: message.requestID,
+    agentID: message.agentID,
+    messages: message.agentID === books.id ? transcript : [report],
+  })
+  return true
+}
+
+const initial = (message: WebviewMessage) => {
+  if (message.type !== "webviewReady") return stress(message)
+  emit({
+    type: "ready",
+    serverInfo: { port: 0, version: "preview" },
+    workspaceDirectory: "C:/Projects/preview",
+  })
+  return true
+}
+
+const reply = (message: WebviewMessage) => {
+  if (initial(message)) return
   if (message.type === "requestProjectUsage") {
     emit({
       type: "projectUsageLoaded",

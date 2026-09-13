@@ -1,6 +1,93 @@
 import AxeBuilder from "@axe-core/playwright"
 import { expect, test } from "@playwright/test"
 
+test("representative routine workload stays responsive and recovers", async ({ context, page }) => {
+  await page.setViewportSize({ width: 900, height: 900 })
+  const devtools = await context.newCDPSession(page)
+  await devtools.send("Performance.enable")
+  await page.goto("/?state=light-routines&scene=performance")
+  const workers = page.locator(".routines-identity[data-routine-worker]")
+  await expect(workers).toHaveCount(40)
+  await devtools.send("HeapProfiler.collectGarbage")
+  const initial = await devtools.send("Performance.getMetrics")
+  const baseline = initial.metrics.find((metric) => metric.name === "JSHeapUsedSize")?.value ?? 0
+
+  const search = page.getByLabel("Search workers")
+  const samples = await search.evaluate(async (node) => {
+    const field = node as HTMLInputElement
+    const times: number[] = []
+    for (const value of ["Worker 1", "Worker 2", "Worker 3", "Worker", ""]) {
+      const start = performance.now()
+      field.value = value
+      field.dispatchEvent(new InputEvent("input", { bubbles: true, data: value, inputType: "insertText" }))
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+      times.push(performance.now() - start)
+    }
+    return times
+  })
+  const ordered = [...samples].sort((a, b) => a - b)
+  const p95 = ordered[Math.ceil(ordered.length * 0.95) - 1] ?? Number.POSITIVE_INFINITY
+  expect(p95).toBeLessThan(100)
+  await expect(workers).toHaveCount(40)
+
+  const start = await page.evaluate(() => performance.now())
+  await page.locator('.routines-identity[data-routine-worker="routine"]').click()
+  const log = page.getByRole("log", { name: "Messages with Books" })
+  await expect(log.locator("[data-routine-message]")).toHaveCount(1_000, { timeout: 15_000 })
+  const rendered = await page.evaluate((value) => performance.now() - value, start)
+  expect(rendered).toBeLessThan(3_000)
+
+  const composer = page.getByLabel("Message this worker")
+  const typed = await composer.evaluate(async (node) => {
+    const field = node as HTMLTextAreaElement
+    const start = performance.now()
+    field.value = "Follow up on report 1000"
+    field.dispatchEvent(new InputEvent("input", { bubbles: true, data: field.value, inputType: "insertText" }))
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    return performance.now() - start
+  })
+  expect(typed).toBeLessThan(100)
+  await expect(composer).toHaveValue("Follow up on report 1000")
+
+  await page.evaluate(() =>
+    window.dispatchEvent(new MessageEvent("message", { data: { type: "connectionState", state: "disconnected" } })),
+  )
+  const offline = page.getByText("Disconnected. Previously loaded routine information may be stale.")
+  await expect(offline).toBeVisible()
+  const reconnect = await page.evaluate(() => performance.now())
+  await page.evaluate(() =>
+    window.dispatchEvent(new MessageEvent("message", { data: { type: "connectionState", state: "connected" } })),
+  )
+  await expect(offline).toBeHidden()
+  await expect(workers).toHaveCount(40)
+  await expect(page.locator('[aria-busy="true"]')).toHaveCount(0)
+  const recovered = await page.evaluate((value) => performance.now() - value, reconnect)
+  expect(recovered).toBeLessThan(1_000)
+  expect(
+    await log.locator("[data-routine-message]").evaluateAll((nodes) => {
+      const ids = nodes.map((node) => (node as HTMLElement).dataset.routineMessage)
+      return new Set(ids).size
+    }),
+  ).toBe(1_000)
+
+  await devtools.send("HeapProfiler.collectGarbage")
+  const final = await devtools.send("Performance.getMetrics")
+  const heap = final.metrics.find((metric) => metric.name === "JSHeapUsedSize")?.value ?? 0
+  const growth = Math.max(0, heap - baseline)
+  expect(growth).toBeLessThan(64 * 1024 * 1024)
+  console.log(
+    JSON.stringify({
+      workers: 40,
+      messages: 1_000,
+      inputP95Ms: p95,
+      composerMs: typed,
+      renderMs: rendered,
+      reconnectMs: recovered,
+      heapGrowthBytes: growth,
+    }),
+  )
+})
+
 for (const theme of ["light", "dark"]) {
   for (const width of [320, 900]) {
     test(`${theme} routines at ${width}px`, async ({ page }, info) => {

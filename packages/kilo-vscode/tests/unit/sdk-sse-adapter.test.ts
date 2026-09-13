@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import type { KiloClient } from "@kilocode/sdk/v2/client"
+import { createKiloClient, type KiloClient } from "@kilocode/sdk/v2/client"
 import { KiloConnectionService } from "../../src/services/cli-backend/connection-service"
 import { SdkSSEAdapter, type SSEPayload } from "../../src/services/cli-backend/sdk-sse-adapter"
 
@@ -56,6 +56,53 @@ function aborted(signal?: AbortSignal) {
 }
 
 describe("SdkSSEAdapter", () => {
+  it("recovers a dropped real HTTP event stream within the client budget", async () => {
+    const bytes = new TextEncoder().encode(`data: ${JSON.stringify(event())}\n\n`)
+    let requests = 0
+    const server = Bun.serve({
+      port: 0,
+      fetch() {
+        requests += 1
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(bytes)
+              controller.close()
+            },
+          }),
+          { headers: { "content-type": "text/event-stream" } },
+        )
+      },
+    })
+    const adapter = new SdkSSEAdapter(createKiloClient({ baseUrl: server.url.origin }))
+    const states: string[] = []
+    const start = performance.now()
+    const recovered = new Promise<number>((resolve) => {
+      let count = 0
+      adapter.onEvent(() => {
+        count += 1
+        if (count === 2) resolve(performance.now() - start)
+      })
+    })
+    adapter.onStateChange((state) => states.push(state))
+
+    try {
+      adapter.connect()
+      const elapsed = await Promise.race([
+        recovered,
+        wait(1_000).then(() => {
+          throw new Error("SSE reconnect exceeded 1,000 ms")
+        }),
+      ])
+      expect(elapsed).toBeLessThan(1_000)
+      expect(requests).toBe(2)
+      expect(states).toEqual(["connecting", "connected", "connecting", "connected"])
+    } finally {
+      adapter.disconnect()
+      server.stop(true)
+    }
+  })
+
   it("normalizes nested sync envelopes at the SSE boundary", async () => {
     const adapter = new SdkSSEAdapter(
       client(async function* (opts) {

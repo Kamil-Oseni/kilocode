@@ -347,11 +347,17 @@ const layer = Layer.effect(
 
     // kilocode_change start - read/modify/write kept boundaries and workspace restores must not overlap
     const receipts = recovery({ sessions, snap, storage, summary, state, gather })
+    const locked = <A, E, R>(sessionID: SessionID, body: Effect.Effect<A, E, R>) =>
+      Effect.gen(function* () {
+        const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
+        return yield* gate.withWorkspace(session.directory)(body)
+      })
     return Service.of({
-      revert: (input) => gate.withPermits(1)(revert(input)),
-      unrevert: (input) => gate.withPermits(1)(unrevert(input)),
+      revert: (input) => locked(input.sessionID, revert(input)),
+      unrevert: (input) => locked(input.sessionID, unrevert(input)),
       discardChanges: (input) =>
-        gate.withPermits(1)(
+        locked(
+          input.sessionID,
           receipt(
             storage,
             input,
@@ -363,7 +369,8 @@ const layer = Layer.effect(
           ),
         ),
       keepChanges: (input) =>
-        gate.withPermits(1)(
+        locked(
+          input.sessionID,
           receipt(
             storage,
             input,
@@ -374,7 +381,7 @@ const layer = Layer.effect(
             (proof) => receipts.reconcile(input.sessionID, proof),
           ),
         ),
-      cleanup: (session) => gate.withPermits(1)(cleanup(session)),
+      cleanup: (session) => gate.withWorkspace(session.directory)(cleanup(session)),
     })
     // kilocode_change end
   }),

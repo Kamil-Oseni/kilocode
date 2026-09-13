@@ -174,7 +174,7 @@ describe("kept boundary integrity", () => {
               return "complete"
             }).pipe(
               Effect.ensuring(
-                gate.withPermits(1)(
+                gate.withWorkspace(state.session.directory)(
                   Effect.sync(() => {
                     cleaned = true
                   }),
@@ -203,7 +203,7 @@ describe("kept boundary integrity", () => {
             const entered = yield* Deferred.make<void>()
             const release = yield* Deferred.make<void>()
             const holder = yield* gate
-              .withPermits(1)(
+              .withWorkspace(state.session.directory)(
                 Effect.gen(function* () {
                   yield* Deferred.succeed(entered, undefined)
                   yield* Deferred.await(release)

@@ -758,7 +758,7 @@ export const layer: Layer.Layer<
               )
             }
             // Cancel jobs before taking the gate: cancellation may await their checkpoint cleanup.
-            yield* gate.withPermits(1)(Effect.gen(function* () {
+            yield* gate.withWorkspace(session.directory)(Effect.gen(function* () {
               yield* retention.reviews(sessionID).pipe(Effect.orDie) // kilocode_change - drain review work before receipt erasure
               yield* events.publish(SessionV1.Event.Deleted, { sessionID, info: session })
               const workspaceKey = hasInstance ? yield* InstanceState.directory : undefined

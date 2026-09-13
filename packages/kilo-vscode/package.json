@@ -1433,6 +1433,7 @@
     "snapshot:build": "bun script/dev-snapshot.ts build",
     "snapshot:install": "bun script/dev-snapshot.ts install",
     "snapshot:release": "bun script/dev-snapshot.ts release",
+    "release:evidence": "bun script/release-evidence.ts",
     "extension": "bun script/launch.ts",
     "extension:isolated": "bun script/launch.ts --isolated",
     "extension:isolated:clean": "bun script/launch.ts --isolated --clean"

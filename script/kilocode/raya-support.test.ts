@@ -26,6 +26,8 @@ test("target, runner, publishing and generated documentation drift fail", () => 
     ["os: macos-latest", "os: macos-14"],
     ["--notes-file dist/support-notes.md", "--notes-file other.md"],
     ["--notes dist/support-notes.md", "--notes other.md"],
+    ["packages/kilo-vscode/out/*.evidence.json", "packages/kilo-vscode/out/*.txt"],
+    ["dist/*.evidence.json", "dist/*.txt"],
   ]) {
     expect(() => check(contract, manifest!, workflow!.replace(before!, after!), document!)).toThrow()
   }
@@ -57,6 +59,9 @@ test("packaging target and checkout cannot drift from the claimed release source
   expect(() =>
     check(contract, manifest!, workflow!.replaceAll("ref: ${{ github.sha }}", "ref: main"), document!),
   ).toThrow("triggering source")
+  expect(() =>
+    check(contract, manifest!, workflow!.replace("bun run release:evidence", "bun run snapshot:release"), document!),
+  ).toThrow("declared target")
 })
 
 test("generation is idempotent and preserves manual feature coverage", () => {
@@ -76,6 +81,7 @@ test("release notes use immutable source links and distinguish evidence from ass
   expect(text).toContain("eden.raya")
   expect(text).toContain("^1.106.0")
   expect(text).toContain("not a verified installation")
+  expect(text).toContain("matching `.evidence.json` receipt")
   expect(text).toContain("Installation remains unverified for: `darwin-arm64`, `linux-x64`")
   expect(() => notes(contract, "owner/fork", "main")).toThrow("full source commit")
   expect(() => notes(contract, "owner/fork\ninjected", sha)).toThrow("repository")

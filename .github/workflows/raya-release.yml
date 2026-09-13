@@ -57,9 +57,9 @@ jobs:
           v="${GITHUB_REF_NAME#raya-}"; v="${v#v}"
           echo "RAYA_VERSION=$v" >> "$GITHUB_ENV"
 
-      - name: Build VSIX
-        run: bun run snapshot:release
-        working-directory: packages/kilo-vscode
+      # kilocode_change start
+      - name: Build and record release evidence
+        run: bun run release:evidence
         env:
           RAYA_RELEASE_VERSION: ${{ env.RAYA_VERSION }}
           RAYA_VSCE_TARGET: ${{ matrix.target }}
@@ -68,8 +68,11 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: raya-${{ matrix.target }}
-          path: packages/kilo-vscode/out/*.vsix
+          path: |
+            packages/kilo-vscode/out/*.vsix
+            packages/kilo-vscode/out/*.evidence.json
           if-no-files-found: error
+      # kilocode_change end
 
   release:
     name: Publish GitHub Release
@@ -103,7 +106,7 @@ jobs:
           version="${GITHUB_REF_NAME#raya-}"; version="${version#v}"
           prerelease=""
           case "$version" in *-*) prerelease="--prerelease" ;; esac
-          gh release create "$GITHUB_REF_NAME" dist/*.vsix \
+          gh release create "$GITHUB_REF_NAME" dist/*.vsix dist/*.evidence.json \
             --repo "$GITHUB_REPOSITORY" \
             --title "Raya $version" \
             --generate-notes \

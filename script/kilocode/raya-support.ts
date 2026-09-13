@@ -76,7 +76,7 @@ export function check(data: Contract, manifest: string, workflow: string, docume
     field(field(jobs, "build"), "runs-on") !== "${{ matrix.os }}" ||
     !build.some(
       (step: unknown) =>
-        field(step, "run") === "bun run snapshot:release" &&
+        field(step, "run") === "bun run release:evidence" &&
         field(field(step, "env"), "RAYA_VSCE_TARGET") === "${{ matrix.target }}",
     )
   )
@@ -99,10 +99,18 @@ export function check(data: Contract, manifest: string, workflow: string, docume
   if (
     !publish.some((step: unknown) => {
       const run = field(step, "run")
-      return typeof run === "string" && run.includes("--notes-file dist/support-notes.md")
+      return (
+        typeof run === "string" &&
+        run.includes("--notes-file dist/support-notes.md") &&
+        run.includes("dist/*.evidence.json")
+      )
     })
   )
-    throw new Error("Release must publish the support notes.")
+    throw new Error("Release must publish the support notes and platform evidence receipts.")
+  const upload = build.find((step: unknown) => String(field(step, "uses")).startsWith("actions/upload-artifact@"))
+  const uploadPath = field(field(upload, "with"), "path")
+  if (typeof uploadPath !== "string" || !uploadPath.includes("*.vsix") || !uploadPath.includes("*.evidence.json"))
+    throw new Error("Release builds must retain both the VSIX and its evidence receipt.")
   if (replace(document, data) !== document) throw new Error("Generated support matrix is stale; run with --write.")
 }
 
@@ -117,7 +125,7 @@ export function notes(data: Contract, repository: string, commit: string) {
         .filter((row) => row.installation === "unverified")
         .map((row) => `\`${row.target}\``)
         .join(", ") || "none of the declared targets"
-    }.\n`
+    }. Each published VSIX has a matching \`.evidence.json\` receipt for its source gates, native build and archive inspection.\n`
   )
 }
 

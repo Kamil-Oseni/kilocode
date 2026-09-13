@@ -22,25 +22,38 @@ Because GitHub Releases inherit the repository's visibility, keeping the repo pr
 The workflow reuses the same build pipeline as local development rather than duplicating it. Each matrix job checks out the repo, sets up Bun (the shared `setup-bun` composite action, which installs dependencies across Windows, macOS, and Linux), and on Linux additionally installs Zig for the sandbox helper. It then resolves the plain `x.y.z` version from the tag and runs the extension's release build:
 
 ```bash
-bun run snapshot:release
+bun run release:evidence
 ```
 
-That script (`packages/kilo-vscode/script/dev-snapshot.ts` in `release` mode) prepares the SDK, compiles the CLI binary for the runner's own platform, runs the production validation build, and packages a platform-tagged VSIX into `packages/kilo-vscode/out/`. Two environment variables drive it:
+The runner (`packages/kilo-vscode/script/release-evidence.ts`) first requires a clean tracked checkout and records the full source commit, native host and pinned Bun version. It executes the support-contract, architecture, workflow, test-inventory, generated-state, Effect-facade, changeset and migration gates sequentially. It then calls `packages/kilo-vscode/script/dev-snapshot.ts` in release mode to prepare the SDK, compile the CLI for the runner's own platform, run the production validation build, and package a platform-tagged VSIX into `packages/kilo-vscode/out/`.
+
+After packaging, the runner reads the VSIX without executing or extracting it. It verifies both embedded manifests against `eden.raya`, the requested version and native target; requires the bundled CLI; rejects `.env` and `.tmp` entries; records archive, CLI and entry sizes; streams a SHA-256 digest; and fails if generation changed tracked source. The adjacent `raya-<target>.evidence.json` identifies every executed command, status and duration. Installation is explicitly `not-run` in CI receipts because packaging on a hosted runner is not clean-install evidence.
+
+Two environment variables drive it:
 
 - `RAYA_RELEASE_VERSION` — the version to stamp into the VSIX. Any `raya-`/`v` prefix and any prerelease or build suffix are stripped, because `vsce` only accepts a bare `major.minor.patch` version. The GitHub Release tag still carries the full name, so prerelease identity is preserved at the release level even though the packaged version is the semver core.
 - `RAYA_VSCE_TARGET` — the platform target (e.g. `win32-x64`). This is written into the VSIX so VS Code installs the correct build on each machine and refuses a mismatched one.
 
-Each job uploads its `.vsix` as a workflow artifact; a final job downloads all of them and runs `gh release create` to publish the Release with the assets. Building natively per platform (rather than cross-compiling) keeps the workflow simple and avoids Docker/QEMU, at the cost of covering only the three common targets above. Other architectures are not built.
+Each job uploads its `.vsix` and matching evidence JSON as workflow artifacts; a final job downloads all of them and runs `gh release create` to publish the Release with both artifact types. Building natively per platform (rather than cross-compiling) keeps the workflow simple and avoids Docker/QEMU, at the cost of covering only the three common targets above. Other architectures are not built.
 
 You can produce a release VSIX locally the same way the workflow does, which is useful for testing the artifact before tagging:
 
 ```bash
-cd packages/kilo-vscode
-RAYA_RELEASE_VERSION=7.4.24 RAYA_VSCE_TARGET=win32-x64 bun run snapshot:release
+RAYA_RELEASE_VERSION=7.4.24 RAYA_VSCE_TARGET=win32-x64 bun run release:evidence
 # → packages/kilo-vscode/out/raya-win32-x64.vsix
 ```
 
+The command writes both `packages/kilo-vscode/out/raya-win32-x64.vsix` and `packages/kilo-vscode/out/raya-win32-x64.evidence.json`. Run `bun run release:evidence --plan` to inspect the ordered release-specific gates without executing them or building an artifact. A plan is not passing evidence. Package tests affected by a change and the normal pull-request checks remain required; the release receipt does not turn an untested source revision into an approved release.
+
 The new workflow file is registered in `script/check-workflows.ts`; that CI guard fails if a workflow is added or removed without updating the list, which is how the repo keeps upstream-merged workflows from silently running.
+
+## Clean-install evidence
+
+Each supported platform still needs an installation receipt produced from the exact published VSIX. On a clean VS Code profile, install the platform asset, reload the extension host, confirm `eden.raya` and the packaged version through the editor's installed-extension inventory, start its bundled backend, and run the representative task and recovery checks listed in the implementation ledger. Record the source commit, runner, VS Code version, artifact SHA-256, installed identity, backend version, checks exercised and every skipped or failed check. Only then may the support contract change that target from `unverified` to verified installation evidence.
+
+## Rollback
+
+Do not overwrite or delete the previous GitHub Release when publishing a new one. If installation, activation, bundled-backend startup or a representative recovery check fails, retain the failing evidence receipt, disable automatic update for the affected client, reinstall the previous verified platform VSIX, reload VS Code, and confirm its extension and backend identities before resuming work. Record both artifact hashes and the reason for rollback in `docs/Raya-Implementation-Progress.md`. If the failure may have changed stored data, export recovery state before reinstalling and follow `docs/Raya-Database-Recovery.md`; installing an older extension is not proof that newer database state is backward-compatible.
 
 ## How the update checker works
 

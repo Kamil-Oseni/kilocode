@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-13):** ChatGPT reviewed and repaired Grok's work, delivered durable Routine DMs, attachments, Chat Info, first-class organization persistence/navigation, explicit delegation authority, restart-safe main-chat provisioning, organization editing/archive, one-click chat-result navigation, simplified Browser behavior, actionable GPT-Live microphone recovery, durable goal usage totals including delegated sessions, enforceable goal limits including bounded automatic recovery, revision-safe goal file deliverables, a non-model charge ledger, and safe initial voice destinations. Latest installed commit: `a449e06728`. Remaining: the unfinished 39-requirement work, further tool/Live/external goal accounting and non-file deliverables, inline media treatment, full live rebuild-survival acceptance, paid GPT-Live/device acoustic acceptance, packaged VS Code microphone consent, and the remaining EN-10 controls. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-13):** ChatGPT reviewed and repaired Grok's work, delivered durable Routine DMs, attachments, Chat Info, first-class organization persistence/navigation, explicit delegation authority, restart-safe main-chat provisioning, organization editing/archive, one-click chat-result navigation, simplified Browser behavior, actionable GPT-Live microphone recovery, durable goal usage totals including delegated sessions, enforceable goal limits including bounded automatic recovery, revision-safe goal file deliverables, a non-model charge ledger, safe initial voice destinations, and an explicit media listener exposure gate. Latest pushed product commit: `91d807247c`; latest installed extension commit: `a449e06728`. Remaining: the unfinished 39-requirement work, further tool/Live/external goal accounting and non-file deliverables, inline media treatment, full live rebuild-survival acceptance, paid GPT-Live/device acoustic acceptance, packaged VS Code microphone consent, and the remaining EN-10 controls. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -9,6 +9,16 @@
 Updated 2026-09-13. This is a continuation guide, not a completion certificate.
 
 **Latest delivered product:** ChatGPT installed snapshot `a449e06728` (`eden.raya@7.4.23-snapshot+a449e06728.kamil-oseni.1789308784437`). It includes the earlier Routine, Browser, GPT-Live recovery and reconnect work plus durable direct/delegated goal usage totals, enforceable time, cost and automatic-recovery limits, revision-safe file deliverables, the non-model charge ledger, and safe initial voice destinations described below. Reload VS Code normally to pick up the snapshot.
+
+## ChatGPT 2026-09-13 10:20 America/Toronto — active EN-10 listener checkpoint
+
+**Delivered in product commit `91d807247c`; pushed.** The Go media companion now derives its listener address through a tested gate. The default `127.0.0.1:7890` and explicit numeric IPv4/IPv6 loopback addresses need no flag. Any wildcard, hostname, LAN or public bind requires the exact opt-in `RAYA_MF_ALLOW_NON_LOOPBACK=1`; setting only `RAYA_MF_ADDR` cannot expose the control service. Invalid address syntax fails before socket creation.
+
+The checked-in Compose deployment sets the opt-in for its intentional `0.0.0.0:7890` container bind and continues publishing the host port only on `127.0.0.1`. This flag documents deployment intent. It does not authenticate callers on the container network and does not enable remote/shared voice support.
+
+Changed product paths: `.changeset/raya-voice-listener-gate.md`, `services/raya-mf/cmd/raya-mf/listen.go`, its focused test, the small `main.go` integration, Compose environment, and topology/progress/handoff documentation. Evidence: 11 focused cases pass; the uncached full companion suite passes; `go vet ./...` passes; and the native companion rebuilt at `services/raya-mf/.tmp/raya-mf.exe`, 10,156,544 bytes. No Bun, `tsgo` or `tsgolint` ran, and no Docker image was built or deployed.
+
+Delivery completed by ChatGPT at 2026-09-13 10:22 America/Toronto. Product commit `91d807247c5a7f7931ee5ce93cc9d75dddf31499` is on `origin/main`. This checkpoint changes only the companion service and its deployment contract, so it does not require another VS Code snapshot; the verified installed extension remains `eden.raya@7.4.23-snapshot+a449e06728.kamil-oseni.1789308784437`. The rebuilt native binary is ignored build output and no running container was replaced. EN-10 remains open for service authentication/browser-origin policy, provider lifecycle bounds, managed-socket abrupt-exit/cross-window evidence, and deployed container acceptance.
 
 ## ChatGPT 2026-09-13 10:08 America/Toronto — active EN-10 destination checkpoint
 
@@ -43,7 +53,7 @@ Status excerpts below are historical records, not a fresh certification of every
 ## Checkpoint and standing authorization
 
 - Workspace: `C:\Users\User\Desktop\raya`; PowerShell; branch `main`; origin `https://github.com/Kamil-Oseni/kilocode.git`.
-- Last verified pushed product checkpoint: `a449e0672853bf769bbf29b8c858c2cd10a7730b`, including safe numeric-loopback voice destinations, the non-model charge ledger, durable direct and delegated goal-tree model usage totals, enforceable active-time, recorded model-cost and consecutive automatic-recovery limits, and revision-safe file deliverables in addition to the earlier Routine, Browser, GPT-Live recovery and reconnect work.
+- Last verified pushed product checkpoint: `91d807247c5a7f7931ee5ce93cc9d75dddf31499`, adding an explicit non-loopback media-listener deployment gate after the installed safe-destination checkpoint.
 - Installed: `eden.raya@7.4.23-snapshot+a449e06728.kamil-oseni.1789308784437`.
 - VSIX: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-a449e06728-kamil-oseni-1789308784437.vsix`; SHA-256 `A7B3EE18CE5F6CCE65E2064B6E825037E8F57F0383ED934C064CD28ECD3B59C4`; 517,801,262 bytes; 431 entries; zero `.env` or `.tmp` entries.
 - The user authorizes two parallel workers plus root, batched checks, periodic normal commits/pushes to `origin/main`, and `snapshot:install` outside the sandbox. Do not ask again. No force push, hook bypass or forced VS Code reload.

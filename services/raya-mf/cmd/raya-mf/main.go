@@ -78,9 +78,9 @@ func main() {
 		write(writer, http.StatusOK, map[string]any{"closed": true})
 	})
 
-	addr := os.Getenv("RAYA_MF_ADDR")
-	if addr == "" {
-		addr = "127.0.0.1:7890"
+	addr, err := address(os.Getenv("RAYA_MF_ADDR"), os.Getenv("RAYA_MF_ALLOW_NON_LOOPBACK"))
+	if err != nil {
+		panic(err)
 	}
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {

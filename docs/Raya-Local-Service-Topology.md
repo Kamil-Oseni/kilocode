@@ -18,8 +18,8 @@ The contract regression imports the exact launch arguments used by `ServerManage
 |---|---|---|
 | Extension to CLI voice control | Managed backend HTTP with generated Basic credentials | Carries session and directory context, not independent tenant authentication. |
 | Extension to media frontend | Numeric loopback HTTP origin; default `http://127.0.0.1:7890` | Control handlers currently have no service authentication. Remote/shared deployment is unavailable. |
-| Media frontend listener | Native default `127.0.0.1:7890`; environment can override | Non-loopback configuration is not yet gated. |
-| Docker media frontend | Listens on `0.0.0.0` inside the container; Compose publishes host `127.0.0.1:7890` | Host publication and container-network reachability are different boundaries. Do not simply reject all wildcard container listeners without replacing this launch path. |
+| Media frontend listener | Native default `127.0.0.1:7890`; numeric loopback addresses are accepted directly | Any wildcard, hostname, LAN or public bind requires the exact opt-in `RAYA_MF_ALLOW_NON_LOOPBACK=1`. |
+| Docker media frontend | Listens on `0.0.0.0` inside the container through the explicit non-loopback opt-in; Compose publishes host `127.0.0.1:7890` | Host publication and container-network reachability remain different boundaries. The opt-in records deployment intent; it does not authenticate container-network callers. |
 | Media frontend to backend | Voice events carry the supplied backend authorization and directory to a validated numeric loopback HTTP origin | Redirects are refused. Remote callbacks are unavailable. |
 | LiveKit and voice engine | WebRTC/audio and provider connection are separate from CLI control | Tokens, provider keys, remote rooms and cleanup require their own lifecycle guarantees. |
 
@@ -35,7 +35,7 @@ The regression uses in-memory storage adapters and synthetic credentials to test
 
 ## Remaining acceptance work
 
-- Define and enforce the allowed media control deployment, including local native and container paths, service authentication and browser-origin handling.
+- Add media-control service authentication and browser-origin handling for the explicitly selected local native or container deployment.
 - Complete handler/provider lifecycle limits and observe cancellation and cleanup after HTTP transport deadlines, without applying short HTTP timeouts to long-lived audio sessions.
 - Preserve initial destination validation and redirect refusal before sending credentials. Endpoint authentication remains separate.
 - Exercise authenticated and unauthenticated requests on actual managed sockets, abrupt parent exit and cross-window ownership.
@@ -66,3 +66,11 @@ The Qwen broker now validates both its managed CLI backend and media frontend be
 The CLI independently validates `mediaURL` before parent lookup, delegate creation, room-token minting or persistence. Its real authenticated HTTP route returns `400` for an unsafe destination. The Go media companion independently validates the callback backend before reserving a session, opening the voice engine or joining the media room. This is defense in depth across callers; it does not authenticate the media control listener or authorize a remote/shared topology.
 
 ChatGPT verified this boundary on 2026-09-13 with 48 extension broker tests and 359 assertions, two CLI destination tests with 13 assertions, the real voice HTTP test with 46 assertions, an uncached full `go test ./...`, `go vet ./...`, and a native 10,135,040-byte companion rebuild. No paid provider or microphone was used.
+
+## Listener exposure gate
+
+The media companion now refuses any listener address that is not a numeric loopback address unless the deployment sets the exact flag `RAYA_MF_ALLOW_NON_LOOPBACK=1`. Changing `RAYA_MF_ADDR` alone can no longer expose control routes on a wildcard, hostname, LAN or public interface. Malformed addresses fail before `net.Listen`.
+
+The checked-in Compose deployment declares the opt-in because its process must listen on the container wildcard address; its published host ports remain pinned to `127.0.0.1`. The flag makes that exposure decision reviewable but does not authenticate callers already inside the container network. Remote/shared deployment remains unsupported.
+
+ChatGPT verified this boundary on 2026-09-13 with 11 focused address cases, the uncached full companion suite, `go vet ./...`, and a 10,156,544-byte native rebuild. The Docker image was not built or deployed in this checkpoint to avoid an unnecessary high-memory operation.

@@ -12,6 +12,8 @@ services:
     build: .
     environment:
       RAYA_MF_ADDR: 0.0.0.0:7890
+      # raya_change - the container bind is deliberate; host publication remains loopback-only.
+      RAYA_MF_ALLOW_NON_LOOPBACK: "1"
     ports:
       - "127.0.0.1:7890:7890"
     depends_on:

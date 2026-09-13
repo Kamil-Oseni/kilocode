@@ -4,6 +4,7 @@ import { Server } from "@/server/server"
 import { RayaTask } from "@/kilocode/task"
 import { Organization, Page } from "@/kilocode/task/organization"
 import { Record as Delegation } from "@/kilocode/task/delegation"
+import { ActivityPage } from "@/kilocode/task/info"
 import { resetDatabase } from "../../fixture/db"
 import { disposeAllInstances, tmpdir } from "../../fixture/fixture"
 
@@ -92,6 +93,22 @@ test("routine organization HTTP persists ordered graphs with optimistic archive 
     organizationName: organization.name,
     organizationRevision: 1,
   })
+  const activity = Schema.decodeUnknownSync(Schema.toCodecJson(ActivityPage))(
+    await (await app.request(`${route}/activity`, { headers })).json(),
+  )
+  expect(activity.items).toHaveLength(1)
+  expect(activity.items[0]).toMatchObject({
+    sender: { id: chief.id, name: "Chief", archived: false },
+    recipient: { id: books.id, name: "Books", archived: false },
+    organizationID: organization.id,
+    organizationName: organization.name,
+    objective: "Review the accounts.",
+    state: "failed",
+  })
+  expect((await app.request(`${route}/activity?cursor=invalid`, { headers })).status).toBe(400)
+  expect(
+    (await app.request("/kilocode/organization/org_00000000000000000000000000000000/activity", { headers })).status,
+  ).toBe(404)
 
   const invalid = await app.request(route, {
     method: "PATCH",

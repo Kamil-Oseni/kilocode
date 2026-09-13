@@ -300,6 +300,13 @@ export interface RoutineOrganizationUpdateMessage {
   delegations: { senderID: string; recipientID: string }[]
 }
 
+export interface RoutineOrganizationActivityMessage {
+  type: "routineOrganizationActivity"
+  requestID: string
+  organizationID: string
+  cursor?: string
+}
+
 export interface RoutineOrganizationArchiveMessage {
   type: "routineOrganizationArchive"
   requestID: string
@@ -1949,6 +1956,7 @@ export type WebviewMessage =
   | RoutineDelegateMessage
   | RoutineDelegateCancelMessage
   | RoutineDelegateChainMessage
+  | RoutineOrganizationActivityMessage
   | RoutineOrganizationUpdateMessage
   | RoutineProvisioningUpdateMessage
   | RoutineOrganizationArchiveMessage

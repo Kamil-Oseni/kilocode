@@ -2544,3 +2544,41 @@ After delivery, proceed to organization-wide orchestration and handoff visibilit
 ## ChatGPT 2026-09-13 03:08 America/Toronto — grouped Chat Info media delivered
 
 Product commit `307ec18c4f81f733a9a9f094382c150ea25a8e94` (`feat(routines): group shared chat media`) is on `origin/main`; its one-worker gate passed 29 TypeScript package checks plus JetBrains. The low-memory snapshot passed sequential extension validation, production bundling, packaging and installation. Installed identity: `eden.raya@7.4.23-snapshot+307ec18c4f.kamil-oseni.1789283225749`. Artifact: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-307ec18c4f-kamil-oseni-1789283225749.vsix`; 517,571,129 bytes; 431 entries; SHA-256 `7415FD4926980F66E889E04B92DBE248D5585DE4850D40BECF5BB090E7603909`; bundled CLI 229,133,312 bytes; zero `.env` or `.tmp` entries. Reload VS Code before review. Resume with organization-wide orchestration and handoff visibility.
+
+## ChatGPT 2026-09-13 03:23 America/Toronto — organization work and handoff view
+
+**Status: implemented and verified locally; commit, push and low-memory snapshot installation remain.** Organization overview now has a durable Work feed beneath Team. It shows actual tracked requests with sender → recipient, state, objective, response/failure, update time, follow-on marker, recorded cost, DM navigation and child-run navigation. This is execution history. Keep it distinct from the reporting tree, directional delegation permissions and `organization:provision`; those are structure/policy and do not prove work occurred.
+
+Implementation contract:
+
+1. `RayaTaskInfo.activity` pages `RayaRoutineDelegationTable` by exact `organization_id`, newest creation first, maximum 50. Its opaque cursor contains section, creation time and record ID. The HTTP handler verifies that the organization exists first.
+2. Activity returns stable request/source, sender and recipient with active/retained identity, exact organization plus saved name/revision provenance, state, objective/expected/context, parent references, deadline/budget, created/updated times, response/reason/cost, child occurrence and session. It does not inspect prose or synthesize communication.
+3. `GET /kilocode/organization/:organizationID/activity` is generated as `organization.activity` in the v2 SDK. Extension and webview correlate request, organization and cursor; both refuse wrong-organization records. The webview validates identities, state, optional text, finite timestamps and nonnegative cost, then deduplicates pages by request ID.
+4. `OrganizationActivity.tsx` owns loading, empty, retry, refresh and pagination. It mounts only for the selected organization, leaving the coalesced Routine refresh unchanged and avoiding per-member fan-out.
+
+Design follows `docs/designer.md`: one neutral surface, thin dividers, sentence-case copy, shared Raya type/accent tokens, focus rings and responsive wrapping. No decorative card, tint, status chip, gradient or emoji was added.
+
+Verification already completed:
+
+- OpenCode organization HTTP test: 1 pass / 35 assertions.
+- Extension organization bridge: 6 pass / 27 assertions.
+- Sequential `bun run check-types:webview` and `bun run check-types`: exit 0.
+- Targeted Prettier and ESLint: exit 0.
+- Source-link extractor: 97 URLs; OpenCode annotation guard: no shared source; Kilo-marker guard: pass.
+- One-worker Playwright wide organization case: 1 pass with Work assertions, axe and overflow.
+- One-worker Playwright 320 px organization case: 1 pass with navigation and overflow.
+- SDK generator ran alone. The sandboxed attempt failed only on `C:\Users\User\.local` access; the approved rerun passed.
+
+The first serial pre-push gate then caught one compile-time omission: `encode` accepted only share/contact cursor types. Activity pagination already passed at runtime. `ActivityCursor` is now included in the union and the directly affected TUI `bun run typecheck` passes. This correction is part of the checkpoint.
+
+Do not run root `bun run lint`, `tsgolint`, parallel typechecks or broad Bun test sets on this machine. Use one process at a time, `TURBO_CONCURRENCY=1` for pushes and `RAYA_LOW_MEMORY=1` for installation.
+
+After delivery:
+
+1. Add in-place lineage disclosure to Work rows using existing `GET /kilocode/agent/:agentID/delegate/:id/chain`. Pass sender ID plus delegation ID, correlate both, require the returned center record to match, and render parent/follow-on records from stored data.
+2. For live queued/accepted/running/needs-input rows, expose existing cancellation only where the endpoint permits it; refresh after a confirmed mutation and retain completed results.
+3. Add organization-level assignment/follow-up entry points routed to a named worker or authorized delegation. Ask for missing responsible worker, outcome, deadline, budget and authority; do not infer a CEO or rewrite permissions.
+4. Add filters/search after realistic workload evidence establishes useful dimensions.
+5. Prove representative discovery → design → code → hosting → outreach through real browser/tool/integration boundaries with company/workspace isolation, explicit permission intersection, attributable cost and durable reports. A mock card is never evidence of an external action.
+
+Update this handoff and `docs/Raya-Implementation-Progress.md` after each slice with `ChatGPT`, timestamp, paths, commands/exits, corrections, commit/push hashes, installed identity, limits and next edit. The audit goal remains active.

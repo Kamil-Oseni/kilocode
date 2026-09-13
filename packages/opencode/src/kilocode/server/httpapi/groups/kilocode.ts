@@ -40,7 +40,11 @@ import {
   Record as InboxRecord,
   Send as InboxSend,
 } from "@/kilocode/task/inbox"
-import { Page as InboxInfoPage, Query as InboxInfoQuery } from "@/kilocode/task/info"
+import {
+  ActivityPage as OrganizationActivityPage,
+  Page as InboxInfoPage,
+  Query as InboxInfoQuery,
+} from "@/kilocode/task/info"
 import {
   Lineage as DelegateLineage,
   Record as DelegateRecord,
@@ -211,6 +215,7 @@ export const KilocodePaths = {
   agentInboxAttachment: `${root}/agent/:agentID/inbox/attachment/:attachmentID`,
   organizations: `${root}/organization`,
   organizationItem: `${root}/organization/:organizationID`,
+  organizationActivity: `${root}/organization/:organizationID/activity`,
   agentDelegate: `${root}/agent/:agentID/delegate`,
   agentDelegateItem: `${root}/agent/:agentID/delegate/:id`,
   agentDelegateChain: `${root}/agent/:agentID/delegate/:id/chain`,
@@ -849,6 +854,23 @@ export const KilocodeApi = HttpApi.make("kilocode")
           OpenApi.annotations({
             identifier: "kilocode.routine.organization.get",
             summary: "Get a routine organization",
+          }),
+        ),
+        HttpApiEndpoint.get("organizationActivity", KilocodePaths.organizationActivity, {
+          params: { organizationID: Organization.fields.id },
+          query: Schema.Struct({
+            ...WorkspaceRoutingQueryFields,
+            cursor: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
+            limit: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(50))),
+          }),
+          success: described(OrganizationActivityPage, "Tracked organization work"),
+          error: [InvalidRequestError, HttpApiError.NotFound],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.organization.activity",
+            summary: "List tracked work in a routine organization",
+            description:
+              "Page durable worker-to-worker requests for one organization with sender, recipient, state, response, and lineage references.",
           }),
         ),
         HttpApiEndpoint.patch("organizationUpdate", KilocodePaths.organizationItem, {

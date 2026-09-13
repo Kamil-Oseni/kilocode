@@ -398,6 +398,15 @@ export interface RoutineOrganizationUpdatedMessage {
   recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
 }
 
+export interface RoutineOrganizationActivityResultMessage {
+  type: "routineOrganizationActivity"
+  requestID: string
+  organizationID: string
+  items?: import("@kilocode/sdk/v2/client").KilocodeRoutineOrganizationActivityResponse["items"]
+  next?: string
+  error?: string
+}
+
 export interface RoutineOrganizationArchivedMessage {
   type: "routineOrganizationArchived"
   requestID: string
@@ -1889,6 +1898,7 @@ export type ExtensionMessage =
   | RoutineDelegatedMessage
   | RoutineDelegateStoppedMessage
   | RoutineDelegateChainResultMessage
+  | RoutineOrganizationActivityResultMessage
   | RoutineOrganizationUpdatedMessage
   | RoutineProvisioningUpdatedMessage
   | RoutineOrganizationArchivedMessage

@@ -89,11 +89,48 @@ export const ContactPage = Schema.Struct({
   next: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
 })
 export const Page = Schema.Union([SharePage, ContactPage])
+const Person = Schema.Struct({
+  id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)),
+  name: Schema.String.check(Schema.isMinLength(1)),
+  role: Schema.String.check(Schema.isMinLength(1)),
+  archived: Schema.Boolean,
+})
+export const Activity = Schema.Struct({
+  id: token,
+  sender: Person,
+  recipient: Person,
+  organizationID: Schema.String.check(Schema.isPattern(/^org_[a-f0-9]{32}$/)),
+  organizationName: Schema.optional(Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(120))),
+  organizationRevision: Schema.optional(
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER)),
+  ),
+  source: token,
+  state: Contact.fields.state,
+  objective: Contact.fields.objective,
+  expected: Schema.optional(Schema.String),
+  context: Schema.optional(Schema.String),
+  parentID: Schema.optional(token),
+  parentRunID: Schema.optional(token),
+  deadline: Schema.optional(stamp),
+  budget: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(1_000_000))),
+  time: stamp,
+  updated: stamp,
+  response: Schema.optional(Schema.String),
+  reason: Schema.optional(Schema.String),
+  cost: Schema.optional(Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0))),
+  occurrenceID: Schema.optional(token),
+  sessionID: Schema.optional(SessionID),
+})
+export const ActivityPage = Schema.Struct({
+  items: Schema.Array(Activity),
+  next: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
+})
 export type Query = typeof Query.Type
 export type Share = typeof Share.Type
 export type Contact = typeof Contact.Type
 export type Page = typeof Page.Type
 export type Identity = Pick<Contact, "name" | "role" | "archived">
+export type Activity = typeof Activity.Type
 
 const ShareCursor = Schema.Struct({
   section: Schema.Literal("shares"),
@@ -102,12 +139,13 @@ const ShareCursor = Schema.Struct({
   skip: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(10_000)),
 })
 const ContactCursor = Schema.Struct({ section: Schema.Literal("contacts"), time: stamp, id: token })
+const ActivityCursor = Schema.Struct({ section: Schema.Literal("activity"), time: stamp, id: token })
 
 export class Invalid extends Schema.TaggedErrorClass<Invalid>()("RayaTaskInfo.Invalid", {
   message: Schema.String,
 }) {}
 
-function encode(value: typeof ShareCursor.Type | typeof ContactCursor.Type) {
+function encode(value: typeof ShareCursor.Type | typeof ContactCursor.Type | typeof ActivityCursor.Type) {
   return Buffer.from(JSON.stringify(value)).toString("base64url")
 }
 
@@ -299,6 +337,77 @@ export namespace RayaTaskInfo {
           : {}),
       }
     })
-    return { shares: share, contacts: contact }
+    const activity = Effect.fn("RayaTaskInfo.activity")(function* (
+      organizationID: string,
+      resolve: (id: string) => Effect.Effect<Identity>,
+      value?: string,
+      limit = 50,
+    ) {
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50)
+        return yield* new Invalid({ message: "Organization activity pages are limited to 50 items." })
+      const raw = yield* cursor(value)
+      const anchor =
+        raw === undefined
+          ? undefined
+          : yield* Schema.decodeUnknownEffect(ActivityCursor)(raw).pipe(
+              Effect.mapError(() => new Invalid({ message: "This organization activity cursor is invalid." })),
+            )
+      const rows = yield* db
+        .select()
+        .from(Delegation)
+        .where(
+          and(
+            eq(Delegation.organization_id, organizationID),
+            anchor
+              ? or(
+                  lt(Delegation.time_created, anchor.time),
+                  and(eq(Delegation.time_created, anchor.time), lt(Delegation.id, anchor.id)),
+                )
+              : undefined,
+          ),
+        )
+        .orderBy(desc(Delegation.time_created), desc(Delegation.id))
+        .limit(limit + 1)
+        .all()
+        .pipe(Effect.orDie)
+      const slice = rows.slice(0, limit)
+      const items: Activity[] = []
+      for (const row of slice) {
+        const sender = yield* resolve(row.sender_id)
+        const recipient = yield* resolve(row.recipient_id)
+        items.push({
+          id: row.id,
+          sender: { id: row.sender_id, ...sender },
+          recipient: { id: row.recipient_id, ...recipient },
+          organizationID,
+          ...(row.organization_name ? { organizationName: row.organization_name } : {}),
+          ...(row.organization_revision !== null ? { organizationRevision: row.organization_revision } : {}),
+          source: row.source,
+          state: row.state,
+          objective: row.objective,
+          ...(row.expected ? { expected: row.expected } : {}),
+          ...(row.context ? { context: row.context } : {}),
+          ...(row.parent_id ? { parentID: row.parent_id } : {}),
+          ...(row.parent_run_id ? { parentRunID: row.parent_run_id } : {}),
+          ...(row.deadline !== null ? { deadline: row.deadline } : {}),
+          ...(row.budget !== null ? { budget: row.budget } : {}),
+          time: row.time_created,
+          updated: row.time_updated,
+          ...(row.response ? { response: row.response } : {}),
+          ...(row.reason ? { reason: row.reason } : {}),
+          ...(row.cost !== null ? { cost: row.cost } : {}),
+          ...(row.child_run_id ? { occurrenceID: row.child_run_id } : {}),
+          ...(row.session_id ? { sessionID: SessionID.make(row.session_id) } : {}),
+        })
+      }
+      const last = slice.at(-1)
+      return {
+        items,
+        ...(rows.length > limit && last
+          ? { next: encode({ section: "activity", time: last.time_created, id: last.id }) }
+          : {}),
+      }
+    })
+    return { shares: share, contacts: contact, activity }
   }
 }

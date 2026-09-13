@@ -355,6 +355,31 @@ const reply = (message: WebviewMessage) => {
     })
     return
   }
+  if (message.type === "routineOrganizationActivity") {
+    emit({
+      type: "routineOrganizationActivity",
+      requestID: message.requestID,
+      organizationID: message.organizationID,
+      items: [
+        {
+          id: "rdg_org_preview",
+          sender: { id: legal.id, name: legal.name, role: "Chief of Staff", archived: false },
+          recipient: { id: books.id, name: books.name, role: "Accounting", archived: false },
+          organizationID: message.organizationID,
+          organizationName: "Website Builders",
+          organizationRevision: 1,
+          source: "org_preview",
+          state: "completed",
+          objective: "Review Friday travel expenses and return a reconciled ledger.",
+          response: "The ledger is reconciled and the receipt exception is documented.",
+          time: 1,
+          updated: 3,
+          cost: 0.42,
+        },
+      ],
+    })
+    return
+  }
   if (calendar(message)) return
   if (message.type === "routineProvisioningUpdate") {
     legal.capabilities = message.enabled ? ["legal", "organization:provision"] : ["legal"]

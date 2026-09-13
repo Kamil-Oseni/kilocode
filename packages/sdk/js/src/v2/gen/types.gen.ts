@@ -22713,6 +22713,80 @@ export type KilocodeRoutineOrganizationUpdateResponses = {
 export type KilocodeRoutineOrganizationUpdateResponse =
   KilocodeRoutineOrganizationUpdateResponses[keyof KilocodeRoutineOrganizationUpdateResponses]
 
+export type KilocodeRoutineOrganizationActivityData = {
+  body?: never
+  path: {
+    organizationID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+    cursor?: string
+    limit?: string
+  }
+  url: "/kilocode/organization/{organizationID}/activity"
+}
+
+export type KilocodeRoutineOrganizationActivityErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeRoutineOrganizationActivityError =
+  KilocodeRoutineOrganizationActivityErrors[keyof KilocodeRoutineOrganizationActivityErrors]
+
+export type KilocodeRoutineOrganizationActivityResponses = {
+  /**
+   * Tracked organization work
+   */
+  200: {
+    items: Array<{
+      id: string
+      sender: {
+        id: string
+        name: string
+        role: string
+        archived: boolean
+      }
+      recipient: {
+        id: string
+        name: string
+        role: string
+        archived: boolean
+      }
+      organizationID: string
+      organizationName?: string
+      organizationRevision?: number
+      source: string
+      state: "queued" | "accepted" | "running" | "needs_input" | "completed" | "failed" | "cancelled"
+      objective: string
+      expected?: string
+      context?: string
+      parentID?: string
+      parentRunID?: string
+      deadline?: number
+      budget?: number
+      time: number
+      updated: number
+      response?: string
+      reason?: string
+      cost?: number
+      occurrenceID?: string
+      sessionID?: string
+    }>
+    next?: string
+  }
+}
+
+export type KilocodeRoutineOrganizationActivityResponse =
+  KilocodeRoutineOrganizationActivityResponses[keyof KilocodeRoutineOrganizationActivityResponses]
+
 export type KilocodeRoutineEventData = {
   body?: {
     source: string

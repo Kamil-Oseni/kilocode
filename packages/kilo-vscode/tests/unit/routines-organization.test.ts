@@ -136,6 +136,56 @@ test("organization archive includes the expected revision and returns a bounded 
   ])
 })
 
+test("organization activity stays scoped and preserves its cursor", async () => {
+  const calls: Request[] = []
+  const messages: Record<string, unknown>[] = []
+  const item = {
+    id: "work_1",
+    sender: { id: worker, name: "Finance lead", role: "Lead", archived: false },
+    recipient: { id: peer, name: "Reviewer", role: "Reviewer", archived: false },
+    organizationID: id,
+    source: "source_1",
+    state: "completed",
+    objective: "Review the books",
+    time: 10,
+    updated: 20,
+    response: "The books balance.",
+  }
+  const client = createKiloClient({
+    baseUrl: "http://localhost:4096",
+    fetch: async (input, init) => {
+      calls.push(new Request(input, init))
+      return Response.json({ items: [item], next: "next_page" })
+    },
+  })
+  await handleRoutineMessage({
+    client,
+    directory: "workspace",
+    post: (message) => messages.push(message as Record<string, unknown>),
+    message: {
+      type: "routineOrganizationActivity",
+      requestID: "request",
+      organizationID: id,
+      cursor: "cursor_1",
+    },
+  })
+  expect(calls).toHaveLength(1)
+  const url = new URL(calls[0].url)
+  expect(calls[0].method).toBe("GET")
+  expect(url.pathname).toBe(`/kilocode/organization/${id}/activity`)
+  expect(url.searchParams.get("directory")).toBe("workspace")
+  expect(url.searchParams.get("cursor")).toBe("cursor_1")
+  expect(messages).toEqual([
+    {
+      type: "routineOrganizationActivity",
+      requestID: "request",
+      organizationID: id,
+      items: [item],
+      next: "next_page",
+    },
+  ])
+})
+
 test("worker creation authority sends the expected state and verifies durable provenance", async () => {
   const calls: Request[] = []
   const messages: Record<string, unknown>[] = []

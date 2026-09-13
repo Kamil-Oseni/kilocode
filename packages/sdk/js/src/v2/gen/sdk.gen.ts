@@ -293,6 +293,8 @@ import type {
   KilocodeRoutineInboxSendResponses,
   KilocodeRoutineListErrors,
   KilocodeRoutineListResponses,
+  KilocodeRoutineOrganizationActivityErrors,
+  KilocodeRoutineOrganizationActivityResponses,
   KilocodeRoutineOrganizationArchiveErrors,
   KilocodeRoutineOrganizationArchiveResponses,
   KilocodeRoutineOrganizationCreateErrors,
@@ -9136,6 +9138,46 @@ export class Organization2 extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * List tracked work in a routine organization
+   *
+   * Page durable worker-to-worker requests for one organization with sender, recipient, state, response, and lineage references.
+   */
+  public activity<ThrowOnError extends boolean = false>(
+    parameters: {
+      organizationID: string
+      directory?: string
+      workspace?: string
+      cursor?: string
+      limit?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "organizationID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "cursor" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      KilocodeRoutineOrganizationActivityResponses,
+      KilocodeRoutineOrganizationActivityErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/organization/{organizationID}/activity",
+      ...options,
+      ...params,
     })
   }
 }

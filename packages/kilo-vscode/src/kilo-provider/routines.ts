@@ -121,6 +121,7 @@ const replies: Record<string, string> = {
   routineDelegate: "routineDelegated",
   routineDelegateCancel: "routineDelegateStopped",
   routineDelegateChain: "routineDelegateChain",
+  routineOrganizationActivity: "routineOrganizationActivity",
   routineOrganizationUpdate: "routineOrganizationUpdated",
   routineOrganizationArchive: "routineOrganizationArchived",
   routineProvisioningUpdate: "routineProvisioningUpdated",
@@ -166,6 +167,7 @@ const messages = new Set([
   "routineDelegate",
   "routineDelegateCancel",
   "routineDelegateChain",
+  "routineOrganizationActivity",
   "routineOrganizationUpdate",
   "routineOrganizationArchive",
   "routineProvisioningUpdate",
@@ -531,6 +533,32 @@ async function revise(ctx: Ctx) {
   await ctx.refresh?.()
 }
 
+async function activity(ctx: Ctx) {
+  const msg = ctx.message
+  if (!token(msg.requestID) || typeof msg.organizationID !== "string" || !/^org_[a-f0-9]{32}$/.test(msg.organizationID))
+    throw new Error("Reload the organization before reading its work.")
+  const cursor = msg.cursor === undefined ? undefined : String(msg.cursor)
+  if (cursor !== undefined && (cursor.length < 1 || cursor.length > 256))
+    throw new Error("This organization activity page cursor is invalid.")
+  const result = await ctx.kilo.organization.activity(
+    { directory: ctx.dir, organizationID: msg.organizationID, ...(cursor ? { cursor } : {}) },
+    { throwOnError: true },
+  )
+  if (
+    !result.data ||
+    !Array.isArray(result.data.items) ||
+    !result.data.items.every((item) => item.organizationID === msg.organizationID)
+  )
+    throw new Error("The organization work response could not be verified. Refresh and try again.")
+  ctx.post({
+    type: "routineOrganizationActivity",
+    requestID: msg.requestID,
+    organizationID: msg.organizationID,
+    items: result.data.items,
+    next: result.data.next,
+  })
+}
+
 async function retire(ctx: Ctx) {
   const msg = ctx.message
   if (!token(msg.requestID) || typeof msg.organizationID !== "string" || !/^org_[a-f0-9]{32}$/.test(msg.organizationID))
@@ -816,6 +844,7 @@ const routes: Record<string, (ctx: Ctx) => Promise<void>> = {
   routineDelegate: pass,
   routineDelegateCancel: halt,
   routineDelegateChain: trace,
+  routineOrganizationActivity: activity,
   routineOrganizationUpdate: revise,
   routineOrganizationArchive: retire,
   routineProvisioningUpdate: provision,

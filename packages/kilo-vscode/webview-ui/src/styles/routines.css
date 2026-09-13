@@ -650,6 +650,113 @@
   grid-column: 1 / -1;
 }
 
+.routines-organization-work {
+  display: flex;
+  flex-direction: column;
+  gap: var(--raya-space-8);
+  margin-top: var(--raya-space-16);
+  padding-top: var(--raya-space-16);
+  border-top: 1px solid var(--border-weak, var(--vscode-widget-border));
+}
+
+.routines-organization-work-head,
+.routines-organization-work-route,
+.routines-organization-work-meta {
+  display: flex;
+  align-items: center;
+}
+
+.routines-organization-work-head {
+  justify-content: space-between;
+  gap: var(--raya-space-12);
+}
+
+.routines-organization-work-head p,
+.routines-organization-work-list p {
+  margin: 0;
+}
+
+.routines-organization-work-head p,
+.routines-organization-work-meta {
+  margin-top: var(--raya-space-2);
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-size: var(--kilo-font-size-12);
+}
+
+.routines-organization-work-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.routines-organization-work-list > li {
+  display: flex;
+  flex-direction: column;
+  gap: var(--raya-space-6);
+  padding: var(--raya-space-10) 0;
+}
+
+.routines-organization-work-list > li + li {
+  border-top: 1px solid var(--border-weak, var(--vscode-widget-border));
+}
+
+.routines-organization-work-route {
+  flex-wrap: wrap;
+  gap: var(--raya-space-6);
+  min-width: 0;
+}
+
+.routines-organization-work-route button,
+.routines-organization-work-meta button {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text-base, var(--vscode-foreground));
+  font: inherit;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.routines-organization-work-route button:focus-visible,
+.routines-organization-work-meta button:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, Highlight);
+  outline-offset: 2px;
+}
+
+.routines-organization-work-state {
+  margin-left: auto;
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-size: var(--kilo-font-size-12);
+  font-weight: 500;
+}
+
+.routines-organization-work-objective,
+.routines-organization-work-result {
+  max-width: 52rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.routines-organization-work-result {
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+}
+
+.routines-organization-work-meta {
+  flex-wrap: wrap;
+  gap: var(--raya-space-4) var(--raya-space-10);
+}
+
+@media (max-width: 500px) {
+  .routines-organization-work-state {
+    width: 100%;
+    margin-left: 0;
+  }
+}
+
 .routines-organization-form {
   gap: var(--raya-space-16);
 }

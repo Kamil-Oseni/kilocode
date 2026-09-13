@@ -29,6 +29,7 @@ import { AccessReview } from "./AccessReview"
 import { OutputEditor } from "./OutputEditor"
 import { OutputReview } from "./OutputReview"
 import { Inbox, status, type Anchor, type Box } from "./Inbox"
+import { OrganizationActivity } from "./OrganizationActivity"
 import { Output } from "../../../../src/shared/routine-output"
 
 type Schedule =
@@ -1856,6 +1857,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                         }}
                       </For>
                     </ol>
+                    <OrganizationActivity id={item.id} onChoose={choose} onOpenSession={props.onOpenSession} />
                   </div>
                 </section>
               )}

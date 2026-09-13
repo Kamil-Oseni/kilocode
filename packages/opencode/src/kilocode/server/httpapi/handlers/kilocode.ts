@@ -639,6 +639,43 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .get(ctx.params.organizationID)
         .pipe(Effect.catchTag("RayaTaskOrganization.NotFound", () => Effect.fail(new HttpApiError.NotFound({}))))
     })
+    const identity = () => {
+      const cache = new Map<string, TaskIdentity>()
+      return Effect.fn("KilocodeHttpApi.routineIdentity")(function* (id: string) {
+        const cached = cache.get(id)
+        if (cached) return cached
+        const active = yield* runner.tasks
+          .get(id)
+          .pipe(Effect.catchTag("RayaTask.NotFoundError", () => Effect.succeed(undefined)))
+        if (active) {
+          const item = { name: active.name, role: active.role, archived: false }
+          cache.set(id, item)
+          return item
+        }
+        const archived = yield* runner.tasks.page({ agentID: id }).pipe(Effect.orDie)
+        const item = archived.items[0]
+        if (!item) return yield* Effect.die(new Error(`Routine worker ${id} has no retained identity.`))
+        const found = { name: item.definition.name, role: item.definition.role, archived: true }
+        cache.set(id, found)
+        return found
+      })
+    }
+    const organizationActivity = Effect.fn("KilocodeHttpApi.organizationActivity")(function* (ctx: {
+      params: { organizationID: string }
+      query: { cursor?: string; limit?: number }
+    }) {
+      yield* organizations
+        .get(ctx.params.organizationID)
+        .pipe(Effect.catchTag("RayaTaskOrganization.NotFound", () => Effect.fail(new HttpApiError.NotFound({}))))
+      const resolve = identity()
+      return yield* info
+        .activity(ctx.params.organizationID, resolve, ctx.query.cursor, ctx.query.limit ?? 50)
+        .pipe(
+          Effect.catchTag("RayaTaskInfo.Invalid", (err) =>
+            Effect.fail(new InvalidRequestError({ message: err.message })),
+          ),
+        )
+    })
     const organizationUpdate = Effect.fn("KilocodeHttpApi.organizationUpdate")(function* (ctx: {
       params: { organizationID: string }
       payload: OrganizationUpdate
@@ -762,19 +799,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
               Effect.fail(new InvalidRequestError({ message: err.message })),
             ),
           )
-      const identities = new Map<string, TaskIdentity>()
-      for (const agent of yield* runner.tasks.list())
-        identities.set(agent.id, { name: agent.name, role: agent.role, archived: false })
-      const resolve = Effect.fn("KilocodeHttpApi.agentInboxInfoIdentity")(function* (id: string) {
-        const found = identities.get(id)
-        if (found) return found
-        const archived = yield* runner.tasks.page({ agentID: id }).pipe(Effect.orDie)
-        const item = archived.items[0]
-        if (!item) return yield* Effect.die(new Error(`Routine delegation peer ${id} has no retained identity.`))
-        const identity = { name: item.definition.name, role: item.definition.role, archived: true }
-        identities.set(id, identity)
-        return identity
-      })
+      const resolve = identity()
       return yield* info
         .contacts(ctx.params.agentID, resolve, ctx.query.cursor, ctx.query.limit ?? 50)
         .pipe(
@@ -1025,6 +1050,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .handle("organizationList", organizationList)
         .handle("organizationCreate", organizationCreate)
         .handle("organizationGet", organizationGet)
+        .handle("organizationActivity", organizationActivity)
         .handle("organizationUpdate", organizationUpdate)
         .handle("organizationArchive", organizationArchive)
         .handle("agentEvent", agentEvent)

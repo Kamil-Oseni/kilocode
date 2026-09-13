@@ -25,11 +25,13 @@ Status excerpts below are historical records, not a fresh certification of every
 - The user authorizes two parallel workers plus root, batched checks, periodic normal commits/pushes to `origin/main`, and `snapshot:install` outside the sandbox. Do not ask again. No force push, hook bypass or forced VS Code reload.
 - At approximately $10 remaining, as reported by the user, stop opening broad work, settle current processes, update this handoff and give the continuation prompt below. Do not invent a credit balance.
 
-## ChatGPT 2026-09-12 22:38 America/Toronto — easiest-to-hardest verification queue
+## ChatGPT 2026-09-12 22:53 America/Toronto — easiest-to-hardest verification queue
 
 Close the remaining parent requirements in this order, finishing a complete acceptance package before opening an unrelated slice. This order reflects verification cost; it does not waive original acceptance.
 
-1. **Repository-deterministic:** UI-01; PR-03 + EN-03; UX-03; EN-07; EN-13; EN-14; EN-15; PR-02 + OVR-06; PR-04 + EN-02 + OVR-05; PR-05 + OVR-04; EN-06; EN-10; OVR-09; OVR-08.
+Completed from this queue: UI-01, PR-03 and EN-03.
+
+1. **Repository-deterministic:** UX-03; EN-07; EN-13; EN-14; EN-15; PR-02 + OVR-06; PR-04 + EN-02 + OVR-05; PR-05 + OVR-04; EN-06; EN-10; OVR-09; OVR-08.
 2. **Packaged local interaction:** EN-04 + EN-05 + UX-01; UX-02; UX-04; UX-05; UI-03; EN-09.
 3. **External, physical-device, multi-platform or moderated evidence:** EN-01; EN-11 + OVR-02 + OVR-10; EN-12 + OVR-01; OVR-03; PR-06; PR-01 + OVR-07; UI-02.
 
@@ -134,13 +136,13 @@ The following sections retain the full 39-item scope. Related findings and overh
 
 ### PR-03 — Make routine scheduling explicit before activation
 
-**Recorded status:** In progress. Structured creation/editing, absolute date controls, explicit timezone, backend occurrence preview and version-checked confirmation implemented. Real view DOM interactions verified; migration review and full live UI verification remain open.
+**Recorded status:** Verified by ChatGPT on 2026-09-12 22:53 America/Toronto. Structured creation/editing, explicit timezone, backend occurrence preview and version-checked confirmation satisfy the original acceptance. Monday and Friday remain distinct, unsupported intervals and ambiguous phrases reject before persistence, and DST gaps/folds plus stale previews are covered. The production editor preview-and-confirm journey passes.
 
-**Implementation and verification:**
+**Verification evidence:**
 
-1. Close packaged structured-schedule creation/edit/preview/activation behavior; persist phrase, timezone, recurrence and version together.
-2. Preserve rejection and draft state for ambiguous language, missing timezone and concurrent edits; never activate a guessed interpretation.
-3. Test Monday/Friday/interval phrases, DST folds/gaps, timezone-less migration, stale preview versions and user-supplied schedule examples.
+1. The bounded English parser preserves weekday identity and rejects unsupported phrases such as `every 2 hours`, `tomorrow morning`, invalid times and qualified calendars it cannot represent.
+2. The real editor requires a correlated backend preview, displays the exact interpreted recurrence, timezone and next three occurrences, and requires a current schedule version before confirmation.
+3. Backend, extension and production-component tests cover Monday/Friday, explicit timezones, DST folds/gaps, absolute local dates, stale previews, concurrent edits and review-held legacy unzoned calendars.
 
 **Source entry points:** [packages/kilo-vscode/src/kilo-provider/routines.ts](../packages/kilo-vscode/src/kilo-provider/routines.ts).
 
@@ -218,13 +220,13 @@ The following sections retain the full 39-item scope. Related findings and overh
 
 ### EN-03 — Implement timezone and event-filter semantics end to end
 
-**Recorded status:** In progress. Stored timezone evaluation, exact event filters and read-only forecasts verified. Legacy calendars without a timezone now hold automatic admission until explicit review; queued rows and history remain preserved. CLI, real queue migration and actual editor checks pass. Deployed event and full packaged acceptance remain open.
+**Recorded status:** Verified by ChatGPT on 2026-09-12 22:53 America/Toronto. Preview and execution share the bounded timezone evaluator. Exact event filters reject missing and mismatched values and are revalidated before session startup. Catch-up and immutable occurrence evidence are explicit, and legacy unzoned work remains review-held without losing queued/history evidence.
 
-**Implementation and verification:**
+**Verification evidence:**
 
-1. Finish deployed timezone/filter/catch-up acceptance using the same evaluator for UI preview and execution.
-2. Store scheduled occurrence separately from start time and preserve the review hold on legacy timezone-less schedules.
-3. Run the same routine under different host zones; cover DST, sleep/resume, missing/mismatched event filters, queued edits and restart.
+1. Cross-process tests run the same stored timezone under UTC and Asia/Tokyo hosts and produce the same instant; DST gaps, repeated local minutes and fractional-hour transitions are covered.
+2. Timer triggers persist immutable queue identity, scheduled time, observed time and timezone separately from run start. Recurring catch-up is one minute without backlog; one-time work remains due until consumed.
+3. Missing, mismatched and empty exact event filters do not trigger. A schedule changed after selection is rejected before session creation. Reopened legacy unzoned queues retain evidence and require explicit timezone review.
 
 **Source entry points:** [packages/opencode/src/kilocode/task/index.ts](../packages/opencode/src/kilocode/task/index.ts), [packages/opencode/src/kilocode/task/cron.ts](../packages/opencode/src/kilocode/task/cron.ts).
 
@@ -469,7 +471,7 @@ The following sections retain the full 39-item scope. Related findings and overh
 **Verification evidence:**
 
 1. Code inspection confirms each preview surface imports its production component; sample records supply state without recreating product markup or business logic.
-2. `bunx playwright test --config playwright.preview.config.ts` passes 47/47 Chromium cases. Coverage includes light/dark and narrow/wide composer, history, top navigation, file review and result views; current/legacy memory; the real Routine DM and organization flows; empty, loading, stale and error recovery; keyboard actions; 200% zoom; axe checks; and horizontal overflow.
+2. `bunx playwright test --config playwright.preview.config.ts` passes 48/48 Chromium cases. Coverage includes light/dark and narrow/wide composer, history, top navigation, file review and result views; current/legacy memory; the real Routine DM, organization and schedule-confirmation flows; empty, loading, stale and error recovery; keyboard actions; 200% zoom; axe checks; and horizontal overflow.
 3. Preview tests assert the `production-view` classification and exercise product controls, including composer input, history semantics, review/undo actions, goal criteria/result disclosure, Routine navigation, organization editing and recovery. A production markup/style change therefore reaches the same imported component in the report.
 
 **Original acceptance:** A production markup/style change appears in the corresponding preview. The visual report identifies real versus illustrative components and never attributes a fixture-only failure to production.
@@ -2344,4 +2346,10 @@ This checkpoint delivers the complete extension-side organization management cha
 
 UI-01 is fully Verified. ChatGPT inspected the preview implementation and confirmed that its goal, usage, memory, Routine, composer, history, review, top-navigation, user-message and transcript surfaces directly import production components. Narrow provider/sample-data adapters drive those components without copying their markup or business logic. Every report fixture is visibly labelled `Production view with sample data` and machine-labelled `data-preview-kind="production-view"`; no illustrative duplicate remains.
 
-`bunx playwright test --config playwright.preview.config.ts` passes 47/47 Chromium cases in 4.7 minutes. The suite exercises production controls across relevant light/dark and narrow/wide layouts, current/legacy memory, Routine DM and organization journeys, empty/loading/stale/error recovery, keyboard behavior, 200% zoom, axe rules and horizontal overflow. This directly satisfies UI-01's original preview-integrity acceptance. It is a verification-only documentation checkpoint, so no new VSIX is needed and installed product `8f12bbae99` remains current. Continue with PR-03 + EN-03, then the rest of the deterministic queue above.
+`bunx playwright test --config playwright.preview.config.ts` originally passed 47/47 Chromium cases and now passes 48/48 after adding the production schedule-confirmation journey. The suite exercises production controls across relevant light/dark and narrow/wide layouts, current/legacy memory, Routine DM and organization journeys, empty/loading/stale/error recovery, keyboard behavior, 200% zoom, axe rules and horizontal overflow. This directly satisfies UI-01's original preview-integrity acceptance. It is a verification-only checkpoint, so installed product `8f12bbae99` remains current.
+
+## ChatGPT 2026-09-12 22:53 America/Toronto — PR-03 and EN-03 verification receipt
+
+PR-03 and EN-03 are fully Verified. A new production-component Chromium journey opens Books → Edit schedule, selects Monday and Friday only at 09:00 in America/Toronto, previews the exact `0 9 * * 1,5` schedule and three occurrences, verifies confirmation admission, passes axe and overflow checks, then confirms through the correlated update acknowledgement. ChatGPT inspected the rendered editor under `docs/designer.md`; no product visual change was made.
+
+Deterministic evidence: 168 backend tests / 1,143 assertions across cron parsing, timezone/DST behavior, event selection/revalidation, forecast, catch-up, occurrence persistence, queue and scheduler; 39 extension tests / 94 assertions across phrases, forecast identity, stale edits, trigger disclosure and the actual editor; 48/48 production preview cases; extension host/webview typechecks; and full extension lint. The matrix proves Monday/Friday distinction, rejection rather than guessing for intervals/ambiguous phrases, the same intended local occurrence on differently zoned hosts, exact missing/mismatched filter rejection, explicit DST gaps/folds, one-minute recurring catch-up without backlog, retained one-time occurrences, immutable scheduled/observed evidence, and legacy timezone review holds. No changeset or snapshot reinstall is needed because this checkpoint adds verification coverage and documentation only. Continue with UX-03.

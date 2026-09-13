@@ -143,6 +143,36 @@ test("routines organization editor separates reporting, delegation, and archive"
   await page.screenshot({ path: info.outputPath("organization-editor.png"), fullPage: true })
 })
 
+test("production schedule preview keeps selected weekdays and timezone before confirmation", async ({ page }, info) => {
+  await page.setViewportSize({ width: 900, height: 900 })
+  await page.goto("/?state=light-routines")
+  await page.getByRole("button", { name: "Books options" }).click()
+  await page.getByRole("menuitem", { name: "Edit schedule" }).click()
+  await expect(page.getByRole("heading", { name: "Edit schedule" })).toBeVisible()
+
+  await page.getByLabel("Repeat").selectOption({ label: "Selected weekdays" })
+  for (const day of ["Tuesday", "Wednesday", "Thursday"]) await page.getByLabel(day, { exact: true }).uncheck()
+  await page.getByLabel("Time of day").fill("09:00")
+  await page.getByLabel("Calendar timezone").fill("America/Toronto")
+  await page.getByRole("button", { name: "Preview schedule" }).click()
+
+  const preview = page.getByRole("status")
+  await expect(preview).toContainText("0 9 * * 1,5")
+  await expect(preview).toContainText("Timezone: America/Toronto")
+  await expect(preview.locator("span").filter({ hasText: "2030" })).toHaveCount(3)
+  await expect(page.getByRole("button", { name: "Confirm schedule change" })).toBeEnabled()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  const result = await new AxeBuilder({ page })
+    .include(".routines-view")
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+    .analyze()
+  expect(result.violations).toEqual([])
+  await page.screenshot({ path: info.outputPath("schedule.png"), fullPage: true })
+
+  await page.getByRole("button", { name: "Confirm schedule change" }).click()
+  await expect(page.getByRole("heading", { name: "Edit schedule" })).toBeHidden()
+})
+
 test("narrow organization overview can return to the organization list", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 900 })
   await page.goto("/?state=light-routines")

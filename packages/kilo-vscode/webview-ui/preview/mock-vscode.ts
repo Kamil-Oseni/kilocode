@@ -46,6 +46,29 @@ const report = {
 
 const scene = new URLSearchParams(window.location.search).get("scene") ?? "ready"
 
+const calendar = (message: WebviewMessage) => {
+  if (message.type === "routineForecast") {
+    const schedule = message.schedule
+    if (!schedule) {
+      emit({ type: "routineForecast", requestID: message.requestID, error: "Choose a valid schedule." })
+      return true
+    }
+    const base = Date.parse("2030-01-07T14:00:00Z")
+    emit({
+      type: "routineForecast",
+      requestID: message.requestID,
+      forecastID: "preview-schedule",
+      schedule,
+      occurrences: schedule.kind === "cron" ? [base, base + 4 * 86_400_000, base + 7 * 86_400_000] : [],
+      timezone: schedule.kind === "cron" ? schedule.tz : undefined,
+    })
+    return true
+  }
+  if (message.type !== "routineScheduleUpdate") return false
+  emit({ type: "routineScheduleUpdated", requestID: message.requestID, agentID: message.agentID })
+  return true
+}
+
 const reply = (message: WebviewMessage) => {
   if (message.type === "webviewReady") {
     emit({
@@ -280,6 +303,7 @@ const reply = (message: WebviewMessage) => {
     })
     return
   }
+  if (calendar(message)) return
   if (message.type === "routineOrganizationUpdate") {
     if (scene === "conflict") {
       emit({

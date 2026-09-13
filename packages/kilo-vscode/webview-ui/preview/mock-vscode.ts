@@ -13,6 +13,7 @@ const books = {
   schedule: { kind: "manual" },
   enabled: true,
   access: "brief",
+  tools: ["read", "glob", "grep", "list", "mcp_accounting"],
 }
 
 const legal = {
@@ -186,6 +187,22 @@ const calendar = (message: WebviewMessage) => {
 }
 
 const preview = (message: WebviewMessage) => {
+  if (message.type === "routineAccessUpdate") {
+    books.access = message.access
+    books.tools = message.tools
+    setTimeout(
+      () =>
+        emit({
+          type: "routineAccessUpdated",
+          requestID: message.requestID,
+          agentID: message.agentID,
+          access: message.access,
+          tools: message.tools,
+        }),
+      0,
+    )
+    return true
+  }
   if (message.type === "routineInboxAttachmentPreview") {
     const sound = message.attachmentID === "123e4567-e89b-42d3-a456-426614174002"
     emit({

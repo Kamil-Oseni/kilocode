@@ -10,7 +10,7 @@ test("access review sends only a conditional update and correlates confirmation 
     fetch: async (input, init) => {
       const request = new Request(input, init)
       calls.push(request)
-      return Response.json({ id: "routine", access: "brief" })
+      return Response.json({ id: "routine", access: "brief", tools: ["read"] })
     },
   })
   const message = {
@@ -18,18 +18,26 @@ test("access review sends only a conditional update and correlates confirmation 
     requestID: "review",
     agentID: "routine",
     access: "brief",
+    tools: ["read"],
     expectedAccess: "unset",
+    expectedTools: "unset",
   }
   await handleRoutineMessage({ client, directory: "workspace", post: (msg) => messages.push(msg), message })
   expect(calls).toHaveLength(1)
   expect(calls[0].method).toBe("PATCH")
   expect(new URL(calls[0].url).searchParams.get("directory")).toBe("workspace")
-  expect(await calls[0].json()).toEqual({ access: "brief", expectedAccess: "unset" })
+  expect(await calls[0].json()).toEqual({
+    access: "brief",
+    tools: ["read"],
+    expectedAccess: "unset",
+    expectedTools: "unset",
+  })
   expect(messages[0]).toMatchObject({
     type: "routineAccessUpdated",
     requestID: "review",
     agentID: "routine",
     access: "brief",
+    tools: ["read"],
   })
   await handleRoutineMessage({
     client,
@@ -43,8 +51,20 @@ test("access review sends only a conditional update and correlates confirmation 
     requestID: "review",
     error: "Reload the routine before reviewing access.",
   })
-  await handleRoutineMessage({ client: null, directory: "workspace", post: (msg) => messages.push(msg), message })
+  await handleRoutineMessage({
+    client,
+    directory: "workspace",
+    post: (msg) => messages.push(msg),
+    message: { ...message, expectedTools: undefined },
+  })
+  expect(calls).toHaveLength(1)
   expect(messages[2]).toMatchObject({
+    type: "routineAccessUpdated",
+    requestID: "review",
+    error: "Reload the routine before reviewing access.",
+  })
+  await handleRoutineMessage({ client: null, directory: "workspace", post: (msg) => messages.push(msg), message })
+  expect(messages[3]).toMatchObject({
     type: "routineAccessUpdated",
     requestID: "review",
     error: "Raya is not connected.",
@@ -55,7 +75,7 @@ test("access review sends only a conditional update and correlates confirmation 
     post: (msg) => messages.push(msg),
     message: { ...message, access: "full", requestID: "mismatch" },
   })
-  expect(messages[3]).toMatchObject({
+  expect(messages[4]).toMatchObject({
     type: "routineAccessUpdated",
     requestID: "mismatch",
     error: "The saved access could not be confirmed. Reload the routine before trying again.",

@@ -163,7 +163,9 @@ export interface RoutineAccessUpdateMessage {
   requestID: string
   agentID: string
   access: "brief" | "full"
+  tools: string[]
   expectedAccess: "brief" | "full" | "unset"
+  expectedTools: string[] | "unset"
 }
 
 export interface RoutineRunMessage {

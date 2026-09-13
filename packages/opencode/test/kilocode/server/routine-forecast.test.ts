@@ -269,10 +269,15 @@ test("legacy access review is required before startup and saves only against the
   const reviewed = await app.request(url, {
     method: "PATCH",
     headers,
-    body: JSON.stringify({ access: "full", expectedAccess: "unset" }),
+    body: JSON.stringify({ access: "full", tools: ["read"], expectedAccess: "unset", expectedTools: "unset" }),
   })
   expect(reviewed.status).toBe(200)
-  expect(await reviewed.json()).toMatchObject({ access: "full", enabled: false, schedule: { kind: "manual" } })
+  expect(await reviewed.json()).toMatchObject({
+    access: "full",
+    tools: ["read"],
+    enabled: false,
+    schedule: { kind: "manual" },
+  })
   const stale = await app.request(url, {
     method: "PATCH",
     headers,
@@ -280,13 +285,20 @@ test("legacy access review is required before startup and saves only against the
   })
   expect(stale.status).toBe(400)
   expect(await stale.text()).toContain("access changed")
+  const staleTools = await app.request(url, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ access: "full", tools: [], expectedAccess: "full", expectedTools: "unset" }),
+  })
+  expect(staleTools.status).toBe(400)
+  expect(await staleTools.text()).toContain("tool access changed")
   const changed = await app.request(url, {
     method: "PATCH",
     headers,
-    body: JSON.stringify({ access: "brief", expectedAccess: "full" }),
+    body: JSON.stringify({ access: "brief", tools: [], expectedAccess: "full", expectedTools: ["read"] }),
   })
   expect(changed.status).toBe(200)
-  expect(await changed.json()).toMatchObject({ access: "brief", enabled: false })
+  expect(await changed.json()).toMatchObject({ access: "brief", tools: [], enabled: false })
   expect(await (await app.request(`${url}/runs`, { headers })).json()).toEqual([])
 }, 30_000)
 

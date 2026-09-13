@@ -29071,6 +29071,20 @@
                     "type": "string",
                     "enum": ["brief", "full", "unset"]
                   },
+                  "expectedTools": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["unset"]
+                      }
+                    ]
+                  },
                   "expectedOutput": {
                     "anyOf": [
                       {

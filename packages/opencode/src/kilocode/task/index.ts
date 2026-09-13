@@ -656,6 +656,7 @@ export namespace RayaTask {
         expectedSchedule?: Schedule
         expectedScheduleVersion?: number
         expectedAccess?: "brief" | "full" | "unset"
+        expectedTools?: readonly string[] | "unset"
         expectedOutput?: Output | "unset"
         expectedProvisioning?: boolean
         provisioning?: typeof Provisioning.Type
@@ -683,6 +684,12 @@ export namespace RayaTask {
           kind: "conflict",
           field: "access",
           message: "This routine's access changed. Reload it before reviewing access again.",
+        })
+      if (patch.expectedTools !== undefined && !isDeepStrictEqual(patch.expectedTools, prior.tools ?? "unset"))
+        return yield* new GuardError({
+          kind: "conflict",
+          field: "tools",
+          message: "This routine's tool access changed. Reload it before reviewing access again.",
         })
       if (patch.expectedScheduleVersion !== undefined && patch.expectedScheduleVersion !== (prior.scheduleVersion ?? 1))
         return yield* new GuardError({

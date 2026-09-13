@@ -9963,6 +9963,7 @@ export class Routine extends HeyApiClient {
             kind: "manual"
           }
       expectedAccess?: "brief" | "full" | "unset"
+      expectedTools?: Array<string> | "unset"
       expectedOutput?:
         | {
             destination: "conversation"
@@ -10007,6 +10008,7 @@ export class Routine extends HeyApiClient {
             { in: "body", key: "schedule" },
             { in: "body", key: "expectedSchedule" },
             { in: "body", key: "expectedAccess" },
+            { in: "body", key: "expectedTools" },
             { in: "body", key: "expectedOutput" },
             { in: "body", key: "expectedScheduleVersion" },
             { in: "body", key: "avatar" },

@@ -58,6 +58,7 @@ type Agent = {
   nextRun?: number
   execution?: Execution
   access?: "full" | "brief"
+  tools?: string[]
   dir?: string
   mode?: string
   plan?: string
@@ -1759,7 +1760,9 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                   schedule={whenLabel(item.schedule)}
                   access={
                     item.access === "full"
-                      ? "Full tool access"
+                      ? item.tools === undefined || item.tools.includes("*")
+                        ? "All tools"
+                        : "Selected tools"
                       : item.access === "brief"
                         ? "Read and report"
                         : "Needs review"

@@ -283,6 +283,14 @@ function tools(msg: Msg) {
   return msg.tools.filter((item): item is string => typeof item === "string")
 }
 
+function reviewTools(value: unknown) {
+  if (!Array.isArray(value) || value.length > 128) return
+  if (value.some((item) => typeof item !== "string" || !item.trim() || item.length > 128)) return
+  const items = value.map((item) => String(item).trim())
+  if (new Set(items).size !== items.length) return
+  return items
+}
+
 function capabilities(msg: Msg) {
   if (!Array.isArray(msg.capabilities)) return
   return msg.capabilities.filter((item): item is string => typeof item === "string")
@@ -779,6 +787,8 @@ async function update(ctx: Ctx) {
 
 async function review(ctx: Ctx) {
   const msg = ctx.message
+  const selected = reviewTools(msg.tools)
+  const expected = msg.expectedTools === "unset" ? "unset" : reviewTools(msg.expectedTools)
   if (
     typeof msg.requestID !== "string" ||
     !msg.requestID ||
@@ -787,7 +797,9 @@ async function review(ctx: Ctx) {
     !msg.agentID ||
     msg.agentID.length > 256 ||
     (msg.access !== "brief" && msg.access !== "full") ||
-    (msg.expectedAccess !== "unset" && msg.expectedAccess !== "brief" && msg.expectedAccess !== "full")
+    (msg.expectedAccess !== "unset" && msg.expectedAccess !== "brief" && msg.expectedAccess !== "full") ||
+    selected === undefined ||
+    expected === undefined
   )
     throw new Error("Reload the routine before reviewing access.")
   const result = await ctx.kilo.update(
@@ -795,13 +807,25 @@ async function review(ctx: Ctx) {
       directory: ctx.dir,
       agentID: msg.agentID,
       access: msg.access,
+      tools: selected,
       expectedAccess: msg.expectedAccess,
+      expectedTools: expected,
     },
     { throwOnError: true },
   )
-  if (result.data?.id !== msg.agentID || result.data.access !== msg.access)
+  if (
+    result.data?.id !== msg.agentID ||
+    result.data.access !== msg.access ||
+    !isDeepStrictEqual(result.data.tools, selected)
+  )
     throw new Error("The saved access could not be confirmed. Reload the routine before trying again.")
-  ctx.post({ type: "routineAccessUpdated", requestID: msg.requestID, agentID: msg.agentID, access: result.data.access })
+  ctx.post({
+    type: "routineAccessUpdated",
+    requestID: msg.requestID,
+    agentID: msg.agentID,
+    access: result.data.access,
+    tools: result.data.tools,
+  })
 }
 
 async function output(ctx: Ctx) {

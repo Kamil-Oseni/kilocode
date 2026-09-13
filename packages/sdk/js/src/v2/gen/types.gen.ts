@@ -21792,6 +21792,7 @@ export type KilocodeRoutineUpdateData = {
           kind: "manual"
         }
     expectedAccess?: "brief" | "full" | "unset"
+    expectedTools?: Array<string> | "unset"
     expectedOutput?:
       | {
           destination: "conversation"

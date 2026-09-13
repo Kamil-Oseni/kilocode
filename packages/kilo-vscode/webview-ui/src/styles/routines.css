@@ -111,6 +111,31 @@
   font: inherit;
 }
 
+.routines-tool-scope {
+  min-width: 0;
+  margin: var(--raya-space-12) 0 0;
+  padding: var(--raya-space-10) 0 0;
+  border: 0;
+  border-top: 1px solid var(--border-weak, var(--vscode-widget-border));
+}
+
+.routines-tool-scope legend {
+  padding: 0;
+  margin-bottom: var(--raya-space-8);
+  font-weight: 500;
+}
+
+.routines-tool-scope [data-component="checkbox"] + [data-component="checkbox"] {
+  margin-top: var(--raya-space-6);
+}
+
+.routines-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--raya-space-6);
+  margin-top: var(--raya-space-12);
+}
+
 .routines-instructions pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;

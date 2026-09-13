@@ -11653,7 +11653,8 @@ export class Voice extends HeyApiClient {
    * Mint thin-client and media-frontend room credentials without exposing provider secrets.
    */
   public start<ThrowOnError extends boolean = false>(
-    parameters?: {
+    parameters: {
+      "x-raya-media-key": string
       directory?: string
       workspace?: string
       parentSessionID?: string
@@ -11667,6 +11668,7 @@ export class Voice extends HeyApiClient {
       [
         {
           args: [
+            { in: "headers", key: "x-raya-media-key" },
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "body", key: "parentSessionID" },

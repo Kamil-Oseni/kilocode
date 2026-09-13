@@ -17,7 +17,7 @@ The contract regression imports the exact launch arguments used by `ServerManage
 | Link | Current behavior | Boundary or remaining work |
 |---|---|---|
 | Extension to CLI voice control | Managed backend HTTP with generated Basic credentials | Carries session and directory context, not independent tenant authentication. |
-| Extension to media frontend | Numeric loopback HTTP origin; default `http://127.0.0.1:7890` | Control handlers currently have no service authentication. Remote/shared deployment is unavailable. |
+| Extension to media frontend | Numeric loopback HTTP origin; default `http://127.0.0.1:7890`; shared service key plus per-session bearer capability | Keys stay in the extension host, managed CLI and companion. Remote/shared deployment is unavailable. |
 | Media frontend listener | Native default `127.0.0.1:7890`; numeric loopback addresses are accepted directly | Any wildcard, hostname, LAN or public bind requires the exact opt-in `RAYA_MF_ALLOW_NON_LOOPBACK=1`. |
 | Docker media frontend | Listens on `0.0.0.0` inside the container through the explicit non-loopback opt-in; Compose publishes host `127.0.0.1:7890` | Host publication and container-network reachability remain different boundaries. The opt-in records deployment intent; it does not authenticate container-network callers. |
 | Media frontend to backend | Voice events carry the supplied backend authorization and directory to a validated numeric loopback HTTP origin | Redirects are refused. Remote callbacks are unavailable. |
@@ -35,7 +35,6 @@ The regression uses in-memory storage adapters and synthetic credentials to test
 
 ## Remaining acceptance work
 
-- Add media-control service authentication and browser-origin handling for the explicitly selected local native or container deployment.
 - Complete handler/provider lifecycle limits and observe cancellation and cleanup after HTTP transport deadlines, without applying short HTTP timeouts to long-lived audio sessions.
 - Preserve initial destination validation and redirect refusal before sending credentials. Endpoint authentication remains separate.
 - Exercise authenticated and unauthenticated requests on actual managed sockets, abrupt parent exit and cross-window ownership.
@@ -74,3 +73,22 @@ The media companion now refuses any listener address that is not a numeric loopb
 The checked-in Compose deployment declares the opt-in because its process must listen on the container wildcard address; its published host ports remain pinned to `127.0.0.1`. The flag makes that exposure decision reviewable but does not authenticate callers already inside the container network. Remote/shared deployment remains unsupported.
 
 ChatGPT verified this boundary on 2026-09-13 with 11 focused address cases, the uncached full companion suite, `go vet ./...`, and a 10,156,544-byte native rebuild. The Docker image was not built or deployed in this checkpoint to avoid an unnecessary high-memory operation.
+
+## Media control authentication and browser boundary
+
+Every `/v1/` control request now requires two independent credentials. `RAYA_MF_TOKEN` is a 32-byte base64url service key shared through the environment of VS Code and the media companion. The managed backend launcher explicitly removes it from the CLI environment so tool child processes cannot inherit it. The extension transmits it once to the authenticated loopback CLI in a credential header; the CLI retains it only in the live voice entry and mints a separate random 32-byte control capability for that session. The extension host sends both values only in headers when it admits or closes media work. The CLI uses both for context injection. The service key is neither included in JSON bodies nor persisted in Raya state. The session capability is persisted with the voice session so a restored backend does not silently replace its ownership credential, and older stored sessions receive one during migration.
+
+The companion stores only a SHA-256 digest of each active session capability and compares both credentials in constant time. A missing, malformed or incorrect service key or bearer capability returns `401` before parsing a control body or allocating voice/room resources. A capability for one session cannot read, inject into or close another. `/healthz` remains credential-free for local process readiness.
+
+Browser-origin requests are refused with `403` before reaching `/v1/` handlers when they carry `Origin` or `Sec-Fetch-Site`. Browser requests that attempt a custom credential header must also pass a CORS preflight, and the service exposes no CORS permission. Node and Go control clients send neither browser header. This policy is defense in depth around the authenticated loopback service; it is not a claim that hostile processes running as the same OS user are isolated.
+
+Generate a key with `bun run --silent voice:key`, then set `RAYA_MF_TOKEN` in the shell that starts the companion and VS Code. For the checked-in development stack on PowerShell:
+
+```powershell
+$env:RAYA_MF_TOKEN = (bun run --silent voice:key).Trim()
+bun run extension:voice
+```
+
+Compose refuses to start `raya-mf` without the variable. Rotating the key requires restarting both the companion and Raya because existing service-key authorization becomes invalid. GPT-Live and OpenAI Realtime do not use this separate Qwen media companion.
+
+ChatGPT verified this boundary on 2026-09-13 with the real Go router, service-key parser, browser filter and ownership manager; 49 extension broker tests with 370 assertions; 34 managed-server environment tests with 58 assertions; 19 focused CLI voice tests with 122 assertions; the generated API contract with 11 assertions; the uncached full companion suite; `go vet ./...`; extension-host and SDK typechecks; and a 10,168,832-byte native rebuild. The key generator emits exactly one 43-character base64url value. No paid provider, microphone or Docker deployment was used.

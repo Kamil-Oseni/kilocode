@@ -347,10 +347,11 @@ describe("server workspace helpers", () => {
     expect(resolveIndexingEnv([{ uri: { fsPath: "/repo" } }])).toEqual({})
   })
 
-  it("disables unused managed-backend services while preserving the environment", () => {
+  it("disables unused services, strips the media key, and preserves the safe environment", () => {
     expect(
       resolveManagedServerEnv({
         PATH: "/usr/bin",
+        RAYA_MF_TOKEN: "media-service-key",
         KILO_DISABLE_CHANNEL_DB: "false",
         KILO_EXPERIMENTAL_DISABLE_FILEWATCHER: "false",
       }),

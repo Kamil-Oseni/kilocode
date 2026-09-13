@@ -11,7 +11,7 @@ import { VoiceSessionID, type Envelope, type State } from "@/kilocode/voice/prot
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(LayerNode.compile(LayerNode.group([Storage.node, FSUtil.node, CrossSpawnSpawner.node, Git.node])))
-function fixture(id: VoiceSessionID) {
+function fixture(id: VoiceSessionID, legacy = false) {
   return {
     info: {
       id,
@@ -20,6 +20,7 @@ function fixture(id: VoiceSessionID) {
       livekitURL: "ws://unused.invalid",
       clientToken: "synthetic",
       mediaToken: "synthetic",
+      ...(legacy ? {} : { controlToken: "synthetic-control-capability" }),
       mediaURL: "http://unused.invalid",
       engine: "qwen-realtime" as const,
       acceptsTruncation: false,
@@ -32,6 +33,17 @@ function fixture(id: VoiceSessionID) {
     turns: [],
   }
 }
+
+it.live("mints and persists a control capability for legacy voice state", () =>
+  Effect.gen(function* () {
+    const storage = yield* Storage.Service
+    const id = VoiceSessionID.make(`rvs_${crypto.randomUUID()}`)
+    yield* storage.write(["raya_voice", id], fixture(id, true))
+    const first = yield* service(storage).get(id)
+    expect(first?.info.controlToken).toMatch(/^[A-Za-z0-9_-]{43}$/)
+    expect((yield* service(storage).get(id))?.info.controlToken).toBe(first?.info.controlToken)
+  }),
+)
 function service(storage: Storage.Interface) {
   return RayaVoice.make({
     storage,

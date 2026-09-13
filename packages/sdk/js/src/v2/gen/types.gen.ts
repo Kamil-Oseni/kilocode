@@ -26647,6 +26647,9 @@ export type KilocodeVoiceStartData = {
     mediaURL: string
     room?: string
   }
+  headers: {
+    "x-raya-media-key": string
+  }
   path?: never
   query?: {
     directory?: string
@@ -26679,6 +26682,7 @@ export type KilocodeVoiceStartResponses = {
     livekitURL: string
     clientToken: string
     mediaToken: string
+    controlToken: string
     mediaURL: string
     engine: "qwen-realtime"
     acceptsTruncation: boolean
@@ -26760,6 +26764,7 @@ export type KilocodeVoiceStateResponses = {
       livekitURL: string
       clientToken: string
       mediaToken: string
+      controlToken: string
       mediaURL: string
       engine: "qwen-realtime"
       acceptsTruncation: boolean

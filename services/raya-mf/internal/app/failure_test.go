@@ -237,7 +237,7 @@ func TestFailureOutcomeRemainsReadableThroughManagerUntilSuccessfulClose(t *test
 	media := &failingRoom{fakeRoom: newFakeRoom(), code: "both_reports"}
 	manager := NewManager(joining{join: func(context.Context) (room.Room, error) { return media, nil }})
 	manager.engine = opening{open: func(context.Context) (engine.Session, error) { return voice, nil }}
-	if _, err := manager.Start(context.Background(), wire.Start{ID: "retained"}); err != nil {
+	if _, err := manager.Start(context.Background(), wire.Start{ID: "retained"}, mediaAuth); err != nil {
 		t.Fatal(err)
 	}
 	manager.mu.RLock()
@@ -246,23 +246,26 @@ func TestFailureOutcomeRemainsReadableThroughManagerUntilSuccessfulClose(t *test
 	voice.events <- engine.Event{Type: "engine.error", Text: secret.Error()}
 	finished(t, session)
 	for range 2 {
-		if !errors.Is(manager.Close("retained"), secret) {
+		if !errors.Is(manager.Close("retained", mediaAuth), secret) {
 			t.Fatal("close lost cleanup error")
 		}
-		status, found := manager.Status("retained")
+		status, found, err := manager.Status("retained", mediaAuth)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if !found || status.Failure == nil || status.Cleanup != "failed" || status.BackendReport != "not_configured" {
 			t.Fatalf("status = %#v, found %v", status, found)
 		}
 	}
 	healthy := NewManager(joining{join: func(context.Context) (room.Room, error) { return newFakeRoom(), nil }})
 	healthy.engine = opening{open: func(context.Context) (engine.Session, error) { return newFakeEngine(), nil }}
-	if _, err := healthy.Start(context.Background(), wire.Start{ID: "healthy"}); err != nil {
+	if _, err := healthy.Start(context.Background(), wire.Start{ID: "healthy"}, mediaAuth); err != nil {
 		t.Fatal(err)
 	}
-	if err := healthy.Close("healthy"); err != nil {
+	if err := healthy.Close("healthy", mediaAuth); err != nil {
 		t.Fatal(err)
 	}
-	if _, found := healthy.Status("healthy"); found {
+	if _, found, err := healthy.Status("healthy", mediaAuth); err != nil || found {
 		t.Fatal("successful close retained session")
 	}
 }

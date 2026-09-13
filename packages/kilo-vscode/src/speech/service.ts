@@ -5,7 +5,14 @@ import { transcribe } from "./openai-stt"
 import { SpeechSettingsStore, type SpeechSettings } from "./settings"
 import { VoiceReplies } from "./replies"
 import { getErrorMessage } from "../kilo-provider-utils"
-import { cancelSpeechCapture, startSpeechCapture, stopSpeechCapture, startLiveCapture, stopLiveCapture, cancelLiveCapture } from "../speech-to-text/capture" // raya_change - native fallback when VS Code denies webview mic access
+import {
+  cancelSpeechCapture,
+  startSpeechCapture,
+  stopSpeechCapture,
+  startLiveCapture,
+  stopLiveCapture,
+  cancelLiveCapture,
+} from "../speech-to-text/capture" // raya_change - native fallback when VS Code denies webview mic access
 import type { KiloConnectionService } from "../services/cli-backend/connection-service" // raya_change - realtime voice session broker
 import { RealtimeBroker } from "./realtime-broker"
 import { voiceFallback } from "./fallback" // raya_change - explicit three-rung degradation
@@ -104,8 +111,7 @@ export class SpeechService implements vscode.Disposable {
     input: { sessionID: string; directory: string; connection: KiloConnectionService },
     post: Post,
   ): Promise<void> {
-    const failed = (error: string) =>
-      post({ type: "speechRealtimeError", code: "busy", error })
+    const failed = (error: string) => post({ type: "speechRealtimeError", code: "busy", error })
     if (!(await this.admit(failed))) return
     if (this.openai.active || this.live.active || this.realtime.active) {
       failed("End the existing OpenAI voice call before switching engines.")
@@ -127,6 +133,15 @@ export class SpeechService implements vscode.Disposable {
         if (!key) {
           return { ok: false, code: "configuration", error: "Add the Qwen realtime key in Speech settings.", fallback }
         }
+        const mediaKey = process.env.RAYA_MF_TOKEN?.trim()
+        if (!mediaKey || !/^[A-Za-z0-9_-]{43}$/.test(mediaKey)) {
+          return {
+            ok: false,
+            code: "configuration",
+            error: "Set RAYA_MF_TOKEN to the same 32-byte base64url key used by the media service.",
+            fallback,
+          }
+        }
         await input.connection.getClientAsync(input.directory)
         const server = input.connection.getServerConfig()
         if (!server) throw new Error("Raya backend is not connected")
@@ -136,6 +151,7 @@ export class SpeechService implements vscode.Disposable {
           backendURL: server.baseUrl,
           auth: `Basic ${Buffer.from(`kilo:${server.password}`).toString("base64")}`,
           key,
+          mediaKey,
           settings,
         }
       },
@@ -240,7 +256,8 @@ export class SpeechService implements vscode.Disposable {
       { requestID: input.requestId, sessionID: input.sessionID, sdp: input.sdp },
       async (signal) => {
         const settings = await this.settings.load()
-        if (settings.voiceEngine !== "openai-live") throw new Error("GPT-Live voice is not selected in Speech settings.")
+        if (settings.voiceEngine !== "openai-live")
+          throw new Error("GPT-Live voice is not selected in Speech settings.")
         const key = await this.settings.key("openai")
         if (!key) throw new Error("GPT-Live requires an OpenAI API key in Speech settings.")
         if (!/^[a-z][a-z0-9_-]{0,63}$/.test(settings.openaiVoice)) throw new Error("OpenAI voice name is invalid.")
@@ -251,11 +268,16 @@ export class SpeechService implements vscode.Disposable {
         const context = await loadVoiceContext(client, input.sessionID, input.directory, signal, current)
         if (!current()) throw new Error("The voice connection or workspace changed.")
         return {
-          key, voice: settings.openaiVoice, backend: server.baseUrl,
+          key,
+          voice: settings.openaiVoice,
+          backend: server.baseUrl,
           authorization: `Basic ${Buffer.from(`kilo:${server.password}`).toString("base64")}`,
-          directory: input.directory, current, context: context.text,
+          directory: input.directory,
+          current,
+          context: context.text,
           started: () => post({ type: "speechLiveStarted", requestId: input.requestId }),
-          usage: (usage) => post({ type: "speechLiveUsage", requestId: input.requestId, sessionID: input.sessionID, usage }),
+          usage: (usage) =>
+            post({ type: "speechLiveUsage", requestId: input.requestId, sessionID: input.sessionID, usage }),
         }
       },
       (answer) => post({ type: "speechOpenAIReady", requestId: input.requestId, sdp: answer.sdp }),
@@ -464,7 +486,13 @@ export class SpeechService implements vscode.Disposable {
     const text = await this.replies.wait(sessionID)
     if (!text) return
     const settings = await this.settings.load()
-    if (settings.mode === "off" || ["openai-realtime", "openai-live"].includes(settings.voiceEngine) || this.openai.active || this.live.active) return
+    if (
+      settings.mode === "off" ||
+      ["openai-realtime", "openai-live"].includes(settings.voiceEngine) ||
+      this.openai.active ||
+      this.live.active
+    )
+      return
     await this.speak({ requestId: crypto.randomUUID(), text: speakable(text) }, post)
   }
   // raya_change end

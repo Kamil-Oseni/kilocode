@@ -28,6 +28,7 @@
     "dev:local": "bun run packages/opencode/script/dev-local.ts",
     "voice:stack": "docker compose -f services/raya-mf/docker-compose.yml up -d --build",
     "voice:stack:down": "docker compose -f services/raya-mf/docker-compose.yml down",
+    "voice:key": "bun run script/voice-key.ts",
     "voice:test": "go -C services/raya-mf test ./...",
     "voice:probe:qwen": "go -C services/raya-mf run ./cmd/qwen-probe",
     "release:evidence": "bun run --cwd packages/kilo-vscode release:evidence"

@@ -33,7 +33,7 @@ func TestLocalDestination(t *testing.T) {
 			t.Fatalf("expected %q to be rejected", input)
 		}
 		manager := NewManager(nil)
-		if _, err := manager.Start(context.Background(), wire.Start{BackendURL: input}); err == nil {
+		if _, err := manager.Start(context.Background(), wire.Start{BackendURL: input}, mediaAuth); err == nil {
 			t.Fatalf("manager accepted %q", input)
 		}
 		if len(manager.sessions) != 0 {

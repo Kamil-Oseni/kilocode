@@ -12,6 +12,8 @@ import (
 	"github.com/Kilo-Org/kilocode/services/raya-mf/internal/wire"
 )
 
+const mediaAuth = "0123456789abcdef0123456789abcdef"
+
 type opening struct {
 	open func(context.Context) (engine.Session, error)
 }
@@ -65,13 +67,13 @@ func TestManagerClaimsBeforeAllocationAndRetainsLifetime(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), struct{}{}, "trace"))
 	defer cancel()
 	done := make(chan error, 1)
-	go func() { _, err := manager.Start(ctx, wire.Start{ID: "same"}); done <- err }()
+	go func() { _, err := manager.Start(ctx, wire.Start{ID: "same"}, mediaAuth); done <- err }()
 	lifetime := <-entered
 	if lifetime.Value(struct{}{}) != "trace" {
 		t.Fatal("setup lost request context values")
 	}
 	for range 20 {
-		if _, err := manager.Start(context.Background(), wire.Start{ID: "same"}); err == nil {
+		if _, err := manager.Start(context.Background(), wire.Start{ID: "same"}, mediaAuth); err == nil {
 			t.Fatal("duplicate admitted")
 		}
 	}
@@ -86,7 +88,7 @@ func TestManagerClaimsBeforeAllocationAndRetainsLifetime(t *testing.T) {
 	if lifetime.Err() != nil {
 		t.Fatal("request cancellation stopped established engine")
 	}
-	if err := manager.Close("same"); err != nil {
+	if err := manager.Close("same", mediaAuth); err != nil {
 		t.Fatal(err)
 	}
 	if lifetime.Err() == nil || voice.count.Load() != 1 {
@@ -106,11 +108,11 @@ func TestManagerStopDuringSetupReleasesBeforeReplacement(t *testing.T) {
 	manager.engine = opening{open: func(context.Context) (engine.Session, error) { return voice, nil }}
 	start := make(chan error, 1)
 	stop := make(chan error, 1)
-	go func() { _, err := manager.Start(context.Background(), wire.Start{ID: "same"}); start <- err }()
+	go func() { _, err := manager.Start(context.Background(), wire.Start{ID: "same"}, mediaAuth); start <- err }()
 	<-entered
-	go func() { stop <- manager.Close("same") }()
+	go func() { stop <- manager.Close("same", mediaAuth) }()
 	<-closing
-	if _, err := manager.Start(context.Background(), wire.Start{ID: "same"}); err == nil {
+	if _, err := manager.Start(context.Background(), wire.Start{ID: "same"}, mediaAuth); err == nil {
 		t.Fatal("replacement allocated during teardown")
 	}
 	close(release)
@@ -122,13 +124,13 @@ func TestManagerStopDuringSetupReleasesBeforeReplacement(t *testing.T) {
 	}
 	manager.rooms = joining{join: func(context.Context) (room.Room, error) { return newFakeRoom(), nil }}
 	manager.engine = opening{open: func(context.Context) (engine.Session, error) { return newFakeEngine(), nil }}
-	if _, err := manager.Start(context.Background(), wire.Start{ID: "same"}); err != nil {
+	if _, err := manager.Start(context.Background(), wire.Start{ID: "same"}, mediaAuth); err != nil {
 		t.Fatal(err)
 	}
 	if err := manager.CloseAll(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := manager.Start(context.Background(), wire.Start{ID: "other"}); err == nil {
+	if _, err := manager.Start(context.Background(), wire.Start{ID: "other"}, mediaAuth); err == nil {
 		t.Fatal("start after shutdown admitted")
 	}
 }
@@ -147,13 +149,40 @@ func TestManagerFailedSetupCanRetryAfterSuccessfulCleanup(t *testing.T) {
 	manager := NewManager(joining{join: func(context.Context) (room.Room, error) { return nil, setup }})
 	manager.engine = opening{open: func(context.Context) (engine.Session, error) { return voice, nil }}
 	for range 2 {
-		_, err := manager.Start(context.Background(), wire.Start{ID: "retry"})
+		_, err := manager.Start(context.Background(), wire.Start{ID: "retry"}, mediaAuth)
 		if !errors.Is(err, setup) {
 			t.Fatalf("errors lost: %v", err)
 		}
 	}
 	if voice.count.Load() != 2 {
 		t.Fatal("setup leaked engine")
+	}
+}
+
+func TestManagerRequiresExactSessionCapability(t *testing.T) {
+	manager := NewManager(joining{join: func(context.Context) (room.Room, error) { return newFakeRoom(), nil }})
+	manager.engine = opening{open: func(context.Context) (engine.Session, error) { return newFakeEngine(), nil }}
+	if _, err := manager.Start(context.Background(), wire.Start{ID: "protected"}, "short"); !errors.Is(err, ErrAuthorization) {
+		t.Fatalf("short capability accepted: %v", err)
+	}
+	if _, err := manager.Start(context.Background(), wire.Start{ID: "protected"}, mediaAuth); err != nil {
+		t.Fatal(err)
+	}
+	wrong := "fedcba9876543210fedcba9876543210"
+	if _, found, err := manager.Status("protected", wrong); !found || !errors.Is(err, ErrAuthorization) {
+		t.Fatalf("wrong status capability = found %t, error %v", found, err)
+	}
+	if err := manager.Inject(context.Background(), "protected", wrong, engine.ContextItem{}); !errors.Is(err, ErrAuthorization) {
+		t.Fatalf("wrong inject capability = %v", err)
+	}
+	if err := manager.Close("protected", wrong); !errors.Is(err, ErrAuthorization) {
+		t.Fatalf("wrong close capability = %v", err)
+	}
+	if _, found, err := manager.Status("protected", mediaAuth); err != nil || !found {
+		t.Fatalf("owner lost session after refused control: found %t, error %v", found, err)
+	}
+	if err := manager.Close("protected", mediaAuth); err != nil {
+		t.Fatal(err)
 	}
 }
 func TestConcurrentSessionCloseRetainsError(t *testing.T) {
@@ -181,16 +210,16 @@ func TestManagerRetainsActiveOwnerUntilCleanupFinishes(t *testing.T) {
 	manager := NewManager(joining{join: func(context.Context) (room.Room, error) { return newFakeRoom(), nil }})
 	var allocations atomic.Int32
 	manager.engine = opening{open: func(context.Context) (engine.Session, error) { allocations.Add(1); return voice, nil }}
-	if _, err := manager.Start(context.Background(), wire.Start{ID: "same"}); err != nil {
+	if _, err := manager.Start(context.Background(), wire.Start{ID: "same"}, mediaAuth); err != nil {
 		t.Fatal(err)
 	}
 	done := make(chan error, 1)
-	go func() { done <- manager.Close("same") }()
+	go func() { done <- manager.Close("same", mediaAuth) }()
 	<-entered
-	if _, err := manager.Start(context.Background(), wire.Start{ID: "same"}); err == nil {
+	if _, err := manager.Start(context.Background(), wire.Start{ID: "same"}, mediaAuth); err == nil {
 		t.Fatal("replacement admitted before cleanup")
 	}
-	if err := manager.Inject(context.Background(), "same", engine.ContextItem{}); err == nil {
+	if err := manager.Inject(context.Background(), "same", mediaAuth, engine.ContextItem{}); err == nil {
 		t.Fatal("injected while stopping")
 	}
 	if allocations.Load() != 1 {
@@ -201,7 +230,7 @@ func TestManagerRetainsActiveOwnerUntilCleanupFinishes(t *testing.T) {
 		t.Fatal(err)
 	}
 	manager.engine = opening{open: func(context.Context) (engine.Session, error) { return newFakeEngine(), nil }}
-	if _, err := manager.Start(context.Background(), wire.Start{ID: "same"}); err != nil {
+	if _, err := manager.Start(context.Background(), wire.Start{ID: "same"}, mediaAuth); err != nil {
 		t.Fatal(err)
 	}
 	if err := manager.CloseAll(); err != nil {
@@ -217,7 +246,7 @@ func TestManagerRequestCancellationReleasesSetupClaim(t *testing.T) {
 	manager.engine = opening{open: func(ctx context.Context) (engine.Session, error) { close(entered); <-ctx.Done(); return nil, ctx.Err() }}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { _, err := manager.Start(ctx, wire.Start{ID: "cancel"}); done <- err }()
+	go func() { _, err := manager.Start(ctx, wire.Start{ID: "cancel"}, mediaAuth); done <- err }()
 	<-entered
 	cancel()
 	if err := result(t, done); !errors.Is(err, context.Canceled) {
@@ -243,14 +272,17 @@ func TestManagerStopReportsSetupCleanupFailure(t *testing.T) {
 			manager.engine = opening{open: func(context.Context) (engine.Session, error) { return voice, nil }}
 			start := make(chan error, 1)
 			stop := make(chan error, 1)
-			go func() { _, err := manager.Start(context.Background(), wire.Start{ID: "cleanup"}); start <- err }()
+			go func() {
+				_, err := manager.Start(context.Background(), wire.Start{ID: "cleanup"}, mediaAuth)
+				start <- err
+			}()
 			<-entered
 			go func() {
 				if shutdown {
 					stop <- manager.CloseAll()
 					return
 				}
-				stop <- manager.Close("cleanup")
+				stop <- manager.Close("cleanup", mediaAuth)
 			}()
 			<-cleanup
 			close(release)
@@ -260,10 +292,10 @@ func TestManagerStopReportsSetupCleanupFailure(t *testing.T) {
 			if err := result(t, stop); !errors.Is(err, failure) {
 				t.Fatalf("stop lost cleanup error: %v", err)
 			}
-			if err := manager.Close("cleanup"); !errors.Is(err, failure) {
+			if err := manager.Close("cleanup", mediaAuth); !errors.Is(err, failure) {
 				t.Fatalf("repeated stop lost cleanup failure: %v", err)
 			}
-			if _, err := manager.Start(context.Background(), wire.Start{ID: "cleanup"}); err == nil {
+			if _, err := manager.Start(context.Background(), wire.Start{ID: "cleanup"}, mediaAuth); err == nil {
 				t.Fatal("replacement admitted after uncertain cleanup")
 			}
 		})
@@ -275,14 +307,14 @@ func TestManagerRetainsActiveClaimAfterCleanupFailure(t *testing.T) {
 	voice := &closing{fakeEngine: newFakeEngine(), close: func() error { return failure }}
 	manager := NewManager(joining{join: func(context.Context) (room.Room, error) { return newFakeRoom(), nil }})
 	manager.engine = opening{open: func(context.Context) (engine.Session, error) { return voice, nil }}
-	if _, err := manager.Start(context.Background(), wire.Start{ID: "failed"}); err != nil {
+	if _, err := manager.Start(context.Background(), wire.Start{ID: "failed"}, mediaAuth); err != nil {
 		t.Fatal(err)
 	}
 	for range 2 {
-		if err := manager.Close("failed"); !errors.Is(err, failure) {
+		if err := manager.Close("failed", mediaAuth); !errors.Is(err, failure) {
 			t.Fatalf("close failure lost: %v", err)
 		}
-		if _, err := manager.Start(context.Background(), wire.Start{ID: "failed"}); err == nil {
+		if _, err := manager.Start(context.Background(), wire.Start{ID: "failed"}, mediaAuth); err == nil {
 			t.Fatal("uncertain cleanup allowed replacement")
 		}
 	}

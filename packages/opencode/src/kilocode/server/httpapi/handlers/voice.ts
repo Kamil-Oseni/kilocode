@@ -166,8 +166,8 @@ export const voiceHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-voice",
           )
         }).pipe(Effect.catchTag("VoiceError", (error) => Effect.fail(failure(error)))),
       )
-      .handle("voiceStart", (ctx: { payload: typeof Start.Type }) =>
-        voice.start(ctx.payload).pipe(
+      .handle("voiceStart", (ctx: { headers: { "x-raya-media-key": string }; payload: typeof Start.Type }) =>
+        voice.start(ctx.payload, ctx.headers["x-raya-media-key"]).pipe(
           Effect.catchTag("NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
           Effect.catchTag("RayaVoice.InputError", () => Effect.fail(new HttpApiError.BadRequest({}))),
         ),

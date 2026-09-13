@@ -30,12 +30,14 @@ export function resolveIndexingEnv(folders: readonly WorkspaceFolderLike[] | und
 }
 
 export function resolveManagedServerEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  return {
+  const resolved: NodeJS.ProcessEnv = {
     ...env,
     KILO_DISABLE_CHANNEL_DB: "true",
     // VS Code does not consume the backend's file.watcher.updated events.
     KILO_EXPERIMENTAL_DISABLE_FILEWATCHER: "true",
   }
+  delete resolved.RAYA_MF_TOKEN
+  return resolved
 }
 
 export class ServerManager {

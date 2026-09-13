@@ -41,6 +41,7 @@ export const VoicePaths = {
 } as const
 
 const headers = { "x-raya-voice-key": Schema.optional(Schema.String) }
+const mediaHeaders = { "x-raya-media-key": Schema.String }
 const errors = [
   HttpApiError.BadRequest,
   HttpApiError.NotFound,
@@ -199,6 +200,7 @@ export const VoiceApi = HttpApi.make("raya-voice").add(
     )
     .add(
       HttpApiEndpoint.post("voiceStart", VoicePaths.start, {
+        headers: mediaHeaders,
         query: WorkspaceRoutingQuery,
         payload: Start,
         success: described(State.fields.info, "Realtime voice session connection"),

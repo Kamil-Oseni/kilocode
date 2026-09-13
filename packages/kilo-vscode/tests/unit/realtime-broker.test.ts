@@ -12,7 +12,7 @@ function gate() {
 }
 
 function fixture(handle?: (request: Request) => Promise<Response | undefined>) {
-  const calls: Array<{ method: string; path: string; auth: string | null; body: string }> = []
+  const calls: Array<{ method: string; path: string; auth: string | null; mediaKey: string | null; body: string }> = []
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -21,6 +21,7 @@ function fixture(handle?: (request: Request) => Promise<Response | undefined>) {
         method: request.method,
         path: new URL(request.url).pathname,
         auth: request.headers.get("Authorization"),
+        mediaKey: request.headers.get("X-Raya-Media-Key"),
         body: await request.clone().text(),
       })
       const response = await handle?.(request)
@@ -32,6 +33,7 @@ function fixture(handle?: (request: Request) => Promise<Response | undefined>) {
           livekitURL: "ws://127.0.0.1:7880",
           clientToken: "client-secret",
           mediaToken: "media-secret",
+          controlToken: "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY",
           engine: "qwen-realtime",
           acceptsTruncation: false,
         })
@@ -44,6 +46,7 @@ function fixture(handle?: (request: Request) => Promise<Response | undefined>) {
     backendURL: server.url.origin,
     auth: "Basic synthetic-secret",
     key: "engine-secret",
+    mediaKey: "A".repeat(43),
     settings: {
       ...DEFAULT_SPEECH_SETTINGS,
       voiceEngine: "qwen-realtime" as const,
@@ -70,13 +73,14 @@ test("managed voice control accepts only numeric loopback HTTP origins", () => {
     expect(local(value)).toBeUndefined()
 })
 
-test("broker rejects unsafe initial destinations before sending credentials", async () => {
-  for (const target of ["backend", "media"] as const) {
+test("broker rejects unsafe initial destinations and service keys before sending credentials", async () => {
+  for (const target of ["backend", "media", "key"] as const) {
     const site = fixture()
     const broker = new RealtimeBroker()
     const config = {
       ...site.config,
       ...(target === "backend" ? { backendURL: "http://backend.example" } : {}),
+      ...(target === "key" ? { mediaKey: "invalid" } : {}),
       settings: {
         ...site.config.settings,
         ...(target === "media" ? { mediaFrontendURL: "http://media.example" } : {}),
@@ -91,13 +95,44 @@ test("broker rejects unsafe initial destinations before sending credentials", as
       ).toEqual({
         ok: false,
         code: "configuration",
-        error: "Voice backend and media frontend must use numeric loopback HTTP addresses.",
+        error:
+          "Voice backend and media frontend require numeric loopback HTTP addresses and a valid media service key.",
       })
       expect(site.calls).toEqual([])
       expect(broker.active).toBe(false)
     } finally {
       site.close()
     }
+  }
+})
+
+test("broker authenticates media admission and cleanup with the CLI capability", async () => {
+  const site = fixture()
+  const broker = new RealtimeBroker()
+  try {
+    expect(
+      await broker.start(
+        async () => site.config,
+        () => {},
+      ),
+    ).toMatchObject({ ok: true })
+    const backend = site.calls.find((call) => call.path === "/kilocode/voice/session" && call.method === "POST")
+    if (!backend) throw new Error("backend admission was not sent")
+    expect(backend.mediaKey).toBe("A".repeat(43))
+    expect(backend.body).not.toContain("A".repeat(43))
+    const media = site.calls.find((call) => call.path === "/v1/sessions" && call.method === "POST")
+    expect(media?.auth).toBe("Bearer MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY")
+    expect(media?.mediaKey).toBe("A".repeat(43))
+    expect(media?.body).not.toContain("A".repeat(43))
+    expect(await broker.stop()).toBeUndefined()
+    expect(site.calls.find((call) => call.path === "/v1/sessions/rvs_test" && call.method === "DELETE")?.auth).toBe(
+      "Bearer MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY",
+    )
+    expect(site.calls.find((call) => call.path === "/v1/sessions/rvs_test" && call.method === "DELETE")?.mediaKey).toBe(
+      "A".repeat(43),
+    )
+  } finally {
+    site.close()
   }
 })
 

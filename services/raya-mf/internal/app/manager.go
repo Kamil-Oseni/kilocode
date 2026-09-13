@@ -4,6 +4,8 @@ package app
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -24,6 +26,8 @@ type Manager struct {
 	closed   bool
 }
 
+var ErrAuthorization = errors.New("media control authorization failed")
+
 func NewManager(rooms room.Factory) *Manager {
 	return &Manager{rooms: rooms, engine: qwen.Engine{}, sessions: map[string]*ownership{}}
 }
@@ -36,9 +40,13 @@ type ownership struct {
 	session *Session
 	stopped bool
 	closed  error
+	token   [sha256.Size]byte
 }
 
-func (m *Manager) Start(ctx context.Context, input wire.Start) (wire.Started, error) {
+func (m *Manager) Start(ctx context.Context, input wire.Start, token string) (wire.Started, error) {
+	if len(token) < 32 {
+		return wire.Started{}, ErrAuthorization
+	}
 	if input.BackendURL != "" {
 		backend, err := local(input.BackendURL)
 		if err != nil {
@@ -53,7 +61,7 @@ func (m *Manager) Start(ctx context.Context, input wire.Start) (wire.Started, er
 	run, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	stop := context.AfterFunc(ctx, cancel)
 	defer stop()
-	claim := &ownership{ready: make(chan struct{}), cancel: cancel}
+	claim := &ownership{ready: make(chan struct{}), cancel: cancel, token: sha256.Sum256([]byte(token))}
 	m.mu.Lock()
 	if m.closed {
 		m.mu.Unlock()
@@ -107,36 +115,43 @@ func (m *Manager) Start(ctx context.Context, input wire.Start) (wire.Started, er
 	return wire.Started{ID: id, Descriptor: m.engine.Descriptor(), StartedAt: time.Now()}, nil
 }
 
-func (m *Manager) Inject(ctx context.Context, id string, item engine.ContextItem) error {
+func (m *Manager) Inject(ctx context.Context, id string, token string, item engine.ContextItem) error {
 	m.mu.RLock()
 	claim := m.sessions[id]
 	if claim == nil || claim.session == nil || claim.stopped {
 		m.mu.RUnlock()
 		return errors.New("voice session is not active; reconnect before sending context")
 	}
+	if !authorized(claim, token) {
+		m.mu.RUnlock()
+		return ErrAuthorization
+	}
 	session := claim.session
 	m.mu.RUnlock()
 	return session.Inject(ctx, item)
 }
 
-func (m *Manager) Status(id string) (wire.Status, bool) {
+func (m *Manager) Status(id string, token string) (wire.Status, bool, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	claim := m.sessions[id]
 	if claim == nil {
-		return wire.Status{}, false
+		return wire.Status{}, false, nil
+	}
+	if !authorized(claim, token) {
+		return wire.Status{}, true, ErrAuthorization
 	}
 	if claim.session != nil {
-		return claim.session.Status(), true
+		return claim.session.Status(), true, nil
 	}
 	select {
 	case <-claim.ready:
 		if claim.closed != nil {
-			return wire.Status{ID: id, State: "failed", Cleanup: "failed"}, true
+			return wire.Status{ID: id, State: "failed", Cleanup: "failed"}, true, nil
 		}
 	default:
 	}
-	return wire.Status{ID: id, State: "starting"}, true
+	return wire.Status{ID: id, State: "starting"}, true, nil
 }
 
 func (m *Manager) release(id string, claim *ownership) {
@@ -147,17 +162,26 @@ func (m *Manager) release(id string, claim *ownership) {
 	m.mu.Unlock()
 }
 
-func (m *Manager) Close(id string) error {
+func (m *Manager) Close(id string, token string) error {
 	m.mu.Lock()
 	claim := m.sessions[id]
 	if claim == nil {
 		m.mu.Unlock()
 		return errors.New("voice session not found")
 	}
+	if !authorized(claim, token) {
+		m.mu.Unlock()
+		return ErrAuthorization
+	}
 	claim.stopped = true
 	claim.cancel()
 	m.mu.Unlock()
 	return m.finish(id, claim)
+}
+
+func authorized(claim *ownership, token string) bool {
+	digest := sha256.Sum256([]byte(token))
+	return subtle.ConstantTimeCompare(claim.token[:], digest[:]) == 1
 }
 
 func (m *Manager) finish(id string, claim *ownership) error {

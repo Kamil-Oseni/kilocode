@@ -9,6 +9,7 @@ import { OpenAIBinding, OpenAICall } from "@/kilocode/voice/openai-protocol"
 import { LiveDuration } from "@/kilocode/voice/live-protocol"
 import { SessionID } from "@/session/schema"
 import { RayaGoal } from "@/kilocode/goal"
+import { Info } from "@/kilocode/voice/protocol"
 
 test("the shipped Live voice routes keep duration and delegation behind auth and parent ownership", async () => {
   await using dir = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
@@ -28,12 +29,15 @@ test("the shipped Live voice routes keep duration and delegation behind auth and
   )
   const auth = `Basic ${Buffer.from("voice-test:voice-test-password").toString("base64")}`
   const key = "a".repeat(64)
+  const prior = process.env.RAYA_MF_TOKEN
+  process.env.RAYA_MF_TOKEN = "A".repeat(43)
   const request = (
     method: string,
     route: string,
     body?: unknown,
     secret: string | undefined = key,
     authorization: string | undefined = auth,
+    mediaKey: string | undefined = "A".repeat(43),
   ) =>
     app.handler(
       new Request(`http://localhost${route}`, {
@@ -41,6 +45,7 @@ test("the shipped Live voice routes keep duration and delegation behind auth and
         headers: {
           "content-type": "application/json",
           "x-kilo-directory": dir.path,
+          ...(mediaKey ? { "x-raya-media-key": mediaKey } : {}),
           ...(secret ? { "x-raya-voice-key": secret } : {}),
           ...(authorization ? { authorization } : {}),
         },
@@ -88,6 +93,38 @@ test("the shipped Live voice routes keep duration and delegation behind auth and
         })
       ).status,
     ).toBe(400)
+    expect(
+      (
+        await request(
+          "POST",
+          "/kilocode/voice/session",
+          { parentSessionID: parent.id, mediaURL: "http://127.0.0.1:7890" },
+          key,
+          auth,
+          "",
+        )
+      ).status,
+    ).toBe(400)
+    expect(
+      (
+        await request(
+          "POST",
+          "/kilocode/voice/session",
+          { parentSessionID: parent.id, mediaURL: "http://127.0.0.1:7890" },
+          key,
+          auth,
+          "invalid",
+        )
+      ).status,
+    ).toBe(400)
+    const voice = await request("POST", "/kilocode/voice/session", {
+      parentSessionID: parent.id,
+      mediaURL: "http://127.0.0.1:7890",
+    })
+    expect(voice.status).toBe(200)
+    const media = Schema.decodeUnknownSync(Info)(await voice.json())
+    expect(media.controlToken).toMatch(/^[A-Za-z0-9_-]{43}$/)
+    expect((await request("DELETE", `/kilocode/voice/session/${media.id}`)).status).toBe(200)
     expect((await request("POST", `/session/${parent.id}/goal`, { objective: "Account for Live voice" })).status).toBe(
       200,
     )
@@ -225,6 +262,8 @@ test("the shipped Live voice routes keep duration and delegation behind auth and
     expect(retained).toEqual(kept)
     expect(JSON.stringify(retained)).not.toContain(key)
   } finally {
+    if (prior === undefined) delete process.env.RAYA_MF_TOKEN
+    if (prior !== undefined) process.env.RAYA_MF_TOKEN = prior
     await app.dispose()
     await disposeAllInstances()
     await resetDatabase()

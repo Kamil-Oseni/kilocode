@@ -1,5 +1,6 @@
 // raya_change - Async voice plane: session admission, transcript truth, and reactive delegation.
 import { Effect, Option, Schema, Semaphore } from "effect"
+import { randomBytes } from "node:crypto"
 import { AccessToken } from "livekit-server-sdk"
 import type { Session } from "@/session/session"
 import type { SessionPrompt } from "@/session/prompt"
@@ -11,12 +12,16 @@ import { local } from "./destination"
 
 type Entry = {
   info: typeof Info.Type
+  mediaKey: string
   delegateID: (typeof Info.Type)["parentSessionID"]
   transcript: VoiceReconstructor
   failure?: typeof Failure.Type
 }
 
-type Stored = typeof State.Type & { delegateID: Entry["delegateID"] }
+type Stored = Omit<typeof State.Type, "info"> & {
+  info: Omit<typeof Info.Type, "controlToken"> & { controlToken?: string }
+  delegateID: Entry["delegateID"]
+}
 
 type Deps = {
   sessions: Pick<Session.Interface, "create" | "get">
@@ -27,10 +32,12 @@ type Deps = {
     key: string
     secret: string
   }
-  inject?: (url: string, id: string, item: typeof ContextItem.Type) => Promise<void>
+  inject?: (url: string, id: string, key: string, token: string, item: typeof ContextItem.Type) => Promise<void>
 }
 
 const key = (id: VoiceSessionID) => ["raya_voice", id]
+const capability = () => randomBytes(32).toString("base64url")
+const mediaKey = (value?: string) => (value && /^[A-Za-z0-9_-]{43}$/.test(value) ? value : undefined)
 
 export namespace RayaVoice {
   export class InputError extends Schema.TaggedErrorClass<InputError>()("RayaVoice.InputError", {
@@ -78,10 +85,12 @@ export namespace RayaVoice {
         catch: (err) => err,
       }).pipe(Effect.orDie)
 
-    const start = Effect.fn("RayaVoice.start")(function* (input: typeof Start.Type) {
+    const start = Effect.fn("RayaVoice.start")(function* (input: typeof Start.Type, key?: string) {
       const mediaURL = local(input.mediaURL)
       if (!mediaURL)
         return yield* new InputError({ message: "Voice media frontend must use a numeric loopback HTTP address." })
+      const serviceKey = mediaKey(key)
+      if (!serviceKey) return yield* new InputError({ message: "Voice media frontend requires a valid service key." })
       const parent = yield* deps.sessions.get(input.parentSessionID)
       const id = VoiceSessionID.make(`rvs_${crypto.randomUUID()}`)
       const room = input.room ?? id
@@ -103,13 +112,14 @@ export namespace RayaVoice {
         livekitURL: livekit.url,
         clientToken,
         mediaToken,
+        controlToken: capability(),
         mediaURL,
         engine: "qwen-realtime" as const,
         acceptsTruncation: false,
         status: "starting" as const,
         createdAt: Date.now(),
       }
-      entries.set(id, { info, delegateID: delegate.id, transcript: new VoiceReconstructor() })
+      entries.set(id, { info, mediaKey: serviceKey, delegateID: delegate.id, transcript: new VoiceReconstructor() })
       yield* persist(entries.get(id)!)
       yield* deps.prompts
         .prompt({
@@ -175,13 +185,17 @@ export namespace RayaVoice {
         Effect.orDie,
       )
       if (!stored?.delegateID) return
-      const entry = {
-        info: stored.info,
+      const saved = stored.info.controlToken
+      const controlToken = saved && /^[A-Za-z0-9_-]{43}$/.test(saved) ? saved : capability()
+      const entry: Entry = {
+        info: { ...stored.info, controlToken },
+        mediaKey: "",
         delegateID: stored.delegateID,
         transcript: new VoiceReconstructor(stored),
         failure: stored.failure,
       }
       entries.set(id, entry)
+      if (stored.info.controlToken !== controlToken) yield* persist(entry)
       return entry
     })
 
@@ -199,7 +213,7 @@ export namespace RayaVoice {
       const status = { done: false }
       const narration = setTimeout(() => {
         if (status.done) return
-        void inject(entry.info.mediaURL, entry.info.id, {
+        void inject(entry.info.mediaURL, entry.info.id, entry.mediaKey, entry.info.controlToken, {
           id: crypto.randomUUID(),
           kind: "guidance",
           text: "I’m checking that now.",
@@ -235,7 +249,7 @@ export namespace RayaVoice {
       clearTimeout(narration)
       yield* Effect.tryPromise({
         try: () =>
-          inject(entry.info.mediaURL, entry.info.id, {
+          inject(entry.info.mediaURL, entry.info.id, entry.mediaKey, entry.info.controlToken, {
             id: crypto.randomUUID(),
             kind: "delegation.result",
             text: result || "I couldn’t find a grounded answer.",

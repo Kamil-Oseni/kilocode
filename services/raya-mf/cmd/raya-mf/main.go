@@ -18,13 +18,16 @@ import (
 	"github.com/Kilo-Org/kilocode/services/raya-mf/internal/wire"
 )
 
-func main() {
-	manager := app.NewManager(lkroom.Factory{})
+func routes(manager *app.Manager, key control.Key) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(writer http.ResponseWriter, _ *http.Request) {
 		write(writer, http.StatusOK, map[string]any{"ok": true, "service": "raya-mf"})
 	})
 	mux.HandleFunc("POST /v1/sessions", func(writer http.ResponseWriter, request *http.Request) {
+		token, ok := control.Authorize(writer, request, key)
+		if !ok {
+			return
+		}
 		// kilocode_change start - bound the complete control body before opening a session
 		body, ok := control.Read(writer, request)
 		if !ok {
@@ -36,7 +39,7 @@ func main() {
 			write(writer, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
-		started, err := manager.Start(request.Context(), input)
+		started, err := manager.Start(request.Context(), input, token)
 		if err != nil {
 			write(writer, http.StatusBadGateway, map[string]string{"error": err.Error()})
 			return
@@ -44,7 +47,15 @@ func main() {
 		write(writer, http.StatusCreated, started)
 	})
 	mux.HandleFunc("GET /v1/sessions/{id}", func(writer http.ResponseWriter, request *http.Request) {
-		status, found := manager.Status(request.PathValue("id"))
+		token, ok := control.Authorize(writer, request, key)
+		if !ok {
+			return
+		}
+		status, found, err := manager.Status(request.PathValue("id"), token)
+		if errors.Is(err, app.ErrAuthorization) {
+			write(writer, http.StatusUnauthorized, map[string]string{"error": err.Error()})
+			return
+		}
 		if !found {
 			write(writer, http.StatusNotFound, map[string]string{"error": "voice session not found"})
 			return
@@ -53,6 +64,10 @@ func main() {
 	})
 
 	mux.HandleFunc("POST /v1/sessions/{id}/inject", func(writer http.ResponseWriter, request *http.Request) {
+		token, ok := control.Authorize(writer, request, key)
+		if !ok {
+			return
+		}
 		// kilocode_change start - audio is separate; injected JSON has a finite control-body limit
 		body, ok := control.Read(writer, request)
 		if !ok {
@@ -64,20 +79,40 @@ func main() {
 			write(writer, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
-		if err := manager.Inject(request.Context(), request.PathValue("id"), input.Item); err != nil {
+		if err := manager.Inject(request.Context(), request.PathValue("id"), token, input.Item); err != nil {
+			if errors.Is(err, app.ErrAuthorization) {
+				write(writer, http.StatusUnauthorized, map[string]string{"error": err.Error()})
+				return
+			}
 			write(writer, http.StatusNotFound, map[string]string{"error": err.Error()})
 			return
 		}
 		write(writer, http.StatusAccepted, map[string]any{"accepted": true})
 	})
 	mux.HandleFunc("DELETE /v1/sessions/{id}", func(writer http.ResponseWriter, request *http.Request) {
-		if err := manager.Close(request.PathValue("id")); err != nil {
+		token, ok := control.Authorize(writer, request, key)
+		if !ok {
+			return
+		}
+		if err := manager.Close(request.PathValue("id"), token); err != nil {
+			if errors.Is(err, app.ErrAuthorization) {
+				write(writer, http.StatusUnauthorized, map[string]string{"error": err.Error()})
+				return
+			}
 			write(writer, http.StatusNotFound, map[string]string{"error": err.Error()})
 			return
 		}
 		write(writer, http.StatusOK, map[string]any{"closed": true})
 	})
+	return control.Browser(mux)
+}
 
+func main() {
+	manager := app.NewManager(lkroom.Factory{})
+	key, err := control.ParseKey(os.Getenv("RAYA_MF_TOKEN"))
+	if err != nil {
+		panic(err)
+	}
 	addr, err := address(os.Getenv("RAYA_MF_ADDR"), os.Getenv("RAYA_MF_ALLOW_NON_LOOPBACK"))
 	if err != nil {
 		panic(err)
@@ -86,7 +121,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	server := control.Server(mux) // kilocode_change - bounded HTTP control transport
+	server := control.Server(routes(manager, key)) // kilocode_change - bounded authenticated native control transport
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	go func() {

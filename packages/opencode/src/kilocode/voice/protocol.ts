@@ -18,6 +18,7 @@ export const Info = Schema.Struct({
   livekitURL: Schema.String,
   clientToken: Schema.String,
   mediaToken: Schema.String,
+  controlToken: Schema.String,
   mediaURL: Schema.String,
   engine: Schema.Literal("qwen-realtime"),
   acceptsTruncation: Schema.Boolean,

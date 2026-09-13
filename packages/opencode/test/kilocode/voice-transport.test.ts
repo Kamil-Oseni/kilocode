@@ -5,7 +5,8 @@ for (const status of [204, 301, 302, 303, 307, 308]) {
   for (const remote of [false, true]) {
     test(`voice context delivery handles ${status} without ${remote ? "other-port" : "same-origin"} redirects`, async () => {
       const hits: string[] = []
-      const calls: Array<{ path: string; body: string; method: string }> = []
+      const calls: Array<{ path: string; body: string; method: string; auth: string | null; mediaKey: string | null }> =
+        []
       const target = Bun.serve({
         hostname: "127.0.0.1",
         port: 0,
@@ -23,7 +24,13 @@ for (const status of [204, 301, 302, 303, 307, 308]) {
             hits.push(request.url)
             return new Response(null, { status: 204 })
           }
-          calls.push({ path, method: request.method, body: await request.text() })
+          calls.push({
+            path,
+            method: request.method,
+            body: await request.text(),
+            auth: request.headers.get("Authorization"),
+            mediaKey: request.headers.get("X-Raya-Media-Key"),
+          })
           return new Response(null, {
             status,
             headers: { Location: `${remote ? target.url.origin : new URL(request.url).origin}/redirected` },
@@ -38,7 +45,7 @@ for (const status of [204, 301, 302, 303, 307, 308]) {
         created: new Date(0).toISOString(),
       }
       try {
-        const result = await post(source.url.origin, "rvs_test", item).then(
+        const result = await post(source.url.origin, "rvs_test", "A".repeat(43), "control-capability", item).then(
           () => undefined,
           (error: unknown) => error,
         )
@@ -50,7 +57,13 @@ for (const status of [204, 301, 302, 303, 307, 308]) {
         }
         expect(hits).toEqual([])
         expect(calls).toEqual([
-          { path: "/v1/sessions/rvs_test/inject", method: "POST", body: JSON.stringify({ item }) },
+          {
+            path: "/v1/sessions/rvs_test/inject",
+            method: "POST",
+            body: JSON.stringify({ item }),
+            auth: "Bearer control-capability",
+            mediaKey: "A".repeat(43),
+          },
         ])
       } finally {
         await Promise.all([source.stop(true), target.stop(true)])

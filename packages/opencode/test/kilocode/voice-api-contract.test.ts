@@ -26,8 +26,10 @@ describe("Raya realtime voice API", () => {
     const file = join(import.meta.dir, "../../../sdk/openapi.json")
     const spec = (await Bun.file(file).json()) as Spec
     const start = JSON.stringify(spec.paths["/kilocode/voice/session"]?.post)
+    expect(start).toContain("x-raya-media-key")
     expect(start).toContain("clientToken")
     expect(start).toContain("mediaToken")
+    expect(start).toContain("controlToken")
     expect(start).toContain("acceptsTruncation")
     expect(start).not.toContain("qwenKey")
     expect(start).not.toContain("apiSecret")

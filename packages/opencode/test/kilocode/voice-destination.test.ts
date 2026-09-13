@@ -50,4 +50,12 @@ test("invalid media destinations fail before parent lookup or delegate creation"
   )
   expect(Exit.isFailure(exit)).toBe(true)
   if (Exit.isFailure(exit)) expect(exit.cause.toString()).toContain("RayaVoice.InputError")
+  const key = await Effect.runPromiseExit(
+    voice.start({
+      parentSessionID: SessionID.make("ses_destination_test"),
+      mediaURL: "http://127.0.0.1:7890",
+    }),
+  )
+  expect(Exit.isFailure(key)).toBe(true)
+  if (Exit.isFailure(key)) expect(key.cause.toString()).toContain("RayaVoice.InputError")
 })

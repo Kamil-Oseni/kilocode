@@ -7,6 +7,7 @@ type Session = {
   livekitURL: string
   clientToken: string
   mediaToken: string
+  controlToken: string
   engine: "qwen-realtime"
   acceptsTruncation: boolean
 }
@@ -16,6 +17,7 @@ type Config = {
   backendURL: string
   auth: string
   key: string
+  mediaKey: string
   settings: SpeechSettings
 }
 type Failure = {
@@ -93,10 +95,13 @@ export class RealtimeBroker {
       if ("ok" in loaded) return await this.abandon(claim, loaded)
       const backend = local(loaded.backendURL)
       const frontend = local(loaded.settings.mediaFrontendURL)
-      if (!backend || !frontend)
+      if (!backend || !frontend || !/^[A-Za-z0-9_-]{43}$/.test(loaded.mediaKey))
         return await this.abandon(
           claim,
-          failure("configuration", "Voice backend and media frontend must use numeric loopback HTTP addresses."),
+          failure(
+            "configuration",
+            "Voice backend and media frontend require numeric loopback HTTP addresses and a valid media service key.",
+          ),
         )
       claim.config = {
         ...loaded,
@@ -108,7 +113,11 @@ export class RealtimeBroker {
         `${cfg.backendURL}/kilocode/voice/session?directory=${encodeURIComponent(cfg.directory)}`,
         {
           method: "POST",
-          headers: { Authorization: cfg.auth, "Content-Type": "application/json" },
+          headers: {
+            Authorization: cfg.auth,
+            "Content-Type": "application/json",
+            "X-Raya-Media-Key": cfg.mediaKey,
+          },
           body: JSON.stringify({
             parentSessionID: cfg.sessionID,
             mediaURL: cfg.settings.mediaFrontendURL.replace(/\/$/, ""),
@@ -132,7 +141,11 @@ export class RealtimeBroker {
       claim.media = true
       const media = await this.request(`${cfg.settings.mediaFrontendURL.replace(/\/$/, "")}/v1/sessions`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          Authorization: `Bearer ${claim.info.controlToken}`,
+          "Content-Type": "application/json",
+          "X-Raya-Media-Key": cfg.mediaKey,
+        },
         body: JSON.stringify({
           id: claim.info.id,
           room: claim.info.room,
@@ -192,6 +205,7 @@ export class RealtimeBroker {
           ? [
               this.request(`${cfg.settings.mediaFrontendURL.replace(/\/$/, "")}/v1/sessions/${id}`, {
                 method: "DELETE",
+                headers: { Authorization: `Bearer ${info.controlToken}`, "X-Raya-Media-Key": cfg.mediaKey },
               }),
             ]
           : []),
@@ -229,6 +243,8 @@ function session(value: unknown): Session {
     typeof item.livekitURL !== "string" ||
     typeof item.clientToken !== "string" ||
     typeof item.mediaToken !== "string" ||
+    typeof item.controlToken !== "string" ||
+    !/^[A-Za-z0-9_-]{43}$/.test(item.controlToken) ||
     item.engine !== "qwen-realtime" ||
     typeof item.acceptsTruncation !== "boolean"
   )
@@ -239,6 +255,7 @@ function session(value: unknown): Session {
     livekitURL: item.livekitURL,
     clientToken: item.clientToken,
     mediaToken: item.mediaToken,
+    controlToken: item.controlToken,
     engine: item.engine,
     acceptsTruncation: item.acceptsTruncation,
   }

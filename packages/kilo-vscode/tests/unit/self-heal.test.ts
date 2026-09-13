@@ -17,6 +17,8 @@ describe("Raya self-heal", () => {
     expect(parseSelfHealCommand("/self-heal install ../../other")?.kind).toBe("usage")
     expect(parseSelfHealCommand("/self-heal verify heal_ready")).toEqual({ kind: "verify", id: "heal_ready" })
     expect(parseSelfHealCommand("/self-heal verify ../../other")?.kind).toBe("usage")
+    expect(parseSelfHealCommand("/self-heal accept heal_ready")).toEqual({ kind: "accept", id: "heal_ready" })
+    expect(parseSelfHealCommand("/self-heal accept ../../other")?.kind).toBe("usage")
     expect(parseSelfHealCommand("/self-heal list")).toEqual({ kind: "list" })
     expect(parseSelfHealCommand("/self-heal The goal loops forever")).toEqual({
       kind: "capture",

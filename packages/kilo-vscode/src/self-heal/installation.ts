@@ -22,6 +22,32 @@ const replay = z.object({
     criteria: z.array(z.string().min(1)).min(1),
   }),
 })
+const evidence = z.object({
+  sessionID: z.string().min(1),
+  messageID: z.string().min(1),
+  partID: z.string().min(1),
+  callID: z.string().min(1),
+  summary: z.string().min(1),
+  record: z.object({
+    version: z.literal(1),
+    digest: z.string().regex(/^[a-f0-9]{64}$/),
+    at: z.number().finite().nonnegative(),
+  }),
+})
+const result = z.object({
+  sessionID: z.string().min(1),
+  goalRevision: z.string().min(1),
+  summary: z.string().min(1),
+  verifiedAt: z.number().finite().nonnegative(),
+  reviewedAt: z.number().finite().nonnegative(),
+  requirements: z.array(
+    z.object({
+      requirement: z.string().min(1),
+      passed: z.literal(true),
+      evidence: z.array(evidence).min(1),
+    }),
+  ),
+})
 const schema = z.object({
   version: z.literal(1),
   id: z.string().uuid(),
@@ -46,9 +72,13 @@ const schema = z.object({
     "replay-dispatching",
     "replay-submitted",
     "replay-unknown",
+    "verification-publishing",
+    "verification-unknown",
+    "verified-active",
     "failed",
   ]),
   replaySessionID: z.string().min(1).optional(),
+  verification: result.optional(),
   reason: z.string().optional(),
   createdAt: z.number().finite().nonnegative(),
   updatedAt: z.number().finite().nonnegative(),
@@ -56,6 +86,7 @@ const schema = z.object({
 
 export type Record = z.infer<typeof schema>
 export type Plan = Omit<Record, "version" | "id" | "package" | "phase" | "reason" | "createdAt" | "updatedAt">
+export type Verification = NonNullable<Record["verification"]>
 
 function message(err: unknown) {
   return err instanceof Error ? err.message : String(err)
@@ -200,7 +231,13 @@ export class SelfHealInstallation {
         await this.write(failed)
         return { record: failed, changed: true }
       }
-      if (record.phase === "active" || record.phase.startsWith("replay-")) return { record, changed: false }
+      if (
+        record.phase === "active" ||
+        record.phase === "verified-active" ||
+        record.phase.startsWith("replay-") ||
+        record.phase.startsWith("verification-")
+      )
+        return { record, changed: false }
       const active = { ...record, phase: "active" as const, reason: undefined, updatedAt: Date.now() }
       await this.write(active)
       return { record: active, changed: true }
@@ -256,6 +293,50 @@ export class SelfHealInstallation {
       }
       await this.write(submitted)
       return { record: submitted, dispatched: true }
+    })
+  }
+
+  accept(candidate: Verification, publish: (record: Record) => Promise<void>) {
+    return this.lock(async () => {
+      const record = await this.read()
+      if (!record) throw new Error("No self-heal installation is retained for verification.")
+      if (record.phase === "verified-active" || record.phase.startsWith("verification-"))
+        return { record, published: false }
+      if (record.phase !== "replay-submitted" || !record.replaySessionID)
+        throw new Error("Installed repair verification has not completed an owned dispatch.")
+      const receipt = result.parse(candidate)
+      if (receipt.sessionID !== record.replaySessionID)
+        throw new Error("Verification evidence belongs to a different session.")
+      if (
+        JSON.stringify(receipt.requirements.map((item) => item.requirement)) !==
+        JSON.stringify(record.replay.report.criteria)
+      )
+        throw new Error("Verification evidence does not cover the retained acceptance criteria exactly.")
+      const pending: Record = {
+        ...record,
+        phase: "verification-publishing",
+        verification: receipt,
+        reason: undefined,
+        updatedAt: Date.now(),
+      }
+      await this.write(pending)
+      await publish(pending).catch(async (err) => {
+        const unknown: Record = {
+          ...pending,
+          phase: "verification-unknown",
+          reason: `Verification evidence publication could not be confirmed. ${message(err)}`,
+          updatedAt: Date.now(),
+        }
+        await this.write(unknown)
+        throw err
+      })
+      const accepted: Record = {
+        ...pending,
+        phase: "verified-active",
+        updatedAt: Date.now(),
+      }
+      await this.write(accepted)
+      return { record: accepted, published: true }
     })
   }
 }

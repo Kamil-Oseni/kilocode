@@ -198,7 +198,11 @@ import { capture as captureSelfHeal } from "./self-heal/intake" // raya_change -
 import { detail as selfHealReviewDetail, review as reviewSelfHeal } from "./self-heal/review"
 import { detail as selfHealInstallDetail, install as installSelfHeal } from "./self-heal/install"
 import { SelfHealInstallation } from "./self-heal/installation"
-import { verify as verifySelfHeal } from "./self-heal/verification"
+import {
+  accept as acceptSelfHeal,
+  detail as selfHealVerificationDetail,
+  verify as verifySelfHeal,
+} from "./self-heal/verification"
 import { SpeechService } from "./speech/service" // raya_change - Milestone H voice orchestration
 import {
   buildIndexingSettingsMessage,
@@ -4655,6 +4659,59 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
             },
             { throwOnError: true },
           )
+        },
+      })
+      this.postMessage({ type: "goalState", sessionID: reporter, notice: result.notice })
+      return { handled: true }
+    }
+    if (command.kind === "accept") {
+      const root = path.join(
+        this.extensionContext?.globalStorageUri.fsPath ?? this.extensionUri.fsPath,
+        "self-heal-install",
+      )
+      const action = "Accept installed repair"
+      const result = await acceptSelfHeal({
+        itemID: command.id,
+        journal: new SelfHealInstallation(root),
+        load: async (session) =>
+          this.client!.kilocode.goal.get(
+            { sessionID: session, directory: this.getContextDirectory() },
+            { throwOnError: true },
+          ).then((value) => value.data),
+        confirm: async (view) =>
+          (await vscode.window.showWarningMessage(
+            `Review installed repair: ${view.itemID}`,
+            { modal: true, detail: selfHealVerificationDetail(view) },
+            action,
+          )) === action,
+        publish: async (record) => {
+          const verification = record.verification!
+          const artifact = `self-heal-verification:${record.id}:${verification.goalRevision}`
+          const { data: item } = await this.client!.kilocode.selfHeal.get(
+            { itemID: record.itemID, directory: store },
+            { throwOnError: true },
+          )
+          if (item.evidence.some((evidence) => evidence.artifact === artifact)) return
+          const sources = verification.requirements
+            .map(
+              (requirement) =>
+                `${requirement.requirement}: ${requirement.evidence.map((evidence) => `${evidence.summary} (${evidence.sessionID}/${evidence.messageID}/${evidence.callID})`).join("; ")}`,
+            )
+            .join(" | ")
+          const evidence = [
+            ...item.evidence,
+            {
+              summary: `${verification.summary} Verification session ${verification.sessionID}. ${sources}`,
+              artifact,
+              at: verification.reviewedAt,
+            },
+          ].slice(-50)
+          const { data: updated } = await this.client!.kilocode.selfHeal.update(
+            { itemID: record.itemID, directory: store, evidence },
+            { throwOnError: true },
+          )
+          if (!updated?.evidence.some((entry) => entry.artifact === artifact))
+            throw new Error("The repair did not retain the reviewed verification evidence.")
         },
       })
       this.postMessage({ type: "goalState", sessionID: reporter, notice: result.notice })

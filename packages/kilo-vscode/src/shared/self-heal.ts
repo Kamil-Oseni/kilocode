@@ -6,10 +6,11 @@ export type SelfHealCommand =
   | { kind: "review"; id: string }
   | { kind: "install"; id: string }
   | { kind: "verify"; id: string }
+  | { kind: "accept"; id: string }
   | { kind: "capture"; description: string }
 
 const usage =
-  "Usage: /self-heal <describe the issue you noticed>, /self-heal list, /self-heal inspect <itemID>, /self-heal review <itemID>, /self-heal install <itemID>, or /self-heal verify <itemID>"
+  "Usage: /self-heal <describe the issue you noticed>, /self-heal list, /self-heal inspect <itemID>, /self-heal review <itemID>, /self-heal install <itemID>, /self-heal verify <itemID>, or /self-heal accept <itemID>"
 
 export function parseSelfHealCommand(text: string): SelfHealCommand | undefined {
   const match = text.trim().match(/^\/self-heal(?:\s+([\s\S]*))?$/i)
@@ -32,6 +33,10 @@ export function parseSelfHealCommand(text: string): SelfHealCommand | undefined 
   if (/^verify(?:\s|$)/i.test(description)) {
     const id = description.match(/^verify\s+(heal_[a-z0-9_-]+)$/i)?.[1]
     return id ? { kind: "verify", id } : { kind: "usage", notice: usage }
+  }
+  if (/^accept(?:\s|$)/i.test(description)) {
+    const id = description.match(/^accept\s+(heal_[a-z0-9_-]+)$/i)?.[1]
+    return id ? { kind: "accept", id } : { kind: "usage", notice: usage }
   }
   return { kind: "capture", description }
 }

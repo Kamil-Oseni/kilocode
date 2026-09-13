@@ -10,7 +10,12 @@ import { expect, test } from "bun:test"
 import { createKiloClient } from "@kilocode/sdk/v2/client"
 import { install as runInstall } from "../../src/self-heal/install"
 import { SelfHealInstallation, type Plan } from "../../src/self-heal/installation"
-import { prompt as replayPrompt, verify as verifyInstall } from "../../src/self-heal/verification"
+import {
+  accept as acceptVerification,
+  detail as verificationDetail,
+  prompt as replayPrompt,
+  verify as verifyInstall,
+} from "../../src/self-heal/verification"
 
 const require = createRequire(import.meta.url)
 const writer = createRequire(require.resolve("@vscode/vsce"))("yazl") as {
@@ -565,6 +570,254 @@ test("starts verification from retained input and keeps the linked session", asy
       },
     })
     expect(duplicate.notice).toContain("already running in session ses_validation")
+  } finally {
+    await rm(run.root, { recursive: true, force: true })
+  }
+})
+
+test("publishes exact reviewed verification evidence once", async () => {
+  const run = await fixture()
+  try {
+    const root = join(run.root, "state")
+    const journal = new SelfHealInstallation(root)
+    await journal.run(run.plan, async () => undefined)
+    const binary = join(run.root, "kilo.exe")
+    await writeFile(binary, run.binary)
+    await journal.activate(run.plan.extension, binary)
+    await journal.replay(async (_input, link) => link("ses_validation"))
+    const receipt = {
+      sessionID: "ses_validation",
+      goalRevision: "revision_validation",
+      summary: "The installed behavior passed.",
+      verifiedAt: 10,
+      reviewedAt: 11,
+      requirements: run.plan.replay.report.criteria.map((requirement) => ({
+        requirement,
+        passed: true as const,
+        evidence: [
+          {
+            sessionID: "ses_validation",
+            messageID: "msg_validation",
+            partID: "part_validation",
+            callID: "call_validation",
+            summary: "Observed the corrected runtime behavior.",
+            record: { version: 1 as const, digest: "e".repeat(64), at: 9 },
+          },
+        ],
+      })),
+    }
+    let calls = 0
+    const publish = async (record: Awaited<ReturnType<typeof journal.inspect>>) => {
+      calls++
+      expect(record).toMatchObject({ phase: "verification-publishing", verification: receipt })
+    }
+    expect(await journal.accept(receipt, publish)).toMatchObject({
+      published: true,
+      record: { phase: "verified-active", verification: receipt },
+    })
+    expect(await new SelfHealInstallation(root).accept(receipt, publish)).toMatchObject({
+      published: false,
+      record: { phase: "verified-active" },
+    })
+    expect(calls).toBe(1)
+    expect(await journal.activate(run.plan.extension, binary)).toMatchObject({
+      changed: false,
+      record: { phase: "verified-active" },
+    })
+  } finally {
+    await rm(run.root, { recursive: true, force: true })
+  }
+})
+
+test("rejects incomplete evidence and retains unknown publication", async () => {
+  const run = await fixture()
+  try {
+    const root = join(run.root, "state")
+    const journal = new SelfHealInstallation(root)
+    await journal.run(run.plan, async () => undefined)
+    const binary = join(run.root, "kilo.exe")
+    await writeFile(binary, run.binary)
+    await journal.activate(run.plan.extension, binary)
+    await journal.replay(async (_input, link) => link("ses_validation"))
+    const base = {
+      sessionID: "ses_validation",
+      goalRevision: "revision_validation",
+      summary: "The installed behavior passed.",
+      verifiedAt: 10,
+      reviewedAt: 11,
+      requirements: [],
+    }
+    await expect(journal.accept(base, async () => undefined)).rejects.toThrow("criteria exactly")
+    const retained = await journal.inspect()
+    expect(retained).toMatchObject({ phase: "replay-submitted" })
+    expect(retained?.verification).toBeUndefined()
+    const receipt = {
+      ...base,
+      requirements: run.plan.replay.report.criteria.map((requirement) => ({
+        requirement,
+        passed: true as const,
+        evidence: [
+          {
+            sessionID: "ses_validation",
+            messageID: "msg_validation",
+            partID: "part_validation",
+            callID: "call_validation",
+            summary: "Observed the corrected runtime behavior.",
+            record: { version: 1 as const, digest: "e".repeat(64), at: 9 },
+          },
+        ],
+      })),
+    }
+    await expect(
+      journal.accept(receipt, async () => {
+        throw new Error("backend acknowledgement lost")
+      }),
+    ).rejects.toThrow("backend acknowledgement lost")
+    expect(await journal.inspect()).toMatchObject({
+      phase: "verification-unknown",
+      verification: receipt,
+      reason: expect.stringContaining("could not be confirmed"),
+    })
+    let repeated = false
+    expect(
+      await journal.accept(receipt, async () => {
+        repeated = true
+      }),
+    ).toMatchObject({ published: false, record: { phase: "verification-unknown" } })
+    expect(repeated).toBe(false)
+  } finally {
+    await rm(run.root, { recursive: true, force: true })
+  }
+})
+
+test("accepts a stable completed goal audit through explicit review", async () => {
+  const run = await fixture()
+  try {
+    const root = join(run.root, "state")
+    const journal = new SelfHealInstallation(root)
+    await journal.run(run.plan, async () => undefined)
+    const binary = join(run.root, "kilo.exe")
+    await writeFile(binary, run.binary)
+    await journal.activate(run.plan.extension, binary)
+    await journal.replay(async (_input, link) => link("ses_validation"))
+    const goal = {
+      status: "complete",
+      revision: "revision_validation",
+      review: { status: "accepted", acceptedAt: 11 },
+      audit: {
+        summary: "The installed behavior passed.",
+        verifiedAt: 10,
+        requirements: run.plan.replay.report.criteria.map((requirement) => ({
+          requirement,
+          passed: true,
+          evidence: [
+            {
+              sessionID: "ses_validation",
+              messageID: "msg_validation",
+              partID: "part_validation",
+              callID: "call_validation",
+              summary: "Observed the corrected runtime behavior.",
+              record: { version: 1, digest: "e".repeat(64), at: 9 },
+            },
+          ],
+        })),
+      },
+    }
+    let loads = 0
+    let published = 0
+    const accepted = await acceptVerification({
+      itemID: run.plan.itemID,
+      journal,
+      load: async (session) => {
+        loads++
+        expect(session).toBe("ses_validation")
+        return goal
+      },
+      confirm: async (view) => {
+        expect(verificationDetail(view)).toContain("Observed the corrected runtime behavior.")
+        return true
+      },
+      publish: async (record) => {
+        published++
+        expect(record).toMatchObject({
+          phase: "verification-publishing",
+          verification: { sessionID: "ses_validation" },
+        })
+      },
+    })
+    expect(loads).toBe(2)
+    expect(published).toBe(1)
+    expect(accepted).toMatchObject({
+      notice: expect.stringContaining("is verified"),
+      record: { phase: "verified-active" },
+    })
+  } finally {
+    await rm(run.root, { recursive: true, force: true })
+  }
+})
+
+test("changed or incomplete goal evidence cannot be accepted", async () => {
+  const run = await fixture()
+  try {
+    const root = join(run.root, "state")
+    const journal = new SelfHealInstallation(root)
+    await journal.run(run.plan, async () => undefined)
+    const binary = join(run.root, "kilo.exe")
+    await writeFile(binary, run.binary)
+    await journal.activate(run.plan.extension, binary)
+    await journal.replay(async (_input, link) => link("ses_validation"))
+    const audit = {
+      status: "complete",
+      revision: "revision_validation",
+      review: { status: "accepted", acceptedAt: 11 },
+      audit: {
+        summary: "The installed behavior passed.",
+        verifiedAt: 10,
+        requirements: run.plan.replay.report.criteria.map((requirement) => ({
+          requirement,
+          passed: true,
+          evidence: [
+            {
+              sessionID: "ses_validation",
+              messageID: "msg_validation",
+              partID: "part_validation",
+              callID: "call_validation",
+              summary: "Observed the corrected runtime behavior.",
+              record: { version: 1, digest: "e".repeat(64), at: 9 },
+            },
+          ],
+        })),
+      },
+    }
+    let loads = 0
+    let published = false
+    const changed = await acceptVerification({
+      itemID: run.plan.itemID,
+      journal,
+      load: async () => {
+        loads++
+        return loads === 1 ? audit : { ...audit, audit: { ...audit.audit, summary: "Changed after review." } }
+      },
+      confirm: async () => true,
+      publish: async () => {
+        published = true
+      },
+    })
+    expect(changed.notice).toContain("evidence changed")
+    expect(published).toBe(false)
+    expect(await journal.inspect()).toMatchObject({ phase: "replay-submitted" })
+
+    const incomplete = await acceptVerification({
+      itemID: run.plan.itemID,
+      journal,
+      load: async () => ({ ...audit, audit: { ...audit.audit, requirements: [] } }),
+      confirm: async () => true,
+      publish: async () => {
+        published = true
+      },
+    })
+    expect(incomplete.notice).toContain("does not have a completed, accepted audit")
+    expect(published).toBe(false)
   } finally {
     await rm(run.root, { recursive: true, force: true })
   }

@@ -2,6 +2,16 @@
 
 Source of scope: [Comprehensive audit](Raya-Comprehensive-Audit.md). All sections and all ten overhauls remain in scope. Work proceeds in dependency order, with broader validation batched at checkpoints. A completed subtask does not mean the overall overhaul is complete.
 
+## ChatGPT 2026-09-13 12:50 America/Toronto — late GPT-Live charge ownership
+
+**Status: delivered in product commit `36cacd2ffb`; pushed.** The existing GPT-Live duration integration correctly retained authoritative seconds and deliberately left monetary coverage unknown, but its goal write addressed only the currently active goal. A call that began under one goal could therefore close after that goal had completed and a replacement goal had started; the voice receipt survived, while the goal ledger rejected the late settlement.
+
+Goal charge attribution now selects the retained goal whose lifecycle contains the receipt's stable observation time. Current-goal receipts behave as before. A late receipt is appended to the matching completed goal in history, never to the replacement goal. Exact retries remain idempotent, conflicting receipt reuse remains rejected, and a receipt that matches no retained lifecycle fails explicitly instead of being assigned by guesswork. The changeset now names late GPT-Live settlement.
+
+Focused verification passes 1 test / 16 assertions. The complete goal-state file passes 92 tests / 1,128 assertions, including reload, revision, history, concurrency, lifecycle, budgeting and accounting coverage. Prettier passes; scoped Oxlint reports zero errors and only pre-existing warnings elsewhere in the two large files; the OpenCode annotation guard correctly reports that only Kilo-owned paths changed. No SDK schema or endpoint changed, and no `tsgo`, `tsgolint`, Turbo graph, root lint or parallel validation ran. This small backend checkpoint is pushed and will be included in the next batched snapshot installation; the installed snapshot remains `8b6cc8c7f3`.
+
+OVR-06 remains **In progress** for trustworthy tool/external-service integrations, explicit multi-currency budget semantics and reservations, non-file deliverable associations, and its remaining packaged lifecycle/UI acceptance. GPT-Live late-settlement ownership is now covered.
+
 ## ChatGPT 2026-09-13 12:30 America/Toronto — EN-14 measured client workload
 
 **Status: Verified.** EN-14 now has a production-view Chromium workload in addition to the existing deterministic request, reconnect and streaming bounds. The reference workload loads 40 active Routine workers, opens a 1,000-message conversation, exercises worker search and the conversation composer, disconnects and reconnects the client, verifies that no message identity is duplicated, confirms the busy state clears, and measures retained JavaScript heap after browser garbage collection.

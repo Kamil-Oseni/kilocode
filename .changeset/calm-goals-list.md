@@ -5,3 +5,5 @@
 ---
 
 Show revision-safe files, cited ready Canvas versions and host-verified completed browser downloads in goal details and copied reports.
+
+Let goals save and enforce an atomic concurrent delegated-child limit before creating new child sessions.

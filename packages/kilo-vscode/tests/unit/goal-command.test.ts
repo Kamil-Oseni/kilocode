@@ -54,6 +54,10 @@ describe("native goal command", () => {
     expect(goalPrompt("recover within the limit", { recoveryAttempts: 2 })).toContain(
       "Automatic recovery-attempt limit: 2 consecutive attempts",
     )
+    expect(goalPrompt("delegate within the limit", { concurrentChildren: 3 })).toContain("Concurrent-child limit: 3")
+    expect(goalPrompt("delegate within the limit", { concurrentChildren: 3 })).toContain(
+      "Reserve a slot before creating a delegated child",
+    )
     expect(text).toContain("call get_goal")
     expect(text).toContain('update_goal(status="complete")')
     expect(text).toContain("real successful tool calls")

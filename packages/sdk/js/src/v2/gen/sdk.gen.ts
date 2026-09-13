@@ -8572,6 +8572,7 @@ export class Goal extends HeyApiClient {
         activeMs?: number
         modelCost?: number
         recoveryAttempts?: number
+        concurrentChildren?: number
       }
       clearBudget?: true
       expectedIntent?: string
@@ -8626,6 +8627,7 @@ export class Goal extends HeyApiClient {
         activeMs?: number
         modelCost?: number
         recoveryAttempts?: number
+        concurrentChildren?: number
       }
     },
     options?: Options<never, ThrowOnError>,

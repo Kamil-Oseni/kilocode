@@ -30,6 +30,7 @@ import { pollWithTimeout } from "../lib/effect"
 import type { Bus } from "@/bus"
 import { tmpdirScoped } from "../fixture/fixture"
 import * as Artifact from "@/kilocode/goal/artifact"
+import * as GoalChildren from "@/kilocode/goal/children"
 import { digest } from "@opencode-ai/core/kilocode/evidence-digest"
 
 const it = testEffect(LayerNode.compile(LayerNode.group([Storage.node, FSUtil.node, CrossSpawnSpawner.node, Git.node])))
@@ -125,6 +126,45 @@ function setup(
 }
 
 describe("RayaGoal", () => {
+  it.live("atomically reserves the saved concurrent-child limit and resets live reservations on restart", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const root = SessionID.make(`ses_child_root_${crypto.randomUUID()}`)
+      const child = SessionID.make(`ses_child_nested_${crypto.randomUUID()}`)
+      const rows: MessageV2.WithParts[] = []
+      const sessions = {
+        messages: () => Effect.succeed(rows),
+        children: () => Effect.succeed([]),
+        get: (id: SessionID) =>
+          id === child
+            ? Effect.succeed({ id: child, parentID: root } as Session.Info)
+            : Effect.succeed({ id: root } as Session.Info),
+      }
+      const goals = RayaGoal.make({ storage, sessions })
+      yield* Effect.addFinalizer(() => goals.clear(root))
+      yield* goals.create(root, "Bound delegated work", undefined, undefined, undefined, undefined, {
+        concurrentChildren: 1,
+      })
+
+      const first = yield* GoalChildren.make({ storage, sessions })
+      const lease = yield* first.claim(child)
+      const denied = yield* first.claim(root).pipe(Effect.exit)
+      expect(Exit.isFailure(denied)).toBe(true)
+      if (Exit.isFailure(denied)) expect(Cause.pretty(denied.cause)).toContain("concurrent-child limit reached (1)")
+
+      yield* lease.release
+      const released = yield* first.claim(root)
+      yield* released.release
+
+      const beforeRestart = yield* first.claim(root)
+      const restarted = yield* GoalChildren.make({ storage, sessions })
+      const afterRestart = yield* restarted.claim(child)
+      yield* beforeRestart.release
+      yield* afterRestart.release
+      expect((yield* goals.get(root))?.budget?.concurrentChildren).toBe(1)
+    }),
+  )
+
   it.live("required command binding rejects unrelated successful evidence and wrong directories", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service

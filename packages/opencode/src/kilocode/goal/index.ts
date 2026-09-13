@@ -129,6 +129,9 @@ export namespace RayaGoal {
     recoveryAttempts: Schema.optional(
       Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(100)),
     ),
+    concurrentChildren: Schema.optional(
+      Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(32)),
+    ),
   })
   export type Budget = typeof Budget.Type
 
@@ -367,7 +370,8 @@ export namespace RayaGoal {
     value !== undefined &&
     value.activeMs === undefined &&
     value.modelCost === undefined &&
-    value.recoveryAttempts === undefined
+    value.recoveryAttempts === undefined &&
+    value.concurrentChildren === undefined
   const exhausted = (
     state: State,
     now: number,
@@ -599,7 +603,7 @@ export namespace RayaGoal {
         return yield* new AuditError({ message: "Goal criterion IDs must be unique." })
       if (emptyBudget(budget))
         return yield* new AuditError({
-          message: "A goal budget requires an active-time, model-cost, or recovery-attempt limit.",
+          message: "A goal budget requires an active-time, model-cost, recovery-attempt, or concurrent-child limit.",
         })
       const existing = yield* get(sessionID)
       if (existing && existing.status !== "complete" && existing.selfHealID !== selfHealID)
@@ -809,7 +813,7 @@ export namespace RayaGoal {
       const budget = input.clearBudget ? undefined : (input.budget ?? prior.budget)
       if (emptyBudget(budget))
         return yield* new AuditError({
-          message: "A goal budget requires an active-time, model-cost, or recovery-attempt limit.",
+          message: "A goal budget requires an active-time, model-cost, recovery-attempt, or concurrent-child limit.",
         })
       const revised = !isDeepStrictEqual(criteria, prior.criteria)
       const limited = !isDeepStrictEqual(budget, prior.budget)

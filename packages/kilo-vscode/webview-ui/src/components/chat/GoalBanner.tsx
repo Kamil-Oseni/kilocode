@@ -80,7 +80,8 @@ const span = (ms: number) => {
 const sameBudget = (left: GoalBudget | null | undefined, right: GoalBudget | null | undefined) =>
   left?.activeMs === right?.activeMs &&
   left?.modelCost === right?.modelCost &&
-  left?.recoveryAttempts === right?.recoveryAttempts
+  left?.recoveryAttempts === right?.recoveryAttempts &&
+  left?.concurrentChildren === right?.concurrentChildren
 
 function label(goal: Pick<GoalState, "status" | "review">) {
   return goal.status === "paused" && goal.review?.status === "pending" ? "Ready for review" : statusWord[goal.status]
@@ -143,20 +144,26 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
   const [minutes, setMinutes] = createSignal("")
   const [cost, setCost] = createSignal("")
   const [attempts, setAttempts] = createSignal("")
+  const [children, setChildren] = createSignal("")
   const [savedBudget, setSavedBudget] = createSignal<GoalBudget>()
   const required = () => (!criteria().length && saved() === undefined ? undefined : criteria())
   const revised = () => !equal(required(), saved())
   const active = () => (minutes().trim() ? Number(minutes()) * 60_000 : undefined)
   const amount = () => (cost().trim() ? Number(cost()) : undefined)
   const recoveries = () => (attempts().trim() ? Number(attempts()) : undefined)
+  const concurrent = () => (children().trim() ? Number(children()) : undefined)
   const limits = (): GoalBudget => ({
     ...(active() === undefined ? {} : { activeMs: Math.round(active()!) }),
     ...(amount() === undefined ? {} : { modelCost: amount() }),
     ...(recoveries() === undefined ? {} : { recoveryAttempts: recoveries() }),
+    ...(concurrent() === undefined ? {} : { concurrentChildren: concurrent() }),
   })
   const budget = () => {
     const value = limits()
-    return value.activeMs === undefined && value.modelCost === undefined && value.recoveryAttempts === undefined
+    return value.activeMs === undefined &&
+      value.modelCost === undefined &&
+      value.recoveryAttempts === undefined &&
+      value.concurrentChildren === undefined
       ? undefined
       : value
   }
@@ -168,7 +175,8 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
         active()! < 1_000 ||
         active()! > 31_536_000_000)) ||
     (amount() !== undefined && (!Number.isFinite(amount()) || amount()! <= 0 || amount()! > 1_000_000)) ||
-    (recoveries() !== undefined && (!Number.isSafeInteger(recoveries()) || recoveries()! < 1 || recoveries()! > 100))
+    (recoveries() !== undefined && (!Number.isSafeInteger(recoveries()) || recoveries()! < 1 || recoveries()! > 100)) ||
+    (concurrent() !== undefined && (!Number.isSafeInteger(concurrent()) || concurrent()! < 1 || concurrent()! > 32))
   const invalid = () => (revised() && !valid(required())) || invalidBudget()
   const [now, setNow] = createSignal(Date.now())
   const runtime = () => {
@@ -212,6 +220,9 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
         setMinutes(props.goal.budget?.activeMs === undefined ? "" : String(props.goal.budget.activeMs / 60_000))
         setCost(props.goal.budget?.modelCost === undefined ? "" : String(props.goal.budget.modelCost))
         setAttempts(props.goal.budget?.recoveryAttempts === undefined ? "" : String(props.goal.budget.recoveryAttempts))
+        setChildren(
+          props.goal.budget?.concurrentChildren === undefined ? "" : String(props.goal.budget.concurrentChildren),
+        )
         queueMicrotask(() => editor?.focus())
       },
     ),
@@ -398,6 +409,10 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                         {limit().recoveryAttempts === undefined
                           ? "No recovery-attempt limit"
                           : plural(limit().recoveryAttempts!, "recovery attempt")}
+                        {" Â· "}
+                        {limit().concurrentChildren === undefined
+                          ? "No concurrent-child limit"
+                          : plural(limit().concurrentChildren!, "concurrent child")}
                       </div>
                     )}
                   </Show>
@@ -521,10 +536,21 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                           onInput={(event) => setAttempts(event.currentTarget.value)}
                         />
                       </label>
+                      <label for="goal-child-limit">
+                        Concurrent delegated children
+                        <input
+                          id="goal-child-limit"
+                          inputMode="numeric"
+                          value={children()}
+                          readOnly={props.saving}
+                          onInput={(event) => setChildren(event.currentTarget.value)}
+                        />
+                      </label>
                       <p>
                         Leave a field blank for no saved limit. Recovery attempts are consecutive; successful work or a
-                        revised approach renews them. Raya may stop earlier when repeated work is unsafe. Child, tool,
-                        voice and external charges are not included in model cost.
+                        revised approach renews them. A child slot is reserved before delegation and released when that
+                        task ends. Raya may stop earlier when repeated work is unsafe. Tool, voice and external charges
+                        are not included in model cost.
                       </p>
                     </fieldset>
                     <GoalCriteriaEditor
@@ -535,7 +561,7 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                     <Show when={invalid()}>
                       <p role="status">
                         Use complete criteria, positive limits, no more than 1 year of active time, no more than
-                        $1,000,000 of recorded model cost, and 1 to 100 recovery attempts.
+                        $1,000,000 of recorded model cost, 1 to 100 recovery attempts, and 1 to 32 concurrent children.
                       </p>
                     </Show>
                     <Show when={props.editError}>

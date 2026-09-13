@@ -19996,6 +19996,7 @@ export type KilocodeGoalGetResponses = {
         activeMs?: number
         modelCost?: number
         recoveryAttempts?: number
+        concurrentChildren?: number
       }
       budgetHit?: {
         kind: "active-time" | "model-cost" | "recovery-attempts"
@@ -20069,6 +20070,7 @@ export type KilocodeGoalGetResponses = {
       activeMs?: number
       modelCost?: number
       recoveryAttempts?: number
+      concurrentChildren?: number
     }
     objective: string
     revision?: string
@@ -20220,6 +20222,7 @@ export type KilocodeGoalGetResponses = {
           activeMs?: number
           modelCost?: number
           recoveryAttempts?: number
+          concurrentChildren?: number
         }
         budgetHit?: {
           kind: "active-time" | "model-cost" | "recovery-attempts"
@@ -20293,6 +20296,7 @@ export type KilocodeGoalGetResponses = {
         activeMs?: number
         modelCost?: number
         recoveryAttempts?: number
+        concurrentChildren?: number
       }
       budgetHit?: {
         kind: "active-time" | "model-cost" | "recovery-attempts"
@@ -20391,6 +20395,7 @@ export type KilocodeGoalUpdateData = {
       activeMs?: number
       modelCost?: number
       recoveryAttempts?: number
+      concurrentChildren?: number
     }
     clearBudget?: true
     expectedIntent?: string
@@ -20476,6 +20481,7 @@ export type KilocodeGoalUpdateResponses = {
         activeMs?: number
         modelCost?: number
         recoveryAttempts?: number
+        concurrentChildren?: number
       }
       budgetHit?: {
         kind: "active-time" | "model-cost" | "recovery-attempts"
@@ -20549,6 +20555,7 @@ export type KilocodeGoalUpdateResponses = {
       activeMs?: number
       modelCost?: number
       recoveryAttempts?: number
+      concurrentChildren?: number
     }
     objective: string
     revision?: string
@@ -20700,6 +20707,7 @@ export type KilocodeGoalUpdateResponses = {
           activeMs?: number
           modelCost?: number
           recoveryAttempts?: number
+          concurrentChildren?: number
         }
         budgetHit?: {
           kind: "active-time" | "model-cost" | "recovery-attempts"
@@ -20773,6 +20781,7 @@ export type KilocodeGoalUpdateResponses = {
         activeMs?: number
         modelCost?: number
         recoveryAttempts?: number
+        concurrentChildren?: number
       }
       budgetHit?: {
         kind: "active-time" | "model-cost" | "recovery-attempts"
@@ -20859,6 +20868,7 @@ export type KilocodeGoalCreateData = {
       activeMs?: number
       modelCost?: number
       recoveryAttempts?: number
+      concurrentChildren?: number
     }
   }
   path: {
@@ -20938,6 +20948,7 @@ export type KilocodeGoalCreateResponses = {
         activeMs?: number
         modelCost?: number
         recoveryAttempts?: number
+        concurrentChildren?: number
       }
       budgetHit?: {
         kind: "active-time" | "model-cost" | "recovery-attempts"
@@ -21011,6 +21022,7 @@ export type KilocodeGoalCreateResponses = {
       activeMs?: number
       modelCost?: number
       recoveryAttempts?: number
+      concurrentChildren?: number
     }
     objective: string
     revision?: string
@@ -21162,6 +21174,7 @@ export type KilocodeGoalCreateResponses = {
           activeMs?: number
           modelCost?: number
           recoveryAttempts?: number
+          concurrentChildren?: number
         }
         budgetHit?: {
           kind: "active-time" | "model-cost" | "recovery-attempts"
@@ -21235,6 +21248,7 @@ export type KilocodeGoalCreateResponses = {
         activeMs?: number
         modelCost?: number
         recoveryAttempts?: number
+        concurrentChildren?: number
       }
       budgetHit?: {
         kind: "active-time" | "model-cost" | "recovery-attempts"

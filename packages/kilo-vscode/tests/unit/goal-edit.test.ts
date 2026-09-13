@@ -124,7 +124,7 @@ test("goal criteria edits validate drafts and require matching saved criteria", 
 test("goal limit edits validate and require an exact saved acknowledgement", async () => {
   const calls: Request[] = []
   const messages: unknown[] = []
-  const saved = { activeMs: 60_000, modelCost: 4, recoveryAttempts: 2 }
+  const saved = { activeMs: 60_000, modelCost: 4, recoveryAttempts: 2, concurrentChildren: 3 }
   let returned: typeof saved | undefined = saved
   const client = createKiloClient({
     baseUrl: "http://localhost:4096",
@@ -154,7 +154,7 @@ test("goal limit edits validate and require an exact saved acknowledgement", asy
   await editGoal(context)
   expect(await calls[0].json()).toMatchObject({ budget: saved, expectedIntent: "reviewed" })
   expect(messages.at(-1)).toMatchObject({ goal: { budget: saved } })
-  returned = { activeMs: 60_000, modelCost: 5, recoveryAttempts: 2 }
+  returned = { activeMs: 60_000, modelCost: 5, recoveryAttempts: 2, concurrentChildren: 3 }
   await editGoal(context)
   expect(messages.at(-1)).toMatchObject({ error: expect.stringContaining("did not match") })
   returned = undefined
@@ -169,6 +169,9 @@ test("goal limit edits validate and require an exact saved acknowledgement", asy
     { recoveryAttempts: 0 },
     { recoveryAttempts: 1.5 },
     { recoveryAttempts: 101 },
+    { concurrentChildren: 0 },
+    { concurrentChildren: 1.5 },
+    { concurrentChildren: 33 },
     { recoveryAttempts: 2, unknown: true },
   ])
     await editGoal({ ...context, message: { ...message, budget } as GoalEditMessage })

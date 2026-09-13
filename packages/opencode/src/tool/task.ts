@@ -18,13 +18,15 @@ import { KiloSessionProcessor } from "../kilocode/session/processor" // kilocode
 import { KiloSession } from "../kilocode/session" // kilocode_change
 import { resumeHint } from "../kilocode/task-resume" // kilocode_change
 import { errorMessage } from "@/util/error" // kilocode_change
-import { Effect, Exit, Schema, Scope } from "effect"
+import { Effect, Exit, Option, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import * as SandboxPolicy from "@/kilocode/sandbox/policy" // kilocode_change
 import { Database } from "@opencode-ai/core/database/database"
 import { Permission } from "@/permission" // raya_change - Milestone D auto-routing respects inherited task denies
 import { RayaChief } from "@/kilocode/chief" // raya_change - Milestone B enforced Auto decision
+import * as GoalChildren from "@/kilocode/goal/children" // kilocode_change - raya_change: goal child reservations
+import { Storage } from "@/storage/storage" // kilocode_change - raya_change: durable goal child limit
 import { ModelV2 } from "@opencode-ai/core/model" // raya_change - Milestone B preserved target model
 import { ProviderV2 } from "@opencode-ai/core/provider" // raya_change - Milestone B preserved target model
 
@@ -121,6 +123,8 @@ export const TaskTool = Tool.define(
     const scope = yield* Scope.Scope
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
+    const storage = Option.getOrUndefined(yield* Effect.serviceOption(Storage.Service)) // kilocode_change - raya_change: optional outside durable goal contexts
+    const children = storage ? yield* GoalChildren.make({ storage, sessions }) : undefined // kilocode_change - raya_change
 
     const run = Effect.fn("TaskTool.execute")(function* (
       params: Schema.Schema.Type<typeof Parameters>,
@@ -273,6 +277,9 @@ export const TaskTool = Tool.define(
       const variant = selected.variant
       // kilocode_change end
 
+      const ops = ctx.extra?.promptOps as TaskPromptOps
+      if (!ops) return yield* Effect.fail(new Error("TaskTool requires promptOps in ctx.extra"))
+
       const canTask = depth + 1 < (cfg.subagent_depth ?? 2) // kilocode_change - honor upstream's opt-in depth limit
       const canTodo = next.permission.some((rule) => rule.permission === "todowrite")
 
@@ -302,52 +309,62 @@ export const TaskTool = Tool.define(
       }
       // kilocode_change end
       const platform = KiloSession.resolvePlatform(ctx.sessionID) // kilocode_change - preserve parent attribution across task creation/resume
+      // kilocode_change start // raya_change start - reserve before child creation and release every exit path
+      const lease = children ? yield* children.claim(ctx.sessionID) : { release: Effect.void }
+      // kilocode_change end // raya_change end
       // kilocode_change start - create a child session with inherited Kilo restrictions
       const nextSession =
         session ??
-        (yield* sessions.create({
-          parentID: ctx.sessionID,
-          title: params.description + ` (@${next.name} subagent)`,
-          agent: next.name,
-          platform, // kilocode_change
-          permission: childPermission, // kilocode_change - persist inherited Kilo ceilings and upstream child denies
-        }))
+        (yield* sessions
+          .create({
+            parentID: ctx.sessionID,
+            title: params.description + ` (@${next.name} subagent)`,
+            agent: next.name,
+            platform, // kilocode_change
+            permission: childPermission, // kilocode_change - persist inherited Kilo ceilings and upstream child denies
+          })
+          .pipe(Effect.tapError(() => lease.release)))
       // kilocode_change end
       // kilocode_change start - persist a task-specific ceiling consumed by SessionPrompt.runLoop
-      yield* sessions.setMetadata({
-        sessionID: nextSession.id,
-        metadata: KiloTask.metadata(
-          {
-            ...nextSession.metadata,
-            ...(parent.metadata?.["raya.goal.open"] === true ? { "raya.goal.open": true } : {}),
-          },
-          params.step_cap,
-        ),
-      })
+      yield* sessions
+        .setMetadata({
+          sessionID: nextSession.id,
+          metadata: KiloTask.metadata(
+            {
+              ...nextSession.metadata,
+              ...(parent.metadata?.["raya.goal.open"] === true ? { "raya.goal.open": true } : {}),
+            },
+            params.step_cap,
+          ),
+        })
+        .pipe(Effect.tapError(() => lease.release))
       // kilocode_change end
       // kilocode_change start - rebuild in-memory ancestry and inherit confinement after creation/resume
       KiloSession.register({ id: nextSession.id, parentID: ctx.sessionID, platform })
       yield* SandboxPolicy.inherit(ctx.sessionID, nextSession.id, fallback).pipe(
         Effect.provideService(Config.Service, config),
+        Effect.tapError(() => lease.release),
       )
       // kilocode_change end
 
       // kilocode_change start
       // raya_change start - consume the already logged Chief decision exactly once
       if (chief) {
-        const latest = yield* sessions.get(ctx.sessionID)
+        const latest = yield* sessions.get(ctx.sessionID).pipe(Effect.tapError(() => lease.release))
         const clean = Object.fromEntries(
           Object.entries(latest.metadata ?? {}).filter(([key]) => key !== RayaChief.pendingKey),
         )
-        yield* sessions.setMetadata({
-          sessionID: ctx.sessionID,
-          // kilocode_change start
-          metadata: {
-            ...clean,
-            [RayaChief.phaseKey]: "goal", // raya_change - reserve the next Auto step for goal verification
-          },
-          // kilocode_change end
-        })
+        yield* sessions
+          .setMetadata({
+            sessionID: ctx.sessionID,
+            // kilocode_change start
+            metadata: {
+              ...clean,
+              [RayaChief.phaseKey]: "goal", // raya_change - reserve the next Auto step for goal verification
+            },
+            // kilocode_change end
+          })
+          .pipe(Effect.tapError(() => lease.release))
       }
       // raya_change end
       // kilocode_change end
@@ -376,13 +393,12 @@ export const TaskTool = Tool.define(
         ...(runInBackground ? { background: true } : {}),
       }
 
-      yield* ctx.metadata({
-        title: params.description,
-        metadata,
-      })
-
-      const ops = ctx.extra?.promptOps as TaskPromptOps
-      if (!ops) return yield* Effect.fail(new Error("TaskTool requires promptOps in ctx.extra"))
+      yield* ctx
+        .metadata({
+          title: params.description,
+          metadata,
+        })
+        .pipe(Effect.tapError(() => lease.release))
 
       const runTask = Effect.fn("TaskTool.runTask")(
         function* () {
@@ -473,8 +489,9 @@ export const TaskTool = Tool.define(
             }),
         )
 
+      const work = () => runTask().pipe(Effect.ensuring(lease.release))
       const backgroundRun = withCostPropagation(
-        runTask().pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id, message))),
+        work().pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id, message))),
       ) // kilocode_change
       // kilocode_change end
 
@@ -491,12 +508,14 @@ export const TaskTool = Tool.define(
       // kilocode_change end
 
       if (
-        yield* background.extend({
-          origin, // kilocode_change
-          id: nextSession.id,
-          // kilocode_change - extended background work also propagates its cost
-          run: withCostPropagation(runTask().pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id, message)))), // kilocode_change
-        })
+        yield* background
+          .extend({
+            origin, // kilocode_change
+            id: nextSession.id,
+            // kilocode_change - extended background work also propagates its cost
+            run: withCostPropagation(work().pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id, message)))), // kilocode_change
+          })
+          .pipe(Effect.tapError(() => lease.release))
       ) {
         return {
           title: params.description,
@@ -517,25 +536,27 @@ export const TaskTool = Tool.define(
       const foregroundCost = runInBackground
         ? undefined
         : yield* KiloCostPropagation.childCost(sessions, nextSession.id) // kilocode_change - snapshot before the foreground job starts
-      const info = yield* background.start({
-        origin, // kilocode_change
-        id: nextSession.id,
-        type: id,
-        title: params.description,
-        metadata,
-        onPromote: Effect.all([
-          ctx.metadata({
-            title: params.description,
-            metadata: { ...metadata, background: true, jobId: nextSession.id },
-          }),
-          notify(nextSession.id),
-        ]),
-        // kilocode_change - only the initial-background start needs its own cost bracket; the
-        // foreground/promoted path below is already wrapped by the acquireUseRelease at the bottom of run()
-        run: runInBackground
-          ? backgroundRun
-          : runTask().pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id, message))), // kilocode_change
-      })
+      const info = yield* background
+        .start({
+          origin, // kilocode_change
+          id: nextSession.id,
+          type: id,
+          title: params.description,
+          metadata,
+          onPromote: Effect.all([
+            ctx.metadata({
+              title: params.description,
+              metadata: { ...metadata, background: true, jobId: nextSession.id },
+            }),
+            notify(nextSession.id),
+          ]),
+          // kilocode_change - only the initial-background start needs its own cost bracket; the
+          // foreground/promoted path below is already wrapped by the acquireUseRelease at the bottom of run()
+          run: runInBackground
+            ? backgroundRun
+            : work().pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id, message))), // kilocode_change
+        })
+        .pipe(Effect.tapError(() => lease.release))
 
       function backgroundResult() {
         return {
@@ -614,6 +635,7 @@ export const TaskTool = Tool.define(
                 )
               }),
             ),
+            Effect.ensuring(lease.release), // raya_change - release even when a raced registry entry owns the work
           ),
         // kilocode_change end
       )

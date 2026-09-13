@@ -29,9 +29,9 @@ Status excerpts below are historical records, not a fresh certification of every
 
 Close the remaining parent requirements in this order, finishing a complete acceptance package before opening an unrelated slice. This order reflects verification cost; it does not waive original acceptance.
 
-Completed from this queue: UI-01, PR-03, EN-03, EN-05 and UX-01.
+Completed from this queue: UI-01, PR-03, EN-03, EN-05, EN-13 and UX-01.
 
-1. **Repository-deterministic:** EN-07; EN-13; EN-14; EN-15; PR-02 + OVR-06; PR-04 + EN-02 + OVR-05; PR-05 + OVR-04; EN-06; EN-10; OVR-09; OVR-08.
+1. **Repository-deterministic:** EN-07; EN-14; EN-15; PR-02 + OVR-06; PR-04 + EN-02 + OVR-05; PR-05 + OVR-04; EN-06; EN-10; OVR-09; OVR-08.
 2. **Packaged local interaction or broad cross-surface review:** UX-03; EN-04; UX-02; UX-04; UX-05; UI-03; EN-09.
 3. **External, physical-device, multi-platform or moderated evidence:** EN-01; EN-11 + OVR-02 + OVR-10; EN-12 + OVR-01; OVR-03; PR-06; PR-01 + OVR-07; UI-02.
 
@@ -358,13 +358,13 @@ The following sections retain the full 39-item scope. Related findings and overh
 
 ### EN-13 — Treat recordings and telemetry as separate data products
 
-**Recorded status:** In progress. Added a local diagnostic summary with allowlisted fields and minimized snapshot identity; synthetic export checks pass. Removed telemetry console disclosure before opt-out; actual calling-boundary HTTP tests pass. Outbound consent synchronization, property policy, recorder-format acceptance and retention remain open.
+**Recorded status:** Verified by ChatGPT on 2026-09-12 23:08 America/Toronto. The documented versioned diagnostic summary projects only approved fields. Actual cassette-writer tests reject synthetic secrets across supported textual and declared binary forms without leaking them or replacing prior safe recordings. Extension caller and CLI generation tests prove opt-out before enrichment/dispatch and reject stale enable/capture work.
 
 **Implementation and verification:**
 
-1. Finish the pending recorder/transport batch. Then add acknowledged receiving-side consent ordering and capture generation checks; stale enable must not override newer opt-out.
-2. Define reconnect/multi-client ownership, inventory outbound properties and apply versioned allowlists. Establish destination retention/deletion and separate recording/export consent.
-3. Use actual receiver/outbound synthetic transports for reordered controls, failures, queued events and identity updates; preserve safe cassette bytes and secret-free errors.
+1. Preserve the versioned diagnostic allowlist and the documented separation between local diagnostics, test recordings, telemetry and operational content.
+2. Re-run writer-level format coverage and actual caller/receiver consent ordering whenever recording formats or telemetry transport change.
+3. Continue company retention/deletion policy, outbound-property governance and any future sensitive-recording opt-in as policy work without weakening this verified data-boundary contract.
 
 **Source entry points:** [packages/http-recorder/src/redaction.ts](../packages/http-recorder/src/redaction.ts), [packages/http-recorder/src/redactor.ts](../packages/http-recorder/src/redactor.ts), [packages/kilo-telemetry/src/client.ts](../packages/kilo-telemetry/src/client.ts), [packages/kilo-telemetry/src/identity.ts](../packages/kilo-telemetry/src/identity.ts).
 
@@ -2359,3 +2359,9 @@ Deterministic evidence: 168 backend tests / 1,143 assertions across cron parsing
 EN-05 and UX-01 are fully Verified against their original acceptance. Persisted patch-generation fingerprints reopen a later edit even when the content and line positions repeat. Exact session/revision command identity, chat request/turn identity, out-of-order refresh protection and backend preconditions reject stale or replacement work. Deletion-only and renamed files remain discoverable in the production chat surface; missing reviewed paths open through immutable revision-bound virtual buffers. Controls say `Keep file` / `Undo file`, whole-file editor scope is stated in tooltips, and summaries expose additions and deletions. Per-hunk rollback preserves the other hunk, while dirty buffers and concurrent saved changes fail closed.
 
 Evidence: 67 extension tests / 236 assertions across editor host behavior, chat state, request identity, file extraction, hunk rollback, path safety and lens placement; 10 backend tests / 108 assertions across revision preconditions, cross-process receipt publication and patch-history projection; and 4/4 production-component Chromium cases across light/dark and 320/760 px with axe and overflow checks. The initial browser run was blocked by sandboxed esbuild traversal; the approved identical rerun passed. No product source changed, so no changeset or snapshot reinstall is needed. Keep EN-04 open for uncertain outcomes, cross-process workspace transactions and receipt retention; those are separate from EN-05 revision identity and UX-01 scope clarity.
+
+## ChatGPT 2026-09-12 23:08 America/Toronto — EN-13 verification receipt
+
+EN-13 is fully Verified against its original three-part acceptance. `docs/Raya-Diagnostic-Data-Boundaries.md` documents the bounded version 1 diagnostic fields and separately inventories local summaries, test recordings, telemetry and operational content with destinations, controls and known retention limits. The summary exporter constructs only those fields and cannot serialize arbitrary paths, identities, prompts, file content, configuration, environment or error objects.
+
+Writer-level recorder coverage rejects synthetic secrets across JSON, plain text, SSE, URLs, nested metadata/errors, WebSocket text, declared base64 HTTP responses and binary WebSocket frames. It also rejects invalid/noncanonical binary encodings and bounded-inspection overflow before publishing, preserves prior safe cassette bytes, omits secrets from errors and keeps safe binary replay lossless. Actual extension transport tests prove consent before enrichment/dispatch, redirect refusal, disconnect cancellation and versioned opt-out ordering; CLI telemetry tests reject stale enable/capture after a later opt-out. Evidence: recorder 37 tests / 185 assertions, telemetry 26 / 68, extension boundary/export 16 / 36, plus recorder, telemetry and extension typechecks. Broader company retention/deletion and outbound-property governance stay explicit follow-up policy; they do not invalidate the accepted diagnostic, redaction and opt-out guarantees. No product source changed, so no changeset or snapshot reinstall is required.

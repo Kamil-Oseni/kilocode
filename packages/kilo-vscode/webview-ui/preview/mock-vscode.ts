@@ -20,7 +20,7 @@ const legal = {
   name: "Counsel",
   role: "counsel",
   objective: "Review contracts",
-  capabilities: ["legal"],
+  capabilities: ["legal", "organization:provision"],
   schedule: { kind: "manual" },
   enabled: true,
   access: "brief",

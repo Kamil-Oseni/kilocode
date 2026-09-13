@@ -95,6 +95,8 @@ test("wide routines organization filters and opens worker DMs", async ({ page },
   await expect(page.getByRole("heading", { name: "Website Builders" })).toBeVisible()
   await expect(page.getByText("Find, design, build, and support better client websites.")).toBeVisible()
   await expect(page.getByText("Reports to Counsel")).toBeVisible()
+  await expect(page.getByText("Can create workers", { exact: true })).toBeVisible()
+  await expect(page.getByText("Cannot create workers", { exact: true })).toBeVisible()
   await page.getByRole("button", { name: "Finance 1" }).click()
   await expect(page.locator('.routines-identity[data-routine-worker="routine"]')).toBeVisible()
   await expect(page.locator('.routines-identity[data-routine-worker="legal"]')).toBeHidden()
@@ -115,6 +117,8 @@ test("routines organization editor separates reporting, delegation, and archive"
   await page.getByRole("button", { name: "Website Builders 2" }).click()
   await page.getByRole("button", { name: "Edit organization" }).click()
   await expect(page.getByRole("heading", { name: "Team and reporting" })).toBeVisible()
+  await expect(page.getByText("Can create workers", { exact: true })).toBeVisible()
+  await expect(page.getByText("Cannot create workers", { exact: true })).toBeVisible()
   await expect(
     page.getByText("Reporting lines organize the team. They don’t grant permission to delegate work."),
   ).toBeVisible()

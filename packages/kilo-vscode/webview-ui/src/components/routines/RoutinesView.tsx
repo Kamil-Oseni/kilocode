@@ -116,6 +116,10 @@ function OrganizationEditor(props: {
     props.agents.filter((item) => !members().some((member) => member.agentID === item.id)),
   )
   const label = (id: string) => props.agents.find((item) => item.id === id)?.name ?? "Archived worker"
+  const provisions = (id: string) =>
+    props.agents
+      .find((item) => item.id === id)
+      ?.capabilities.some((capability) => capability.toLowerCase() === "organization:provision") ?? false
   const revise = (id: string, update: Partial<Member>) =>
     setMembers((items) => items.map((item) => (item.agentID === id ? { ...item, ...update } : item)))
   const remove = (id: string) => {
@@ -200,6 +204,9 @@ function OrganizationEditor(props: {
               {(member) => (
                 <li>
                   <strong>{label(member.agentID)}</strong>
+                  <span class="routines-hint">
+                    {provisions(member.agentID) ? "Can create workers" : "Cannot create workers"}
+                  </span>
                   <label class="routines-field">
                     Role
                     <input
@@ -1767,6 +1774,13 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                               <button type="button" onClick={() => choose(member.agentID)} disabled={!agent()}>
                                 <span>{agent()?.name ?? "Archived worker"}</span>
                                 <span>{member.role}</span>
+                                <span>
+                                  {agent()?.capabilities.some(
+                                    (capability) => capability.toLowerCase() === "organization:provision",
+                                  )
+                                    ? "Can create workers"
+                                    : "Cannot create workers"}
+                                </span>
                                 <Show when={supervisor()}>
                                   {(lead) => (
                                     <span>

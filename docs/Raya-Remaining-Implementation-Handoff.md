@@ -2612,3 +2612,9 @@ The next slice is organization-level assignment and follow-up:
 7. Add real extension-bridge coverage and production-preview journeys at 900 px and 320 px for route filtering, validation, success refresh, keyboard focus, axe and overflow. Use one process/worker at a time.
 
 After assignment, add organization Work search/filters only from real feed dimensions, then prove one representative discovery → design → code → hosting → outreach workflow through real tool/integration boundaries with durable reports, scoped authority, attributable cost and failure recovery. Update both ledgers during every slice with `ChatGPT`, timestamp, exact paths/checks/corrections, commit and installed identity so the next review can distinguish code claims from verified behavior.
+
+## ChatGPT 2026-09-13 04:01 America/Toronto — organization lineage and controls delivered
+
+Commit `c338821fb319451e03f2c5639c366ec23798e302` is on `origin/main`. The one-task push gate passed 29 TypeScript packages with only Raya and CLI uncached; JetBrains was cached. The low-memory snapshot then regenerated SDK output with no tracked diff, rebuilt and smoke-tested the Windows CLI, ran host/webview typechecks sequentially, passed extension ESLint and the production bundle, packaged 431 entries, and installed successfully.
+
+Installed identity: `eden.raya@7.4.23-snapshot+c338821fb3.kamil-oseni.1789286289340`. VSIX: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-c338821fb3-kamil-oseni-1789286289340.vsix`; 517,613,055 bytes; SHA-256 `1842B9132FD759180CB543E65C79B8D35C8EA27F6085C8A769F5C4C67C69398D`; bundled CLI 229,147,136 bytes; zero `.env`/`.tmp` entries. HEAD/origin match. Only the two owner reference documents remain untracked. Reload VS Code before reviewing, and begin the next session at the organization-level assignment steps above.

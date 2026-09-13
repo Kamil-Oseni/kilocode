@@ -300,7 +300,7 @@ This checkpoint delivers explicit organization delegation permissions, admission
 
 ## Current work
 
-Latest pushed product checkpoint: `e43672e52d`. Latest verified installed snapshot checkpoint: `4492c705f8`, installed as `eden.raya@7.4.23-snapshot+4492c705f8.kamil-oseni.1789335242671`. The pushed checkpoint adds journaled Canvas interruption recovery to the installed saved-record recovery and independent-writer coordination. Full live rebuild-survival acceptance, paid Live voice/device acceptance, the Go companion rebuild and the remaining audit work stay open.
+Latest pushed product checkpoint: `e43672e52d`. Latest verified installed snapshot checkpoint: `0bfdaf9811`, installed as `eden.raya@7.4.23-snapshot+0bfdaf9811.kamil-oseni.1789336612278`. It includes journaled Canvas interruption recovery, saved-record recovery and independent-writer coordination. Full live rebuild-survival acceptance, paid Live voice/device acceptance, the Go companion rebuild and the remaining audit work stay open.
 
 The browser simplification is delivered through source, tests, push and installed snapshot. Durable spoken snapshots, warm handoff, live device/provider acceptance, organization delegation/provisioning and the full 39-requirement audit remain open.
 
@@ -4234,4 +4234,10 @@ On restore, Raya accepts only the exact recorded preimage or intended result for
 
 Real Bun child-process evidence passes 4/4 with 48 assertions. It kills the writer after the durable journal, before and after the recovery rename, before and after the current rename, and after the source and data renames; every restart converges on one saved revision. A separate crash case changes the editable source before restart and proves that manual source survives while untouched data completes. The existing Canvas compiler/service suite passes 17/17 with 183 assertions across corrupt records, recovery copies, restart, runtime rollback, dirty and divergent files, and invalid-journal retention. Extension-host typecheck, targeted ESLint and Prettier, Knip, Kilo marker, Markdown-table and diff guards pass. The sandboxed esbuild runtime case again encountered its known ancestor-read denial; the identical focused suite passed outside the sandbox. No broad Turbo check, repository-wide typecheck or `tsgolint` ran.
 
-EN-06 remains **In progress** only for installed interaction evidence: reload the new snapshot after it is packaged, then exercise valid-current reopen, damaged-current/valid-recovery reopen, dual-corruption failure, divergent editable-file warning and a real extension-host termination during save. Package installation alone must not mark the row Verified.
+EN-06 remains **In progress** only for installed interaction evidence: reload installed snapshot `0bfdaf9811`, then exercise valid-current reopen, damaged-current/valid-recovery reopen, dual-corruption failure, divergent editable-file warning and a real extension-host termination during save. Package installation alone must not mark the row Verified.
+
+## ChatGPT 2026-09-13 17:58 America/Toronto - Canvas transaction checkpoint installed
+
+The authorized sequential `RAYA_LOW_MEMORY=1` workflow installed `eden.raya@7.4.23-snapshot+0bfdaf9811.kamil-oseni.1789336612278`. Artifact: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-0bfdaf9811-kamil-oseni-1789336612278.vsix`; 517,940,007 bytes; 431 files; SHA-256 `5EDE5E148B967187F2A9AD25B57A9A4CC4602277960E3C0BAE5D796F5E8F1FCB`. The exact versioned extension directory exists with installation time 17:58 America/Toronto. The workflow reused the verified CLI binary, then passed extension-host typecheck, webview typecheck, cached ESLint, production bundling, packaging and installation one stage at a time. No Bun build process or `tsgolint` remained afterward.
+
+Reload VS Code to activate this version in the current extension host. This proves packaging and installed identity; EN-06 remains In progress until the installed reopen, corruption, divergence and real host-termination interaction matrix is recorded.

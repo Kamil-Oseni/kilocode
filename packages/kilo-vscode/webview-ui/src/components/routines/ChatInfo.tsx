@@ -23,6 +23,9 @@ type Contact = {
   archived: boolean
   direction: "sent" | "received"
   delegationID: string
+  organizationID?: string
+  organizationName?: string
+  organizationRevision?: number
   state: string
   objective: string
   expected?: string
@@ -58,11 +61,26 @@ function optionalText(row: Record<string, unknown>, keys: string[]) {
   return keys.every((key) => row[key] === undefined || typeof row[key] === "string")
 }
 
+function provenance(row: Record<string, unknown>) {
+  if (row.organizationID === undefined)
+    return row.organizationName === undefined && row.organizationRevision === undefined
+  return (
+    typeof row.organizationID === "string" &&
+    /^org_[a-f0-9]{32}$/.test(row.organizationID) &&
+    typeof row.organizationName === "string" &&
+    !!row.organizationName.trim() &&
+    typeof row.organizationRevision === "number" &&
+    Number.isSafeInteger(row.organizationRevision) &&
+    row.organizationRevision >= 1
+  )
+}
+
 function validContact(value: unknown): value is Contact {
   if (!value || typeof value !== "object") return false
   const row = value as Record<string, unknown>
   if (!optionalText(row, ["expected", "context", "response", "reason"])) return false
   if (row.cost !== undefined && (typeof row.cost !== "number" || !Number.isFinite(row.cost))) return false
+  if (!provenance(row)) return false
   return (
     typeof row.peerID === "string" &&
     typeof row.name === "string" &&
@@ -329,6 +347,11 @@ export const ChatInfo: Component<{
                       <span class="routines-line-meta">
                         {item.state} · {stamp(item.updated)}
                       </span>
+                      {item.organizationName ? (
+                        <span class="routines-line-meta">
+                          {item.organizationName} · organization revision {item.organizationRevision}
+                        </span>
+                      ) : null}
                       <p>{item.objective}</p>
                       {item.expected ? <p>Expected: {item.expected}</p> : null}
                       {item.context ? <p>Shared context: {item.context}</p> : null}

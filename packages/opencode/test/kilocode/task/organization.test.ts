@@ -78,13 +78,35 @@ test("routine organizations persist ordered versioned graphs and preserve archiv
           { agentID: books.id, role: "Accounting", supervisorID: chief.id },
           { agentID: design.id, role: "Chief Designer", supervisorID: chief.id },
         ],
+        delegations: [
+          { senderID: chief.id, recipientID: books.id },
+          { senderID: chief.id, recipientID: design.id },
+        ],
       })
       expect(created.id).toMatch(/^org_[a-f0-9]{32}$/)
       expect(created.revision).toBe(1)
       expect(created.members.map((member) => member.position)).toEqual([0, 1, 2])
+      expect(created.delegations.map((edge) => edge.position)).toEqual([0, 1])
+      expect(
+        yield* organizations.authorize({
+          id: created.id,
+          revision: 1,
+          senderID: chief.id,
+          recipientID: books.id,
+        }),
+      ).toEqual({ id: created.id, name: "Website Builders", revision: 1 })
+      expect(
+        Exit.isFailure(
+          yield* organizations
+            .authorize({ id: created.id, revision: 1, senderID: books.id, recipientID: chief.id })
+            .pipe(Effect.exit),
+        ),
+      ).toBe(true)
       expect(yield* organizations.hasActive(books.id)).toBe(true)
       expect(yield* organizations.contains(created.id, [chief.id, books.id])).toBe(true)
       expect(yield* organizations.contains(created.id, [chief.id, "missing"])).toBe(false)
+      expect(yield* organizations.shares(chief.id, books.id)).toBe(true)
+      expect(yield* organizations.shares(books.id, design.id)).toBe(true)
       expect(Exit.isFailure(yield* tasks.remove(books.id).pipe(Effect.exit))).toBe(true)
 
       const updated = yield* organizations.update(created.id, {
@@ -95,10 +117,19 @@ test("routine organizations persist ordered versioned graphs and preserve archiv
           { agentID: design.id, role: "Design", supervisorID: chief.id },
           { agentID: books.id, role: "Finance", supervisorID: chief.id },
         ],
+        delegations: [{ senderID: chief.id, recipientID: design.id }],
       })
       expect(updated.revision).toBe(2)
       expect(updated.purpose).toBeUndefined()
       expect(updated.members.map((member) => member.agentID)).toEqual([chief.id, design.id, books.id])
+      expect(updated.delegations).toEqual([{ senderID: chief.id, recipientID: design.id, position: 0 }])
+      expect(
+        Exit.isFailure(
+          yield* organizations
+            .authorize({ id: created.id, revision: 1, senderID: chief.id, recipientID: design.id })
+            .pipe(Effect.exit),
+        ),
+      ).toBe(true)
       expect(
         Exit.isFailure(
           yield* organizations.update(created.id, { expectedRevision: 1, name: "Stale" }).pipe(Effect.exit),
@@ -111,6 +142,7 @@ test("routine organizations persist ordered versioned graphs and preserve archiv
       const archived = yield* organizations.archive(created.id, { expectedRevision: 2 })
       expect(archived).toMatchObject({ archived: true, revision: 3 })
       expect((yield* organizations.list()).items).toEqual([])
+      expect(yield* organizations.shares(chief.id, books.id)).toBe(false)
       expect((yield* organizations.list({ archived: true })).items[0]?.id).toBe(created.id)
       expect((yield* organizations.get(created.id)).members).toEqual(archived.members)
       expect((yield* inbox.page(books.id)).messages[0]?.body).toBe("Close retained.")
@@ -147,6 +179,27 @@ test("routine organizations reject invalid membership and supervisor graphs", as
       ]
       for (const members of invalid) {
         const result = yield* organizations.create({ name: "Invalid", members }).pipe(Effect.exit)
+        expect(Exit.isFailure(result)).toBe(true)
+      }
+      const edges = [
+        [{ senderID: one.id, recipientID: one.id }],
+        [{ senderID: one.id, recipientID: "missing" }],
+        [
+          { senderID: one.id, recipientID: two.id },
+          { senderID: one.id, recipientID: two.id },
+        ],
+      ]
+      for (const delegations of edges) {
+        const result = yield* organizations
+          .create({
+            name: "Invalid edge",
+            members: [
+              { agentID: one.id, role: "One" },
+              { agentID: two.id, role: "Two" },
+            ],
+            delegations,
+          })
+          .pipe(Effect.exit)
         expect(Exit.isFailure(result)).toBe(true)
       }
       expect((yield* organizations.list()).items).toEqual([])

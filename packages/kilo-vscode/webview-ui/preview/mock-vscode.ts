@@ -150,6 +150,7 @@ const reply = (message: WebviewMessage) => {
             { agentID: legal.id, role: "Chief of Staff", position: 0 },
             { agentID: books.id, role: "Accounting", supervisorID: legal.id, position: 1 },
           ],
+          delegations: [{ senderID: legal.id, recipientID: books.id, position: 0 }],
         },
         {
           version: 1,
@@ -161,6 +162,7 @@ const reply = (message: WebviewMessage) => {
           createdAt: 1,
           updatedAt: 1,
           members: [{ agentID: books.id, role: "Accountant", position: 0 }],
+          delegations: [],
         },
       ],
     })
@@ -265,6 +267,9 @@ const reply = (message: WebviewMessage) => {
                 archived: false,
                 direction: "sent",
                 delegationID: "rdg_preview",
+                organizationID: "org_11111111111111111111111111111111",
+                organizationName: "Website Builders",
+                organizationRevision: 1,
                 state: "completed",
                 objective: "Confirm the vendor contract allows the travel reimbursement.",
                 expected: "A cited approval or exception.",

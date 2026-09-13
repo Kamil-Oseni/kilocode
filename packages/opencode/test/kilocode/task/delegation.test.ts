@@ -2,7 +2,16 @@ import { expect, test } from "bun:test"
 import { Effect, Exit } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { SessionID } from "@/session/schema"
-import { RayaTaskDelegation, billed, begun, credited, ceiling, replied, scope, type Request } from "@/kilocode/task/delegation"
+import {
+  RayaTaskDelegation,
+  billed,
+  begun,
+  credited,
+  ceiling,
+  replied,
+  scope,
+  type Request,
+} from "@/kilocode/task/delegation"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import type { RayaTask } from "@/kilocode/task"
 
@@ -37,6 +46,51 @@ test("delegation policy intersects access and workspace without granting broader
   expect(scope(chief, books)).toBeUndefined()
   expect(scope({ dir: "/a" }, { dir: "/b" })).toBeUndefined()
   expect(scope({ dir: "/a" }, { dir: "/a/" })).toBe("/a")
+})
+
+test("organization-scoped delegation persists admission provenance and revalidates before start", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const organizationID = "org_11111111111111111111111111111111"
+      const allowed = { current: true }
+      const policy = (input: { id: string; revision?: number; senderID: string; recipientID: string }) =>
+        allowed.current &&
+        input.id === organizationID &&
+        input.senderID === "chief" &&
+        input.recipientID === "books" &&
+        (input.revision === undefined || input.revision === 3)
+          ? Effect.succeed({ id: organizationID, name: "Website Builders", revision: 3 })
+          : Effect.fail(new Error("denied"))
+      const store = RayaTaskDelegation.make(database, policy, () => Effect.succeed(true))
+      const chief = agent("chief", "generalist")
+      const books = agent("books", "accountant")
+      const admitted = yield* store.admit(
+        request("dlg_org", chief.id, books.id, { organizationID, organizationRevision: 3 }),
+        chief,
+        books,
+      )
+      expect(admitted.record).toMatchObject({
+        organizationID,
+        organizationName: "Website Builders",
+        organizationRevision: 3,
+      })
+      const taken = (yield* store.take(books.id))!
+      expect(yield* store.authorize(taken)).toBe(true)
+      allowed.current = false
+      expect(yield* store.authorize(taken)).toBe(false)
+      expect(
+        Exit.isFailure(yield* store.admit(request("dlg_unscoped", chief.id, books.id), chief, books).pipe(Effect.exit)),
+      ).toBe(true)
+      expect(
+        Exit.isFailure(
+          yield* store
+            .admit(request("dlg_denied", books.id, chief.id, { organizationID, organizationRevision: 3 }), books, chief)
+            .pipe(Effect.exit),
+        ),
+      ).toBe(true)
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
 })
 
 test("posted replies do not invent a completed worker result", () => {
@@ -117,7 +171,9 @@ test("posted replies do not invent a completed worker result", () => {
   )
   expect(notes[0]).toContain("not added to this run's total")
   expect(notes.some((line) => line.includes("Accounting: completed") && line.includes("$1.5"))).toBe(true)
-  expect(notes.some((line) => line.includes("Legal: queued") && line.includes("not a completed worker result"))).toBe(true)
+  expect(notes.some((line) => line.includes("Legal: queued") && line.includes("not a completed worker result"))).toBe(
+    true,
+  )
   expect(
     begun({
       id: "rdl_1",
@@ -155,9 +211,9 @@ test("delegation admits once, refuses loops, and queues without duplicating a bu
       expect(first.created).toBe(true)
       expect(first.record.state).toBe("queued")
       expect(first.record.depth).toBe(1)
-      expect((yield* inbox.page(chief.id)).messages.some((item) => item.body.includes("queued until the worker is free"))).toBe(
-        true,
-      )
+      expect(
+        (yield* inbox.page(chief.id)).messages.some((item) => item.body.includes("queued until the worker is free")),
+      ).toBe(true)
       expect((yield* store.admit(request("dlg_1", chief.id, books.id), chief, books)).created).toBe(false)
       expect(
         Exit.isFailure(
@@ -175,13 +231,13 @@ test("delegation admits once, refuses loops, and queues without duplicating a bu
       const sid = SessionID.make("ses_books")
       const running = yield* store.attach(taken!.id, "run_1", sid)
       expect(running.state).toBe("running")
-      expect((yield* inbox.page(chief.id)).messages.some((item) => item.source.startsWith("start:") && item.body.includes("no longer only queued"))).toBe(
-        true,
-      )
-      expect((yield* store.attach(taken!.id, "run_1", sid)).sessionID).toBe(sid)
       expect(
-        Exit.isFailure(yield* store.attach(taken!.id, "run_2", sid).pipe(Effect.exit)),
+        (yield* inbox.page(chief.id)).messages.some(
+          (item) => item.source.startsWith("start:") && item.body.includes("no longer only queued"),
+        ),
       ).toBe(true)
+      expect((yield* store.attach(taken!.id, "run_1", sid)).sessionID).toBe(sid)
+      expect(Exit.isFailure(yield* store.attach(taken!.id, "run_2", sid).pipe(Effect.exit))).toBe(true)
       const done = yield* store.finish(taken!.id, "completed", books, "Travel receipts are missing.")
       expect(done.state).toBe("completed")
       expect(done.response).toBe("Travel receipts are missing.")
@@ -193,28 +249,26 @@ test("delegation admits once, refuses loops, and queues without duplicating a bu
         Exit.isFailure(yield* store.finish(taken!.id, "failed", books, "A different result.").pipe(Effect.exit)),
       ).toBe(true)
       expect((yield* inbox.page(chief.id)).messages.filter((item) => item.source.startsWith("reply:")).length).toBe(1)
-      const loop = yield* store.admit(
-        request("dlg_loop", books.id, chief.id, { parentID: first.record.id }),
-        books,
-        chief,
-      ).pipe(Effect.exit)
+      const loop = yield* store
+        .admit(request("dlg_loop", books.id, chief.id, { parentID: first.record.id }), books, chief)
+        .pipe(Effect.exit)
       expect(Exit.isFailure(loop)).toBe(true)
       const paused = agent("quiet", "reviewer", { enabled: false })
       const denied = yield* store.admit(request("dlg_pause", chief.id, paused.id), chief, paused)
       expect(denied.record.state).toBe("failed")
       expect(denied.record.reason).toContain("paused")
-      expect((yield* inbox.page(chief.id)).messages.some((item) => item.body.includes("paused") && item.body.includes("not a completed worker reply"))).toBe(
-        true,
-      )
+      expect(
+        (yield* inbox.page(chief.id)).messages.some(
+          (item) => item.body.includes("paused") && item.body.includes("not a completed worker reply"),
+        ),
+      ).toBe(true)
       const extra = agent("legal", "reviewer")
       for (const n of [2, 3, 4, 5]) {
         const item = yield* store.admit(request(`dlg_root_${n}`, chief.id, extra.id), chief, extra)
         expect(item.record.state).toBe("queued")
       }
       expect(
-        Exit.isFailure(
-          yield* store.admit(request("dlg_root_6", chief.id, extra.id), chief, extra).pipe(Effect.exit),
-        ),
+        Exit.isFailure(yield* store.admit(request("dlg_root_6", chief.id, extra.id), chief, extra).pipe(Effect.exit)),
       ).toBe(true)
       const away = yield* store.admit(
         request("dlg_dir", books.id, extra.id),
@@ -223,15 +277,19 @@ test("delegation admits once, refuses loops, and queues without duplicating a bu
       )
       expect(away.record.state).toBe("failed")
       expect(away.record.reason).toContain("cannot leave the sender's workspace")
-      expect((yield* inbox.page(books.id)).messages.some((item) => item.body.includes("cannot leave") && item.body.includes("not a completed worker reply"))).toBe(
-        true,
-      )
+      expect(
+        (yield* inbox.page(books.id)).messages.some(
+          (item) => item.body.includes("cannot leave") && item.body.includes("not a completed worker reply"),
+        ),
+      ).toBe(true)
       const missing = yield* store.admit(request("dlg_gone", books.id, extra.id), books, extra, true)
       expect(missing.record.state).toBe("failed")
       expect(missing.record.reason).toContain("no longer available")
-      expect((yield* inbox.page(books.id)).messages.some((item) => item.body.includes("no longer available") && item.body.includes("not a completed worker reply"))).toBe(
-        true,
-      )
+      expect(
+        (yield* inbox.page(books.id)).messages.some(
+          (item) => item.body.includes("no longer available") && item.body.includes("not a completed worker reply"),
+        ),
+      ).toBe(true)
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })
@@ -313,7 +371,14 @@ test("overdue live requests fail with a timeout reply", async () => {
       expect(first.record.state).toBe("queued")
       expect((yield* store.overdue(Date.now())).length).toBe(0)
       expect((yield* store.overdue(due)).map((item) => item.id)).toEqual([first.record.id])
-      const done = yield* store.finish(first.record.id, "failed", books, undefined, undefined, "This request timed out. It was not completed.")
+      const done = yield* store.finish(
+        first.record.id,
+        "failed",
+        books,
+        undefined,
+        undefined,
+        "This request timed out. It was not completed.",
+      )
       expect(done.state).toBe("failed")
       expect(done.reason).toContain("timed out")
       expect((yield* inbox.page(chief.id)).messages.some((item) => item.body.includes("timed out"))).toBe(true)

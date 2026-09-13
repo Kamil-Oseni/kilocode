@@ -89,6 +89,9 @@ export default {
           \`recipient_id\` text NOT NULL,
           \`parent_id\` text,
           \`parent_run_id\` text,
+          \`organization_id\` text,
+          \`organization_name\` text,
+          \`organization_revision\` integer,
           \`workspace\` text,
           \`objective\` text NOT NULL,
           \`expected\` text,
@@ -142,6 +145,20 @@ export default {
           \`session_id\` text,
           \`reason\` text,
           \`time_updated\` integer NOT NULL
+        );
+      `)
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(`
+        CREATE TABLE \`raya_routine_organization_delegation\` (
+          \`organization_id\` text NOT NULL,
+          \`sender_id\` text NOT NULL,
+          \`recipient_id\` text NOT NULL,
+          \`position\` integer NOT NULL,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL,
+          CONSTRAINT \`raya_routine_organization_delegation_pk\` PRIMARY KEY(\`organization_id\`, \`sender_id\`, \`recipient_id\`),
+          CONSTRAINT \`fk_raya_routine_organization_delegation_organization_id_raya_routine_organization_id_fk\` FOREIGN KEY (\`organization_id\`) REFERENCES \`raya_routine_organization\`(\`id\`) ON DELETE CASCADE
         );
       `)
       // kilocode_change end
@@ -436,6 +453,11 @@ export default {
       // kilocode_change end
       // kilocode_change start
       yield* tx.run(
+        `CREATE INDEX \`raya_routine_delegation_organization\` ON \`raya_routine_delegation\` (\`organization_id\`,\`organization_revision\`);`,
+      )
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(
         `CREATE UNIQUE INDEX \`raya_routine_message_source\` ON \`raya_routine_message\` (\`agent_id\`,\`source\`);`,
       )
       // kilocode_change end
@@ -457,6 +479,16 @@ export default {
       // kilocode_change start
       yield* tx.run(
         `CREATE INDEX \`raya_routine_occurrence_lease\` ON \`raya_routine_occurrence\` (\`state\`,\`lease_until\`);`,
+      )
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(
+        `CREATE UNIQUE INDEX \`raya_routine_organization_delegation_position\` ON \`raya_routine_organization_delegation\` (\`organization_id\`,\`position\`);`,
+      )
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(
+        `CREATE INDEX \`raya_routine_organization_delegation_recipient\` ON \`raya_routine_organization_delegation\` (\`organization_id\`,\`recipient_id\`);`,
       )
       // kilocode_change end
       // kilocode_change start

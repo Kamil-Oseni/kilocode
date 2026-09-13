@@ -6,6 +6,7 @@ type Post = (message: Record<string, unknown>) => void
 type Organization = import("@kilocode/sdk/v2/client").KilocodeRoutineOrganizationListResponse["items"][number]
 
 type Member = Organization["members"][number]
+type Delegation = Organization["delegations"][number]
 
 function member(value: unknown, position: number): value is Member {
   if (!value || typeof value !== "object") return false
@@ -21,19 +22,41 @@ function member(value: unknown, position: number): value is Member {
   )
 }
 
+function delegation(value: unknown, position: number, ids: ReadonlySet<string>): value is Delegation {
+  if (!value || typeof value !== "object") return false
+  const item = value as Partial<Delegation>
+  return (
+    typeof item.senderID === "string" &&
+    typeof item.recipientID === "string" &&
+    item.senderID !== item.recipientID &&
+    ids.has(item.senderID) &&
+    ids.has(item.recipientID) &&
+    Number.isSafeInteger(item.position) &&
+    item.position === position
+  )
+}
+
 function organization(value: unknown): value is Organization {
   if (!value || typeof value !== "object") return false
   const item = value as Partial<Organization>
   if (item.version !== 1 || typeof item.id !== "string" || !/^org_[a-f0-9]{32}$/.test(item.id)) return false
   if (typeof item.name !== "string" || (item.purpose !== undefined && typeof item.purpose !== "string")) return false
   if (!Number.isSafeInteger(item.revision) || item.archived !== false) return false
-  if (!Number.isSafeInteger(item.createdAt) || !Number.isSafeInteger(item.updatedAt) || !Array.isArray(item.members))
+  if (
+    !Number.isSafeInteger(item.createdAt) ||
+    !Number.isSafeInteger(item.updatedAt) ||
+    !Array.isArray(item.members) ||
+    !Array.isArray(item.delegations)
+  )
     return false
   const members = item.members
   if (members.length < 1 || !members.every(member)) return false
   const ids = new Set(members.map((entry) => entry.agentID))
   if (ids.size !== members.length) return false
-  return members.every((entry) => !entry.supervisorID || ids.has(entry.supervisorID))
+  if (!members.every((entry) => !entry.supervisorID || ids.has(entry.supervisorID))) return false
+  if (!item.delegations.every((entry, position) => delegation(entry, position, ids))) return false
+  const edges = new Set(item.delegations.map((edge) => `${edge.senderID}\u0000${edge.recipientID}`))
+  return edges.size === item.delegations.length
 }
 
 function organizations(value: unknown) {

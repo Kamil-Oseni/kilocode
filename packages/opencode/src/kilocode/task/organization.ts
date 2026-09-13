@@ -2,6 +2,7 @@ import { and, asc, count, desc, eq, inArray, isNotNull, isNull, lt, or, sql } fr
 import { Effect, Schema } from "effect"
 import type { Database } from "@opencode-ai/core/database/database"
 import {
+  RayaRoutineOrganizationDelegationTable as DelegationRow,
   RayaRoutineOrganizationMemberTable as MemberRow,
   RayaRoutineOrganizationRevisionTable as RevisionRow,
   RayaRoutineOrganizationTable as OrganizationRow,
@@ -11,6 +12,7 @@ import type { Storage } from "@/storage/storage"
 import { mutate } from "./mutation"
 
 const MAX = 50
+const EDGES = 500
 const Name = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(120))
 const Purpose = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(4000))
 const Role = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(120))
@@ -27,7 +29,13 @@ export const Member = Schema.Struct({
   ...MemberInput.fields,
   position: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThan(MAX)),
 })
+export const DelegationInput = Schema.Struct({ senderID: AgentID, recipientID: AgentID })
+export const Delegation = Schema.Struct({
+  ...DelegationInput.fields,
+  position: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThan(EDGES)),
+})
 const Members = Schema.Array(MemberInput).check(Schema.isMinLength(1), Schema.isMaxLength(MAX))
+const Delegations = Schema.Array(DelegationInput).check(Schema.isMaxLength(EDGES))
 export const Organization = Schema.Struct({
   version: Schema.Literal(1),
   id: Schema.String.check(Schema.isPattern(/^org_[a-f0-9]{32}$/)),
@@ -39,18 +47,28 @@ export const Organization = Schema.Struct({
   createdAt: Stamp,
   updatedAt: Stamp,
   members: Schema.Array(Member).check(Schema.isMinLength(1), Schema.isMaxLength(MAX)),
+  delegations: Schema.Array(Delegation).check(Schema.isMaxLength(EDGES)),
 })
-export const Create = Schema.Struct({ name: Name, purpose: Schema.optional(Purpose), members: Members })
+export const Create = Schema.Struct({
+  name: Name,
+  purpose: Schema.optional(Purpose),
+  members: Members,
+  delegations: Schema.optional(Delegations),
+})
 export const Update = Schema.Struct({
   expectedRevision: Revision,
   name: Schema.optional(Name),
   purpose: Schema.optional(Schema.Union([Purpose, Schema.Null])),
   members: Schema.optional(Members),
+  delegations: Schema.optional(Delegations),
 }).check(
   Schema.makeFilter((value) =>
-    value.name !== undefined || value.purpose !== undefined || value.members !== undefined
+    value.name !== undefined ||
+    value.purpose !== undefined ||
+    value.members !== undefined ||
+    value.delegations !== undefined
       ? undefined
-      : "Change the organization name, purpose, or membership graph.",
+      : "Change the organization name, purpose, membership, or delegation graph.",
   ),
 )
 export const Archive = Schema.Struct({ expectedRevision: Revision })
@@ -106,7 +124,7 @@ function normalize(input: readonly (typeof MemberInput.Type)[]) {
   }))
 }
 
-function graph(input: readonly (typeof Member.Type)[]) {
+function graph(input: readonly (typeof Member.Type)[], delegations: readonly (typeof Delegation.Type)[]) {
   const ids = new Set(input.map((item) => item.agentID))
   if (ids.size !== input.length)
     return new Invalid({ message: "An organization cannot contain the same worker twice." })
@@ -116,6 +134,17 @@ function graph(input: readonly (typeof Member.Type)[]) {
       return new Invalid({ message: "A worker cannot supervise itself in an organization." })
     if (!ids.has(item.supervisorID))
       return new Invalid({ message: "Every supervisor must be a member of the same organization." })
+  }
+  const edges = new Set<string>()
+  for (const edge of delegations) {
+    if (edge.senderID === edge.recipientID)
+      return new Invalid({ message: "A worker cannot delegate to itself in an organization." })
+    if (!ids.has(edge.senderID) || !ids.has(edge.recipientID))
+      return new Invalid({ message: "Every delegation edge must connect two members of the same organization." })
+    const key = `${edge.senderID}\u0000${edge.recipientID}`
+    if (edges.has(key))
+      return new Invalid({ message: "An organization cannot contain the same delegation edge twice." })
+    edges.add(key)
   }
   const parents = new Map(input.map((item) => [item.agentID, item.supervisorID]))
   for (const item of input) {
@@ -136,6 +165,7 @@ function identifier() {
 function decoded(
   row: typeof OrganizationRow.$inferSelect,
   members: readonly (typeof MemberRow.$inferSelect)[],
+  delegations: readonly (typeof DelegationRow.$inferSelect)[],
 ): Organization {
   return {
     version: 1,
@@ -153,6 +183,11 @@ function decoded(
       position: item.position,
       ...(item.supervisor_id ? { supervisorID: item.supervisor_id } : {}),
     })),
+    delegations: delegations.map((item) => ({
+      senderID: item.sender_id,
+      recipientID: item.recipient_id,
+      position: item.position,
+    })),
   }
 }
 
@@ -165,9 +200,11 @@ export namespace RayaTaskOrganization {
 
     const validate = Effect.fn("RayaTaskOrganization.validate")(function* (
       input: readonly (typeof MemberInput.Type)[],
+      edges: readonly (typeof DelegationInput.Type)[],
     ) {
       const members = normalize(input)
-      const invalid = graph(members)
+      const delegations = edges.map((item, position) => ({ ...item, position }))
+      const invalid = graph(members, delegations)
       if (invalid) return yield* invalid
       for (const item of members) {
         yield* workers
@@ -178,7 +215,7 @@ export namespace RayaTaskOrganization {
             ),
           )
       }
-      return members
+      return { members, delegations }
     })
 
     const read = Effect.fn("RayaTaskOrganization.read")(function* (row: typeof OrganizationRow.$inferSelect) {
@@ -189,7 +226,14 @@ export namespace RayaTaskOrganization {
         .orderBy(asc(MemberRow.position))
         .all()
         .pipe(Effect.orDie)
-      return decoded(row, members)
+      const delegations = yield* db
+        .select()
+        .from(DelegationRow)
+        .where(eq(DelegationRow.organization_id, row.id))
+        .orderBy(asc(DelegationRow.position))
+        .all()
+        .pipe(Effect.orDie)
+      return decoded(row, members, delegations)
     })
 
     const get = Effect.fn("RayaTaskOrganization.get")(function* (id: string) {
@@ -202,7 +246,7 @@ export namespace RayaTaskOrganization {
       const value = yield* Schema.decodeUnknownEffect(Create)(input).pipe(
         Effect.mapError(() => new Invalid({ message: "Provide a name and 1–50 valid organization members." })),
       )
-      const members = yield* validate(value.members)
+      const graph = yield* validate(value.members, value.delegations ?? [])
       const now = Date.now()
       const item: Organization = {
         version: 1,
@@ -213,7 +257,8 @@ export namespace RayaTaskOrganization {
         archived: false,
         createdAt: now,
         updatedAt: now,
-        members,
+        members: graph.members,
+        delegations: graph.delegations,
       }
       yield* db
         .transaction(
@@ -245,6 +290,20 @@ export namespace RayaTaskOrganization {
                   })),
                 )
                 .run()
+              if (item.delegations.length)
+                yield* tx
+                  .insert(DelegationRow)
+                  .values(
+                    item.delegations.map((edge) => ({
+                      organization_id: item.id,
+                      sender_id: edge.senderID,
+                      recipient_id: edge.recipientID,
+                      position: edge.position,
+                      time_created: now,
+                      time_updated: now,
+                    })),
+                  )
+                  .run()
               yield* tx
                 .insert(RevisionRow)
                 .values({ organization_id: item.id, revision: 1, definition: JSON.stringify(item), time_created: now })
@@ -260,7 +319,13 @@ export namespace RayaTaskOrganization {
       const value = yield* Schema.decodeUnknownEffect(Update)(input).pipe(
         Effect.mapError(() => new Invalid({ message: "Provide a valid organization revision and change." })),
       )
-      const members = value.members ? yield* validate(value.members) : undefined
+      const current = yield* get(id)
+      const nextMembers = value.members ?? current.members
+      const nextEdges = value.delegations ?? current.delegations
+      const graph =
+        value.members !== undefined || value.delegations !== undefined
+          ? yield* validate(nextMembers, nextEdges)
+          : undefined
       return yield* db
         .transaction(
           (tx) =>
@@ -285,7 +350,14 @@ export namespace RayaTaskOrganization {
                 .orderBy(asc(MemberRow.position))
                 .all()
                 .pipe(Effect.orDie)
-              const prior = decoded(row, stored)
+              const storedEdges = yield* tx
+                .select()
+                .from(DelegationRow)
+                .where(eq(DelegationRow.organization_id, row.id))
+                .orderBy(asc(DelegationRow.position))
+                .all()
+                .pipe(Effect.orDie)
+              const prior = decoded(row, stored, storedEdges)
               const now = Date.now()
               const next: Organization = {
                 ...prior,
@@ -293,7 +365,8 @@ export namespace RayaTaskOrganization {
                 purpose: value.purpose === null ? undefined : (value.purpose?.trim() ?? prior.purpose),
                 revision: row.revision + 1,
                 updatedAt: now,
-                members: members ?? prior.members,
+                members: graph?.members ?? prior.members,
+                delegations: graph?.delegations ?? prior.delegations,
               }
               yield* tx
                 .update(OrganizationRow)
@@ -301,12 +374,12 @@ export namespace RayaTaskOrganization {
                 .where(and(eq(OrganizationRow.id, id), eq(OrganizationRow.revision, value.expectedRevision)))
                 .run()
                 .pipe(Effect.orDie)
-              if (members) {
+              if (graph) {
                 yield* tx.delete(MemberRow).where(eq(MemberRow.organization_id, id)).run().pipe(Effect.orDie)
                 yield* tx
                   .insert(MemberRow)
                   .values(
-                    members.map((member) => ({
+                    graph.members.map((member) => ({
                       organization_id: id,
                       agent_id: member.agentID,
                       role: member.role,
@@ -318,6 +391,22 @@ export namespace RayaTaskOrganization {
                   )
                   .run()
                   .pipe(Effect.orDie)
+                yield* tx.delete(DelegationRow).where(eq(DelegationRow.organization_id, id)).run().pipe(Effect.orDie)
+                if (graph.delegations.length)
+                  yield* tx
+                    .insert(DelegationRow)
+                    .values(
+                      graph.delegations.map((edge) => ({
+                        organization_id: id,
+                        sender_id: edge.senderID,
+                        recipient_id: edge.recipientID,
+                        position: edge.position,
+                        time_created: now,
+                        time_updated: now,
+                      })),
+                    )
+                    .run()
+                    .pipe(Effect.orDie)
               }
               yield* tx
                 .insert(RevisionRow)
@@ -364,7 +453,14 @@ export namespace RayaTaskOrganization {
                 .orderBy(asc(MemberRow.position))
                 .all()
                 .pipe(Effect.orDie)
-              const prior = decoded(row, stored)
+              const storedEdges = yield* tx
+                .select()
+                .from(DelegationRow)
+                .where(eq(DelegationRow.organization_id, row.id))
+                .orderBy(asc(DelegationRow.position))
+                .all()
+                .pipe(Effect.orDie)
+              const prior = decoded(row, stored, storedEdges)
               const now = Date.now()
               const next: Organization = {
                 ...prior,
@@ -458,6 +554,44 @@ export namespace RayaTaskOrganization {
       return row?.count === agents.length
     })
 
+    const shares = Effect.fn("RayaTaskOrganization.shares")(function* (senderID: string, recipientID: string) {
+      if (senderID === recipientID) return false
+      const rows = yield* db
+        .select({ id: MemberRow.organization_id })
+        .from(MemberRow)
+        .innerJoin(OrganizationRow, eq(OrganizationRow.id, MemberRow.organization_id))
+        .where(and(eq(MemberRow.agent_id, senderID), isNull(OrganizationRow.archived_at)))
+        .all()
+        .pipe(Effect.orDie)
+      const ids = rows.map((row) => row.id)
+      if (!ids.length) return false
+      const row = yield* db
+        .select({ count: count() })
+        .from(MemberRow)
+        .where(and(eq(MemberRow.agent_id, recipientID), inArray(MemberRow.organization_id, ids)))
+        .get()
+        .pipe(Effect.orDie)
+      return (row?.count ?? 0) > 0
+    })
+
+    const authorize = Effect.fn("RayaTaskOrganization.authorize")(function* (input: {
+      id: string
+      revision?: number
+      senderID: string
+      recipientID: string
+    }) {
+      const item = yield* get(input.id)
+      if (item.archived) return yield* new Invalid({ message: "This organization is archived." })
+      if (input.revision !== undefined && item.revision !== input.revision)
+        return yield* new Conflict({ message: "This organization changed. Reload it before delegating work." })
+      const ids = new Set(item.members.map((member) => member.agentID))
+      if (!ids.has(input.senderID) || !ids.has(input.recipientID))
+        return yield* new Invalid({ message: "Both workers must be active members of this organization." })
+      if (!item.delegations.some((edge) => edge.senderID === input.senderID && edge.recipientID === input.recipientID))
+        return yield* new Invalid({ message: "This organization does not permit that worker-to-worker delegation." })
+      return { id: item.id, name: item.name, revision: item.revision }
+    })
+
     return {
       list,
       get,
@@ -466,6 +600,8 @@ export namespace RayaTaskOrganization {
       archive: (...args: Parameters<typeof archive>) => mutate(storage, archive(...args), "Organization"),
       hasActive,
       contains,
+      shares,
+      authorize,
     }
   }
 }

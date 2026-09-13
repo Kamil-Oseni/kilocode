@@ -20,12 +20,24 @@ export const Request = Schema.Struct({
   recipientID: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)),
   parentID: Schema.optional(token),
   parentRunID: Schema.optional(token),
+  organizationID: Schema.optional(Schema.String.check(Schema.isPattern(/^org_[a-f0-9]{32}$/))),
+  organizationRevision: Schema.optional(
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER)),
+  ),
   objective: body,
   expected: Schema.optional(body),
   context: Schema.optional(body),
-  deadline: Schema.optional(Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(8.64e15))),
+  deadline: Schema.optional(
+    Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(8.64e15)),
+  ),
   budget: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(1_000_000))),
-})
+}).check(
+  Schema.makeFilter((value) =>
+    (value.organizationID === undefined) === (value.organizationRevision === undefined)
+      ? undefined
+      : "Organization ID and revision must be provided together.",
+  ),
+)
 
 export const Record = Schema.Struct({
   id: token,
@@ -34,6 +46,9 @@ export const Record = Schema.Struct({
   recipientID: Request.fields.recipientID,
   parentID: Schema.optional(token),
   parentRunID: Schema.optional(token),
+  organizationID: Schema.optional(Schema.String.check(Schema.isPattern(/^org_[a-f0-9]{32}$/))),
+  organizationName: Schema.optional(Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(120))),
+  organizationRevision: Request.fields.organizationRevision,
   workspace: Schema.optional(Schema.String),
   objective: body,
   expected: Schema.optional(body),
@@ -108,6 +123,9 @@ export function prompt(sender: RayaTask.Agent, recipient: RayaTask.Agent, reques
   return [
     "Answer this request from another worker. The standing assignment and schedule are unchanged. Do not rewrite them, and do not treat this as a request to run the recurring job now.",
     `Requesting worker: ${sender.name} (${sender.role})`,
+    request.organizationID
+      ? `Organization: ${request.organizationID} (revision ${request.organizationRevision})`
+      : undefined,
     `Request objective:\n${request.objective}`,
     request.expected ? `Expected result:\n${request.expected}` : undefined,
     request.context ? `Permitted context:\n${request.context}` : undefined,
@@ -130,6 +148,9 @@ function decode(row: typeof Delegation.$inferSelect): Record {
     time: row.time_created,
     ...(row.parent_id ? { parentID: row.parent_id } : {}),
     ...(row.parent_run_id ? { parentRunID: row.parent_run_id } : {}),
+    ...(row.organization_id ? { organizationID: row.organization_id } : {}),
+    ...(row.organization_name ? { organizationName: row.organization_name } : {}),
+    ...(row.organization_revision !== null ? { organizationRevision: row.organization_revision } : {}),
     ...(row.workspace ? { workspace: row.workspace } : {}),
     ...(row.expected ? { expected: row.expected } : {}),
     ...(row.context ? { context: row.context } : {}),
@@ -152,6 +173,8 @@ function same(saved: Record, value: Request) {
     saved.context === value.context &&
     saved.parentID === value.parentID &&
     saved.parentRunID === value.parentRunID &&
+    saved.organizationID === value.organizationID &&
+    saved.organizationRevision === value.organizationRevision &&
     saved.deadline === value.deadline &&
     saved.budget === value.budget
   )
@@ -164,8 +187,15 @@ function cards(row: Record, sender: RayaTask.Agent, recipient: RayaTask.Agent): 
       : row.state === "failed"
         ? row.reason || "This request was not started."
         : undefined
-  const ask = [`Request from ${sender.name}:`, row.objective, note].filter((line): line is string => !!line).join("\n")
-  const sent = [`Asked ${recipient.name}:`, row.objective, note].filter((line): line is string => !!line).join("\n")
+  const provenance = row.organizationName
+    ? `${row.organizationName} · organization revision ${row.organizationRevision}`
+    : undefined
+  const ask = [`Request from ${sender.name}:`, provenance, row.objective, note]
+    .filter((line): line is string => !!line)
+    .join("\n")
+  const sent = [`Asked ${recipient.name}:`, provenance, row.objective, note]
+    .filter((line): line is string => !!line)
+    .join("\n")
   const id = Schema.is(token)(row.id) ? row.id : undefined
   return [
     {
@@ -175,7 +205,13 @@ function cards(row: Record, sender: RayaTask.Agent, recipient: RayaTask.Agent): 
       body: ask.slice(0, 8000),
       ...(id ? { occurrenceID: id } : {}),
     },
-    { agentID: sender.id, source: origin("sent", row.source), kind: "delegation", body: sent.slice(0, 8000), ...(id ? { occurrenceID: id } : {}) },
+    {
+      agentID: sender.id,
+      source: origin("sent", row.source),
+      kind: "delegation",
+      body: sent.slice(0, 8000),
+      ...(id ? { occurrenceID: id } : {}),
+    },
   ]
 }
 
@@ -223,7 +259,11 @@ export function replied(row: Record, recipient: RayaTask.Agent): Publish | undef
   const findings = row.response?.trim()
   const lines =
     row.state === "completed"
-      ? [`Reply from ${recipient.name}.`, findings || "No written reply was saved. This is not invented success.", billed(row)]
+      ? [
+          `Reply from ${recipient.name}.`,
+          findings || "No written reply was saved. This is not invented success.",
+          billed(row),
+        ]
       : [
           `Delegation ${row.state} (${recipient.name}).`,
           row.reason || findings || "No written reply was saved.",
@@ -243,18 +283,29 @@ export function replied(row: Record, recipient: RayaTask.Agent): Publish | undef
 }
 
 export namespace RayaTaskDelegation {
-  export function make(database: Database.Interface) {
+  export function make(
+    database: Database.Interface,
+    policy?: (input: {
+      id: string
+      revision?: number
+      senderID: string
+      recipientID: string
+    }) => Effect.Effect<{ id: string; name: string; revision: number }, unknown>,
+    shares?: (senderID: string, recipientID: string) => Effect.Effect<boolean, unknown>,
+  ) {
     const db = database.db
     const inbox = RayaTaskInbox.make(database)
     const publish = (items: readonly Publish[]) =>
       Effect.forEach(items, (item) =>
-        inbox.publish(item).pipe(
-          Effect.catch((error) =>
-            typeof error === "object" && error !== null && "_tag" in error && error._tag === "RayaTaskInbox.Conflict"
-              ? Effect.void
-              : Effect.die(error),
+        inbox
+          .publish(item)
+          .pipe(
+            Effect.catch((error) =>
+              typeof error === "object" && error !== null && "_tag" in error && error._tag === "RayaTaskInbox.Conflict"
+                ? Effect.void
+                : Effect.die(error),
+            ),
           ),
-        ),
       )
     const get = Effect.fn("RayaTaskDelegation.get")(function* (id: string) {
       const row = yield* db.select().from(Delegation).where(eq(Delegation.id, id)).get().pipe(Effect.orDie)
@@ -279,15 +330,22 @@ export namespace RayaTaskDelegation {
       return seen
     })
     const outstanding = Effect.fn("RayaTaskDelegation.outstanding")(function* (senderID: string, parentID?: string) {
-      const rows = yield* (parentID
-        ? db
-            .select()
-            .from(Delegation)
-            .where(and(eq(Delegation.parent_id, parentID), inArray(Delegation.state, [...live])))
-        : db
-            .select()
-            .from(Delegation)
-            .where(and(eq(Delegation.sender_id, senderID), isNull(Delegation.parent_id), inArray(Delegation.state, [...live])))
+      const rows = yield* (
+        parentID
+          ? db
+              .select()
+              .from(Delegation)
+              .where(and(eq(Delegation.parent_id, parentID), inArray(Delegation.state, [...live])))
+          : db
+              .select()
+              .from(Delegation)
+              .where(
+                and(
+                  eq(Delegation.sender_id, senderID),
+                  isNull(Delegation.parent_id),
+                  inArray(Delegation.state, [...live]),
+                ),
+              )
       )
         .all()
         .pipe(Effect.orDie)
@@ -300,7 +358,9 @@ export namespace RayaTaskDelegation {
       gone?: boolean,
     ) {
       const value = yield* Schema.decodeUnknownEffect(Request)(input).pipe(
-        Effect.mapError(() => new Invalid({ message: "Delegation requests need a stable source and a non-empty objective." })),
+        Effect.mapError(
+          () => new Invalid({ message: "Delegation requests need a stable source and a non-empty objective." }),
+        ),
       )
       if (value.senderID !== sender.id || value.recipientID !== recipient.id)
         return yield* new Invalid({ message: "Delegation identities must match the requesting and receiving workers." })
@@ -311,10 +371,32 @@ export namespace RayaTaskDelegation {
         return yield* new Invalid({ message: "This delegation deadline has already passed." })
       const prior = yield* lookup(value.source)
       if (prior) {
-        if (!same(prior, value)) return yield* new Conflict({ message: "This delegation source already has a different request." })
+        if (!same(prior, value))
+          return yield* new Conflict({ message: "This delegation source already has a different request." })
         return { record: prior, created: false }
       }
+      const organization = value.organizationID
+        ? policy
+          ? yield* policy({
+              id: value.organizationID,
+              revision: value.organizationRevision,
+              senderID: value.senderID,
+              recipientID: value.recipientID,
+            }).pipe(
+              Effect.mapError(() => new Invalid({ message: "This organization does not authorize that delegation." })),
+            )
+          : yield* new Invalid({ message: "Organization delegation policy is unavailable." })
+        : undefined
+      if (!value.organizationID && shares && (yield* shares(value.senderID, value.recipientID).pipe(Effect.orDie)))
+        return yield* new Invalid({
+          message: "Choose the organization and its current revision for this worker-to-worker delegation.",
+        })
       const lineage = yield* ancestors(value.parentID)
+      const parent = lineage[0]
+      if (parent?.organizationID && value.organizationID !== parent.organizationID)
+        return yield* new Invalid({
+          message: "A delegated follow-on must stay in its parent organization's authority graph.",
+        })
       const depth = lineage.length + 1
       if (depth > DEPTH) return yield* new Invalid({ message: "This delegation chain is too deep." })
       const ids = new Set(lineage.flatMap((item) => [item.senderID, item.recipientID]))
@@ -325,12 +407,20 @@ export namespace RayaTaskDelegation {
       const count = yield* outstanding(value.senderID, value.parentID)
       if (count >= FAN)
         return yield* new Invalid({ message: "This worker already has too many outstanding delegated requests." })
-      if (gone)
-        return yield* persist(value, sender, recipient, workspace, depth, "failed", GONE)
+      if (gone) return yield* persist(value, sender, recipient, workspace, depth, "failed", GONE, organization)
       if (sender.dir?.trim() && recipient.dir?.trim() && workspace === undefined)
-        return yield* persist(value, sender, recipient, workspace, depth, "failed", AWAY)
+        return yield* persist(value, sender, recipient, workspace, depth, "failed", AWAY, organization)
       if (!recipient.enabled)
-        return yield* persist(value, sender, recipient, workspace, depth, "failed", "This worker is paused. Delegation is not started until it is enabled.")
+        return yield* persist(
+          value,
+          sender,
+          recipient,
+          workspace,
+          depth,
+          "failed",
+          "This worker is paused. Delegation is not started until it is enabled.",
+          organization,
+        )
       if (recipient.access === undefined)
         return yield* persist(
           value,
@@ -340,8 +430,9 @@ export namespace RayaTaskDelegation {
           depth,
           "failed",
           "Review this older routine's workspace access before starting delegated work.",
+          organization,
         )
-      return yield* persist(value, sender, recipient, workspace, depth, "queued")
+      return yield* persist(value, sender, recipient, workspace, depth, "queued", undefined, organization)
     })
     const persist = Effect.fn("RayaTaskDelegation.persist")(function* (
       value: Request,
@@ -351,6 +442,7 @@ export namespace RayaTaskDelegation {
       depth: number,
       state: Record["state"],
       reason?: string,
+      organization?: { id: string; name: string; revision: number },
     ) {
       const now = Date.now()
       const row = {
@@ -360,6 +452,9 @@ export namespace RayaTaskDelegation {
         recipient_id: value.recipientID,
         parent_id: value.parentID ?? null,
         parent_run_id: value.parentRunID ?? null,
+        organization_id: organization?.id ?? null,
+        organization_name: organization?.name ?? null,
+        organization_revision: organization?.revision ?? null,
         workspace: workspace ?? null,
         objective: value.objective,
         expected: value.expected ?? null,
@@ -407,6 +502,24 @@ export namespace RayaTaskDelegation {
         .all()
         .pipe(Effect.orDie)
       return updated[0] ? decode(updated[0]) : undefined
+    })
+    const authorize = Effect.fn("RayaTaskDelegation.authorize")(function* (row: Record) {
+      if (!row.organizationID)
+        return shares
+          ? yield* shares(row.senderID, row.recipientID).pipe(
+              Effect.map((shared) => !shared),
+              Effect.catch(() => Effect.succeed(false)),
+            )
+          : true
+      if (!policy) return false
+      return yield* policy({
+        id: row.organizationID,
+        senderID: row.senderID,
+        recipientID: row.recipientID,
+      }).pipe(
+        Effect.as(true),
+        Effect.catch(() => Effect.succeed(false)),
+      )
     })
     const attach = Effect.fn("RayaTaskDelegation.attach")(function* (id: string, runID: string, sessionID: SessionID) {
       const prior = yield* get(id)
@@ -483,7 +596,11 @@ export namespace RayaTaskDelegation {
         for (const item of items) nested.push(...(yield* descendants(item.id)))
         return [...items, ...nested]
       })
-    const stop = Effect.fn("RayaTaskDelegation.stop")(function* (id: string, recipient: RayaTask.Agent, reason: string) {
+    const stop = Effect.fn("RayaTaskDelegation.stop")(function* (
+      id: string,
+      recipient: RayaTask.Agent,
+      reason: string,
+    ) {
       const prior = yield* get(id)
       if (prior.state === "cancelled") return prior
       if (prior.state === "completed" || prior.state === "failed") return prior
@@ -500,7 +617,12 @@ export namespace RayaTaskDelegation {
       return rows.map(decode)
     })
     const bySession = Effect.fn("RayaTaskDelegation.bySession")(function* (sessionID: SessionID) {
-      const row = yield* db.select().from(Delegation).where(eq(Delegation.session_id, sessionID)).get().pipe(Effect.orDie)
+      const row = yield* db
+        .select()
+        .from(Delegation)
+        .where(eq(Delegation.session_id, sessionID))
+        .get()
+        .pipe(Effect.orDie)
       return row ? decode(row) : undefined
     })
     const byRun = Effect.fn("RayaTaskDelegation.byRun")(function* (parentRunID: string) {
@@ -527,12 +649,31 @@ export namespace RayaTaskDelegation {
       const rows = yield* db
         .select()
         .from(Delegation)
-        .where(and(inArray(Delegation.state, [...live]), or(eq(Delegation.sender_id, id), eq(Delegation.recipient_id, id))))
+        .where(
+          and(inArray(Delegation.state, [...live]), or(eq(Delegation.sender_id, id), eq(Delegation.recipient_id, id))),
+        )
         .orderBy(asc(Delegation.time_created), asc(Delegation.id))
         .all()
         .pipe(Effect.orDie)
       return rows.map(decode)
     })
-    return { admit, take, attach, finish, get, lookup, chain, tree, descendants, stop, queued, overdue, bySession, byRun, held }
+    return {
+      admit,
+      take,
+      authorize,
+      attach,
+      finish,
+      get,
+      lookup,
+      chain,
+      tree,
+      descendants,
+      stop,
+      queued,
+      overdue,
+      bySession,
+      byRun,
+      held,
+    }
   }
 }

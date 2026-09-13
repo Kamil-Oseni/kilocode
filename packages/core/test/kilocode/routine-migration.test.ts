@@ -9,6 +9,7 @@ import migration from "@opencode-ai/core/database/migration/20260908092112_kiloc
 import archive from "@opencode-ai/core/database/migration/20260908124554_kilocode-routine-archive"
 import attachments from "@opencode-ai/core/database/migration/20260912150000_kilocode-routine-user-attachments"
 import organization from "@opencode-ai/core/database/migration/20260912210000_kilocode-routine-organization"
+import delegation from "@opencode-ai/core/database/migration/20260912231306_kilocode-routine-organization-delegation"
 import type { SqlClient } from "effect/unstable/sql/SqlClient"
 
 const run = <A, E>(effect: Effect.Effect<A, E, SqlClient>) =>
@@ -202,6 +203,41 @@ test("a conflicting organization member table rolls back the organization migrat
         ),
       ).toBeUndefined()
       expect(yield* db.get(sql`SELECT id FROM migration WHERE id = ${organization.id}`)).toBeUndefined()
+    }),
+  )
+})
+
+test("organization delegation migration preserves queued work and adds directional edges", async () => {
+  await run(
+    Effect.gen(function* () {
+      const db = yield* EffectDrizzleSqlite.makeWithDefaults()
+      const index = migrations.findIndex((item) => item.id === delegation.id)
+      expect(index).toBeGreaterThan(0)
+      yield* DatabaseMigration.applyOnly(db, migrations.slice(0, index))
+      yield* db.run(
+        sql`INSERT INTO raya_routine_organization (id, name, revision, time_created, time_updated) VALUES ('org_test', 'Test', 1, 1, 1)`,
+      )
+      yield* db.run(
+        sql`INSERT INTO raya_routine_delegation (id, source, sender_id, recipient_id, objective, depth, state, time_created, time_updated) VALUES ('request', 'source', 'chief', 'books', 'Review', 1, 'queued', 1, 1)`,
+      )
+      yield* DatabaseMigration.applyOnly(db, [delegation])
+      expect(
+        yield* db.get(sql`SELECT state, organization_id FROM raya_routine_delegation WHERE id = 'request'`),
+      ).toEqual({
+        state: "queued",
+        organization_id: null,
+      })
+      yield* db.run(
+        sql`INSERT INTO raya_routine_organization_delegation (organization_id, sender_id, recipient_id, position, time_created, time_updated) VALUES ('org_test', 'chief', 'books', 0, 1, 1)`,
+      )
+      expect(yield* db.get(sql`SELECT sender_id, recipient_id FROM raya_routine_organization_delegation`)).toEqual({
+        sender_id: "chief",
+        recipient_id: "books",
+      })
+      yield* DatabaseMigration.applyOnly(db, [delegation])
+      expect(yield* db.get(sql`SELECT count(*) AS count FROM migration WHERE id = ${delegation.id}`)).toEqual({
+        count: 1,
+      })
     }),
   )
 })

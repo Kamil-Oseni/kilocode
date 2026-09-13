@@ -1,9 +1,9 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "dac6c5b7-5e01-416b-b668-e2c58036cbc6",
+  "id": "d1040d32-02e8-46f3-9a67-bb7fa4352555",
   "prevIds": [
-    "a0a21b54-d5a9-491d-90c5-f8fd2bb95454"
+    "dac6c5b7-5e01-416b-b668-e2c58036cbc6"
   ],
   "ddl": [
     {
@@ -44,6 +44,10 @@
     },
     {
       "name": "raya_routine_occurrence",
+      "entityType": "tables"
+    },
+    {
+      "name": "raya_routine_organization_delegation",
       "entityType": "tables"
     },
     {
@@ -536,6 +540,36 @@
       "autoincrement": false,
       "default": null,
       "generated": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "table": "raya_routine_delegation"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "organization_name",
+      "entityType": "columns",
+      "table": "raya_routine_delegation"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "organization_revision",
+      "entityType": "columns",
+      "table": "raya_routine_delegation"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
       "name": "workspace",
       "entityType": "columns",
       "table": "raya_routine_delegation"
@@ -929,6 +963,66 @@
       "name": "time_updated",
       "entityType": "columns",
       "table": "raya_routine_occurrence"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "table": "raya_routine_organization_delegation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "sender_id",
+      "entityType": "columns",
+      "table": "raya_routine_organization_delegation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "recipient_id",
+      "entityType": "columns",
+      "table": "raya_routine_organization_delegation"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "position",
+      "entityType": "columns",
+      "table": "raya_routine_organization_delegation"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_created",
+      "entityType": "columns",
+      "table": "raya_routine_organization_delegation"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_updated",
+      "entityType": "columns",
+      "table": "raya_routine_organization_delegation"
     },
     {
       "type": "text",
@@ -2511,6 +2605,21 @@
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
+      "name": "fk_raya_routine_organization_delegation_organization_id_raya_routine_organization_id_fk",
+      "entityType": "fks",
+      "table": "raya_routine_organization_delegation"
+    },
+    {
+      "columns": [
+        "organization_id"
+      ],
+      "tableTo": "raya_routine_organization",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
       "name": "fk_raya_routine_organization_member_organization_id_raya_routine_organization_id_fk",
       "entityType": "fks",
       "table": "raya_routine_organization_member"
@@ -2734,6 +2843,17 @@
       "name": "raya_routine_cursor_pk",
       "entityType": "pks",
       "table": "raya_routine_cursor"
+    },
+    {
+      "columns": [
+        "organization_id",
+        "sender_id",
+        "recipient_id"
+      ],
+      "nameExplicit": false,
+      "name": "raya_routine_organization_delegation_pk",
+      "entityType": "pks",
+      "table": "raya_routine_organization_delegation"
     },
     {
       "columns": [
@@ -3117,6 +3237,24 @@
     {
       "columns": [
         {
+          "value": "organization_id",
+          "isExpression": false
+        },
+        {
+          "value": "organization_revision",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "raya_routine_delegation_organization",
+      "entityType": "indexes",
+      "table": "raya_routine_delegation"
+    },
+    {
+      "columns": [
+        {
           "value": "agent_id",
           "isExpression": false
         },
@@ -3219,6 +3357,42 @@
       "name": "raya_routine_occurrence_lease",
       "entityType": "indexes",
       "table": "raya_routine_occurrence"
+    },
+    {
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false
+        },
+        {
+          "value": "position",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "raya_routine_organization_delegation_position",
+      "entityType": "indexes",
+      "table": "raya_routine_organization_delegation"
+    },
+    {
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false
+        },
+        {
+          "value": "recipient_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "raya_routine_organization_delegation_recipient",
+      "entityType": "indexes",
+      "table": "raya_routine_organization_delegation"
     },
     {
       "columns": [

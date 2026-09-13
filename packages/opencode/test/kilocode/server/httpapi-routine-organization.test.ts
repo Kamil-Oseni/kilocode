@@ -3,6 +3,7 @@ import { Schema } from "effect"
 import { Server } from "@/server/server"
 import { RayaTask } from "@/kilocode/task"
 import { Organization, Page } from "@/kilocode/task/organization"
+import { Record as Delegation } from "@/kilocode/task/delegation"
 import { resetDatabase } from "../../fixture/db"
 import { disposeAllInstances, tmpdir } from "../../fixture/fixture"
 
@@ -15,17 +16,17 @@ test("routine organization HTTP persists ordered graphs with optimistic archive 
   await using directory = await tmpdir({ git: true })
   const headers = { "content-type": "application/json", "x-kilo-directory": directory.path }
   const app = Server.Default().app
-  const worker = async (name: string) => {
+  const worker = async (name: string, enabled = true) => {
     const response = await app.request("/kilocode/agent", {
       method: "POST",
       headers,
-      body: JSON.stringify({ name, objective: `${name} work`, schedule: { kind: "manual" } }),
+      body: JSON.stringify({ name, objective: `${name} work`, schedule: { kind: "manual" }, enabled }),
     })
     expect(response.status).toBe(200)
     return Schema.decodeUnknownSync(Schema.toCodecJson(RayaTask.Agent))(await response.json())
   }
   const chief = await worker("Chief")
-  const books = await worker("Books")
+  const books = await worker("Books", false)
   const other = await worker("Other")
   const create = await app.request("/kilocode/organization", {
     method: "POST",
@@ -37,15 +38,60 @@ test("routine organization HTTP persists ordered graphs with optimistic archive 
         { agentID: chief.id, role: "CEO" },
         { agentID: books.id, role: "Accounting", supervisorID: chief.id },
       ],
+      delegations: [{ senderID: chief.id, recipientID: books.id }],
     }),
   })
   expect(create.status).toBe(200)
   const organization = Schema.decodeUnknownSync(Schema.toCodecJson(Organization))(await create.json())
   expect(organization).toMatchObject({ version: 1, revision: 1, archived: false })
   expect(organization.members.map((member) => member.position)).toEqual([0, 1])
+  expect(organization.delegations).toEqual([{ senderID: chief.id, recipientID: books.id, position: 0 }])
   const route = `/kilocode/organization/${organization.id}`
   expect((await app.request(route, { headers })).status).toBe(200)
   expect((await app.request(`/kilocode/agent/${books.id}`, { method: "DELETE", headers })).status).toBe(400)
+  const missing = await app.request(`/kilocode/agent/${chief.id}/delegate`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      source: "http_missing_org",
+      senderID: chief.id,
+      recipientID: books.id,
+      objective: "Review the accounts.",
+    }),
+  })
+  expect(missing.status).toBe(400)
+  const reverse = await app.request(`/kilocode/agent/${books.id}/delegate`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      source: "http_reverse_org",
+      senderID: books.id,
+      recipientID: chief.id,
+      organizationID: organization.id,
+      organizationRevision: organization.revision,
+      objective: "Approve the accounts.",
+    }),
+  })
+  expect(reverse.status).toBe(400)
+  const delegated = await app.request(`/kilocode/agent/${chief.id}/delegate`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      source: "http_org",
+      senderID: chief.id,
+      recipientID: books.id,
+      organizationID: organization.id,
+      organizationRevision: organization.revision,
+      objective: "Review the accounts.",
+    }),
+  })
+  expect(delegated.status).toBe(200)
+  expect(Schema.decodeUnknownSync(Schema.toCodecJson(Delegation))(await delegated.json())).toMatchObject({
+    state: "failed",
+    organizationID: organization.id,
+    organizationName: organization.name,
+    organizationRevision: 1,
+  })
 
   const invalid = await app.request(route, {
     method: "PATCH",
@@ -68,6 +114,23 @@ test("routine organization HTTP persists ordered graphs with optimistic archive 
   const revised = Schema.decodeUnknownSync(Schema.toCodecJson(Organization))(await update.json())
   expect(revised).toMatchObject({ name: "Website Operations", revision: 2 })
   expect(revised.purpose).toBeUndefined()
+  expect(revised.delegations).toEqual(organization.delegations)
+  expect(
+    (
+      await app.request(`/kilocode/agent/${chief.id}/delegate`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          source: "http_stale_org",
+          senderID: chief.id,
+          recipientID: books.id,
+          organizationID: organization.id,
+          organizationRevision: 1,
+          objective: "Review the accounts again.",
+        }),
+      })
+    ).status,
+  ).toBe(400)
   expect(
     (
       await app.request(route, {

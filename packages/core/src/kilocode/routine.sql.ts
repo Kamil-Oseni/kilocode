@@ -100,6 +100,9 @@ export const RayaRoutineDelegationTable = sqliteTable(
     recipient_id: text().notNull(),
     parent_id: text(),
     parent_run_id: text(),
+    organization_id: text(),
+    organization_name: text(),
+    organization_revision: integer(),
     workspace: text(),
     objective: text().notNull(),
     expected: text(),
@@ -123,6 +126,7 @@ export const RayaRoutineDelegationTable = sqliteTable(
     index("raya_routine_delegation_recipient").on(table.recipient_id, table.state, table.time_created),
     index("raya_routine_delegation_parent").on(table.parent_id),
     index("raya_routine_delegation_run").on(table.parent_run_id),
+    index("raya_routine_delegation_organization").on(table.organization_id, table.organization_revision),
   ],
 )
 
@@ -158,6 +162,25 @@ export const RayaRoutineOrganizationMemberTable = sqliteTable(
     uniqueIndex("raya_routine_organization_member_position").on(table.organization_id, table.position),
     index("raya_routine_organization_member_agent").on(table.agent_id, table.organization_id),
     index("raya_routine_organization_member_supervisor").on(table.organization_id, table.supervisor_id),
+  ],
+)
+
+export const RayaRoutineOrganizationDelegationTable = sqliteTable(
+  "raya_routine_organization_delegation",
+  {
+    organization_id: text()
+      .notNull()
+      .references(() => RayaRoutineOrganizationTable.id, { onDelete: "cascade" }),
+    sender_id: text().notNull(),
+    recipient_id: text().notNull(),
+    position: integer().notNull(),
+    time_created: integer().notNull(),
+    time_updated: integer().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.organization_id, table.sender_id, table.recipient_id] }),
+    uniqueIndex("raya_routine_organization_delegation_position").on(table.organization_id, table.position),
+    index("raya_routine_organization_delegation_recipient").on(table.organization_id, table.recipient_id),
   ],
 )
 

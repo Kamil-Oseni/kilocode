@@ -22234,6 +22234,11 @@ export type KilocodeRoutineOrganizationListResponses = {
         supervisorID?: string
         position: number
       }>
+      delegations: Array<{
+        senderID: string
+        recipientID: string
+        position: number
+      }>
     }>
     next?: string
   }
@@ -22250,6 +22255,10 @@ export type KilocodeRoutineOrganizationCreateData = {
       agentID: string
       role: string
       supervisorID?: string
+    }>
+    delegations?: Array<{
+      senderID: string
+      recipientID: string
     }>
   }
   path?: never
@@ -22288,6 +22297,11 @@ export type KilocodeRoutineOrganizationCreateResponses = {
       agentID: string
       role: string
       supervisorID?: string
+      position: number
+    }>
+    delegations: Array<{
+      senderID: string
+      recipientID: string
       position: number
     }>
   }
@@ -22348,6 +22362,11 @@ export type KilocodeRoutineOrganizationArchiveResponses = {
       supervisorID?: string
       position: number
     }>
+    delegations: Array<{
+      senderID: string
+      recipientID: string
+      position: number
+    }>
   }
 }
 
@@ -22400,6 +22419,11 @@ export type KilocodeRoutineOrganizationGetResponses = {
       supervisorID?: string
       position: number
     }>
+    delegations: Array<{
+      senderID: string
+      recipientID: string
+      position: number
+    }>
   }
 }
 
@@ -22415,6 +22439,10 @@ export type KilocodeRoutineOrganizationUpdateData = {
       agentID: string
       role: string
       supervisorID?: string
+    }>
+    delegations?: Array<{
+      senderID: string
+      recipientID: string
     }>
   }
   path: {
@@ -22463,6 +22491,11 @@ export type KilocodeRoutineOrganizationUpdateResponses = {
       agentID: string
       role: string
       supervisorID?: string
+      position: number
+    }>
+    delegations: Array<{
+      senderID: string
+      recipientID: string
       position: number
     }>
   }
@@ -22819,6 +22852,9 @@ export type KilocodeRoutineInboxInfoResponses = {
           archived: boolean
           direction: "sent" | "received"
           delegationID: string
+          organizationID?: string
+          organizationName?: string
+          organizationRevision?: number
           source: string
           state: "queued" | "accepted" | "running" | "needs_input" | "completed" | "failed" | "cancelled"
           objective: string
@@ -22989,6 +23025,8 @@ export type KilocodeRoutineDelegateCreateData = {
     recipientID: string
     parentID?: string
     parentRunID?: string
+    organizationID?: string
+    organizationRevision?: number
     objective: string
     expected?: string
     context?: string
@@ -23034,6 +23072,9 @@ export type KilocodeRoutineDelegateCreateResponses = {
     recipientID: string
     parentID?: string
     parentRunID?: string
+    organizationID?: string
+    organizationName?: string
+    organizationRevision?: number
     workspace?: string
     objective: string
     expected?: string
@@ -23091,6 +23132,9 @@ export type KilocodeRoutineDelegateGetResponses = {
     recipientID: string
     parentID?: string
     parentRunID?: string
+    organizationID?: string
+    organizationName?: string
+    organizationRevision?: number
     workspace?: string
     objective: string
     expected?: string
@@ -23150,6 +23194,9 @@ export type KilocodeRoutineDelegateChainResponses = {
       recipientID: string
       parentID?: string
       parentRunID?: string
+      organizationID?: string
+      organizationName?: string
+      organizationRevision?: number
       workspace?: string
       objective: string
       expected?: string
@@ -23172,6 +23219,9 @@ export type KilocodeRoutineDelegateChainResponses = {
       recipientID: string
       parentID?: string
       parentRunID?: string
+      organizationID?: string
+      organizationName?: string
+      organizationRevision?: number
       workspace?: string
       objective: string
       expected?: string
@@ -23194,6 +23244,9 @@ export type KilocodeRoutineDelegateChainResponses = {
       recipientID: string
       parentID?: string
       parentRunID?: string
+      organizationID?: string
+      organizationName?: string
+      organizationRevision?: number
       workspace?: string
       objective: string
       expected?: string
@@ -23253,6 +23306,9 @@ export type KilocodeRoutineDelegateCancelResponses = {
     recipientID: string
     parentID?: string
     parentRunID?: string
+    organizationID?: string
+    organizationName?: string
+    organizationRevision?: number
     workspace?: string
     objective: string
     expected?: string

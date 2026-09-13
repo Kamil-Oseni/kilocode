@@ -8949,7 +8949,7 @@ export class Organization2 extends HeyApiClient {
   /**
    * Create a routine organization
    *
-   * Create a versioned organization graph from existing persistent routine workers.
+   * Create a versioned organization graph with existing persistent workers and explicit directional delegation permissions.
    */
   public create<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -8961,6 +8961,10 @@ export class Organization2 extends HeyApiClient {
         agentID: string
         role: string
         supervisorID?: string
+      }>
+      delegations?: Array<{
+        senderID: string
+        recipientID: string
       }>
     },
     options?: Options<never, ThrowOnError>,
@@ -8975,6 +8979,7 @@ export class Organization2 extends HeyApiClient {
             { in: "body", key: "name" },
             { in: "body", key: "purpose" },
             { in: "body", key: "members" },
+            { in: "body", key: "delegations" },
           ],
         },
       ],
@@ -9075,7 +9080,7 @@ export class Organization2 extends HeyApiClient {
   /**
    * Update a routine organization
    *
-   * Replace organization fields or its ordered graph using an optimistic revision.
+   * Replace organization fields, its ordered membership graph, or directional delegation permissions using an optimistic revision.
    */
   public update<ThrowOnError extends boolean = false>(
     parameters: {
@@ -9089,6 +9094,10 @@ export class Organization2 extends HeyApiClient {
         agentID: string
         role: string
         supervisorID?: string
+      }>
+      delegations?: Array<{
+        senderID: string
+        recipientID: string
       }>
     },
     options?: Options<never, ThrowOnError>,
@@ -9105,6 +9114,7 @@ export class Organization2 extends HeyApiClient {
             { in: "body", key: "name" },
             { in: "body", key: "purpose" },
             { in: "body", key: "members" },
+            { in: "body", key: "delegations" },
           ],
         },
       ],
@@ -9225,7 +9235,7 @@ export class Inbox extends HeyApiClient {
   /**
    * Inspect persisted routine conversation information
    *
-   * Page files and HTTP links recorded in inbox messages, or tracked sent and received worker delegations. Results retain source identities and do not infer unrecorded communication.
+   * Page files and HTTP links recorded in inbox messages, or tracked sent and received worker delegations. Results retain source and organization provenance and do not infer unrecorded communication.
    */
   public info<ThrowOnError extends boolean = false>(
     parameters: {
@@ -9403,7 +9413,7 @@ export class Delegate extends HeyApiClient {
   /**
    * Ask another roster worker for a tracked result
    *
-   * Admit one authorized request to a recipient worker without rewriting either standing assignment. Busy recipients are queued; retries reuse the same source.
+   * Admit one authorized request to a recipient worker without rewriting either standing assignment. Workers in a shared organization require its current revision and an explicit directional permission. Busy recipients are queued; retries reuse the same source.
    */
   public create<ThrowOnError extends boolean = false>(
     parameters: {
@@ -9415,6 +9425,8 @@ export class Delegate extends HeyApiClient {
       recipientID?: string
       parentID?: string
       parentRunID?: string
+      organizationID?: string
+      organizationRevision?: number
       objective?: string
       expected?: string
       context?: string
@@ -9436,6 +9448,8 @@ export class Delegate extends HeyApiClient {
             { in: "body", key: "recipientID" },
             { in: "body", key: "parentID" },
             { in: "body", key: "parentRunID" },
+            { in: "body", key: "organizationID" },
+            { in: "body", key: "organizationRevision" },
             { in: "body", key: "objective" },
             { in: "body", key: "expected" },
             { in: "body", key: "context" },

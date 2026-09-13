@@ -66,6 +66,7 @@ for (const theme of ["light", "dark"]) {
       await expect(panel.getByText("stripe.com", { exact: true })).toBeVisible()
       await expect(panel.getByText("receipt.pdf", { exact: true })).toBeVisible()
       await expect(panel.getByText("Counsel", { exact: true })).toBeVisible()
+      await expect(panel.getByText("Website Builders · organization revision 1", { exact: true })).toBeVisible()
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
       const infoResult = await new AxeBuilder({ page })
         .include(".routines-view")

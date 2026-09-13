@@ -32,6 +32,7 @@ import type { Database } from "@opencode-ai/core/database/database"
 import { scheduler } from "./scheduler"
 import { reconcile as recovery } from "./reconcile"
 import { RayaTaskSnapshot } from "./snapshot"
+import { RayaTaskOrganization } from "./organization"
 import * as Log from "@opencode-ai/core/util/log"
 
 const WAIT = "waiting on you"
@@ -128,11 +129,13 @@ export namespace RayaTaskRunner {
   type Runner = {
     tick: (from: number) => Effect.Effect<void>
     fire: (id: string) => Effect.Effect<RayaTask.Run, RayaTask.GuardError | RayaTask.NotFoundError>
-    ask: (id: string, question: string, opts?: { defer?: boolean }) => Effect.Effect<RayaTask.Run, RayaTask.GuardError | RayaTask.NotFoundError>
+    ask: (
+      id: string,
+      question: string,
+      opts?: { defer?: boolean },
+    ) => Effect.Effect<RayaTask.Run, RayaTask.GuardError | RayaTask.NotFoundError>
     resume: (sessionID: SessionID) => Effect.Effect<void>
-    delegate: (
-      input: Ask,
-    ) => Effect.Effect<Errand, RayaTask.GuardError | RayaTask.NotFoundError | Invalid | Conflict>
+    delegate: (input: Ask) => Effect.Effect<Errand, RayaTask.GuardError | RayaTask.NotFoundError | Invalid | Conflict>
     stop: (id: string) => Effect.Effect<Errand, RayaTask.GuardError | RayaTask.NotFoundError | Invalid>
     settle: (sessionID: SessionID) => Effect.Effect<void>
     park: (sessionID: SessionID, waiting: boolean) => Effect.Effect<void>
@@ -154,7 +157,10 @@ export namespace RayaTaskRunner {
     const schedule = input.database ? scheduler({ ...input, database: input.database }) : undefined
     const restore = input.database ? recovery({ ...input, database: input.database }) : undefined
     const inbox = input.database ? RayaTaskInbox.make(input.database) : undefined
-    const errands = input.database ? RayaTaskDelegation.make(input.database) : undefined
+    const organizations = input.database ? RayaTaskOrganization.make(input.database, tasks, input.storage) : undefined
+    const errands = input.database
+      ? RayaTaskDelegation.make(input.database, organizations?.authorize, organizations?.shares)
+      : undefined
     const LATE = "This request timed out. It was not completed."
     const drop = (id: string, sid: SessionID | undefined, rid: string | undefined, reason: string) =>
       Effect.gen(function* () {
@@ -167,9 +173,9 @@ export namespace RayaTaskRunner {
       if (!errands) return
       const rows = yield* errands.overdue(from)
       for (const row of rows) {
-        const recipient = yield* tasks.get(row.recipientID).pipe(
-          Effect.catchTag("RayaTask.NotFoundError", () => Effect.succeed(undefined)),
-        )
+        const recipient = yield* tasks
+          .get(row.recipientID)
+          .pipe(Effect.catchTag("RayaTask.NotFoundError", () => Effect.succeed(undefined)))
         if (!recipient) continue
         yield* errands.finish(row.id, "failed", recipient, undefined, undefined, LATE).pipe(
           Effect.catchTag("RayaTaskDelegation.Conflict", () => Effect.void),
@@ -179,9 +185,9 @@ export namespace RayaTaskRunner {
         )
         yield* drop(row.recipientID, row.sessionID, row.childRunID, LATE)
         if (!row.sessionID || !input.halt) continue
-        yield* input.halt(row.sessionID).pipe(
-          Effect.catch((err) => Effect.sync(() => log.error("timed out session stop failed", { err }))),
-        )
+        yield* input
+          .halt(row.sessionID)
+          .pipe(Effect.catch((err) => Effect.sync(() => log.error("timed out session stop failed", { err }))))
       }
     })
     const retain = Effect.fn("RayaTaskRunner.retain")(function* (run: RayaTask.Run) {
@@ -191,20 +197,22 @@ export namespace RayaTaskRunner {
       const names = new Map<string, string>()
       for (const kid of kids) {
         if (names.has(kid.recipientID)) continue
-        const found = yield* tasks.get(kid.recipientID).pipe(
-          Effect.catchTag("RayaTask.NotFoundError", () => Effect.succeed(undefined)),
-        )
+        const found = yield* tasks
+          .get(kid.recipientID)
+          .pipe(Effect.catchTag("RayaTask.NotFoundError", () => Effect.succeed(undefined)))
         names.set(kid.recipientID, found?.name ?? kid.recipientID)
       }
       const extra = credited(kids, (id) => names.get(id) ?? id)
       const body = extra.length ? [item.body, ...extra].join("\n").slice(0, 8000) : item.body
-      yield* inbox.publish({ ...item, body }).pipe(
-        Effect.catch((error) =>
-          typeof error === "object" && error !== null && "_tag" in error && error._tag === "RayaTaskInbox.Conflict"
-            ? Effect.void
-            : Effect.die(error),
-        ),
-      )
+      yield* inbox
+        .publish({ ...item, body })
+        .pipe(
+          Effect.catch((error) =>
+            typeof error === "object" && error !== null && "_tag" in error && error._tag === "RayaTaskInbox.Conflict"
+              ? Effect.void
+              : Effect.die(error),
+          ),
+        )
     })
 
     const seed = Effect.fn("RayaTaskRunner.seed")(function* (item: RayaTask.Agent) {
@@ -279,91 +287,96 @@ export namespace RayaTaskRunner {
     })
 
     const fire = Effect.fn("RayaTaskRunner.fire")(
-      (id: string, trigger?: Trigger, note?: string, opts?: { follow?: boolean; view?: Pick<RayaTask.Agent, "role" | "access" | "tools">; defer?: boolean }) =>
-      tasks.enforce(id).pipe(
-        Effect.andThen(recoverable(id)),
-        Effect.andThen(
-          claim(
-            input.storage,
-            id,
-            check(id, trigger, opts?.follow ?? !!note),
-            (selected, owner) =>
-              Effect.gen(function* () {
-                const item = selected.item
-                if (selected.trigger.kind === "timer") {
-                  if (!schedule)
-                    return yield* new RayaTask.GuardError({
-                      message: "The routine occurrence database is unavailable.",
-                    })
-                  yield* schedule.reserve(selected.trigger, owner.id)
-                }
-                const objective = note ?? (yield* seed(item))
-                yield* snapshots.save({
-                  version: 1,
-                  runID: owner.id,
-                  agentID: item.id,
-                  at: owner.at,
-                  definition: item,
-                  objective,
-                })
-                const created = yield* open(
-                  item.dir,
-                  input.sessions.create({
-                    title: item.name,
-                    agent: specialist(item),
-                    metadata: {
-                      rayaRoutine: {
-                        version: selected.trigger.kind === "timer" ? 2 : 1,
-                        agentID: item.id,
-                        runID: owner.id,
-                        scheduleVersion: item.scheduleVersion ?? 1,
-                        trigger: selected.trigger,
+      (
+        id: string,
+        trigger?: Trigger,
+        note?: string,
+        opts?: { follow?: boolean; view?: Pick<RayaTask.Agent, "role" | "access" | "tools">; defer?: boolean },
+      ) =>
+        tasks.enforce(id).pipe(
+          Effect.andThen(recoverable(id)),
+          Effect.andThen(
+            claim(
+              input.storage,
+              id,
+              check(id, trigger, opts?.follow ?? !!note),
+              (selected, owner) =>
+                Effect.gen(function* () {
+                  const item = selected.item
+                  if (selected.trigger.kind === "timer") {
+                    if (!schedule)
+                      return yield* new RayaTask.GuardError({
+                        message: "The routine occurrence database is unavailable.",
+                      })
+                    yield* schedule.reserve(selected.trigger, owner.id)
+                  }
+                  const objective = note ?? (yield* seed(item))
+                  yield* snapshots.save({
+                    version: 1,
+                    runID: owner.id,
+                    agentID: item.id,
+                    at: owner.at,
+                    definition: item,
+                    objective,
+                  })
+                  const created = yield* open(
+                    item.dir,
+                    input.sessions.create({
+                      title: item.name,
+                      agent: specialist(item),
+                      metadata: {
+                        rayaRoutine: {
+                          version: selected.trigger.kind === "timer" ? 2 : 1,
+                          agentID: item.id,
+                          runID: owner.id,
+                          scheduleVersion: item.scheduleVersion ?? 1,
+                          trigger: selected.trigger,
+                        },
                       },
-                    },
-                    model:
-                      item.mode || !item.model
-                        ? undefined
-                        : {
-                            providerID: ProviderV2.ID.make(item.model.providerID),
-                            id: ModelV2.ID.make(item.model.id),
-                          },
-                    permission: RayaTask.rules(opts?.view ?? item),
-                  }),
-                )
-                yield* owner.link(created.id)
-                if (selected.trigger.kind === "timer" && schedule)
-                  yield* schedule.link(selected.trigger, owner.id, created.id)
-                yield* goals.create(
-                  created.id,
-                  objective,
-                  undefined,
-                  undefined,
-                  undefined,
-                  note ? undefined : item.output?.criteria,
-                )
-                const run: RayaTask.Run = {
-                  id: owner.id,
-                  agentID: item.id,
-                  at: owner.at,
-                  sessionID: created.id,
-                  status: "running",
-                  scheduleVersion: item.scheduleVersion ?? 1,
-                  trigger: selected.trigger,
-                }
-                const stored = yield* tasks.record(run)
-                if (!opts?.defer)
-                  yield* kick({
-                    database: input.database,
+                      model:
+                        item.mode || !item.model
+                          ? undefined
+                          : {
+                              providerID: ProviderV2.ID.make(item.model.providerID),
+                              id: ModelV2.ID.make(item.model.id),
+                            },
+                      permission: RayaTask.rules(opts?.view ?? item),
+                    }),
+                  )
+                  yield* owner.link(created.id)
+                  if (selected.trigger.kind === "timer" && schedule)
+                    yield* schedule.link(selected.trigger, owner.id, created.id)
+                  yield* goals.create(
+                    created.id,
+                    objective,
+                    undefined,
+                    undefined,
+                    undefined,
+                    note ? undefined : item.output?.criteria,
+                  )
+                  const run: RayaTask.Run = {
+                    id: owner.id,
+                    agentID: item.id,
+                    at: owner.at,
                     sessionID: created.id,
-                    storage: input.storage,
-                    sessions: input.sessions,
-                  }).pipe(Effect.forkDetach)
-                return stored
-              }),
-            (selected) => selected.trigger,
+                    status: "running",
+                    scheduleVersion: item.scheduleVersion ?? 1,
+                    trigger: selected.trigger,
+                  }
+                  const stored = yield* tasks.record(run)
+                  if (!opts?.defer)
+                    yield* kick({
+                      database: input.database,
+                      sessionID: created.id,
+                      storage: input.storage,
+                      sessions: input.sessions,
+                    }).pipe(Effect.forkDetach)
+                  return stored
+                }),
+              (selected) => selected.trigger,
+            ),
           ),
         ),
-      ),
     )
 
     const park = Effect.fn("RayaTaskRunner.park")(function* (sessionID: SessionID, waiting: boolean) {
@@ -391,14 +404,18 @@ export namespace RayaTaskRunner {
       const existing = yield* goals.get(run.sessionID)
       if (!existing || existing.status === "complete") {
         yield* goals.create(run.sessionID, note).pipe(
-          Effect.catchTag("RayaGoal.AuditError", (err) => Effect.fail(new RayaTask.GuardError({ message: err.message }))),
+          Effect.catchTag("RayaGoal.AuditError", (err) =>
+            Effect.fail(new RayaTask.GuardError({ message: err.message })),
+          ),
           Effect.catchTag("RayaGoal.ExistsError", () =>
             Effect.fail(new RayaTask.GuardError({ message: "This worker is already running another goal." })),
           ),
         )
       } else {
         yield* goals.revise(run.sessionID, note).pipe(
-          Effect.catchTag("RayaGoal.AuditError", (err) => Effect.fail(new RayaTask.GuardError({ message: err.message }))),
+          Effect.catchTag("RayaGoal.AuditError", (err) =>
+            Effect.fail(new RayaTask.GuardError({ message: err.message })),
+          ),
           Effect.catchTag("RayaGoal.NotFoundError", () =>
             Effect.fail(new RayaTask.GuardError({ message: "This worker's current run could not be steered." })),
           ),
@@ -443,6 +460,17 @@ export namespace RayaTaskRunner {
         })
       const sender = yield* tasks.get(taken.senderID)
       const recipient = yield* tasks.get(taken.recipientID)
+      if (!(yield* errands.authorize(taken))) {
+        yield* errands.finish(
+          taken.id,
+          "failed",
+          recipient,
+          undefined,
+          undefined,
+          "The organization no longer authorizes this delegation.",
+        )
+        return yield* errands.get(taken.id)
+      }
       if (taken.deadline !== undefined && taken.deadline <= Date.now()) {
         yield* errands.finish(taken.id, "failed", recipient, undefined, undefined, LATE)
         return yield* errands.get(taken.id)
@@ -451,6 +479,8 @@ export namespace RayaTaskRunner {
         source: taken.source,
         senderID: taken.senderID,
         recipientID: taken.recipientID,
+        organizationID: taken.organizationID,
+        organizationRevision: taken.organizationRevision,
         objective: taken.objective,
         expected: taken.expected,
         context: taken.context,
@@ -485,11 +515,13 @@ export namespace RayaTaskRunner {
 
     const fetch = (id: string) =>
       Effect.gen(function* () {
-        const live = yield* tasks.get(id).pipe(Effect.catchTag("RayaTask.NotFoundError", () => Effect.succeed(undefined)))
+        const live = yield* tasks
+          .get(id)
+          .pipe(Effect.catchTag("RayaTask.NotFoundError", () => Effect.succeed(undefined)))
         if (live) return { agent: live, gone: false as const }
-        const archived = yield* tasks.page({ agentID: id }).pipe(
-          Effect.catchTag("RayaTask.GuardError", () => Effect.succeed({ items: [] as const })),
-        )
+        const archived = yield* tasks
+          .page({ agentID: id })
+          .pipe(Effect.catchTag("RayaTask.GuardError", () => Effect.succeed({ items: [] as const })))
         const found = archived.items.find((item) => item.definition.id === id)
         if (found) return { agent: found.definition, gone: true as const }
         return
@@ -539,9 +571,9 @@ export namespace RayaTaskRunner {
         if (item.state === "completed" || item.state === "failed") continue
         yield* drop(item.recipientID, item.sessionID, item.childRunID, "Stopped by the user.")
         if (!item.sessionID || !input.halt) continue
-        yield* input.halt(item.sessionID).pipe(
-          Effect.catch((err) => Effect.sync(() => log.error("delegated session stop failed", { err }))),
-        )
+        yield* input
+          .halt(item.sessionID)
+          .pipe(Effect.catch((err) => Effect.sync(() => log.error("delegated session stop failed", { err }))))
       }
       const seen = new Set<string>()
       for (const item of listed) {
@@ -571,13 +603,18 @@ export namespace RayaTaskRunner {
               ? ("failed" as const)
               : undefined
       if (!state) return
-      yield* errands.finish(row.id, state, recipient, run.outcome?.summary, run.outcome?.cost, run.blockedReason).pipe(
-        Effect.catch((error) =>
-          typeof error === "object" && error !== null && "_tag" in error && error._tag === "RayaTaskDelegation.Conflict"
-            ? Effect.void
-            : Effect.die(error),
-        ),
-      )
+      yield* errands
+        .finish(row.id, state, recipient, run.outcome?.summary, run.outcome?.cost, run.blockedReason)
+        .pipe(
+          Effect.catch((error) =>
+            typeof error === "object" &&
+            error !== null &&
+            "_tag" in error &&
+            error._tag === "RayaTaskDelegation.Conflict"
+              ? Effect.void
+              : Effect.die(error),
+          ),
+        )
       if (yield* busy(recipient.id)) return
       const taken = yield* errands.take(recipient.id)
       if (!taken) return

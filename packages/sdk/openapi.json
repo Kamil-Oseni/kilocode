@@ -30512,6 +30512,32 @@
                             },
                             "minItems": 1,
                             "maxItems": 50
+                          },
+                          "delegations": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "senderID": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256
+                                },
+                                "recipientID": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256
+                                },
+                                "position": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "exclusiveMaximum": 500
+                                }
+                              },
+                              "required": ["senderID", "recipientID", "position"],
+                              "additionalProperties": false
+                            },
+                            "maxItems": 500
                           }
                         },
                         "required": [
@@ -30522,7 +30548,8 @@
                           "archived",
                           "createdAt",
                           "updatedAt",
-                          "members"
+                          "members",
+                          "delegations"
                         ],
                         "additionalProperties": false
                       }
@@ -30668,9 +30695,45 @@
                       },
                       "minItems": 1,
                       "maxItems": 50
+                    },
+                    "delegations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "senderID": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "recipientID": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "position": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "exclusiveMaximum": 500
+                          }
+                        },
+                        "required": ["senderID", "recipientID", "position"],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 500
                     }
                   },
-                  "required": ["version", "id", "name", "revision", "archived", "createdAt", "updatedAt", "members"],
+                  "required": [
+                    "version",
+                    "id",
+                    "name",
+                    "revision",
+                    "archived",
+                    "createdAt",
+                    "updatedAt",
+                    "members",
+                    "delegations"
+                  ],
                   "additionalProperties": false,
                   "description": "Created routine organization"
                 }
@@ -30695,7 +30758,7 @@
             }
           }
         },
-        "description": "Create a versioned organization graph from existing persistent routine workers.",
+        "description": "Create a versioned organization graph with existing persistent workers and explicit directional delegation permissions.",
         "summary": "Create a routine organization",
         "requestBody": {
           "content": {
@@ -30739,6 +30802,27 @@
                     },
                     "minItems": 1,
                     "maxItems": 50
+                  },
+                  "delegations": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "senderID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "recipientID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        }
+                      },
+                      "required": ["senderID", "recipientID"],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 500
                   }
                 },
                 "required": ["name", "members"],
@@ -30866,9 +30950,45 @@
                       },
                       "minItems": 1,
                       "maxItems": 50
+                    },
+                    "delegations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "senderID": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "recipientID": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "position": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "exclusiveMaximum": 500
+                          }
+                        },
+                        "required": ["senderID", "recipientID", "position"],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 500
                     }
                   },
-                  "required": ["version", "id", "name", "revision", "archived", "createdAt", "updatedAt", "members"],
+                  "required": [
+                    "version",
+                    "id",
+                    "name",
+                    "revision",
+                    "archived",
+                    "createdAt",
+                    "updatedAt",
+                    "members",
+                    "delegations"
+                  ],
                   "additionalProperties": false,
                   "description": "Routine organization"
                 }
@@ -31014,9 +31134,45 @@
                       },
                       "minItems": 1,
                       "maxItems": 50
+                    },
+                    "delegations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "senderID": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "recipientID": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "position": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "exclusiveMaximum": 500
+                          }
+                        },
+                        "required": ["senderID", "recipientID", "position"],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 500
                     }
                   },
-                  "required": ["version", "id", "name", "revision", "archived", "createdAt", "updatedAt", "members"],
+                  "required": [
+                    "version",
+                    "id",
+                    "name",
+                    "revision",
+                    "archived",
+                    "createdAt",
+                    "updatedAt",
+                    "members",
+                    "delegations"
+                  ],
                   "additionalProperties": false,
                   "description": "Updated routine organization"
                 }
@@ -31061,7 +31217,7 @@
             }
           }
         },
-        "description": "Replace organization fields or its ordered graph using an optimistic revision.",
+        "description": "Replace organization fields, its ordered membership graph, or directional delegation permissions using an optimistic revision.",
         "summary": "Update a routine organization",
         "requestBody": {
           "content": {
@@ -31110,6 +31266,27 @@
                     },
                     "minItems": 1,
                     "maxItems": 50
+                  },
+                  "delegations": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "senderID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "recipientID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        }
+                      },
+                      "required": ["senderID", "recipientID"],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 500
                   }
                 },
                 "required": ["expectedRevision"],
@@ -31235,9 +31412,45 @@
                       },
                       "minItems": 1,
                       "maxItems": 50
+                    },
+                    "delegations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "senderID": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "recipientID": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "position": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "exclusiveMaximum": 500
+                          }
+                        },
+                        "required": ["senderID", "recipientID", "position"],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 500
                     }
                   },
-                  "required": ["version", "id", "name", "revision", "archived", "createdAt", "updatedAt", "members"],
+                  "required": [
+                    "version",
+                    "id",
+                    "name",
+                    "revision",
+                    "archived",
+                    "createdAt",
+                    "updatedAt",
+                    "members",
+                    "delegations"
+                  ],
                   "additionalProperties": false,
                   "description": "Archived routine organization"
                 }
@@ -32650,6 +32863,20 @@
                                 "type": "string",
                                 "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
                               },
+                              "organizationID": {
+                                "type": "string",
+                                "pattern": "^org_[a-f0-9]{32}$"
+                              },
+                              "organizationName": {
+                                "type": "string",
+                                "pattern": "\\S",
+                                "maxLength": 120
+                              },
+                              "organizationRevision": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 9007199254740991
+                              },
                               "source": {
                                 "type": "string",
                                 "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
@@ -32783,7 +33010,7 @@
             }
           }
         },
-        "description": "Page files and HTTP links recorded in inbox messages, or tracked sent and received worker delegations. Results retain source identities and do not infer unrecorded communication.",
+        "description": "Page files and HTTP links recorded in inbox messages, or tracked sent and received worker delegations. Results retain source and organization provenance and do not infer unrecorded communication.",
         "summary": "Inspect persisted routine conversation information",
         "x-codeSamples": [
           {
@@ -33269,6 +33496,20 @@
                       "type": "string",
                       "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
                     },
+                    "organizationID": {
+                      "type": "string",
+                      "pattern": "^org_[a-f0-9]{32}$"
+                    },
+                    "organizationName": {
+                      "type": "string",
+                      "pattern": "\\S",
+                      "maxLength": 120
+                    },
+                    "organizationRevision": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
                     "workspace": {
                       "type": "string"
                     },
@@ -33412,7 +33653,7 @@
             }
           }
         },
-        "description": "Admit one authorized request to a recipient worker without rewriting either standing assignment. Busy recipients are queued; retries reuse the same source.",
+        "description": "Admit one authorized request to a recipient worker without rewriting either standing assignment. Workers in a shared organization require its current revision and an explicit directional permission. Busy recipients are queued; retries reuse the same source.",
         "summary": "Ask another roster worker for a tracked result",
         "requestBody": {
           "content": {
@@ -33441,6 +33682,15 @@
                   "parentRunID": {
                     "type": "string",
                     "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                  },
+                  "organizationID": {
+                    "type": "string",
+                    "pattern": "^org_[a-f0-9]{32}$"
+                  },
+                  "organizationRevision": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
                   },
                   "objective": {
                     "type": "string",
@@ -33553,6 +33803,20 @@
                     "parentRunID": {
                       "type": "string",
                       "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                    },
+                    "organizationID": {
+                      "type": "string",
+                      "pattern": "^org_[a-f0-9]{32}$"
+                    },
+                    "organizationName": {
+                      "type": "string",
+                      "pattern": "\\S",
+                      "maxLength": 120
+                    },
+                    "organizationRevision": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
                     },
                     "workspace": {
                       "type": "string"
@@ -33772,6 +34036,20 @@
                           "type": "string",
                           "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
                         },
+                        "organizationID": {
+                          "type": "string",
+                          "pattern": "^org_[a-f0-9]{32}$"
+                        },
+                        "organizationName": {
+                          "type": "string",
+                          "pattern": "\\S",
+                          "maxLength": 120
+                        },
+                        "organizationRevision": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
                         "workspace": {
                           "type": "string"
                         },
@@ -33903,6 +34181,20 @@
                           "parentRunID": {
                             "type": "string",
                             "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                          },
+                          "organizationID": {
+                            "type": "string",
+                            "pattern": "^org_[a-f0-9]{32}$"
+                          },
+                          "organizationName": {
+                            "type": "string",
+                            "pattern": "\\S",
+                            "maxLength": 120
+                          },
+                          "organizationRevision": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
                           },
                           "workspace": {
                             "type": "string"
@@ -34036,6 +34328,20 @@
                           "parentRunID": {
                             "type": "string",
                             "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                          },
+                          "organizationID": {
+                            "type": "string",
+                            "pattern": "^org_[a-f0-9]{32}$"
+                          },
+                          "organizationName": {
+                            "type": "string",
+                            "pattern": "\\S",
+                            "maxLength": 120
+                          },
+                          "organizationRevision": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
                           },
                           "workspace": {
                             "type": "string"
@@ -34256,6 +34562,20 @@
                     "parentRunID": {
                       "type": "string",
                       "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+                    },
+                    "organizationID": {
+                      "type": "string",
+                      "pattern": "^org_[a-f0-9]{32}$"
+                    },
+                    "organizationName": {
+                      "type": "string",
+                      "pattern": "\\S",
+                      "maxLength": 120
+                    },
+                    "organizationRevision": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
                     },
                     "workspace": {
                       "type": "string"

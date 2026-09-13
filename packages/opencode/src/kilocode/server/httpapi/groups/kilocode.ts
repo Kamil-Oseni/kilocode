@@ -808,7 +808,8 @@ export const KilocodeApi = HttpApi.make("kilocode")
           OpenApi.annotations({
             identifier: "kilocode.routine.organization.create",
             summary: "Create a routine organization",
-            description: "Create a versioned organization graph from existing persistent routine workers.",
+            description:
+              "Create a versioned organization graph with existing persistent workers and explicit directional delegation permissions.",
           }),
         ),
         HttpApiEndpoint.get("organizationGet", KilocodePaths.organizationItem, {
@@ -832,7 +833,8 @@ export const KilocodeApi = HttpApi.make("kilocode")
           OpenApi.annotations({
             identifier: "kilocode.routine.organization.update",
             summary: "Update a routine organization",
-            description: "Replace organization fields or its ordered graph using an optimistic revision.",
+            description:
+              "Replace organization fields, its ordered membership graph, or directional delegation permissions using an optimistic revision.",
           }),
         ),
         HttpApiEndpoint.delete("organizationArchive", KilocodePaths.organizationItem, {
@@ -898,7 +900,7 @@ export const KilocodeApi = HttpApi.make("kilocode")
             identifier: "kilocode.routine.inbox.info",
             summary: "Inspect persisted routine conversation information",
             description:
-              "Page files and HTTP links recorded in inbox messages, or tracked sent and received worker delegations. Results retain source identities and do not infer unrecorded communication.",
+              "Page files and HTTP links recorded in inbox messages, or tracked sent and received worker delegations. Results retain source and organization provenance and do not infer unrecorded communication.",
           }),
         ),
         HttpApiEndpoint.post("agentInboxSend", KilocodePaths.agentInboxItem, {
@@ -967,7 +969,7 @@ export const KilocodeApi = HttpApi.make("kilocode")
             identifier: "kilocode.routine.delegate.create",
             summary: "Ask another roster worker for a tracked result",
             description:
-              "Admit one authorized request to a recipient worker without rewriting either standing assignment. Busy recipients are queued; retries reuse the same source.",
+              "Admit one authorized request to a recipient worker without rewriting either standing assignment. Workers in a shared organization require its current revision and an explicit directional permission. Busy recipients are queued; retries reuse the same source.",
           }),
         ),
         HttpApiEndpoint.get("agentDelegateGet", KilocodePaths.agentDelegateItem, {

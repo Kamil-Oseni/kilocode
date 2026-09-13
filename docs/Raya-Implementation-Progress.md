@@ -4,9 +4,11 @@ Source of scope: [Comprehensive audit](Raya-Comprehensive-Audit.md). All section
 
 ## ChatGPT 2026-09-13 11:40 America/Toronto — cross-directory data and execution ownership
 
-**Status: verified locally; commit and push remain.** The real shared-backend acceptance now creates a session in project A, then queries directory-filtered session lists for projects A and B with the same authenticated connection. A contains the session and B does not. The test then deliberately sends the session's shell request with project B in `x-kilo-directory`. Workspace routing resolves the session's persisted location before execution, so the command reports project A as its working directory, writes `owner.txt` only in project A, and leaves project B unchanged.
+**Status: delivered in verification commit `18b7e15f5d`; pushed.** The real shared-backend acceptance now creates a session in project A, then queries directory-filtered session lists for projects A and B with the same authenticated connection. A contains the session and B does not. The test then deliberately sends the session's shell request with project B in `x-kilo-directory`. Workspace routing resolves the session's persisted location before execution, so the command reports project A as its working directory, writes `owner.txt` only in project A, and leaves project B unchanged.
 
 This distinguishes routing from authentication: the shared backend credential permits the request, the explicit directory query scopes discovery, and the persisted session directory owns execution even when a stale or incorrect caller header is supplied. The final process-level case passes 1/1 with 13 assertions in 35.04 seconds. All spawned Bun processes exited; no `tsgo` or `tsgolint` ran. EN-10 remains **In progress** only for an authenticated deployed-companion acceptance run and its independent artifact/runtime receipt.
+
+Delivery completed by ChatGPT at 2026-09-13 11:42 America/Toronto. Verification commit `18b7e15f5dc46e2efff0e3c8241f9b19029601c5` (`test(cli): verify session directory ownership`) is on `origin/main`. It changes process-level acceptance and documentation only, so no extension snapshot is required; the installed extension remains `eden.raya@7.4.23-snapshot+f83096f7d6.kamil-oseni.1789312194050`.
 
 ## ChatGPT 2026-09-13 11:31 America/Toronto — managed-socket parent and window ownership
 

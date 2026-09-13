@@ -52,19 +52,12 @@ function launch(input: Record<string, string>) {
   })
 }
 
-async function fixture() {
-  const root = await mkdtemp(join(import.meta.dir, ".self-heal-install-"))
-  const output = join(root, "repair.vsix")
-  const binary = Buffer.from("verified kilo binary")
-  const target = `${process.platform}-${process.arch}` as Plan["target"]
+async function archive(output: string, version: string, target: Plan["target"], binary: Buffer) {
   const zip = new writer.ZipFile()
-  zip.addBuffer(
-    Buffer.from(JSON.stringify({ name: "raya", publisher: "eden", version: "1.2.3" })),
-    "extension/package.json",
-  )
+  zip.addBuffer(Buffer.from(JSON.stringify({ name: "raya", publisher: "eden", version })), "extension/package.json")
   zip.addBuffer(
     Buffer.from(
-      `<PackageManifest><Metadata><Identity Id="raya" Publisher="eden" Version="1.2.3" TargetPlatform="${target}" /></Metadata></PackageManifest>`,
+      `<PackageManifest><Metadata><Identity Id="raya" Publisher="eden" Version="${version}" TargetPlatform="${target}" /></Metadata></PackageManifest>`,
     ),
     "extension.vsixmanifest",
   )
@@ -72,7 +65,22 @@ async function fixture() {
   const done = pipeline(zip.outputStream, createWriteStream(output))
   zip.end()
   await done
-  const archive = await readFile(output)
+  const value = await readFile(output)
+  return {
+    artifact: { digest: createHash("sha256").update(value).digest("hex"), size: value.length },
+    binary: { digest: createHash("sha256").update(binary).digest("hex"), size: binary.length },
+  }
+}
+
+async function fixture() {
+  const root = await mkdtemp(join(import.meta.dir, ".self-heal-install-"))
+  const output = join(root, "repair.vsix")
+  const rollback = join(root, "rollback.vsix")
+  const binary = Buffer.from("verified kilo binary")
+  const previous = Buffer.from("previous kilo binary")
+  const target = `${process.platform}-${process.arch}` as Plan["target"]
+  const receipt = await archive(output, "1.2.3", target, binary)
+  const prior = await archive(rollback, "1.2.2", target, previous)
   const plan: Plan = {
     itemID: "heal_ready",
     approvalID: "approval_ready",
@@ -82,9 +90,10 @@ async function fixture() {
     extension: "1.2.3",
     target,
     output,
-    artifact: { digest: createHash("sha256").update(archive).digest("hex"), size: archive.length },
-    binary: { digest: createHash("sha256").update(binary).digest("hex"), size: binary.length },
+    artifact: receipt.artifact,
+    binary: receipt.binary,
     previous: "1.2.2",
+    rollback: { version: "1.2.2", target, source: rollback, ...prior },
     replay: {
       attemptID: "attempt_ready",
       sessionID: "ses_ready",
@@ -101,7 +110,7 @@ async function fixture() {
       },
     },
   }
-  return { root, output, binary, plan }
+  return { root, output, binary, previous, plan }
 }
 
 function item(plan: Plan, digest = plan.artifact.digest) {
@@ -183,6 +192,17 @@ function item(plan: Plan, digest = plan.artifact.digest) {
   }
 }
 
+function rollback(plan: Plan) {
+  return {
+    version: plan.rollback.version,
+    target: plan.rollback.target,
+    package: plan.rollback.source,
+    artifact: plan.rollback.artifact,
+    binary: plan.rollback.binary,
+    retainedAt: 1,
+  }
+}
+
 function client(rows: unknown[], calls: Request[]) {
   return createKiloClient({
     baseUrl: "http://unused.invalid",
@@ -213,6 +233,8 @@ test("persists exact install intent, suppresses replay, and verifies activation"
       expect(await readFile(path)).toEqual(await readFile(run.output))
     })
     expect(result).toMatchObject({ dispatched: true, record: { phase: "awaiting-reload" } })
+    expect(result.record.rollback.package).toContain(join(run.root, "state", "rollback."))
+    expect(await readFile(result.record.rollback.package)).toEqual(await readFile(run.plan.rollback.source))
     const duplicate = await new SelfHealInstallation(join(run.root, "state")).run(run.plan, async () => {
       calls++
     })
@@ -343,6 +365,7 @@ test("install UI refreshes the approval after confirmation and cancel dispatches
       itemID: run.plan.itemID,
       directory: join(run.root, "backend"),
       previous: run.plan.previous,
+      rollback: rollback(run.plan),
       journal: new SelfHealInstallation(join(run.root, "state")),
       confirm: async () => true,
       dispatch: async () => {
@@ -361,6 +384,7 @@ test("install UI refreshes the approval after confirmation and cancel dispatches
         itemID: other.plan.itemID,
         directory: join(other.root, "backend"),
         previous: other.plan.previous,
+        rollback: rollback(other.plan),
         journal: new SelfHealInstallation(join(other.root, "state")),
         confirm: async () => false,
         dispatch: async () => {
@@ -379,6 +403,36 @@ test("install UI refreshes the approval after confirmation and cancel dispatches
   }
 })
 
+test("missing rollback package blocks repair installation before review", async () => {
+  const run = await fixture()
+  try {
+    const calls: Request[] = []
+    let confirmed = false
+    let dispatched = false
+    const result = await runInstall({
+      client: client([], calls),
+      itemID: run.plan.itemID,
+      directory: join(run.root, "backend"),
+      previous: run.plan.previous,
+      journal: new SelfHealInstallation(join(run.root, "state")),
+      confirm: async () => {
+        confirmed = true
+        return true
+      },
+      dispatch: async () => {
+        dispatched = true
+      },
+    })
+    expect(result.notice).toContain("rollback would be unavailable")
+    expect(calls).toHaveLength(0)
+    expect(confirmed).toBe(false)
+    expect(dispatched).toBe(false)
+    expect(await new SelfHealInstallation(join(run.root, "state")).inspect()).toBeUndefined()
+  } finally {
+    await rm(run.root, { recursive: true, force: true })
+  }
+})
+
 test("changed approval after install confirmation creates no intent", async () => {
   const run = await fixture()
   try {
@@ -389,6 +443,7 @@ test("changed approval after install confirmation creates no intent", async () =
       itemID: run.plan.itemID,
       directory: join(run.root, "backend"),
       previous: run.plan.previous,
+      rollback: rollback(run.plan),
       journal: new SelfHealInstallation(join(run.root, "state")),
       confirm: async () => true,
       dispatch: async () => {
@@ -415,6 +470,7 @@ test("changed replay criteria after install confirmation creates no intent", asy
       itemID: run.plan.itemID,
       directory: join(run.root, "backend"),
       previous: run.plan.previous,
+      rollback: rollback(run.plan),
       journal: new SelfHealInstallation(join(run.root, "state")),
       confirm: async () => true,
       dispatch: async () => {

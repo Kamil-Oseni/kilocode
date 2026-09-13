@@ -20,13 +20,30 @@ const metadata = z.object({
 })
 
 type Bytes = { digest: string; size: number }
-type Expected = {
+export type PackageIdentity = {
   name: string
   publisher: string
   version: string
   target: string
+}
+type Expected = PackageIdentity & {
   artifact?: Bytes
   binary?: Bytes
+}
+
+/** Read a complete package receipt while validating its manifests and bundled CLI. */
+export async function inspect(path: string, expected: PackageIdentity) {
+  const artifact = await hash(createReadStream(path), 1024 * 1024 * 1024)
+  const zip = await openPromise(path, { strictFileNames: true, autoClose: false })
+  try {
+    const archive = await contents(zip, expected.target, true)
+    manifests(archive.files, expected)
+    if (!archive.binary) throw new Error("Update archive does not contain the expected CLI binary.")
+    await checksum(path, artifact)
+    return { artifact, binary: archive.binary }
+  } finally {
+    zip.close()
+  }
 }
 
 async function hash(stream: AsyncIterable<Uint8Array>, limit: number) {

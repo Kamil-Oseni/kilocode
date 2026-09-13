@@ -9,6 +9,8 @@ import { latest, scan } from "./update-release"
 import { verify } from "./update-vsix"
 import { UpdateRun } from "./update-run"
 import { Installation } from "./update-installation"
+import { PackageVault } from "./package-vault"
+import { join } from "node:path"
 
 const INTERVAL_MS = 6 * 60 * 60 * 1000 // re-check every 6 hours while the window stays open
 const FIRST_DELAY_MS = 30 * 1000 // let activation settle before the first background check
@@ -82,6 +84,12 @@ async function installFrom(
       await stage(asset, cfg.repo, cfg.token, async (path) => {
         if (!active()) return
         await verify(path, { name: "raya", publisher: "eden", version, target })
+        await new PackageVault(join(context.globalStorageUri.fsPath, "package-vault")).retain(path, {
+          name: "raya",
+          publisher: "eden",
+          version,
+          target,
+        })
         if (!active()) return
         await new Installation(context.globalState).run(
           version,
@@ -210,6 +218,10 @@ export function registerUpdateChecker(context: vscode.ExtensionContext): vscode.
     })
     .catch(() => log.appendLine("[recovery] Could not reconcile the saved update installation record."))
   void recovered
+  const binary = join(context.extensionUri.fsPath, "bin", process.platform === "win32" ? "kilo.exe" : "kilo")
+  void new PackageVault(join(context.globalStorageUri.fsPath, "package-vault"))
+    .activate(String(context.extension.packageJSON.version), currentTarget(), binary)
+    .catch((err) => log.appendLine(`[vault] ${err instanceof Error ? err.message : String(err)}`))
   const run = (manual: boolean) =>
     runner
       .run((active) => check(context, credentials, manual, active))

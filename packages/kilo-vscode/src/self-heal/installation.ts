@@ -48,6 +48,14 @@ const result = z.object({
     }),
   ),
 })
+const rollback = z.object({
+  version: z.string().min(1),
+  target: z.enum(["win32-x64", "win32-arm64", "linux-x64", "linux-arm64", "darwin-x64", "darwin-arm64"]),
+  source: z.string().min(1),
+  package: z.string().min(1),
+  artifact: bytes,
+  binary: bytes,
+})
 const schema = z.object({
   version: z.literal(1),
   id: z.string().uuid(),
@@ -63,6 +71,7 @@ const schema = z.object({
   artifact: bytes,
   binary: bytes,
   previous: z.string().min(1),
+  rollback,
   replay,
   phase: z.enum([
     "validating",
@@ -85,7 +94,10 @@ const schema = z.object({
 })
 
 export type Record = z.infer<typeof schema>
-export type Plan = Omit<Record, "version" | "id" | "package" | "phase" | "reason" | "createdAt" | "updatedAt">
+export type Plan = Omit<
+  Record,
+  "version" | "id" | "package" | "rollback" | "phase" | "reason" | "createdAt" | "updatedAt"
+> & { rollback: Omit<Record["rollback"], "package"> }
 export type Verification = NonNullable<Record["verification"]>
 
 function message(err: unknown) {
@@ -143,16 +155,16 @@ export class SelfHealInstallation {
     }
   }
 
-  private async stage(record: Record) {
-    const tmp = join(this.root, `approved.${record.id}.${randomUUID()}.tmp`)
-    await copyFile(record.output, tmp, constants.COPYFILE_EXCL)
+  private async stage(source: string, destination: string, name: string) {
+    const tmp = join(this.root, `${name}.${randomUUID()}.tmp`)
+    await copyFile(source, tmp, constants.COPYFILE_EXCL)
     const file = await open(tmp, "r+")
     try {
       await file.sync()
     } finally {
       await file.close()
     }
-    await rename(tmp, record.package)
+    await rename(tmp, destination)
   }
 
   inspect() {
@@ -162,8 +174,11 @@ export class SelfHealInstallation {
   run(plan: Plan, install: (path: string) => Promise<void>) {
     return this.lock(async () => {
       if (!isAbsolute(plan.output)) throw new Error("The approved self-heal artifact path is not absolute.")
+      if (!isAbsolute(plan.rollback.source)) throw new Error("The rollback package path is not absolute.")
       if (plan.target !== `${process.platform}-${process.arch}`)
         throw new Error("The approved self-heal artifact does not target this computer.")
+      if (plan.rollback.target !== plan.target || plan.rollback.version !== plan.previous)
+        throw new Error("The rollback package does not match the active Raya version and platform.")
       const existing = await this.read()
       if (existing) {
         if (existing.approvalID === plan.approvalID) return { record: existing, dispatched: false }
@@ -173,6 +188,7 @@ export class SelfHealInstallation {
       const id = randomUUID()
       const record = schema.parse({
         ...plan,
+        rollback: { ...plan.rollback, package: join(this.root, `rollback.${id}.vsix`) },
         version: 1,
         id,
         package: join(this.root, `approved.${id}.vsix`),
@@ -182,7 +198,7 @@ export class SelfHealInstallation {
       })
       await this.write(record)
       try {
-        await this.stage(record)
+        await this.stage(record.output, record.package, `approved.${record.id}`)
         await verify(record.package, {
           name: "raya",
           publisher: "eden",
@@ -190,6 +206,15 @@ export class SelfHealInstallation {
           target: record.target,
           artifact: record.artifact,
           binary: record.binary,
+        })
+        await this.stage(record.rollback.source, record.rollback.package, `rollback.${record.id}`)
+        await verify(record.rollback.package, {
+          name: "raya",
+          publisher: "eden",
+          version: record.rollback.version,
+          target: record.rollback.target,
+          artifact: record.rollback.artifact,
+          binary: record.rollback.binary,
         })
       } catch (err) {
         await this.write({ ...record, phase: "failed", reason: message(err), updatedAt: Date.now() })

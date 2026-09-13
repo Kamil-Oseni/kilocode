@@ -3,9 +3,10 @@
 import { $ } from "bun"
 import { createRequire } from "node:module"
 import { join, dirname, resolve } from "node:path"
-import { tmpdir } from "node:os"
+import { homedir, tmpdir } from "node:os"
 import { rmSync, mkdirSync, existsSync } from "node:fs"
 import { load, identity, digest } from "../../opencode/src/kilocode/self-heal/build-input"
+import { PackageVault } from "../src/services/package-vault"
 
 const mode = process.argv[2] ?? "install"
 const shouldInstall = mode === "install"
@@ -36,6 +37,7 @@ const user =
 const stamp = Date.now() // raya_change - unique local identity prevents stale VS Code webview service-worker state
 // raya_change start - release mode takes its version from the pushed tag and its platform from the runner
 const target = repair?.target ?? (process.env.RAYA_VSCE_TARGET?.trim() || undefined)
+const packageTarget = target ?? `${process.platform}-${process.arch}`
 // vsce requires a plain major.minor.patch version, so coerce off any prerelease/build suffix.
 const releaseVersion = (process.env.RAYA_RELEASE_VERSION ?? "")
   .trim()
@@ -116,7 +118,7 @@ await createVSIX({
   cwd: root,
   packagePath: vsixPath,
   version: snapshotVersion,
-  ...(target ? { target } : {}), // raya_change - platform-tagged VSIX for GitHub Release assets
+  target: packageTarget, // raya_change - every retained package has an exact platform identity
   updatePackageJson: false,
   dependencies: false,
   skipLicense: true,
@@ -129,6 +131,32 @@ if (shouldInstall) {
   const name = isInsiders ? "code-insiders" : "code"
   const winPath = process.platform === "win32" && execPath ? join(dirname(execPath), "bin", name + ".cmd") : ""
   const cli = winPath && existsSync(winPath) ? winPath : name
+  const product = isInsiders ? "Code - Insiders" : "Code"
+  const storage =
+    process.env.RAYA_GLOBAL_STORAGE?.trim() ||
+    (process.platform === "win32"
+      ? join(
+          process.env.APPDATA ?? join(homedir(), "AppData", "Roaming"),
+          product,
+          "User",
+          "globalStorage",
+          "eden.raya",
+        )
+      : process.platform === "darwin"
+        ? join(homedir(), "Library", "Application Support", product, "User", "globalStorage", "eden.raya")
+        : join(
+            process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"),
+            product.toLowerCase(),
+            "User",
+            "globalStorage",
+            "eden.raya",
+          ))
+  await new PackageVault(join(storage, "package-vault")).retain(vsixPath, {
+    name: "raya",
+    publisher: "eden",
+    version: snapshotVersion,
+    target: packageTarget,
+  })
   console.log(`\n🚀 Installing to ${cli}...`)
   await $`${cli} --force --install-extension ${vsixPath}`
 

@@ -1,5 +1,6 @@
 import type { KiloClient } from "@kilocode/sdk/v2/client"
 import { SelfHealInstallation, type Plan, type Record } from "./installation"
+import type { Package } from "../services/package-vault"
 
 export type View = {
   itemID: string
@@ -75,10 +76,15 @@ export async function install(input: {
   itemID: string
   directory: string
   previous: string
+  rollback?: Package
   journal: SelfHealInstallation
   confirm: (view: View) => Promise<boolean>
   dispatch: (path: string) => Promise<void>
 }): Promise<{ notice: string; record?: Record; reload?: boolean }> {
+  if (!input.rollback || input.rollback.version !== input.previous)
+    return {
+      notice: `Raya has no verified package for the active version ${input.previous}. Installation was not started because rollback would be unavailable.`,
+    }
   const current = await load(input.client, input.itemID, input.directory)
   if (!current) return { notice: `Self-heal item ${input.itemID} does not have an approved artifact ready to install.` }
   if (!(await input.confirm(current.view))) return { notice: "Installation closed. Nothing was installed." }
@@ -89,7 +95,17 @@ export async function install(input: {
     JSON.stringify(refreshed.plan) !== JSON.stringify(current.plan)
   )
     return { notice: "The approved artifact changed. Review it again before installation." }
-  const plan: Plan = { ...refreshed.plan, previous: input.previous }
+  const plan: Plan = {
+    ...refreshed.plan,
+    previous: input.previous,
+    rollback: {
+      version: input.rollback.version,
+      target: input.rollback.target as Plan["target"],
+      source: input.rollback.package,
+      artifact: input.rollback.artifact,
+      binary: input.rollback.binary,
+    },
+  }
   const result = await input.journal.run(plan, input.dispatch).then(
     (value) => value,
     () => undefined,

@@ -198,6 +198,7 @@ import { capture as captureSelfHeal } from "./self-heal/intake" // raya_change -
 import { detail as selfHealReviewDetail, review as reviewSelfHeal } from "./self-heal/review"
 import { detail as selfHealInstallDetail, install as installSelfHeal } from "./self-heal/install"
 import { SelfHealInstallation } from "./self-heal/installation"
+import { PackageVault } from "./services/package-vault"
 import {
   accept as acceptSelfHeal,
   detail as selfHealVerificationDetail,
@@ -4574,15 +4575,25 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     if (command.kind === "install") {
       await vscode.workspace.fs.createDirectory(vscode.Uri.file(store))
       const action = "Install approved update"
+      const previous = String(this.extensionContext?.extension.packageJSON.version ?? "unknown")
       const root = path.join(
         this.extensionContext?.globalStorageUri.fsPath ?? this.extensionUri.fsPath,
         "self-heal-install",
+      )
+      const vault = new PackageVault(
+        path.join(this.extensionContext?.globalStorageUri.fsPath ?? this.extensionUri.fsPath, "package-vault"),
+      )
+      const rollback = await vault.activate(
+        previous,
+        `${process.platform}-${process.arch}`,
+        path.join(this.extensionUri.fsPath, "bin", process.platform === "win32" ? "kilo.exe" : "kilo"),
       )
       const result = await installSelfHeal({
         client: this.client!,
         itemID: command.id,
         directory: store,
-        previous: String(this.extensionContext?.extension.packageJSON.version ?? "unknown"),
+        previous,
+        rollback,
         journal: new SelfHealInstallation(root),
         confirm: async (view) =>
           (await vscode.window.showWarningMessage(

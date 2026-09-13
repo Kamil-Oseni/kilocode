@@ -1486,7 +1486,12 @@ describe("RayaTask store", () => {
     const inbox = RayaTaskInbox.make(database)
     const store = RayaTaskDelegation.make(database)
     const chief = await Effect.runPromise(
-      tasks.create({ name: "Chief of Staff", role: "generalist", objective: "Coordinate Friday close", schedule: { kind: "manual" } }),
+      tasks.create({
+        name: "Chief of Staff",
+        role: "generalist",
+        objective: "Coordinate Friday close",
+        schedule: { kind: "manual" },
+      }),
     )
     const books = await Effect.runPromise(
       tasks.create({
@@ -1560,7 +1565,9 @@ describe("RayaTask store", () => {
     expect(await Effect.runPromise(tasks.get(books.id))).toMatchObject({ id: books.id, name: "Accounting" })
     await Effect.runPromise(store.stop(admitted.record.id, books, "Stopped by the user."))
     expect(await Effect.runPromise(tasks.remove(books.id))).toBe(true)
-    expect((await Effect.runPromise(inbox.page(books.id))).messages.some((item) => item.body === report.body)).toBe(true)
+    expect((await Effect.runPromise(inbox.page(books.id))).messages.some((item) => item.body === report.body)).toBe(
+      true,
+    )
   })
 
   test.each(["generalist", "coder", "reviewer", "accountant", "inbox", "custom"])(
@@ -1654,6 +1661,9 @@ describe("RayaTask store", () => {
     expect(Permission.evaluate("read", "file", selected).action).toBe("allow")
     for (const permission of ["grep", "browser_click", "task"])
       expect(Permission.evaluate(permission, "file", selected).action).toBe("deny")
+    const provisioner = RayaTask.rules({ role: "briefer", capabilities: ["organization:provision"] })
+    expect(Permission.evaluate("create_subordinate", "organization:org_1", provisioner).action).toBe("allow")
+    expect(Permission.evaluate("edit", "file", provisioner).action).toBe("deny")
     const tools = ["read", "write", "apply_patch", "bash", "task", "browser_click", "plugin_write", "mcp_send_message"]
     expect([...Permission.disabled(tools, Permission.merge(Permission.fromConfig({ "*": "allow" }), denied))]).toEqual(
       tools.filter((tool) => tool !== "read"),

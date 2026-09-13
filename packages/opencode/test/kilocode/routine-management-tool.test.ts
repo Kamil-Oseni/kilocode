@@ -181,6 +181,144 @@ it.live(
 )
 
 it.live(
+  "authorized routine workers create bounded durable subordinates and recover lost results",
+  () =>
+    provideTmpdirInstance((directory) =>
+      Effect.gen(function* () {
+        const storage = yield* Storage.Service
+        const database = yield* Database.Service
+        const tasks = RayaTask.make({ storage, database })
+        const parent = yield* tasks.create({
+          name: "Chief Designer",
+          role: "designer",
+          objective: "Lead website design",
+          output: output("Design lead"),
+          capabilities: ["design", "organization:provision"],
+          access: "brief",
+          schedule: { kind: "manual" },
+        })
+        const reviewer = yield* tasks.create({
+          name: "Design Reviewer",
+          role: "reviewer",
+          objective: "Review website designs",
+          output: output("Review"),
+          capabilities: ["design"],
+          access: "brief",
+          schedule: { kind: "manual" },
+        })
+        const organizations = RayaTaskOrganization.make(database, tasks, storage)
+        const organization = yield* organizations.create({
+          name: "Website Builders",
+          purpose: "Build client websites.",
+          members: [
+            { agentID: parent.id, role: "Chief Designer" },
+            { agentID: reviewer.id, role: "Reviewer", supervisorID: parent.id },
+          ],
+          delegations: [{ senderID: parent.id, recipientID: reviewer.id }],
+        })
+        const runID = "run_design_lead"
+        yield* tasks.record({
+          id: runID,
+          agentID: parent.id,
+          at: Date.now(),
+          sessionID: SessionID.make("ses_routine_management"),
+          status: "running",
+          scheduleVersion: 1,
+          trigger: { kind: "manual" },
+        })
+        const workerSessions = {
+          ...sessions,
+          get: () =>
+            Effect.succeed({
+              metadata: {
+                rayaRoutine: {
+                  version: 1,
+                  agentID: parent.id,
+                  runID,
+                  scheduleVersion: 1,
+                  trigger: { kind: "manual" },
+                },
+              },
+            } as never),
+        }
+        const params = {
+          organizationID: organization.id,
+          expectedRevision: organization.revision,
+          name: "Landing Page Designer",
+          role: "designer",
+          objective: "Design one assigned landing page and return evidence",
+          output: output("Landing page"),
+          capabilities: ["design"],
+          access: "brief" as const,
+          when: "only when I ask",
+          delegatesTo: [reviewer.id],
+        }
+        const failed = { pending: true }
+        const unreliable = {
+          ...storage,
+          replace: (key: string[], value: unknown) =>
+            key[1] === "agent-workflows" && failed.pending
+              ? Effect.sync(() => {
+                  failed.pending = false
+                  throw new Error("simulated result loss")
+                })
+              : storage.replace(key, value),
+        }
+        const broken = routineManagementTools({ database, storage: unreliable, sessions: workerSessions })
+        const provision = yield* (yield* broken.createSubordinate).init()
+        expect(Exit.isFailure(yield* provision.execute(params, context("create-subordinate")).pipe(Effect.exit))).toBe(
+          true,
+        )
+
+        const agents = yield* tasks.list()
+        const child = agents.find((item) => item.name === params.name)
+        if (!child) return yield* Effect.die(new Error("subordinate was not created"))
+        expect(child).toMatchObject({
+          role: "designer",
+          access: "brief",
+          capabilities: ["design"],
+          schedule: { kind: "manual" },
+        })
+        const revised = yield* organizations.get(organization.id)
+        expect(revised.revision).toBe(2)
+        expect(revised.members.at(-1)).toMatchObject({ agentID: child.id, supervisorID: parent.id })
+        expect(revised.delegations.slice(-2)).toEqual([
+          { senderID: parent.id, recipientID: child.id, position: 1 },
+          { senderID: child.id, recipientID: reviewer.id, position: 2 },
+        ])
+
+        const stable = routineManagementTools({ database, storage, sessions: workerSessions })
+        const retry = yield* (yield* stable.createSubordinate).init()
+        const recovered = yield* retry.execute(params, {
+          ...context("create-subordinate"),
+          ask: () => Effect.die("completed subordinate creation must not request permission again"),
+        })
+        expect(recovered).toMatchObject({
+          title: "Subordinate created",
+          metadata: { requestStatus: "complete", organizationRevision: 2, parentID: parent.id, agentID: child.id },
+        })
+        expect(yield* tasks.list()).toHaveLength(3)
+
+        const denied = yield* retry.execute(
+          { ...params, expectedRevision: 2, name: "Growth Designer", capabilities: ["growth"] },
+          context("excess-capability"),
+        )
+        expect(denied.title).toBe("Subordinate creation needs review")
+        expect(denied.output).toContain("cannot grant the child capability growth")
+        expect(yield* tasks.list()).toHaveLength(3)
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            Storage.layerFromDir(path.join(directory, "storage")),
+            Database.layerFromPath(path.join(directory, "queue.sqlite")),
+          ),
+        ),
+      ),
+    ),
+  30_000,
+)
+
+it.live(
   "main-chat updates require stable identities and replay their completed receipts",
   () =>
     provideTmpdirInstance((directory) =>

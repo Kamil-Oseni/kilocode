@@ -327,7 +327,9 @@ export namespace RayaTask {
     ]
   }
 
-  export function rules(agent: Pick<Agent, "role" | "access" | "tools" | "dir">) {
+  export function rules(
+    agent: Pick<Agent, "role" | "access" | "tools" | "dir"> & Partial<Pick<Agent, "capabilities">>,
+  ) {
     if (brief(agent)) {
       const cfg: Record<string, "allow" | "deny"> = { "*": "deny", question: "allow" }
       const reads = [
@@ -349,11 +351,15 @@ export namespace RayaTask {
       for (const tool of reads) {
         if (!selected || Permission.evaluate(tool, "*", selected).action === "allow") cfg[tool] = "allow"
       }
+      if (agent.capabilities?.some((item) => item.toLowerCase() === "organization:provision"))
+        cfg.create_subordinate = "allow"
       return Permission.fromConfig(cfg)
     }
     if (agent.tools?.length) {
       const cfg: Record<string, "allow" | "deny"> = { "*": "deny", question: "allow" }
       for (const tool of agent.tools) cfg[tool] = "allow"
+      if (agent.capabilities?.some((item) => item.toLowerCase() === "organization:provision"))
+        cfg.create_subordinate = "allow"
       return confine(agent.dir, Permission.fromConfig(cfg))
     }
     return confine(agent.dir, Permission.fromConfig({ "*": "allow", edit: "allow", write: "allow", bash: "allow" }))
@@ -514,7 +520,11 @@ export namespace RayaTask {
       const roster = yield* list()
       const results = yield* Effect.forEach(
         roster,
-        (agent) => runsFor(agent.id).pipe(Effect.exit, Effect.map((result) => ({ agentID: agent.id, result }))),
+        (agent) =>
+          runsFor(agent.id).pipe(
+            Effect.exit,
+            Effect.map((result) => ({ agentID: agent.id, result })),
+          ),
         { concurrency: 8 },
       )
       return results.reduce<{ items: Array<{ agentID: string; runs: readonly Run[] }>; failed: string[] }>(

@@ -19,11 +19,21 @@ Status excerpts below are historical records, not a fresh certification of every
 ## Checkpoint and standing authorization
 
 - Workspace: `C:\Users\User\Desktop\raya`; PowerShell; branch `main`; origin `https://github.com/Kamil-Oseni/kilocode.git`.
-- Last verified pushed product checkpoint: `4d8ae70feac48327206020fa329442106195dde6`, explicit Routine organization delegation authority and provenance over the delivered organization navigation and simplified persistent Browser.
-- Installed: `eden.raya@7.4.23-snapshot+4d8ae70fea.kamil-oseni.1789258236638`.
-- VSIX: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-4d8ae70fea-kamil-oseni-1789258236638.vsix`; SHA-256 `76B61469ECB9EEF9871197FF4F3AFC8314CB05AAB7F064CAC22958B90A86AA21`; 517402637 bytes; 431 entries.
+- Last verified pushed product checkpoint: `8f12bbae99945c0d94fa95c5d6e395f554cee2e4`, including complete Routine organization management/navigation, simplified persistent Browser and clearer GPT-Live key/microphone recovery.
+- Installed: `eden.raya@7.4.23-snapshot+8f12bbae99.kamil-oseni.1789266370866`.
+- VSIX: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-8f12bbae99-kamil-oseni-1789266370866.vsix`; SHA-256 `A8B85F16424A68B4CF9D5B61B99F66F796355CE5E886A5B60152AFA2789F80F5`; 517504093 bytes; 431 entries.
 - The user authorizes two parallel workers plus root, batched checks, periodic normal commits/pushes to `origin/main`, and `snapshot:install` outside the sandbox. Do not ask again. No force push, hook bypass or forced VS Code reload.
 - At approximately $10 remaining, as reported by the user, stop opening broad work, settle current processes, update this handoff and give the continuation prompt below. Do not invent a credit balance.
+
+## ChatGPT 2026-09-12 22:38 America/Toronto — easiest-to-hardest verification queue
+
+Close the remaining parent requirements in this order, finishing a complete acceptance package before opening an unrelated slice. This order reflects verification cost; it does not waive original acceptance.
+
+1. **Repository-deterministic:** UI-01; PR-03 + EN-03; UX-03; EN-07; EN-13; EN-14; EN-15; PR-02 + OVR-06; PR-04 + EN-02 + OVR-05; PR-05 + OVR-04; EN-06; EN-10; OVR-09; OVR-08.
+2. **Packaged local interaction:** EN-04 + EN-05 + UX-01; UX-02; UX-04; UX-05; UI-03; EN-09.
+3. **External, physical-device, multi-platform or moderated evidence:** EN-01; EN-11 + OVR-02 + OVR-10; EN-12 + OVR-01; OVR-03; PR-06; PR-01 + OVR-07; UI-02.
+
+UI/UX work must follow `docs/designer.md`, consult the current official OpenAI Codex GitHub UI for interaction and information-architecture guidance, and preserve Raya's accent color plus Instrument Serif and Outfit. Do not begin deferred Codex-derived feature work before the existing audit is complete.
 
 ## ChatGPT 2026-09-12 18:26 America/Toronto — latest delivered and active checkpoints
 
@@ -454,13 +464,13 @@ The following sections retain the full 39-item scope. Related findings and overh
 
 ### UI-01 — Test real components in the visual harness
 
-**Recorded status:** In progress. Preview labels distinguish production from illustrative fixtures. Memory, routines, composer, history, review, slash, topnav, transcript, conversation, result, and criteria-editor now use real components in the 5199 harness. Thirty-seven Chromium checks pass. Live packaged visual acceptance remains open.
+**Recorded status:** Verified by ChatGPT on 2026-09-12 22:38 America/Toronto. The 5199 harness directly imports the production goal, usage, memory, Routines, composer, history, review, top navigation, user-message and transcript components through narrow providers. All report fixtures are visibly and machine-labelled `Production view with sample data`; there are no remaining illustrative duplicate surfaces.
 
-**Implementation and verification:**
+**Verification evidence:**
 
-1. Replace remaining illustrative composer/history/review/result previews with real components and narrow fixture adapters.
-2. Label any remaining demos and avoid maintaining parallel markup disconnected from production.
-3. Render real loading/empty/error/retry/busy/long-content states; verify interactions and inspect screenshots.
+1. Code inspection confirms each preview surface imports its production component; sample records supply state without recreating product markup or business logic.
+2. `bunx playwright test --config playwright.preview.config.ts` passes 47/47 Chromium cases. Coverage includes light/dark and narrow/wide composer, history, top navigation, file review and result views; current/legacy memory; the real Routine DM and organization flows; empty, loading, stale and error recovery; keyboard actions; 200% zoom; axe checks; and horizontal overflow.
+3. Preview tests assert the `production-view` classification and exercise product controls, including composer input, history semantics, review/undo actions, goal criteria/result disclosure, Routine navigation, organization editing and recovery. A production markup/style change therefore reaches the same imported component in the report.
 
 **Original acceptance:** A production markup/style change appears in the corresponding preview. The visual report identifies real versus illustrative components and never attributes a fixture-only failure to production.
 
@@ -2329,3 +2339,9 @@ Local evidence so far: extension-host/webview typechecks pass; the real bundled 
 Product commit `8f12bbae99945c0d94fa95c5d6e395f554cee2e4` is pushed to `origin/main`. Normal push hooks passed 29 cross-package typechecks plus JetBrains. The snapshot workflow regenerated SDK inputs with no tracked drift, reused the existing 229088768-byte CLI, passed extension host/webview types, lint and the production bundle, packaged 431 files, and installed `eden.raya@7.4.23-snapshot+8f12bbae99.kamil-oseni.1789266370866`. Artifact: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-8f12bbae99-kamil-oseni-1789266370866.vsix`; SHA-256 `A8B85F16424A68B4CF9D5B61B99F66F796355CE5E886A5B60152AFA2789F80F5`; 517504093 bytes; 431 entries; bundled CLI 229088768 bytes; zero `.env` or `.tmp` entries. `code --list-extensions --show-versions` independently returned the exact installed identity. `HEAD` and `origin/main` matched the product commit before this documentation receipt. No force push, hook bypass or forced reload was used.
 
 This checkpoint delivers the complete extension-side organization management chain and one-click chat-result navigation into Routines. Continue with paid GPT-Live 1 and physical microphone acceptance, including VS Code webview microphone permission, interruption, reconnect, device change, and real acoustic playback/capture. Also keep packaged pre/post-install Routine draft carry-over and inline media rendering open. Codex-derived additions remain deferred until the existing audit requirements are complete.
+
+## ChatGPT 2026-09-12 22:41 America/Toronto — UI-01 verification receipt
+
+UI-01 is fully Verified. ChatGPT inspected the preview implementation and confirmed that its goal, usage, memory, Routine, composer, history, review, top-navigation, user-message and transcript surfaces directly import production components. Narrow provider/sample-data adapters drive those components without copying their markup or business logic. Every report fixture is visibly labelled `Production view with sample data` and machine-labelled `data-preview-kind="production-view"`; no illustrative duplicate remains.
+
+`bunx playwright test --config playwright.preview.config.ts` passes 47/47 Chromium cases in 4.7 minutes. The suite exercises production controls across relevant light/dark and narrow/wide layouts, current/legacy memory, Routine DM and organization journeys, empty/loading/stale/error recovery, keyboard behavior, 200% zoom, axe rules and horizontal overflow. This directly satisfies UI-01's original preview-integrity acceptance. It is a verification-only documentation checkpoint, so no new VSIX is needed and installed product `8f12bbae99` remains current. Continue with PR-03 + EN-03, then the rest of the deterministic queue above.

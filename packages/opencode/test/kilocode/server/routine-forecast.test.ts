@@ -41,6 +41,62 @@ test("routine capability errors identify the missing decision without saving a r
   expect(await response.json()).toEqual([])
 }, 30_000)
 
+test("worker creation authority uses expected state and records durable provenance", async () => {
+  await using directory = await tmpdir({ git: true })
+  const headers = { "content-type": "application/json", "x-kilo-directory": directory.path }
+  const app = Server.Default().app
+  const created = await app.request("/kilocode/agent", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      name: "Chief Designer",
+      role: "designer",
+      objective: "Lead design",
+      capabilities: ["Design"],
+      schedule: { kind: "manual" },
+    }),
+  })
+  const agent = Schema.decodeUnknownSync(Schema.toCodecJson(RayaTask.Agent))(await created.json())
+  const grant = await app.request(`/kilocode/agent/${agent.id}/provisioning`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ enabled: true, expected: false }),
+  })
+  expect(grant.status).toBe(200)
+  const allowed = Schema.decodeUnknownSync(Schema.toCodecJson(RayaTask.Agent))(await grant.json())
+  expect(allowed.capabilities).toEqual(["Design", "organization:provision"])
+  expect(allowed.provisioning).toMatchObject({ enabled: true, source: "user", changedAt: expect.any(Number) })
+
+  const replay = await app.request(`/kilocode/agent/${agent.id}/provisioning`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ enabled: true, expected: false }),
+  })
+  expect(replay.status).toBe(200)
+  expect(await replay.json()).toMatchObject({ id: agent.id, provisioning: allowed.provisioning })
+
+  const stale = await app.request(`/kilocode/agent/${agent.id}/provisioning`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ enabled: false, expected: false }),
+  })
+  expect(stale.status).toBe(400)
+  expect(await stale.json()).toMatchObject({ kind: "conflict", field: "capabilities" })
+
+  const revoke = await app.request(`/kilocode/agent/${agent.id}/provisioning`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ enabled: false, expected: true }),
+  })
+  expect(revoke.status).toBe(200)
+  const denied = Schema.decodeUnknownSync(Schema.toCodecJson(RayaTask.Agent))(await revoke.json())
+  expect(denied.capabilities).toEqual(["Design"])
+  expect(denied.provisioning).toMatchObject({ enabled: false, source: "user", changedAt: expect.any(Number) })
+
+  const listed = await app.request("/kilocode/agent", { headers })
+  expect((await listed.json())[0]).toMatchObject({ id: agent.id, provisioning: denied.provisioning })
+}, 30_000)
+
 test("routine output contracts round-trip and reject invalid updates without replacing saved requirements", async () => {
   await using directory = await tmpdir({ git: true })
   const headers = { "content-type": "application/json", "x-kilo-directory": directory.path }

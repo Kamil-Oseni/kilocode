@@ -118,6 +118,7 @@ export const NotebookRejectPayload = Schema.Struct({ error: NotebookFailure })
 export const AgentManagerReplyPayload = Schema.Struct({ result: AgentManagerResult })
 export const AgentManagerRejectPayload = Schema.Struct({ error: AgentManagerFailure })
 export const TaskCreatePayload = RayaTask.Create
+export const TaskAuthorityPayload = RayaTask.Authority
 export const TaskUpdatePayload = Schema.Struct({
   name: Schema.optional(Schema.String),
   role: Schema.optional(Schema.String),
@@ -194,6 +195,7 @@ export const KilocodePaths = {
   agents: `${root}/agent`,
   agentForecast: `${root}/agent-forecast`,
   agentItem: `${root}/agent/:agentID`,
+  agentAuthority: `${root}/agent/:agentID/provisioning`,
   agentRun: `${root}/agent/:agentID/run`,
   agentRuns: `${root}/agent/:agentID/runs`,
   agentHistories: `${root}/agent-runs`,
@@ -728,6 +730,20 @@ export const KilocodeApi = HttpApi.make("kilocode")
             identifier: "kilocode.routine.update",
             summary: "Update an assigned agent",
             description: "Edit a standing job, schedule, or enabled flag.",
+          }),
+        ),
+        HttpApiEndpoint.patch("agentAuthority", KilocodePaths.agentAuthority, {
+          params: { agentID: Schema.String },
+          query: WorkspaceRoutingQuery,
+          payload: TaskAuthorityPayload,
+          success: described(RayaTask.Agent, "Updated worker-creation authority"),
+          error: [InvalidRequestError, HttpApiError.NotFound],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.authority",
+            summary: "Update worker-creation authority",
+            description:
+              "Grant or revoke a routine worker's authority to create subordinate workers, with expected-state conflict detection and durable provenance.",
           }),
         ),
         HttpApiEndpoint.delete("agentRemove", KilocodePaths.agentItem, {

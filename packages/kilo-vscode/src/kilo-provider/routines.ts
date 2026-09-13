@@ -102,27 +102,31 @@ async function reschedule(ctx: Ctx) {
   ctx.post({ type: "routineScheduleUpdated", requestID: msg.requestID, agentID: item.edit.agentID })
 }
 
+const replies: Record<string, string> = {
+  routineOutputUpdate: "routineOutputUpdated",
+  routineAccessUpdate: "routineAccessUpdated",
+  routineArchive: "routineArchive",
+  routineSnapshot: "routineSnapshot",
+  routineForecast: "routineForecast",
+  routineScheduleUpdate: "routineScheduleUpdated",
+  routineInboxPage: "routineInboxPage",
+  routineInboxSend: "routineInboxSent",
+  routineInboxFilesPick: "routineInboxFiles",
+  routineInboxFilesForget: "routineInboxFiles",
+  routineInboxAttachmentOpen: "routineInboxAttachmentOpened",
+  routineInboxInfo: "routineInboxInfo",
+  routineInboxRead: "routineInboxRead",
+  routineInboxDraft: "routineInboxDraft",
+  routineDelegate: "routineDelegated",
+  routineDelegateCancel: "routineDelegateStopped",
+  routineDelegateChain: "routineDelegateChain",
+  routineOrganizationUpdate: "routineOrganizationUpdated",
+  routineOrganizationArchive: "routineOrganizationArchived",
+  routineProvisioningUpdate: "routineProvisioningUpdated",
+}
+
 function reply(type: string) {
-  if (type === "routineOutputUpdate") return "routineOutputUpdated"
-  if (type === "routineAccessUpdate") return "routineAccessUpdated"
-  if (type === "routineArchive") return "routineArchive"
-  if (type === "routineSnapshot") return "routineSnapshot"
-  if (type === "routineForecast") return "routineForecast"
-  if (type === "routineScheduleUpdate") return "routineScheduleUpdated"
-  if (type === "routineInboxPage") return "routineInboxPage"
-  if (type === "routineInboxSend") return "routineInboxSent"
-  if (type === "routineInboxFilesPick") return "routineInboxFiles"
-  if (type === "routineInboxFilesForget") return "routineInboxFiles"
-  if (type === "routineInboxAttachmentOpen") return "routineInboxAttachmentOpened"
-  if (type === "routineInboxInfo") return "routineInboxInfo"
-  if (type === "routineInboxRead") return "routineInboxRead"
-  if (type === "routineInboxDraft") return "routineInboxDraft"
-  if (type === "routineDelegate") return "routineDelegated"
-  if (type === "routineDelegateCancel") return "routineDelegateStopped"
-  if (type === "routineDelegateChain") return "routineDelegateChain"
-  if (type === "routineOrganizationUpdate") return "routineOrganizationUpdated"
-  if (type === "routineOrganizationArchive") return "routineOrganizationArchived"
-  return "routineState"
+  return replies[type] ?? "routineState"
 }
 
 export function reason(err: unknown) {
@@ -162,6 +166,7 @@ const messages = new Set([
   "routineDelegateChain",
   "routineOrganizationUpdate",
   "routineOrganizationArchive",
+  "routineProvisioningUpdate",
 ])
 
 function owned(type: string) {
@@ -502,6 +507,32 @@ async function retire(ctx: Ctx) {
   await ctx.refresh?.()
 }
 
+async function provision(ctx: Ctx) {
+  const msg = ctx.message
+  if (
+    !token(msg.requestID) ||
+    !token(msg.agentID) ||
+    typeof msg.enabled !== "boolean" ||
+    typeof msg.expected !== "boolean"
+  )
+    throw new Error("Reload the organization before changing worker-creation authority.")
+  const result = await ctx.kilo.authority(
+    {
+      directory: ctx.dir,
+      agentID: String(msg.agentID),
+      enabled: msg.enabled,
+      expected: msg.expected,
+    },
+    { throwOnError: true },
+  )
+  const agent = result.data
+  const enabled = agent?.capabilities.some((item) => item.toLowerCase() === "organization:provision")
+  if (!agent || agent.id !== msg.agentID || enabled !== msg.enabled || agent.provisioning?.enabled !== msg.enabled)
+    throw new Error("The saved worker-creation authority could not be verified. Reload the organization.")
+  ctx.post({ type: "routineProvisioningUpdated", requestID: msg.requestID, agentID: msg.agentID, agent })
+  await ctx.refresh?.()
+}
+
 async function list(ctx: Ctx) {
   if (ctx.refresh)
     return ctx.refresh(
@@ -743,6 +774,7 @@ const routes: Record<string, (ctx: Ctx) => Promise<void>> = {
   routineDelegateChain: trace,
   routineOrganizationUpdate: revise,
   routineOrganizationArchive: retire,
+  routineProvisioningUpdate: provision,
   routineList: list,
   routineCreate: create,
   routineUpdate: update,

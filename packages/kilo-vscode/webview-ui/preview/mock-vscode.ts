@@ -21,6 +21,7 @@ const legal = {
   role: "counsel",
   objective: "Review contracts",
   capabilities: ["legal", "organization:provision"],
+  provisioning: { enabled: true, source: "user" as const, changedAt: 2 },
   schedule: { kind: "manual" },
   enabled: true,
   access: "brief",
@@ -304,6 +305,17 @@ const reply = (message: WebviewMessage) => {
     return
   }
   if (calendar(message)) return
+  if (message.type === "routineProvisioningUpdate") {
+    legal.capabilities = message.enabled ? ["legal", "organization:provision"] : ["legal"]
+    legal.provisioning = { enabled: message.enabled, source: "user", changedAt: Date.now() }
+    emit({
+      type: "routineProvisioningUpdated",
+      requestID: message.requestID,
+      agentID: message.agentID,
+      agent: legal,
+    })
+    return
+  }
   if (message.type === "routineOrganizationUpdate") {
     if (scene === "conflict") {
       emit({

@@ -365,6 +365,23 @@ it.live(
           }),
         ).toEqual(JSON.parse(JSON.stringify(changed)))
 
+        const authorityParams = { agentID: agent.id, patch: { canCreateWorkers: true } }
+        const authorized = yield* updateRoutine.execute(authorityParams, context("grant-worker-creation"))
+        expect(authorized.title).toBe("Routine updated")
+        const granted = yield* tasks.get(agent.id)
+        expect(granted.capabilities).toEqual(["accounting", "organization:provision"])
+        expect(granted.provisioning).toMatchObject({
+          enabled: true,
+          source: "chat",
+          actorID: "ses_routine_management",
+        })
+        expect(
+          yield* updateRoutine.execute(authorityParams, {
+            ...context("grant-worker-creation"),
+            ask: () => Effect.die("completed authority update must not request permission again"),
+          }),
+        ).toEqual(JSON.parse(JSON.stringify(authorized)))
+
         const updateOrganization = yield* (yield* tools.updateOrganization).init()
         const organizationParams = {
           organizationID: organization.id,

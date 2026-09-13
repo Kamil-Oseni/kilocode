@@ -21418,6 +21418,12 @@ export type KilocodeRoutineListResponses = {
       }>
     }
     capabilities: Array<string>
+    provisioning?: {
+      enabled: boolean
+      source: "user" | "chat" | "worker"
+      actorID?: string
+      changedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
     memoryScope: "role" | "project" | "session"
     schedule:
       | {
@@ -21547,6 +21553,12 @@ export type KilocodeRoutineCreateResponses = {
       }>
     }
     capabilities: Array<string>
+    provisioning?: {
+      enabled: boolean
+      source: "user" | "chat" | "worker"
+      actorID?: string
+      changedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
     memoryScope: "role" | "project" | "session"
     schedule:
       | {
@@ -21638,6 +21650,12 @@ export type KilocodeRoutineArchiveResponses = {
           }>
         }
         capabilities: Array<string>
+        provisioning?: {
+          enabled: boolean
+          source: "user" | "chat" | "worker"
+          actorID?: string
+          changedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
         memoryScope: "role" | "project" | "session"
         schedule:
           | {
@@ -21842,6 +21860,12 @@ export type KilocodeRoutineUpdateResponses = {
       }>
     }
     capabilities: Array<string>
+    provisioning?: {
+      enabled: boolean
+      source: "user" | "chat" | "worker"
+      actorID?: string
+      changedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
     memoryScope: "role" | "project" | "session"
     schedule:
       | {
@@ -21887,6 +21911,107 @@ export type KilocodeRoutineUpdateResponses = {
 }
 
 export type KilocodeRoutineUpdateResponse = KilocodeRoutineUpdateResponses[keyof KilocodeRoutineUpdateResponses]
+
+export type KilocodeRoutineAuthorityData = {
+  body?: {
+    enabled: boolean
+    expected: boolean
+  }
+  path: {
+    agentID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/agent/{agentID}/provisioning"
+}
+
+export type KilocodeRoutineAuthorityErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeRoutineAuthorityError = KilocodeRoutineAuthorityErrors[keyof KilocodeRoutineAuthorityErrors]
+
+export type KilocodeRoutineAuthorityResponses = {
+  /**
+   * Updated worker-creation authority
+   */
+  200: {
+    id: string
+    name: string
+    avatar?: string
+    role: string
+    objective: string
+    output?: {
+      destination: "conversation"
+      description: string
+      criteria: Array<{
+        id: string
+        description: string
+        verification: string
+      }>
+    }
+    capabilities: Array<string>
+    provisioning?: {
+      enabled: boolean
+      source: "user" | "chat" | "worker"
+      actorID?: string
+      changedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
+    memoryScope: "role" | "project" | "session"
+    schedule:
+      | {
+          kind: "once"
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+      | {
+          kind: "cron"
+          expr: string
+          tz?: string
+        }
+      | {
+          kind: "event"
+          source: string
+          filter?: string
+        }
+      | {
+          kind: "manual"
+        }
+    scheduleVersion?: number
+    scheduleUpdatedAt?: number
+    enabled: boolean
+    blockReset?: Array<string>
+    plan?: string
+    model?: {
+      providerID: string
+      id: string
+    }
+    mode?: string
+    dir?: string
+    access?: "full" | "brief"
+    tools?: Array<string>
+    createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    note?: string
+    nextRun?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    execution?: {
+      state: "starting" | "active" | "recovery"
+      runID?: string
+      sessionID?: string
+    }
+  }
+}
+
+export type KilocodeRoutineAuthorityResponse =
+  KilocodeRoutineAuthorityResponses[keyof KilocodeRoutineAuthorityResponses]
 
 export type KilocodeRoutineRunData = {
   body?: never
@@ -22167,6 +22292,12 @@ export type KilocodeRoutineSnapshotResponses = {
         }>
       }
       capabilities: Array<string>
+      provisioning?: {
+        enabled: boolean
+        source: "user" | "chat" | "worker"
+        actorID?: string
+        changedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
       memoryScope: "role" | "project" | "session"
       schedule:
         | {

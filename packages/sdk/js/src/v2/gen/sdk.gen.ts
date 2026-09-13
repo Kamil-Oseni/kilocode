@@ -259,6 +259,8 @@ import type {
   KilocodeRemoveSkillResponses,
   KilocodeRoutineArchiveErrors,
   KilocodeRoutineArchiveResponses,
+  KilocodeRoutineAuthorityErrors,
+  KilocodeRoutineAuthorityResponses,
   KilocodeRoutineCreateErrors,
   KilocodeRoutineCreateResponses,
   KilocodeRoutineDelegateCancelErrors,
@@ -9984,6 +9986,51 @@ export class Routine extends HeyApiClient {
       ThrowOnError
     >({
       url: "/kilocode/agent/{agentID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Update worker-creation authority
+   *
+   * Grant or revoke a routine worker's authority to create subordinate workers, with expected-state conflict detection and durable provenance.
+   */
+  public authority<ThrowOnError extends boolean = false>(
+    parameters: {
+      agentID: string
+      directory?: string
+      workspace?: string
+      enabled?: boolean
+      expected?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "agentID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "enabled" },
+            { in: "body", key: "expected" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<
+      KilocodeRoutineAuthorityResponses,
+      KilocodeRoutineAuthorityErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/agent/{agentID}/provisioning",
       ...options,
       ...params,
       headers: {

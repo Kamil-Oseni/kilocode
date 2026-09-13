@@ -299,6 +299,14 @@ export interface RoutineOrganizationArchiveMessage {
   organizationID: string
   expectedRevision: number
 }
+
+export interface RoutineProvisioningUpdateMessage {
+  type: "routineProvisioningUpdate"
+  requestID: string
+  agentID: string
+  enabled: boolean
+  expected: boolean
+}
 // raya_change end
 
 export interface RequestBackgroundJobsMessage {
@@ -1934,6 +1942,7 @@ export type WebviewMessage =
   | RoutineDelegateCancelMessage
   | RoutineDelegateChainMessage
   | RoutineOrganizationUpdateMessage
+  | RoutineProvisioningUpdateMessage
   | RoutineOrganizationArchiveMessage
   | RequestBackgroundJobsMessage
   | CancelBackgroundJobMessage

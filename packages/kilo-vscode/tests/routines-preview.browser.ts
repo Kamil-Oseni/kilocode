@@ -49,10 +49,13 @@ for (const theme of ["light", "dark"]) {
       await expect(page.getByRole("button", { name: "Open receipt.pdf" })).toBeVisible()
       await expect(page.getByRole("button", { name: "Attach" })).toBeVisible()
       expect(
-        await page.locator(".routines-file-name").first().evaluate((node) => {
-          const style = getComputedStyle(node)
-          return style.textOverflow === "ellipsis" && node.clientWidth > 0
-        }),
+        await page
+          .locator(".routines-file-name")
+          .first()
+          .evaluate((node) => {
+            const style = getComputedStyle(node)
+            return style.textOverflow === "ellipsis" && node.clientWidth > 0
+          }),
       ).toBe(true)
       const draft = page.getByLabel("Message this worker")
       await draft.fill("Keep this follow-up draft")
@@ -117,8 +120,12 @@ test("routines organization editor separates reporting, delegation, and archive"
   await page.getByRole("button", { name: "Website Builders 2" }).click()
   await page.getByRole("button", { name: "Edit organization" }).click()
   await expect(page.getByRole("heading", { name: "Team and reporting" })).toBeVisible()
-  await expect(page.getByText("Can create workers", { exact: true })).toBeVisible()
-  await expect(page.getByText("Cannot create workers", { exact: true })).toBeVisible()
+  const counsel = page.locator(".routines-organization-edit-members li").filter({ hasText: "Counsel" })
+  const authority = counsel.getByRole("checkbox", { name: "Can create workers" }).first()
+  await expect(authority).toBeChecked()
+  await counsel.getByText("Can create workers", { exact: true }).first().click()
+  await expect(authority).not.toBeChecked()
+  await expect(counsel.getByText("Changed by you", { exact: false })).toBeVisible()
   await expect(
     page.getByText("Reporting lines organize the team. They don’t grant permission to delegate work."),
   ).toBeVisible()
@@ -302,18 +309,16 @@ test("light routines at 200% zoom", async ({ browser }, info) => {
   await page.getByRole("button", { name: "Info", exact: true }).click()
   const panel = page.getByLabel("Chat info for Books")
   await expect(panel.getByRole("heading", { name: "Worker communication" })).toBeVisible()
-  const overflow = await panel
-    .locator("*")
-    .evaluateAll((nodes) =>
-      nodes
-        .filter((node) => node.scrollWidth > node.clientWidth + 1)
-        .map((node) => ({
-          tag: node.tagName,
-          className: node.className,
-          client: node.clientWidth,
-          scroll: node.scrollWidth,
-        })),
-    )
+  const overflow = await panel.locator("*").evaluateAll((nodes) =>
+    nodes
+      .filter((node) => node.scrollWidth > node.clientWidth + 1)
+      .map((node) => ({
+        tag: node.tagName,
+        className: node.className,
+        client: node.clientWidth,
+        scroll: node.scrollWidth,
+      })),
+  )
   expect(overflow).toEqual([])
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await page.screenshot({ path: info.outputPath("zoom.png"), fullPage: true })

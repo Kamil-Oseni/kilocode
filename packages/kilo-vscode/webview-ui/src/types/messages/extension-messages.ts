@@ -398,6 +398,15 @@ export interface RoutineOrganizationArchivedMessage {
   error?: string
   recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
 }
+
+export interface RoutineProvisioningUpdatedMessage {
+  type: "routineProvisioningUpdated"
+  requestID: string
+  agentID: string
+  agent?: import("@kilocode/sdk/v2/client").KilocodeRoutineAuthorityResponse
+  error?: string
+  recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
+}
 // raya_change end
 
 // Wire shape lives in src/shared/stream-messages.ts; narrow `part` to the
@@ -1872,6 +1881,7 @@ export type ExtensionMessage =
   | RoutineDelegateStoppedMessage
   | RoutineDelegateChainResultMessage
   | RoutineOrganizationUpdatedMessage
+  | RoutineProvisioningUpdatedMessage
   | RoutineOrganizationArchivedMessage
   | PartUpdatedMessage
   | PartsUpdatedMessage

@@ -44,6 +44,12 @@ type Agent = {
   objective: string
   output?: Output
   capabilities: string[]
+  provisioning?: {
+    enabled: boolean
+    source: "user" | "chat" | "worker"
+    actorID?: string
+    changedAt: number
+  }
   schedule: Schedule
   scheduleVersion?: number
   enabled: boolean
@@ -95,9 +101,11 @@ function OrganizationEditor(props: {
   agents: Agent[]
   saving: boolean
   error?: string
+  provisioning?: string
   onClose: () => void
   onSave: (value: { name: string; purpose: string; members: Member[]; delegations: Delegation[] }) => void
   onArchive: () => void
+  onProvision: (agentID: string, enabled: boolean, expected: boolean) => void
 }) {
   const [name, setName] = createSignal(props.item.name)
   const [purpose, setPurpose] = createSignal(props.item.purpose ?? "")
@@ -120,6 +128,7 @@ function OrganizationEditor(props: {
     props.agents
       .find((item) => item.id === id)
       ?.capabilities.some((capability) => capability.toLowerCase() === "organization:provision") ?? false
+  const provenance = (id: string) => props.agents.find((item) => item.id === id)?.provisioning
   const revise = (id: string, update: Partial<Member>) =>
     setMembers((items) => items.map((item) => (item.agentID === id ? { ...item, ...update } : item)))
   const remove = (id: string) => {
@@ -197,6 +206,7 @@ function OrganizationEditor(props: {
             <div>
               <h4 id={`team-${props.item.id}`}>Team and reporting</h4>
               <p>Reporting lines organize the team. They don’t grant permission to delegate work.</p>
+              <p>Creation authority applies in every organization this worker belongs to.</p>
             </div>
           </div>
           <ol class="routines-organization-edit-members">
@@ -204,9 +214,25 @@ function OrganizationEditor(props: {
               {(member) => (
                 <li>
                   <strong>{label(member.agentID)}</strong>
-                  <span class="routines-hint">
-                    {provisions(member.agentID) ? "Can create workers" : "Cannot create workers"}
-                  </span>
+                  <Checkbox
+                    checked={provisions(member.agentID)}
+                    disabled={props.saving || props.provisioning === member.agentID}
+                    onChange={(enabled) => props.onProvision(member.agentID, enabled, provisions(member.agentID))}
+                  >
+                    Can create workers
+                  </Checkbox>
+                  <Show when={provenance(member.agentID)}>
+                    {(entry) => (
+                      <span class="routines-hint">
+                        {entry().source === "user"
+                          ? "Changed by you"
+                          : entry().source === "chat"
+                            ? "Changed from chat"
+                            : "Changed by " + label(entry().actorID ?? "")}{" "}
+                        · {new Date(entry().changedAt).toLocaleString()}
+                      </span>
+                    )}
+                  </Show>
                   <label class="routines-field">
                     Role
                     <input
@@ -674,6 +700,9 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const [organizationsLoaded, setOrganizationsLoaded] = createSignal(false)
   const [editingOrganization, setEditingOrganization] = createSignal<Organization>()
   const [organizationRequest, setOrganizationRequest] = createSignal<{ id: string; action: "update" | "archive" }>()
+  const [authorityRequest, setAuthorityRequest] = createSignal<{ id: string; agentID: string }>()
+  const provisioning = createMemo(() => authorityRequest()?.agentID)
+  const locking = () => !!organizationRequest() || !!authorityRequest()
   const [organizationNotice, setOrganizationNotice] = createSignal("")
   const [manage, setManage] = createSignal(false)
   const [templates, setTemplates] = createSignal<Template[]>([])
@@ -879,6 +908,20 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
       organizationID: item.id,
       expectedRevision: item.revision,
       ...value,
+    })
+  }
+
+  const saveProvisioning = (agentID: string, enabled: boolean, expected: boolean) => {
+    if (authorityRequest()) return
+    const id = crypto.randomUUID()
+    setOrganizationNotice("")
+    setAuthorityRequest({ id, agentID })
+    vscode.postMessage({
+      type: "routineProvisioningUpdate",
+      requestID: id,
+      agentID,
+      enabled,
+      expected,
     })
   }
 
@@ -1179,6 +1222,21 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     }
   }
 
+  const authorityResult = (msg: Extract<ExtensionMessage, { type: "routineProvisioningUpdated" }>) => {
+    const request = authorityRequest()
+    if (!request || msg.requestID !== request.id || msg.agentID !== request.agentID) return
+    setAuthorityRequest()
+    if (msg.error || !msg.agent) {
+      setOrganizationNotice(
+        [msg.error ?? "Raya could not update this authority.", msg.recovery?.next].filter(Boolean).join(" "),
+      )
+      load()
+      return
+    }
+    setAgents((items) => items.map((item) => (item.id === msg.agentID ? (msg.agent as Agent) : item)))
+    setOrganizationNotice("")
+  }
+
   const boxed = (msg: Extract<ExtensionMessage, { type: "routineInbox" }>) => {
     if (msg.error) return
     if (!Array.isArray(msg.items)) return
@@ -1195,6 +1253,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     if (msg.type === "routineScheduleUpdated") updated(msg)
     if (msg.type === "routineState") received(msg)
     if (msg.type === "routineOrganizationUpdated" || msg.type === "routineOrganizationArchived") organizationResult(msg)
+    if (msg.type === "routineProvisioningUpdated") authorityResult(msg)
     if (msg.type === "routineInbox") boxed(msg)
     if (msg.type === "folderPickerResult" && msg.requestId === wait() && msg.path) {
       setDir(msg.path)
@@ -1725,14 +1784,16 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
               <OrganizationEditor
                 item={editingOrganization()!}
                 agents={agents()}
-                saving={!!organizationRequest()}
+                saving={locking()}
                 error={organizationNotice()}
+                provisioning={provisioning()}
                 onClose={() => {
                   setEditingOrganization()
                   setOrganizationNotice("")
                 }}
                 onSave={saveOrganization}
                 onArchive={archiveOrganization}
+                onProvision={saveProvisioning}
               />
             </Show>
             <Show when={!worker() && !editingOrganization() ? currentOrganization() : undefined} keyed>

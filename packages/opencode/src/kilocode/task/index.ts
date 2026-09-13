@@ -111,6 +111,16 @@ export namespace RayaTask {
   })
   export type Output = typeof Output.Type
 
+  const Timestamp = Schema.Number.check(Schema.isBetween({ minimum: -8.64e15, maximum: 8.64e15 }))
+  const Provision = "organization:provision"
+  export const Provisioning = Schema.Struct({
+    enabled: Schema.Boolean,
+    source: Schema.Literals(["user", "chat", "worker"]),
+    actorID: Schema.optional(Schema.String),
+    changedAt: Timestamp,
+  })
+  export const Authority = Schema.Struct({ enabled: Schema.Boolean, expected: Schema.Boolean })
+
   export const Agent = Schema.Struct({
     id: Schema.String,
     name: Schema.String,
@@ -119,6 +129,7 @@ export namespace RayaTask {
     objective: Schema.String,
     output: Schema.optional(Output),
     capabilities: Schema.Array(Schema.String),
+    provisioning: Schema.optional(Provisioning),
     memoryScope: Schema.Literals(["role", "project", "session"]),
     schedule: Schedule,
     scheduleVersion: Schema.optional(Version),
@@ -175,7 +186,6 @@ export namespace RayaTask {
   })
   export type Outcome = typeof Outcome.Type
 
-  const Timestamp = Schema.Number.check(Schema.isBetween({ minimum: -8.64e15, maximum: 8.64e15 }))
   export const Trigger = Schema.Union([
     Schema.Struct({ kind: Schema.Literal("manual") }),
     Schema.Struct({
@@ -646,12 +656,21 @@ export namespace RayaTask {
         expectedScheduleVersion?: number
         expectedAccess?: "brief" | "full" | "unset"
         expectedOutput?: Output | "unset"
+        expectedProvisioning?: boolean
+        provisioning?: typeof Provisioning.Type
       },
     ) {
       const items = yield* list()
       const index = items.findIndex((item) => item.id === id)
       if (index < 0) return yield* new NotFoundError({ message: "Agent not found" })
       const prior = items[index]!
+      const provisioning = prior.capabilities.some((item) => item.toLowerCase() === Provision)
+      if (patch.expectedProvisioning !== undefined && patch.expectedProvisioning !== provisioning)
+        return yield* new GuardError({
+          kind: "conflict",
+          field: "capabilities",
+          message: "This worker's creation authority changed. Reload the organization before editing again.",
+        })
       if (patch.expectedOutput !== undefined && !isDeepStrictEqual(patch.expectedOutput, prior.output ?? "unset"))
         return yield* new GuardError({
           kind: "conflict",
@@ -689,6 +708,7 @@ export namespace RayaTask {
         objective: patch.objective?.trim() || prior.objective,
         output: contract,
         capabilities: patch.capabilities ?? prior.capabilities,
+        provisioning: patch.provisioning ?? prior.provisioning,
         memoryScope: patch.memoryScope ?? prior.memoryScope,
         schedule,
         scheduleVersion: version,
@@ -721,6 +741,39 @@ export namespace RayaTask {
       copy[index] = next
       yield* save(copy)
       return next
+    })
+
+    const authority = Effect.fn("RayaTask.authority")(function* (
+      id: string,
+      input: typeof Authority.Type,
+      source: (typeof Provisioning.Type)["source"],
+      actorID?: string,
+    ) {
+      const value = yield* Schema.decodeUnknownEffect(Authority)(input).pipe(
+        Effect.mapError(
+          () => new GuardError({ kind: "capability", message: "Choose whether this worker can create workers." }),
+        ),
+      )
+      const items = yield* list()
+      const index = items.findIndex((item) => item.id === id)
+      if (index < 0) return yield* new NotFoundError({ message: "Agent not found" })
+      const prior = items[index]!
+      const current = prior.capabilities.some((item) => item.toLowerCase() === Provision)
+      if (current === value.enabled && prior.provisioning?.enabled === value.enabled) return prior
+      if (current !== value.expected)
+        return yield* new GuardError({
+          kind: "conflict",
+          field: "capabilities",
+          message: "This worker's creation authority changed. Reload the organization before editing again.",
+        })
+      const capabilities = value.enabled
+        ? [...prior.capabilities, ...(current ? [] : [Provision])]
+        : prior.capabilities.filter((item) => item.toLowerCase() !== Provision)
+      return yield* update(id, {
+        capabilities,
+        provisioning: { enabled: value.enabled, source, ...(actorID ? { actorID } : {}), changedAt: Date.now() },
+        expectedProvisioning: value.expected,
+      })
     })
 
     const blocked = (agent: Agent, history: readonly Run[]) => {
@@ -971,6 +1024,7 @@ export namespace RayaTask {
       create: (input: Create) => mutate(deps.storage, create(input)),
       provision: (input: Create, id: string) => mutate(deps.storage, create(input, id, true)),
       update: (...args: Parameters<typeof update>) => mutate(deps.storage, update(...args)),
+      authority: (...args: Parameters<typeof authority>) => mutate(deps.storage, authority(...args)),
       remove: (id: string) =>
         mutate(
           deps.storage,

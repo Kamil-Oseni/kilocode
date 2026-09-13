@@ -21,6 +21,20 @@ const saved = {
   delegations: [{ senderID: worker, recipientID: peer, position: 0 }],
 }
 
+const agent = {
+  id: worker,
+  name: "Finance lead",
+  role: "accountant",
+  objective: "Review the books",
+  capabilities: ["accounting", "organization:provision"],
+  provisioning: { enabled: true, source: "user" as const, changedAt: 3 },
+  memoryScope: "role" as const,
+  schedule: { kind: "manual" as const },
+  enabled: true,
+  createdAt: 1,
+  updatedAt: 3,
+}
+
 test("organization update sends the full explicit graph and verifies the response", async () => {
   const calls: Request[] = []
   const messages: Record<string, unknown>[] = []
@@ -120,4 +134,57 @@ test("organization archive includes the expected revision and returns a bounded 
   expect(messages).toEqual([
     { type: "routineOrganizationArchived", requestID: "request", organizationID: id, revision: 5 },
   ])
+})
+
+test("worker creation authority sends the expected state and verifies durable provenance", async () => {
+  const calls: Request[] = []
+  const messages: Record<string, unknown>[] = []
+  const client = createKiloClient({
+    baseUrl: "http://localhost:4096",
+    fetch: async (input, init) => {
+      calls.push(new Request(input, init))
+      return Response.json(agent)
+    },
+  })
+  await handleRoutineMessage({
+    client,
+    directory: "workspace",
+    post: (message) => messages.push(message as Record<string, unknown>),
+    message: {
+      type: "routineProvisioningUpdate",
+      requestID: "request",
+      agentID: worker,
+      enabled: true,
+      expected: false,
+    },
+  })
+  expect(calls).toHaveLength(1)
+  expect(calls[0].method).toBe("PATCH")
+  expect(new URL(calls[0].url).pathname).toBe(`/kilocode/agent/${worker}/provisioning`)
+  expect(await calls[0].json()).toEqual({ enabled: true, expected: false })
+  expect(messages).toEqual([{ type: "routineProvisioningUpdated", requestID: "request", agentID: worker, agent }])
+})
+
+test("worker creation authority rejects a response without matching provenance", async () => {
+  const messages: Record<string, unknown>[] = []
+  const client = createKiloClient({
+    baseUrl: "http://localhost:4096",
+    fetch: async () => Response.json({ ...agent, provisioning: undefined }),
+  })
+  await handleRoutineMessage({
+    client,
+    directory: "workspace",
+    post: (message) => messages.push(message as Record<string, unknown>),
+    message: {
+      type: "routineProvisioningUpdate",
+      requestID: "request",
+      agentID: worker,
+      enabled: true,
+      expected: false,
+    },
+  })
+  expect(messages).toHaveLength(1)
+  expect(messages[0].type).toBe("routineProvisioningUpdated")
+  expect(messages[0].agent).toBeUndefined()
+  expect(messages[0].error).toContain("could not be verified")
 })

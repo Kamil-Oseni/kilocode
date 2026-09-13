@@ -70,6 +70,7 @@ import {
   GoalUpdatePayload, // raya_change - Milestone A goal API
   CheckpointCreatePayload, // raya_change - named workspace checkpoints
   TaskCreatePayload,
+  TaskAuthorityPayload,
   TaskUpdatePayload,
   TaskEventPayload,
   DesignSystemSetPayload, // raya_change - owner design-system lock
@@ -560,6 +561,17 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         ),
       )
     })
+    const agentAuthority = Effect.fn("KilocodeHttpApi.agentAuthority")(function* (ctx: {
+      params: { agentID: string }
+      payload: typeof TaskAuthorityPayload.Type
+    }) {
+      return yield* runner.tasks.authority(ctx.params.agentID, ctx.payload, "user").pipe(
+        Effect.catchTag("RayaTask.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+        Effect.catchTag("RayaTask.GuardError", (err) =>
+          Effect.fail(new InvalidRequestError({ message: err.message, kind: err.kind, field: err.field })),
+        ),
+      )
+    })
     const agentRun = Effect.fn("KilocodeHttpApi.agentRun")(function* (ctx: { params: { agentID: string } }) {
       return yield* runner.fire(ctx.params.agentID).pipe(
         Effect.catchTag("RayaTask.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
@@ -1003,6 +1015,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         )
         .handle("agentCreate", agentCreate)
         .handle("agentUpdate", agentUpdate)
+        .handle("agentAuthority", agentAuthority)
         .handle("agentRemove", agentRemove)
         .handle("agentRun", agentRun)
         .handle("agentRuns", agentRuns)

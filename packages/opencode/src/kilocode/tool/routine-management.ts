@@ -65,6 +65,7 @@ const RoutinePatch = Schema.Struct({
   objective: Schema.optional(Text),
   output: Schema.optional(RayaTask.Output),
   capabilities: Schema.optional(Schema.Array(Schema.String)),
+  canCreateWorkers: Schema.optional(Schema.Boolean),
   access: Schema.optional(Schema.Literals(["brief", "full"])),
   plan: Schema.optional(Schema.String),
   enabled: Schema.optional(Schema.Boolean),
@@ -97,6 +98,7 @@ const RoutineMutation = Schema.Struct({
   objective: Schema.optional(Schema.String),
   output: Schema.optional(RayaTask.Output),
   capabilities: Schema.optional(Schema.Array(Schema.String)),
+  provisioning: Schema.optional(RayaTask.Provisioning),
   access: Schema.optional(Schema.Literals(["brief", "full"])),
   plan: Schema.optional(Schema.String),
   enabled: Schema.optional(Schema.Boolean),
@@ -104,6 +106,7 @@ const RoutineMutation = Schema.Struct({
   expectedScheduleVersion: Schema.Int,
   expectedAccess: Schema.Literals(["brief", "full", "unset"]),
   expectedOutput: Schema.Union([RayaTask.Output, Schema.Literal("unset")]),
+  expectedProvisioning: Schema.optional(Schema.Boolean),
 })
 const RoutinePlan = Schema.Struct({ agent: RayaTask.Agent, patch: RoutineMutation })
 const OrganizationUpdatePlan = Schema.Struct({
@@ -197,6 +200,7 @@ function matches(agent: RayaTask.Agent, patch: typeof RoutineMutation.Type) {
   if (patch.objective !== undefined && agent.objective !== patch.objective) return false
   if (patch.output !== undefined && !isDeepStrictEqual(agent.output, patch.output)) return false
   if (patch.capabilities !== undefined && !isDeepStrictEqual(agent.capabilities, patch.capabilities)) return false
+  if (patch.provisioning !== undefined && !isDeepStrictEqual(agent.provisioning, patch.provisioning)) return false
   if (patch.access !== undefined && agent.access !== patch.access) return false
   if (patch.plan !== undefined && agent.plan !== patch.plan) return false
   if (patch.enabled !== undefined && agent.enabled !== patch.enabled) return false
@@ -645,7 +649,7 @@ export function routineManagementTools(input: {
     "update_routine",
     Effect.succeed({
       description:
-        "Update one saved routine using its ID from inspect_routines. Use ask_options before calling if the requested role, job, schedule/timezone, access, capabilities, output criteria, or enable state is missing or ambiguous.",
+        "Update one saved routine using its ID from inspect_routines. Use ask_options before calling if the requested role, job, schedule/timezone, access, capabilities, worker-creation authority, output criteria, or enable state is missing or ambiguous.",
       parameters: UpdateRoutine,
       execute: (params: typeof UpdateRoutine.Type, ctx: Tool.Context) =>
         Effect.gen(function* () {
@@ -654,6 +658,23 @@ export function routineManagementTools(input: {
           if (params.patch.timezone !== undefined && params.patch.when === undefined && params.patch.cron === undefined)
             return yield* Effect.fail(new Error("Timezone requires a calendar schedule change."))
           const before = yield* tasks.get(params.agentID)
+          const allowed = before.capabilities.some((item) => item.toLowerCase() === Provision)
+          const base = params.patch.capabilities ?? before.capabilities
+          const capabilities =
+            params.patch.canCreateWorkers === undefined
+              ? params.patch.capabilities
+              : params.patch.canCreateWorkers
+                ? [...base.filter((item) => item.toLowerCase() !== Provision), Provision]
+                : base.filter((item) => item.toLowerCase() !== Provision)
+          const provisioning =
+            params.patch.canCreateWorkers === undefined
+              ? undefined
+              : {
+                  enabled: params.patch.canCreateWorkers,
+                  source: "chat" as const,
+                  actorID: ctx.sessionID,
+                  changedAt: Date.now(),
+                }
           const timed = params.patch.when !== undefined || params.patch.cron !== undefined
           const nextSchedule = timed ? yield* schedule(params.patch) : undefined
           const patch = yield* Schema.decodeUnknownEffect(RoutineMutation)({
@@ -661,7 +682,8 @@ export function routineManagementTools(input: {
             role: params.patch.role,
             objective: params.patch.objective,
             output: params.patch.output,
-            capabilities: params.patch.capabilities,
+            capabilities,
+            provisioning,
             access: params.patch.access,
             plan: params.patch.plan,
             enabled: params.patch.enabled,
@@ -669,12 +691,11 @@ export function routineManagementTools(input: {
             expectedScheduleVersion: before.scheduleVersion ?? 1,
             expectedAccess: before.access ?? "unset",
             expectedOutput: before.output ?? "unset",
+            expectedProvisioning: allowed,
           })
           const patterns = [
             `access:${params.patch.access ?? before.access ?? "brief"}`,
-            ...new Set(
-              (params.patch.capabilities ?? before.capabilities).map((value) => `capability:${value.toLowerCase()}`),
-            ),
+            ...new Set((capabilities ?? before.capabilities).map((value) => `capability:${value.toLowerCase()}`)),
           ]
           return yield* workflow({
             storage: input.storage,

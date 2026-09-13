@@ -7,7 +7,7 @@ export function GoalDeliverables(props: { items?: GoalState["deliverables"] }) {
       {(items) => (
         <div class="goal-banner__deliverables" aria-label="Goal deliverables">
           <div class="goal-banner__section-title">Deliverables</div>
-          <Show when={items().length} fallback={<div class="goal-banner__reason">No cited file deliverables.</div>}>
+          <Show when={items().length} fallback={<div class="goal-banner__reason">No cited deliverables.</div>}>
             <For each={items()}>
               {(item) => (
                 <div class="goal-banner__deliverable">
@@ -15,9 +15,11 @@ export function GoalDeliverables(props: { items?: GoalState["deliverables"] }) {
                     {item.path}
                   </span>
                   <span class="goal-banner__task-status">
-                    {item.revision.status === "captured"
-                      ? `Revision ${item.revision.sha256.slice(0, 12)} recorded from ${item.tool}.`
-                      : `Removal recorded from ${item.tool}.`}
+                    {item.kind === "canvas"
+                      ? `Canvas version ${item.version} recorded from ${item.tool}.`
+                      : item.revision.status === "captured"
+                        ? `Revision ${item.revision.sha256.slice(0, 12)} recorded from ${item.tool}.`
+                        : `Removal recorded from ${item.tool}.`}
                   </span>
                 </div>
               )}

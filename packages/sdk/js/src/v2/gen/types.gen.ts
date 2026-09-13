@@ -5747,37 +5747,57 @@ export type RayaGoalCharge =
       reason: string
     }
 
-export type RayaGoalDeliverable = {
-  path: string
-  revision:
-    | {
-        version: 1
-        status: "captured"
-        path: string
-        canonical: string
-        sha256: string
-        mode: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+export type RayaGoalDeliverable =
+  | {
+      kind?: "file"
+      path: string
+      revision:
+        | {
+            version: 1
+            status: "captured"
+            path: string
+            canonical: string
+            sha256: string
+            mode: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          }
+        | {
+            version: 1
+            status: "absent"
+            path: string
+            parent: string
+          }
+      tool: "write" | "edit" | "apply_patch"
+      evidence: {
+        messageID?: string
+        partID?: string
+        sessionID?: string
+        callID: string
+        summary: string
+        record?: {
+          version: 1
+          digest: string
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
       }
-    | {
-        version: 1
-        status: "absent"
-        path: string
-        parent: string
-      }
-  tool: "write" | "edit" | "apply_patch"
-  evidence: {
-    messageID?: string
-    partID?: string
-    sessionID?: string
-    callID: string
-    summary: string
-    record?: {
-      version: 1
-      digest: string
-      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     }
-  }
-}
+  | {
+      kind: "canvas"
+      path: string
+      version: number
+      tool: "create_canvas" | "update_canvas"
+      evidence: {
+        messageID?: string
+        partID?: string
+        sessionID?: string
+        callID: string
+        summary: string
+        record?: {
+          version: 1
+          digest: string
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+      }
+    }
 
 export type EffectHttpApiErrorConflict = {
   _tag: "Conflict"

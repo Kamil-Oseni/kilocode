@@ -46,12 +46,23 @@ export namespace RayaGoal {
   })
   export type Evidence = typeof Evidence.Type
 
-  const Deliverable = Schema.Struct({
+  const FileDeliverable = Schema.Struct({
+    kind: Schema.optional(Schema.Literal("file")),
     path: Schema.String,
     revision: Artifact.Entry,
     tool: Schema.Literals(["write", "edit", "apply_patch"]),
     evidence: Evidence,
-  }).annotate({ identifier: "RayaGoalDeliverable" })
+  })
+  const CanvasDeliverable = Schema.Struct({
+    kind: Schema.Literal("canvas"),
+    path: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(1024)),
+    version: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+    tool: Schema.Literals(["create_canvas", "update_canvas"]),
+    evidence: Evidence,
+  })
+  const Deliverable = Schema.Union([FileDeliverable, CanvasDeliverable]).annotate({
+    identifier: "RayaGoalDeliverable",
+  })
   type Deliverable = typeof Deliverable.Type
 
   export const Requirement = Schema.Struct({
@@ -1024,13 +1035,9 @@ export namespace RayaGoal {
       const cited = new Map(
         audit.requirements.flatMap((item) => item.evidence).map((item) => [id(item), item] as const),
       )
-      const files = new Map<string, Deliverable>()
+      const artifacts = new Map<string, Deliverable>()
       for (const part of tools(messages)) {
-        if (
-          part.state.status !== "completed" ||
-          (part.tool !== "write" && part.tool !== "edit" && part.tool !== "apply_patch")
-        )
-          continue
+        if (part.state.status !== "completed") continue
         const evidence = cited.get(
           id({
             sessionID: part.sessionID,
@@ -1040,13 +1047,27 @@ export namespace RayaGoal {
           }),
         )
         if (!evidence) continue
-        for (const revision of Artifact.entries(part.state.metadata["rayaRevision"])) {
-          const key =
-            process.platform === "win32" ? path.normalize(revision.path).toLowerCase() : path.normalize(revision.path)
-          files.set(key, { path: revision.path, revision, tool: part.tool, evidence })
+        if (part.tool === "write" || part.tool === "edit" || part.tool === "apply_patch") {
+          for (const revision of Artifact.entries(part.state.metadata["rayaRevision"])) {
+            const value =
+              process.platform === "win32" ? path.normalize(revision.path).toLowerCase() : path.normalize(revision.path)
+            artifacts.set(`file:${value}`, { kind: "file", path: revision.path, revision, tool: part.tool, evidence })
+          }
+          continue
         }
+        if (part.tool !== "create_canvas" && part.tool !== "update_canvas") continue
+        if (part.state.metadata["status"] !== "ready") continue
+        const target = part.state.metadata["path"]
+        const version = part.state.metadata["version"]
+        if (typeof target !== "string" || !target.trim() || target.length > 1024) continue
+        if (typeof version !== "number" || !Number.isSafeInteger(version) || version < 1) continue
+        const value = process.platform === "win32" ? path.normalize(target).toLowerCase() : path.normalize(target)
+        const key = `canvas:${value}`
+        const prior = artifacts.get(key)
+        if (prior?.kind === "canvas" && prior.version > version) continue
+        artifacts.set(key, { kind: "canvas", path: target, version, tool: part.tool, evidence })
       }
-      return [...files.values()]
+      return [...artifacts.values()]
     }
 
     const fingerprint = (part: SessionV1.ToolPart) =>

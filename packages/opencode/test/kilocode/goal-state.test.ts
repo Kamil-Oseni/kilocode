@@ -811,6 +811,64 @@ describe("RayaGoal", () => {
     }),
   )
 
+  it.live("retains the latest cited ready Canvas version as a non-file deliverable", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const sessionID = SessionID.make(`ses_canvas_deliverable_${crypto.randomUUID()}`)
+      const rows: MessageV2.WithParts[] = []
+      const goals = setup(storage, () => rows)
+      yield* Effect.addFinalizer(() => goals.clear(sessionID))
+      yield* goals.create(sessionID, "Create the live sales report")
+      const created = transcript({
+        sessionID,
+        tool: "create_canvas",
+        metadata: { path: ".raya/canvases/sales-report.canvas.tsx", status: "ready", version: 1 },
+      })
+      const updated = transcript({
+        sessionID,
+        tool: "update_canvas",
+        metadata: { path: ".raya/canvases/sales-report.canvas.tsx", status: "ready", version: 2 },
+      })
+      const broken = transcript({
+        sessionID,
+        tool: "create_canvas",
+        metadata: { path: ".raya/canvases/broken.canvas.tsx", status: "error", version: 1 },
+      })
+      rows.push(...created.rows, ...updated.rows, ...broken.rows)
+      const completed = yield* goals.update(sessionID, {
+        status: "complete",
+        summary: "Live sales report created",
+        requirements: [
+          {
+            requirement: "The live report is ready",
+            passed: true,
+            evidence: [created.part!, updated.part!, broken.part!].map((part) => ({
+              callID: part.callID,
+              summary: "The cited Canvas tool returned its retained host receipt",
+            })),
+          },
+        ],
+      })
+      expect(completed.deliverables).toEqual([
+        {
+          kind: "canvas",
+          path: ".raya/canvases/sales-report.canvas.tsx",
+          version: 2,
+          tool: "update_canvas",
+          evidence: expect.objectContaining({
+            callID: updated.part!.callID,
+            messageID: updated.part!.messageID,
+            partID: updated.part!.id,
+            sessionID,
+          }),
+        },
+      ])
+      expect((yield* setup(storage, () => rows).get(sessionID))?.deliverables).toEqual(completed.deliverables)
+      const next = yield* goals.create(sessionID, "Create the next artifact")
+      expect(next.history?.at(-1)?.deliverables).toEqual(completed.deliverables)
+    }),
+  )
+
   it.live("moves a pending deliverable inventory into revision history when requirements change", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service

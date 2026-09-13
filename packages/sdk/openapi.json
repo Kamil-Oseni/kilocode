@@ -69125,153 +69125,247 @@
         ]
       },
       "RayaGoalDeliverable": {
-        "type": "object",
-        "properties": {
-          "path": {
-            "type": "string"
-          },
-          "revision": {
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "version": {
-                    "type": "number",
-                    "enum": [1]
-                  },
-                  "status": {
-                    "type": "string",
-                    "enum": ["captured"]
-                  },
-                  "path": {
-                    "type": "string"
-                  },
-                  "canonical": {
-                    "type": "string"
-                  },
-                  "sha256": {
-                    "type": "string",
-                    "pattern": "^[a-f0-9]{64}$"
-                  },
-                  "mode": {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["NaN"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["-Infinity"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity", "-Infinity", "NaN"]
-                      }
-                    ]
-                  }
-                },
-                "required": ["version", "status", "path", "canonical", "sha256", "mode"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "version": {
-                    "type": "number",
-                    "enum": [1]
-                  },
-                  "status": {
-                    "type": "string",
-                    "enum": ["absent"]
-                  },
-                  "path": {
-                    "type": "string"
-                  },
-                  "parent": {
-                    "type": "string"
-                  }
-                },
-                "required": ["version", "status", "path", "parent"],
-                "additionalProperties": false
-              }
-            ]
-          },
-          "tool": {
-            "type": "string",
-            "enum": ["write", "edit", "apply_patch"]
-          },
-          "evidence": {
+        "anyOf": [
+          {
             "type": "object",
             "properties": {
-              "messageID": {
+              "kind": {
                 "type": "string",
-                "pattern": "^msg"
+                "enum": ["file"]
               },
-              "partID": {
-                "type": "string",
-                "pattern": "^prt"
-              },
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
-              },
-              "callID": {
+              "path": {
                 "type": "string"
               },
-              "summary": {
-                "type": "string"
+              "revision": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "version": {
+                        "type": "number",
+                        "enum": [1]
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": ["captured"]
+                      },
+                      "path": {
+                        "type": "string"
+                      },
+                      "canonical": {
+                        "type": "string"
+                      },
+                      "sha256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "mode": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["NaN"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["-Infinity"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity", "-Infinity", "NaN"]
+                          }
+                        ]
+                      }
+                    },
+                    "required": ["version", "status", "path", "canonical", "sha256", "mode"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "version": {
+                        "type": "number",
+                        "enum": [1]
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": ["absent"]
+                      },
+                      "path": {
+                        "type": "string"
+                      },
+                      "parent": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["version", "status", "path", "parent"],
+                    "additionalProperties": false
+                  }
+                ]
               },
-              "record": {
+              "tool": {
+                "type": "string",
+                "enum": ["write", "edit", "apply_patch"]
+              },
+              "evidence": {
                 "type": "object",
                 "properties": {
-                  "version": {
-                    "type": "number",
-                    "enum": [1]
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg"
                   },
-                  "digest": {
+                  "partID": {
+                    "type": "string",
+                    "pattern": "^prt"
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "callID": {
                     "type": "string"
                   },
-                  "at": {
-                    "anyOf": [
-                      {
-                        "type": "number"
+                  "summary": {
+                    "type": "string"
+                  },
+                  "record": {
+                    "type": "object",
+                    "properties": {
+                      "version": {
+                        "type": "number",
+                        "enum": [1]
                       },
-                      {
-                        "type": "string",
-                        "enum": ["NaN"]
+                      "digest": {
+                        "type": "string"
                       },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["-Infinity"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      "at": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["NaN"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["-Infinity"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity", "-Infinity", "NaN"]
+                          }
+                        ]
                       }
-                    ]
+                    },
+                    "required": ["version", "digest", "at"],
+                    "additionalProperties": false
                   }
                 },
-                "required": ["version", "digest", "at"],
+                "required": ["callID", "summary"],
                 "additionalProperties": false
               }
             },
-            "required": ["callID", "summary"],
+            "required": ["path", "revision", "tool", "evidence"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["canvas"]
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "tool": {
+                "type": "string",
+                "enum": ["create_canvas", "update_canvas"]
+              },
+              "evidence": {
+                "type": "object",
+                "properties": {
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg"
+                  },
+                  "partID": {
+                    "type": "string",
+                    "pattern": "^prt"
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "callID": {
+                    "type": "string"
+                  },
+                  "summary": {
+                    "type": "string"
+                  },
+                  "record": {
+                    "type": "object",
+                    "properties": {
+                      "version": {
+                        "type": "number",
+                        "enum": [1]
+                      },
+                      "digest": {
+                        "type": "string"
+                      },
+                      "at": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["NaN"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["-Infinity"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity", "-Infinity", "NaN"]
+                          }
+                        ]
+                      }
+                    },
+                    "required": ["version", "digest", "at"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["callID", "summary"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["kind", "path", "version", "tool", "evidence"],
             "additionalProperties": false
           }
-        },
-        "required": ["path", "revision", "tool", "evidence"],
-        "additionalProperties": false
+        ]
       },
       "effect_HttpApiError_Conflict": {
         "type": "object",

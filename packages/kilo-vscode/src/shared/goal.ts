@@ -22,12 +22,21 @@ type GoalArtifactRevision =
   | { version: 1; status: "captured"; path: string; canonical: string; sha256: string; mode: number }
   | { version: 1; status: "absent"; path: string; parent: string }
 
-interface GoalDeliverable {
-  path: string
-  revision: GoalArtifactRevision
-  tool: "write" | "edit" | "apply_patch"
-  evidence: GoalEvidence
-}
+type GoalDeliverable =
+  | {
+      kind?: "file"
+      path: string
+      revision: GoalArtifactRevision
+      tool: "write" | "edit" | "apply_patch"
+      evidence: GoalEvidence
+    }
+  | {
+      kind: "canvas"
+      path: string
+      version: number
+      tool: "create_canvas" | "update_canvas"
+      evidence: GoalEvidence
+    }
 
 export interface GoalSource {
   inspection?: ReturnType<typeof inspection>

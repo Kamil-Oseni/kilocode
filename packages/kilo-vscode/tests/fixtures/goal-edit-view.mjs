@@ -110,6 +110,13 @@ const goal = {
       tool: "write",
       evidence: { callID: "deliverable", summary: "Created the report" },
     },
+    {
+      kind: "canvas",
+      path: ".raya/canvases/sales-report.canvas.tsx",
+      version: 3,
+      tool: "update_canvas",
+      evidence: { callID: "canvas", summary: "Updated the live report" },
+    },
   ],
   progress: [],
 }
@@ -131,6 +138,11 @@ try {
   assert.ok(root.querySelector('[aria-label="Goal deliverables"]').textContent.includes("C:\\workspace\\report.md"))
   assert.ok(
     root.querySelector('[aria-label="Goal deliverables"]').textContent.includes("Revision aaaaaaaaaaaa recorded"),
+  )
+  assert.ok(
+    root
+      .querySelector('[aria-label="Goal deliverables"]')
+      .textContent.includes("Canvas version 3 recorded from update_canvas"),
   )
   assert.equal(root.querySelector('[role="progressbar"]'), null)
   assert.ok(!root.querySelector(".goal-banner__usage").textContent.includes("%"))

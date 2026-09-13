@@ -72,6 +72,19 @@ test("goal reports preserve exact references and mark legacy records instead of 
             record: { version: 1, digest: "digest", at: 1 },
           },
         },
+        {
+          kind: "canvas",
+          path: ".raya/canvases/sales-report.canvas.tsx",
+          version: 3,
+          tool: "update_canvas",
+          evidence: {
+            callID: "canvas-call",
+            sessionID: "child",
+            messageID: "canvas-message",
+            partID: "canvas-part",
+            summary: "Updated the live report",
+          },
+        },
       ],
       status: "complete",
       createdAt: 0,
@@ -121,7 +134,15 @@ test("goal reports preserve exact references and mark legacy records instead of 
   expect(saved).toContain("> /workspace/output.md")
   expect(saved).toContain(`Captured SHA-256: ${"a".repeat(64)}`)
   expect(saved).toContain("Source tool: write")
-  expect(saved).toContain("Coverage: revision-safe file mutations cited by the accepted completion audit")
+  expect(saved).toContain("### Canvas")
+  expect(saved).toContain("> .raya/canvases/sales-report.canvas.tsx")
+  expect(saved).toContain("Recorded version: 3")
+  expect(saved).toContain("Source tool: update_canvas")
+  expect(saved).toContain("> Call: canvas-call")
+  expect(saved).toContain("> Updated the live report")
+  expect(saved).toContain(
+    "Coverage: revision-safe file mutations and ready Canvas versions cited by the accepted completion audit",
+  )
   expect(saved).toContain("Tokens: input 10; output 20; reasoning 3; cache read 4; cache write 5.")
   expect(saved).toContain(
     "Delegated-session tokens included above: input 2; output 5; reasoning 1; cache read 1; cache write 2.",

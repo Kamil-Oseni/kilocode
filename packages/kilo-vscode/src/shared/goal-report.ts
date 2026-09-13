@@ -114,9 +114,24 @@ function deliverables(goal: Pick<Goal, "deliverables">) {
     lines.push("No deliverable inventory was retained for this goal version.")
     return lines
   }
-  if (goal.deliverables.length === 0)
-    lines.push("No revision-safe file deliverables were present in the cited completion evidence.")
+  if (goal.deliverables.length === 0) lines.push("No deliverables were present in the cited completion evidence.")
   for (const item of goal.deliverables) {
+    if (item.kind === "canvas") {
+      lines.push(
+        "",
+        "### Canvas",
+        "",
+        quote(item.path),
+        `Recorded version: ${item.version}`,
+        `Source tool: ${item.tool}`,
+        quote(
+          `Session: ${item.evidence.sessionID ?? "not recorded"}\nMessage: ${item.evidence.messageID ?? "not recorded"}\nPart: ${item.evidence.partID ?? "not recorded"}\nCall: ${item.evidence.callID}`,
+        ),
+        "Evidence summary:",
+        quote(item.evidence.summary),
+      )
+      continue
+    }
     lines.push(
       "",
       `### ${item.revision.status === "absent" ? "Removed file" : "File"}`,
@@ -135,7 +150,7 @@ function deliverables(goal: Pick<Goal, "deliverables">) {
   }
   lines.push(
     "",
-    "Coverage: revision-safe file mutations cited by the accepted completion audit. Links, external records and uncited outputs are not included.",
+    "Coverage: revision-safe file mutations and ready Canvas versions cited by the accepted completion audit. Links, external records and uncited outputs are not included.",
   )
   return lines
 }

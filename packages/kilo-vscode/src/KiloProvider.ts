@@ -196,6 +196,8 @@ import { parseSelfHealCommand } from "./shared/self-heal"
 import { summary as selfHealSummary, inspect as inspectSelfHeal } from "./self-heal/summary"
 import { capture as captureSelfHeal } from "./self-heal/intake" // raya_change - global autonomous feedback repair
 import { detail as selfHealReviewDetail, review as reviewSelfHeal } from "./self-heal/review"
+import { detail as selfHealInstallDetail, install as installSelfHeal } from "./self-heal/install"
+import { SelfHealInstallation } from "./self-heal/installation"
 import { SpeechService } from "./speech/service" // raya_change - Milestone H voice orchestration
 import {
   buildIndexingSettingsMessage,
@@ -4562,6 +4564,39 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           )) === action,
       })
       this.postMessage({ type: "goalState", sessionID: reporter, notice: result.notice })
+      return { handled: true }
+    }
+    if (command.kind === "install") {
+      await vscode.workspace.fs.createDirectory(vscode.Uri.file(store))
+      const action = "Install approved update"
+      const root = path.join(
+        this.extensionContext?.globalStorageUri.fsPath ?? this.extensionUri.fsPath,
+        "self-heal-install",
+      )
+      const result = await installSelfHeal({
+        client: this.client!,
+        itemID: command.id,
+        directory: store,
+        previous: String(this.extensionContext?.extension.packageJSON.version ?? "unknown"),
+        journal: new SelfHealInstallation(root),
+        confirm: async (view) =>
+          (await vscode.window.showWarningMessage(
+            `Install ${view.itemID}: ${view.title}`,
+            { modal: true, detail: selfHealInstallDetail(view) },
+            action,
+          )) === action,
+        dispatch: async (artifact) => {
+          await vscode.commands.executeCommand("workbench.extensions.installExtension", vscode.Uri.file(artifact))
+        },
+      })
+      this.postMessage({ type: "goalState", sessionID: reporter, notice: result.notice })
+      if (result.reload) {
+        const choice = await vscode.window.showInformationMessage(
+          `Raya ${result.record?.extension} is installed. Reload to activate and verify it.`,
+          "Reload",
+        )
+        if (choice === "Reload") await vscode.commands.executeCommand("workbench.action.reloadWindow")
+      }
       return { handled: true }
     }
     if (command.kind === "list") {

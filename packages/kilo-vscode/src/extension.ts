@@ -36,6 +36,7 @@ import { markWorkspace } from "./util/spotlight"
 import { createNotebookBridge } from "./services/notebook"
 import { createGitExecutable } from "./util/git-executable"
 import { registerUpdateChecker } from "./services/update-checker" // raya_change - GitHub Release auto-update
+import { recover as recoverSelfHealInstallation } from "./self-heal/recovery"
 import { isCursorHost } from "./utils"
 
 let agentManager: AgentManagerProvider | undefined
@@ -71,6 +72,10 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(registerGrantAllPermissions(connectionService)) // raya_change - global all-tools toggle
   context.subscriptions.push(registerDesignSystemLock(connectionService)) // raya_change - owner design-system lock
   context.subscriptions.push(registerUpdateChecker(context)) // raya_change - poll GitHub Releases for newer Raya builds
+  void recoverSelfHealInstallation(context).catch((err) => {
+    console.warn("[Kilo New] Self-heal installation recovery failed:", err)
+    void vscode.window.showErrorMessage("Raya could not read its saved repair installation. The record was retained.")
+  })
   const notebookBridge = createNotebookBridge(connectionService)
   let restore = context.workspaceState.get<RestoreState>(RESTORE_KEY) ?? {}
   const remember = (patch: RestoreState) => {

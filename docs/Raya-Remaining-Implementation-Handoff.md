@@ -2525,3 +2525,8 @@ The low-memory snapshot passed unchanged SDK preparation, sequential extension-h
 The implementation stays within the current neutral DM bubble and shared token system from `docs/designer.md`. It adds no tinted panel, ornamental control or explanatory copy. Evidence passes 11 tests / 46 assertions, separate extension/webview `tsgo`, targeted Prettier/ESLint, and the production component at light 900 px and dark 320 px with axe and overflow. ChatGPT visually inspected the narrow dark result. No root lint, parallel typecheck or `tsgolint` graph ran.
 
 After delivery, grouped media in Chat Info is the next deterministic OVR-05 slice. Reuse this exact preview component/bridge instead of fetching content through a new route. Then implement organization-wide orchestration and handoff visibility.
+
+
+## ChatGPT 2026-09-13 03:00 America/Toronto — Routine media playback delivered
+
+Product commit `51fc2022d34bbbadbda63970ea80c16007e90184` (`feat(routines): play media in worker chats`) is on `origin/main`; its one-worker push gate passed 29 TypeScript package checks plus JetBrains. The authorized low-memory build passed sequential extension validation, production bundling, packaging and installation. Installed identity: `eden.raya@7.4.23-snapshot+51fc2022d3.kamil-oseni.1789282723416`. Artifact: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-51fc2022d3-kamil-oseni-1789282723416.vsix`; 517,568,742 bytes; 431 entries; SHA-256 `27C5F0DC2FF91E9403BCB2BA68C202323106B77AE6D99C37988ABBFD2AFBB37B`; bundled CLI 229,133,312 bytes; zero `.env` or `.tmp` entries. Reload VS Code before review. Resume with grouped Chat Info media; do not repeat the inline playback implementation.

@@ -3603,3 +3603,10 @@ The host preview allowlist now covers only the named raster image, audio and vid
 Evidence: two focused extension suites pass 11 tests / 46 assertions, including audio/video MIME inference, host acceptance of verified audio, raster image behavior and SVG refusal. Extension-host and webview `tsgo` ran separately and passed; targeted Prettier and ESLint pass. The production Routine conversation passes light 900 px and dark 320 px Chromium journeys with one worker, including the existing axe and horizontal-overflow checks. ChatGPT inspected the narrow dark rendering and confirmed that the audio controls, filename, MIME/size, fallback action and composer fit without page overflow. No root lint, parallel typecheck or `tsgolint` graph ran.
 
 Inline image/audio/video presentation is now implemented. Continue OVR-05 with grouped Media in Chat Info, followed by organization-wide orchestration and handoff visibility.
+
+
+## ChatGPT 2026-09-13 03:00 America/Toronto — Routine media playback delivered
+
+Product commit `51fc2022d34bbbadbda63970ea80c16007e90184` (`feat(routines): play media in worker chats`) is on `origin/main`. The push gate passed 29 TypeScript package checks plus JetBrains with `TURBO_CONCURRENCY=1`; 28 TypeScript jobs were cached and the changed Raya extension passed both checks. No root lint or `tsgolint` graph ran.
+
+The authorized low-memory workflow passed unchanged SDK preparation, sequential extension-host/webview typechecks, cached ESLint, production bundling, packaging and installation. VS Code reports `eden.raya@7.4.23-snapshot+51fc2022d3.kamil-oseni.1789282723416`. Artifact: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-51fc2022d3-kamil-oseni-1789282723416.vsix`; 517,568,742 bytes; 431 entries; SHA-256 `27C5F0DC2FF91E9403BCB2BA68C202323106B77AE6D99C37988ABBFD2AFBB37B`; bundled CLI 229,133,312 bytes; zero `.env` or `.tmp` entries. HEAD and `origin/main` match, with only the two owner-authored reference documents untracked. Reload VS Code before manual playback review.

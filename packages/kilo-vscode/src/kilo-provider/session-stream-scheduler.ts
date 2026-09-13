@@ -19,6 +19,7 @@ export type StreamSchedulerStats = {
   active: number
   visible: number
   background: number
+  queued: number
 }
 
 export type StreamSchedulerOptions = {
@@ -125,7 +126,7 @@ export class SessionStreamScheduler {
   private readonly bgBase: number
   private readonly bgStep: number
   private readonly bgMax: number
-  private readonly counters: StreamSchedulerStats = {
+  private readonly counters: Omit<StreamSchedulerStats, "queued"> = {
     received: 0,
     emitted: 0,
     batches: 0,
@@ -253,7 +254,8 @@ export class SessionStreamScheduler {
   }
 
   stats(): Readonly<StreamSchedulerStats> {
-    return this.counters
+    const queued = [...this.queues.values()].reduce((sum, queue) => sum + queue.size, 0)
+    return { ...this.counters, queued }
   }
 
   private ensureQueue(sid: string): Map<string, PartUpdate> {

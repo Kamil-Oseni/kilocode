@@ -474,4 +474,24 @@ describe("SessionStreamScheduler / stats", () => {
     // Lane counters are incremented once per emission (batch or single).
     expect(stats.active + stats.visible + stats.background).toBe(stats.batches)
   })
+
+  it("bounds a representative 40-session streaming burst by unique parts", () => {
+    const sent: Sent[] = []
+    const queue = new SessionStreamScheduler((msg) => sent.push(msg))
+    const sessions = 40
+    const deltas = 1_000
+
+    for (let session = 0; session < sessions; session++) {
+      for (let delta = 0; delta < deltas; delta++) {
+        queue.push(update("", "x", `sess-${session}`))
+      }
+    }
+
+    expect(queue.stats()).toMatchObject({ received: sessions * deltas, queued: sessions, batches: 0 })
+    queue.flush()
+    expect(sent).toHaveLength(1)
+    expect(items(sent)).toHaveLength(sessions)
+    expect(queue.stats()).toMatchObject({ emitted: sessions, queued: 0, batches: 1 })
+    queue.dispose()
+  })
 })

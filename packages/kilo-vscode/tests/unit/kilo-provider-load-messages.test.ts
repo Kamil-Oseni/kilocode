@@ -171,7 +171,7 @@ function createClient(options?: {
       notifications: async () => ({ data: [] }),
       profile: async () => ({ data: {} }),
     },
-    kilocode: { goal: { get: async () => ({ data: undefined }) } }, // raya_change - satisfy delayed goal refreshes
+    kilocode: { goal: { get: async () => ({ data: undefined, response: { status: 200 } }) } }, // raya_change - satisfy delayed goal refreshes
     command: { list: async () => ({ data: [] }) },
   }
 }
@@ -250,7 +250,10 @@ type ProviderInternals = {
   handleSetSandboxDefault: (enabled: boolean, requestID: string, directory?: string) => Promise<void>
   handleToggleSandbox: (input: { sessionID: string; requestID: string }) => Promise<void>
   refreshGitStatus: (directory?: string, sessionID?: string) => Promise<void>
+  scheduleReview: (sessionID: string) => void
   handleLoadMessages: (sid: string, opts?: { mode?: string; before?: string; limit?: number }) => Promise<void>
+  reconcileAfterReconnect: (generation: number) => Promise<void>
+  connectionGeneration: number
   handleDeleteSession: (sid: string) => Promise<void>
 }
 
@@ -970,6 +973,42 @@ describe("KiloProvider.handleLoadMessages / focus mode freshness", () => {
     expect(loaded!.mode).toBe("reconcile")
     expect(typeof loaded!.since).toBe("number")
     expect(loaded!.messages.map((m) => m.id)).toContain("m3")
+  })
+
+  it("reconciles at most 40 tracked transcript tails after reconnect", async () => {
+    const client = createClient()
+    const { internal, sent } = makeProvider(client)
+    internal.connectionGeneration = 7
+    internal.scheduleReview = () => undefined
+    internal.contextSessionID = "s20"
+    internal.trackedSessionIds = new Set(Array.from({ length: 60 }, (_, index) => `s${index}`))
+
+    await internal.reconcileAfterReconnect(7)
+
+    const loaded = sent.filter(
+      (message) => typeof message === "object" && message && (message as { type?: unknown }).type === "messagesLoaded",
+    ) as Array<{ sessionID: string; mode: string }>
+    expect(loaded).toHaveLength(40)
+    expect(loaded[0]).toMatchObject({ sessionID: "s20", mode: "reconcile" })
+    expect(new Set(loaded.map((message) => message.sessionID)).size).toBe(40)
+    expect(client.calls).toHaveLength(40)
+  })
+
+  it("drops active and queued transcript recovery after a newer connection generation", async () => {
+    const messages = defer<{ data: unknown[]; response: { headers: Headers } }>()
+    const client = createClient({ messagesDeferred: messages })
+    const { internal, sent } = makeProvider(client)
+    internal.connectionGeneration = 7
+    internal.trackedSessionIds = new Set(Array.from({ length: 20 }, (_, index) => `s${index}`))
+
+    const work = internal.reconcileAfterReconnect(7)
+    while (client.calls.length < 4) await Promise.resolve()
+    internal.connectionGeneration = 8
+    messages.resolve(mkResult([]))
+    await work
+
+    expect(client.calls).toHaveLength(4)
+    expect(sent.some((message) => (message as { type?: string }).type === "messagesLoaded")).toBe(false)
   })
 
   it("throttles repeat focus-mode reconciles within 1s", async () => {

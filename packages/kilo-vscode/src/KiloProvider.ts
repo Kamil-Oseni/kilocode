@@ -76,6 +76,7 @@ import { parseMessageFiles, type MessageFile } from "./kilo-provider/message-fil
 import { renameSession } from "./kilo-provider/rename-session"
 import { handleFileSearch } from "./kilo-provider/file-search"
 import { handleSessionSearch } from "./kilo-provider/session-search"
+import { reconcile as reconcileReconnect } from "./kilo-provider/reconnect-reconcile"
 import { handleFilePicker, handleFolderPicker } from "./kilo-provider/file-picker"
 import { sessionSourceId } from "./diff/sources/session" // raya_change - chat review opens its own snapshot, not unrelated workspace edits
 import { watchFontSizeConfig } from "./kilo-provider/font-size"
@@ -428,6 +429,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private loadMessagesAbort: AbortController | null = null // Current load request cancellation.
   private lastReconciledAt = new Map<string, number>() // Per-session focus-mode reconcile timestamp.
   private pendingSessionRefresh = false // Refresh requested before the client is ready.
+  private reconnectPending = false
   private focused = true
   private noticed = new Set<string>()
   private readonly streams = new SessionStreamScheduler((msg) => this.postMessage(msg))
@@ -2281,6 +2283,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
       // Subscribe to connection state changes
       this.unsubscribeState = this.connectionService.onStateChange(async (state, error) => {
+        const prior = this.connectionState
+        if (prior === "connected" && state !== "connected") this.reconnectPending = true
         if (this.connectionState !== state) {
           this.routineRefresh.invalidate()
           this.connectionGeneration++
@@ -2291,19 +2295,20 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         this.postConnectionState(error)
 
         if (state === "connected") {
+          const reconnect = this.reconnectPending
+          this.reconnectPending = false
+          const generation = this.connectionGeneration
           this.flushPendingKiloModel()
           // Fire config warnings independently so a failure in the
           // sequential await chain doesn't prevent warnings from being shown
           void this.checkConfigWarnings("state")
           try {
-            // Profile fetch is best-effort — returns 401 when user isn't logged into gateway.
-            const sdkClient = this.client
-            if (sdkClient) {
-              const profileResult = await sdkClient.kilo.profile()
-              this.postMessage({ type: "profileData", data: profileResult.data ?? null })
-            }
+            // Restore authoritative transcript tails before optional account data.
+            // This keeps reconnect recovery independent of a slow gateway profile request.
+            const recovery = reconnect ? this.reconcileAfterReconnect(generation) : Promise.resolve()
             await this.syncWebviewState("sse-connected")
             await this.flushPendingSessionRefresh("sse-connected")
+            await recovery
             this.recoverPendingPrompts()
           } catch (error) {
             console.error("[Kilo New] KiloProvider: ❌ Failed during connected state handling:", error)
@@ -2540,8 +2545,10 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       before?: string
       limit?: number
       preserveStream?: boolean
+      generation?: number
     } = {},
   ): Promise<void> {
+    if (options.generation !== undefined && options.generation !== this.connectionGeneration) return
     const mode = options.mode ?? "replace"
     if (mode === "replace" || mode === "focus") {
       this.trackedSessionIds.add(sessionID)
@@ -2580,6 +2587,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         signal: abort?.signal,
       })
       if (abort?.signal.aborted) return
+      if (options.generation !== undefined && options.generation !== this.connectionGeneration) return
       // Drop results for a session deleted mid-fetch. Prepend/reconcile have
       // no abort controller, so this guard prevents ghost entries.
       if (!this.trackedSessionIds.has(sessionID)) return
@@ -2619,9 +2627,19 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       this.scheduleReview(sessionID)
     } catch (error) {
       if (abort?.signal.aborted) return
+      if (options.generation !== undefined && options.generation !== this.connectionGeneration) return
       console.error("[Kilo New] KiloProvider: Failed to load messages:", error)
       this.postMessage({ type: "error", message: getErrorMessage(error) || "Failed to load messages", sessionID })
     }
+  }
+
+  private reconcileAfterReconnect(generation: number): Promise<void> {
+    return reconcileReconnect({
+      ids: this.trackedSessionIds,
+      focused: this.contextSessionID,
+      valid: () => this.connectionState === "connected" && this.connectionGeneration === generation,
+      load: (id) => this.handleLoadMessages(id, { mode: "reconcile", generation }),
+    })
   }
 
   /**

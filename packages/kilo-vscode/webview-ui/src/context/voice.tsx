@@ -307,7 +307,10 @@ export const VoiceProvider: ParentComponent = (props) => {
       return true
     }
     if (message.type !== "speechLiveMicError") return false
-    if (call?.id === message.requestId) failOpenAI(message.error)
+    if (call?.id === message.requestId)
+      failOpenAI(
+        "Raya could not access a microphone through VS Code or the system audio host. Allow microphone access for desktop apps, check the selected input, then reconnect.",
+      )
     return true
   }
 

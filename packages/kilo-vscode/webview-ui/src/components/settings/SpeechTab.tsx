@@ -68,7 +68,7 @@ const SpeechTab: Component = () => {
             description={
               settings().hasOpenAIKey
                 ? "An OpenAI key is stored in VS Code Secret Storage. It is never copied to the CLI speech mirror."
-                : "Add a key with access to the selected voice model. Legacy voice and transcription keys are not reused."
+                : "Paste an OpenAI Platform project API key with GPT-Live access."
             }
           >
             <div class="speech-key-fields">
@@ -103,7 +103,7 @@ const SpeechTab: Component = () => {
           </SettingsRow>
           <SettingsRow
             title="Live voice status"
-            description="Microphone, interruption and latency still require validation on your device. Live input captions use OpenAI transcription and may differ from what the audio model heard."
+            description="Start voice in a conversation to check your microphone, interruption and latency on this device."
             last
           >
             <div class="speech-live-status">

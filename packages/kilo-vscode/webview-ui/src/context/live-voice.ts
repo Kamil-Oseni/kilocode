@@ -35,6 +35,17 @@ const acoustic = {
   channelCount: 1,
 } as const
 
+function captureError(err: unknown) {
+  const name = err instanceof DOMException || err instanceof Error ? err.name : ""
+  if (name === "NotAllowedError" || name === "SecurityError")
+    return "Raya could not access a microphone through VS Code or the system audio host. Allow microphone access for desktop apps in system settings, then reconnect."
+  if (name === "NotFoundError" || name === "OverconstrainedError")
+    return "Raya could not find a usable microphone. Connect or select one in system settings, then reconnect."
+  if (name === "NotReadableError" || name === "AbortError")
+    return "Raya could not open your microphone. Close other apps using it, check the selected input, then reconnect."
+  return "Raya could not start microphone capture. Check the selected input and system microphone access, then reconnect."
+}
+
 /** Turn host PCM (s16le) into a WebRTC-capable MediaStream when the webview microphone is blocked. */
 export function pump(rate = 24_000) {
   const ctx = new AudioContext()
@@ -111,7 +122,11 @@ export class LiveVoice {
     const connect = this.connect(operation, exchange)
     operation.timer = setTimeout(() => this.fail(operation, "Live voice connection timed out. Reconnect to try again."), 30_000)
     await Promise.all([ready, connect]).catch((error: unknown) => {
-      this.fail(operation, "Live voice could not connect. Check microphone access and reconnect.")
+      const message =
+        error instanceof Error && error.message.startsWith("Raya could not")
+          ? error.message
+          : "Live voice could not connect. Check microphone access and reconnect."
+      this.fail(operation, message)
       if (this.operation === operation && !operation.closed && !operation.closing) {
         operation.closed = true
         clearTimeout(operation.timer)
@@ -120,7 +135,7 @@ export class LiveVoice {
         this.sink.aec(false)
         this.sink.status("degraded")
       }
-      throw error
+      throw new Error(message)
     })
   }
 
@@ -184,11 +199,18 @@ export class LiveVoice {
   }
 
   private async capture() {
+    let issue: unknown
     try {
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error("Microphone capture is unavailable")
       return { media: await navigator.mediaDevices.getUserMedia({ audio: acoustic }), ready: true }
     } catch (err) {
-      if (!this.acquire) throw err
+      issue = err
+    }
+    if (!this.acquire) throw new Error(captureError(issue))
+    try {
       return { media: await this.acquire(), ready: false }
+    } catch {
+      throw new Error(captureError(issue))
     }
   }
 

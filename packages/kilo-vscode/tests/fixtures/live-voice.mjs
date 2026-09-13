@@ -361,6 +361,41 @@ try {
       check(events.statuses.length === stopped && host.readyState === "ended", "late host readiness cannot revive stopped media")
       drop()
 
+      const failures = [
+        [
+          "NotAllowedError",
+          "Raya could not access a microphone through VS Code or the system audio host. Allow microphone access for desktop apps in system settings, then reconnect.",
+        ],
+        [
+          "NotFoundError",
+          "Raya could not find a usable microphone. Connect or select one in system settings, then reconnect.",
+        ],
+        [
+          "NotReadableError",
+          "Raya could not open your microphone. Close other apps using it, check the selected input, then reconnect.",
+        ],
+        [
+          "UnknownError",
+          "Raya could not start microphone capture. Check the selected input and system microphone access, then reconnect.",
+        ],
+      ]
+      for (const [name, message] of failures) {
+        navigator.mediaDevices.getUserMedia = async () => {
+          const err = new Error("Browser microphone failure")
+          err.name = name
+          throw err
+        }
+        const failed = new Voice.LiveVoice(sink, 50, async () => {
+          throw new Error("Host microphone failure")
+        })
+        await failed.start({ sessionID: "session-a", requestID: `request-${name}` }, after).then(
+          () => {
+            throw new Error(`${name} microphone failure connected`)
+          },
+          () => check(events.errors.at(-1) === message, `${name} reports an actionable microphone recovery`),
+        )
+      }
+
       const pcm = Voice.pump(24000)
       check(pcm.stream.getAudioTracks()[0].readyState === "live", "PCM pump exposes a live MediaStreamTrack")
       pcm.write(new Int16Array(480).buffer)
@@ -380,7 +415,7 @@ try {
       for (const context of contexts) await context.close()
     }
   })
-  assert.equal(result.length, 48)
+  assert.equal(result.length, 52)
   console.log(`Live native WebRTC: ${result.length} implementation assertions passed; local peers/synthetic audio only.`)
 } finally {
   await browser.close()

@@ -131,7 +131,7 @@ try {
     "actual engine selector shows GPT-Live 1 by default",
   )
   check(root.textContent.includes("gpt-live-1"), "settings display the Live API model")
-  check(root.textContent.includes("Add a key with access"), "missing dedicated key has actionable guidance")
+  check(root.textContent.includes("OpenAI Platform project API key"), "missing dedicated key has actionable guidance")
   check(voice.settings().hasOpenAIKey === false, "empty storage reports no OpenAI secret")
   const input = root.querySelector('input[aria-label="OpenAI API key"]')
   assert.ok(input)
@@ -159,7 +159,7 @@ try {
   check(clear?.kind === "openai" && clear.key === undefined, "Clear targets only the OpenAI secret")
   await store.setKey(clear.kind, clear.key)
   await load()
-  check(root.textContent.includes("Add a key with access"), "cleared key returns to setup guidance")
+  check(root.textContent.includes("OpenAI Platform project API key"), "cleared key returns to setup guidance")
   await store.update({ voiceEngine: "qwen-realtime", mode: "off" })
   await load()
   check(

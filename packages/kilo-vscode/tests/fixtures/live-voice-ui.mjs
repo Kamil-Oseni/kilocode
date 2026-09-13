@@ -238,7 +238,27 @@ try {
     second.requestId,
   )
   assert.equal(await page.getByRole("group", { name: "Voice controls" }).count(), 0)
-  console.log("Live VoiceProvider UI: 34 implementation assertions passed")
+  await page.reload()
+  await page.evaluate(() => window.__configureVoice())
+  await page.getByRole("button", { name: "Start voice", exact: true }).click()
+  const failed = await page.evaluate(() =>
+    window.__composerMessages.find((message) => message.type === "speechOpenAIStart"),
+  )
+  await page.evaluate(
+    (requestId) =>
+      window.postMessage(
+        { type: "speechLiveMicError", requestId, error: "secret device internals" },
+        "*",
+      ),
+    failed.requestId,
+  )
+  await page
+    .getByText(
+      "Raya could not access a microphone through VS Code or the system audio host. Allow microphone access for desktop apps, check the selected input, then reconnect.",
+    )
+    .waitFor()
+  assert.equal((await page.locator(".prompt-realtime-voice").innerText()).includes("secret device internals"), false)
+  console.log("Live VoiceProvider UI: 36 implementation assertions passed")
 } finally {
   await browser.close()
   server.kill()

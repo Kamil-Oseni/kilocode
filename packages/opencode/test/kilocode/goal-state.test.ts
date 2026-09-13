@@ -4505,4 +4505,66 @@ describe("RayaGoal", () => {
       expect((yield* goals.get(sessionID))?.charges).toEqual([receipt])
     }),
   )
+
+  it.live("accounts image charges from the exact delegated task graph", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const parentID = SessionID.make(`ses_image_parent_${crypto.randomUUID()}`)
+      const childID = SessionID.make(`ses_image_child_${crypto.randomUUID()}`)
+      const strayID = SessionID.make(`ses_image_stray_${crypto.randomUUID()}`)
+      const parent = transcript({
+        sessionID: parentID,
+        tool: "task",
+        metadata: { parentSessionId: parentID, sessionId: childID },
+      })
+      const child = transcript({ sessionID: childID, tool: "generate_image", metadata: {} })
+      const stray = transcript({ sessionID: strayID, tool: "generate_image", metadata: {} })
+      parent.part!.state.metadata.childMessageID = child.rows[0].info.id
+      const rows = new Map([
+        [parentID, parent.rows],
+        [childID, child.rows],
+        [strayID, stray.rows],
+      ])
+      const goals = setup(storage, () => parent.rows, {
+        messagesFor: (id) => rows.get(id) ?? [],
+        children: (id) => (id === parentID ? ([{ id: childID }, { id: strayID }] as Session.Info[]) : []),
+      })
+      yield* Effect.addFinalizer(() => goals.clear(parentID))
+      const created = yield* goals.create(parentID, "Account for delegated image generation")
+      parent.part!.state.time.start = created.createdAt + 1
+      child.rows[0].info.time.created = created.createdAt + 2
+      stray.rows[0].info.time.created = created.createdAt + 2
+      const part = child.part!
+      const receipt: RayaGoal.Charge = {
+        id: "generate-image:openrouter:gen_child_1",
+        kind: "tool",
+        provider: "openrouter",
+        service: "openai/gpt-5-image",
+        source: "usage.cost",
+        origin: { sessionID: childID, messageID: part.messageID, callID: part.callID },
+        at: created.createdAt + 3,
+        coverage: "recorded",
+        amount: 0.375,
+        currency: "USD",
+      }
+      part.state.metadata.rayaGoalCharge = { version: 1, receipt }
+      stray.part!.state.metadata.rayaGoalCharge = {
+        version: 1,
+        receipt: {
+          ...receipt,
+          id: "generate-image:openrouter:gen_stray_1",
+          origin: {
+            sessionID: strayID,
+            messageID: stray.part!.messageID,
+            callID: stray.part!.callID,
+          },
+        },
+      }
+
+      const result = yield* goals.recordTurn(parentID, parent.rows[1].info.id)
+      expect(result?.state.charges).toEqual([receipt])
+      expect(result?.state.usage.descendantCost).toBe(0)
+      expect((yield* goals.get(parentID))?.charges).toEqual([receipt])
+    }),
+  )
 })

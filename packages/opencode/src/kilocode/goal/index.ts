@@ -1613,7 +1613,10 @@ export namespace RayaGoal {
       if (recorded.includes(latest.info.id)) return
       const assistants = candidates.filter((message) => !recorded.includes(message.info.id))
       const parts = assistants.flatMap((message) => message.parts)
-      const incoming = yield* Effect.forEach(parts, (part) =>
+      const inputs = [...new Set([...(state.inputs ?? []), user.info.id])]
+      const scope = yield* collect(deps.sessions, sessionID, state.createdAt, inputs, messages)
+      const scoped = scope.flatMap((message) => message.parts)
+      const incoming = yield* Effect.forEach(scoped, (part) =>
         Effect.gen(function* () {
           if (
             part.type !== "tool" ||
@@ -1631,7 +1634,7 @@ export namespace RayaGoal {
             return yield* new AuditError({ message: "The image charge receipt is invalid." })
           if (
             receipt.kind !== "tool" ||
-            receipt.origin.sessionID !== sessionID ||
+            receipt.origin.sessionID !== part.sessionID ||
             receipt.origin.messageID !== part.messageID ||
             receipt.origin.callID !== part.callID ||
             receipt.at < state.createdAt
@@ -1714,8 +1717,7 @@ export namespace RayaGoal {
         reasoning: 0,
         cache: { read: 0, write: 0 },
       }
-      const inputs = [...new Set([...(state.inputs ?? []), user.info.id])]
-      const accounting = yield* Accounting.totals(deps.sessions, sessionID, state.createdAt, inputs, messages)
+      const accounting = Accounting.sum(scope, sessionID)
       const stalled = (idle || failed) && retries >= idleLimit
       const now = Date.now()
       const reason = invalid

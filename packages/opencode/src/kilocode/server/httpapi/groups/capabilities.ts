@@ -4,7 +4,13 @@ import { Authorization } from "@/server/routes/instance/httpapi/middleware/autho
 
 export const Capabilities = Schema.Struct({
   version: Schema.Literal(1),
-  features: Schema.Struct({ "goal.commandCheck": Schema.Literal(1) }),
+  features: Schema.Struct({
+    "client.vscode": Schema.Literal(1),
+    "client.cli": Schema.Literal(1),
+    "client.console": Schema.Literal(1),
+    "events.additive": Schema.Literal(1),
+    "goal.commandCheck": Schema.Literal(1),
+  }),
 })
 
 export const CapabilitiesApi = HttpApi.make("capabilities").add(

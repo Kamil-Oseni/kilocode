@@ -3,6 +3,39 @@ import { createKiloClient } from "@kilocode/sdk/v2/client"
 import { Capabilities } from "../../src/services/cli-backend/capabilities"
 import { editGoal } from "../../src/kilo-provider/goal"
 
+test("supported client features share one authenticated manifest without broadening unknown versions", async () => {
+  let calls = 0
+  let current:
+    | { client: ReturnType<typeof createKiloClient>; config: { baseUrl: string; password: string } }
+    | undefined
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch() {
+      calls++
+      return Response.json({
+        version: 1,
+        features: { "client.vscode": 1, "events.additive": 1, future: 9 },
+        future: true,
+      })
+    },
+  })
+  try {
+    const config = { baseUrl: server.url.origin, password: "secret" }
+    const client = createKiloClient({ baseUrl: config.baseUrl })
+    current = { client, config }
+    const capabilities = new Capabilities(() => current)
+    expect((await capabilities.require(client, "client.vscode"))()).toBe(true)
+    expect((await capabilities.require(client, "events.additive"))()).toBe(true)
+    expect((await capabilities.require(client, "client.cli"))()).toBe(false)
+    expect(calls).toBe(1)
+    current = undefined
+    expect((await capabilities.require(client, "client.vscode"))()).toBe(false)
+  } finally {
+    await server.stop(true)
+  }
+})
+
 test("bound goal edits require a supported authenticated contract before any mutation", async () => {
   const calls: { method: string; authorization: string | null }[] = []
   const criteria = [

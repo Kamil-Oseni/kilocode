@@ -140,6 +140,31 @@ describe("SdkSSEAdapter", () => {
     }
   })
 
+  it("contains an unknown event handler failure and continues with later events", async () => {
+    const error = console.error
+    console.error = () => undefined
+    const seen: string[] = []
+    const adapter = new SdkSSEAdapter(
+      client(async function* (opts) {
+        yield { directory: "/repo", payload: { type: "future.event", data: { version: 99 } } }
+        yield event()
+        await aborted(opts.signal)
+      }),
+    )
+    adapter.onEvent((item) => {
+      if (String(item.type) === "future.event") throw new Error("unknown event")
+      seen.push(item.type)
+    })
+    try {
+      adapter.connect()
+      while (!seen.length) await wait(1)
+      expect(seen).toEqual(["server.connected"])
+    } finally {
+      adapter.disconnect()
+      console.error = error
+    }
+  })
+
   it("backs off reconnects when an SSE fetch fails before opening", async () => {
     const timer = globalThis.setTimeout
     const delays: number[] = []
@@ -212,13 +237,40 @@ describe("KiloConnectionService backend crash", () => {
 })
 
 describe("KiloConnectionService SSE startup", () => {
+  it("fails clearly before opening events when the backend lacks the VS Code contract", async () => {
+    const original = globalThis.fetch
+    const paths: string[] = []
+    globalThis.fetch = (async (request: RequestInfo | URL) => {
+      const url = request instanceof Request ? request.url : String(request)
+      paths.push(new URL(url).pathname)
+      return Response.json({ version: 1, features: { "client.cli": 1 } })
+    }) as typeof fetch
+    const service = new KiloConnectionService({} as any)
+    ;(service as any).serverManager.getServer = async () => ({ port: 52512, password: "secret", process: {} })
+
+    try {
+      await expect(service.connect("/tmp/workspace")).rejects.toThrow(
+        "This Raya backend is not compatible with the installed extension. Update or reinstall Raya.",
+      )
+      expect(paths).toEqual(["/kilocode/capabilities"])
+      expect(service.getConnectionState()).toBe("error")
+      expect(() => service.getClient()).toThrow("Not connected")
+    } finally {
+      service.dispose()
+      globalThis.fetch = original
+    }
+  })
+
   it("waits through an initial SSE fetch failure until the stream opens", async () => {
     const original = globalThis.fetch
     const chunk = new TextEncoder().encode(
       'data: {"payload":{"id":"evt_connected","type":"server.connected","properties":{}}}\n\n',
     )
     let calls = 0
-    globalThis.fetch = (async () => {
+    globalThis.fetch = (async (request: RequestInfo | URL) => {
+      const url = request instanceof Request ? request.url : String(request)
+      if (new URL(url).pathname === "/kilocode/capabilities")
+        return Response.json({ version: 1, features: { "client.vscode": 1 } })
       calls += 1
       if (calls === 1) throw new TypeError("fetch failed")
       return new Response(

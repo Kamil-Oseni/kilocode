@@ -39509,12 +39509,34 @@
                     "features": {
                       "type": "object",
                       "properties": {
+                        "client.vscode": {
+                          "type": "number",
+                          "enum": [1]
+                        },
+                        "client.cli": {
+                          "type": "number",
+                          "enum": [1]
+                        },
+                        "client.console": {
+                          "type": "number",
+                          "enum": [1]
+                        },
+                        "events.additive": {
+                          "type": "number",
+                          "enum": [1]
+                        },
                         "goal.commandCheck": {
                           "type": "number",
                           "enum": [1]
                         }
                       },
-                      "required": ["goal.commandCheck"],
+                      "required": [
+                        "client.vscode",
+                        "client.cli",
+                        "client.console",
+                        "events.additive",
+                        "goal.commandCheck"
+                      ],
                       "additionalProperties": false
                     }
                   },

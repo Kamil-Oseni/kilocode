@@ -87,7 +87,7 @@ export class KiloConnectionService {
   readonly sandboxPreference: SandboxPreference
   private readonly serverManager: ServerManager
   readonly capabilities = new Capabilities(() =>
-    this.state === "connected" && this.client && this.config ? { client: this.client, config: this.config } : undefined,
+    this.client && this.config ? { client: this.client, config: this.config } : undefined,
   )
   private client: KiloClient | null = null
   private sseClient: SdkSSEAdapter | null = null
@@ -801,7 +801,7 @@ export class KiloConnectionService {
     this.setState("error", new Error(`CLI background process exited with ${reason}. Retry to reconnect.`))
   }
 
-  private async doConnect(workspaceDir: string): Promise<void> {
+  private async doConnect(_dir: string): Promise<void> {
     // Never expose a stale SDK client while its replacement server is starting.
     this.resetConnection()
 
@@ -826,6 +826,15 @@ export class KiloConnectionService {
     const sse = new SdkSSEAdapter(client)
     this.client = client
     this.sseClient = sse
+
+    const compatible = await this.capabilities.require(client, "client.vscode")
+    if (!compatible()) {
+      this.client = null
+      this.sseClient = null
+      this.config = null
+      this.info = null
+      throw new Error("This Raya backend is not compatible with the installed extension. Update or reinstall Raya.")
+    }
 
     // Wait until SSE yields its first server event before resolving connect().
     // Initial stream failures are handled by the adapter reconnect loop.

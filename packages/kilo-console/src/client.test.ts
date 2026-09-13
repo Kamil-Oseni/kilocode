@@ -3,11 +3,19 @@ import { expect, test } from "bun:test"
 // client.ts binds window.fetch once at import time, so every test must share the
 // same window whose fetch writes into a swappable calls array.
 let calls: Array<{ url: string; method: string; body: unknown }> = []
+let compatible = true
+let probes = 0
+let contract: { authorization: string | null; redirect: RequestRedirect } | undefined
 
 const win = {
   fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
     const req = input instanceof Request ? input : new Request(input, init)
-    calls.push({ url: req.url, method: req.method, body: await req.json() })
+    if (new URL(req.url).pathname === "/kilocode/capabilities") {
+      probes++
+      contract = { authorization: req.headers.get("authorization"), redirect: req.redirect }
+      return Response.json({ version: 1, features: { "client.console": compatible ? 1 : 2 } })
+    }
+    calls.push({ url: req.url, method: req.method, body: req.method === "GET" ? undefined : await req.json() })
     return new Response(JSON.stringify({ permission: { edit: { "*": "allow" } } }), {
       headers: { "content-type": "application/json" },
     })
@@ -16,9 +24,51 @@ const win = {
 
 function setup() {
   calls = []
+  compatible = true
+  probes = 0
+  contract = undefined
   Object.defineProperty(globalThis, "window", { value: win, configurable: true })
   return calls
 }
+
+test("refuses an incompatible backend before a console mutation", async () => {
+  const calls = setup()
+  compatible = false
+  const client = await import("./client")
+  const query = { url: "http://kilo:secret@127.0.0.1:4097", dir: "/tmp/project", scope: "project" as const }
+
+  await expect(client.saveConfig(query, { permission: { edit: { "*": "allow" } } })).rejects.toThrow(
+    "This Kilo backend is not compatible with this console. Update both from the same build.",
+  )
+  expect(probes).toBe(1)
+  expect(contract).toEqual({ authorization: "Basic a2lsbzpzZWNyZXQ=", redirect: "error" })
+  expect(calls).toHaveLength(0)
+})
+
+test("contains an unknown console event handler failure and delivers the next event", async () => {
+  setup()
+  const client = await import("./client")
+  const seen: string[] = []
+  const warn = console.warn
+  console.warn = () => undefined
+  const handler = (event: Parameters<typeof client.deliver>[1]) => {
+    const type = String(event.payload.type)
+    if (type === "future.event") throw new Error("unknown event")
+    seen.push(type)
+  }
+  try {
+    client.deliver(handler, { directory: "/tmp/project", payload: { type: "future.event" } } as unknown as Parameters<
+      typeof client.deliver
+    >[1])
+    client.deliver(handler, {
+      directory: "/tmp/project",
+      payload: { type: "server.connected" },
+    } as unknown as Parameters<typeof client.deliver>[1])
+    expect(seen).toEqual(["server.connected"])
+  } finally {
+    console.warn = warn
+  }
+})
 
 test("config writes include the selected directory", async () => {
   const calls = setup()

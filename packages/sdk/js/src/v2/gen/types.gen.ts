@@ -24926,6 +24926,10 @@ export type CapabilitiesGetResponses = {
   200: {
     version: 1
     features: {
+      "client.vscode": 1
+      "client.cli": 1
+      "client.console": 1
+      "events.additive": 1
       "goal.commandCheck": 1
     }
   }

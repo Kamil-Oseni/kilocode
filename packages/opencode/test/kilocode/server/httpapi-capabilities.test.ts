@@ -3,6 +3,17 @@ import { ConfigProvider, Layer } from "effect"
 import { HttpRouter } from "effect/unstable/http"
 import * as HttpApiServer from "@/server/routes/instance/httpapi/server"
 
+const manifest = {
+  version: 1,
+  features: {
+    "client.vscode": 1,
+    "client.cli": 1,
+    "client.console": 1,
+    "events.additive": 1,
+    "goal.commandCheck": 1,
+  },
+}
+
 function server(password?: string) {
   return HttpRouter.toWebHandler(
     HttpApiServer.routes.pipe(
@@ -20,12 +31,12 @@ function server(password?: string) {
   )
 }
 
-test("the shipped HTTP server advertises exact-command validation without a workspace or mutation", async () => {
+test("the shipped HTTP server advertises supported clients and semantic contracts without a mutation", async () => {
   const app = server()
   try {
     const response = await app.handler(new Request("http://localhost/kilocode/capabilities"), HttpApiServer.context)
     expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({ version: 1, features: { "goal.commandCheck": 1 } })
+    expect(await response.json()).toEqual(manifest)
   } finally {
     await app.dispose()
   }
@@ -51,7 +62,7 @@ test("capability discovery follows configured server authentication", async () =
       HttpApiServer.context,
     )
     expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({ version: 1, features: { "goal.commandCheck": 1 } })
+    expect(await response.json()).toEqual(manifest)
   } finally {
     await app.dispose()
   }

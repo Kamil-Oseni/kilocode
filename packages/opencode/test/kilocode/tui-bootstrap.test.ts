@@ -11,21 +11,27 @@ afterEach(async () => {
 
 test("blocking TUI bootstrap requests complete", async () => {
   await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
-  const client = createKiloClient({
+    const client = createKiloClient({
     baseUrl: "http://kilo.internal",
     directory: tmp.path,
-    fetch: ((request: RequestInfo | URL, init?: RequestInit) =>
-      Server.Default().app.fetch(new Request(request, init))) as typeof fetch,
+      fetch: ((request: RequestInfo | URL, init?: RequestInit) =>
+        Server.Default().app.fetch(new Request(request, init))) as typeof fetch,
   })
 
   const responses = await Promise.all([
     client.config.providers({}, { throwOnError: true }),
     client.provider.list({}, { throwOnError: true }),
     client.experimental.capabilities.get({}, { throwOnError: true }),
+    client.capabilities.get({ throwOnError: true }),
     client.app.agents({}, { throwOnError: true }),
     client.config.get({}, { throwOnError: true }),
     client.global.config.get({ throwOnError: true }),
   ])
 
   for (const response of responses) expect(response.data).toBeDefined()
+  expect(responses[3].data?.features).toMatchObject({
+    "client.cli": 1,
+    "client.console": 1,
+    "events.additive": 1,
+  })
 })

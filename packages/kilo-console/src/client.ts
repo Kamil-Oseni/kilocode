@@ -155,13 +155,36 @@ function server(input: string) {
 
 function client(input: ProjectQuery) {
   const info = server(input.url)
+  const auth = { Authorization: `Basic ${info.token}` }
+  const ctl = new AbortController()
+  const timer = setTimeout(() => ctl.abort(), 3000)
+  const contract = fetcher(`${info.url}/kilocode/capabilities`, {
+    headers: auth,
+    redirect: "error",
+    signal: ctl.signal,
+  })
+    .then(async (res) => {
+      if (!res.ok) return false
+      const data: unknown = await res.json()
+      if (!data || typeof data !== "object" || !("version" in data) || data.version !== 1) return false
+      if (!("features" in data) || !data.features || typeof data.features !== "object") return false
+      return "client.console" in data.features && data.features["client.console"] === 1
+    })
+    .catch(() => false)
+    .finally(() => clearTimeout(timer))
+  const gate = Object.assign(
+    async (request: RequestInfo | URL, init?: RequestInit) => {
+      if (!(await contract))
+        throw new Error("This Kilo backend is not compatible with this console. Update both from the same build.")
+      return fetcher(request, init)
+    },
+    { preconnect: fetcher.preconnect },
+  )
   return createKiloClient({
     baseUrl: info.url,
     directory: value(input.dir),
-    headers: {
-      Authorization: `Basic ${info.token}`,
-    },
-    fetch: fetcher,
+    headers: auth,
+    fetch: gate,
   })
 }
 
@@ -639,6 +662,14 @@ export async function viewProjectSessions(
   return demand("Viewed sessions", result)
 }
 
+export function deliver(handler: (event: ProjectConsoleEvent) => void, event: ProjectConsoleEvent) {
+  try {
+    handler(event)
+  } catch (err) {
+    console.warn(`Project event ignored: ${message(err)}`)
+  }
+}
+
 export function subscribeProjectEvents(input: ProjectQuery, handler: (event: ProjectConsoleEvent) => void) {
   const sdk = client(input)
   const ctl = new AbortController()
@@ -646,7 +677,7 @@ export function subscribeProjectEvents(input: ProjectQuery, handler: (event: Pro
     const events = await sdk.global.event({ signal: ctl.signal, sseMaxRetryAttempts: 0 })
     for await (const event of events.stream) {
       if (ctl.signal.aborted) return
-      handler(event)
+      deliver(handler, event)
     }
   })().catch((err) => {
     if (!ctl.signal.aborted) console.warn(`Project events: ${message(err)}`)

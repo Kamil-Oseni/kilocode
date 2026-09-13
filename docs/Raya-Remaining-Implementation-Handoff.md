@@ -29,13 +29,15 @@ Status excerpts below are historical records, not a fresh certification of every
 
 Close the remaining parent requirements in this order, finishing a complete acceptance package before opening an unrelated slice. This order reflects verification cost; it does not waive original acceptance.
 
-Completed from this queue: PR-02, PR-03, PR-06, EN-03, EN-05, EN-13, UX-01 and UI-01.
+Completed from this queue: PR-02, PR-03, PR-06, EN-03, EN-05, EN-07, EN-13, UX-01 and UI-01.
 
-1. **Repository-deterministic:** EN-07; EN-14; EN-15; OVR-06; PR-04 + EN-02 + OVR-05; PR-05 + OVR-04; EN-06; EN-10; OVR-09; OVR-08.
+1. **Repository-deterministic:** EN-14; EN-15; OVR-06; PR-04 + EN-02 + OVR-05; PR-05 + OVR-04; EN-06; EN-10; OVR-09; OVR-08.
 2. **Packaged local interaction or broad cross-surface review:** UX-03; EN-04; UX-02; UX-04; UX-05; UI-03; EN-09.
 3. **External, physical-device, multi-platform or moderated evidence:** EN-01; EN-11 + OVR-02 + OVR-10; EN-12 + OVR-01; OVR-03; PR-01 + OVR-07; UI-02.
 
-UI/UX work must follow `docs/designer.md`, consult the current official OpenAI Codex GitHub UI for interaction and information-architecture guidance, and preserve Raya's accent color plus Instrument Serif and Outfit. Do not begin deferred Codex-derived feature work before the existing audit is complete.
+UI/UX work must redesign the entire Raya interface from `docs/designer.md` and the current official OpenAI Codex GitHub UI/UX principles and source patterns. The scope includes chat, composer/input fields, voice, Routines DMs and messaging, organizations, settings, browser, history, review, canvas, repair, shared controls, and all loading/empty/error/recovery states. Preserve only Raya's accent color, Instrument Serif/Outfit typography, and the current goal card design; every other existing layout and component style may be replaced. Do not begin deferred Codex-derived feature work before the existing audit is complete.
+
+**ChatGPT 2026-09-12 23:25 America/Toronto:** recorded this as the global UI/UX acceptance boundary. Future agents must not preserve current component styling merely because it already exists.
 
 ## ChatGPT 2026-09-12 18:26 America/Toronto — latest delivered and active checkpoints
 
@@ -276,13 +278,13 @@ The following sections retain the full 39-item scope. Related findings and overh
 
 ### EN-07 — Use explicit compatibility contracts during the runtime migration
 
-**Recorded status:** In progress. Added a versioned capability manifest following existing optional server authentication and connection-specific pre-mutation support checks for command-bound goal edits. Unsupported or replaced backends preserve the draft. Actual auth, SDK regeneration and affected package typechecks pass; broader feature/event and client-version contracts remain open.
+**Recorded status:** Verified by ChatGPT on 2026-09-12 23:35 America/Toronto. The authenticated versioned manifest owns supported VS Code, CLI/TUI and local-console generations, additive event behavior and the separately evolvable exact-command semantic. VS Code and console fail before SSE or feature requests when their required contract is unavailable, replaced connections are rechecked, unknown listener failures cannot stop later events, and generated contracts are checked for drift.
 
 **Implementation and verification:**
 
-1. Expand capability negotiation from goal checks to other new mutation/event surfaces and publish endpoint ownership across runtime generations.
-2. Keep conversions narrow, explicit omissions documented and generated SDKs authoritative; unavailable features must preserve drafts.
-3. Run supported client/backend contract pairs, unknown events, missing capabilities, stale connections and generated-drift checks.
+1. Preserve the same-source client generation flags and add a narrower versioned feature only when one semantic can evolve independently. Do not infer arbitrary cross-version endpoint combinations from the coarse client flags.
+2. Keep the VS Code pre-SSE handshake, console per-client transport check, connection-identity invalidation and authenticated raw manifest request. An unavailable required contract must fail before a feature call so local drafts remain available.
+3. Re-run backend/CLI bootstrap, extension capability/SSE, console boundary, protocol/client identity and generated-drift checks after changing an endpoint, event envelope, client generation or explicit omission.
 
 **Source entry points:** [packages/protocol/src/api.ts](../packages/protocol/src/api.ts), [packages/client/src/contract.ts](../packages/client/src/contract.ts).
 
@@ -386,7 +388,7 @@ The following sections retain the full 39-item scope. Related findings and overh
 
 ### EN-15 — Make release confidence reproducible across the fork
 
-**Recorded status:** In progress. Windows path normalization repaired in the Promise-facade guard; classified the existing real HTTP routine fixture with an exact reference count. Cross-package/snapshot checks are recorded per checkpoint. Broader reproducible release coverage remains open.
+**Recorded status:** In progress. Windows path normalization and real-HTTP fixture classification remain in place. ChatGPT repaired 13 later extension changesets that had reintroduced the nonexistent `kilo-code` package; `bunx changeset status` again assembles the full release plan. A unified documented release runner and supported-platform clean-install evidence remain open.
 
 **Implementation and verification:**
 
@@ -2377,3 +2379,11 @@ The production result package and copied report expose the objective, criteria, 
 PR-06 is fully Verified against its original acceptance. `docs/Raya-Supported-Clients.md` lets a colleague identify the `eden.raya` installer, VS Code/backend compatibility boundary, platform-specific asset, installation path and expected feature limits without reading implementation source. Its status language is intentionally narrow: Windows x64 has a recorded local installation checkpoint, while the macOS ARM64 and Linux x64 rows are configured build targets whose installation remains unverified. This is the documented “VS Code first; inherited clients not Raya-certified” product boundary anticipated by the audit.
 
 CI and the release workflow consume `docs/Raya-Support-Contract.json` through `script/kilocode/raya-support.ts`. Release notes are generated from the same contract, link the matrix at the immutable checked-out commit and repeat the distinction between build targets and installation evidence. Verification passes 7 focused tests / 26 assertions, the live support guard, the 30-workflow allowlist and the 472-file Markdown-table check. An actual generated note at checkout `742c82fdfe2a531f2ff01ea56200db9fc3891777` names `eden.raya`, VS Code `^1.106.0`, all declared assets and the two unverified platforms. Preserve this contract/guard coupling; platform rollout evidence and company support SLA ownership remain future release-policy work rather than blockers to PR-06. No product source changed, so no changeset or snapshot reinstall is required.
+
+## ChatGPT 2026-09-12 23:35 America/Toronto — EN-07 verification receipt
+
+EN-07 is fully Verified against its original acceptance. The authenticated `/kilocode/capabilities` manifest now identifies version 1 of the supported `client.vscode`, `client.cli` and `client.console` same-source generations, `events.additive`, and the independently evolvable `goal.commandCheck` semantic. VS Code checks its complete client contract before exposing an SDK client or opening SSE. The local console checks its contract through the raw authenticated transport before every constructed SDK client's feature request, mutation or stream. Missing, malformed, unknown or wrong-version contracts fail with explicit update guidance before the requested operation; a connection/backend replacement is rechecked and cannot inherit a prior result.
+
+Extension and console delivery boundaries contain an individual handler's unknown-event failure and continue to a later known event. The actual CLI/TUI bootstrap reads its declared contracts through the regenerated SDK against the real server. Evidence: backend/CLI 3 tests / 18 assertions; extension capability/connection/SSE 12 / 51; console transport/event 4 / 20; protocol/client identity and generation equivalence 3 / 20. OpenCode, SDK, extension and console typechecks, extension lint/Knip, SDK regeneration, client generated-drift check, generated-artifact guard, annotation guard, workflow guard, Markdown-table guard and `git diff --check` pass. Preserve the explicit omissions in `packages/client/src/contract.ts`; add a new narrow feature version when a semantic evolves independently rather than weakening a client-generation contract. The release changeset is `.changeset/raya-runtime-client-contract.md`; commit, push, run the authorized snapshot installation and record its exact identity/hash before beginning EN-14.
+
+**ChatGPT 2026-09-12 23:38 America/Toronto — EN-15 metadata repair:** the EN-07 release check found 13 later extension changesets pointing at removed package `kilo-code`. All now point at `raya`, with descriptions and patch bumps unchanged, and `bunx changeset status` succeeds. Re-run this command before every release checkpoint. EN-15 remains open for a single documented release/evidence runner and supported-platform clean-install evidence.

@@ -2724,3 +2724,9 @@ The inventory also found that the Routine access UI exposes only brief/full even
 3. Prove one smallest honest discovery → design → code → hosting → outreach path. Use real browser/tool/MCP boundaries available locally, existing delegation lineage and DM records, exact worker tool policies, and known or explicitly unknown cost. Exercise a partial external failure and retry. If hosting or outreach needs credentials, complete all local behavior first and record the exact credential-backed manual acceptance still required.
 
 Do not claim the representative company workflow is complete from preview cards or synthetic connector output. Update both ledgers during implementation with `ChatGPT`, Toronto time, exact evidence, commits, push and installed artifact details.
+
+## ChatGPT 2026-09-13 05:28 America/Toronto — delegated tool ceiling delivered
+
+Product and ledger commit `fbd4edf5d7` (`fix(routines): preserve delegated tool limits`) is on `origin/main`. Its required constrained push gate passed all 29 TypeScript packages with 28 cached and only the CLI running uncached; JetBrains reused its cache. `TURBO_CONCURRENCY=1` remained set. No root lint or repository `tsgolint` ran.
+
+The authorized `RAYA_LOW_MEMORY=1` installer rebuilt the changed CLI, ran extension validation sequentially, packaged 431 entries and installed successfully. Installed identity: `eden.raya@7.4.23-snapshot+fbd4edf5d7.kamil-oseni.1789291537178`. Artifact: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-fbd4edf5d7-kamil-oseni-1789291537178.vsix`; 517,640,279 bytes; SHA-256 `BBDBAFADD7BC8737E22DB0AD37DD14906932181083CEBD4ED4F5EEB81188BA65`; bundled CLI 229,147,648 bytes; zero `.env`/`.tmp` entries. Reload VS Code before manual review. Continue with saved tool scopes and optimistic access review, followed by the agent-facing existing-worker delegation tool.

@@ -72,6 +72,10 @@ describe("Raya canvas compiler", () => {
     expect(restored?.warning).toBeUndefined()
     expect((await reopened.draft(next)).data).toEqual({ value: 2 })
     expect((await new CanvasCompiler(output).restore(root, "rollback"))?.revision).toBe(first.revision)
+    await writeFile(join(dirname(next.bundle!), "rollback.current.json"), "{damaged after rollback")
+    const recovered = await new CanvasCompiler(output).restore(root, "rollback")
+    expect(recovered?.revision).toBe(first.revision)
+    expect(recovered?.warning).toContain("restored the last working canvas")
     const last = await reopened.create(root, "rollback", "export default function Report() { return <p>Newest</p> }", {
       value: 3,
     })

@@ -1,7 +1,8 @@
 // raya_change - Milestone E portable esbuild canvas compiler and artifact storage
 import { createHash, randomUUID } from "node:crypto"
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises"
-import { dirname, join } from "node:path"
+import { dirname, join, resolve } from "node:path"
+import { Flock } from "@opencode-ai/core/util/flock"
 import { initialize, transform, type TransformOptions } from "esbuild-wasm"
 import { z } from "zod"
 import { prune } from "./canvas-retention"
@@ -79,6 +80,7 @@ export class CanvasCompiler {
       source: string
       build: CanvasBuild
       code?: string
+      base?: string
       files: { path: string; before: string | undefined; after: string }[]
     }
   >()
@@ -107,9 +109,12 @@ export class CanvasCompiler {
 
   /** Promote only a successful render of the latest candidate. */
   commit(build: CanvasBuild, writable: (path: string) => boolean = () => true): Promise<void> {
+    const root = dirname(dirname(dirname(build.path)))
     return this.queue(build.path, async () => {
-      await this.save(build, writable)
-      await this.clean(dirname(dirname(dirname(build.path))), build.name)
+      await this.lock(root, build.name, async () => {
+        await this.save(build, writable)
+        await this.clean(root, build.name)
+      })
     })
   }
 
@@ -156,6 +161,7 @@ export class CanvasCompiler {
       if (error.code === "ENOENT") return undefined
       throw error
     })
+    if (raw !== candidate.base) throw new Error("Canvas candidate was superseded by another window before saving.")
     const previous = raw === undefined ? undefined : record.parse(JSON.parse(raw))
     if (previous && previous.build.name !== build.name) throw new Error("Saved canvas name does not match.")
     const temp = `${target}.${randomUUID()}.tmp`
@@ -213,42 +219,46 @@ export class CanvasCompiler {
     const root = dirname(dirname(dirname(build.path)))
     let preserved = false
     await this.queue(build.path, async () => {
-      if (!current()) return
-      const target = this.manifest(root, build.name)
-      const raw = await readFile(target, "utf8").catch((error: NodeJS.ErrnoException) => {
-        if (error.code === "ENOENT") return undefined
-        throw error
-      })
-      if (raw === undefined) return
-      const saved = manifest.parse(JSON.parse(raw))
-      if (saved.build.name !== build.name || (saved.previous && saved.previous.build.name !== build.name))
-        throw new Error("Saved canvas name does not match.")
-      if (saved.build.revision !== build.revision || !saved.previous) return
-      const temp = `${target}.${randomUUID()}.tmp`
-      try {
-        await writeFile(temp, JSON.stringify(saved.previous), { flag: "wx" })
+      await this.lock(root, build.name, async () => {
         if (!current()) return
-        await rename(temp, target)
-        preserved = !(await reconcile(
-          [
-            { path: this.source(root, build.name), before: saved.source, after: saved.previous.source },
-            {
-              path: this.data(root, build.name),
-              before: JSON.stringify(saved.build.data, null, 2),
-              after: JSON.stringify(saved.previous.build.data, null, 2),
-            },
-          ],
-          current,
-          writable,
-        ).catch((error) => {
-          console.error("[Raya] Canvas editable files could not be reconciled:", error)
-          return false
-        }))
-      } finally {
-        await unlink(temp).catch((error: NodeJS.ErrnoException) => {
-          if (error.code !== "ENOENT") throw error
+        const target = this.manifest(root, build.name)
+        const raw = await readFile(target, "utf8").catch((error: NodeJS.ErrnoException) => {
+          if (error.code === "ENOENT") return undefined
+          throw error
         })
-      }
+        if (raw === undefined) return
+        const saved = manifest.parse(JSON.parse(raw))
+        if (saved.build.name !== build.name || (saved.previous && saved.previous.build.name !== build.name))
+          throw new Error("Saved canvas name does not match.")
+        if (saved.build.revision !== build.revision || !saved.previous) return
+        const temp = `${target}.${randomUUID()}.tmp`
+        try {
+          await writeFile(temp, JSON.stringify(saved.previous), { flag: "wx" })
+          if (!current()) return
+          await this.copy(this.backup(root, build.name), saved.previous)
+          if (!current()) return
+          await rename(temp, target)
+          preserved = !(await reconcile(
+            [
+              { path: this.source(root, build.name), before: saved.source, after: saved.previous.source },
+              {
+                path: this.data(root, build.name),
+                before: JSON.stringify(saved.build.data, null, 2),
+                after: JSON.stringify(saved.previous.build.data, null, 2),
+              },
+            ],
+            current,
+            writable,
+          ).catch((error) => {
+            console.error("[Raya] Canvas editable files could not be reconciled:", error)
+            return false
+          }))
+        } finally {
+          await unlink(temp).catch((error: NodeJS.ErrnoException) => {
+            if (error.code !== "ENOENT") throw error
+          })
+        }
+      })
     })
     if (!current()) return
     const saved = await this.restore(root, build.name)
@@ -340,15 +350,17 @@ export class CanvasCompiler {
     const saved = raw === undefined ? undefined : this.decode(raw, name)
     if (!saved) return
     const corrupt = `${target}.corrupt`
-    await this.queue(this.source(root, name), async () => {
-      const latest = await readFile(target, "utf8")
-      if (latest !== damaged) {
-        if (this.decode(latest, name)) return
-        throw new Error("The saved canvas changed while Raya was recovering it. Its files have been retained.")
-      }
-      await writeFile(corrupt, damaged)
-      await this.copy(target, saved)
-    })
+    await this.queue(this.source(root, name), () =>
+      this.lock(root, name, async () => {
+        const latest = await readFile(target, "utf8")
+        if (latest !== damaged) {
+          if (this.decode(latest, name)) return
+          throw new Error("The saved canvas changed while Raya was recovering it. Its files have been retained.")
+        }
+        await writeFile(corrupt, damaged)
+        await this.copy(target, saved)
+      }),
+    )
     const latest = await readFile(target, "utf8")
     const restored = this.decode(latest, name)
     if (!restored)
@@ -384,6 +396,12 @@ export class CanvasCompiler {
     return join(this.directory(root), `${name}.recovery.json`)
   }
 
+  private lock<T>(root: string, name: string, work: () => Promise<T>) {
+    const path = resolve(root)
+    const key = process.platform === "win32" ? path.toLowerCase() : path
+    return Flock.withLock(`canvas:${key}\0${name}`, work, { dir: join(this.output, ".locks") })
+  }
+
   async rebuild(path: string): Promise<CanvasBuild> {
     const name = this.name(path)
     const root = dirname(dirname(dirname(path)))
@@ -403,6 +421,10 @@ export class CanvasCompiler {
     const version = (this.versions.get(path) ?? 0) + 1
     this.versions.set(path, version)
     const revision = randomUUID()
+    const base = await readFile(this.manifest(root, name), "utf8").catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return undefined
+      throw error
+    })
     this.latest.set(path, revision)
     for (const [id, candidate] of this.candidates) {
       if (candidate.build.path === path) this.candidates.delete(id)
@@ -453,13 +475,13 @@ ${source}`,
       const code = `${result.code}\nwindow.RayaCanvas.mount(RayaArtifact.default);\n`
       await writeFile(bundle, code, { flag: "wx" })
       const build: CanvasBuild = { name, path, bundle, data, status: "ready", version, revision }
-      if (this.owns(build)) this.candidates.set(revision, { root, source, build, code, files })
+      if (this.owns(build)) this.candidates.set(revision, { root, source, build, code, base, files })
       return build
     } catch (error) {
       return { name, path, data, status: "error", version, revision, error: message(error) }
     } finally {
       this.active.delete(revision)
-      await this.queue(path, () => this.clean(root, name))
+      await this.queue(path, () => this.lock(root, name, () => this.clean(root, name)))
     }
   }
 

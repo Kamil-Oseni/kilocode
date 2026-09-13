@@ -2,6 +2,7 @@ import { Component, For, createMemo, createSignal, onCleanup, onMount } from "so
 import { Button } from "@kilocode/kilo-ui/button"
 import { useVSCode } from "../../context/vscode"
 import type { ExtensionMessage } from "../../types/messages"
+import { MediaAttachment, previewable } from "./MediaAttachment"
 
 type Share = {
   kind: "file" | "link" | "attachment"
@@ -202,7 +203,10 @@ export const ChatInfo: Component<{
   const unsub = vscode.onMessage(receive)
   onCleanup(unsub)
 
-  const files = createMemo(() => shares().filter((item) => item.kind === "file" || item.kind === "attachment"))
+  const media = createMemo(() => shares().filter((item) => item.kind === "attachment" && previewable(item.mime ?? "")))
+  const files = createMemo(() =>
+    shares().filter((item) => item.kind === "file" || (item.kind === "attachment" && !previewable(item.mime ?? ""))),
+  )
   const links = createMemo(() => shares().filter((item) => item.kind === "link"))
 
   return (
@@ -255,6 +259,25 @@ export const ChatInfo: Component<{
             {props.enabled ? "Pause" : "Enable"}
           </Button>
         </div>
+      </section>
+
+      <section class="routines-info-section" aria-labelledby="routine-info-media">
+        <h3 id="routine-info-media">Media</h3>
+        {media().length ? (
+          <ul class="routines-info-media" aria-label="Shared media">
+            <For each={media()}>
+              {(item) => (
+                <MediaAttachment
+                  agentID={props.agentID}
+                  file={{ id: item.attachmentID!, name: item.label, mime: item.mime!, size: item.size! }}
+                  detail={stamp(item.time)}
+                />
+              )}
+            </For>
+          </ul>
+        ) : (
+          <p class="routines-empty">{shareBusy() ? "Loading shared media…" : "No media shared."}</p>
+        )}
       </section>
 
       <section class="routines-info-section" aria-labelledby="routine-info-files">

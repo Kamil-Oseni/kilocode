@@ -3610,3 +3610,14 @@ Inline image/audio/video presentation is now implemented. Continue OVR-05 with g
 Product commit `51fc2022d34bbbadbda63970ea80c16007e90184` (`feat(routines): play media in worker chats`) is on `origin/main`. The push gate passed 29 TypeScript package checks plus JetBrains with `TURBO_CONCURRENCY=1`; 28 TypeScript jobs were cached and the changed Raya extension passed both checks. No root lint or `tsgolint` graph ran.
 
 The authorized low-memory workflow passed unchanged SDK preparation, sequential extension-host/webview typechecks, cached ESLint, production bundling, packaging and installation. VS Code reports `eden.raya@7.4.23-snapshot+51fc2022d3.kamil-oseni.1789282723416`. Artifact: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-51fc2022d3-kamil-oseni-1789282723416.vsix`; 517,568,742 bytes; 431 entries; SHA-256 `27C5F0DC2FF91E9403BCB2BA68C202323106B77AE6D99C37988ABBFD2AFBB37B`; bundled CLI 229,133,312 bytes; zero `.env` or `.tmp` entries. HEAD and `origin/main` match, with only the two owner-authored reference documents untracked. Reload VS Code before manual playback review.
+
+
+## ChatGPT 2026-09-13 03:05 America/Toronto — grouped Routine Chat Info media
+
+**Status: implemented and verified locally; commit, push and low-memory snapshot installation remain.** Chat Info now separates previewable images, audio and video into a first-class `Media` section while keeping documents under `Files`, URLs under `Links`, and delegation history under `Worker communication`. Shared media reuses the exact lazy, correlated, validated preview and playback component from the message thread, adds the share timestamp, and retains open/retry behavior. The reusable component moved into `MediaAttachment.tsx` so Inbox and Chat Info share one production implementation without a runtime import cycle.
+
+The responsive media grid uses the existing neutral surface, spacing, borders and typography from `docs/designer.md`; it contains no tinted wrapper, nested decorative card, icon tile, gradient or ornamental status. At narrow widths it collapses to one column; at wide widths the image and audio report sit side by side while the rest of Chat Info retains the same reading order.
+
+Evidence: webview `tsgo`, targeted Prettier and ESLint pass. Two serial production-component Chromium journeys pass at light 900 px and dark 320 px, asserting the Media heading, inline image and audio controls within Chat Info plus the existing Files, Links, Worker communication, axe and horizontal-overflow contracts. ChatGPT inspected the 900 px result and confirmed the hierarchy and grid. No root lint, parallel typecheck or `tsgolint` graph ran.
+
+This completes the requested Chat Info media grouping for supported inline formats. Continue OVR-05 with organization-wide orchestration and handoff visibility, keeping media, files, links and worker communication available from each worker DM.

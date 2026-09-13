@@ -1126,6 +1126,20 @@
   list-style: none;
 }
 
+.routines-info-media {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(14rem, 100%), 1fr));
+  gap: var(--raya-space-12);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.routines-info-media .routines-image-item {
+  width: 100%;
+  max-width: 28rem;
+}
+
 .routines-info-list > li + li {
   border-top: 1px solid var(--border-weak, var(--vscode-widget-border));
 }

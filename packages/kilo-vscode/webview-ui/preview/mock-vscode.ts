@@ -315,6 +315,24 @@ const reply = (message: WebviewMessage) => {
                 size: report.attachments[1].size,
                 time: report.time,
               },
+              {
+                kind: "attachment",
+                attachmentID: report.attachments[0].id,
+                messageID: report.id,
+                label: report.attachments[0].name,
+                mime: report.attachments[0].mime,
+                size: report.attachments[0].size,
+                time: report.time,
+              },
+              {
+                kind: "attachment",
+                attachmentID: report.attachments[2].id,
+                messageID: report.id,
+                label: report.attachments[2].name,
+                mime: report.attachments[2].mime,
+                size: report.attachments[2].size,
+                time: report.time,
+              },
             ]
           : [
               {

@@ -29,10 +29,10 @@ Status excerpts below are historical records, not a fresh certification of every
 
 Close the remaining parent requirements in this order, finishing a complete acceptance package before opening an unrelated slice. This order reflects verification cost; it does not waive original acceptance.
 
-Completed from this queue: UI-01, PR-03 and EN-03.
+Completed from this queue: UI-01, PR-03, EN-03, EN-05 and UX-01.
 
 1. **Repository-deterministic:** EN-07; EN-13; EN-14; EN-15; PR-02 + OVR-06; PR-04 + EN-02 + OVR-05; PR-05 + OVR-04; EN-06; EN-10; OVR-09; OVR-08.
-2. **Packaged local interaction or broad cross-surface review:** UX-03; EN-04 + EN-05 + UX-01; UX-02; UX-04; UX-05; UI-03; EN-09.
+2. **Packaged local interaction or broad cross-surface review:** UX-03; EN-04; UX-02; UX-04; UX-05; UI-03; EN-09.
 3. **External, physical-device, multi-platform or moderated evidence:** EN-01; EN-11 + OVR-02 + OVR-10; EN-12 + OVR-01; OVR-03; PR-06; PR-01 + OVR-07; UI-02.
 
 UI/UX work must follow `docs/designer.md`, consult the current official OpenAI Codex GitHub UI for interaction and information-architecture guidance, and preserve Raya's accent color plus Instrument Serif and Outfit. Do not begin deferred Codex-derived feature work before the existing audit is complete.
@@ -248,13 +248,13 @@ The following sections retain the full 39-item scope. Related findings and overh
 
 ### EN-05 — Identify reviewed content by revision, not line positions
 
-**Recorded status:** In progress. Content and persisted patch-generation fingerprints, stale-command rejection, Keep acceptance hydration, historical Undo hydration, and deletion/rename anchors verified in targeted tests. Chat now offers Keep/Undo on apply_patch and multiedit files, including deletions and renames. Opening a reviewed path that is gone on disk loads a virtual editor buffer with the deleted text and the same Keep/Undo CodeLens. Packaged live interaction in a real VS Code session remains open.
+**Recorded status:** Verified by ChatGPT on 2026-09-12 23:03 America/Toronto. Content and persisted patch-generation fingerprints reopen later edits at identical line positions. Session/revision-bound commands, out-of-order reply protection and backend preconditions reject stale work. Deletion-only and renamed files remain discoverable in production chat and editor paths, including a revision-bound virtual buffer when the file no longer exists.
 
 **Implementation and verification:**
 
-1. Finish packaged live VS Code interaction with a renamed or deleted buffer after reload.
-2. Preserve acceptance across unrelated line shifts but reject stale content revisions; make deletion-only actions discoverable.
-3. Change the same lines twice, rename/edit/delete, reopen and undo historical work; inspect anchors, Keep boundaries and focus.
+1. Preserve generation identity through migrations and keep the documented content-only legacy limitation explicit.
+2. Re-run the focused extension/backend revision matrix when review fingerprints, patch projection, virtual buffers or command identity change.
+3. Keep production chat preview coverage for renamed/deleted files, exact file actions, axe rules and narrow layouts.
 
 **Source entry points:** [packages/kilo-vscode/src/edit-review/InEditorReview.ts](../packages/kilo-vscode/src/edit-review/InEditorReview.ts).
 
@@ -398,13 +398,13 @@ The following sections retain the full 39-item scope. Related findings and overh
 
 ### UX-01 — Match review labels to action scope
 
-**Recorded status:** In progress. Keep file / Undo file labels and scope tooltips implemented. File-level summary includes additions and deletions. Concurrent-edit acceptance and live interaction validation remain open.
+**Recorded status:** Verified by ChatGPT on 2026-09-12 23:03 America/Toronto. Production controls use Keep file / Undo file, editor tooltips state the whole-file boundary, and summaries expose additions and deletions. Exact per-hunk tests preserve the other hunk; deletion-only, rename, dirty-buffer, replacement-content and stale-command paths retain unaffected or newer work.
 
 **Implementation and verification:**
 
-1. Finish actual review-scope interactions across editor/chat with file-level labels, counts and revision-bound tooltips.
-2. Keep pending/failure states and selected review; never imply line-only scope for a whole-file action.
-3. Test partial selection, mixed additions/deletions and concurrent edits; verify file scope, retry, dismissal and focus return.
+1. Preserve file-level naming, revision-bound whole-file tooltips and separate additions/deletions whenever review controls change.
+2. Re-run the hunk, dirty-buffer, replacement-content, stale-command and production preview matrix after review UX changes.
+3. Keep pending/failure states and selected review; never imply line-only scope for a whole-file action.
 
 **Source entry points:** [packages/kilo-vscode/src/edit-review/patch-ranges.ts](../packages/kilo-vscode/src/edit-review/patch-ranges.ts), [packages/kilo-vscode/src/edit-review/InEditorReview.ts](../packages/kilo-vscode/src/edit-review/InEditorReview.ts).
 
@@ -2353,3 +2353,9 @@ UI-01 is fully Verified. ChatGPT inspected the preview implementation and confir
 PR-03 and EN-03 are fully Verified. A new production-component Chromium journey opens Books → Edit schedule, selects Monday and Friday only at 09:00 in America/Toronto, previews the exact `0 9 * * 1,5` schedule and three occurrences, verifies confirmation admission, passes axe and overflow checks, then confirms through the correlated update acknowledgement. ChatGPT inspected the rendered editor under `docs/designer.md`; no product visual change was made.
 
 Deterministic evidence: 168 backend tests / 1,143 assertions across cron parsing, timezone/DST behavior, event selection/revalidation, forecast, catch-up, occurrence persistence, queue and scheduler; 39 extension tests / 94 assertions across phrases, forecast identity, stale edits, trigger disclosure and the actual editor; 48/48 production preview cases; extension host/webview typechecks; and full extension lint. The matrix proves Monday/Friday distinction, rejection rather than guessing for intervals/ambiguous phrases, the same intended local occurrence on differently zoned hosts, exact missing/mismatched filter rejection, explicit DST gaps/folds, one-minute recurring catch-up without backlog, retained one-time occurrences, immutable scheduled/observed evidence, and legacy timezone review holds. No changeset or snapshot reinstall is needed because this checkpoint adds verification coverage and documentation only. Continue with EN-07. UX-03 moved to the cross-surface tier after confirming that its original acceptance spans chat, Routines, voice, browser, canvas, history, settings and repair.
+
+## ChatGPT 2026-09-12 23:03 America/Toronto — EN-05 and UX-01 verification receipt
+
+EN-05 and UX-01 are fully Verified against their original acceptance. Persisted patch-generation fingerprints reopen a later edit even when the content and line positions repeat. Exact session/revision command identity, chat request/turn identity, out-of-order refresh protection and backend preconditions reject stale or replacement work. Deletion-only and renamed files remain discoverable in the production chat surface; missing reviewed paths open through immutable revision-bound virtual buffers. Controls say `Keep file` / `Undo file`, whole-file editor scope is stated in tooltips, and summaries expose additions and deletions. Per-hunk rollback preserves the other hunk, while dirty buffers and concurrent saved changes fail closed.
+
+Evidence: 67 extension tests / 236 assertions across editor host behavior, chat state, request identity, file extraction, hunk rollback, path safety and lens placement; 10 backend tests / 108 assertions across revision preconditions, cross-process receipt publication and patch-history projection; and 4/4 production-component Chromium cases across light/dark and 320/760 px with axe and overflow checks. The initial browser run was blocked by sandboxed esbuild traversal; the approved identical rerun passed. No product source changed, so no changeset or snapshot reinstall is needed. Keep EN-04 open for uncertain outcomes, cross-process workspace transactions and receipt retention; those are separate from EN-05 revision identity and UX-01 scope clarity.

@@ -199,6 +199,8 @@ test("organization assignment forwards the authorized route and bounded work det
     organizationName: "Finance",
     organizationRevision: 4,
     objective: "Prepare the September close package.",
+    parentID: "work_1",
+    parentRunID: "run_1",
     expected: "A reconciled close package.",
     context: "Use the approved finance workspace.",
     deadline,
@@ -229,6 +231,8 @@ test("organization assignment forwards the authorized route and bounded work det
       organizationID: id,
       organizationRevision: 4,
       objective: " Prepare the September close package. ",
+      parentID: "work_1",
+      parentRunID: "run_1",
       expected: " A reconciled close package. ",
       context: " Use the approved finance workspace. ",
       deadline,
@@ -243,6 +247,8 @@ test("organization assignment forwards the authorized route and bounded work det
     organizationID: id,
     organizationRevision: 4,
     objective: record.objective,
+    parentID: "work_1",
+    parentRunID: "run_1",
     expected: record.expected,
     context: record.context,
     deadline,
@@ -254,6 +260,51 @@ test("organization assignment forwards the authorized route and bounded work det
     agentID: worker,
     record,
   })
+})
+
+test("organization follow-on rejects a response attached to another parent", async () => {
+  const messages: Record<string, unknown>[] = []
+  const client = createKiloClient({
+    baseUrl: "http://localhost:4096",
+    fetch: async () =>
+      Response.json({
+        id: "work_2",
+        source: "organization:finance:follow",
+        senderID: worker,
+        recipientID: peer,
+        organizationID: id,
+        organizationRevision: 4,
+        objective: "Prepare the review deck.",
+        parentID: "work_other",
+        parentRunID: "run_1",
+        state: "queued",
+      }),
+  })
+  await handleRoutineMessage({
+    client,
+    directory: "workspace",
+    post: (message) => messages.push(message as Record<string, unknown>),
+    message: {
+      type: "routineDelegate",
+      requestID: "request",
+      agentID: worker,
+      recipientID: peer,
+      source: "organization:finance:follow",
+      organizationID: id,
+      organizationRevision: 4,
+      objective: "Prepare the review deck.",
+      parentID: "work_1",
+      parentRunID: "run_1",
+    },
+  })
+  expect(messages).toHaveLength(1)
+  expect(messages[0]).toMatchObject({
+    type: "routineDelegated",
+    requestID: "request",
+    agentID: worker,
+  })
+  expect(messages[0].record).toBeUndefined()
+  expect(messages[0].error).toContain("could not be verified")
 })
 
 test("organization assignment rejects a response from another organization", async () => {

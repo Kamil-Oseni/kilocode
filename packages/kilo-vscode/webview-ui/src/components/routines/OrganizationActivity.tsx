@@ -3,7 +3,7 @@ import { useDialog } from "@kilocode/kilo-ui/context/dialog"
 import { Component, For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { useVSCode } from "../../context/vscode"
 import type { ExtensionMessage } from "../../types/messages"
-import { OrganizationAssignment } from "./OrganizationAssignment"
+import { OrganizationAssignment, type Follow } from "./OrganizationAssignment"
 
 type Work = import("@kilocode/sdk/v2/client").KilocodeRoutineOrganizationActivityResponse["items"][number]
 type Step = Pick<Work, "id" | "state" | "objective" | "organizationID"> & {
@@ -11,6 +11,7 @@ type Step = Pick<Work, "id" | "state" | "objective" | "organizationID"> & {
   recipientID: string
 }
 type Tree = { record: Step; above: Step[]; below: Step[] }
+type Trace = { request: string; id: string; agent: string; action: "inspect" | "follow" }
 
 const states = new Set(["queued", "accepted", "running", "needs_input", "completed", "failed", "cancelled"])
 
@@ -104,8 +105,10 @@ export const OrganizationActivity: Component<{
   id: string
   item: import("@kilocode/sdk/v2/client").KilocodeRoutineOrganizationListResponse["items"][number]
   agents: { id: string; name: string; enabled: boolean }[]
+  receipt?: { id: string; name: string }
   onEdit: () => void
   onChoose: (id: string) => void
+  onAssigned: (worker: { id: string; name: string }) => void
   onOpenSession?: (id: string) => void
 }> = (props) => {
   const vscode = useVSCode()
@@ -117,12 +120,41 @@ export const OrganizationActivity: Component<{
   const [open, setOpen] = createSignal("")
   const [trees, setTrees] = createSignal<Record<string, Tree>>({})
   const [faults, setFaults] = createSignal<Record<string, string>>({})
-  const [trace, setTrace] = createSignal<{ request: string; id: string; agent: string }>()
+  const [trace, setTrace] = createSignal<Trace>()
   const [confirm, setConfirm] = createSignal("")
   const [stopping, setStopping] = createSignal<{ request: string; id: string; agent: string; recipient: string }>()
-  const [assigned, setAssigned] = createSignal<{ id: string; name: string }>()
   let request = ""
   let after: string | undefined
+
+  const assign = (parent?: Follow) =>
+    dialog.show(() => (
+      <OrganizationAssignment
+        item={props.item}
+        agents={props.agents}
+        parent={parent}
+        onEdit={props.onEdit}
+        onAssigned={(worker) => {
+          props.onAssigned(worker)
+          if (parent) {
+            setOpen("")
+            setTrees((prior) => {
+              const next = { ...prior }
+              delete next[parent.id]
+              return next
+            })
+          }
+          load()
+        }}
+      />
+    ))
+
+  const parent = (item: Work, tree: Tree): Follow => ({
+    id: item.id,
+    ...(item.occurrenceID ? { run: item.occurrenceID } : {}),
+    objective: item.objective,
+    recipient: item.recipient,
+    used: [...new Set([tree.record, ...tree.above].flatMap((row) => [row.senderID, row.recipientID]))],
+  })
 
   const load = (cursor?: string) => {
     request = crypto.randomUUID()
@@ -171,6 +203,7 @@ export const OrganizationActivity: Component<{
       return next
     })
     setTrees((prior) => ({ ...prior, [active.id]: found }))
+    if (active.action === "follow" && item) assign(parent(item, found))
   }
 
   const halted = (msg: Extract<ExtensionMessage, { type: "routineDelegateStopped" }>) => {
@@ -237,7 +270,24 @@ export const OrganizationActivity: Component<{
     setOpen(item.id)
     if (trees()[item.id] || trace()?.id === item.id) return
     const request = crypto.randomUUID()
-    setTrace({ request, id: item.id, agent: item.sender.id })
+    setTrace({ request, id: item.id, agent: item.sender.id, action: "inspect" })
+    vscode.postMessage({
+      type: "routineDelegateChain",
+      requestID: request,
+      agentID: item.sender.id,
+      id: item.id,
+    })
+  }
+
+  const follow = (item: Work) => {
+    if (trace()) return
+    const saved = trees()[item.id]
+    if (saved) {
+      assign(parent(item, saved))
+      return
+    }
+    const request = crypto.randomUUID()
+    setTrace({ request, id: item.id, agent: item.sender.id, action: "follow" })
     vscode.postMessage({
       type: "routineDelegateChain",
       requestID: request,
@@ -263,19 +313,6 @@ export const OrganizationActivity: Component<{
     })
   }
 
-  const assign = () =>
-    dialog.show(() => (
-      <OrganizationAssignment
-        item={props.item}
-        agents={props.agents}
-        onEdit={props.onEdit}
-        onAssigned={(worker) => {
-          setAssigned(worker)
-          load()
-        }}
-      />
-    ))
-
   return (
     <section class="routines-organization-work" aria-labelledby={`organization-work-${props.id}`}>
       <div class="routines-organization-work-head">
@@ -288,7 +325,7 @@ export const OrganizationActivity: Component<{
           </Show>
         </div>
         <div class="routines-organization-work-actions">
-          <Button size="small" onClick={assign}>
+          <Button size="small" onClick={() => assign()}>
             Assign work
           </Button>
           <Button variant="ghost" size="small" disabled={busy()} onClick={() => load()}>
@@ -296,7 +333,7 @@ export const OrganizationActivity: Component<{
           </Button>
         </div>
       </div>
-      <Show when={assigned()}>
+      <Show when={props.receipt}>
         {(worker) => (
           <div class="routines-organization-work-notice" role="status">
             <span>Work assigned to {worker().name}.</span>
@@ -355,6 +392,11 @@ export const OrganizationActivity: Component<{
                   >
                     {trace()?.id === item.id ? "Loading chain" : open() === item.id ? "Hide chain" : "Show chain"}
                   </Button>
+                  <Show when={item.state === "completed"}>
+                    <Button variant="ghost" size="small" disabled={!!trace()} onClick={() => follow(item)}>
+                      {trace()?.id === item.id && trace()?.action === "follow" ? "Loading routes" : "Assign follow-on"}
+                    </Button>
+                  </Show>
                   <Show when={live(item.state) && confirm() !== item.id}>
                     <Button variant="ghost" size="small" disabled={!!stopping()} onClick={() => setConfirm(item.id)}>
                       Stop work

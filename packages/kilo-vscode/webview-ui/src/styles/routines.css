@@ -780,6 +780,35 @@
   gap: var(--raya-space-10);
 }
 
+.routines-assignment-parent {
+  padding-bottom: var(--raya-space-10);
+  border-bottom: 1px solid var(--border-weak, var(--vscode-widget-border));
+}
+
+.routines-assignment-parent span {
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-size: var(--kilo-font-size-12);
+}
+
+.routines-assignment-parent p {
+  margin: var(--raya-space-4) 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.routines-assignment-person {
+  min-height: 2.25rem;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  padding: var(--raya-space-8) 0;
+  border-bottom: var(--raya-hairline) solid color-mix(in srgb, var(--border-base) 60%, transparent);
+  color: var(--text-base, var(--vscode-foreground));
+  font-size: var(--kilo-font-size-13);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
 .routines-assignment-details {
   border-top: 1px solid var(--border-weak, var(--vscode-widget-border));
   padding-top: var(--raya-space-8);

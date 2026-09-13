@@ -7,12 +7,21 @@ import type { ExtensionMessage } from "../../types/messages"
 
 type Organization = import("@kilocode/sdk/v2/client").KilocodeRoutineOrganizationListResponse["items"][number]
 type Agent = { id: string; name: string; enabled: boolean }
+export type Follow = {
+  id: string
+  run?: string
+  objective: string
+  recipient: { id: string; name: string; role: string }
+  used: string[]
+}
 type Sent = {
   request: string
   source: string
   sender: string
   recipient: string
   objective: string
+  parentID?: string
+  parentRunID?: string
   expected?: string
   context?: string
   deadline?: number
@@ -43,6 +52,8 @@ function matches(value: unknown, pending: Sent, item: Organization) {
     row.source === pending.source &&
     row.senderID === pending.sender &&
     row.recipientID === pending.recipient &&
+    row.parentID === pending.parentID &&
+    row.parentRunID === pending.parentRunID &&
     row.organizationID === item.id &&
     row.organizationRevision === item.revision &&
     row.objective === pending.objective &&
@@ -56,6 +67,7 @@ function matches(value: unknown, pending: Sent, item: Organization) {
 export const OrganizationAssignment: Component<{
   item: Organization
   agents: Agent[]
+  parent?: Follow
   onEdit: () => void
   onAssigned: (worker: { id: string; name: string }) => void
 }> = (props) => {
@@ -69,16 +81,24 @@ export const OrganizationAssignment: Component<{
     }),
   )
   const targets = createMemo(() =>
-    people().filter(
-      (person) =>
-        person.agent.enabled &&
-        props.item.delegations.some(
-          (edge) => edge.recipientID === person.agent.id && people().some((entry) => entry.agent.id === edge.senderID),
-        ),
-    ),
+    people().filter((person) => {
+      if (!person.agent.enabled) return false
+      if (props.parent)
+        return (
+          !props.parent.used.includes(person.agent.id) &&
+          props.item.delegations.some(
+            (edge) => edge.senderID === props.parent!.recipient.id && edge.recipientID === person.agent.id,
+          )
+        )
+      return props.item.delegations.some(
+        (edge) => edge.recipientID === person.agent.id && people().some((entry) => entry.agent.id === edge.senderID),
+      )
+    }),
   )
   const [recipient, setRecipient] = createSignal(targets()[0]?.agent.id ?? "")
   const senders = createMemo(() => {
+    if (props.parent)
+      return people().filter((person) => person.agent.enabled && person.agent.id === props.parent!.recipient.id)
     const ids = new Set(
       props.item.delegations.filter((edge) => edge.recipientID === recipient()).map((edge) => edge.senderID),
     )
@@ -92,7 +112,7 @@ export const OrganizationAssignment: Component<{
   const [budget, setBudget] = createSignal("")
   const [sent, setSent] = createSignal<Sent>()
   const [error, setError] = createSignal("")
-  const source = `organization:${props.item.id}:${crypto.randomUUID()}`
+  const source = `organization${props.parent ? "-follow" : ""}:${props.item.id}:${crypto.randomUUID()}`
 
   createEffect(() => {
     const available = senders()
@@ -147,6 +167,8 @@ export const OrganizationAssignment: Component<{
       sender: sender(),
       recipient: recipient(),
       objective: objective().trim(),
+      ...(props.parent ? { parentID: props.parent.id } : {}),
+      ...(props.parent?.run ? { parentRunID: props.parent.run } : {}),
       ...(expected().trim() ? { expected: expected().trim() } : {}),
       ...(context().trim() ? { context: context().trim() } : {}),
       ...(due() === undefined ? {} : { deadline: due()! }),
@@ -160,6 +182,8 @@ export const OrganizationAssignment: Component<{
       agentID: value.sender,
       recipientID: value.recipient,
       source: value.source,
+      ...(value.parentID ? { parentID: value.parentID } : {}),
+      ...(value.parentRunID ? { parentRunID: value.parentRunID } : {}),
       organizationID: props.item.id,
       organizationRevision: props.item.revision,
       objective: value.objective,
@@ -171,12 +195,16 @@ export const OrganizationAssignment: Component<{
   }
 
   return (
-    <Dialog title={`Assign work in ${props.item.name}`} fit>
+    <Dialog title={`${props.parent ? "Assign follow-on" : "Assign work"} in ${props.item.name}`} fit>
       <Show
         when={targets().length}
         fallback={
           <div class="routines-assignment">
-            <p>No active worker has an authorized route. Resume a routed worker or update delegation permissions.</p>
+            <p>
+              {props.parent
+                ? `${props.parent.recipient.name} has no authorized route to an unused active worker.`
+                : "No active worker has an authorized route. Resume a routed worker or update delegation permissions."}
+            </p>
             <div class="dialog-confirm-actions">
               <Button variant="secondary" size="large" onClick={() => dialog.close()} autofocus>
                 Close
@@ -206,6 +234,14 @@ export const OrganizationAssignment: Component<{
               {error()}
             </p>
           </Show>
+          <Show when={props.parent}>
+            {(parent) => (
+              <div class="routines-assignment-parent">
+                <span>Following</span>
+                <p>{parent().objective}</p>
+              </div>
+            )}
+          </Show>
           <div class="routines-assignment-route">
             <label class="routines-field" for={`${uid}-recipient`}>
               Responsible worker
@@ -221,19 +257,31 @@ export const OrganizationAssignment: Component<{
                 </For>
               </select>
             </label>
-            <label class="routines-field" for={`${uid}-sender`}>
-              Assigned by
-              <select
-                id={`${uid}-sender`}
-                value={sender()}
-                disabled={!!sent()}
-                onChange={(event) => setSender(event.currentTarget.value)}
-              >
-                <For each={senders()}>
-                  {(person) => <option value={person.agent.id}>{person.agent.name + " · " + person.role}</option>}
-                </For>
-              </select>
-            </label>
+            <Show
+              when={props.parent}
+              fallback={
+                <label class="routines-field" for={`${uid}-sender`}>
+                  Assigned by
+                  <select
+                    id={`${uid}-sender`}
+                    value={sender()}
+                    disabled={!!sent()}
+                    onChange={(event) => setSender(event.currentTarget.value)}
+                  >
+                    <For each={senders()}>
+                      {(person) => <option value={person.agent.id}>{person.agent.name + " · " + person.role}</option>}
+                    </For>
+                  </select>
+                </label>
+              }
+            >
+              <div class="routines-field">
+                <span>Assigned by</span>
+                <strong class="routines-assignment-person">
+                  {props.parent!.recipient.name + " · " + props.parent!.recipient.role}
+                </strong>
+              </div>
+            </Show>
           </div>
           <label class="routines-field" for={`${uid}-objective`}>
             Outcome
@@ -305,7 +353,7 @@ export const OrganizationAssignment: Component<{
               Cancel
             </Button>
             <Button type="submit" size="large" disabled={!valid() || !!sent()}>
-              {sent() ? "Assigning" : "Assign work"}
+              {sent() ? "Assigning" : props.parent ? "Assign follow-on" : "Assign work"}
             </Button>
           </div>
         </form>

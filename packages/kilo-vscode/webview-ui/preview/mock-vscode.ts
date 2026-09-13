@@ -27,6 +27,17 @@ const legal = {
   access: "brief",
 }
 
+const design = {
+  id: "design",
+  name: "Studio",
+  role: "designer",
+  objective: "Prepare client-ready design work",
+  capabilities: ["design"],
+  schedule: { kind: "manual" },
+  enabled: true,
+  access: "brief",
+}
+
 const report = {
   id: "rmg_1",
   agentID: books.id,
@@ -67,6 +78,8 @@ let assignment:
       organizationID: string
       organizationRevision?: number
       objective: string
+      parentID?: string
+      parentRunID?: string
       expected?: string
       context?: string
       deadline?: number
@@ -87,6 +100,7 @@ const work = (organizationID: string) => {
       state: "completed" as const,
       objective: "Review Friday travel expenses and return a reconciled ledger.",
       response: "The ledger is reconciled and the receipt exception is documented.",
+      occurrenceID: "run_org_preview",
       time: 1,
       updated: 3,
       cost: 0.42,
@@ -94,31 +108,35 @@ const work = (organizationID: string) => {
     {
       id: "rdg_org_follow",
       sender: { id: books.id, name: books.name, role: "Accounting", archived: false },
-      recipient: { id: legal.id, name: legal.name, role: "Chief of Staff", archived: false },
+      recipient: { id: design.id, name: design.name, role: "Design", archived: false },
       organizationID,
       organizationName: "Website Builders",
       organizationRevision: 1,
       source: "org_follow",
       state: (stopped ? "cancelled" : "running") as "cancelled" | "running",
       parentID: "rdg_org_preview",
-      objective: "Ask Counsel to approve the documented receipt exception.",
+      objective: "Prepare a client-ready summary of the approved close package.",
       time: 2,
       updated: stopped ? 4 : 3,
     },
   ]
   if (!assignment) return items
+  const sender = assignment.senderID === legal.id ? legal : assignment.senderID === books.id ? books : design
+  const recipient = assignment.recipientID === legal.id ? legal : assignment.recipientID === books.id ? books : design
   return [
     ...items,
     {
       id: "rdg_org_assigned",
-      sender: { id: legal.id, name: legal.name, role: "Chief of Staff", archived: false },
-      recipient: { id: books.id, name: books.name, role: "Accounting", archived: false },
+      sender: { id: sender.id, name: sender.name, role: sender.role, archived: false },
+      recipient: { id: recipient.id, name: recipient.name, role: recipient.role, archived: false },
       organizationID,
       organizationName: "Website Builders",
       organizationRevision: 1,
       source: assignment.source,
       state: "running" as const,
       objective: assignment.objective,
+      parentID: assignment.parentID,
+      parentRunID: assignment.parentRunID,
       expected: assignment.expected,
       context: assignment.context,
       deadline: assignment.deadline,
@@ -191,17 +209,18 @@ const preview = (message: WebviewMessage) => {
       recipientID: current.recipient.id,
     }
     const root = rows[0]!
-    const child = rows[1]!
     const prior = { ...root, senderID: root.sender.id, recipientID: root.recipient.id }
-    const follow = { ...child, senderID: child.sender.id, recipientID: child.recipient.id }
+    const children = rows
+      .filter((item) => item.parentID === root.id)
+      .map((item) => ({ ...item, senderID: item.sender.id, recipientID: item.recipient.id }))
     emit({
       type: "routineDelegateChain",
       requestID: message.requestID,
       agentID: message.agentID,
       id: message.id,
       record,
-      above: message.id === child.id ? [prior] : [],
-      below: message.id === root.id ? [follow] : [],
+      above: current.parentID === root.id ? [prior] : [],
+      below: message.id === root.id ? children : [],
     })
     return true
   }
@@ -213,6 +232,8 @@ const preview = (message: WebviewMessage) => {
       organizationID: message.organizationID,
       organizationRevision: message.organizationRevision,
       objective: message.objective,
+      parentID: message.parentID,
+      parentRunID: message.parentRunID,
       expected: message.expected,
       context: message.context,
       deadline: message.deadline,
@@ -231,11 +252,13 @@ const preview = (message: WebviewMessage) => {
         organizationName: "Website Builders",
         organizationRevision: message.organizationRevision,
         objective: message.objective,
+        parentID: message.parentID,
+        parentRunID: message.parentRunID,
         expected: message.expected,
         context: message.context,
         deadline: message.deadline,
         budget: message.budget,
-        depth: 1,
+        depth: message.parentID ? 2 : 1,
         state: "running",
         time: 4,
       },
@@ -245,12 +268,16 @@ const preview = (message: WebviewMessage) => {
   if (message.type !== "routineDelegateCancel" || message.id !== "rdg_org_follow") return false
   stopped = true
   const item = work("org_11111111111111111111111111111111")[1]!
-  emit({
-    type: "routineDelegateStopped",
-    requestID: message.requestID,
-    agentID: message.agentID,
-    record: { ...item, senderID: item.sender.id, recipientID: item.recipient.id },
-  })
+  setTimeout(
+    () =>
+      emit({
+        type: "routineDelegateStopped",
+        requestID: message.requestID,
+        agentID: message.agentID,
+        record: { ...item, senderID: item.sender.id, recipientID: item.recipient.id },
+      }),
+    0,
+  )
   return true
 }
 
@@ -342,7 +369,7 @@ const reply = (message: WebviewMessage) => {
       requestID: id,
       viewID: view,
       refreshID: 1,
-      agents: [books, legal],
+      agents: [books, legal, design],
       templates: [],
       organizations: [
         {
@@ -357,8 +384,12 @@ const reply = (message: WebviewMessage) => {
           members: [
             { agentID: legal.id, role: "Chief of Staff", position: 0 },
             { agentID: books.id, role: "Accounting", supervisorID: legal.id, position: 1 },
+            { agentID: design.id, role: "Design", supervisorID: legal.id, position: 2 },
           ],
-          delegations: [{ senderID: legal.id, recipientID: books.id, position: 0 }],
+          delegations: [
+            { senderID: legal.id, recipientID: books.id, position: 0 },
+            { senderID: books.id, recipientID: design.id, position: 1 },
+          ],
         },
         {
           version: 1,
@@ -403,6 +434,22 @@ const reply = (message: WebviewMessage) => {
             time: 2,
           },
           unread: 1,
+          state: "scheduled",
+        },
+        {
+          agentID: design.id,
+          conversationID: "rcv_design",
+          name: design.name,
+          role: design.role,
+          latest: {
+            id: "rmg_design",
+            agentID: design.id,
+            kind: "report",
+            source: "report:design1",
+            body: "Ready for design handoffs.",
+            time: 2,
+          },
+          unread: 0,
           state: "scheduled",
         },
       ],

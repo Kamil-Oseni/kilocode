@@ -705,6 +705,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const provisioning = createMemo(() => authorityRequest()?.agentID)
   const locking = () => !!organizationRequest() || !!authorityRequest()
   const [organizationNotice, setOrganizationNotice] = createSignal("")
+  const [workReceipt, setWorkReceipt] = createSignal<{ organizationID: string; id: string; name: string }>()
   const [manage, setManage] = createSignal(false)
   const [templates, setTemplates] = createSignal<Template[]>([])
   const [runs, setRuns] = createSignal<Record<string, Run[]>>({})
@@ -1861,8 +1862,12 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                       id={item.id}
                       item={item}
                       agents={agents()}
+                      {...(workReceipt()?.organizationID === item.id
+                        ? { receipt: { id: workReceipt()!.id, name: workReceipt()!.name } }
+                        : {})}
                       onEdit={() => editOrganization(item)}
                       onChoose={choose}
+                      onAssigned={(worker) => setWorkReceipt({ organizationID: item.id, ...worker })}
                       onOpenSession={props.onOpenSession}
                     />
                   </div>

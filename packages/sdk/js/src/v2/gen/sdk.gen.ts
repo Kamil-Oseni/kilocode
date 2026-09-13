@@ -323,6 +323,8 @@ import type {
   KilocodeSelfHealAdmitResponses,
   KilocodeSelfHealAdvanceErrors,
   KilocodeSelfHealAdvanceResponses,
+  KilocodeSelfHealArtifactReviewErrors,
+  KilocodeSelfHealArtifactReviewResponses,
   KilocodeSelfHealCreateErrors,
   KilocodeSelfHealCreateResponses,
   KilocodeSelfHealGetErrors,
@@ -10861,6 +10863,53 @@ export class SelfHeal extends HeyApiClient {
       ThrowOnError
     >({
       url: "/kilocode/self-heal/{itemID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Approve a reviewed self-heal artifact
+   *
+   * Bind one explicit release decision to the exact currently verified artifact identity. This makes the artifact install-ready; it does not install it.
+   */
+  public artifactReview<ThrowOnError extends boolean = false>(
+    parameters: {
+      itemID: string
+      directory?: string
+      workspace?: string
+      artifactID?: string
+      digest?: string
+      extension?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "itemID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "artifactID" },
+            { in: "body", key: "digest" },
+            { in: "body", key: "extension" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeSelfHealArtifactReviewResponses,
+      KilocodeSelfHealArtifactReviewErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/self-heal/{itemID}/artifact/review",
       ...options,
       ...params,
       headers: {

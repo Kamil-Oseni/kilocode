@@ -990,6 +990,18 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       return item
     })
 
+    const selfHealArtifactReview = Effect.fn("KilocodeHttpApi.selfHealArtifactReview")(function* (ctx: {
+      params: { itemID: string }
+      payload: typeof RayaSelfHeal.ArtifactReview.Type
+    }) {
+      if (!(yield* healing.get(ctx.params.itemID))) return yield* new HttpApiError.NotFound({})
+      const approval = yield* healing
+        .approve(ctx.params.itemID, ctx.payload)
+        .pipe(Effect.catchTag("SelfHeal.ReviewConflict", () => Effect.fail(new HttpApiError.Conflict({}))))
+      if (!approval) return yield* new HttpApiError.Conflict({})
+      return approval
+    })
+
     const selfHealUpdate = Effect.fn("KilocodeHttpApi.selfHealUpdate")(function* (ctx: {
       params: { itemID: string }
       payload: typeof SelfHealUpdatePayload.Type
@@ -1093,6 +1105,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .handle("selfHealPrepare", selfHealPrepare)
         .handle("selfHealList", selfHealList)
         .handle("selfHealGet", selfHealGet)
+        .handle("selfHealArtifactReview", selfHealArtifactReview)
         .handle("selfHealUpdate", selfHealUpdate)
     )
     // raya_change end

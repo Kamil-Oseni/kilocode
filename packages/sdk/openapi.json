@@ -39824,6 +39824,112 @@
         ]
       }
     },
+    "/kilocode/self-heal/{itemID}/artifact/review": {
+      "post": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.selfHeal.artifactReview",
+        "parameters": [
+          {
+            "name": "itemID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reviewed self-heal artifact release approval",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RayaSelfHealArtifactApproval"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_Conflict"
+                }
+              }
+            }
+          }
+        },
+        "description": "Bind one explicit release decision to the exact currently verified artifact identity. This makes the artifact install-ready; it does not install it.",
+        "summary": "Approve a reviewed self-heal artifact",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "artifactID": {
+                    "type": "string"
+                  },
+                  "digest": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "extension": {
+                    "type": "string",
+                    "pattern": "^\\d+\\.\\d+\\.\\d+-repair\\+[a-f0-9.]+$"
+                  }
+                },
+                "required": ["artifactID", "digest", "extension"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.selfHeal.artifactReview({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/kilocode/anaconda-desktop/status": {
       "get": {
         "tags": ["anaconda-desktop"],
@@ -81564,6 +81670,110 @@
         ],
         "additionalProperties": false
       },
+      "RayaSelfHealArtifactApproval": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "number",
+            "enum": [1]
+          },
+          "itemID": {
+            "type": "string"
+          },
+          "attemptID": {
+            "type": "string"
+          },
+          "sessionID": {
+            "type": "string",
+            "pattern": "^ses"
+          },
+          "messageID": {
+            "type": "string",
+            "pattern": "^msg"
+          },
+          "callID": {
+            "type": "string"
+          },
+          "completion": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "at": {
+            "type": "number",
+            "minimum": 0
+          },
+          "id": {
+            "type": "string"
+          },
+          "artifactID": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "head": {
+            "type": "string"
+          },
+          "extension": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+\\.\\d+-repair\\+[a-f0-9.]+$"
+          },
+          "artifact": {
+            "type": "object",
+            "properties": {
+              "digest": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "size": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": ["digest", "size"],
+            "additionalProperties": false
+          },
+          "binary": {
+            "type": "object",
+            "properties": {
+              "digest": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "size": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": ["digest", "size"],
+            "additionalProperties": false
+          },
+          "status": {
+            "type": "string",
+            "enum": ["install-ready"]
+          }
+        },
+        "required": [
+          "version",
+          "itemID",
+          "attemptID",
+          "sessionID",
+          "messageID",
+          "callID",
+          "completion",
+          "at",
+          "id",
+          "artifactID",
+          "source",
+          "head",
+          "extension",
+          "artifact",
+          "binary",
+          "status"
+        ],
+        "additionalProperties": false
+      },
       "RayaSelfHealDelivery": {
         "type": "object",
         "properties": {
@@ -81598,10 +81808,21 @@
           },
           "status": {
             "type": "string",
-            "enum": ["preparing", "building", "ready-for-review", "artifact-unavailable", "failed", "interrupted"]
+            "enum": [
+              "preparing",
+              "building",
+              "ready-for-review",
+              "install-ready",
+              "artifact-unavailable",
+              "failed",
+              "interrupted"
+            ]
           },
           "artifact": {
             "$ref": "#/components/schemas/RayaSelfHealArtifact"
+          },
+          "approval": {
+            "$ref": "#/components/schemas/RayaSelfHealArtifactApproval"
           },
           "reason": {
             "type": "string"

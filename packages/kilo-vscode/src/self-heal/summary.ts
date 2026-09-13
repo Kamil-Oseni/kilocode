@@ -3,6 +3,7 @@ import type { KiloClient, KilocodeSelfHealListResponse } from "@kilocode/sdk/v2/
 type SelfHealItem = KilocodeSelfHealListResponse extends ReadonlyArray<infer Item> ? Item : never
 
 function label(item: SelfHealItem) {
+  if (item.artifact?.status === "install-ready") return "Fix reviewed; ready to install"
   if (item.artifact?.status === "ready-for-review") return "Fix tested; artifact ready for review"
   if (item.artifact?.status === "preparing") return "Fix tested; preparing review artifact"
   if (item.artifact?.status === "building") return "Fix tested; building review artifact"
@@ -37,6 +38,8 @@ export async function inspect(client: KiloClient, id: string, directory: string)
       : ` Delivery source identity is unknown.${source?.status === "unknown" ? ` ${source.reason}` : ""}`
   const artifact = (() => {
     if (!outcome.artifact) return " No review artifact is retained."
+    if (outcome.artifact.status === "install-ready")
+      return ` Reviewed artifact ${outcome.artifact.artifact?.id ?? outcome.artifact.callID} is approved for installation as ${outcome.artifact.approval?.extension ?? "the retained version"}. It is not installed. Approval receipt ${outcome.artifact.approval?.id ?? "is unavailable"}; VSIX SHA-256 ${outcome.artifact.approval?.artifact.digest ?? "is unavailable"}.`
     if (outcome.artifact.status === "ready-for-review")
       return ` Review artifact ${outcome.artifact.artifact?.id ?? outcome.artifact.callID} matches its retained receipt. It is ready for review, not ready to install or installed.`
     if (outcome.artifact.status === "preparing")

@@ -5,7 +5,7 @@ import { createHash } from "node:crypto"
 import { repairs, Outcome, Admission, Granted, Advance, Prepare } from "./repair"
 import { Completion, completions } from "./completion"
 import { SessionID } from "@/session/schema"
-import { artifacts, Delivery } from "./artifact"
+import { artifacts, Approval, Delivery, Review } from "./artifact"
 
 export namespace RayaSelfHeal {
   export const CompletionReceipt = Completion
@@ -18,6 +18,8 @@ export namespace RayaSelfHeal {
   export const RepairGranted = Granted
   export const RepairAdvance = Advance
   export const RepairPrepare = Prepare
+  export const ArtifactReview = Review
+  export const ArtifactApproval = Approval
 
   export const Category = Schema.Literals([
     "ui",
@@ -393,6 +395,7 @@ export namespace RayaSelfHeal {
       outcome,
       link: completion.link,
       complete: completion.record,
+      approve: delivery.approve,
     }
   }
 }

@@ -47,6 +47,29 @@ const Pointer = Schema.Struct({
   at: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
 })
 
+export const Review = Schema.Struct({
+  artifactID: Schema.String,
+  digest: Hash,
+  extension: Build.fields.extension,
+})
+
+export const Approval = Schema.Struct({
+  ...Pointer.fields,
+  id: Schema.String,
+  artifactID: Schema.String,
+  source: Hash,
+  head: Schema.String,
+  extension: Build.fields.extension,
+  artifact: Bytes,
+  binary: Bytes,
+  status: Schema.Literal("install-ready"),
+  at: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
+}).annotate({ identifier: "Raya.SelfHealArtifactApproval" })
+
+export class ReviewConflict extends Schema.TaggedErrorClass<ReviewConflict>()("SelfHeal.ReviewConflict", {
+  message: Schema.String,
+}) {}
+
 const Terminal = Schema.Struct({
   status: Schema.Literals(["failed", "interrupted"]),
   reason: Schema.String,
@@ -59,11 +82,13 @@ export const Delivery = Schema.Struct({
     "preparing",
     "building",
     "ready-for-review",
+    "install-ready",
     "artifact-unavailable",
     "failed",
     "interrupted",
   ]),
   artifact: Schema.optional(Receipt),
+  approval: Schema.optional(Approval),
   reason: Schema.optional(Schema.String),
 }).annotate({ identifier: "Raya.SelfHealDelivery" })
 
@@ -78,6 +103,7 @@ export function artifacts(storage: Pick<Storage.Interface, "list" | "read" | "cr
     hash(JSON.stringify([session, message, call])),
   ]
   const itemkey = (id: string) => ["raya", "self-heal", "artifact-item", id]
+  const approvalkey = (id: string) => ["raya", "self-heal", "artifact-approval", id]
   const read = (session: string, message: string, call: string, stage: string) =>
     storage.read<unknown>([...key(session, message, call), stage]).pipe(
       Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(undefined)),
@@ -155,6 +181,13 @@ export function artifacts(storage: Pick<Storage.Interface, "list" | "read" | "cr
     cache.legacy = grouped
     return grouped.get(id) ?? []
   })
+  const approved = Effect.fn(function* (id: string) {
+    return yield* storage.read<unknown>(approvalkey(id)).pipe(
+      Effect.flatMap(Schema.decodeUnknownEffect(Approval)),
+      Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(undefined)),
+      Effect.orDie,
+    )
+  })
   const find = Effect.fn(function* (id: string) {
     const saved = yield* storage.read<unknown>(itemkey(id)).pipe(
       Effect.flatMap(Schema.decodeUnknownEffect(Pointer)),
@@ -170,12 +203,44 @@ export function artifacts(storage: Pick<Storage.Interface, "list" | "read" | "cr
     if (pointer.itemID !== id) throw new Error("Retained artifact pointer belongs to another repair")
     const state = yield* status(pointer.sessionID, pointer.messageID, pointer.callID)
     if (!state) throw new Error("Retained artifact pointer has no invocation journal")
-    if (state.result && state.observed?.status === "matches-receipt")
+    if (state.result && state.observed?.status === "matches-receipt") {
+      const artifact = Schema.decodeUnknownSync(Receipt)(state.result)
+      const approval = yield* approved(id)
+      if (approval) {
+        if (
+          approval.itemID !== artifact.itemID ||
+          approval.attemptID !== artifact.attemptID ||
+          approval.sessionID !== artifact.sessionID ||
+          approval.messageID !== artifact.messageID ||
+          approval.callID !== artifact.callID ||
+          approval.completion !== artifact.completion ||
+          approval.artifactID !== artifact.id ||
+          approval.source !== artifact.source ||
+          approval.head !== artifact.head ||
+          approval.extension !== artifact.extension ||
+          approval.artifact.digest !== artifact.artifact.digest ||
+          approval.artifact.size !== artifact.artifact.size ||
+          approval.binary.digest !== artifact.binary.digest ||
+          approval.binary.size !== artifact.binary.size
+        )
+          return Schema.decodeUnknownSync(Delivery)({
+            ...pointer,
+            status: "artifact-unavailable",
+            reason: "The retained release approval no longer matches the verified artifact receipt.",
+          })
+        return Schema.decodeUnknownSync(Delivery)({
+          ...pointer,
+          status: "install-ready",
+          artifact,
+          approval,
+        })
+      }
       return Schema.decodeUnknownSync(Delivery)({
         ...pointer,
         status: "ready-for-review",
-        artifact: Schema.decodeUnknownSync(Receipt)(state.result),
+        artifact,
       })
+    }
     if (state.result)
       return Schema.decodeUnknownSync(Delivery)({
         ...pointer,
@@ -198,6 +263,56 @@ export function artifacts(storage: Pick<Storage.Interface, "list" | "read" | "cr
       ...pointer,
       status: state.dispatch ? "building" : "preparing",
     })
+  })
+  const approve = Effect.fn(function* (id: string, input: typeof Review.Type) {
+    const delivery = yield* find(id)
+    if (!delivery) return undefined
+    if (delivery.status === "install-ready") {
+      if (
+        delivery.approval?.artifactID === input.artifactID &&
+        delivery.approval.artifact.digest === input.digest &&
+        delivery.approval.extension === input.extension
+      )
+        return delivery.approval
+      return yield* new ReviewConflict({ message: "This repair already has a different retained release approval." })
+    }
+    if (delivery.status !== "ready-for-review" || !delivery.artifact)
+      return yield* new ReviewConflict({ message: "This repair does not have a currently verified review artifact." })
+    if (
+      delivery.artifact.id !== input.artifactID ||
+      delivery.artifact.artifact.digest !== input.digest ||
+      delivery.artifact.extension !== input.extension
+    )
+      return yield* new ReviewConflict({
+        message: "The reviewed artifact identity is stale or does not match the retained receipt.",
+      })
+    const value = Schema.decodeUnknownSync(Approval)({
+      version: 1,
+      id: randomUUID(),
+      itemID: delivery.artifact.itemID,
+      attemptID: delivery.artifact.attemptID,
+      sessionID: delivery.artifact.sessionID,
+      messageID: delivery.artifact.messageID,
+      callID: delivery.artifact.callID,
+      completion: delivery.artifact.completion,
+      artifactID: delivery.artifact.id,
+      source: delivery.artifact.source,
+      head: delivery.artifact.head,
+      extension: delivery.artifact.extension,
+      artifact: delivery.artifact.artifact,
+      binary: delivery.artifact.binary,
+      status: "install-ready",
+      at: Date.now(),
+    })
+    if (yield* storage.create(approvalkey(id), value).pipe(Effect.orDie)) return value
+    const retained = yield* approved(id)
+    if (
+      retained?.artifactID === value.artifactID &&
+      retained.artifact.digest === value.artifact.digest &&
+      retained.extension === value.extension
+    )
+      return retained
+    return yield* new ReviewConflict({ message: "Another release decision already owns this repair artifact." })
   })
   const run = Effect.fn(function* (input: {
     outcome: typeof Outcome.Type
@@ -316,5 +431,5 @@ export function artifacts(storage: Pick<Storage.Interface, "list" | "read" | "cr
       ),
     )
   })
-  return { run, status, find }
+  return { run, status, find, approve }
 }

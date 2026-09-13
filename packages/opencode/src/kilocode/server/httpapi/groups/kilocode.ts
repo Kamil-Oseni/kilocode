@@ -1194,6 +1194,20 @@ export const KilocodeApi = HttpApi.make("kilocode")
             description: "Get one durable feedback item and its verification evidence.",
           }),
         ),
+        HttpApiEndpoint.post("selfHealArtifactReview", `${KilocodePaths.selfHealItem}/artifact/review`, {
+          params: { itemID: Schema.String },
+          query: WorkspaceRoutingQuery,
+          payload: RayaSelfHeal.ArtifactReview,
+          success: described(RayaSelfHeal.ArtifactApproval, "Reviewed self-heal artifact release approval"),
+          error: [HttpApiError.NotFound, HttpApiError.Conflict],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.selfHeal.artifactReview",
+            summary: "Approve a reviewed self-heal artifact",
+            description:
+              "Bind one explicit release decision to the exact currently verified artifact identity. This makes the artifact install-ready; it does not install it.",
+          }),
+        ),
         HttpApiEndpoint.patch("selfHealUpdate", KilocodePaths.selfHealItem, {
           params: { itemID: Schema.String },
           query: WorkspaceRoutingQuery,

@@ -255,7 +255,8 @@ for (const changed of [false, true])
             expect((yield* delivery.status(sessionID, request.messageID, request.callID))?.observed?.status).toBe(
               "matches-receipt",
             )
-            expect(yield* delivery.find(item.id)).toMatchObject({
+            const ready = yield* delivery.find(item.id)
+            expect(ready).toMatchObject({
               itemID: item.id,
               attemptID: outcome.id,
               sessionID,
@@ -264,12 +265,66 @@ for (const changed of [false, true])
               status: "ready-for-review",
               artifact: { status: "ready-for-review" },
             })
+            expect(
+              Exit.isFailure(
+                yield* delivery
+                  .approve(item.id, {
+                    artifactID: ready!.artifact!.id,
+                    digest: "0".repeat(64),
+                    extension: ready!.artifact!.extension,
+                  })
+                  .pipe(Effect.exit),
+              ),
+            ).toBe(true)
+            const approvals = yield* Effect.all(
+              [
+                delivery.approve(item.id, {
+                  artifactID: ready!.artifact!.id,
+                  digest: ready!.artifact!.artifact.digest,
+                  extension: ready!.artifact!.extension,
+                }),
+                delivery.approve(item.id, {
+                  artifactID: ready!.artifact!.id,
+                  digest: ready!.artifact!.artifact.digest,
+                  extension: ready!.artifact!.extension,
+                }),
+              ],
+              { concurrency: "unbounded" },
+            )
+            const approval = approvals[0]
+            expect(approval).toMatchObject({
+              itemID: item.id,
+              attemptID: outcome.id,
+              artifactID: ready!.artifact!.id,
+              source: ready!.artifact!.source,
+              artifact: ready!.artifact!.artifact,
+              binary: ready!.artifact!.binary,
+              status: "install-ready",
+            })
+            expect(approvals[1]).toEqual(approval)
+            expect(
+              Exit.isFailure(
+                yield* delivery
+                  .approve(item.id, {
+                    artifactID: crypto.randomUUID(),
+                    digest: ready!.artifact!.artifact.digest,
+                    extension: ready!.artifact!.extension,
+                  })
+                  .pipe(Effect.exit),
+              ),
+            ).toBe(true)
+            expect(yield* delivery.find(item.id)).toMatchObject({
+              status: "install-ready",
+              approval: { id: approval!.id },
+              artifact: { id: ready!.artifact!.id },
+            })
             const itempath = ["raya", "self-heal", "artifact-item", item.id]
             const pointer = yield* storage.read<unknown>(itempath).pipe(Effect.orDie)
             yield* storage.remove(itempath).pipe(Effect.orDie)
             expect(yield* artifacts(storage, path.join(directory, "snapshots")).find(item.id)).toMatchObject({
-              status: "ready-for-review",
+              status: "install-ready",
               artifact: { itemID: item.id },
+              approval: { id: approval!.id },
             })
             expect(yield* storage.create(itempath, pointer).pipe(Effect.orDie)).toBe(true)
             expect(Exit.isFailure(yield* delivery.run(request).pipe(Effect.exit))).toBe(true)
@@ -309,12 +364,14 @@ for (const changed of [false, true])
               expect((yield* delivery.status(sessionID, request.messageID, request.callID))?.observed?.status).toBe(
                 "unavailable-or-changed",
               )
+              expect(yield* delivery.find(item.id)).toMatchObject({ status: "artifact-unavailable" })
             }
             yield* storage.write(publication, published).pipe(Effect.orDie)
             yield* Effect.promise(() => fs.writeFile(built.output, "corrupted archive"))
             expect((yield* delivery.status(sessionID, request.messageID, request.callID))?.observed?.status).toBe(
               "unavailable-or-changed",
             )
+            expect(yield* delivery.find(item.id)).toMatchObject({ status: "artifact-unavailable" })
             const coordinate = [
               "raya",
               "self-heal",

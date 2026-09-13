@@ -9163,6 +9163,31 @@ export type RayaSelfHealArtifact = {
   at: number
 }
 
+export type RayaSelfHealArtifactApproval = {
+  version: 1
+  itemID: string
+  attemptID: string
+  sessionID: string
+  messageID: string
+  callID: string
+  completion: string
+  at: number
+  id: string
+  artifactID: string
+  source: string
+  head: string
+  extension: string
+  artifact: {
+    digest: string
+    size: number
+  }
+  binary: {
+    digest: string
+    size: number
+  }
+  status: "install-ready"
+}
+
 export type RayaSelfHealDelivery = {
   version: 1
   itemID: string
@@ -9172,8 +9197,16 @@ export type RayaSelfHealDelivery = {
   callID: string
   completion: string
   at: number
-  status: "preparing" | "building" | "ready-for-review" | "artifact-unavailable" | "failed" | "interrupted"
+  status:
+    | "preparing"
+    | "building"
+    | "ready-for-review"
+    | "install-ready"
+    | "artifact-unavailable"
+    | "failed"
+    | "interrupted"
   artifact?: RayaSelfHealArtifact
+  approval?: RayaSelfHealArtifactApproval
   reason?: string
 }
 
@@ -24851,6 +24884,50 @@ export type KilocodeSelfHealUpdateResponses = {
 }
 
 export type KilocodeSelfHealUpdateResponse = KilocodeSelfHealUpdateResponses[keyof KilocodeSelfHealUpdateResponses]
+
+export type KilocodeSelfHealArtifactReviewData = {
+  body?: {
+    artifactID: string
+    digest: string
+    extension: string
+  }
+  path: {
+    itemID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/self-heal/{itemID}/artifact/review"
+}
+
+export type KilocodeSelfHealArtifactReviewErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeSelfHealArtifactReviewError =
+  KilocodeSelfHealArtifactReviewErrors[keyof KilocodeSelfHealArtifactReviewErrors]
+
+export type KilocodeSelfHealArtifactReviewResponses = {
+  /**
+   * Reviewed self-heal artifact release approval
+   */
+  200: RayaSelfHealArtifactApproval
+}
+
+export type KilocodeSelfHealArtifactReviewResponse =
+  KilocodeSelfHealArtifactReviewResponses[keyof KilocodeSelfHealArtifactReviewResponses]
 
 export type AnacondaDesktopStatusData = {
   body?: never

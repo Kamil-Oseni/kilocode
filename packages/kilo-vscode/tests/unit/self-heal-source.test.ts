@@ -487,6 +487,13 @@ test("self-heal summary distinguishes tested evidence, legacy claims and deliver
       artifact: { status: "ready-for-review" },
     }),
   ).toContain("Fix tested; artifact ready for review")
+  expect(
+    summary({
+      ...item,
+      completion: { attemptID: "attempt", at: 1 },
+      artifact: { status: "install-ready" },
+    }),
+  ).toContain("Fix reviewed; ready to install")
 })
 
 test("self-heal inspection keeps review, installation and failure states distinct", async () => {
@@ -510,13 +517,26 @@ test("self-heal inspection keeps review, installation and failure states distinc
             status,
             ...(status === "ready-for-review"
               ? { artifact: { id: "artifact_delivery", status: "ready-for-review" } }
-              : {}),
+              : status === "install-ready"
+                ? {
+                    artifact: { id: "artifact_delivery", status: "ready-for-review" },
+                    approval: {
+                      id: "approval_delivery",
+                      extension: "7.4.23-repair+deadbeef",
+                      artifact: { digest: "a".repeat(64), size: 100 },
+                    },
+                  }
+                : {}),
           },
         }),
     })
   expect(await inspect(response("ready-for-review"), "heal_delivery", "global")).toContain(
     "ready for review, not ready to install or installed",
   )
+  const approved = await inspect(response("install-ready"), "heal_delivery", "global")
+  expect(approved).toContain("approved for installation as 7.4.23-repair+deadbeef")
+  expect(approved).toContain("It is not installed")
+  expect(approved).toContain("Approval receipt approval_delivery")
   expect(await inspect(response("artifact-unavailable"), "heal_delivery", "global")).toContain("can't be installed")
   expect(await inspect(response("interrupted"), "heal_delivery", "global")).toContain("prevents automatic replay")
 })

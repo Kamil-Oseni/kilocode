@@ -51,6 +51,13 @@ test("HTTP updates cannot assert tested or installed completion or reassign repa
   }
   const observed = await request("GET", `/kilocode/self-heal/${item.id}`)
   expect(await observed.json()).toMatchObject({ status: "triaged", reloadRequired: false })
+  const review = {
+    artifactID: crypto.randomUUID(),
+    digest: "0".repeat(64),
+    extension: "7.4.23-repair+deadbeef",
+  }
+  expect((await request("POST", `/kilocode/self-heal/${item.id}/artifact/review`, review)).status).toBe(409)
+  expect((await request("POST", "/kilocode/self-heal/heal_missing/artifact/review", review)).status).toBe(404)
   const session = (await (await request("POST", "/session", {})).json()) as { id: string }
   const forged = await request("POST", `/session/${session.id}/goal`, {
     objective: "Unrelated success",

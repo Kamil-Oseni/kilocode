@@ -10,6 +10,14 @@ Updated 2026-09-13. This is a continuation guide, not a completion certificate.
 
 **Latest delivered product:** ChatGPT installed snapshot `f83096f7d6` (`eden.raya@7.4.23-snapshot+f83096f7d6.kamil-oseni.1789312194050`). It includes the earlier Routine, Browser, GPT-Live recovery and reconnect work plus durable direct/delegated goal usage totals, enforceable time, cost and automatic-recovery limits, revision-safe file deliverables, the non-model charge ledger, safe initial voice destinations, and authenticated media control described below. Reload VS Code normally to pick up the snapshot.
 
+## ChatGPT 2026-09-13 11:46 America/Toronto — EN-10 container-runtime handoff
+
+**Acceptance unavailable on this machine; EN-10 remains In progress.** The remaining companion check must run against a real built container. This Windows environment has no `docker` command, Docker Desktop/backend or `vmmem` process, and no Podman, nerdctl or Finch alternative. Source inspection of `services/raya-mf/Dockerfile`, `services/raya-mf/docker-compose.yml` and `.dockerignore` is complete, but it is not runtime evidence. No image/container was built or replaced.
+
+On a machine with a working container runtime, check out the exact intended commit, provide the same valid `RAYA_MF_TOKEN` to the caller and Compose deployment, build without reusing an unrecorded mutable image, and retain the image digest and container ID. Through the host-published `127.0.0.1` port, verify unauthenticated and wrong credentials fail before allocation; a valid service key plus per-session capability admits work; the eight-session ceiling returns `503`; stalled provider/room setup returns `504` within the bound and releases capacity after confirmed cleanup; cross-session capabilities fail; browser-origin headers are refused; successful close releases capacity; and shutdown removes active ownership. Record exact commands, HTTP evidence, logs, image digest and cleanup. Do not mark EN-10 Verified from source tests alone.
+
+This missing runtime affects only the deployed-container acceptance. Continue repository-deterministic requirements. No Bun, `tsgo` or `tsgolint` process ran during this environment check.
+
 ## ChatGPT 2026-09-13 11:40 America/Toronto — active EN-10 cross-directory checkpoint
 
 **Delivered in verification commit `18b7e15f5d`; pushed.** On one real authenticated shared backend, the test creates a session in project A and proves directory-filtered discovery includes it for A but excludes it for B. It then submits the session shell request with project B in the caller header. The server resolves the session's persisted location, executes in A, reports A as its working directory, writes the marker only under A, and leaves B unchanged. This verifies actual command execution ownership without presenting a directory header as user authentication.

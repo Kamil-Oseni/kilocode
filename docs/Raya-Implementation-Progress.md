@@ -2,6 +2,12 @@
 
 Source of scope: [Comprehensive audit](Raya-Comprehensive-Audit.md). All sections and all ten overhauls remain in scope. Work proceeds in dependency order, with broader validation batched at checkpoints. A completed subtask does not mean the overall overhaul is complete.
 
+## ChatGPT 2026-09-13 11:46 America/Toronto — authenticated companion-container acceptance unavailable locally
+
+**Status: EN-10 remains In progress; no product change.** The final EN-10 acceptance requires an actually built and running authenticated `raya-mf` container. Read-only environment inspection found no `docker` command, Docker Desktop/backend or `vmmem` process. Podman, nerdctl and Finch are also unavailable. The checked-in Dockerfile, Compose definition and ignore rules were inspected, but no image or container was built, started, replaced or certified.
+
+This is an environment limitation for one acceptance step rather than a product failure or a blocker for the wider audit. A future run must use a machine with a working container runtime, build the exact committed companion source, exercise authenticated admission/capacity/setup-timeout/cleanup through the published loopback port, and record the image digest, container identity and runtime results. Repository-deterministic work continues meanwhile. No Bun, `tsgo` or `tsgolint` process ran for this inspection.
+
 ## ChatGPT 2026-09-13 11:40 America/Toronto — cross-directory data and execution ownership
 
 **Status: delivered in verification commit `18b7e15f5d`; pushed.** The real shared-backend acceptance now creates a session in project A, then queries directory-filtered session lists for projects A and B with the same authenticated connection. A contains the session and B does not. The test then deliberately sends the session's shell request with project B in `x-kilo-directory`. Workspace routing resolves the session's persisted location before execution, so the command reports project A as its working directory, writes `owner.txt` only in project A, and leaves project B unchanged.

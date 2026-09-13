@@ -42,6 +42,7 @@ The regression uses in-memory storage adapters and synthetic credentials to test
 ## Remaining acceptance work
 
 - Exercise the admission ceiling and provider setup deadline through an actually deployed authenticated companion container.
+- The 2026-09-13 Windows verification host had no Docker, Docker Desktop/backend, Podman, nerdctl or Finch runtime. Run this acceptance on a container-capable host and retain the exact image digest, container ID, authenticated HTTP results and cleanup logs; source inspection is not sufficient.
 - Preserve initial destination validation and redirect refusal before sending credentials. Endpoint authentication remains separate.
 - Preserve the real dual-server abrupt-parent and cross-window credential-isolation acceptance.
 - Preserve directory-filtered discovery and persisted session execution-ownership acceptance separately from authentication.

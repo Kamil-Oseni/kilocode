@@ -478,7 +478,13 @@ try {
       ...goal,
       status: "paused",
       intent: "budget",
-      budget: { activeMs: 1_800_000, modelCost: 1, recoveryAttempts: 2, concurrentChildren: 3 },
+      budget: {
+        activeMs: 1_800_000,
+        modelCost: 1,
+        recoveryAttempts: 2,
+        concurrentChildren: 3,
+        chargeCosts: [{ currency: "USD", limit: 2, reservation: 0.5 }],
+      },
       budgetHit: { kind: "model-cost", limit: 1, observed: 1.25, at: Date.now() },
     },
   })
@@ -488,12 +494,19 @@ try {
   assert.equal(root.querySelector("#goal-cost-limit").value, "1")
   assert.equal(root.querySelector("#goal-recovery-limit").value, "2")
   assert.equal(root.querySelector("#goal-child-limit").value, "3")
+  assert.equal(root.querySelector("#goal-charge-currency-0").value, "USD")
+  assert.equal(root.querySelector("#goal-charge-limit-0").value, "2")
+  assert.equal(root.querySelector("#goal-charge-reservation-0").value, "0.5")
   root.querySelector("#goal-cost-limit").value = "3"
   root.querySelector("#goal-cost-limit").dispatchEvent(new window.Event("input", { bubbles: true }))
   root.querySelector("#goal-recovery-limit").value = "4"
   root.querySelector("#goal-recovery-limit").dispatchEvent(new window.Event("input", { bubbles: true }))
   root.querySelector("#goal-child-limit").value = "5"
   root.querySelector("#goal-child-limit").dispatchEvent(new window.Event("input", { bubbles: true }))
+  root.querySelector("#goal-charge-limit-0").value = "4"
+  root.querySelector("#goal-charge-limit-0").dispatchEvent(new window.Event("input", { bubbles: true }))
+  root.querySelector("#goal-charge-reservation-0").value = "1"
+  root.querySelector("#goal-charge-reservation-0").dispatchEvent(new window.Event("input", { bubbles: true }))
   assert.equal(button("Update goal").disabled, false)
   button("Update goal").click()
   const budget = sent.findLast((msg) => msg.type === "goalEdit")
@@ -502,6 +515,7 @@ try {
     modelCost: 3,
     recoveryAttempts: 4,
     concurrentChildren: 5,
+    chargeCosts: [{ currency: "USD", limit: 4, reservation: 1 }],
   })
   assert.equal(budget.expectedIntent, "budget")
   emit({
@@ -524,6 +538,7 @@ try {
   recovery.dispatchEvent(new window.Event("input", { bubbles: true }))
   children.value = ""
   children.dispatchEvent(new window.Event("input", { bubbles: true }))
+  button("Remove").click()
   button("Update goal").click()
   const cleared = sent.findLast((msg) => msg.type === "goalEdit")
   assert.equal(cleared.budget, null)

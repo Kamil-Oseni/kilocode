@@ -31,6 +31,7 @@ import type { Bus } from "@/bus"
 import { tmpdirScoped } from "../fixture/fixture"
 import * as Artifact from "@/kilocode/goal/artifact"
 import * as GoalChildren from "@/kilocode/goal/children"
+import * as GoalCharges from "@/kilocode/goal/charges"
 import { digest } from "@opencode-ai/core/kilocode/evidence-digest"
 
 const it = testEffect(LayerNode.compile(LayerNode.group([Storage.node, FSUtil.node, CrossSpawnSpawner.node, Git.node])))
@@ -162,6 +163,133 @@ describe("RayaGoal", () => {
       yield* beforeRestart.release
       yield* afterRestart.release
       expect((yield* goals.get(root))?.budget?.concurrentChildren).toBe(1)
+    }),
+  )
+
+  it.live("reserves currency-specific non-model capacity and reconciles delegated charges", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const root = SessionID.make(`ses_charge_root_${crypto.randomUUID()}`)
+      const child = SessionID.make(`ses_charge_child_${crypto.randomUUID()}`)
+      const rows: MessageV2.WithParts[] = []
+      const sessions = {
+        messages: () => Effect.succeed(rows),
+        children: () => Effect.succeed([]),
+        get: (id: SessionID) =>
+          id === child
+            ? Effect.succeed({ id: child, parentID: root } as Session.Info)
+            : Effect.succeed({ id: root } as Session.Info),
+      }
+      const goals = RayaGoal.make({ storage, sessions })
+      yield* Effect.addFinalizer(() => goals.clear(root))
+      const created = yield* goals.create(root, "Bound image spending", undefined, undefined, undefined, undefined, {
+        chargeCosts: [{ currency: "USD", limit: 1, reservation: 0.6 }],
+      })
+      const claims = yield* GoalCharges.make({ storage, sessions })
+      const first = yield* claims.claim(child, "USD")
+      const concurrent = yield* claims.claim(root, "USD").pipe(Effect.exit)
+      expect(Exit.isFailure(concurrent)).toBe(true)
+      if (Exit.isFailure(concurrent)) expect(Cause.pretty(concurrent.cause)).toContain("reserved by another")
+      yield* first.settle({
+        id: "generate-image:openrouter:reserved-1",
+        kind: "tool",
+        provider: "openrouter",
+        service: "openai/gpt-5-image",
+        source: "usage.cost",
+        origin: { sessionID: child, messageID: MessageID.ascending(), callID: "charge-call" },
+        at: Date.now(),
+        coverage: "recorded",
+        amount: 0.7,
+        currency: "USD",
+      })
+      yield* first.release
+      expect((yield* goals.get(root))?.charges?.[0]?.origin.sessionID).toBe(child)
+
+      const denied = yield* claims.claim(root, "USD").pipe(Effect.exit)
+      expect(Exit.isFailure(denied)).toBe(true)
+      if (Exit.isFailure(denied)) expect(Cause.pretty(denied.cause)).toContain("does not fit the remaining limit")
+      const saved = yield* goals.get(root)
+      expect(saved?.status).toBe("paused")
+      expect(saved?.budgetHit).toMatchObject({
+        kind: "charge-cost",
+        currency: "USD",
+        limit: 1,
+        observed: 0.7,
+      })
+      expect(saved?.createdAt).toBe(created.createdAt)
+    }),
+  )
+
+  it.live("pauses a currency budget when the provider amount is unknown", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const root = SessionID.make(`ses_unknown_charge_${crypto.randomUUID()}`)
+      const rows: MessageV2.WithParts[] = []
+      const sessions = {
+        messages: () => Effect.succeed(rows),
+        children: () => Effect.succeed([]),
+        get: () => Effect.succeed({ id: root } as Session.Info),
+      }
+      const goals = RayaGoal.make({ storage, sessions })
+      yield* Effect.addFinalizer(() => goals.clear(root))
+      yield* goals.create(root, "Stop on uncertain image spending", undefined, undefined, undefined, undefined, {
+        chargeCosts: [{ currency: "USD", limit: 1, reservation: 0.5 }],
+      })
+      const claims = yield* GoalCharges.make({ storage, sessions })
+      const lease = yield* claims.claim(root, "USD")
+      yield* lease.settle({
+        id: "generate-image:openrouter:unknown-1",
+        kind: "tool",
+        provider: "openrouter",
+        service: "openai/gpt-5-image",
+        origin: { sessionID: root, messageID: MessageID.ascending(), callID: "unknown-call" },
+        at: Date.now(),
+        coverage: "unknown",
+        currency: "USD",
+        reason: "The provider omitted the billed amount.",
+      })
+      yield* lease.release
+      const saved = yield* goals.get(root)
+      expect(saved?.status).toBe("paused")
+      expect(saved?.budgetHit).toMatchObject({
+        kind: "charge-cost",
+        currency: "USD",
+        uncertain: true,
+        observed: 0,
+      })
+      const resumed = yield* goals.control(root, "active").pipe(Effect.exit)
+      expect(Exit.isFailure(resumed)).toBe(true)
+      if (Exit.isFailure(resumed)) expect(Cause.pretty(resumed.cause)).toContain("cannot be reconciled")
+      const changed = yield* goals.edit(root, {
+        budget: { activeMs: 60_000 },
+        status: "active",
+        expectedIntent: saved!.intent,
+      })
+      expect(changed.state.status).toBe("active")
+      expect(changed.state.budgetHit).toBeUndefined()
+    }),
+  )
+
+  it.live("rejects duplicate currencies and reservations above their limits", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const rows: MessageV2.WithParts[] = []
+      for (const chargeCosts of [
+        [
+          { currency: "USD", limit: 1, reservation: 0.5 },
+          { currency: "USD", limit: 2, reservation: 0.5 },
+        ],
+        [{ currency: "USD", limit: 1, reservation: 2 }],
+      ]) {
+        const sessionID = SessionID.make(`ses_invalid_charge_${crypto.randomUUID()}`)
+        const goals = setup(storage, () => rows)
+        const result = yield* goals
+          .create(sessionID, "Reject an ambiguous charge budget", undefined, undefined, undefined, undefined, {
+            chargeCosts,
+          })
+          .pipe(Effect.exit)
+        expect(Exit.isFailure(result)).toBe(true)
+      }
     }),
   )
 
@@ -4475,7 +4603,15 @@ describe("RayaGoal", () => {
       const rows: MessageV2.WithParts[] = []
       const goals = setup(storage, () => rows)
       yield* Effect.addFinalizer(() => goals.clear(sessionID))
-      const created = yield* goals.create(sessionID, "Retain the billed image attempt")
+      const created = yield* goals.create(
+        sessionID,
+        "Retain the billed image attempt",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { chargeCosts: [{ currency: "USD", limit: 0.2, reservation: 0.1 }] },
+      )
       const data = transcript({ sessionID, tool: "generate_image", metadata: {} })
       const part = data.part!
       const receipt: RayaGoal.Charge = {
@@ -4501,6 +4637,8 @@ describe("RayaGoal", () => {
 
       const result = yield* goals.recordTurn(sessionID, data.rows[1].info.id)
       expect(result?.productive).toBe(false)
+      expect(result?.state.status).toBe("paused")
+      expect(result?.state.budgetHit).toMatchObject({ kind: "charge-cost", currency: "USD", observed: 0.25 })
       expect(result?.state.charges).toEqual([receipt])
       expect((yield* goals.get(sessionID))?.charges).toEqual([receipt])
     }),

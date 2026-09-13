@@ -70,6 +70,14 @@ async function main() {
               kind: "visible" as const,
               selector: `[data-fixture="${id}"] ${state === "usage" ? ".usage-history" : ".goal-banner"}`,
             },
+            ...(state === "editing"
+              ? [
+                  {
+                    kind: "visible" as const,
+                    selector: `[data-fixture="${id}"] #goal-charge-reservation-0`,
+                  },
+                ]
+              : []),
             { kind: "console" as const, level: "error" as const, max: 0 },
           ],
         }

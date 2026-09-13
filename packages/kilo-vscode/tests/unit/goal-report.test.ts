@@ -9,7 +9,9 @@ test("goal reports preserve exact references and mark legacy records instead of 
   expect(text).toContain("Execution counters were not retained.")
   expect(text).toContain("Goal-session model cost was not retained.")
   expect(text).toContain("Goal-session token totals were not retained.")
-  expect(text).toContain("No active-time, recorded model-cost, recovery-attempt, or concurrent-child limit was saved.")
+  expect(text).toContain(
+    "No active-time, recorded model-cost, non-model charge, recovery-attempt, or concurrent-child limit was saved.",
+  )
   expect(text).toContain("No deliverable inventory was retained for this goal version.")
   const saved = report(
     {
@@ -24,7 +26,13 @@ test("goal reports preserve exact references and mark legacy records instead of 
         descendantTokens: { input: 2, output: 5, reasoning: 1, cache: { read: 1, write: 2 } },
       },
       activeMs: 12500,
-      budget: { activeMs: 60_000, modelCost: 2, recoveryAttempts: 3, concurrentChildren: 2 },
+      budget: {
+        activeMs: 60_000,
+        modelCost: 2,
+        recoveryAttempts: 3,
+        concurrentChildren: 2,
+        chargeCosts: [{ currency: "USD", limit: 4, reservation: 0.5 }],
+      },
       budgetHit: { kind: "recovery-attempts", limit: 3, observed: 3, at: 1 },
       charges: [
         {
@@ -143,6 +151,7 @@ test("goal reports preserve exact references and mark legacy records instead of 
   expect(saved).toContain("Goal-session recorded model-cost limit: $2.000000.")
   expect(saved).toContain("Consecutive automatic recovery-attempt limit: 3.")
   expect(saved).toContain("Concurrent delegated-child limit: 2.")
+  expect(saved).toContain("USD non-model charge limit: 4.000000; reserve 0.500000")
   expect(saved).toContain("A child slot is reserved before child-session creation")
   expect(saved).toContain("Reducing the limit does not cancel running children")
   expect(saved).toContain("Limit reached: automatic recovery attempts; limit 3; observed 3")

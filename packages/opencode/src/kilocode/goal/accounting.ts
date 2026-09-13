@@ -1,8 +1,5 @@
-import { Effect } from "effect"
-import type { Session } from "@/session/session"
-import type { MessageID, SessionID } from "@/session/schema"
+import type { SessionID } from "@/session/schema"
 import type { SessionV1 } from "@opencode-ai/core/v1/session"
-import { collect } from "./evidence-scope"
 
 const zero = () => ({ input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } })
 
@@ -40,12 +37,3 @@ export const sum = (rows: readonly SessionV1.WithParts[], sessionID: SessionID) 
   }
   return { cost: Math.max(cost, descendantCost), descendantCost, tokens, descendantTokens: descendants }
 }
-
-/** Usage for the persisted task graph admitted by the goal's exact root inputs. */
-export const totals = (
-  sessions: Pick<Session.Interface, "messages" | "children">,
-  sessionID: SessionID,
-  createdAt: number,
-  inputs: readonly MessageID[],
-  root: readonly SessionV1.WithParts[],
-) => collect(sessions, sessionID, createdAt, inputs, root).pipe(Effect.map((rows) => sum(rows, sessionID)))

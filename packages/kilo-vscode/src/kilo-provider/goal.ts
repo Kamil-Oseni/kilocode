@@ -15,6 +15,33 @@ const cost = (value: unknown) =>
   value === undefined || (finite(value) && Number(value) > 0 && Number(value) <= 1_000_000)
 const children = (value: unknown) =>
   value === undefined || (typeof value === "number" && Number.isSafeInteger(value) && value >= 1 && value <= 32)
+const charges = (value: unknown) => {
+  if (value === undefined) return true
+  if (!Array.isArray(value) || value.length < 1 || value.length > 8) return false
+  const currencies = new Set<string>()
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") return false
+    const item = entry as Record<string, unknown>
+    if (
+      Object.keys(item).some((key) => key !== "currency" && key !== "limit" && key !== "reservation") ||
+      typeof item.currency !== "string" ||
+      !/^[A-Z]{3,8}$/.test(item.currency) ||
+      currencies.has(item.currency) ||
+      !finite(item.limit) ||
+      Number(item.limit) <= 0 ||
+      Number(item.limit) > 1_000_000 ||
+      !finite(item.reservation) ||
+      Number(item.reservation) <= 0 ||
+      Number(item.reservation) > 1_000_000 ||
+      Number(item.reservation) > Number(item.limit)
+    )
+      return false
+    currencies.add(item.currency)
+  }
+  return true
+}
+const sameCharges = (left: GoalBudget["chargeCosts"], right: GoalBudget["chargeCosts"]) =>
+  JSON.stringify(left ?? []) === JSON.stringify(right ?? [])
 const budget = (value: unknown): value is GoalBudget | null => {
   if (value === null) return true
   if (!value || typeof value !== "object") return false
@@ -22,7 +49,12 @@ const budget = (value: unknown): value is GoalBudget | null => {
   if (
     !Object.keys(item).length ||
     Object.keys(item).some(
-      (key) => key !== "activeMs" && key !== "modelCost" && key !== "recoveryAttempts" && key !== "concurrentChildren",
+      (key) =>
+        key !== "activeMs" &&
+        key !== "modelCost" &&
+        key !== "recoveryAttempts" &&
+        key !== "concurrentChildren" &&
+        key !== "chargeCosts",
     )
   )
     return false
@@ -31,7 +63,8 @@ const budget = (value: unknown): value is GoalBudget | null => {
     duration(item.activeMs) &&
     cost(item.modelCost) &&
     retries(item.recoveryAttempts) &&
-    children(item.concurrentChildren)
+    children(item.concurrentChildren) &&
+    charges(item.chargeCosts)
   )
 }
 const sameBudget = (left: GoalBudget | null | undefined, right: GoalBudget | null | undefined) => {
@@ -40,7 +73,8 @@ const sameBudget = (left: GoalBudget | null | undefined, right: GoalBudget | nul
     left?.activeMs === expected?.activeMs &&
     left?.modelCost === expected?.modelCost &&
     left?.recoveryAttempts === expected?.recoveryAttempts &&
-    left?.concurrentChildren === expected?.concurrentChildren
+    left?.concurrentChildren === expected?.concurrentChildren &&
+    sameCharges(left?.chargeCosts, expected?.chargeCosts)
   )
 }
 

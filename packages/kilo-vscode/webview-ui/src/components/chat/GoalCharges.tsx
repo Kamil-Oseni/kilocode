@@ -38,7 +38,7 @@ export function GoalCharges(props: { items?: GoalCharge[]; historical?: boolean 
           <For each={unknown()}>
             {(item) => (
               <p>
-                {name(item)}: cost unknown
+                {name(item)}: {item.currency ? `${item.currency} cost unknown` : "cost unknown"}
                 {item.quantity === undefined ? "." : `; ${item.quantity} ${item.unit ?? "units"}.`} {item.reason}
               </p>
             )}

@@ -123,7 +123,7 @@ describe("generate-image billing receipt", () => {
       messageID: MessageID.make("msg_image_unknown"),
       at: 200,
     })
-    expect(charge.coverage).toBe("unknown")
+    expect(charge).toMatchObject({ coverage: "unknown", currency: "USD" })
     if (charge.coverage === "unknown") expect(charge.reason).toContain("without reporting a billed amount")
   })
 

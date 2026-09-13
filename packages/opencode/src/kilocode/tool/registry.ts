@@ -3,7 +3,7 @@ import { AgentManagerModelsTool } from "./agent-manager-models"
 import { AgentManagerTool } from "./agent-manager"
 import { BackgroundProcessTool } from "./background-process"
 import { ChartTool } from "./chart"
-import { GenerateImageTool } from "./generate-image"
+import { generateImageTool } from "./generate-image"
 import { InteractiveTerminalTool } from "./interactive-terminal"
 import { NotebookEditTool, NotebookExecuteTool, NotebookReadTool } from "./notebook-host"
 import { MemoryRecallTool } from "./memory-recall"
@@ -102,7 +102,7 @@ export namespace KiloToolRegistry {
       const manager = yield* AgentManagerTool.pipe(Effect.provideService(AgentManager.Service, host ?? unavailable))
       const process = yield* BackgroundProcessTool
       const chart = yield* ChartTool
-      const image = yield* GenerateImageTool
+      const image = yield* generateImageTool(goalDeps)
       const terminal = yield* InteractiveTerminalTool
       // The notify_user tool depends on KiloSessions.Service, which the tool-registry layer provides
       // via KiloSessions.defaultLayer (see src/tool/registry.ts). Grabs the service from the surrounding

@@ -882,8 +882,26 @@
   line-height: var(--raya-leading-body);
 }
 
+.goal-banner__charge-limit {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(72px, 0.6fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: var(--raya-space-8);
+  align-items: end;
+  padding-top: var(--raya-space-4);
+  border-top: var(--raya-hairline) solid var(--goal-line);
+}
+
+.goal-banner__charge-add {
+  grid-column: 1 / -1;
+}
+
 @media (max-width: 360px) {
   .goal-banner__limits {
+    grid-template-columns: 1fr;
+  }
+
+  .goal-banner__charge-limit {
     grid-template-columns: 1fr;
   }
 }

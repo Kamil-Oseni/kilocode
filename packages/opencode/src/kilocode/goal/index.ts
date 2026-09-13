@@ -121,6 +121,13 @@ export namespace RayaGoal {
     acceptedAt: Schema.optional(Schema.Number),
   })
 
+  export const ChargeLimit = Schema.Struct({
+    currency: Schema.String.check(Schema.isPattern(/^[A-Z]{3,8}$/)),
+    limit: Schema.Finite.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(1_000_000)),
+    reservation: Schema.Finite.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(1_000_000)),
+  })
+  export type ChargeLimit = typeof ChargeLimit.Type
+
   export const Budget = Schema.Struct({
     activeMs: Schema.optional(
       Schema.Int.check(Schema.isGreaterThanOrEqualTo(1_000), Schema.isLessThanOrEqualTo(31_536_000_000)),
@@ -132,13 +139,16 @@ export namespace RayaGoal {
     concurrentChildren: Schema.optional(
       Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(32)),
     ),
+    chargeCosts: Schema.optional(Schema.Array(ChargeLimit).check(Schema.isMinLength(1), Schema.isMaxLength(8))),
   })
   export type Budget = typeof Budget.Type
 
   export const BudgetHit = Schema.Struct({
-    kind: Schema.Literals(["active-time", "model-cost", "recovery-attempts"]),
+    kind: Schema.Literals(["active-time", "model-cost", "charge-cost", "recovery-attempts"]),
     limit: Schema.Finite,
     observed: Schema.Finite,
+    currency: Schema.optional(Schema.String.check(Schema.isPattern(/^[A-Z]{3,8}$/))),
+    uncertain: Schema.optional(Schema.Boolean),
     at: Schema.Number,
   })
   export type BudgetHit = typeof BudgetHit.Type
@@ -194,6 +204,7 @@ export namespace RayaGoal {
     Schema.Struct({
       ...chargeFields,
       coverage: Schema.Literal("unknown"),
+      currency: Schema.optional(Schema.String.check(Schema.isPattern(/^[A-Z]{3,8}$/))),
       reason: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(240)),
     }),
   ]).annotate({ identifier: "RayaGoalCharge" })
@@ -372,7 +383,32 @@ export namespace RayaGoal {
     value.activeMs === undefined &&
     value.modelCost === undefined &&
     value.recoveryAttempts === undefined &&
-    value.concurrentChildren === undefined
+    value.concurrentChildren === undefined &&
+    value.chargeCosts === undefined
+  const budgetIssue = (value: Budget | undefined) => {
+    if (!value?.chargeCosts) return
+    if (new Set(value.chargeCosts.map((item) => item.currency)).size !== value.chargeCosts.length)
+      return "Each non-model charge currency may have only one saved limit."
+    if (value.chargeCosts.some((item) => item.reservation > item.limit))
+      return "Each non-model charge reservation must be less than or equal to its currency limit."
+  }
+  const chargeHit = (state: Pick<State, "budget" | "charges">, now: number): BudgetHit | undefined => {
+    for (const cfg of state.budget?.chargeCosts ?? []) {
+      const items = state.charges?.filter((item) => item.currency === cfg.currency) ?? []
+      const spent = items.reduce((sum, item) => sum + (item.coverage === "recorded" ? item.amount : 0), 0)
+      if (items.some((item) => item.coverage === "unknown"))
+        return {
+          kind: "charge-cost",
+          currency: cfg.currency,
+          limit: cfg.limit,
+          observed: spent,
+          uncertain: true,
+          at: now,
+        }
+      if (spent >= cfg.limit)
+        return { kind: "charge-cost", currency: cfg.currency, limit: cfg.limit, observed: spent, at: now }
+    }
+  }
   const exhausted = (
     state: State,
     now: number,
@@ -386,6 +422,8 @@ export namespace RayaGoal {
     }
     const limit = state.budget?.modelCost
     if (limit !== undefined && cost >= limit) return { kind: "model-cost", limit, observed: cost, at: now }
+    const charge = chargeHit(state, now)
+    if (charge) return charge
     const recoveries = state.budget?.recoveryAttempts
     if (recoveries !== undefined && attempts >= recoveries)
       return { kind: "recovery-attempts", limit: recoveries, observed: attempts, at: now }
@@ -395,7 +433,11 @@ export namespace RayaGoal {
       ? "The saved active-time limit was reached. Increase or remove it before resuming."
       : hit.kind === "model-cost"
         ? "The saved goal-session model-cost limit was reached. Increase or remove it before resuming."
-        : "The saved automatic recovery-attempt limit was reached. Revise the approach, increase the limit, or remove it before resuming."
+        : hit.kind === "charge-cost"
+          ? hit.uncertain
+            ? `The ${hit.currency} non-model charge limit cannot be reconciled because a provider did not report an amount. Remove that currency limit before resuming.`
+            : `The saved ${hit.currency} non-model charge limit was reached. Increase or remove it before resuming.`
+          : "The saved automatic recovery-attempt limit was reached. Revise the approach, increase the limit, or remove it before resuming."
 
   const revisions = (state: State, at: number, source: typeof Revision.Type.source) => [
     ...(state.revisions ?? []),
@@ -604,8 +646,11 @@ export namespace RayaGoal {
         return yield* new AuditError({ message: "Goal criterion IDs must be unique." })
       if (emptyBudget(budget))
         return yield* new AuditError({
-          message: "A goal budget requires an active-time, model-cost, recovery-attempt, or concurrent-child limit.",
+          message:
+            "A goal budget requires an active-time, model-cost, non-model charge, recovery-attempt, or concurrent-child limit.",
         })
+      const issue = budgetIssue(budget)
+      if (issue) return yield* new AuditError({ message: issue })
       const existing = yield* get(sessionID)
       if (existing && existing.status !== "complete" && existing.selfHealID !== selfHealID)
         return yield* new AuditError({ message: "An existing goal cannot be linked to a different self-heal item." })
@@ -814,8 +859,11 @@ export namespace RayaGoal {
       const budget = input.clearBudget ? undefined : (input.budget ?? prior.budget)
       if (emptyBudget(budget))
         return yield* new AuditError({
-          message: "A goal budget requires an active-time, model-cost, recovery-attempt, or concurrent-child limit.",
+          message:
+            "A goal budget requires an active-time, model-cost, non-model charge, recovery-attempt, or concurrent-child limit.",
         })
+      const issue = budgetIssue(budget)
+      if (issue) return yield* new AuditError({ message: issue })
       const revised = !isDeepStrictEqual(criteria, prior.criteria)
       const limited = !isDeepStrictEqual(budget, prior.budget)
       const recovered = budget?.recoveryAttempts !== prior.budget?.recoveryAttempts
@@ -1729,7 +1777,8 @@ export namespace RayaGoal {
             : "The turn ended without work, verification, or a goal status update. Steer the goal or stop it."
       const blocked = invalid || repeated || stalled
       const total = Math.max((state.usage.cost ?? 0) + cost, accounting.cost)
-      const hit = blocked || state.status !== "active" ? undefined : exhausted(state, now, total, retries)
+      const hit =
+        blocked || state.status !== "active" ? undefined : exhausted({ ...state, charges }, now, total, retries)
       const stopped = blocked || hit !== undefined
       const retry = !stopped && state.status === "active" && (idle || failed)
       const next = yield* save(sessionID, {
@@ -2010,17 +2059,37 @@ export namespace RayaGoal {
       return next
     })
 
-    const charged = Effect.fn("RayaGoal.charged")(function* (sessionID: SessionID, input: Charge) {
+    const descendant = Effect.fn("RayaGoal.descendant")(function* (sessionID: SessionID, origin: SessionID) {
+      if (origin === sessionID) return true
+      if (!deps.sessions.get) return false
+      let id: SessionID | undefined = origin
+      for (let depth = 0; id && depth < 64; depth++) {
+        const item = yield* deps.sessions
+          .get(id)
+          .pipe(Effect.catchTag("NotFoundError", () => Effect.succeed(undefined)))
+        id = item?.parentID
+        if (id === sessionID) return true
+      }
+      return false
+    })
+
+    const charged = Effect.fn("RayaGoal.charged")(function* (sessionID: SessionID, input: Charge, createdAt?: number) {
       const state = yield* requireGoal(sessionID)
       const charge = yield* Schema.decodeUnknownEffect(Charge)(input).pipe(
         Effect.mapError(() => new AuditError({ message: "The non-model charge receipt is invalid." })),
       )
-      if (charge.origin.sessionID !== sessionID)
+      if (createdAt === undefined && charge.origin.sessionID !== sessionID)
         return yield* new AuditError({ message: "The non-model charge belongs to another session." })
+      if (createdAt !== undefined && !(yield* descendant(sessionID, charge.origin.sessionID)))
+        return yield* new AuditError({ message: "The non-model charge does not belong to this goal's session tree." })
       const owner =
-        charge.at >= state.createdAt
+        createdAt === state.createdAt || (createdAt === undefined && charge.at >= state.createdAt)
           ? state
-          : state.history?.findLast((item) => charge.at >= item.createdAt && charge.at <= item.updatedAt)
+          : state.history?.findLast((item) =>
+              createdAt === undefined
+                ? charge.at >= item.createdAt && charge.at <= item.updatedAt
+                : item.createdAt === createdAt,
+            )
       if (!owner) return yield* new AuditError({ message: "The non-model charge does not belong to a retained goal." })
       const prior = owner.charges?.find((item) => item.id === charge.id)
       if (prior) {
@@ -2031,6 +2100,9 @@ export namespace RayaGoal {
       if ((owner.charges?.length ?? 0) >= 512)
         return yield* new AuditError({ message: "The goal non-model charge ledger is full." })
       const append = [...(owner.charges ?? []), charge]
+      const now = Date.now()
+      const hit =
+        owner === state && state.status === "active" ? chargeHit({ ...state, charges: append }, now) : undefined
       const next = yield* save(sessionID, {
         ...state,
         charges: owner === state ? append : state.charges,
@@ -2038,7 +2110,14 @@ export namespace RayaGoal {
           owner === state
             ? state.history
             : state.history?.map((item) => (item === owner ? { ...item, charges: append } : item)),
-        updatedAt: Date.now(),
+        status: hit ? "paused" : state.status,
+        budgetHit: hit ?? state.budgetHit,
+        activeMs: hit ? elapsed(state, now) : state.activeMs,
+        activeAt: hit ? undefined : state.activeAt,
+        progress: hit
+          ? progress(state, { at: now, kind: "status", message: `Paused: ${budgetReason(hit)}` })
+          : state.progress,
+        updatedAt: now,
       }).pipe(
         Effect.catchIf(
           (error) => AuditError.isInstance(error) && error.conflict === true,
@@ -2046,9 +2125,13 @@ export namespace RayaGoal {
             Effect.gen(function* () {
               const latest = yield* requireGoal(sessionID)
               const target =
-                charge.at >= latest.createdAt
+                createdAt === latest.createdAt || (createdAt === undefined && charge.at >= latest.createdAt)
                   ? latest
-                  : latest.history?.findLast((item) => charge.at >= item.createdAt && charge.at <= item.updatedAt)
+                  : latest.history?.findLast((item) =>
+                      createdAt === undefined
+                        ? charge.at >= item.createdAt && charge.at <= item.updatedAt
+                        : item.createdAt === createdAt,
+                    )
               const saved = target?.charges?.find((item) => item.id === charge.id)
               if (saved && isDeepStrictEqual(saved, charge)) return latest
               return yield* error
@@ -2056,6 +2139,37 @@ export namespace RayaGoal {
         ),
       )
       return { state: next, charge }
+    })
+
+    const limited = Effect.fn("RayaGoal.limited")(function* (
+      sessionID: SessionID,
+      createdAt: number,
+      currency: string,
+      observed: number,
+      uncertain = false,
+    ) {
+      const state = yield* requireGoal(sessionID)
+      if (state.createdAt !== createdAt || state.status !== "active") return state
+      const cfg = state.budget?.chargeCosts?.find((item) => item.currency === currency)
+      if (!cfg) return state
+      const now = Date.now()
+      const hit: BudgetHit = {
+        kind: "charge-cost",
+        currency,
+        limit: cfg.limit,
+        observed,
+        ...(uncertain ? { uncertain: true } : {}),
+        at: now,
+      }
+      return yield* save(sessionID, {
+        ...state,
+        status: "paused",
+        budgetHit: hit,
+        activeMs: elapsed(state, now),
+        activeAt: undefined,
+        updatedAt: now,
+        progress: progress(state, { at: now, kind: "status", message: `Paused: ${budgetReason(hit)}` }),
+      })
     })
 
     return {
@@ -2075,6 +2189,7 @@ export namespace RayaGoal {
       continued,
       retried,
       charged,
+      limited,
       dispatched,
       finished,
       bound,

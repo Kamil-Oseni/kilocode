@@ -242,7 +242,15 @@ const propsFor = (state: PvState): GoalBannerProps => {
   if (state === "disabled") return { goal: goal("active"), disabled: true }
   if (state === "expanded") return { goal: goal("active"), todos, expanded: true }
   if (state === "editing") {
-    return { goal: goal("active", { criteria }), todos, expanded: true, editing: true }
+    return {
+      goal: goal("active", {
+        criteria,
+        budget: { chargeCosts: [{ currency: "USD", limit: 4, reservation: 0.5 }] },
+      }),
+      todos,
+      expanded: true,
+      editing: true,
+    }
   }
   if (state === "discard") return { goal: goal("paused"), todos, expanded: true, confirmingStop: true }
   if (state === "discard-busy") {

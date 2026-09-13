@@ -18087,6 +18087,32 @@
                                 "type": "integer",
                                 "minimum": 1,
                                 "maximum": 32
+                              },
+                              "chargeCosts": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "currency": {
+                                      "type": "string",
+                                      "pattern": "^[A-Z]{3,8}$"
+                                    },
+                                    "limit": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    },
+                                    "reservation": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": ["currency", "limit", "reservation"],
+                                  "additionalProperties": false
+                                },
+                                "minItems": 1,
+                                "maxItems": 8
                               }
                             },
                             "additionalProperties": false
@@ -18096,13 +18122,20 @@
                             "properties": {
                               "kind": {
                                 "type": "string",
-                                "enum": ["active-time", "model-cost", "recovery-attempts"]
+                                "enum": ["active-time", "model-cost", "charge-cost", "recovery-attempts"]
                               },
                               "limit": {
                                 "type": "number"
                               },
                               "observed": {
                                 "type": "number"
+                              },
+                              "currency": {
+                                "type": "string",
+                                "pattern": "^[A-Z]{3,8}$"
+                              },
+                              "uncertain": {
+                                "type": "boolean"
                               },
                               "at": {
                                 "anyOf": [
@@ -18506,6 +18539,32 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 32
+                        },
+                        "chargeCosts": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "currency": {
+                                "type": "string",
+                                "pattern": "^[A-Z]{3,8}$"
+                              },
+                              "limit": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "maximum": 1000000
+                              },
+                              "reservation": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "maximum": 1000000
+                              }
+                            },
+                            "required": ["currency", "limit", "reservation"],
+                            "additionalProperties": false
+                          },
+                          "minItems": 1,
+                          "maxItems": 8
                         }
                       },
                       "additionalProperties": false
@@ -18828,13 +18887,20 @@
                       "properties": {
                         "kind": {
                           "type": "string",
-                          "enum": ["active-time", "model-cost", "recovery-attempts"]
+                          "enum": ["active-time", "model-cost", "charge-cost", "recovery-attempts"]
                         },
                         "limit": {
                           "type": "number"
                         },
                         "observed": {
                           "type": "number"
+                        },
+                        "currency": {
+                          "type": "string",
+                          "pattern": "^[A-Z]{3,8}$"
+                        },
+                        "uncertain": {
+                          "type": "boolean"
                         },
                         "at": {
                           "anyOf": [
@@ -19491,6 +19557,32 @@
                                       "type": "integer",
                                       "minimum": 1,
                                       "maximum": 32
+                                    },
+                                    "chargeCosts": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "currency": {
+                                            "type": "string",
+                                            "pattern": "^[A-Z]{3,8}$"
+                                          },
+                                          "limit": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          },
+                                          "reservation": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          }
+                                        },
+                                        "required": ["currency", "limit", "reservation"],
+                                        "additionalProperties": false
+                                      },
+                                      "minItems": 1,
+                                      "maxItems": 8
                                     }
                                   },
                                   "additionalProperties": false
@@ -19500,13 +19592,20 @@
                                   "properties": {
                                     "kind": {
                                       "type": "string",
-                                      "enum": ["active-time", "model-cost", "recovery-attempts"]
+                                      "enum": ["active-time", "model-cost", "charge-cost", "recovery-attempts"]
                                     },
                                     "limit": {
                                       "type": "number"
                                     },
                                     "observed": {
                                       "type": "number"
+                                    },
+                                    "currency": {
+                                      "type": "string",
+                                      "pattern": "^[A-Z]{3,8}$"
+                                    },
+                                    "uncertain": {
+                                      "type": "boolean"
                                     },
                                     "at": {
                                       "anyOf": [
@@ -19910,6 +20009,32 @@
                                 "type": "integer",
                                 "minimum": 1,
                                 "maximum": 32
+                              },
+                              "chargeCosts": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "currency": {
+                                      "type": "string",
+                                      "pattern": "^[A-Z]{3,8}$"
+                                    },
+                                    "limit": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    },
+                                    "reservation": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": ["currency", "limit", "reservation"],
+                                  "additionalProperties": false
+                                },
+                                "minItems": 1,
+                                "maxItems": 8
                               }
                             },
                             "additionalProperties": false
@@ -19919,13 +20044,20 @@
                             "properties": {
                               "kind": {
                                 "type": "string",
-                                "enum": ["active-time", "model-cost", "recovery-attempts"]
+                                "enum": ["active-time", "model-cost", "charge-cost", "recovery-attempts"]
                               },
                               "limit": {
                                 "type": "number"
                               },
                               "observed": {
                                 "type": "number"
+                              },
+                              "currency": {
+                                "type": "string",
+                                "pattern": "^[A-Z]{3,8}$"
+                              },
+                              "uncertain": {
+                                "type": "boolean"
                               },
                               "at": {
                                 "anyOf": [
@@ -20420,6 +20552,32 @@
                         "type": "integer",
                         "minimum": 1,
                         "maximum": 32
+                      },
+                      "chargeCosts": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "currency": {
+                              "type": "string",
+                              "pattern": "^[A-Z]{3,8}$"
+                            },
+                            "limit": {
+                              "type": "number",
+                              "exclusiveMinimum": 0,
+                              "maximum": 1000000
+                            },
+                            "reservation": {
+                              "type": "number",
+                              "exclusiveMinimum": 0,
+                              "maximum": 1000000
+                            }
+                          },
+                          "required": ["currency", "limit", "reservation"],
+                          "additionalProperties": false
+                        },
+                        "minItems": 1,
+                        "maxItems": 8
                       }
                     },
                     "additionalProperties": false
@@ -20813,6 +20971,32 @@
                                 "type": "integer",
                                 "minimum": 1,
                                 "maximum": 32
+                              },
+                              "chargeCosts": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "currency": {
+                                      "type": "string",
+                                      "pattern": "^[A-Z]{3,8}$"
+                                    },
+                                    "limit": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    },
+                                    "reservation": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": ["currency", "limit", "reservation"],
+                                  "additionalProperties": false
+                                },
+                                "minItems": 1,
+                                "maxItems": 8
                               }
                             },
                             "additionalProperties": false
@@ -20822,13 +21006,20 @@
                             "properties": {
                               "kind": {
                                 "type": "string",
-                                "enum": ["active-time", "model-cost", "recovery-attempts"]
+                                "enum": ["active-time", "model-cost", "charge-cost", "recovery-attempts"]
                               },
                               "limit": {
                                 "type": "number"
                               },
                               "observed": {
                                 "type": "number"
+                              },
+                              "currency": {
+                                "type": "string",
+                                "pattern": "^[A-Z]{3,8}$"
+                              },
+                              "uncertain": {
+                                "type": "boolean"
                               },
                               "at": {
                                 "anyOf": [
@@ -21232,6 +21423,32 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 32
+                        },
+                        "chargeCosts": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "currency": {
+                                "type": "string",
+                                "pattern": "^[A-Z]{3,8}$"
+                              },
+                              "limit": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "maximum": 1000000
+                              },
+                              "reservation": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "maximum": 1000000
+                              }
+                            },
+                            "required": ["currency", "limit", "reservation"],
+                            "additionalProperties": false
+                          },
+                          "minItems": 1,
+                          "maxItems": 8
                         }
                       },
                       "additionalProperties": false
@@ -21554,13 +21771,20 @@
                       "properties": {
                         "kind": {
                           "type": "string",
-                          "enum": ["active-time", "model-cost", "recovery-attempts"]
+                          "enum": ["active-time", "model-cost", "charge-cost", "recovery-attempts"]
                         },
                         "limit": {
                           "type": "number"
                         },
                         "observed": {
                           "type": "number"
+                        },
+                        "currency": {
+                          "type": "string",
+                          "pattern": "^[A-Z]{3,8}$"
+                        },
+                        "uncertain": {
+                          "type": "boolean"
                         },
                         "at": {
                           "anyOf": [
@@ -22217,6 +22441,32 @@
                                       "type": "integer",
                                       "minimum": 1,
                                       "maximum": 32
+                                    },
+                                    "chargeCosts": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "currency": {
+                                            "type": "string",
+                                            "pattern": "^[A-Z]{3,8}$"
+                                          },
+                                          "limit": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          },
+                                          "reservation": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          }
+                                        },
+                                        "required": ["currency", "limit", "reservation"],
+                                        "additionalProperties": false
+                                      },
+                                      "minItems": 1,
+                                      "maxItems": 8
                                     }
                                   },
                                   "additionalProperties": false
@@ -22226,13 +22476,20 @@
                                   "properties": {
                                     "kind": {
                                       "type": "string",
-                                      "enum": ["active-time", "model-cost", "recovery-attempts"]
+                                      "enum": ["active-time", "model-cost", "charge-cost", "recovery-attempts"]
                                     },
                                     "limit": {
                                       "type": "number"
                                     },
                                     "observed": {
                                       "type": "number"
+                                    },
+                                    "currency": {
+                                      "type": "string",
+                                      "pattern": "^[A-Z]{3,8}$"
+                                    },
+                                    "uncertain": {
+                                      "type": "boolean"
                                     },
                                     "at": {
                                       "anyOf": [
@@ -22636,6 +22893,32 @@
                                 "type": "integer",
                                 "minimum": 1,
                                 "maximum": 32
+                              },
+                              "chargeCosts": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "currency": {
+                                      "type": "string",
+                                      "pattern": "^[A-Z]{3,8}$"
+                                    },
+                                    "limit": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    },
+                                    "reservation": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": ["currency", "limit", "reservation"],
+                                  "additionalProperties": false
+                                },
+                                "minItems": 1,
+                                "maxItems": 8
                               }
                             },
                             "additionalProperties": false
@@ -22645,13 +22928,20 @@
                             "properties": {
                               "kind": {
                                 "type": "string",
-                                "enum": ["active-time", "model-cost", "recovery-attempts"]
+                                "enum": ["active-time", "model-cost", "charge-cost", "recovery-attempts"]
                               },
                               "limit": {
                                 "type": "number"
                               },
                               "observed": {
                                 "type": "number"
+                              },
+                              "currency": {
+                                "type": "string",
+                                "pattern": "^[A-Z]{3,8}$"
+                              },
+                              "uncertain": {
+                                "type": "boolean"
                               },
                               "at": {
                                 "anyOf": [
@@ -23483,6 +23773,32 @@
                                 "type": "integer",
                                 "minimum": 1,
                                 "maximum": 32
+                              },
+                              "chargeCosts": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "currency": {
+                                      "type": "string",
+                                      "pattern": "^[A-Z]{3,8}$"
+                                    },
+                                    "limit": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    },
+                                    "reservation": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": ["currency", "limit", "reservation"],
+                                  "additionalProperties": false
+                                },
+                                "minItems": 1,
+                                "maxItems": 8
                               }
                             },
                             "additionalProperties": false
@@ -23492,13 +23808,20 @@
                             "properties": {
                               "kind": {
                                 "type": "string",
-                                "enum": ["active-time", "model-cost", "recovery-attempts"]
+                                "enum": ["active-time", "model-cost", "charge-cost", "recovery-attempts"]
                               },
                               "limit": {
                                 "type": "number"
                               },
                               "observed": {
                                 "type": "number"
+                              },
+                              "currency": {
+                                "type": "string",
+                                "pattern": "^[A-Z]{3,8}$"
+                              },
+                              "uncertain": {
+                                "type": "boolean"
                               },
                               "at": {
                                 "anyOf": [
@@ -23902,6 +24225,32 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 32
+                        },
+                        "chargeCosts": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "currency": {
+                                "type": "string",
+                                "pattern": "^[A-Z]{3,8}$"
+                              },
+                              "limit": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "maximum": 1000000
+                              },
+                              "reservation": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "maximum": 1000000
+                              }
+                            },
+                            "required": ["currency", "limit", "reservation"],
+                            "additionalProperties": false
+                          },
+                          "minItems": 1,
+                          "maxItems": 8
                         }
                       },
                       "additionalProperties": false
@@ -24224,13 +24573,20 @@
                       "properties": {
                         "kind": {
                           "type": "string",
-                          "enum": ["active-time", "model-cost", "recovery-attempts"]
+                          "enum": ["active-time", "model-cost", "charge-cost", "recovery-attempts"]
                         },
                         "limit": {
                           "type": "number"
                         },
                         "observed": {
                           "type": "number"
+                        },
+                        "currency": {
+                          "type": "string",
+                          "pattern": "^[A-Z]{3,8}$"
+                        },
+                        "uncertain": {
+                          "type": "boolean"
                         },
                         "at": {
                           "anyOf": [
@@ -24887,6 +25243,32 @@
                                       "type": "integer",
                                       "minimum": 1,
                                       "maximum": 32
+                                    },
+                                    "chargeCosts": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "currency": {
+                                            "type": "string",
+                                            "pattern": "^[A-Z]{3,8}$"
+                                          },
+                                          "limit": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          },
+                                          "reservation": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          }
+                                        },
+                                        "required": ["currency", "limit", "reservation"],
+                                        "additionalProperties": false
+                                      },
+                                      "minItems": 1,
+                                      "maxItems": 8
                                     }
                                   },
                                   "additionalProperties": false
@@ -24896,13 +25278,20 @@
                                   "properties": {
                                     "kind": {
                                       "type": "string",
-                                      "enum": ["active-time", "model-cost", "recovery-attempts"]
+                                      "enum": ["active-time", "model-cost", "charge-cost", "recovery-attempts"]
                                     },
                                     "limit": {
                                       "type": "number"
                                     },
                                     "observed": {
                                       "type": "number"
+                                    },
+                                    "currency": {
+                                      "type": "string",
+                                      "pattern": "^[A-Z]{3,8}$"
+                                    },
+                                    "uncertain": {
+                                      "type": "boolean"
                                     },
                                     "at": {
                                       "anyOf": [
@@ -25306,6 +25695,32 @@
                                 "type": "integer",
                                 "minimum": 1,
                                 "maximum": 32
+                              },
+                              "chargeCosts": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "currency": {
+                                      "type": "string",
+                                      "pattern": "^[A-Z]{3,8}$"
+                                    },
+                                    "limit": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    },
+                                    "reservation": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": ["currency", "limit", "reservation"],
+                                  "additionalProperties": false
+                                },
+                                "minItems": 1,
+                                "maxItems": 8
                               }
                             },
                             "additionalProperties": false
@@ -25315,13 +25730,20 @@
                             "properties": {
                               "kind": {
                                 "type": "string",
-                                "enum": ["active-time", "model-cost", "recovery-attempts"]
+                                "enum": ["active-time", "model-cost", "charge-cost", "recovery-attempts"]
                               },
                               "limit": {
                                 "type": "number"
                               },
                               "observed": {
                                 "type": "number"
+                              },
+                              "currency": {
+                                "type": "string",
+                                "pattern": "^[A-Z]{3,8}$"
+                              },
+                              "uncertain": {
+                                "type": "boolean"
                               },
                               "at": {
                                 "anyOf": [
@@ -25880,6 +26302,32 @@
                         "type": "integer",
                         "minimum": 1,
                         "maximum": 32
+                      },
+                      "chargeCosts": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "currency": {
+                              "type": "string",
+                              "pattern": "^[A-Z]{3,8}$"
+                            },
+                            "limit": {
+                              "type": "number",
+                              "exclusiveMinimum": 0,
+                              "maximum": 1000000
+                            },
+                            "reservation": {
+                              "type": "number",
+                              "exclusiveMinimum": 0,
+                              "maximum": 1000000
+                            }
+                          },
+                          "required": ["currency", "limit", "reservation"],
+                          "additionalProperties": false
+                        },
+                        "minItems": 1,
+                        "maxItems": 8
                       }
                     },
                     "additionalProperties": false
@@ -69192,6 +69640,10 @@
               "coverage": {
                 "type": "string",
                 "enum": ["unknown"]
+              },
+              "currency": {
+                "type": "string",
+                "pattern": "^[A-Z]{3,8}$"
               },
               "reason": {
                 "type": "string",

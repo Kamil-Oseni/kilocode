@@ -77,11 +77,15 @@ const span = (ms: number) => {
   if (minutes) return `${minutes}m ${rest}s`
   return `${rest}s`
 }
+const field = (value: number | undefined) => (value === undefined ? "" : String(value))
+const sameCharges = (left: GoalBudget["chargeCosts"], right: GoalBudget["chargeCosts"]) =>
+  JSON.stringify(left ?? []) === JSON.stringify(right ?? [])
 const sameBudget = (left: GoalBudget | null | undefined, right: GoalBudget | null | undefined) =>
   left?.activeMs === right?.activeMs &&
   left?.modelCost === right?.modelCost &&
   left?.recoveryAttempts === right?.recoveryAttempts &&
-  left?.concurrentChildren === right?.concurrentChildren
+  left?.concurrentChildren === right?.concurrentChildren &&
+  sameCharges(left?.chargeCosts, right?.chargeCosts)
 
 function label(goal: Pick<GoalState, "status" | "review">) {
   return goal.status === "paused" && goal.review?.status === "pending" ? "Ready for review" : statusWord[goal.status]
@@ -94,6 +98,10 @@ function paused(goal: Pick<GoalState, "review" | "budgetHit">) {
     return "Paused after reaching the saved active-time limit. Increase or remove it before resuming."
   if (goal.budgetHit?.kind === "model-cost")
     return "Paused after reaching the saved recorded model-cost limit. Increase or remove it before resuming."
+  if (goal.budgetHit?.kind === "charge-cost")
+    return goal.budgetHit.uncertain
+      ? `Paused because a ${goal.budgetHit.currency} non-model charge had no reported amount. Remove that currency limit before resuming.`
+      : `Paused after reaching the saved ${goal.budgetHit.currency} non-model charge limit. Increase or remove it before resuming.`
   if (goal.budgetHit?.kind === "recovery-attempts")
     return "Paused after reaching the saved recovery-attempt limit. Revise the approach or change the limit before resuming."
   return "Paused. Resume when ready, or steer the goal before continuing."
@@ -145,6 +153,7 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
   const [cost, setCost] = createSignal("")
   const [attempts, setAttempts] = createSignal("")
   const [children, setChildren] = createSignal("")
+  const [charges, setCharges] = createSignal<Array<{ currency: string; limit: string; reservation: string }>>([])
   const [savedBudget, setSavedBudget] = createSignal<GoalBudget>()
   const required = () => (!criteria().length && saved() === undefined ? undefined : criteria())
   const revised = () => !equal(required(), saved())
@@ -152,18 +161,26 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
   const amount = () => (cost().trim() ? Number(cost()) : undefined)
   const recoveries = () => (attempts().trim() ? Number(attempts()) : undefined)
   const concurrent = () => (children().trim() ? Number(children()) : undefined)
+  const chargeCosts = () =>
+    charges().map((item) => ({
+      currency: item.currency.trim().toUpperCase(),
+      limit: Number(item.limit),
+      reservation: Number(item.reservation),
+    }))
   const limits = (): GoalBudget => ({
     ...(active() === undefined ? {} : { activeMs: Math.round(active()!) }),
     ...(amount() === undefined ? {} : { modelCost: amount() }),
     ...(recoveries() === undefined ? {} : { recoveryAttempts: recoveries() }),
     ...(concurrent() === undefined ? {} : { concurrentChildren: concurrent() }),
+    ...(charges().length ? { chargeCosts: chargeCosts() } : {}),
   })
   const budget = () => {
     const value = limits()
     return value.activeMs === undefined &&
       value.modelCost === undefined &&
       value.recoveryAttempts === undefined &&
-      value.concurrentChildren === undefined
+      value.concurrentChildren === undefined &&
+      value.chargeCosts === undefined
       ? undefined
       : value
   }
@@ -176,7 +193,18 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
         active()! > 31_536_000_000)) ||
     (amount() !== undefined && (!Number.isFinite(amount()) || amount()! <= 0 || amount()! > 1_000_000)) ||
     (recoveries() !== undefined && (!Number.isSafeInteger(recoveries()) || recoveries()! < 1 || recoveries()! > 100)) ||
-    (concurrent() !== undefined && (!Number.isSafeInteger(concurrent()) || concurrent()! < 1 || concurrent()! > 32))
+    (concurrent() !== undefined && (!Number.isSafeInteger(concurrent()) || concurrent()! < 1 || concurrent()! > 32)) ||
+    chargeCosts().some(
+      (item) =>
+        !/^[A-Z]{3,8}$/.test(item.currency) ||
+        !Number.isFinite(item.limit) ||
+        item.limit <= 0 ||
+        item.limit > 1_000_000 ||
+        !Number.isFinite(item.reservation) ||
+        item.reservation <= 0 ||
+        item.reservation > item.limit,
+    ) ||
+    new Set(chargeCosts().map((item) => item.currency)).size !== chargeCosts().length
   const invalid = () => (revised() && !valid(required())) || invalidBudget()
   const [now, setNow] = createSignal(Date.now())
   const runtime = () => {
@@ -216,12 +244,21 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
         setBasis(props.goal.intent ?? "unset")
         setSaved(props.goal.criteria?.map((item) => ({ ...item })))
         setCriteria(props.goal.criteria?.map((item) => ({ ...item })) ?? [])
-        setSavedBudget(props.goal.budget ? { ...props.goal.budget } : undefined)
-        setMinutes(props.goal.budget?.activeMs === undefined ? "" : String(props.goal.budget.activeMs / 60_000))
-        setCost(props.goal.budget?.modelCost === undefined ? "" : String(props.goal.budget.modelCost))
-        setAttempts(props.goal.budget?.recoveryAttempts === undefined ? "" : String(props.goal.budget.recoveryAttempts))
-        setChildren(
-          props.goal.budget?.concurrentChildren === undefined ? "" : String(props.goal.budget.concurrentChildren),
+        setSavedBudget(
+          props.goal.budget
+            ? { ...props.goal.budget, chargeCosts: props.goal.budget.chargeCosts?.map((item) => ({ ...item })) }
+            : undefined,
+        )
+        setMinutes(field(props.goal.budget?.activeMs === undefined ? undefined : props.goal.budget.activeMs / 60_000))
+        setCost(field(props.goal.budget?.modelCost))
+        setAttempts(field(props.goal.budget?.recoveryAttempts))
+        setChildren(field(props.goal.budget?.concurrentChildren))
+        setCharges(
+          props.goal.budget?.chargeCosts?.map((item) => ({
+            currency: item.currency,
+            limit: String(item.limit),
+            reservation: String(item.reservation),
+          })) ?? [],
         )
         queueMicrotask(() => editor?.focus())
       },
@@ -372,6 +409,7 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                   <GoalRevisions goal={viewing()!} sessionID={props.sessionID} />
                   <GoalPlan goal={viewing()!} />
                   <GoalReport goal={viewing()!} sessionID={props.sessionID} />
+                  <GoalCharges items={viewing()!.charges} historical />
                 </div>
               </Show>
               <Show when={props.expanded && !archive()}>
@@ -413,6 +451,15 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                         {limit().concurrentChildren === undefined
                           ? "No concurrent-child limit"
                           : plural(limit().concurrentChildren!, "concurrent child")}
+                        <For each={limit().chargeCosts}>
+                          {(item) => (
+                            <span>
+                              {"; "}
+                              {item.currency} {item.limit.toFixed(2)} other charges; {item.reservation.toFixed(2)}{" "}
+                              reserved per operation
+                            </span>
+                          )}
+                        </For>
                       </div>
                     )}
                   </Show>
@@ -546,11 +593,91 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                           onInput={(event) => setChildren(event.currentTarget.value)}
                         />
                       </label>
+                      <For each={charges()}>
+                        {(item, index) => (
+                          <div class="goal-banner__charge-limit">
+                            <label for={`goal-charge-currency-${index()}`}>
+                              Currency
+                              <input
+                                id={`goal-charge-currency-${index()}`}
+                                value={item.currency}
+                                maxlength="8"
+                                readOnly={props.saving}
+                                onInput={(event) =>
+                                  setCharges((rows) =>
+                                    rows.map((row, at) =>
+                                      at === index()
+                                        ? { ...row, currency: event.currentTarget.value.toUpperCase() }
+                                        : row,
+                                    ),
+                                  )
+                                }
+                              />
+                            </label>
+                            <label for={`goal-charge-limit-${index()}`}>
+                              Recorded charge limit
+                              <input
+                                id={`goal-charge-limit-${index()}`}
+                                inputMode="decimal"
+                                value={item.limit}
+                                readOnly={props.saving}
+                                onInput={(event) =>
+                                  setCharges((rows) =>
+                                    rows.map((row, at) =>
+                                      at === index() ? { ...row, limit: event.currentTarget.value } : row,
+                                    ),
+                                  )
+                                }
+                              />
+                            </label>
+                            <label for={`goal-charge-reservation-${index()}`}>
+                              Per-operation reservation
+                              <input
+                                id={`goal-charge-reservation-${index()}`}
+                                inputMode="decimal"
+                                value={item.reservation}
+                                readOnly={props.saving}
+                                onInput={(event) =>
+                                  setCharges((rows) =>
+                                    rows.map((row, at) =>
+                                      at === index() ? { ...row, reservation: event.currentTarget.value } : row,
+                                    ),
+                                  )
+                                }
+                              />
+                            </label>
+                            <Button
+                              size="small"
+                              variant="ghost"
+                              disabled={props.saving}
+                              onClick={() => setCharges((rows) => rows.filter((_, at) => at !== index()))}
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        )}
+                      </For>
+                      <Show when={charges().length < 8}>
+                        <div class="goal-banner__charge-add">
+                          <Button
+                            size="small"
+                            variant="secondary"
+                            disabled={props.saving}
+                            onClick={() =>
+                              setCharges((rows) => [...rows, { currency: "USD", limit: "", reservation: "" }])
+                            }
+                          >
+                            Add non-model charge limit
+                          </Button>
+                        </div>
+                      </Show>
                       <p>
                         Leave a field blank for no saved limit. Recovery attempts are consecutive; successful work or a
                         revised approach renews them. A child slot is reserved before delegation and released when that
-                        task ends. Raya may stop earlier when repeated work is unsafe. Tool, voice and external charges
-                        are not included in model cost.
+                        task ends. Non-model currencies stay separate. Supported billed operations reserve the amount
+                        you set before starting, then reconcile the provider receipt. An unknown amount pauses that
+                        currency limit. A reservation controls Raya admission; the provider may report a larger final
+                        bill. Tool, voice and external charges are not included in model cost.
                       </p>
                     </fieldset>
                     <GoalCriteriaEditor
@@ -561,7 +688,8 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                     <Show when={invalid()}>
                       <p role="status">
                         Use complete criteria, positive limits, no more than 1 year of active time, no more than
-                        $1,000,000 of recorded model cost, 1 to 100 recovery attempts, and 1 to 32 concurrent children.
+                        $1,000,000 of recorded model cost, 1 to 100 recovery attempts, 1 to 32 concurrent children, and
+                        complete unique currency limits whose reservation does not exceed the limit.
                       </p>
                     </Show>
                     <Show when={props.editError}>

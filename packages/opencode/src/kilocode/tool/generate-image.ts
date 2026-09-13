@@ -1,5 +1,5 @@
 // kilocode_change - new file
-import { Effect, Schema } from "effect"
+import { Cause, Effect, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import * as path from "path"
 import { readFile } from "fs/promises"
@@ -13,6 +13,9 @@ import { Config } from "@/config/config"
 import { KILO_OPENROUTER_BASE } from "@kilocode/kilo-gateway"
 import DESCRIPTION from "./generate-image.txt"
 import type { RayaGoal } from "@/kilocode/goal"
+import * as ChargeReservations from "@/kilocode/goal/charges"
+import type { Storage } from "@/storage/storage"
+import type { Session } from "@/session/session"
 
 const log = Log.create({ service: "tool.generate_image" })
 
@@ -152,6 +155,7 @@ export function imageCharge(input: {
   return {
     ...base,
     coverage: "unknown",
+    currency: "USD",
     reason: input.billing.reason ?? "The image provider completed the request without reporting a billed amount.",
   }
 }
@@ -250,145 +254,166 @@ type Meta = {
   rayaGoalCharge?: { version: 1; receipt: RayaGoal.Charge }
 }
 
-export const GenerateImageTool = Tool.define(
-  "generate_image",
-  Effect.gen(function* () {
-    const fs = yield* FSUtil.Service
-    const authSvc = yield* Auth.Service
-    const configSvc = yield* Config.Service
-    const http = yield* HttpClient.HttpClient
+type GoalDeps = { storage: Storage.Interface; sessions: Session.Interface }
 
-    return {
-      description: DESCRIPTION,
-      parameters: Parameters,
-      execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
-        Effect.gen(function* () {
-          const instance = yield* InstanceState.context
-          const auth = yield* authSvc.get("kilo")
-          const authInput: AuthInput | undefined = auth
-            ? {
-                type: auth.type === "api" ? "api" : "oauth",
-                ...(auth.type === "api" ? { key: auth.key } : {}),
-                ...(auth.type === "oauth" ? { access: auth.access } : {}),
-                ...(auth.type === "oauth" && auth.accountId ? { accountId: auth.accountId } : {}),
+export const generateImageTool = (goals?: GoalDeps) =>
+  Tool.define(
+    "generate_image",
+    Effect.gen(function* () {
+      const fs = yield* FSUtil.Service
+      const authSvc = yield* Auth.Service
+      const configSvc = yield* Config.Service
+      const http = yield* HttpClient.HttpClient
+      const charges = goals ? yield* ChargeReservations.make(goals) : undefined
+
+      return {
+        description: DESCRIPTION,
+        parameters: Parameters,
+        execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
+          Effect.gen(function* () {
+            const instance = yield* InstanceState.context
+            const auth = yield* authSvc.get("kilo")
+            const authInput: AuthInput | undefined = auth
+              ? {
+                  type: auth.type === "api" ? "api" : "oauth",
+                  ...(auth.type === "api" ? { key: auth.key } : {}),
+                  ...(auth.type === "oauth" ? { access: auth.access } : {}),
+                  ...(auth.type === "oauth" && auth.accountId ? { accountId: auth.accountId } : {}),
+                }
+              : undefined
+            const resolved = resolveProvider(authInput, process.env["OPENROUTER_API_KEY"])
+            if (!resolved) {
+              return {
+                title: "Image generation unavailable",
+                output:
+                  "No image generation provider available. Log in to Kilo or set OPENROUTER_API_KEY, then try again.",
+                metadata: { error: "no-provider" } as Meta,
               }
-            : undefined
-          const resolved = resolveProvider(authInput, process.env["OPENROUTER_API_KEY"])
-          if (!resolved) {
-            return {
-              title: "Image generation unavailable",
-              output:
-                "No image generation provider available. Log in to Kilo or set OPENROUTER_API_KEY, then try again.",
-              metadata: { error: "no-provider" } as Meta,
             }
-          }
 
-          yield* ctx.metadata({
-            title: `Generate image "${params.prompt.slice(0, 60)}"`,
-            metadata: { provider: resolved.provider },
-          })
-
-          let inputImage: string | undefined
-          if (params.image) {
-            const imgPath = path.isAbsolute(params.image) ? params.image : path.join(instance.directory, params.image)
-            yield* assertExternalDirectoryEffect(ctx, imgPath)
-            const buf = yield* Effect.tryPromise(() => readFile(imgPath))
-            const ext = path.extname(imgPath).slice(1).toLowerCase() || "png"
-            const mime = ext === "jpg" ? "jpeg" : ext
-            inputImage = `data:image/${mime};base64,${buf.toString("base64")}`
-          }
-
-          const cfg = yield* configSvc.get()
-          const model = params.model ?? cfg.experimental?.image_generation_model ?? DEFAULT_MODEL
-          const req = buildRequest(resolved, params.prompt, model, inputImage)
-
-          const response = yield* http.execute(
-            HttpClientRequest.post(req.url).pipe(
-              HttpClientRequest.setHeaders(req.headers),
-              HttpClientRequest.bodyText(req.body, "application/json"),
-            ),
-          )
-
-          const status = response.status
-          if (status < 200 || status >= 300) {
-            const errText = yield* response.text
-            log.warn("image generation failed", { status, errText: errText.slice(0, 200) })
-            return {
-              title: "Image generation failed",
-              output: `Image generation request failed (HTTP ${status}).`,
-              metadata: { provider: resolved.provider, error: "http-error" } as Meta,
-            }
-          }
-
-          const text = yield* response.text
-          const value = (() => {
-            try {
-              return JSON.parse(text) as unknown
-            } catch {
-              return undefined
-            }
-          })()
-          const billing = parseImageBilling(value, resolved.provider)
-          const charge = billing
-            ? imageCharge({
-                billing,
-                provider: resolved.provider,
-                model,
-                sessionID: ctx.sessionID,
-                messageID: ctx.messageID,
-                callID: ctx.callID,
-                at: Date.now(),
-              })
-            : undefined
-          if (charge)
             yield* ctx.metadata({
-              metadata: { provider: resolved.provider, rayaGoalCharge: { version: 1 as const, receipt: charge } },
+              title: `Generate image "${params.prompt.slice(0, 60)}"`,
+              metadata: { provider: resolved.provider },
             })
-          const parsed = parseImageResponse(text, resolved.provider)
-          if (!parsed) {
-            return {
-              title: "Image generation produced no image",
-              output: "The model did not return an image. Try a different prompt or model.",
-              metadata: {
-                provider: resolved.provider,
-                error: "no-image",
-                ...(charge ? { rayaGoalCharge: { version: 1 as const, receipt: charge } } : {}),
-              } as Meta,
+
+            let inputImage: string | undefined
+            if (params.image) {
+              const imgPath = path.isAbsolute(params.image) ? params.image : path.join(instance.directory, params.image)
+              yield* assertExternalDirectoryEffect(ctx, imgPath)
+              const buf = yield* Effect.tryPromise(() => readFile(imgPath))
+              const ext = path.extname(imgPath).slice(1).toLowerCase() || "png"
+              const mime = ext === "jpg" ? "jpeg" : ext
+              inputImage = `data:image/${mime};base64,${buf.toString("base64")}`
             }
-          }
 
-          const finalPath = ensureExtension(params.path, parsed.format)
-          const absPath = path.isAbsolute(finalPath) ? finalPath : path.join(instance.directory, finalPath)
-          yield* assertExternalDirectoryEffect(ctx, absPath)
-          yield* ctx.ask({
-            permission: "write",
-            patterns: [path.relative(instance.worktree, absPath)],
-            always: ["*"],
-            metadata: { filepath: absPath },
-          })
+            const cfg = yield* configSvc.get()
+            const model = params.model ?? cfg.experimental?.image_generation_model ?? DEFAULT_MODEL
+            const req = buildRequest(resolved, params.prompt, model, inputImage)
+            const lease = charges
+              ? yield* charges.claim(ctx.sessionID, "USD")
+              : { release: Effect.void, settle: (_charge: RayaGoal.Charge) => Effect.void }
 
-          const buf = Buffer.from(parsed.base64, "base64")
-          yield* fs.writeWithDirs(absPath, buf)
+            return yield* Effect.gen(function* () {
+              const response = yield* http.execute(
+                HttpClientRequest.post(req.url).pipe(
+                  HttpClientRequest.setHeaders(req.headers),
+                  HttpClientRequest.bodyText(req.body, "application/json"),
+                ),
+              )
 
-          return {
-            title: path.relative(instance.worktree, absPath),
-            output: `Image saved to ${finalPath}.`,
-            metadata: {
-              format: parsed.format,
-              filepath: absPath,
-              provider: resolved.provider,
-              ...(charge ? { rayaGoalCharge: { version: 1 as const, receipt: charge } } : {}),
-            } as Meta,
-            attachments: [
-              {
-                type: "file" as const,
-                mime: `image/${parsed.format}`,
-                url: `file://${absPath}`,
-                filename: path.basename(absPath),
-              },
-            ],
-          }
-        }).pipe(Effect.orDie),
-    }
-  }),
-)
+              const status = response.status
+              if (status < 200 || status >= 300) {
+                const errText = yield* response.text
+                log.warn("image generation failed", { status, errText: errText.slice(0, 200) })
+                return {
+                  title: "Image generation failed",
+                  output: `Image generation request failed (HTTP ${status}).`,
+                  metadata: { provider: resolved.provider, error: "http-error" } as Meta,
+                }
+              }
+
+              const text = yield* response.text
+              const value = (() => {
+                try {
+                  return JSON.parse(text) as unknown
+                } catch {
+                  return undefined
+                }
+              })()
+              const billing = parseImageBilling(value, resolved.provider)
+              const charge = billing
+                ? imageCharge({
+                    billing,
+                    provider: resolved.provider,
+                    model,
+                    sessionID: ctx.sessionID,
+                    messageID: ctx.messageID,
+                    callID: ctx.callID,
+                    at: Date.now(),
+                  })
+                : undefined
+              if (charge) {
+                yield* ctx.metadata({
+                  metadata: { provider: resolved.provider, rayaGoalCharge: { version: 1 as const, receipt: charge } },
+                })
+                yield* lease
+                  .settle(charge)
+                  .pipe(
+                    Effect.catchCause((cause) =>
+                      Effect.sync(() =>
+                        log.warn("goal image charge settlement deferred to turn accounting", {
+                          cause: Cause.squash(cause),
+                        }),
+                      ),
+                    ),
+                  )
+              }
+              const parsed = parseImageResponse(text, resolved.provider)
+              if (!parsed) {
+                return {
+                  title: "Image generation produced no image",
+                  output: "The model did not return an image. Try a different prompt or model.",
+                  metadata: {
+                    provider: resolved.provider,
+                    error: "no-image",
+                    ...(charge ? { rayaGoalCharge: { version: 1 as const, receipt: charge } } : {}),
+                  } as Meta,
+                }
+              }
+
+              const finalPath = ensureExtension(params.path, parsed.format)
+              const absPath = path.isAbsolute(finalPath) ? finalPath : path.join(instance.directory, finalPath)
+              yield* assertExternalDirectoryEffect(ctx, absPath)
+              yield* ctx.ask({
+                permission: "write",
+                patterns: [path.relative(instance.worktree, absPath)],
+                always: ["*"],
+                metadata: { filepath: absPath },
+              })
+
+              const buf = Buffer.from(parsed.base64, "base64")
+              yield* fs.writeWithDirs(absPath, buf)
+
+              return {
+                title: path.relative(instance.worktree, absPath),
+                output: `Image saved to ${finalPath}.`,
+                metadata: {
+                  format: parsed.format,
+                  filepath: absPath,
+                  provider: resolved.provider,
+                  ...(charge ? { rayaGoalCharge: { version: 1 as const, receipt: charge } } : {}),
+                } as Meta,
+                attachments: [
+                  {
+                    type: "file" as const,
+                    mime: `image/${parsed.format}`,
+                    url: `file://${absPath}`,
+                    filename: path.basename(absPath),
+                  },
+                ],
+              }
+            }).pipe(Effect.ensuring(lease.release))
+          }).pipe(Effect.orDie),
+      }
+    }),
+  )

@@ -6,12 +6,16 @@ export type GoalBudget = {
   modelCost?: number
   recoveryAttempts?: number
   concurrentChildren?: number
+  chargeCosts?: GoalChargeLimit[]
 }
+type GoalChargeLimit = { currency: string; limit: number; reservation: number }
 export type GoalBudgetHit = {
-  kind: "active-time" | "model-cost" | "recovery-attempts"
+  kind: "active-time" | "model-cost" | "charge-cost" | "recovery-attempts"
   limit: number
   observed: number
   at: number
+  currency?: string
+  uncertain?: boolean
 }
 
 export interface GoalEvidence {
@@ -78,7 +82,10 @@ type GoalChargeBase = {
 }
 
 export type GoalCharge = GoalChargeBase &
-  ({ coverage: "recorded"; amount: number; currency: string } | { coverage: "unknown"; reason: string })
+  (
+    | { coverage: "recorded"; amount: number; currency: string }
+    | { coverage: "unknown"; currency?: string; reason: string }
+  )
 
 export interface GoalState {
   review?: { status: "pending" | "accepted"; at: number; criteria: string[]; acceptedAt?: number }
@@ -303,6 +310,7 @@ ${objective}
 ${budget?.activeMs ? `Active-time limit: ${budget.activeMs} milliseconds of accumulated active goal time. Pause before starting more work when it is reached.` : "No active-time limit was saved."}
 ${budget?.recoveryAttempts ? `Automatic recovery-attempt limit: ${budget.recoveryAttempts} consecutive attempts. Successful work renews the count. Pause before another recovery when the limit is reached.` : "No automatic recovery-attempt limit was saved."}
 ${budget?.concurrentChildren ? `Concurrent-child limit: ${budget.concurrentChildren}. Reserve a slot before creating a delegated child. Running children keep their slots until they finish or are cancelled.` : "No concurrent-child limit was saved."}
+${budget?.chargeCosts?.length ? `Non-model charge limits: ${budget.chargeCosts.map((item) => `${item.currency} ${item.limit} with ${item.reservation} reserved before each supported billed operation`).join("; ")}. Keep currencies separate. Reservations govern process-owned admission and do not guarantee the provider's final bill. Pause when a reported amount reaches its limit or an unknown amount prevents reconciliation.` : "No non-model charge limit was saved."}
 
 Perform the first concrete unit of work now in this same turn. Do not stop after planning or restating the objective. Preserve the full objective and its constraints across turns. For a goal with dependencies, prefer update_goal_plan when available: read get_goal first, preserve stable task IDs, and use its current intent and plan revision. Reconcile plans marked for review or saved for an earlier objective before relying on them. A saved owner does not authorize delegation, and task status is not completion evidence. When using todowrite and a task list is useful, keep it current and identify the work actually in progress. Independent authorized tasks may be in progress together; keep dependent tasks pending until their prerequisites finish. Do not serialize genuinely parallel work merely to show one active task. Delegate only when authorized and useful, and wait for a task's result before relying on it. Give concise progress updates without exposing private chain-of-thought.
 

@@ -9,10 +9,19 @@ type Goal = Pick<
   > &
   Partial<Pick<GoalState, "deliverables">>
 
+function limitName(hit: NonNullable<GoalState["budgetHit"]>) {
+  if (hit.kind === "active-time") return "active time"
+  if (hit.kind === "model-cost") return "recorded model cost"
+  if (hit.kind === "recovery-attempts") return "automatic recovery attempts"
+  return `${hit.currency} non-model charge cost${hit.uncertain ? " with an unknown amount" : ""}`
+}
+
 function limits(goal: Pick<Goal, "budget" | "budgetHit">) {
   const lines = ["", "## Saved limits", ""]
   if (!goal.budget)
-    lines.push("No active-time, recorded model-cost, recovery-attempt, or concurrent-child limit was saved.")
+    lines.push(
+      "No active-time, recorded model-cost, non-model charge, recovery-attempt, or concurrent-child limit was saved.",
+    )
   if (goal.budget?.activeMs !== undefined)
     lines.push(`Active-time limit: ${(goal.budget.activeMs / 1000).toFixed(1)} seconds.`)
   if (goal.budget?.modelCost !== undefined)
@@ -21,9 +30,17 @@ function limits(goal: Pick<Goal, "budget" | "budgetHit">) {
     lines.push(`Consecutive automatic recovery-attempt limit: ${goal.budget.recoveryAttempts}.`)
   if (goal.budget?.concurrentChildren !== undefined)
     lines.push(`Concurrent delegated-child limit: ${goal.budget.concurrentChildren}.`)
+  for (const item of goal.budget?.chargeCosts ?? [])
+    lines.push(
+      `${item.currency} non-model charge limit: ${item.limit.toFixed(6)}; reserve ${item.reservation.toFixed(6)} before each supported billed operation.`,
+    )
+  if (goal.budget?.chargeCosts?.length)
+    lines.push(
+      "Reservations govern Raya's process-owned admission and are released after settlement. A provider may report a larger final bill; unknown amounts pause the matching currency limit.",
+    )
   if (goal.budgetHit)
     lines.push(
-      `Limit reached: ${goal.budgetHit.kind === "active-time" ? "active time" : goal.budgetHit.kind === "model-cost" ? "recorded model cost" : "automatic recovery attempts"}; limit ${goal.budgetHit.limit}; observed ${goal.budgetHit.observed}; recorded ${date(goal.budgetHit.at)}.`,
+      `Limit reached: ${limitName(goal.budgetHit)}; limit ${goal.budgetHit.limit}; observed ${goal.budgetHit.observed}; recorded ${date(goal.budgetHit.at)}.`,
     )
   lines.push(
     "Enforcement pauses before another continuation after an observed time, cost or recovery limit. It does not recall a turn already running. Recovery attempts are consecutive and renew after successful work or a revised approach. A child slot is reserved before child-session creation and released when that live task finishes or is cancelled. Reducing the limit does not cancel running children. Raya may stop earlier when repeated work is unsafe. The model-cost limit has the recorded coverage stated below.",
@@ -103,7 +120,7 @@ function charges(goal: Pick<Goal, "charges">) {
     lines.push(
       item.coverage === "recorded"
         ? `${source}: ${item.currency} ${item.amount.toFixed(6)}.${quantity}${origin}`
-        : `${source}: monetary cost unknown.${quantity} ${item.reason}${origin}`,
+        : `${source}: ${item.currency ? `${item.currency} monetary cost unknown` : "monetary cost unknown"}.${quantity} ${item.reason}${origin}`,
     )
   }
   lines.push(

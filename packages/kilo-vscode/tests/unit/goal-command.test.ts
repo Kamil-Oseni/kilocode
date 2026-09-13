@@ -58,6 +58,11 @@ describe("native goal command", () => {
     expect(goalPrompt("delegate within the limit", { concurrentChildren: 3 })).toContain(
       "Reserve a slot before creating a delegated child",
     )
+    expect(
+      goalPrompt("reserve billed work", {
+        chargeCosts: [{ currency: "USD", limit: 2, reservation: 0.5 }],
+      }),
+    ).toContain("USD 2 with 0.5 reserved before each supported billed operation")
     expect(text).toContain("call get_goal")
     expect(text).toContain('update_goal(status="complete")')
     expect(text).toContain("real successful tool calls")

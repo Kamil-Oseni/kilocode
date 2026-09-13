@@ -416,12 +416,12 @@ The following sections retain the full 39-item scope. Related findings and overh
 
 ### EN-04 — Acknowledge review actions before dismissing them
 
-**Recorded status:** In progress. Correlated editor/chat acknowledgement and delivery, saved retry identities, atomic backend receipts, inherited Keep boundaries, and manual-edit preconditions verified. Uncertain-outcome reconciliation, cross-process workspace transactions, retention, and live/packaged validation remain open.
+**Recorded status:** In progress. Correlated editor/chat acknowledgement and delivery, saved retry identities, atomic backend receipts, inherited Keep boundaries, manual-edit preconditions, authoritative interrupted-completion reconciliation, and task-lifetime receipt retention with deletion erasure are verified. Cross-process workspace transactions and live/packaged validation remain open.
 
 **Implementation and verification:**
 
-1. Reconcile uncertain Keep/Undo outcomes from authoritative receipts after lost acknowledgements; preserve request ID on retry.
-2. Keep session/directory/file/revision immutable throughout; finish independent-writer transaction coverage and a receipt-retention policy that preserves idempotency.
+1. Preserve the implemented authoritative Keep/Undo reconciliation and saved request ID across future review changes.
+2. Keep session/directory/file/revision immutable throughout and finish independent-writer transaction coverage. Receipts now remain for the owning task's lifetime and are erased inside the review gate when that task is deleted.
 3. Drop a successful reply, switch tasks/restart, retry and concurrently edit the file; inspect filesystem state and actual editor/chat dismissal.
 
 **Source entry points:** [packages/kilo-vscode/src/edit-review/InEditorReview.ts](../packages/kilo-vscode/src/edit-review/InEditorReview.ts).
@@ -3151,3 +3151,11 @@ EN-04 is still In progress. Next prove independent backend processes cannot over
 Product commit `9f348e7043` and ledger commit `51a03a0502` are on `origin/main`. The sequential low-memory snapshot workflow passed SDK generation, the Windows x64 CLI build and three smoke checks, extension-host and webview typechecks, cached ESLint, production bundling, packaging and installation. Installed identity: `eden.raya@7.4.23-snapshot+51a03a0502.kamil-oseni.1789331975422`. VSIX: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-51a03a0502-kamil-oseni-1789331975422.vsix`; 517,925,585 bytes; 431 files; SHA-256 `48254E9CEAB36D8478A02094122CAAF2A4F14A855B2193011AB3CA0400BCEAA3`. VS Code's installed inventory matches that version. Reload the current VS Code window before manual acceptance.
 
 The pinned bunx build path still reports its known bin-remap failure, and the active-Bun fallback passed. Do not run `bun install --force`. No build process remained after installation.
+
+## ChatGPT 2026-09-13 16:50 America/Toronto - EN-04 receipt retention policy
+
+**Implemented and focused verification passes; delivery remains.** Review receipts are retained without a time cutoff until the owning task is deleted. This preserves delayed retry idempotency rather than making safety depend on a guessed expiry window. Task deletion now removes `storage/review_receipt/<sessionID>` inside the shared review gate, after active work drains and before the deletion event. Recursive child deletion applies the same rule. Filesystem failure aborts deletion rather than reporting erasure that did not occur.
+
+The production hook is `packages/opencode/src/kilocode/session/retention.ts`, with minimal dependency and deletion calls in `packages/opencode/src/session/session.ts`. Focused evidence passes 4 review lifecycle cases / 18 assertions, including sibling-session isolation, plus the updated Session layer's sandbox composition case. Prettier, scoped Oxlint with zero errors, annotation, Effect facade, changeset and diff guards pass.
+
+Do not add time-based receipt pruning unless the product also introduces an explicit retry-expiry contract and prevents old request IDs from mutating work after expiry. The remaining EN-04 implementation is independent-process workspace ownership. After that, run the installed lost-response, restart, same-ID retry and concurrent-edit acceptance while inspecting both filesystem and review UI state.

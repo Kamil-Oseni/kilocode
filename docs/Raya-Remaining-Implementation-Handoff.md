@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-13):** ChatGPT reviewed and repaired Grok's work, delivered durable Routine DMs, attachments, Chat Info, first-class organization persistence/navigation, explicit delegation authority, restart-safe main-chat provisioning, organization editing/archive, one-click chat-result navigation, simplified Browser behavior, actionable GPT-Live microphone recovery, durable goal usage totals, enforceable goal limits, and revision-safe goal file deliverables. Latest installed commit: `ba8e4c3936`. Remaining: the unfinished 39-requirement work, broader goal accounting and non-file deliverables, inline media treatment, full live rebuild-survival acceptance, paid GPT-Live/device acoustic acceptance, and packaged VS Code microphone consent. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-13):** ChatGPT reviewed and repaired Grok's work, delivered durable Routine DMs, attachments, Chat Info, first-class organization persistence/navigation, explicit delegation authority, restart-safe main-chat provisioning, organization editing/archive, one-click chat-result navigation, simplified Browser behavior, actionable GPT-Live microphone recovery, durable goal usage totals, enforceable goal limits including bounded automatic recovery, and revision-safe goal file deliverables. Latest installed commit: `c473ee39e5`. Remaining: the unfinished 39-requirement work, broader goal accounting and non-file deliverables, inline media treatment, full live rebuild-survival acceptance, paid GPT-Live/device acoustic acceptance, and packaged VS Code microphone consent. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -8,7 +8,7 @@
 
 Updated 2026-09-13. This is a continuation guide, not a completion certificate.
 
-**Latest delivered product:** ChatGPT installed snapshot `ba8e4c3936` (`eden.raya@7.4.23-snapshot+ba8e4c3936.kamil-oseni.1789303069662`). It includes the earlier Routine, Browser, GPT-Live recovery and reconnect work plus durable goal usage totals, enforceable limits and revision-safe file deliverables in current, historical and copied goal details. Reload VS Code normally to pick up the snapshot.
+**Latest delivered product:** ChatGPT installed snapshot `c473ee39e5` (`eden.raya@7.4.23-snapshot+c473ee39e5.kamil-oseni.1789304451923`). It includes the earlier Routine, Browser, GPT-Live recovery and reconnect work plus durable goal usage totals, enforceable time, cost and automatic-recovery limits, and revision-safe file deliverables in current, historical and copied goal details. Reload VS Code normally to pick up the snapshot.
 
 ## Scope and reading order
 
@@ -19,9 +19,9 @@ Status excerpts below are historical records, not a fresh certification of every
 ## Checkpoint and standing authorization
 
 - Workspace: `C:\Users\User\Desktop\raya`; PowerShell; branch `main`; origin `https://github.com/Kamil-Oseni/kilocode.git`.
-- Last verified pushed product checkpoint: `ba8e4c3936ecd9945461999c997c2c761f83d464`, including durable goal-session usage totals, enforceable active-time and recorded model-cost limits, and revision-safe file deliverables in addition to the earlier Routine, Browser, GPT-Live recovery and reconnect work.
-- Installed: `eden.raya@7.4.23-snapshot+ba8e4c3936.kamil-oseni.1789303069662`.
-- VSIX: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-ba8e4c3936-kamil-oseni-1789303069662.vsix`; SHA-256 `815C7B0906A8552BE6847F623E55596F96A2CFC935F7E41FEE5284047FD00D0E`; 517764979 bytes; 431 entries; bundled CLI 229239296 bytes; zero `.env` or `.tmp` entries.
+- Last verified pushed product checkpoint: `c473ee39e5`, including durable goal-session usage totals, enforceable active-time, recorded model-cost and consecutive automatic-recovery limits, and revision-safe file deliverables in addition to the earlier Routine, Browser, GPT-Live recovery and reconnect work.
+- Installed: `eden.raya@7.4.23-snapshot+c473ee39e5.kamil-oseni.1789304451923`.
+- VSIX: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-c473ee39e5-kamil-oseni-1789304451923.vsix`; SHA-256 `072BE3BD03A67B6184305BB20B11E2EACE8108FBD0616F8C9687EB0CA421D76B`; 517771239 bytes; 431 entries; bundled CLI 229241344 bytes; zero `.env` or `.tmp` entries.
 - The user authorizes two parallel workers plus root, batched checks, periodic normal commits/pushes to `origin/main`, and `snapshot:install` outside the sandbox. Do not ask again. No force push, hook bypass or forced VS Code reload.
 - At approximately $10 remaining, as reported by the user, stop opening broad work, settle current processes, update this handoff and give the continuation prompt below. Do not invent a credit balance.
 
@@ -2928,3 +2928,11 @@ Focused evidence passes 2 new core lifecycle tests / 23 assertions, covering pro
 No repository-wide `tsgolint`, root lint, broad Turbo command, standalone CLI-wide `tsgo`, parallel typecheck or broad test suite ran. No `tsgolint` process appeared, and only the existing approximately 21 MB Node process remained after checks. OVR-06 remains In progress for descendant/tool/GPT-Live/external accounting and reservations, non-file/external deliverable associations, other lifecycle semantics and packaged UI acceptance.
 
 Next continue OVR-06 with one bounded accounting source. Prefer durable descendant-session model usage before tool, GPT-Live or external charges: inventory the existing parent/child session linkage and stored assistant usage receipt; add a source-qualified, idempotent child accounting record keyed by child session and settled message; aggregate it without double-counting current-session totals; state missing historical coverage plainly; enforce active cost limits against the combined recorded total; preserve the receipt through reload/revision/history; expose current versus descendant coverage in the goal card and copied report; add focused concurrent/reload tests; regenerate the SDK; and keep every check sequential under `RAYA_LOW_MEMORY=1`. Do not run repository-wide `tsgolint`, broad Turbo, root lint, parallel typechecks, or the standalone CLI-wide `tsgo`.
+
+## ChatGPT 2026-09-13 09:03 America/Toronto — bounded automatic recovery delivered
+
+Product commit `c473ee39e5` (`feat(goals): bound automatic recovery`) is on `origin/main`. Goals can now save a 1–100 consecutive recovery-attempt ceiling, pause before another provider or failed-turn recovery at that ceiling, retain a durable exhaustion receipt, and require a revised approach or reviewed limit change before resuming. Successful work renews the counter. The goal editor, prompt, report, OpenAPI and SDK expose the same contract.
+
+The authorized `RAYA_LOW_MEMORY=1` workflow rebuilt the changed Windows x64 CLI, passed the version, model-snapshot and sandbox-worker smoke checks, then ran extension-host typecheck, webview typecheck, cached ESLint, production bundle, packaging and installation sequentially. It installed `eden.raya@7.4.23-snapshot+c473ee39e5.kamil-oseni.1789304451923`. Artifact: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-c473ee39e5-kamil-oseni-1789304451923.vsix`; 517771239 bytes; 431 entries; SHA-256 `072BE3BD03A67B6184305BB20B11E2EACE8108FBD0616F8C9687EB0CA421D76B`; bundled CLI 229241344 bytes; zero `.env` or `.tmp` entries. The installed-extension inventory reports the exact same version.
+
+No repository-wide `tsgolint`, root lint, broad Turbo command, standalone CLI-wide `tsgo`, parallel typecheck or broad test suite ran. No `tsgolint` process appeared, and no build process remained afterward. Reload VS Code before reviewing the new recovery limit in the expanded goal card.

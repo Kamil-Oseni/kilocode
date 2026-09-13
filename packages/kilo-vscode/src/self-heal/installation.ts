@@ -84,6 +84,11 @@ const schema = z.object({
     "verification-publishing",
     "verification-unknown",
     "verified-active",
+    "rollback-installing",
+    "rollback-awaiting-reload",
+    "rollback-unknown",
+    "rollback-verified",
+    "rollback-failed",
     "failed",
   ]),
   replaySessionID: z.string().min(1).optional(),
@@ -233,6 +238,30 @@ export class SelfHealInstallation {
     return this.lock(async () => {
       const record = await this.read()
       if (!record) return
+      if (record.phase.startsWith("rollback-")) {
+        if (record.phase === "rollback-verified" || record.phase === "rollback-failed" || record.previous !== version)
+          return { record, changed: false }
+        try {
+          await checksum(binary, record.rollback.binary, 512 * 1024 * 1024)
+        } catch (err) {
+          const failed: Record = {
+            ...record,
+            phase: "rollback-failed",
+            reason: `The restored bundled CLI does not match the retained rollback package. ${message(err)}`,
+            updatedAt: Date.now(),
+          }
+          await this.write(failed)
+          return { record: failed, changed: true }
+        }
+        const restored: Record = {
+          ...record,
+          phase: "rollback-verified",
+          reason: undefined,
+          updatedAt: Date.now(),
+        }
+        await this.write(restored)
+        return { record: restored, changed: true }
+      }
       if (record.phase === "validating") {
         const failed = {
           ...record,
@@ -362,6 +391,63 @@ export class SelfHealInstallation {
       }
       await this.write(accepted)
       return { record: accepted, published: true }
+    })
+  }
+
+  rollback(install: (path: string) => Promise<void>) {
+    return this.lock(async () => {
+      const record = await this.read()
+      if (!record) throw new Error("No self-heal installation is retained for rollback.")
+      if (record.phase.startsWith("rollback-")) return { record, dispatched: false }
+      if (
+        !["active", "replay-submitted", "replay-unknown", "verification-unknown", "verified-active", "failed"].includes(
+          record.phase,
+        )
+      )
+        throw new Error("This self-heal installation is not ready for rollback.")
+      try {
+        await verify(record.rollback.package, {
+          name: "raya",
+          publisher: "eden",
+          version: record.rollback.version,
+          target: record.rollback.target,
+          artifact: record.rollback.artifact,
+          binary: record.rollback.binary,
+        })
+      } catch (err) {
+        const failed: Record = {
+          ...record,
+          phase: "rollback-failed",
+          reason: `The retained rollback package could not be verified. ${message(err)}`,
+          updatedAt: Date.now(),
+        }
+        await this.write(failed)
+        throw err
+      }
+      const installing: Record = {
+        ...record,
+        phase: "rollback-installing",
+        reason: undefined,
+        updatedAt: Date.now(),
+      }
+      await this.write(installing)
+      await install(record.rollback.package).catch(async (err) => {
+        const unknown: Record = {
+          ...installing,
+          phase: "rollback-unknown",
+          reason: `Rollback dispatch could not be confirmed. ${message(err)}`,
+          updatedAt: Date.now(),
+        }
+        await this.write(unknown)
+        throw err
+      })
+      const pending: Record = {
+        ...installing,
+        phase: "rollback-awaiting-reload",
+        updatedAt: Date.now(),
+      }
+      await this.write(pending)
+      return { record: pending, dispatched: true }
     })
   }
 }

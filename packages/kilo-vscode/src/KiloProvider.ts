@@ -204,6 +204,7 @@ import {
   detail as selfHealVerificationDetail,
   verify as verifySelfHeal,
 } from "./self-heal/verification"
+import { detail as selfHealRollbackDetail, rollback as rollbackSelfHeal } from "./self-heal/rollback"
 import { SpeechService } from "./speech/service" // raya_change - Milestone H voice orchestration
 import {
   buildIndexingSettingsMessage,
@@ -4726,6 +4727,35 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         },
       })
       this.postMessage({ type: "goalState", sessionID: reporter, notice: result.notice })
+      return { handled: true }
+    }
+    if (command.kind === "rollback") {
+      const root = path.join(
+        this.extensionContext?.globalStorageUri.fsPath ?? this.extensionUri.fsPath,
+        "self-heal-install",
+      )
+      const action = "Restore earlier Raya"
+      const result = await rollbackSelfHeal({
+        itemID: command.id,
+        journal: new SelfHealInstallation(root),
+        confirm: async (view) =>
+          (await vscode.window.showWarningMessage(
+            `Roll back repair: ${view.itemID}`,
+            { modal: true, detail: selfHealRollbackDetail(view) },
+            action,
+          )) === action,
+        dispatch: async (artifact) => {
+          await vscode.commands.executeCommand("workbench.extensions.installExtension", vscode.Uri.file(artifact))
+        },
+      })
+      this.postMessage({ type: "goalState", sessionID: reporter, notice: result.notice })
+      if (result.reload) {
+        const choice = await vscode.window.showInformationMessage(
+          `Raya ${result.record?.previous} is installed for rollback. Reload to verify it.`,
+          "Reload",
+        )
+        if (choice === "Reload") await vscode.commands.executeCommand("workbench.action.reloadWindow")
+      }
       return { handled: true }
     }
     if (command.kind === "list") {

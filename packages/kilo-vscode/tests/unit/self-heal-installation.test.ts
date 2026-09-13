@@ -10,6 +10,7 @@ import { expect, test } from "bun:test"
 import { createKiloClient } from "@kilocode/sdk/v2/client"
 import { install as runInstall } from "../../src/self-heal/install"
 import { SelfHealInstallation, type Plan } from "../../src/self-heal/installation"
+import { detail as rollbackDetail, rollback as runRollback } from "../../src/self-heal/rollback"
 import {
   accept as acceptVerification,
   detail as verificationDetail,
@@ -874,6 +875,117 @@ test("changed or incomplete goal evidence cannot be accepted", async () => {
     })
     expect(incomplete.notice).toContain("does not have a completed, accepted audit")
     expect(published).toBe(false)
+  } finally {
+    await rm(run.root, { recursive: true, force: true })
+  }
+})
+
+test("dispatches rollback once and verifies the restored version and CLI", async () => {
+  const run = await fixture()
+  try {
+    const root = join(run.root, "state")
+    const journal = new SelfHealInstallation(root)
+    await journal.run(run.plan, async () => undefined)
+    const repaired = join(run.root, "repaired.exe")
+    await writeFile(repaired, run.binary)
+    await journal.activate(run.plan.extension, repaired)
+    let calls = 0
+    const result = await runRollback({
+      itemID: run.plan.itemID,
+      journal,
+      confirm: async (view) => {
+        expect(rollbackDetail(view)).toContain(run.plan.rollback.artifact.digest)
+        return true
+      },
+      dispatch: async (path) => {
+        calls++
+        expect(path).toContain(join(root, "rollback."))
+        expect(await readFile(path)).toEqual(await readFile(run.plan.rollback.source))
+        expect(JSON.parse(await readFile(join(root, "installation.json"), "utf8"))).toMatchObject({
+          phase: "rollback-installing",
+          rollback: { package: path },
+        })
+      },
+    })
+    expect(result).toMatchObject({ reload: true, record: { phase: "rollback-awaiting-reload" } })
+    expect(calls).toBe(1)
+    expect(await journal.activate(run.plan.extension, repaired)).toMatchObject({
+      changed: false,
+      record: { phase: "rollback-awaiting-reload" },
+    })
+    const previous = join(run.root, "previous.exe")
+    await writeFile(previous, run.previous)
+    expect(await journal.activate(run.plan.previous, previous)).toMatchObject({
+      changed: true,
+      record: { phase: "rollback-verified" },
+    })
+    expect(await journal.activate(run.plan.previous, previous)).toMatchObject({
+      changed: false,
+      record: { phase: "rollback-verified" },
+    })
+  } finally {
+    await rm(run.root, { recursive: true, force: true })
+  }
+})
+
+test("retains uncertain rollback without redispatch and resolves it by activation", async () => {
+  const run = await fixture()
+  try {
+    const root = join(run.root, "state")
+    const journal = new SelfHealInstallation(root)
+    await journal.run(run.plan, async () => undefined)
+    const repaired = join(run.root, "repaired.exe")
+    await writeFile(repaired, run.binary)
+    await journal.activate(run.plan.extension, repaired)
+    let calls = 0
+    await expect(
+      journal.rollback(async () => {
+        calls++
+        throw new Error("rollback acknowledgement lost")
+      }),
+    ).rejects.toThrow("rollback acknowledgement lost")
+    expect(await journal.inspect()).toMatchObject({
+      phase: "rollback-unknown",
+      reason: expect.stringContaining("could not be confirmed"),
+    })
+    expect(
+      await journal.rollback(async () => {
+        calls++
+      }),
+    ).toMatchObject({ dispatched: false, record: { phase: "rollback-unknown" } })
+    expect(calls).toBe(1)
+    const previous = join(run.root, "previous.exe")
+    await writeFile(previous, run.previous)
+    expect(await journal.activate(run.plan.previous, previous)).toMatchObject({
+      changed: true,
+      record: { phase: "rollback-verified" },
+    })
+  } finally {
+    await rm(run.root, { recursive: true, force: true })
+  }
+})
+
+test("changed rollback bytes fail before dispatch", async () => {
+  const run = await fixture()
+  try {
+    const root = join(run.root, "state")
+    const journal = new SelfHealInstallation(root)
+    const installed = await journal.run(run.plan, async () => undefined)
+    const repaired = join(run.root, "repaired.exe")
+    await writeFile(repaired, run.binary)
+    await journal.activate(run.plan.extension, repaired)
+    await writeFile(installed.record.rollback.package, "changed")
+    let dispatched = false
+    await expect(
+      journal.rollback(async () => {
+        dispatched = true
+      }),
+    ).rejects.toThrow()
+    expect(dispatched).toBe(false)
+    expect(await journal.inspect()).toMatchObject({
+      phase: "rollback-failed",
+      reason: expect.stringContaining("could not be verified"),
+    })
   } finally {
     await rm(run.root, { recursive: true, force: true })
   }

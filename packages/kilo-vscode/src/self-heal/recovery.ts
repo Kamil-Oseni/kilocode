@@ -9,6 +9,25 @@ export async function recover(context: vscode.ExtensionContext) {
   const result = await new SelfHealInstallation(root).activate(version, binary)
   if (!result) return
   const record = result.record
+  if (record.phase === "rollback-verified" && result.changed) {
+    await vscode.window.showInformationMessage(
+      `Raya ${record.previous} is restored and its bundled CLI matches the retained rollback package.`,
+    )
+    return
+  }
+  if (record.phase === "rollback-failed") {
+    await vscode.window.showErrorMessage(`Raya could not verify rollback ${record.id}. ${record.reason}`)
+    return
+  }
+  if (record.phase.startsWith("rollback-")) {
+    const choice = await vscode.window.showWarningMessage(
+      `Rollback ${record.id} is waiting for reload verification. No retry was started.`,
+      "Reload",
+      "Later",
+    )
+    if (choice === "Reload") await vscode.commands.executeCommand("workbench.action.reloadWindow")
+    return
+  }
   if (record.phase === "active" && result.changed) {
     await vscode.window.showInformationMessage(
       `Raya ${record.extension} is active and its bundled CLI matches approval ${record.approvalID}. The original issue still needs verification.`,

@@ -7,10 +7,11 @@ export type SelfHealCommand =
   | { kind: "install"; id: string }
   | { kind: "verify"; id: string }
   | { kind: "accept"; id: string }
+  | { kind: "rollback"; id: string }
   | { kind: "capture"; description: string }
 
 const usage =
-  "Usage: /self-heal <describe the issue you noticed>, /self-heal list, /self-heal inspect <itemID>, /self-heal review <itemID>, /self-heal install <itemID>, /self-heal verify <itemID>, or /self-heal accept <itemID>"
+  "Usage: /self-heal <describe the issue you noticed>, /self-heal list, /self-heal inspect <itemID>, /self-heal review <itemID>, /self-heal install <itemID>, /self-heal verify <itemID>, /self-heal accept <itemID>, or /self-heal rollback <itemID>"
 
 export function parseSelfHealCommand(text: string): SelfHealCommand | undefined {
   const match = text.trim().match(/^\/self-heal(?:\s+([\s\S]*))?$/i)
@@ -18,25 +19,12 @@ export function parseSelfHealCommand(text: string): SelfHealCommand | undefined 
   const description = match[1]?.trim()
   if (!description) return { kind: "usage", notice: usage }
   if (description.toLowerCase() === "list") return { kind: "list" }
-  if (/^inspect(?:\s|$)/i.test(description)) {
-    const id = description.match(/^inspect\s+(heal_[a-z0-9_-]+)$/i)?.[1]
-    return id ? { kind: "inspect", id } : { kind: "usage", notice: usage }
-  }
-  if (/^review(?:\s|$)/i.test(description)) {
-    const id = description.match(/^review\s+(heal_[a-z0-9_-]+)$/i)?.[1]
-    return id ? { kind: "review", id } : { kind: "usage", notice: usage }
-  }
-  if (/^install(?:\s|$)/i.test(description)) {
-    const id = description.match(/^install\s+(heal_[a-z0-9_-]+)$/i)?.[1]
-    return id ? { kind: "install", id } : { kind: "usage", notice: usage }
-  }
-  if (/^verify(?:\s|$)/i.test(description)) {
-    const id = description.match(/^verify\s+(heal_[a-z0-9_-]+)$/i)?.[1]
-    return id ? { kind: "verify", id } : { kind: "usage", notice: usage }
-  }
-  if (/^accept(?:\s|$)/i.test(description)) {
-    const id = description.match(/^accept\s+(heal_[a-z0-9_-]+)$/i)?.[1]
-    return id ? { kind: "accept", id } : { kind: "usage", notice: usage }
+  const action = description.match(/^(inspect|review|install|verify|accept|rollback)(?:\s|$)/i)?.[1]?.toLowerCase() as
+    | Extract<SelfHealCommand, { id: string }>["kind"]
+    | undefined
+  if (action) {
+    const id = description.match(new RegExp(`^${action}\\s+(heal_[a-z0-9_-]+)$`, "i"))?.[1]
+    return id ? { kind: action, id } : { kind: "usage", notice: usage }
   }
   return { kind: "capture", description }
 }

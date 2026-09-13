@@ -5,6 +5,7 @@ import { english } from "@opencode-ai/core/kilocode/schedule"
 import type { Database } from "@opencode-ai/core/database/database"
 import { RayaTask } from "@/kilocode/task"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
+import { RayaTaskDelegation } from "@/kilocode/task/delegation"
 import {
   Create as OrganizationCreate,
   DelegationInput,
@@ -14,6 +15,7 @@ import {
   Update as OrganizationUpdate,
 } from "@/kilocode/task/organization"
 import { record as RoutineIdentity } from "@/kilocode/task/continuation"
+import { RayaTaskRunner } from "@/kilocode/task/runner"
 import type { Session } from "@/session/session"
 import type { Storage } from "@/storage/storage"
 import * as Tool from "@/tool/tool"
@@ -127,6 +129,18 @@ const CreateSubordinate = Schema.Struct({
   canCreateWorkers: Schema.optional(Schema.Boolean),
   delegatesTo: Schema.optional(Schema.Array(Schema.String).check(Schema.isMaxLength(50))),
   ...ScheduleFields,
+})
+const DelegateWork = Schema.Struct({
+  organizationID: Organization.fields.id,
+  expectedRevision: Organization.fields.revision,
+  recipientID: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)),
+  objective: Text,
+  expected: Schema.optional(Text),
+  context: Schema.optional(Text),
+  deadline: Schema.optional(
+    Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(8.64e15)),
+  ),
+  budget: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(1_000_000))),
 })
 const SubordinatePlan = Schema.Struct({
   organizationID: Schema.String,
@@ -271,6 +285,8 @@ export function routineManagementTools(input: {
   const tasks = RayaTask.make({ storage: input.storage, database: input.database })
   const organizations = RayaTaskOrganization.make(input.database, tasks, input.storage)
   const inbox = RayaTaskInbox.make(input.database)
+  const errands = RayaTaskDelegation.make(input.database, organizations.authorize, organizations.shares)
+  const runner = RayaTaskRunner.make({ ...input, database: input.database })
 
   const announce = Effect.fn("RayaRoutineManagement.announceSubordinate")(function* (
     item: typeof Organization.Type,
@@ -645,6 +661,125 @@ export function routineManagementTools(input: {
     }),
   )
 
+  const delegateWork = Tool.define(
+    "delegate_work",
+    Effect.succeed({
+      description:
+        "Assign one bounded follow-on request to an existing worker through the current organization. Use ask_options before calling if the responsible worker, outcome, expected result, context, deadline, or budget is ambiguous. The recipient must be on an exact saved outgoing delegation route. This tool saves and starts the request when possible; it never returns a worker result that has not arrived.",
+      parameters: DelegateWork,
+      execute: (params: typeof DelegateWork.Type, ctx: Tool.Context) =>
+        Effect.gen(function* () {
+          if (!ctx.callID) return yield* Effect.fail(new Error("Work delegation requires a stable tool call."))
+          const session = yield* input.sessions.get(ctx.sessionID)
+          const identity = yield* Schema.decodeUnknownEffect(RoutineIdentity)(session.metadata?.rayaRoutine).pipe(
+            Effect.mapError(() => new Error("Only a running routine worker can delegate work.")),
+          )
+          const sender = yield* tasks.get(identity.agentID)
+          const run = (yield* tasks.runsFor(sender.id)).find(
+            (item) =>
+              item.id === identity.runID &&
+              item.sessionID === ctx.sessionID &&
+              item.scheduleVersion === identity.scheduleVersion &&
+              isDeepStrictEqual(item.trigger, identity.trigger) &&
+              RayaTask.pending(item),
+          )
+          if (!run) return yield* Effect.fail(new Error("The current routine run is no longer active."))
+          const organization = yield* organizations.get(params.organizationID)
+          if (organization.archived) return yield* Effect.fail(new Error("This organization is archived."))
+          if (organization.revision !== params.expectedRevision)
+            return yield* Effect.fail(new Error("This organization changed. Reload it before delegating work."))
+          if (!organization.members.some((item) => item.agentID === sender.id))
+            return yield* Effect.fail(new Error("The current worker is not an active member of this organization."))
+          if (!organization.members.some((item) => item.agentID === params.recipientID))
+            return yield* Effect.fail(new Error("The receiving worker is not an active member of this organization."))
+          if (
+            !organization.delegations.some(
+              (item) => item.senderID === sender.id && item.recipientID === params.recipientID,
+            )
+          )
+            return yield* Effect.fail(
+              new Error("This organization does not permit the current worker to delegate to that worker."),
+            )
+          const incoming = yield* errands.bySession(ctx.sessionID)
+          if (
+            incoming &&
+            (incoming.recipientID !== sender.id ||
+              incoming.childRunID !== run.id ||
+              incoming.organizationID !== organization.id ||
+              (incoming.state !== "running" && incoming.state !== "needs_input"))
+          )
+            return yield* Effect.fail(new Error("The current delegated request no longer matches this worker run."))
+          if (incoming) {
+            const tree = yield* errands.tree(incoming.id)
+            const ancestry = new Set(tree.above.flatMap((item) => [item.senderID, item.recipientID]))
+            ancestry.add(tree.record.senderID)
+            ancestry.add(tree.record.recipientID)
+            if (ancestry.has(params.recipientID))
+              return yield* Effect.fail(new Error("This delegation would create a cycle in the current work chain."))
+          }
+          const source = `delegate:${digest(
+            JSON.stringify([ctx.sessionID, ctx.messageID, ctx.callID, sender.id, organization.id]),
+          ).slice(0, 48)}`
+          const request = {
+            source,
+            senderID: sender.id,
+            recipientID: params.recipientID,
+            parentID: incoming?.id,
+            parentRunID: run.id,
+            organizationID: organization.id,
+            organizationRevision: organization.revision,
+            objective: params.objective.trim(),
+            expected: params.expected?.trim(),
+            context: params.context?.trim(),
+            deadline: params.deadline,
+            budget: params.budget,
+          }
+          const record = yield* runner.delegate(request)
+          if (
+            record.source !== source ||
+            record.senderID !== sender.id ||
+            record.recipientID !== params.recipientID ||
+            record.parentID !== incoming?.id ||
+            record.parentRunID !== run.id ||
+            record.organizationID !== organization.id ||
+            record.organizationRevision !== organization.revision ||
+            record.objective !== params.objective.trim() ||
+            record.expected !== params.expected?.trim() ||
+            record.context !== params.context?.trim() ||
+            record.deadline !== params.deadline ||
+            record.budget !== params.budget
+          )
+            return yield* Effect.fail(new Error("The saved delegation does not match this request."))
+          const recipient = yield* tasks.get(record.recipientID)
+          const reason = record.reason ? ` ${record.reason}` : ""
+          return {
+            title: "Work delegation saved",
+            output: `Assigned the request to ${recipient.name}. Saved state: ${record.state}.${reason}`,
+            metadata: {
+              requestStatus: record.state === "failed" || record.state === "cancelled" ? "unresolved" : "complete",
+              view: "routines",
+              organizationID: organization.id,
+              organizationRevision: organization.revision,
+              delegationID: record.id,
+              state: record.state,
+              senderID: record.senderID,
+              recipientID: record.recipientID,
+              parentID: record.parentID,
+              parentRunID: record.parentRunID,
+            },
+          }
+        }).pipe(
+          Effect.catch((err) =>
+            Effect.succeed({
+              title: "Work delegation needs review",
+              output: `${err instanceof Error ? err.message : String(err)} Review the current organization and work chain before retrying.`,
+              metadata: { requestStatus: "unresolved", view: "routines", organizationID: params.organizationID },
+            }),
+          ),
+        ),
+    }),
+  )
+
   const updateRoutine = Tool.define(
     "update_routine",
     Effect.succeed({
@@ -819,5 +954,5 @@ export function routineManagementTools(input: {
     }),
   )
 
-  return { inspect, create, createSubordinate, updateRoutine, updateOrganization }
+  return { inspect, create, createSubordinate, delegateWork, updateRoutine, updateOrganization }
 }

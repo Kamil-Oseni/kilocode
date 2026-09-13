@@ -8,8 +8,10 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Agent } from "@/agent/agent"
 import { Git } from "@/git"
 import { RayaTask } from "@/kilocode/task"
+import { RayaTaskDelegation } from "@/kilocode/task/delegation"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import { RayaTaskOrganization } from "@/kilocode/task/organization"
+import { KiloToolRegistry } from "@/kilocode/tool/registry"
 import { routineManagementTools } from "@/kilocode/tool/routine-management"
 import * as Permission from "@/permission"
 import { MessageID, SessionID } from "@/session/schema"
@@ -314,6 +316,191 @@ it.live(
         expect(denied.title).toBe("Subordinate creation needs review")
         expect(denied.output).toContain("cannot grant the child capability growth")
         expect(yield* tasks.list()).toHaveLength(3)
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            Storage.layerFromDir(path.join(directory, "storage")),
+            Database.layerFromPath(path.join(directory, "queue.sqlite")),
+          ),
+        ),
+      ),
+    ),
+  30_000,
+)
+
+it.live(
+  "active routine workers delegate durable follow-on work through exact organization routes",
+  () =>
+    provideTmpdirInstance((directory) =>
+      Effect.gen(function* () {
+        const storage = yield* Storage.Service
+        const database = yield* Database.Service
+        const tasks = RayaTask.make({ storage, database })
+        const chief = yield* tasks.create({
+          name: "Chief of Staff",
+          role: "chief",
+          objective: "Coordinate client work",
+          output: output("Company"),
+          capabilities: [],
+          access: "full",
+          schedule: { kind: "manual" },
+        })
+        const designer = yield* tasks.create({
+          name: "Design Lead",
+          role: "designer",
+          objective: "Design assigned websites",
+          output: output("Design"),
+          capabilities: [],
+          access: "full",
+          schedule: { kind: "manual" },
+        })
+        const coder = yield* tasks.create({
+          name: "Frontend Lead",
+          role: "coder",
+          objective: "Build approved website designs",
+          output: output("Build"),
+          capabilities: [],
+          access: "full",
+          schedule: { kind: "manual" },
+        })
+        const organizations = RayaTaskOrganization.make(database, tasks, storage)
+        const organization = yield* organizations.create({
+          name: "Website Builders",
+          purpose: "Ship client websites.",
+          members: [
+            { agentID: chief.id, role: "Chief" },
+            { agentID: designer.id, role: "Design", supervisorID: chief.id },
+            { agentID: coder.id, role: "Frontend", supervisorID: designer.id },
+          ],
+          delegations: [
+            { senderID: chief.id, recipientID: designer.id },
+            { senderID: designer.id, recipientID: coder.id },
+            { senderID: designer.id, recipientID: chief.id },
+          ],
+        })
+        const errands = RayaTaskDelegation.make(database, organizations.authorize, organizations.shares)
+        const incoming = yield* errands.admit(
+          {
+            source: "test:design-request",
+            senderID: chief.id,
+            recipientID: designer.id,
+            organizationID: organization.id,
+            organizationRevision: organization.revision,
+            objective: "Design the approved client site",
+          },
+          chief,
+          designer,
+        )
+        yield* errands.take(designer.id)
+        const runID = "run_design_request"
+        const sessionID = SessionID.make("ses_routine_management")
+        yield* tasks.record({
+          id: runID,
+          agentID: designer.id,
+          at: Date.now(),
+          sessionID,
+          status: "running",
+          scheduleVersion: 1,
+          trigger: { kind: "manual" },
+        })
+        yield* errands.attach(incoming.record.id, runID, sessionID)
+        yield* tasks.record({
+          id: "run_frontend_busy",
+          agentID: coder.id,
+          at: Date.now(),
+          sessionID: SessionID.make("ses_frontend_busy"),
+          status: "running",
+          scheduleVersion: 1,
+          trigger: { kind: "manual" },
+        })
+        const workerSessions = {
+          ...sessions,
+          get: () =>
+            Effect.succeed({
+              metadata: {
+                rayaRoutine: {
+                  version: 1,
+                  agentID: designer.id,
+                  runID,
+                  scheduleVersion: 1,
+                  trigger: { kind: "manual" },
+                },
+              },
+            } as never),
+        }
+        const tools = routineManagementTools({ database, storage, sessions: workerSessions })
+        const info = yield* tools.delegateWork
+        const delegate = yield* info.init()
+        const available = { ...delegate, id: info.id }
+        expect(
+          KiloToolRegistry.available(available, {
+            name: "build",
+            mode: "primary",
+            options: {},
+            permission: {},
+          } as Agent.Info),
+        ).toBe(false)
+        expect(
+          KiloToolRegistry.available(available, {
+            name: "build",
+            mode: "subagent",
+            options: {},
+            permission: {},
+          } as Agent.Info),
+        ).toBe(true)
+        const params = {
+          organizationID: organization.id,
+          expectedRevision: organization.revision,
+          recipientID: coder.id,
+          objective: "Build the approved landing page",
+          expected: "Return the deployed source and verification",
+          context: "Use the approved design in the current request",
+          deadline: Date.now() + 86_400_000,
+          budget: 500,
+        }
+        const assigned = yield* delegate.execute(params, context("delegate-build"))
+        expect(assigned).toMatchObject({
+          title: "Work delegation saved",
+          metadata: {
+            requestStatus: "complete",
+            state: "queued",
+            senderID: designer.id,
+            recipientID: coder.id,
+            parentID: incoming.record.id,
+            parentRunID: runID,
+          },
+        })
+        const id = "delegationID" in assigned.metadata ? assigned.metadata.delegationID : undefined
+        if (typeof id !== "string") return yield* Effect.die(new Error("delegation ID was not returned"))
+        expect(yield* errands.get(id)).toMatchObject({
+          senderID: designer.id,
+          recipientID: coder.id,
+          parentID: incoming.record.id,
+          parentRunID: runID,
+          organizationID: organization.id,
+          organizationRevision: organization.revision,
+          objective: params.objective,
+          expected: params.expected,
+          context: params.context,
+          deadline: params.deadline,
+          budget: params.budget,
+          state: "queued",
+        })
+        expect(yield* delegate.execute(params, context("delegate-build"))).toEqual(assigned)
+        expect(yield* errands.byRun(runID)).toHaveLength(1)
+
+        const cycle = yield* delegate.execute(
+          { ...params, recipientID: chief.id, objective: "Send the work back upstream" },
+          context("delegate-cycle"),
+        )
+        expect(cycle.title).toBe("Work delegation needs review")
+        expect(cycle.output).toContain("create a cycle")
+        const stale = yield* delegate.execute(
+          { ...params, expectedRevision: organization.revision + 1 },
+          context("delegate-stale"),
+        )
+        expect(stale.title).toBe("Work delegation needs review")
+        expect(stale.output).toContain("organization changed")
       }).pipe(
         Effect.provide(
           Layer.mergeAll(

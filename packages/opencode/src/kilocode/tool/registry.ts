@@ -168,6 +168,7 @@ export namespace KiloToolRegistry {
           inspectRoutines: routines?.inspect,
           createOrganization: routines?.create,
           createSubordinate: routines?.createSubordinate,
+          delegateWork: routines?.delegateWork,
           updateRoutine: routines?.updateRoutine,
           updateOrganization: routines?.updateOrganization,
         }
@@ -198,6 +199,7 @@ export namespace KiloToolRegistry {
         inspectRoutines: routines?.inspect,
         createOrganization: routines?.create,
         createSubordinate: routines?.createSubordinate,
+        delegateWork: routines?.delegateWork,
         updateRoutine: routines?.updateRoutine,
         updateOrganization: routines?.updateOrganization,
         ...tools,
@@ -237,6 +239,7 @@ export namespace KiloToolRegistry {
       inspectRoutines?: Tool.Info
       createOrganization?: Tool.Info
       createSubordinate?: Tool.Info
+      delegateWork?: Tool.Info
       updateRoutine?: Tool.Info
       updateOrganization?: Tool.Info
       discover?: Tool.Info
@@ -268,6 +271,7 @@ export namespace KiloToolRegistry {
       const inspectRoutines = tools.inspectRoutines ? yield* Tool.init(tools.inspectRoutines) : undefined
       const createOrganization = tools.createOrganization ? yield* Tool.init(tools.createOrganization) : undefined
       const createSubordinate = tools.createSubordinate ? yield* Tool.init(tools.createSubordinate) : undefined
+      const delegateWork = tools.delegateWork ? yield* Tool.init(tools.delegateWork) : undefined
       const updateRoutine = tools.updateRoutine ? yield* Tool.init(tools.updateRoutine) : undefined
       const updateOrganization = tools.updateOrganization ? yield* Tool.init(tools.updateOrganization) : undefined
       const terminal = tools.terminal ? yield* Tool.init(tools.terminal) : undefined
@@ -310,6 +314,7 @@ export namespace KiloToolRegistry {
         inspectRoutines,
         createOrganization,
         createSubordinate,
+        delegateWork,
         updateRoutine,
         updateOrganization,
       }
@@ -362,7 +367,7 @@ export namespace KiloToolRegistry {
       )
     )
       return agent.mode === "primary"
-    if (tool.id === "create_subordinate") return agent.mode !== "primary"
+    if (tool.id === "create_subordinate" || tool.id === "delegate_work") return agent.mode !== "primary"
     if (tool.id === "refine_self_heal") return agent.mode === "primary" // raya_change - hybrid self-heal reconcile
     if (tool.id === "notify_user") return KiloSessions.remoteStatus().enabled
     if (tool.id === "send_file") return KiloSessions.remoteStatus().connected
@@ -402,6 +407,7 @@ export namespace KiloToolRegistry {
       inspectRoutines?: Tool.Def
       createOrganization?: Tool.Def
       createSubordinate?: Tool.Def
+      delegateWork?: Tool.Def
       updateRoutine?: Tool.Def
       updateOrganization?: Tool.Def
       discover?: Tool.Def
@@ -441,6 +447,7 @@ export namespace KiloToolRegistry {
       ...(tools.inspectRoutines ? [tools.inspectRoutines] : []),
       ...(tools.createOrganization ? [tools.createOrganization] : []),
       ...(tools.createSubordinate ? [tools.createSubordinate] : []),
+      ...(tools.delegateWork ? [tools.delegateWork] : []),
       ...(tools.updateRoutine ? [tools.updateRoutine] : []),
       ...(tools.updateOrganization ? [tools.updateOrganization] : []),
       tools.notify,

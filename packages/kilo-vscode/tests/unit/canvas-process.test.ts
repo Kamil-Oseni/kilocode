@@ -130,3 +130,77 @@ test("independent extension processes can commit different Canvases concurrently
     await rm(root, { recursive: true, force: true })
   }
 }, 30_000)
+
+test("an interrupted Canvas transaction completes deterministically after every durable boundary", async () => {
+  const stages = [
+    "journal-written",
+    "recovery-prepared",
+    "recovery-renamed",
+    "current-prepared",
+    "current-renamed",
+    "source-renamed",
+    "data-renamed",
+  ]
+  for (const stage of stages) {
+    const root = await mkdtemp(path.join(os.tmpdir(), `raya-canvas-crash-${stage}-`))
+    const output = path.join(root, "bundles")
+    try {
+      await seed(root, output, "report")
+      const input = {
+        root,
+        output,
+        name: "report",
+        source: `export default function Report() { return <p>${stage}</p> }`,
+        ready: path.join(root, "ready"),
+        go: path.join(root, "go"),
+        result: path.join(root, "result"),
+        crash: stage,
+      }
+      const child = run(input)
+      await wait(input.ready)
+      await writeFile(input.go, "go")
+      expect((await child).code).toBe(86)
+      const restored = await new CanvasCompiler(output).restore(root, "report")
+      expect(restored?.warning).toContain("completed an interrupted Canvas save")
+      expect(restored?.data).toEqual({ worker: input.source })
+      expect(await readFile(restored!.path, "utf8")).toBe(input.source)
+      expect(JSON.parse(await readFile(new CanvasCompiler(output).data(root, "report"), "utf8"))).toEqual({
+        worker: input.source,
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  }
+}, 90_000)
+
+test("interrupted reconciliation retains a newer editable source", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "raya-canvas-divergent-crash-"))
+  const output = path.join(root, "bundles")
+  try {
+    await seed(root, output, "report")
+    const input = {
+      root,
+      output,
+      name: "report",
+      source: "export default function Report() { return <p>Saved</p> }",
+      ready: path.join(root, "ready"),
+      go: path.join(root, "go"),
+      result: path.join(root, "result"),
+      crash: "current-renamed",
+    }
+    const child = run(input)
+    await wait(input.ready)
+    await writeFile(input.go, "go")
+    expect((await child).code).toBe(86)
+    const source = new CanvasCompiler(output).source(root, "report")
+    await writeFile(source, "export default function Report() { return <p>Manual edit</p> }")
+    const restored = await new CanvasCompiler(output).restore(root, "report")
+    expect(restored?.warning).toContain("Edited source/data files were retained")
+    expect(await readFile(source, "utf8")).toContain("Manual edit")
+    expect(JSON.parse(await readFile(new CanvasCompiler(output).data(root, "report"), "utf8"))).toEqual({
+      worker: input.source,
+    })
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+}, 30_000)

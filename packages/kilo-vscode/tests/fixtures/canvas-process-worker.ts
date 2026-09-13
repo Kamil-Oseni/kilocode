@@ -12,6 +12,7 @@ const input = JSON.parse(process.argv[2]) as {
   result: string
   entered?: string
   hold?: number
+  crash?: string
 }
 
 async function exists(path: string) {
@@ -25,7 +26,9 @@ async function wait(path: string) {
   while (!(await exists(path))) await Bun.sleep(20)
 }
 
-const compiler = new CanvasCompiler(input.output)
+const compiler = new CanvasCompiler(input.output, undefined, (stage) => {
+  if (stage === input.crash) process.exit(86)
+})
 try {
   const build = await compiler.create(input.root, input.name, input.source, { worker: input.source })
   await writeFile(input.ready, "ready")

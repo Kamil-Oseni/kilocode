@@ -97,7 +97,7 @@ export class CanvasService implements vscode.Disposable {
     )
       return
     try {
-      const build = await this.compiler.restore(state.root, state.name)
+      const build = await this.compiler.restore(state.root, state.name, (path) => this.writable(path))
       if (!build || this.disposed || ticket !== this.generation) return
       this.watch(state.root)
       this.refresh.use(state.root, state.name)

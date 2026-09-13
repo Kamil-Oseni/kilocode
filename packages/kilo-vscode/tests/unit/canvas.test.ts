@@ -198,6 +198,30 @@ describe("Raya canvas compiler", () => {
     expect(await readFile(restored!.bundle!, "utf8")).toContain("Saved result")
   })
 
+  it("retains an invalid interrupted transaction for inspection without changing the saved Canvas", async () => {
+    const root = await temp()
+    const output = join(root, "bundles")
+    const compiler = new CanvasCompiler(output)
+    const first = await compiler.create(
+      root,
+      "transaction",
+      `export default function Report() { return <p>Saved result</p> }`,
+      { value: 1 },
+    )
+    await compiler.commit(first)
+    const directory = dirname(first.bundle!)
+    const journal = join(directory, "transaction.transaction.json")
+    const manifest = join(directory, "transaction.current.json")
+    const before = await readFile(manifest, "utf8")
+    await writeFile(journal, "{invalid transaction")
+
+    await expect(new CanvasCompiler(output).restore(root, "transaction")).rejects.toThrow(
+      "transaction.transaction.json",
+    )
+    expect(await readFile(journal, "utf8")).toBe("{invalid transaction")
+    expect(await readFile(manifest, "utf8")).toBe(before)
+  })
+
   it("does not promote runtime failures or superseded candidates", async () => {
     const root = await temp()
     const compiler = new CanvasCompiler(join(root, "bundles"))

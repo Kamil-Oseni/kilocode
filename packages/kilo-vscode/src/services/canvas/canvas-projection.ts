@@ -6,6 +6,7 @@ export async function reconcile(
   files: { path: string; before: string | undefined; after: string }[],
   current: () => boolean,
   writable: (path: string) => boolean,
+  checkpoint: (path: string) => Promise<void> | void = () => undefined,
 ) {
   const entries = files
     .filter((file) => file.before !== file.after)
@@ -28,6 +29,7 @@ export async function reconcile(
     for (const file of entries) {
       if (!current() || !writable(file.path)) return false
       await rename(file.temp, file.path)
+      await checkpoint(file.path)
     }
     return true
   } finally {

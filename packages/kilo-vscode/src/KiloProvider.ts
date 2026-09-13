@@ -195,6 +195,7 @@ import { goalPrompt, parseGoalCommand, type GoalState } from "./shared/goal" // 
 import { parseSelfHealCommand } from "./shared/self-heal"
 import { summary as selfHealSummary, inspect as inspectSelfHeal } from "./self-heal/summary"
 import { capture as captureSelfHeal } from "./self-heal/intake" // raya_change - global autonomous feedback repair
+import { detail as selfHealReviewDetail, review as reviewSelfHeal } from "./self-heal/review"
 import { SpeechService } from "./speech/service" // raya_change - Milestone H voice orchestration
 import {
   buildIndexingSettingsMessage,
@@ -4544,6 +4545,23 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       await vscode.workspace.fs.createDirectory(vscode.Uri.file(store))
       const notice = await inspectSelfHeal(this.client!, command.id, store)
       this.postMessage({ type: "goalState", sessionID: reporter, notice })
+      return { handled: true }
+    }
+    if (command.kind === "review") {
+      await vscode.workspace.fs.createDirectory(vscode.Uri.file(store))
+      const action = "Approve for installation"
+      const result = await reviewSelfHeal({
+        client: this.client!,
+        itemID: command.id,
+        directory: store,
+        confirm: async (view) =>
+          (await vscode.window.showWarningMessage(
+            `Review ${view.itemID}: ${view.title}`,
+            { modal: true, detail: selfHealReviewDetail(view) },
+            action,
+          )) === action,
+      })
+      this.postMessage({ type: "goalState", sessionID: reporter, notice: result.notice })
       return { handled: true }
     }
     if (command.kind === "list") {

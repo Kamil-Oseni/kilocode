@@ -1857,7 +1857,14 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                         }}
                       </For>
                     </ol>
-                    <OrganizationActivity id={item.id} onChoose={choose} onOpenSession={props.onOpenSession} />
+                    <OrganizationActivity
+                      id={item.id}
+                      item={item}
+                      agents={agents()}
+                      onEdit={() => editOrganization(item)}
+                      onChoose={choose}
+                      onOpenSession={props.onOpenSession}
+                    />
                   </div>
                 </section>
               )}

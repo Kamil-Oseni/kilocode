@@ -23,6 +23,21 @@ type Ctx = {
 }
 
 type Listed = { id: string }
+type Assignment = {
+  source: string
+  senderID: string
+  recipientID: string
+  objective: string
+  parentID?: string
+  parentRunID?: string
+  organizationID?: string
+  organizationRevision?: number
+  expected?: string
+  context?: string
+  deadline?: number
+  budget?: number
+}
+const phases = new Set(["queued", "accepted", "running", "needs_input", "completed", "failed", "cancelled"])
 const previews = new Map<
   string,
   { kilo: Kilo; dir: string; data: KilocodeRoutineForecastResponse; expires: number; submitted?: boolean; edit?: Edit }
@@ -129,6 +144,80 @@ const replies: Record<string, string> = {
 
 function reply(type: string) {
   return replies[type] ?? "routineState"
+}
+
+function detail(value: unknown, name: string) {
+  if (value === undefined) return
+  if (typeof value !== "string" || value.length > 8000) throw new Error(`Keep ${name} under 8000 characters.`)
+  return value.trim() || undefined
+}
+
+function identity(value: unknown, message: string) {
+  if (value === undefined) return
+  if (!token(value)) throw new Error(message)
+  return String(value)
+}
+
+function company(msg: Msg) {
+  if (msg.organizationID === undefined && msg.organizationRevision === undefined) return {}
+  if (typeof msg.organizationID !== "string" || !/^org_[a-f0-9]{32}$/.test(msg.organizationID))
+    throw new Error("Reload the organization before assigning work.")
+  const revision = Number(msg.organizationRevision)
+  if (!Number.isSafeInteger(revision) || revision < 1) throw new Error("Reload the organization before assigning work.")
+  return { organizationID: msg.organizationID, organizationRevision: revision }
+}
+
+function future(value: unknown) {
+  if (value === undefined) return
+  const deadline = Number(value)
+  if (!Number.isSafeInteger(deadline) || deadline <= Date.now()) throw new Error("Choose a deadline in the future.")
+  return deadline
+}
+
+function allowance(value: unknown) {
+  if (value === undefined) return
+  const budget = Number(value)
+  if (!Number.isSafeInteger(budget) || budget < 0 || budget > 1_000_000)
+    throw new Error("Choose a whole-number budget from 0 to 1000000.")
+  return budget
+}
+
+function assignment(msg: Msg, objective: string): Assignment {
+  return {
+    source: String(msg.source),
+    senderID: String(msg.agentID),
+    recipientID: String(msg.recipientID),
+    objective,
+    parentID: identity(msg.parentID, "Reload the request chain before assigning work."),
+    parentRunID: identity(msg.parentRunID, "Reload the worker run before assigning work."),
+    ...company(msg),
+    expected: detail(msg.expected, "the expected result"),
+    context: detail(msg.context, "the context"),
+    deadline: future(msg.deadline),
+    budget: allowance(msg.budget),
+  }
+}
+
+function verified(value: unknown, input: Assignment) {
+  if (!value || typeof value !== "object") return false
+  const row = value as Record<string, unknown>
+  return (
+    typeof row.id === "string" &&
+    typeof row.state === "string" &&
+    phases.has(row.state) &&
+    row.source === input.source &&
+    row.senderID === input.senderID &&
+    row.recipientID === input.recipientID &&
+    row.objective === input.objective &&
+    row.parentID === input.parentID &&
+    row.parentRunID === input.parentRunID &&
+    row.organizationID === input.organizationID &&
+    row.organizationRevision === input.organizationRevision &&
+    row.expected === input.expected &&
+    row.context === input.context &&
+    row.deadline === input.deadline &&
+    row.budget === input.budget
+  )
 }
 
 export function reason(err: unknown) {
@@ -412,16 +501,13 @@ async function pass(ctx: Ctx) {
     throw new Error("Reload the conversation before asking another worker.")
   const text = typeof msg.objective === "string" ? msg.objective : ""
   if (!text.trim() || text.length > 8000) throw new Error("Write what the other worker should answer.")
+  const input = assignment(msg, text.trim())
   const result = await ctx.kilo.delegate
     .create(
       {
         directory: ctx.dir,
         agentID: String(msg.agentID),
-        source: String(msg.source),
-        senderID: String(msg.agentID),
-        recipientID: String(msg.recipientID),
-        objective: text,
-        ...(token(msg.parentRunID) ? { parentRunID: String(msg.parentRunID) } : {}),
+        ...input,
       },
       { throwOnError: true },
     )
@@ -431,7 +517,10 @@ async function pass(ctx: Ctx) {
         throw new Error("This worker is no longer available. Delegation is not started.")
       throw err
     })
-  ctx.post({ type: "routineDelegated", requestID: msg.requestID, agentID: msg.agentID, record: result.data })
+  const row = result.data
+  if (!verified(row, input))
+    throw new Error("The assigned work response could not be verified. Refresh organization work before trying again.")
+  ctx.post({ type: "routineDelegated", requestID: msg.requestID, agentID: msg.agentID, record: row })
   await summaries(ctx)
 }
 

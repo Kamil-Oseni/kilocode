@@ -74,6 +74,7 @@ test("routine organization HTTP persists ordered graphs with optimistic archive 
     }),
   })
   expect(reverse.status).toBe(400)
+  const deadline = Date.now() + 60_000
   const delegated = await app.request(`/kilocode/agent/${chief.id}/delegate`, {
     method: "POST",
     headers,
@@ -84,6 +85,10 @@ test("routine organization HTTP persists ordered graphs with optimistic archive 
       organizationID: organization.id,
       organizationRevision: organization.revision,
       objective: "Review the accounts.",
+      expected: "A reconciled ledger.",
+      context: "Use the approved finance workspace.",
+      deadline,
+      budget: 40,
     }),
   })
   expect(delegated.status).toBe(200)
@@ -92,6 +97,10 @@ test("routine organization HTTP persists ordered graphs with optimistic archive 
     organizationID: organization.id,
     organizationName: organization.name,
     organizationRevision: 1,
+    expected: "A reconciled ledger.",
+    context: "Use the approved finance workspace.",
+    deadline,
+    budget: 40,
   })
   const activity = Schema.decodeUnknownSync(Schema.toCodecJson(ActivityPage))(
     await (await app.request(`${route}/activity`, { headers })).json(),
@@ -103,6 +112,10 @@ test("routine organization HTTP persists ordered graphs with optimistic archive 
     organizationID: organization.id,
     organizationName: organization.name,
     objective: "Review the accounts.",
+    expected: "A reconciled ledger.",
+    context: "Use the approved finance workspace.",
+    deadline,
+    budget: 40,
     state: "failed",
   })
   expect((await app.request(`${route}/activity?cursor=invalid`, { headers })).status).toBe(400)

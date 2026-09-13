@@ -272,7 +272,14 @@ export interface RoutineDelegateMessage {
   recipientID: string
   source: string
   objective: string
+  parentID?: string
   parentRunID?: string
+  organizationID?: string
+  organizationRevision?: number
+  expected?: string
+  context?: string
+  deadline?: number
+  budget?: number
 }
 
 export interface RoutineDelegateCancelMessage {

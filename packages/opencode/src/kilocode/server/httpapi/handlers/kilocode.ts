@@ -36,7 +36,7 @@ import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal ope
 import { RayaTask } from "@/kilocode/task"
 import { RayaTaskInbox, type Draft as InboxDraft, type Upload as InboxUpload } from "@/kilocode/task/inbox"
 import { RayaTaskInfo, type Identity as TaskIdentity } from "@/kilocode/task/info"
-import { RayaTaskDelegation } from "@/kilocode/task/delegation"
+import { RayaTaskDelegation, type Request as DelegationRequest } from "@/kilocode/task/delegation"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
 import {
@@ -844,7 +844,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     })
     const agentDelegate = Effect.fn("KilocodeHttpApi.agentDelegate")(function* (ctx: {
       params: { agentID: string }
-      payload: { source: string; senderID: string; recipientID: string; objective: string; parentRunID?: string }
+      payload: DelegationRequest
     }) {
       yield* owned(ctx.params.agentID)
       yield* remembered(ctx.payload.recipientID)

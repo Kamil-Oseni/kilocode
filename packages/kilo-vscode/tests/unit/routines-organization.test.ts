@@ -186,6 +186,117 @@ test("organization activity stays scoped and preserves its cursor", async () => 
   ])
 })
 
+test("organization assignment forwards the authorized route and bounded work details", async () => {
+  const calls: Request[] = []
+  const messages: Record<string, unknown>[] = []
+  const deadline = Date.now() + 60_000
+  const record = {
+    id: "work_2",
+    source: "organization:finance:request",
+    senderID: worker,
+    recipientID: peer,
+    organizationID: id,
+    organizationName: "Finance",
+    organizationRevision: 4,
+    objective: "Prepare the September close package.",
+    expected: "A reconciled close package.",
+    context: "Use the approved finance workspace.",
+    deadline,
+    budget: 40,
+    depth: 1,
+    state: "running",
+    time: 1,
+  }
+  const client = createKiloClient({
+    baseUrl: "http://localhost:4096",
+    fetch: async (input, init) => {
+      const request = new Request(input, init)
+      calls.push(request)
+      if (new URL(request.url).pathname.endsWith("/delegate")) return Response.json(record)
+      return Response.json([])
+    },
+  })
+  await handleRoutineMessage({
+    client,
+    directory: "workspace",
+    post: (message) => messages.push(message as Record<string, unknown>),
+    message: {
+      type: "routineDelegate",
+      requestID: "request",
+      agentID: worker,
+      recipientID: peer,
+      source: record.source,
+      organizationID: id,
+      organizationRevision: 4,
+      objective: " Prepare the September close package. ",
+      expected: " A reconciled close package. ",
+      context: " Use the approved finance workspace. ",
+      deadline,
+      budget: 40,
+    },
+  })
+  expect(calls[0].method).toBe("POST")
+  expect(await calls[0].json()).toEqual({
+    source: record.source,
+    senderID: worker,
+    recipientID: peer,
+    organizationID: id,
+    organizationRevision: 4,
+    objective: record.objective,
+    expected: record.expected,
+    context: record.context,
+    deadline,
+    budget: 40,
+  })
+  expect(messages[0]).toEqual({
+    type: "routineDelegated",
+    requestID: "request",
+    agentID: worker,
+    record,
+  })
+})
+
+test("organization assignment rejects a response from another organization", async () => {
+  const messages: Record<string, unknown>[] = []
+  const client = createKiloClient({
+    baseUrl: "http://localhost:4096",
+    fetch: async () =>
+      Response.json({
+        id: "work_2",
+        source: "organization:finance:request",
+        senderID: worker,
+        recipientID: peer,
+        organizationID: `org_${"b".repeat(32)}`,
+        organizationRevision: 4,
+        objective: "Prepare the close package.",
+        state: "running",
+      }),
+  })
+  await handleRoutineMessage({
+    client,
+    directory: "workspace",
+    post: (message) => messages.push(message as Record<string, unknown>),
+    message: {
+      type: "routineDelegate",
+      requestID: "request",
+      agentID: worker,
+      recipientID: peer,
+      source: "organization:finance:request",
+      organizationID: id,
+      organizationRevision: 4,
+      objective: "Prepare the close package.",
+    },
+  })
+  expect(messages).toHaveLength(1)
+  expect(messages[0]).toMatchObject({
+    type: "routineDelegated",
+    requestID: "request",
+    agentID: worker,
+  })
+  expect(messages[0].record).toBeUndefined()
+  expect(messages[0].error).toContain("could not be verified")
+})
+
 test("worker creation authority sends the expected state and verifies durable provenance", async () => {
   const calls: Request[] = []
   const messages: Record<string, unknown>[] = []

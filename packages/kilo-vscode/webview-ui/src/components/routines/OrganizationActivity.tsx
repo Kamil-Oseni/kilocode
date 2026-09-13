@@ -1,7 +1,9 @@
 import { Button } from "@kilocode/kilo-ui/button"
+import { useDialog } from "@kilocode/kilo-ui/context/dialog"
 import { Component, For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { useVSCode } from "../../context/vscode"
 import type { ExtensionMessage } from "../../types/messages"
+import { OrganizationAssignment } from "./OrganizationAssignment"
 
 type Work = import("@kilocode/sdk/v2/client").KilocodeRoutineOrganizationActivityResponse["items"][number]
 type Step = Pick<Work, "id" | "state" | "objective" | "organizationID"> & {
@@ -100,10 +102,14 @@ function stamp(value: number) {
 
 export const OrganizationActivity: Component<{
   id: string
+  item: import("@kilocode/sdk/v2/client").KilocodeRoutineOrganizationListResponse["items"][number]
+  agents: { id: string; name: string; enabled: boolean }[]
+  onEdit: () => void
   onChoose: (id: string) => void
   onOpenSession?: (id: string) => void
 }> = (props) => {
   const vscode = useVSCode()
+  const dialog = useDialog()
   const [items, setItems] = createSignal<Work[]>([])
   const [next, setNext] = createSignal<string>()
   const [busy, setBusy] = createSignal(true)
@@ -114,6 +120,7 @@ export const OrganizationActivity: Component<{
   const [trace, setTrace] = createSignal<{ request: string; id: string; agent: string }>()
   const [confirm, setConfirm] = createSignal("")
   const [stopping, setStopping] = createSignal<{ request: string; id: string; agent: string; recipient: string }>()
+  const [assigned, setAssigned] = createSignal<{ id: string; name: string }>()
   let request = ""
   let after: string | undefined
 
@@ -256,6 +263,19 @@ export const OrganizationActivity: Component<{
     })
   }
 
+  const assign = () =>
+    dialog.show(() => (
+      <OrganizationAssignment
+        item={props.item}
+        agents={props.agents}
+        onEdit={props.onEdit}
+        onAssigned={(worker) => {
+          setAssigned(worker)
+          load()
+        }}
+      />
+    ))
+
   return (
     <section class="routines-organization-work" aria-labelledby={`organization-work-${props.id}`}>
       <div class="routines-organization-work-head">
@@ -267,10 +287,25 @@ export const OrganizationActivity: Component<{
             </p>
           </Show>
         </div>
-        <Button variant="ghost" size="small" disabled={busy()} onClick={() => load()}>
-          Refresh work
-        </Button>
+        <div class="routines-organization-work-actions">
+          <Button size="small" onClick={assign}>
+            Assign work
+          </Button>
+          <Button variant="ghost" size="small" disabled={busy()} onClick={() => load()}>
+            Refresh work
+          </Button>
+        </div>
       </div>
+      <Show when={assigned()}>
+        {(worker) => (
+          <div class="routines-organization-work-notice" role="status">
+            <span>Work assigned to {worker().name}.</span>
+            <Button variant="ghost" size="small" onClick={() => props.onChoose(worker().id)}>
+              Open worker chat
+            </Button>
+          </div>
+        )}
+      </Show>
       <Show when={items().length}>
         <ol class="routines-organization-work-list">
           <For each={items()}>

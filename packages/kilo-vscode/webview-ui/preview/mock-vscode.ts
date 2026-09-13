@@ -59,38 +59,75 @@ const report = {
 
 const scene = new URLSearchParams(window.location.search).get("scene") ?? "ready"
 let stopped = false
+let assignment:
+  | {
+      source: string
+      senderID: string
+      recipientID: string
+      organizationID: string
+      organizationRevision?: number
+      objective: string
+      expected?: string
+      context?: string
+      deadline?: number
+      budget?: number
+    }
+  | undefined
 
-const work = (organizationID: string) => [
-  {
-    id: "rdg_org_preview",
-    sender: { id: legal.id, name: legal.name, role: "Chief of Staff", archived: false },
-    recipient: { id: books.id, name: books.name, role: "Accounting", archived: false },
-    organizationID,
-    organizationName: "Website Builders",
-    organizationRevision: 1,
-    source: "org_preview",
-    state: "completed" as const,
-    objective: "Review Friday travel expenses and return a reconciled ledger.",
-    response: "The ledger is reconciled and the receipt exception is documented.",
-    time: 1,
-    updated: 3,
-    cost: 0.42,
-  },
-  {
-    id: "rdg_org_follow",
-    sender: { id: books.id, name: books.name, role: "Accounting", archived: false },
-    recipient: { id: legal.id, name: legal.name, role: "Chief of Staff", archived: false },
-    organizationID,
-    organizationName: "Website Builders",
-    organizationRevision: 1,
-    source: "org_follow",
-    state: (stopped ? "cancelled" : "running") as "cancelled" | "running",
-    parentID: "rdg_org_preview",
-    objective: "Ask Counsel to approve the documented receipt exception.",
-    time: 2,
-    updated: stopped ? 4 : 3,
-  },
-]
+const work = (organizationID: string) => {
+  const items = [
+    {
+      id: "rdg_org_preview",
+      sender: { id: legal.id, name: legal.name, role: "Chief of Staff", archived: false },
+      recipient: { id: books.id, name: books.name, role: "Accounting", archived: false },
+      organizationID,
+      organizationName: "Website Builders",
+      organizationRevision: 1,
+      source: "org_preview",
+      state: "completed" as const,
+      objective: "Review Friday travel expenses and return a reconciled ledger.",
+      response: "The ledger is reconciled and the receipt exception is documented.",
+      time: 1,
+      updated: 3,
+      cost: 0.42,
+    },
+    {
+      id: "rdg_org_follow",
+      sender: { id: books.id, name: books.name, role: "Accounting", archived: false },
+      recipient: { id: legal.id, name: legal.name, role: "Chief of Staff", archived: false },
+      organizationID,
+      organizationName: "Website Builders",
+      organizationRevision: 1,
+      source: "org_follow",
+      state: (stopped ? "cancelled" : "running") as "cancelled" | "running",
+      parentID: "rdg_org_preview",
+      objective: "Ask Counsel to approve the documented receipt exception.",
+      time: 2,
+      updated: stopped ? 4 : 3,
+    },
+  ]
+  if (!assignment) return items
+  return [
+    ...items,
+    {
+      id: "rdg_org_assigned",
+      sender: { id: legal.id, name: legal.name, role: "Chief of Staff", archived: false },
+      recipient: { id: books.id, name: books.name, role: "Accounting", archived: false },
+      organizationID,
+      organizationName: "Website Builders",
+      organizationRevision: 1,
+      source: assignment.source,
+      state: "running" as const,
+      objective: assignment.objective,
+      expected: assignment.expected,
+      context: assignment.context,
+      deadline: assignment.deadline,
+      budget: assignment.budget,
+      time: 4,
+      updated: 4,
+    },
+  ]
+}
 
 const calendar = (message: WebviewMessage) => {
   if (message.type === "routineForecast") {
@@ -165,6 +202,43 @@ const preview = (message: WebviewMessage) => {
       record,
       above: message.id === child.id ? [prior] : [],
       below: message.id === root.id ? [follow] : [],
+    })
+    return true
+  }
+  if (message.type === "routineDelegate" && message.organizationID) {
+    assignment = {
+      source: message.source,
+      senderID: message.agentID,
+      recipientID: message.recipientID,
+      organizationID: message.organizationID,
+      organizationRevision: message.organizationRevision,
+      objective: message.objective,
+      expected: message.expected,
+      context: message.context,
+      deadline: message.deadline,
+      budget: message.budget,
+    }
+    emit({
+      type: "routineDelegated",
+      requestID: message.requestID,
+      agentID: message.agentID,
+      record: {
+        id: "rdg_org_assigned",
+        source: message.source,
+        senderID: message.agentID,
+        recipientID: message.recipientID,
+        organizationID: message.organizationID,
+        organizationName: "Website Builders",
+        organizationRevision: message.organizationRevision,
+        objective: message.objective,
+        expected: message.expected,
+        context: message.context,
+        deadline: message.deadline,
+        budget: message.budget,
+        depth: 1,
+        state: "running",
+        time: 4,
+      },
     })
     return true
   }

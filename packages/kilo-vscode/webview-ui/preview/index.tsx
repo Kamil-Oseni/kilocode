@@ -330,6 +330,9 @@ const Fixture: Component<{ id: string; theme: Theme; state: PvState }> = (props)
 const focused = new URLSearchParams(window.location.search).get("state")
 const fixtures = themes.flatMap((theme) => states.map((state) => ({ theme, state, id: `${theme}-${state}` })))
 
+if (focused?.startsWith("light-")) document.body.classList.add("pv-theme--light")
+if (focused?.startsWith("dark-")) document.body.classList.add("pv-theme--dark")
+
 const root = document.getElementById("root")
 if (!root) throw new Error("Root element not found")
 
@@ -339,8 +342,8 @@ render(
       <header class="pv-page__header">
         <h1 class="pv-page__title">Raya · component preview</h1>
         <p class="pv-page__sub">
-          Goal, usage, memory, routines, composer, history, review, slash, topnav, transcript, conversation,
-          and result fixtures render production views with sample data.
+          Goal, usage, memory, routines, composer, history, review, slash, topnav, transcript, conversation, and result
+          fixtures render production views with sample data.
         </p>
       </header>
       <For each={fixtures}>

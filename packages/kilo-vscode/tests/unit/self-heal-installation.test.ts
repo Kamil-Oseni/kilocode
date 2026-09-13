@@ -10,6 +10,7 @@ import { expect, test } from "bun:test"
 import { createKiloClient } from "@kilocode/sdk/v2/client"
 import { install as runInstall } from "../../src/self-heal/install"
 import { SelfHealInstallation, type Plan } from "../../src/self-heal/installation"
+import { prompt as replayPrompt, verify as verifyInstall } from "../../src/self-heal/verification"
 
 const require = createRequire(import.meta.url)
 const writer = createRequire(require.resolve("@vscode/vsce"))("yazl") as {
@@ -454,3 +455,117 @@ test("independent extension processes retain one installation and dispatch once"
     await rm(run.root, { recursive: true, force: true })
   }
 }, 30_000)
+
+test("dispatches one retained verification only after the approved version is active", async () => {
+  const run = await fixture()
+  try {
+    const root = join(run.root, "state")
+    const journal = new SelfHealInstallation(root)
+    await journal.run(run.plan, async () => undefined)
+    await expect(journal.replay(async (_input, link) => link("ses_too_early"))).rejects.toThrow("must be active")
+
+    const binary = join(run.root, "kilo.exe")
+    await writeFile(binary, run.binary)
+    await journal.activate(run.plan.extension, binary)
+    let calls = 0
+    const send = async (input: Plan["replay"], link: (session: string) => Promise<void>) => {
+      calls++
+      expect(input).toEqual(run.plan.replay)
+      await link("ses_validation")
+      await Bun.sleep(100)
+    }
+    const results = await Promise.all([journal.replay(send), new SelfHealInstallation(root).replay(send)])
+    expect(results.filter((result) => result.dispatched)).toHaveLength(1)
+    expect(calls).toBe(1)
+    expect(await journal.inspect()).toMatchObject({
+      phase: "replay-submitted",
+      replaySessionID: "ses_validation",
+    })
+    expect(await journal.activate(run.plan.extension, binary)).toMatchObject({
+      changed: false,
+      record: { phase: "replay-submitted", replaySessionID: "ses_validation" },
+    })
+  } finally {
+    await rm(run.root, { recursive: true, force: true })
+  }
+})
+
+test("retains an unknown verification dispatch without replay", async () => {
+  const run = await fixture()
+  try {
+    const root = join(run.root, "state")
+    const journal = new SelfHealInstallation(root)
+    await journal.run(run.plan, async () => undefined)
+    const binary = join(run.root, "kilo.exe")
+    await writeFile(binary, run.binary)
+    await journal.activate(run.plan.extension, binary)
+    let calls = 0
+    await expect(
+      journal.replay(async (_input, link) => {
+        calls++
+        await link("ses_uncertain")
+        throw new Error("prompt acknowledgement lost")
+      }),
+    ).rejects.toThrow("prompt acknowledgement lost")
+    expect(await journal.inspect()).toMatchObject({
+      phase: "replay-unknown",
+      replaySessionID: "ses_uncertain",
+      reason: expect.stringContaining("could not be confirmed"),
+    })
+    expect(await journal.replay(async (_input, link) => link("ses_repeated"))).toMatchObject({
+      dispatched: false,
+      record: { phase: "replay-unknown" },
+    })
+    expect(calls).toBe(1)
+  } finally {
+    await rm(run.root, { recursive: true, force: true })
+  }
+})
+
+test("starts verification from retained input and keeps the linked session", async () => {
+  const run = await fixture()
+  try {
+    const root = join(run.root, "state")
+    const journal = new SelfHealInstallation(root)
+    await journal.run(run.plan, async () => undefined)
+    const binary = join(run.root, "kilo.exe")
+    await writeFile(binary, run.binary)
+    await journal.activate(run.plan.extension, binary)
+    const calls: string[] = []
+    const result = await verifyInstall({
+      itemID: run.plan.itemID,
+      journal,
+      create: async (replay) => {
+        expect(replay).toEqual(run.plan.replay)
+        calls.push("create")
+        return "ses_validation"
+      },
+      dispatch: async (session, replay, text) => {
+        expect(session).toBe("ses_validation")
+        expect(replay).toEqual(run.plan.replay)
+        expect(text).toBe(replayPrompt(run.plan.replay))
+        expect(text).toContain(run.plan.replay.report.description)
+        expect(text).toContain(run.plan.replay.report.criteria[0])
+        calls.push("dispatch")
+      },
+    })
+    expect(calls).toEqual(["create", "dispatch"])
+    expect(result).toMatchObject({
+      notice: expect.stringContaining("started in session ses_validation"),
+      record: { phase: "replay-submitted", replaySessionID: "ses_validation" },
+    })
+    const duplicate = await verifyInstall({
+      itemID: run.plan.itemID,
+      journal,
+      create: async () => {
+        throw new Error("must not create")
+      },
+      dispatch: async () => {
+        throw new Error("must not dispatch")
+      },
+    })
+    expect(duplicate.notice).toContain("already running in session ses_validation")
+  } finally {
+    await rm(run.root, { recursive: true, force: true })
+  }
+})

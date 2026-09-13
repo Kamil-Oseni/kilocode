@@ -198,6 +198,7 @@ import { capture as captureSelfHeal } from "./self-heal/intake" // raya_change -
 import { detail as selfHealReviewDetail, review as reviewSelfHeal } from "./self-heal/review"
 import { detail as selfHealInstallDetail, install as installSelfHeal } from "./self-heal/install"
 import { SelfHealInstallation } from "./self-heal/installation"
+import { verify as verifySelfHeal } from "./self-heal/verification"
 import { SpeechService } from "./speech/service" // raya_change - Milestone H voice orchestration
 import {
   buildIndexingSettingsMessage,
@@ -4597,6 +4598,66 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         )
         if (choice === "Reload") await vscode.commands.executeCommand("workbench.action.reloadWindow")
       }
+      return { handled: true }
+    }
+    if (command.kind === "verify") {
+      const directory = this.getContextDirectory()
+      const root = path.join(
+        this.extensionContext?.globalStorageUri.fsPath ?? this.extensionUri.fsPath,
+        "self-heal-install",
+      )
+      const result = await verifySelfHeal({
+        itemID: command.id,
+        journal: new SelfHealInstallation(root),
+        create: async (replay) => {
+          const metadata = await sandboxSessionMetadata(
+            this.connectionService.sandboxPreference,
+            this.client!,
+            directory,
+          )
+          const { data: session } = await this.client!.session.create(
+            {
+              directory,
+              platform: this.opts.platform,
+              title: `Verify repair: ${replay.report.title}`,
+              agent: "chief",
+              metadata: {
+                ...metadata,
+                rayaSelfHealVerification: {
+                  itemID: command.id,
+                  attemptID: replay.attemptID,
+                  completion: replay.completion,
+                },
+              },
+            },
+            { throwOnError: true },
+          )
+          return session.id
+        },
+        dispatch: async (session, replay, verification) => {
+          const criteria = replay.report.criteria.map((value, index) => `${index + 1}. ${value}`).join("\n")
+          await this.client!.kilocode.goal.create(
+            {
+              sessionID: session,
+              directory,
+              objective: `Verify installed Raya repair ${command.id}: ${replay.report.title}. Complete only after direct runtime or visual evidence covers every retained criterion.\n${criteria}`,
+            },
+            { throwOnError: true },
+          )
+          await this.client!.session.promptAsync(
+            {
+              sessionID: session,
+              directory,
+              parts: [{ type: "text", text: verification, synthetic: true }],
+              model: providerID && modelID ? { providerID, modelID } : undefined,
+              agent: "chief",
+              snapshotInitialization: this.opts.snapshotInitialization,
+            },
+            { throwOnError: true },
+          )
+        },
+      })
+      this.postMessage({ type: "goalState", sessionID: reporter, notice: result.notice })
       return { handled: true }
     }
     if (command.kind === "list") {

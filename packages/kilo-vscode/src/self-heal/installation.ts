@@ -38,7 +38,17 @@ const schema = z.object({
   binary: bytes,
   previous: z.string().min(1),
   replay,
-  phase: z.enum(["validating", "installing", "awaiting-reload", "active", "failed"]),
+  phase: z.enum([
+    "validating",
+    "installing",
+    "awaiting-reload",
+    "active",
+    "replay-dispatching",
+    "replay-submitted",
+    "replay-unknown",
+    "failed",
+  ]),
+  replaySessionID: z.string().min(1).optional(),
   reason: z.string().optional(),
   createdAt: z.number().finite().nonnegative(),
   updatedAt: z.number().finite().nonnegative(),
@@ -190,10 +200,62 @@ export class SelfHealInstallation {
         await this.write(failed)
         return { record: failed, changed: true }
       }
-      if (record.phase === "active") return { record, changed: false }
+      if (record.phase === "active" || record.phase.startsWith("replay-")) return { record, changed: false }
       const active = { ...record, phase: "active" as const, reason: undefined, updatedAt: Date.now() }
       await this.write(active)
       return { record: active, changed: true }
+    })
+  }
+
+  replay(dispatch: (input: Record["replay"], link: (session: string) => Promise<void>) => Promise<void>) {
+    return this.lock(async () => {
+      const record = await this.read()
+      if (!record) throw new Error("No self-heal installation is retained for verification.")
+      if (record.phase.startsWith("replay-")) return { record, dispatched: false }
+      if (record.phase !== "active") throw new Error("The approved Raya version must be active before verification.")
+      const pending: Record = {
+        ...record,
+        phase: "replay-dispatching",
+        reason: undefined,
+        updatedAt: Date.now(),
+      }
+      await this.write(pending)
+      let session: string | undefined
+      const link = async (id: string) => {
+        if (!id.trim()) throw new Error("Verification session identity is empty.")
+        if (session && session !== id) throw new Error("Verification session identity cannot change.")
+        session = id
+        await this.write({ ...pending, replaySessionID: id, updatedAt: Date.now() })
+      }
+      await dispatch(record.replay, link).catch(async (err) => {
+        const unknown: Record = {
+          ...pending,
+          phase: "replay-unknown",
+          replaySessionID: session,
+          reason: `Verification dispatch could not be confirmed. ${message(err)}`,
+          updatedAt: Date.now(),
+        }
+        await this.write(unknown)
+        throw err
+      })
+      if (!session) {
+        const unknown: Record = {
+          ...pending,
+          phase: "replay-unknown",
+          reason: "Verification dispatch returned no session identity.",
+          updatedAt: Date.now(),
+        }
+        await this.write(unknown)
+        throw new Error(unknown.reason)
+      }
+      const submitted: Record = {
+        ...pending,
+        phase: "replay-submitted",
+        replaySessionID: session,
+        updatedAt: Date.now(),
+      }
+      await this.write(submitted)
+      return { record: submitted, dispatched: true }
     })
   }
 }

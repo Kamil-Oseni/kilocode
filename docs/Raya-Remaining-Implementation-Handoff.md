@@ -29,9 +29,9 @@ Status excerpts below are historical records, not a fresh certification of every
 
 Close the remaining parent requirements in this order, finishing a complete acceptance package before opening an unrelated slice. This order reflects verification cost; it does not waive original acceptance.
 
-Completed from this queue: UI-01, PR-03, EN-03, EN-05, EN-13 and UX-01.
+Completed from this queue: PR-02, PR-03, EN-03, EN-05, EN-13, UX-01 and UI-01.
 
-1. **Repository-deterministic:** EN-07; EN-14; EN-15; PR-02 + OVR-06; PR-04 + EN-02 + OVR-05; PR-05 + OVR-04; EN-06; EN-10; OVR-09; OVR-08.
+1. **Repository-deterministic:** EN-07; EN-14; EN-15; OVR-06; PR-04 + EN-02 + OVR-05; PR-05 + OVR-04; EN-06; EN-10; OVR-09; OVR-08.
 2. **Packaged local interaction or broad cross-surface review:** UX-03; EN-04; UX-02; UX-04; UX-05; UI-03; EN-09.
 3. **External, physical-device, multi-platform or moderated evidence:** EN-01; EN-11 + OVR-02 + OVR-10; EN-12 + OVR-01; OVR-03; PR-06; PR-01 + OVR-07; UI-02.
 
@@ -122,13 +122,13 @@ The following sections retain the full 39-item scope. Related findings and overh
 
 ### PR-02 — Make completion an inspectable agreement
 
-**Recorded status:** In progress. Existing editable criteria, retained evidence and human review are now presented as separate guarantees. Optional exact-command bindings require the saved command, explicit normalized directory and successful eligible evidence. The 5199 harness now mounts a production `GoalBannerView` result package and the production criteria editor. Broader semantic acceptance and live packaged visual acceptance remain open.
+**Recorded status:** Verified by ChatGPT on 2026-09-12 23:12 America/Toronto. Required command checks accept only the saved exact command in its explicit normalized directory, so unrelated successful commands cannot satisfy them. The production completed-task view and copied report expose the requested outcome, verification instructions, exact evidence, artifact/coverage information, caveats, separate user review and explicit unverified outcomes.
 
 **Implementation and verification:**
 
-1. Finish a result package linking outcome, artifacts, required checks, caveats and human review.
-2. Bind evidence to artifact revisions; invalidate affected checks after edits and preserve previous evidence when criteria change.
-3. Test successful but irrelevant commands, changed artifacts and amended criteria; inspect completed tasks in the actual goal/result UI.
+1. Preserve exact command/directory bindings and current artifact/source identity checks when the Goal contract changes.
+2. Keep tool success, evidence-reference acceptance, artifact freshness, requested verification and user acceptance visibly separate.
+3. Re-run backend command/artifact tests plus production result/report views after Goal evidence or completion UI changes.
 
 **Source entry points:** [packages/opencode/src/kilocode/goal/index.ts](../packages/opencode/src/kilocode/goal/index.ts).
 
@@ -2365,3 +2365,9 @@ Evidence: 67 extension tests / 236 assertions across editor host behavior, chat 
 EN-13 is fully Verified against its original three-part acceptance. `docs/Raya-Diagnostic-Data-Boundaries.md` documents the bounded version 1 diagnostic fields and separately inventories local summaries, test recordings, telemetry and operational content with destinations, controls and known retention limits. The summary exporter constructs only those fields and cannot serialize arbitrary paths, identities, prompts, file content, configuration, environment or error objects.
 
 Writer-level recorder coverage rejects synthetic secrets across JSON, plain text, SSE, URLs, nested metadata/errors, WebSocket text, declared base64 HTTP responses and binary WebSocket frames. It also rejects invalid/noncanonical binary encodings and bounded-inspection overflow before publishing, preserves prior safe cassette bytes, omits secrets from errors and keeps safe binary replay lossless. Actual extension transport tests prove consent before enrichment/dispatch, redirect refusal, disconnect cancellation and versioned opt-out ordering; CLI telemetry tests reject stale enable/capture after a later opt-out. Evidence: recorder 37 tests / 185 assertions, telemetry 26 / 68, extension boundary/export 16 / 36, plus recorder, telemetry and extension typechecks. Broader company retention/deletion and outbound-property governance stay explicit follow-up policy; they do not invalidate the accepted diagnostic, redaction and opt-out guarantees. No product source changed, so no changeset or snapshot reinstall is required.
+
+## ChatGPT 2026-09-12 23:12 America/Toronto — PR-02 verification receipt
+
+PR-02 is fully Verified against its original acceptance. The exact backend contract rejects an unrelated successful command, altered command text, the right command in a different directory and a command without the required directory. Only the saved command and normalized directory with eligible successful evidence satisfy the bound criterion. File reads and multi-file patches retain current artifact identity, while partial or unknown inspection coverage cannot appear as full review.
+
+The production result package and copied report expose the objective, criteria, requested verification, exact command/directory, cited evidence identities, evidence-reference status, artifact/inspection limits, caveats, separate user-review state and explicit optional unverified outcomes. Exact historical evidence remains scoped to the selected goal, and source output renders as text. Evidence: one focused backend binding test / 10 assertions; six artifact/inspection tests / 48 assertions; six extension result/report/source/history tests / 68 assertions; and 5/5 production Chromium cases covering light/dark, 320/760 px and the actual criteria editor. ChatGPT inspected the 760 px dark result under `docs/designer.md`. Broader presentation redesign stays in its own UI requirements. No product source changed, so no changeset or snapshot reinstall is required.

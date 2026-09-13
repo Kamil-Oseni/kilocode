@@ -787,12 +787,12 @@ The following sections retain the full 39-item scope. Related findings and overh
 
 ### OVR-09 — Self-heal as verified recovery and repair
 
-**Recorded status:** In progress. Captured-source completion produces a verified review artifact, and each repair now owns one durable artifact attempt with item-level preparing/building/review/unavailable/failure states. Item and outcome reads expose that state without claiming installation. The prior exit-2 watchdog is confined to an ignored acceptance probe rather than shipped self-heal code. Reviewed publication, install-ready approval, installation intent tied to the repair artifact, post-install verification, original-failure replay, rollback and tracked harness cleanup remain open.
+**Recorded status:** In progress. Captured-source completion produces a verified review artifact, and each repair now owns one durable artifact attempt with item-level preparing/building/review/unavailable/failure states. Item and outcome reads expose that state without claiming installation. A tracked bounded lifecycle runner proves valid artifact retention and clean helper exit. Reviewed publication, install-ready approval, installation intent tied to the repair artifact, post-install verification, original-failure replay and rollback remain open.
 
 **Implementation and verification:**
 
 1. Keep diagnosis, recovery and isolated source repair separate. Preserve the existing captured-source lineage and archive/CLI hash checks.
-2. Replace or repair the ignored acceptance probe so a valid artifact is followed by a clean helper exit. Keep that harness issue separate from shipped runtime behavior. Then implement reviewed publication, install-ready approval, install intent tied to the exact artifact, post-install verification and rollback.
+2. Use `bun script/self-heal-artifact-lifecycle.ts` from `packages/opencode` for the tracked artifact/helper-exit acceptance. Then implement reviewed publication, install-ready approval, install intent tied to the exact artifact, post-install verification and rollback.
 3. Reproduce the original failure after installation and reload before claiming repair success. Archive validity alone does not establish product recovery.
 
 **Source entry points:** [self-heal/index.ts](../packages/opencode/src/kilocode/self-heal/index.ts); [shared/self-heal.ts](../packages/kilo-vscode/src/shared/self-heal.ts); [the refinement tool](../packages/opencode/src/kilocode/tool/self-heal.ts); [KiloProvider.ts](../packages/kilo-vscode/src/KiloProvider.ts)
@@ -3215,3 +3215,9 @@ Snapshot `0bfdaf9811` is installed. After reloading VS Code, complete EN-06 with
 ## ChatGPT 2026-09-13 17:58 America/Toronto - Canvas transaction snapshot installed
 
 Snapshot `eden.raya@7.4.23-snapshot+0bfdaf9811.kamil-oseni.1789336612278` is installed. VSIX: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-0bfdaf9811-kamil-oseni-1789336612278.vsix`; 517,940,007 bytes; 431 files; SHA-256 `5EDE5E148B967187F2A9AD25B57A9A4CC4602277960E3C0BAE5D796F5E8F1FCB`. Its exact extension directory exists under `C:\Users\User\.vscode\extensions` with the 17:58 installation timestamp. The sequential low-memory workflow passed both extension typechecks, cached ESLint, production bundling, packaging and installation and left no Bun build process. Reload the current VS Code window before installed EN-06 acceptance. The remaining five-case interaction matrix in the preceding entry is still authoritative.
+
+## ChatGPT 2026-09-13 18:08 America/Toronto - tracked OVR-09 artifact lifecycle
+
+Verification commit `20e6937972` is pushed. Run `bun script/self-heal-artifact-lifecycle.ts` from `packages/opencode`; it launches the existing actual source-backed completion/artifact case as a child process, applies a 45-second bound, requires native exit 0 and prints inherited diagnostics. The final run passed 1/1 with 23 assertions in 10.88 seconds and exited cleanly after retaining a verified `ready-for-review` artifact. This is the maintained replacement for relying on the ignored `.tmp/raya-artifact-probe.ts` watchdog as acceptance.
+
+Read-only inspection of the older real retained artifact `56fa9b05-8b3b-432f-ad8d-eb51952ac420` also still reports `matches-receipt`; its 167,712,418-byte VSIX and 228,271,616-byte CLI match retained digests, all runtime/instance disposal messages returned, and the helper's native exit is 0. No setup, verification command, build, publication or installation was replayed. This removes the harness-cleanup item from OVR-09. Continue with a product-owned release approval and install lifecycle; do not infer install readiness from `ready-for-review`.

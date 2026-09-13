@@ -14,6 +14,12 @@ Focused evidence: the goal-ledger test passes with 11 assertions covering finite
 
 OVR-06 remains **In progress**. The new schema is the internal boundary for future trustworthy tool and external-service receipts, but no amount is inferred from tool output and no provider price is fabricated. Next, integrate only sources that expose authoritative billed amounts or versioned reproducible rates, add late-event and historical-rate coverage, decide currency-specific budget semantics, then complete packaged UI/lifecycle acceptance. Keep model cost and non-model currencies separate until those semantics are explicit.
 
+## ChatGPT 2026-09-13 09:56 America/Toronto — non-model ledger delivery receipt
+
+Product commit `f9006ad66ed3eee276597fff649cecd15e0355e4` (`feat(goals): retain non-model charge receipts`) is on `origin/main`. The low-memory snapshot workflow rebuilt the changed CLI, regenerated the SDK without tracked drift, passed CLI version/model/sandbox-worker smoke checks, ran extension host and webview typechecks sequentially, passed extension lint and production bundling, packaged the VSIX and installed it. Observed build memory stayed below about 640 MB for the largest process; no `tsgolint` process ran.
+
+Installed identity: `eden.raya@7.4.23-snapshot+f9006ad66e.kamil-oseni.1789307627416`. VSIX: `C:\Users\User\AppData\Local\Temp\raya-vscode-snapshots\raya-vscode-snapshot-f9006ad66e-kamil-oseni-1789307627416.vsix`; SHA-256 `9B17FEDDA65A305FB4319D96064D38B1F31B5A929EAD958794A6C6411D7F9CE8`; 517,798,006 bytes; 431 entries. Archive inspection found zero `.env` or `.tmp` entries. `code --list-extensions --show-versions` returned the exact installed identity. HEAD and `origin/main` match the product commit. Only the two owner files `docs/Raya-Codex-Research-Deferred.md` and `docs/Raya-Features.md` remain untracked and untouched.
+
 ## ChatGPT 2026-09-12 17:33 America/Toronto — how parent verification is counted
 
 The 39 rows are large parent outcomes, not individual tickets. A parent remains **In progress** when even one required acceptance layer is still open. This avoids reporting a feature as finished after its unit tests pass while its packaged product, restart behavior, real device/provider path, accessibility, recovery, or release proof is still missing. Substantial parts of the 38 open parents are already implemented; the status reflects their remaining end-to-end evidence.

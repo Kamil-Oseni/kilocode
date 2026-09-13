@@ -5718,6 +5718,7 @@ export type RayaGoalCharge =
       kind: "tool" | "gpt-live" | "external"
       provider?: string
       service?: string
+      source?: string
       origin: {
         sessionID: string
         messageID?: string
@@ -5735,6 +5736,7 @@ export type RayaGoalCharge =
       kind: "tool" | "gpt-live" | "external"
       provider?: string
       service?: string
+      source?: string
       origin: {
         sessionID: string
         messageID?: string

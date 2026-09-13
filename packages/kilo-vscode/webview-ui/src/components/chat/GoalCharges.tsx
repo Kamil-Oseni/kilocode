@@ -27,6 +27,14 @@ export function GoalCharges(props: { items?: GoalCharge[]; historical?: boolean 
               </p>
             )}
           </For>
+          <For each={recorded()}>
+            {(item) => (
+              <p>
+                {name(item)}: {item.currency} {item.amount.toFixed(6)}
+                {item.source ? ` (billing source: ${item.source})` : ""}.
+              </p>
+            )}
+          </For>
           <For each={unknown()}>
             {(item) => (
               <p>

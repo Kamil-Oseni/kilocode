@@ -12,6 +12,7 @@ import { assertExternalDirectoryEffect } from "../../tool/external-directory"
 import { Config } from "@/config/config"
 import { KILO_OPENROUTER_BASE } from "@kilocode/kilo-gateway"
 import DESCRIPTION from "./generate-image.txt"
+import type { RayaGoal } from "@/kilocode/goal"
 
 const log = Log.create({ service: "tool.generate_image" })
 
@@ -36,22 +37,123 @@ export const IMAGE_MODELS = FALLBACK_IMAGE_MODELS
 
 export type ImageFormat = "png" | "jpeg"
 
+export type ImageBilling = {
+  id: string
+  amount?: number
+  source?: string
+  reason?: string
+}
+
+export type ImageResponse = {
+  format: ImageFormat
+  base64: string
+  billing?: ImageBilling
+}
+
 const DATA_URL_RE = /^data:image\/(png|jpeg|jpg);base64,(.+)$/
 
-export function parseImageResponse(body: string): { format: ImageFormat; base64: string } | null {
-  let json: unknown
+function record(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined
+}
+
+function amount(value: unknown) {
+  if (typeof value !== "number" && typeof value !== "string") return
+  if (typeof value === "string" && !value.trim()) return
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 1_000_000 ? parsed : undefined
+}
+
+export function parseImageBilling(value: unknown, provider: ResolvedProvider["provider"] = "openrouter") {
+  const json = record(value)
+  const usage = record(json?.usage)
+  const details = record(usage?.cost_details)
+  const upstream = amount(details?.upstream_inference_cost)
+  const regular = amount(usage?.cost)
+  const cost = provider === "kilo" && upstream !== undefined ? upstream : regular
+  const raw =
+    provider === "kilo" && details?.upstream_inference_cost !== undefined
+      ? details.upstream_inference_cost
+      : usage?.cost
+  const id = typeof json?.id === "string" && json.id.trim() && json.id.length <= 200 ? json.id : undefined
+  if (!id) return
+  return {
+    id,
+    ...(cost === undefined ? {} : { amount: cost }),
+    ...(cost === undefined
+      ? {
+          reason:
+            raw === undefined
+              ? "The image provider completed the request without reporting a billed amount."
+              : "The image provider returned an invalid billed amount.",
+        }
+      : {
+          source:
+            provider === "kilo" && upstream !== undefined ? "usage.cost_details.upstream_inference_cost" : "usage.cost",
+        }),
+  } satisfies ImageBilling
+}
+
+export function parseImageResponse(
+  body: string,
+  provider: ResolvedProvider["provider"] = "openrouter",
+): ImageResponse | null {
+  let value: unknown
   try {
-    json = JSON.parse(body)
+    value = JSON.parse(body)
   } catch {
     return null
   }
-  const choices = (json as any)?.choices
-  const url = choices?.[0]?.message?.images?.[0]?.image_url?.url
+  const json = record(value)
+  const choice = Array.isArray(json?.choices) ? record(json.choices[0]) : undefined
+  const message = record(choice?.message)
+  const image = Array.isArray(message?.images) ? record(message.images[0]) : undefined
+  const url = record(image?.image_url)?.url
   if (typeof url !== "string") return null
   const m = url.match(DATA_URL_RE)
   if (!m) return null
   const format = (m[1] === "jpg" ? "jpeg" : m[1]) as ImageFormat
-  return { format, base64: m[2] }
+  const billing = parseImageBilling(json, provider)
+  return {
+    format,
+    base64: m[2],
+    ...(billing ? { billing } : {}),
+  }
+}
+
+export function imageCharge(input: {
+  billing: ImageBilling
+  provider: ResolvedProvider["provider"]
+  model: string
+  sessionID: Tool.Context["sessionID"]
+  messageID: Tool.Context["messageID"]
+  callID?: string
+  at: number
+}): RayaGoal.Charge {
+  const base = {
+    id: `generate-image:${input.provider}:${input.billing.id}`,
+    kind: "tool" as const,
+    provider: input.provider,
+    service: input.model,
+    origin: {
+      sessionID: input.sessionID,
+      messageID: input.messageID,
+      ...(input.callID ? { callID: input.callID } : {}),
+    },
+    at: input.at,
+  }
+  if (input.billing.amount !== undefined)
+    return {
+      ...base,
+      coverage: "recorded",
+      amount: input.billing.amount,
+      currency: "USD",
+      ...(input.billing.source ? { source: input.billing.source } : {}),
+    }
+  return {
+    ...base,
+    coverage: "unknown",
+    reason: input.billing.reason ?? "The image provider completed the request without reporting a billed amount.",
+  }
 }
 
 export type AuthInput = {
@@ -145,6 +247,7 @@ type Meta = {
   filepath?: string
   provider?: "kilo" | "openrouter"
   error?: string
+  rayaGoalCharge?: { version: 1; receipt: RayaGoal.Charge }
 }
 
 export const GenerateImageTool = Tool.define(
@@ -218,12 +321,39 @@ export const GenerateImageTool = Tool.define(
           }
 
           const text = yield* response.text
-          const parsed = parseImageResponse(text)
+          const value = (() => {
+            try {
+              return JSON.parse(text) as unknown
+            } catch {
+              return undefined
+            }
+          })()
+          const billing = parseImageBilling(value, resolved.provider)
+          const charge = billing
+            ? imageCharge({
+                billing,
+                provider: resolved.provider,
+                model,
+                sessionID: ctx.sessionID,
+                messageID: ctx.messageID,
+                callID: ctx.callID,
+                at: Date.now(),
+              })
+            : undefined
+          if (charge)
+            yield* ctx.metadata({
+              metadata: { provider: resolved.provider, rayaGoalCharge: { version: 1 as const, receipt: charge } },
+            })
+          const parsed = parseImageResponse(text, resolved.provider)
           if (!parsed) {
             return {
               title: "Image generation produced no image",
               output: "The model did not return an image. Try a different prompt or model.",
-              metadata: { provider: resolved.provider, error: "no-image" } as Meta,
+              metadata: {
+                provider: resolved.provider,
+                error: "no-image",
+                ...(charge ? { rayaGoalCharge: { version: 1 as const, receipt: charge } } : {}),
+              } as Meta,
             }
           }
 
@@ -247,6 +377,7 @@ export const GenerateImageTool = Tool.define(
               format: parsed.format,
               filepath: absPath,
               provider: resolved.provider,
+              ...(charge ? { rayaGoalCharge: { version: 1 as const, receipt: charge } } : {}),
             } as Meta,
             attachments: [
               {

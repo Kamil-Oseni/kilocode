@@ -70,6 +70,7 @@ type GoalChargeBase = {
   kind: "tool" | "gpt-live" | "external"
   provider?: string
   service?: string
+  source?: string
   origin: { sessionID: string; messageID?: string; callID?: string }
   at: number
   quantity?: number

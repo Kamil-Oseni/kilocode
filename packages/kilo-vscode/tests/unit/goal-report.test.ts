@@ -37,6 +37,7 @@ test("goal reports preserve exact references and mark legacy records instead of 
           coverage: "recorded",
           amount: 0.25,
           currency: "USD",
+          source: "usage.cost",
         },
         {
           id: "live-duration",
@@ -148,6 +149,7 @@ test("goal reports preserve exact references and mark legacy records instead of 
   expect(saved).toContain("Recovery attempts are consecutive and renew after successful work or a revised approach")
   expect(saved).toContain("does not recall a turn already running")
   expect(saved).toContain("Recorded USD: 0.250000.")
+  expect(saved).toContain("Billing source: usage.cost.")
   expect(saved).toContain("GPT-Live 1: monetary cost unknown. Quantity: 4.5 seconds.")
   expect(saved).toContain("Unknown amounts and non-model charges are not added to the recorded model-cost limit")
   expect(saved).toContain("## Deliverables")

@@ -174,6 +174,7 @@ export namespace RayaGoal {
     kind: Schema.Literals(["tool", "gpt-live", "external"]),
     provider: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(120))),
     service: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(120))),
+    source: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(120))),
     origin: Schema.Struct({
       sessionID: SessionID,
       messageID: Schema.optional(MessageID),
@@ -1612,6 +1613,44 @@ export namespace RayaGoal {
       if (recorded.includes(latest.info.id)) return
       const assistants = candidates.filter((message) => !recorded.includes(message.info.id))
       const parts = assistants.flatMap((message) => message.parts)
+      const incoming = yield* Effect.forEach(parts, (part) =>
+        Effect.gen(function* () {
+          if (
+            part.type !== "tool" ||
+            part.tool !== "generate_image" ||
+            part.state.status === "pending" ||
+            part.state.status === "running"
+          )
+            return
+          const envelope = part.state.metadata?.rayaGoalCharge
+          if (envelope === undefined) return
+          if (!envelope || typeof envelope !== "object" || !("version" in envelope) || envelope.version !== 1)
+            return yield* new AuditError({ message: "The image charge receipt envelope is invalid." })
+          const receipt = "receipt" in envelope ? envelope.receipt : undefined
+          if (!Schema.is(Charge)(receipt))
+            return yield* new AuditError({ message: "The image charge receipt is invalid." })
+          if (
+            receipt.kind !== "tool" ||
+            receipt.origin.sessionID !== sessionID ||
+            receipt.origin.messageID !== part.messageID ||
+            receipt.origin.callID !== part.callID ||
+            receipt.at < state.createdAt
+          )
+            return yield* new AuditError({ message: "The image charge receipt does not match its tool result." })
+          return receipt
+        }),
+      )
+      const additions = incoming.filter((item): item is Charge => item !== undefined)
+      const charges = [...(state.charges ?? [])]
+      for (const charge of additions) {
+        const prior = charges.find((item) => item.id === charge.id)
+        if (prior && !isDeepStrictEqual(prior, charge))
+          return yield* new AuditError({ message: "The image charge receipt ID was reused with different details." })
+        if (prior) continue
+        if (charges.length >= 512)
+          return yield* new AuditError({ message: "The goal non-model charge ledger is full." })
+        charges.push(charge)
+      }
       const calls = parts.filter((part): part is SessionV1.ToolPart => part.type === "tool" && !controls.has(part.tool))
       if (
         parts.some(
@@ -1701,6 +1740,7 @@ export namespace RayaGoal {
         updatedAt: now,
         activeMs: stopped ? elapsed(state, now) : state.activeMs,
         activeAt: stopped ? undefined : state.activeAt,
+        charges: additions.length || state.charges !== undefined ? charges : undefined,
         usage: {
           ...state.usage,
           turns: state.usage.turns + 1,

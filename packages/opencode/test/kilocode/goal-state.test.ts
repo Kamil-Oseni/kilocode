@@ -4433,4 +4433,76 @@ describe("RayaGoal", () => {
       expect(retained?.history?.at(-1)?.charges).toEqual([charge, late])
     }),
   )
+
+  it.live("accounts a completed image generation from its exact host-authored tool receipt", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const sessionID = SessionID.make(`ses_image_charge_${crypto.randomUUID()}`)
+      const rows: MessageV2.WithParts[] = []
+      const goals = setup(storage, () => rows)
+      yield* Effect.addFinalizer(() => goals.clear(sessionID))
+      const created = yield* goals.create(sessionID, "Generate and account for one image")
+      const data = transcript({ sessionID, tool: "generate_image", metadata: {} })
+      const part = data.part!
+      part.state.metadata.rayaGoalCharge = {
+        version: 1,
+        receipt: {
+          id: "generate-image:openrouter:gen_goal_1",
+          kind: "tool",
+          provider: "openrouter",
+          service: "openai/gpt-5-image",
+          origin: { sessionID, messageID: part.messageID, callID: part.callID },
+          at: created.createdAt,
+          coverage: "recorded",
+          amount: 0.125,
+          currency: "USD",
+          source: "usage.cost",
+        },
+      }
+      rows.push(...data.rows)
+
+      const first = yield* goals.recordTurn(sessionID, data.rows[1].info.id)
+      expect(first?.state.charges).toEqual([part.state.metadata.rayaGoalCharge.receipt])
+      expect(yield* goals.recordTurn(sessionID, data.rows[1].info.id)).toBeUndefined()
+      expect((yield* goals.get(sessionID))?.charges).toEqual([part.state.metadata.rayaGoalCharge.receipt])
+    }),
+  )
+
+  it.live("accounts an image charge when file delivery fails after the billed response", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const sessionID = SessionID.make(`ses_image_failed_${crypto.randomUUID()}`)
+      const rows: MessageV2.WithParts[] = []
+      const goals = setup(storage, () => rows)
+      yield* Effect.addFinalizer(() => goals.clear(sessionID))
+      const created = yield* goals.create(sessionID, "Retain the billed image attempt")
+      const data = transcript({ sessionID, tool: "generate_image", metadata: {} })
+      const part = data.part!
+      const receipt: RayaGoal.Charge = {
+        id: "generate-image:openrouter:gen_failed_1",
+        kind: "tool",
+        provider: "openrouter",
+        service: "openai/gpt-5-image",
+        origin: { sessionID, messageID: part.messageID, callID: part.callID },
+        at: created.createdAt,
+        coverage: "recorded",
+        amount: 0.25,
+        currency: "USD",
+        source: "usage.cost",
+      }
+      part.state = {
+        status: "error",
+        input: {},
+        error: "Workspace write was denied after generation.",
+        metadata: { rayaGoalCharge: { version: 1, receipt } },
+        time: part.state.time,
+      }
+      rows.push(...data.rows)
+
+      const result = yield* goals.recordTurn(sessionID, data.rows[1].info.id)
+      expect(result?.productive).toBe(false)
+      expect(result?.state.charges).toEqual([receipt])
+      expect((yield* goals.get(sessionID))?.charges).toEqual([receipt])
+    }),
+  )
 })

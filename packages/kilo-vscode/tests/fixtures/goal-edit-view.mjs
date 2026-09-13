@@ -96,6 +96,20 @@ const goal = {
   createdAt: Date.now(),
   updatedAt: Date.now(),
   usage: { turns: 0, continuations: 0, toolCalls: 0, cost: 1.5, descendantCost: 0.4 },
+  charges: [
+    {
+      id: "generate-image:openrouter:gen_fixture",
+      kind: "tool",
+      provider: "openrouter",
+      service: "openai/gpt-5-image",
+      source: "usage.cost",
+      origin: { sessionID: "session", messageID: "message", callID: "call" },
+      at: Date.now(),
+      coverage: "recorded",
+      amount: 0.125,
+      currency: "USD",
+    },
+  ],
   deliverables: [
     {
       path: "C:\\workspace\\report.md",
@@ -146,6 +160,12 @@ try {
   assert.ok(root.textContent.includes("Original goal"))
   assert.ok(!root.textContent.includes("Late old stop result"))
   root.querySelector('[aria-label="Expand goal details"]').click()
+  assert.ok(root.querySelector('[aria-label="Non-model charges"]').textContent.includes("USD 0.125000 recorded"))
+  assert.ok(
+    root
+      .querySelector('[aria-label="Non-model charges"]')
+      .textContent.includes("openai/gpt-5-image: USD 0.125000 (billing source: usage.cost)"),
+  )
   assert.ok(root.querySelector('[aria-label="Goal deliverables"]').textContent.includes("C:\\workspace\\report.md"))
   assert.ok(
     root.querySelector('[aria-label="Goal deliverables"]').textContent.includes("Revision aaaaaaaaaaaa recorded"),

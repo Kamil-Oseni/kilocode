@@ -1,12 +1,15 @@
 // kilocode_change - new file
 import { describe, expect, test } from "bun:test"
 import {
+  parseImageBilling,
   parseImageResponse,
+  imageCharge,
   resolveProvider,
   ensureExtension,
   IMAGE_MODELS,
   DEFAULT_MODEL,
 } from "../../../src/kilocode/tool/generate-image"
+import { MessageID, SessionID } from "../../../src/session/schema"
 
 describe("generate-image response parser", () => {
   test("extracts PNG from data URL in choices[0].message.images[0]", () => {
@@ -54,6 +57,90 @@ describe("generate-image response parser", () => {
       choices: [{ message: { images: [{ image_url: { url: "https://example.com/image.png" } }] } }],
     })
     expect(parseImageResponse(body)).toBeNull()
+  })
+})
+
+describe("generate-image billing receipt", () => {
+  const image = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
+
+  test("retains the provider request ID and billed USD amount", () => {
+    const parsed = parseImageResponse(
+      JSON.stringify({
+        id: "gen_image_1",
+        choices: [{ message: { images: [{ image_url: { url: image } }] } }],
+        usage: { cost: 0.125 },
+      }),
+    )
+    expect(parsed?.billing).toEqual({ id: "gen_image_1", amount: 0.125, source: "usage.cost" })
+    const charge = imageCharge({
+      billing: parsed!.billing!,
+      provider: "openrouter",
+      model: "openai/gpt-5-image",
+      sessionID: SessionID.make("ses_image_goal"),
+      messageID: MessageID.make("msg_image_goal"),
+      callID: "call_image_goal",
+      at: 100,
+    })
+    expect(charge).toMatchObject({
+      id: "generate-image:openrouter:gen_image_1",
+      coverage: "recorded",
+      amount: 0.125,
+      currency: "USD",
+      source: "usage.cost",
+      provider: "openrouter",
+      service: "openai/gpt-5-image",
+      origin: { callID: "call_image_goal" },
+      at: 100,
+    })
+  })
+
+  test("prefers Kilo upstream cost and preserves a missing amount as unknown", () => {
+    const billed = parseImageResponse(
+      JSON.stringify({
+        id: "gen_kilo_1",
+        choices: [{ message: { images: [{ image_url: { url: image } }] } }],
+        usage: { cost: 0.5, cost_details: { upstream_inference_cost: 0.2 } },
+      }),
+      "kilo",
+    )
+    expect(billed?.billing).toEqual({
+      id: "gen_kilo_1",
+      amount: 0.2,
+      source: "usage.cost_details.upstream_inference_cost",
+    })
+    const missing = parseImageResponse(
+      JSON.stringify({
+        id: "gen_image_unknown",
+        choices: [{ message: { images: [{ image_url: { url: image } }] } }],
+        usage: {},
+      }),
+    )
+    const charge = imageCharge({
+      billing: missing!.billing!,
+      provider: "openrouter",
+      model: "openrouter/auto",
+      sessionID: SessionID.make("ses_image_unknown"),
+      messageID: MessageID.make("msg_image_unknown"),
+      at: 200,
+    })
+    expect(charge.coverage).toBe("unknown")
+    if (charge.coverage === "unknown") expect(charge.reason).toContain("without reporting a billed amount")
+  })
+
+  test("retains billing when a completed response contains no image", () => {
+    expect(parseImageBilling({ id: "gen_no_image", choices: [], usage: { cost: 0.05 } })).toEqual({
+      id: "gen_no_image",
+      amount: 0.05,
+      source: "usage.cost",
+    })
+  })
+
+  test("marks an invalid provider amount as unknown", () => {
+    const billing = parseImageBilling({ id: "gen_bad_cost", usage: { cost: "not-a-number" } })
+    expect(billing).toEqual({
+      id: "gen_bad_cost",
+      reason: "The image provider returned an invalid billed amount.",
+    })
   })
 })
 

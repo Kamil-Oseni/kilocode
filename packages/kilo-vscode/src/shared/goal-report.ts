@@ -99,10 +99,11 @@ function charges(goal: Pick<Goal, "charges">) {
   for (const item of goal.charges) {
     const source = item.service ?? item.provider ?? item.kind
     const quantity = item.quantity === undefined ? "" : ` Quantity: ${item.quantity} ${item.unit ?? "units"}.`
+    const origin = item.source ? ` Billing source: ${item.source}.` : ""
     lines.push(
       item.coverage === "recorded"
-        ? `${source}: ${item.currency} ${item.amount.toFixed(6)}.${quantity}`
-        : `${source}: monetary cost unknown.${quantity} ${item.reason}`,
+        ? `${source}: ${item.currency} ${item.amount.toFixed(6)}.${quantity}${origin}`
+        : `${source}: monetary cost unknown.${quantity} ${item.reason}${origin}`,
     )
   }
   lines.push(

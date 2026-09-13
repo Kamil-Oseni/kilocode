@@ -440,3 +440,139 @@ it.live(
     ),
   30_000,
 )
+
+it.live(
+  "routine company identity, conversations, authority and recovery survive service restart",
+  () =>
+    provideTmpdirInstance((root) =>
+      Effect.gen(function* () {
+        const services = () =>
+          Layer.mergeAll(
+            Storage.layerFromDir(path.join(root, "storage")),
+            Database.layerFromPath(path.join(root, "queue.sqlite")),
+          )
+        const params = {
+          name: "Continuity Company",
+          purpose: "Keep a durable operating team.",
+          workers: [
+            {
+              kind: "new" as const,
+              key: "chief",
+              name: "Chief of Staff",
+              role: "CEO",
+              objective: "Coordinate the company",
+              output: output("Company"),
+              capabilities: ["research"],
+              canCreateWorkers: true,
+              access: "brief" as const,
+              when: "only when I ask",
+              delegatesTo: ["books"],
+            },
+            {
+              kind: "new" as const,
+              key: "books",
+              name: "Books",
+              role: "Accountant",
+              objective: "Review the books",
+              output: output("Accounts"),
+              capabilities: ["accounting"],
+              access: "brief" as const,
+              when: "every Friday at 5pm",
+              timezone: "America/Toronto",
+              supervisorKey: "chief",
+            },
+          ],
+        }
+        const seeded = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const storage = yield* Storage.Service
+            const database = yield* Database.Service
+            const tasks = RayaTask.make({ storage, database })
+            const organizations = RayaTaskOrganization.make(database, tasks, storage)
+            const inbox = RayaTaskInbox.make(database)
+            const create = yield* (yield* routineManagementTools({ database, storage, sessions }).create).init()
+            const receipt = yield* create.execute(params, context("restart-company"))
+            const agents = yield* tasks.list()
+            const chief = agents.find((item) => item.name === "Chief of Staff")!
+            const books = agents.find((item) => item.name === "Books")!
+            const organization = (yield* organizations.list()).items[0]!
+            const authorized = yield* tasks.authority(chief.id, { enabled: true, expected: true }, "user")
+            const revised = yield* organizations.update(organization.id, {
+              expectedRevision: organization.revision,
+              purpose: "Keep a durable operating team and weekly books.",
+            })
+            const report = yield* inbox.publish({
+              agentID: books.id,
+              source: "report:restart-contract",
+              kind: "report",
+              body: "Friday close is ready.",
+              occurrenceID: "occ_restart_contract",
+              attachments: [
+                {
+                  id: "123e4567-e89b-42d3-a456-426614174001",
+                  name: "close.txt",
+                  mime: "text/plain",
+                  size: 5,
+                  data: "Y2xvc2U=",
+                },
+              ],
+            })
+            yield* inbox.read(books.id, report.time)
+            yield* inbox.draft(books.id, { draft: "Ask about the reconciliation." })
+            const run = yield* tasks.record({
+              id: "occ_restart_contract",
+              agentID: books.id,
+              at: report.time,
+              sessionID: SessionID.make("ses_restart_contract"),
+              status: "complete",
+              scheduleVersion: books.scheduleVersion,
+              trigger: {
+                kind: "timer",
+                id: "occ_restart_contract",
+                scheduledAt: report.time,
+                observedAt: report.time,
+              },
+            })
+            const conversation = (yield* inbox.summaries([books], new Map()))[0]!.conversationID
+            return { receipt, chief: authorized, books, organization: revised, report, run, conversation }
+          }).pipe(Effect.provide(services())),
+        )
+
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const storage = yield* Storage.Service
+            const database = yield* Database.Service
+            const tasks = RayaTask.make({ storage, database })
+            const organizations = RayaTaskOrganization.make(database, tasks, storage)
+            const inbox = RayaTaskInbox.make(database)
+            const create = yield* (yield* routineManagementTools({ database, storage, sessions }).create).init()
+            expect(
+              yield* create.execute(params, {
+                ...context("restart-company"),
+                ask: () => Effect.die("a completed restarted request must not ask or mutate again"),
+              }),
+            ).toEqual(JSON.parse(JSON.stringify(seeded.receipt)))
+            const agents = yield* tasks.list()
+            expect(agents.map((item) => item.id).sort()).toEqual([seeded.chief.id, seeded.books.id].sort())
+            expect(yield* tasks.get(seeded.chief.id)).toEqual(seeded.chief)
+            expect((yield* tasks.get(seeded.books.id)).schedule).toEqual(seeded.books.schedule)
+            expect(yield* organizations.get(seeded.organization.id)).toEqual(seeded.organization)
+            expect((yield* tasks.runsFor(seeded.books.id))[0]).toEqual(seeded.run)
+            const page = yield* inbox.page(seeded.books.id)
+            expect(page.messages).toEqual([seeded.report])
+            expect(yield* inbox.content(seeded.books.id, seeded.report.attachments![0]!.id)).toMatchObject({
+              name: "close.txt",
+              data: "Y2xvc2U=",
+            })
+            const box = (yield* inbox.summaries([seeded.books], new Map()))[0]!
+            expect(box).toMatchObject({
+              conversationID: seeded.conversation,
+              unread: 0,
+              draft: "Ask about the reconciliation.",
+            })
+          }).pipe(Effect.provide(services())),
+        )
+      }),
+    ),
+  30_000,
+)

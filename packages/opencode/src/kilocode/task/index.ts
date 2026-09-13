@@ -354,6 +354,7 @@ export namespace RayaTask {
         "get_goal",
         "update_goal",
         "update_goal_plan",
+        "inspect_team",
       ]
       const selected =
         agent.tools !== undefined

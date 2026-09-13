@@ -14,6 +14,7 @@ const reads = [
   "get_goal",
   "update_goal",
   "update_goal_plan",
+  "inspect_team",
 ]
 const view = ["read", "glob", "grep", "list"]
 const groups = [
@@ -21,7 +22,7 @@ const groups = [
   { name: "Change files", tools: ["edit", "write", "apply_patch"] },
   { name: "Commands", tools: ["bash", "background_process", "interactive_terminal"] },
   { name: "Browser and web", tools: ["browser_*", "websearch", "webfetch"] },
-  { name: "Delegation", tools: ["task", "delegate_work"] },
+  { name: "Delegation", tools: ["inspect_team", "task", "delegate_work"] },
   { name: "Connected services", tools: ["mcp_*"] },
 ] as const
 const known = new Set<string>(groups.flatMap((group) => [...group.tools]))

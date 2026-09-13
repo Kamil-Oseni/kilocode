@@ -166,6 +166,7 @@ export namespace KiloToolRegistry {
           ...goal,
           scheduleTask: routines?.scheduleTask,
           inspectRoutines: routines?.inspect,
+          inspectTeam: routines?.inspectTeam,
           createOrganization: routines?.create,
           createSubordinate: routines?.createSubordinate,
           delegateWork: routines?.delegateWork,
@@ -197,6 +198,7 @@ export namespace KiloToolRegistry {
         ...goal,
         scheduleTask: routines?.scheduleTask,
         inspectRoutines: routines?.inspect,
+        inspectTeam: routines?.inspectTeam,
         createOrganization: routines?.create,
         createSubordinate: routines?.createSubordinate,
         delegateWork: routines?.delegateWork,
@@ -237,6 +239,7 @@ export namespace KiloToolRegistry {
       canvas?: Tool.Info[] // raya_change - Milestone E
       scheduleTask?: Tool.Info
       inspectRoutines?: Tool.Info
+      inspectTeam?: Tool.Info
       createOrganization?: Tool.Info
       createSubordinate?: Tool.Info
       delegateWork?: Tool.Info
@@ -269,6 +272,7 @@ export namespace KiloToolRegistry {
       const canvas = tools.canvas ? yield* Effect.all(tools.canvas.map(Tool.init)) : [] // raya_change - Milestone E
       const scheduleTask = tools.scheduleTask ? yield* Tool.init(tools.scheduleTask) : undefined
       const inspectRoutines = tools.inspectRoutines ? yield* Tool.init(tools.inspectRoutines) : undefined
+      const inspectTeam = tools.inspectTeam ? yield* Tool.init(tools.inspectTeam) : undefined
       const createOrganization = tools.createOrganization ? yield* Tool.init(tools.createOrganization) : undefined
       const createSubordinate = tools.createSubordinate ? yield* Tool.init(tools.createSubordinate) : undefined
       const delegateWork = tools.delegateWork ? yield* Tool.init(tools.delegateWork) : undefined
@@ -312,6 +316,7 @@ export namespace KiloToolRegistry {
         canvas, // raya_change - Milestone E
         scheduleTask,
         inspectRoutines,
+        inspectTeam,
         createOrganization,
         createSubordinate,
         delegateWork,
@@ -367,7 +372,7 @@ export namespace KiloToolRegistry {
       )
     )
       return agent.mode === "primary"
-    if (tool.id === "create_subordinate" || tool.id === "delegate_work") return agent.mode !== "primary"
+    if (["inspect_team", "create_subordinate", "delegate_work"].includes(tool.id)) return agent.mode !== "primary"
     if (tool.id === "refine_self_heal") return agent.mode === "primary" // raya_change - hybrid self-heal reconcile
     if (tool.id === "notify_user") return KiloSessions.remoteStatus().enabled
     if (tool.id === "send_file") return KiloSessions.remoteStatus().connected
@@ -405,6 +410,7 @@ export namespace KiloToolRegistry {
       canvas?: Tool.Def[] // raya_change - Milestone E
       scheduleTask?: Tool.Def
       inspectRoutines?: Tool.Def
+      inspectTeam?: Tool.Def
       createOrganization?: Tool.Def
       createSubordinate?: Tool.Def
       delegateWork?: Tool.Def
@@ -445,6 +451,7 @@ export namespace KiloToolRegistry {
       ...(Flag.KILO_CLIENT === "vscode" ? (tools.canvas ?? []) : []), // raya_change - Milestone E
       ...(tools.scheduleTask ? [tools.scheduleTask] : []),
       ...(tools.inspectRoutines ? [tools.inspectRoutines] : []),
+      ...(tools.inspectTeam ? [tools.inspectTeam] : []),
       ...(tools.createOrganization ? [tools.createOrganization] : []),
       ...(tools.createSubordinate ? [tools.createSubordinate] : []),
       ...(tools.delegateWork ? [tools.delegateWork] : []),

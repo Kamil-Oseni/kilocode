@@ -142,6 +142,10 @@ const DelegateWork = Schema.Struct({
   ),
   budget: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(1_000_000))),
 })
+const InspectTeam = Schema.Struct({
+  cursor: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
+  limit: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(20))),
+})
 const SubordinatePlan = Schema.Struct({
   organizationID: Schema.String,
   expectedRevision: Schema.Int,
@@ -780,6 +784,93 @@ export function routineManagementTools(input: {
     }),
   )
 
+  const inspectTeam = Tool.define(
+    "inspect_team",
+    Effect.succeed({
+      description:
+        "Show the current Routine worker's active organizations, coworkers, current revisions, and exact outgoing delegation routes. Use before delegate_work when an organization or recipient ID is unknown. Reporting lines are descriptive and do not grant delegation authority.",
+      parameters: InspectTeam,
+      execute: (params: typeof InspectTeam.Type, ctx: Tool.Context) =>
+        Effect.gen(function* () {
+          const session = yield* input.sessions.get(ctx.sessionID)
+          const identity = yield* Schema.decodeUnknownEffect(RoutineIdentity)(session.metadata?.rayaRoutine).pipe(
+            Effect.mapError(() => new Error("Only a running routine worker can inspect its team.")),
+          )
+          const worker = yield* tasks.get(identity.agentID)
+          const run = (yield* tasks.runsFor(worker.id)).find(
+            (item) =>
+              item.id === identity.runID &&
+              item.sessionID === ctx.sessionID &&
+              item.scheduleVersion === identity.scheduleVersion &&
+              isDeepStrictEqual(item.trigger, identity.trigger) &&
+              RayaTask.pending(item),
+          )
+          if (!run) return yield* Effect.fail(new Error("The current routine run is no longer active."))
+          const page = yield* organizations.memberships(worker.id, { cursor: params.cursor, limit: params.limit ?? 10 })
+          const agents = new Map((yield* tasks.list()).map((item) => [item.id, item]))
+          const incoming = yield* errands.bySession(ctx.sessionID)
+          if (
+            incoming &&
+            (incoming.recipientID !== worker.id ||
+              incoming.childRunID !== run.id ||
+              (incoming.state !== "running" && incoming.state !== "needs_input"))
+          )
+            return yield* Effect.fail(new Error("The current delegated request no longer matches this worker run."))
+          const teams = page.items.map((item) => {
+            const routes = new Set(
+              item.delegations.filter((edge) => edge.senderID === worker.id).map((edge) => edge.recipientID),
+            )
+            const member = item.members.find((entry) => entry.agentID === worker.id)
+            return {
+              id: item.id,
+              name: item.name,
+              revision: item.revision,
+              role: member?.role,
+              members: item.members.map((entry) => ({
+                agentID: entry.agentID,
+                name: agents.get(entry.agentID)?.name ?? "Unavailable worker",
+                role: entry.role,
+                ...(entry.supervisorID ? { supervisorID: entry.supervisorID } : {}),
+                canDelegate: routes.has(entry.agentID),
+              })),
+            }
+          })
+          return {
+            title: "Current Routine teams",
+            output: JSON.stringify({
+              worker: { agentID: worker.id, name: worker.name, role: worker.role, runID: run.id },
+              organizations: teams,
+              ...(incoming
+                ? {
+                    currentRequest: {
+                      id: incoming.id,
+                      senderID: incoming.senderID,
+                      organizationID: incoming.organizationID,
+                      objective: incoming.objective,
+                      state: incoming.state,
+                    },
+                  }
+                : {}),
+              ...(page.next ? { next: page.next } : {}),
+            }),
+            metadata: {
+              requestStatus: "complete",
+              organizationCount: teams.length,
+              ...(page.next ? { next: page.next } : {}),
+            },
+          }
+        }).pipe(
+          Effect.catch((err) =>
+            Effect.succeed({
+              title: "Team inspection needs review",
+              output: `${err instanceof Error ? err.message : String(err)} Reload the current Routine worker before trying again.`,
+              metadata: { requestStatus: "unresolved" },
+            }),
+          ),
+        ),
+    }),
+  )
+
   const updateRoutine = Tool.define(
     "update_routine",
     Effect.succeed({
@@ -954,5 +1045,5 @@ export function routineManagementTools(input: {
     }),
   )
 
-  return { inspect, create, createSubordinate, delegateWork, updateRoutine, updateOrganization }
+  return { inspect, inspectTeam, create, createSubordinate, delegateWork, updateRoutine, updateOrganization }
 }

@@ -1655,7 +1655,16 @@ describe("RayaTask store", () => {
     expect(RayaTask.brief({ role: "briefer", access: "full" })).toBe(false)
     const denied = RayaTask.rules({ role: "briefer" })
     expect(Permission.evaluate("edit", "file", denied).action).toBe("deny")
-    for (const permission of ["read", "glob", "grep", "question", "get_goal", "update_goal", "update_goal_plan"])
+    for (const permission of [
+      "read",
+      "glob",
+      "grep",
+      "question",
+      "get_goal",
+      "update_goal",
+      "update_goal_plan",
+      "inspect_team",
+    ])
       expect(Permission.evaluate(permission, "file", denied).action).toBe("allow")
     const selected = RayaTask.rules({ role: "briefer", tools: ["read", "browser_*", "task"] })
     expect(Permission.evaluate("read", "file", selected).action).toBe("allow")

@@ -429,6 +429,43 @@ it.live(
             } as never),
         }
         const tools = routineManagementTools({ database, storage, sessions: workerSessions })
+        const team = yield* tools.inspectTeam
+        const inspect = yield* team.init()
+        const visible = { ...inspect, id: team.id }
+        expect(
+          KiloToolRegistry.available(visible, {
+            name: "build",
+            mode: "primary",
+            options: {},
+            permission: {},
+          } as Agent.Info),
+        ).toBe(false)
+        expect(
+          KiloToolRegistry.available(visible, {
+            name: "build",
+            mode: "subagent",
+            options: {},
+            permission: {},
+          } as Agent.Info),
+        ).toBe(true)
+        const inspected = yield* inspect.execute({}, context("inspect-team"))
+        expect(inspected.title).toBe("Current Routine teams")
+        expect(JSON.parse(inspected.output)).toMatchObject({
+          worker: { agentID: designer.id, runID },
+          organizations: [
+            {
+              id: organization.id,
+              revision: organization.revision,
+              role: "Design",
+              members: [
+                { agentID: chief.id, name: chief.name, canDelegate: true },
+                { agentID: designer.id, name: designer.name, canDelegate: false },
+                { agentID: coder.id, name: coder.name, canDelegate: true },
+              ],
+            },
+          ],
+          currentRequest: { id: incoming.record.id, senderID: chief.id, state: "running" },
+        })
         const info = yield* tools.delegateWork
         const delegate = yield* info.init()
         const available = { ...delegate, id: info.id }

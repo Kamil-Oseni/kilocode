@@ -537,6 +537,41 @@ export namespace RayaTaskOrganization {
       }
     })
 
+    const memberships = Effect.fn("RayaTaskOrganization.memberships")(function* (agentID: string, query: Query = {}) {
+      if (!Schema.is(AgentID)(agentID)) return yield* new Invalid({ message: "The worker ID is invalid." })
+      const value = yield* Schema.decodeUnknownEffect(Query)(query).pipe(
+        Effect.mapError(() => new Invalid({ message: "Organization pages are limited to 50 items." })),
+      )
+      const after = yield* cursor(value.cursor)
+      const archived = value.archived ?? false
+      const limit = value.limit ?? MAX
+      const rows = yield* db
+        .select({ id: OrganizationRow.id, updated: OrganizationRow.time_updated })
+        .from(OrganizationRow)
+        .innerJoin(MemberRow, and(eq(MemberRow.organization_id, OrganizationRow.id), eq(MemberRow.agent_id, agentID)))
+        .where(
+          and(
+            archived ? isNotNull(OrganizationRow.archived_at) : isNull(OrganizationRow.archived_at),
+            after
+              ? or(
+                  lt(OrganizationRow.time_updated, after.updated),
+                  and(eq(OrganizationRow.time_updated, after.updated), sql`${OrganizationRow.id} < ${after.id}`),
+                )
+              : undefined,
+          ),
+        )
+        .orderBy(desc(OrganizationRow.time_updated), desc(OrganizationRow.id))
+        .limit(limit + 1)
+        .all()
+        .pipe(Effect.orDie)
+      const items = yield* Effect.forEach(rows.slice(0, limit), (row) => get(row.id))
+      const last = rows.slice(0, limit).at(-1)
+      return {
+        items,
+        ...(rows.length > limit && last ? { next: encode({ updated: last.updated, id: last.id }) } : {}),
+      }
+    })
+
     const hasActive = Effect.fn("RayaTaskOrganization.hasActive")(function* (agentID: string) {
       const row = yield* db
         .select({ count: count() })
@@ -606,6 +641,7 @@ export namespace RayaTaskOrganization {
 
     return {
       list,
+      memberships,
       get,
       create: (input: Create) => mutate(storage, create(input), "Organization"),
       provision: (input: Create, id: string) => mutate(storage, create(input, id, true), "Organization"),

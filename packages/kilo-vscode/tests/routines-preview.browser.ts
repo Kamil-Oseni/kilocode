@@ -49,6 +49,8 @@ for (const theme of ["light", "dark"]) {
       await expect(page.getByRole("button", { name: "Open receipt.pdf" })).toBeVisible()
       const image = page.getByRole("button", { name: "Open travel-receipt.png" })
       await expect(image.getByRole("img", { name: "travel-receipt.png" })).toBeVisible()
+      await expect(page.getByLabel("finance-update.wav")).toBeVisible()
+      await expect(page.getByRole("button", { name: "Open file" })).toBeVisible()
       await expect(page.getByRole("button", { name: "Attach" })).toBeVisible()
       expect(
         await page

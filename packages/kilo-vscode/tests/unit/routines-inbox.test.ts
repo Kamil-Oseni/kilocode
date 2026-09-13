@@ -177,6 +177,28 @@ test("routine image preview returns verified bytes without opening an external e
   })
   expect(opened).toEqual([])
 
+  const sound = { ...file, name: "update.wav", mime: "audio/wav" }
+  const audio = createKiloClient({
+    baseUrl: "http://localhost:4096",
+    fetch: async () => Response.json(sound),
+  })
+  await handleRoutineMessage({
+    client: audio,
+    directory: "workspace",
+    post: (msg) => messages.push(msg),
+    message: {
+      type: "routineInboxAttachmentPreview",
+      requestID: "preview-audio",
+      agentID: "routine",
+      attachmentID: id,
+    },
+  })
+  expect(messages.at(-1)).toMatchObject({
+    type: "routineInboxAttachmentPreviewed",
+    requestID: "preview-audio",
+    file: sound,
+  })
+
   const unsupported = createKiloClient({
     baseUrl: "http://localhost:4096",
     fetch: async () => Response.json({ ...file, mime: "image/svg+xml" }),

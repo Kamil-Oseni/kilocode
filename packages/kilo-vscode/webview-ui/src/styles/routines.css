@@ -927,6 +927,47 @@
   text-align: left;
 }
 
+.routines-media {
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--border-weak, var(--vscode-widget-border));
+  border-radius: var(--raya-radius-md, 8px);
+  background: transparent;
+}
+
+.routines-media-caption {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--raya-space-2);
+  min-width: 0;
+  padding: var(--raya-space-8);
+}
+
+.routines-media-placeholder .routines-media-caption {
+  padding-top: var(--raya-space-8);
+}
+
+.routines-playback {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--raya-space-4);
+  padding-bottom: var(--raya-space-4);
+}
+
+.routines-playback audio,
+.routines-playback video {
+  display: block;
+  width: 100%;
+  max-height: 20rem;
+  background: color-mix(in srgb, var(--text-base, var(--vscode-foreground)) 5%, transparent);
+}
+
+.routines-playback > [data-component="button"] {
+  margin-inline: var(--raya-space-8);
+}
+
 .routines-image img,
 .routines-image-state {
   display: block;
@@ -942,11 +983,6 @@
   padding: var(--raya-space-12);
   color: var(--text-weak, var(--vscode-descriptionForeground));
   text-align: center;
-}
-
-.routines-image .routines-file-name,
-.routines-image .routines-file-path {
-  margin-inline: var(--raya-space-8);
 }
 
 .routines-chain {

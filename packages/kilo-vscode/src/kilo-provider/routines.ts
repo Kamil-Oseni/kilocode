@@ -329,7 +329,19 @@ async function attachment(ctx: Ctx) {
   ctx.post({ type: "routineInboxAttachmentOpened", requestID: msg.requestID, agentID: msg.agentID })
 }
 
-const images = new Set(["image/gif", "image/jpeg", "image/png", "image/webp"])
+const media = new Set([
+  "audio/mp4",
+  "audio/mpeg",
+  "audio/ogg",
+  "audio/wav",
+  "image/gif",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "video/mp4",
+  "video/ogg",
+  "video/webm",
+])
 
 async function preview(ctx: Ctx) {
   const msg = ctx.message
@@ -345,7 +357,7 @@ async function preview(ctx: Ctx) {
   )
   const file = result.data
   if (!file || file.id !== msg.attachmentID) throw new Error("That attachment is no longer available.")
-  if (!images.has(file.mime)) throw new Error("This file does not have an inline preview.")
+  if (!media.has(file.mime)) throw new Error("This file does not have an inline preview.")
   if (file.size < 1 || file.size > MAX_ROUTINE_FILE_BYTES)
     throw new Error("This image is too large to preview in the conversation.")
   const bytes = Buffer.from(file.data, "base64")

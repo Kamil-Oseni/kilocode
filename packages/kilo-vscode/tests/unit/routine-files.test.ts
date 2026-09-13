@@ -6,6 +6,9 @@ describe("routine attachment encoding", () => {
     const file = encode("ledger.PDF", new Uint8Array([1, 2, 3]))
     expect(file).toMatchObject({ name: "ledger.PDF", mime: "application/pdf", size: 3, data: "AQID" })
     expect(file.id).toMatch(/^[0-9a-f-]{36}$/)
+    expect(encode("update.wav", new Uint8Array([1])).mime).toBe("audio/wav")
+    expect(encode("walkthrough.mp4", new Uint8Array([1])).mime).toBe("video/mp4")
+    expect(encode("clip.webm", new Uint8Array([1])).mime).toBe("video/webm")
   })
 
   test("rejects empty, oversized, or excessive selections before staging", () => {

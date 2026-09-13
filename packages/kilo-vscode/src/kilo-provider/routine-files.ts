@@ -13,6 +13,14 @@ export type RoutineUpload = {
 }
 
 const mimes: Record<string, string> = {
+  ".m4a": "audio/mp4",
+  ".mp3": "audio/mpeg",
+  ".mp4": "video/mp4",
+  ".oga": "audio/ogg",
+  ".ogg": "audio/ogg",
+  ".ogv": "video/ogg",
+  ".wav": "audio/wav",
+  ".webm": "video/webm",
   ".csv": "text/csv",
   ".gif": "image/gif",
   ".jpeg": "image/jpeg",

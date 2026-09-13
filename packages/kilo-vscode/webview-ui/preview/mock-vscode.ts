@@ -47,6 +47,12 @@ const report = {
       mime: "application/pdf",
       size: 42_240,
     },
+    {
+      id: "123e4567-e89b-42d3-a456-426614174002",
+      name: "finance-update.wav",
+      mime: "audio/wav",
+      size: 44,
+    },
   ],
   time: 1,
 }
@@ -73,6 +79,26 @@ const calendar = (message: WebviewMessage) => {
   }
   if (message.type !== "routineScheduleUpdate") return false
   emit({ type: "routineScheduleUpdated", requestID: message.requestID, agentID: message.agentID })
+  return true
+}
+
+const attachment = (message: WebviewMessage) => {
+  if (message.type !== "routineInboxAttachmentPreview") return false
+  const sound = message.attachmentID === "123e4567-e89b-42d3-a456-426614174002"
+  emit({
+    type: "routineInboxAttachmentPreviewed",
+    requestID: message.requestID,
+    agentID: message.agentID,
+    file: {
+      id: message.attachmentID,
+      name: sound ? "finance-update.wav" : "travel-receipt.png",
+      mime: sound ? "audio/wav" : "image/png",
+      size: sound ? 44 : 68,
+      data: sound
+        ? "UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="
+        : "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+    },
+  })
   return true
 }
 
@@ -255,21 +281,7 @@ const reply = (message: WebviewMessage) => {
     })
     return
   }
-  if (message.type === "routineInboxAttachmentPreview") {
-    emit({
-      type: "routineInboxAttachmentPreviewed",
-      requestID: message.requestID,
-      agentID: message.agentID,
-      file: {
-        id: message.attachmentID,
-        name: "travel-receipt.png",
-        mime: "image/png",
-        size: 68,
-        data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
-      },
-    })
-    return
-  }
+  if (attachment(message)) return
   if (message.type === "routineInboxInfo") {
     emit({
       type: "routineInboxInfo",

@@ -147,6 +147,21 @@ const work = (organizationID: string) => {
   ]
 }
 
+const older = (organizationID: string) => ({
+  id: "rdg_org_older",
+  sender: { id: design.id, name: design.name, role: "Design", archived: false },
+  recipient: { id: legal.id, name: legal.name, role: "Chief of Staff", archived: false },
+  organizationID,
+  organizationName: "Website Builders",
+  organizationRevision: 1,
+  source: "org_older",
+  state: "failed" as const,
+  objective: "Recover the interrupted hosting handoff.",
+  reason: "The hosting provider was unavailable. Retry from the saved design package.",
+  time: 0,
+  updated: 1,
+})
+
 const calendar = (message: WebviewMessage) => {
   if (message.type === "routineForecast") {
     const schedule = message.schedule
@@ -194,7 +209,8 @@ const preview = (message: WebviewMessage) => {
       type: "routineOrganizationActivity",
       requestID: message.requestID,
       organizationID: message.organizationID,
-      items: work(message.organizationID),
+      items: message.cursor === "older" ? [older(message.organizationID)] : work(message.organizationID),
+      ...(message.cursor ? {} : { next: "older" }),
     })
     return true
   }

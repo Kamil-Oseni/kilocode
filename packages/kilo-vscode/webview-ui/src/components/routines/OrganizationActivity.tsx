@@ -1,6 +1,6 @@
 import { Button } from "@kilocode/kilo-ui/button"
 import { useDialog } from "@kilocode/kilo-ui/context/dialog"
-import { Component, For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import { Component, For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { useVSCode } from "../../context/vscode"
 import type { ExtensionMessage } from "../../types/messages"
 import { OrganizationAssignment, type Follow } from "./OrganizationAssignment"
@@ -13,7 +13,15 @@ type Step = Pick<Work, "id" | "state" | "objective" | "organizationID"> & {
 type Tree = { record: Step; above: Step[]; below: Step[] }
 type Trace = { request: string; id: string; agent: string; action: "inspect" | "follow" }
 
-const states = new Set(["queued", "accepted", "running", "needs_input", "completed", "failed", "cancelled"])
+const states = new Set<Work["state"]>([
+  "queued",
+  "accepted",
+  "running",
+  "needs_input",
+  "completed",
+  "failed",
+  "cancelled",
+])
 
 function person(value: unknown) {
   if (!value || typeof value !== "object") return false
@@ -46,7 +54,7 @@ function valid(value: unknown): value is Work {
     /^org_[a-f0-9]{32}$/.test(row.organizationID) &&
     typeof row.source === "string" &&
     typeof row.state === "string" &&
-    states.has(row.state) &&
+    states.has(row.state as Work["state"]) &&
     typeof row.objective === "string" &&
     typeof row.time === "number" &&
     Number.isFinite(row.time) &&
@@ -64,7 +72,7 @@ function step(value: unknown): Step | undefined {
     typeof row.recipientID !== "string" ||
     typeof row.organizationID !== "string" ||
     typeof row.state !== "string" ||
-    !states.has(row.state) ||
+    !states.has(row.state as Work["state"]) ||
     typeof row.objective !== "string"
   )
     return
@@ -123,6 +131,9 @@ export const OrganizationActivity: Component<{
   const [trace, setTrace] = createSignal<Trace>()
   const [confirm, setConfirm] = createSignal("")
   const [stopping, setStopping] = createSignal<{ request: string; id: string; agent: string; recipient: string }>()
+  const [query, setQuery] = createSignal("")
+  const [phase, setPhase] = createSignal("all")
+  const [worker, setWorker] = createSignal("all")
   let request = ""
   let after: string | undefined
 
@@ -252,6 +263,33 @@ export const OrganizationActivity: Component<{
   const attention = createMemo(
     () => items().filter((item) => item.state === "needs_input" || item.state === "failed").length,
   )
+  const workers = createMemo(() => {
+    const found = new Map<string, string>()
+    for (const item of items()) {
+      found.set(item.sender.id, item.sender.name)
+      found.set(item.recipient.id, item.recipient.name)
+    }
+    return [...found].map(([id, name]) => ({ id, name }))
+  })
+  const visible = createMemo(() => {
+    const term = query().trim().toLowerCase()
+    return items().filter((item) => {
+      if (phase() !== "all" && item.state !== phase()) return false
+      if (worker() !== "all" && item.sender.id !== worker() && item.recipient.id !== worker()) return false
+      if (!term) return true
+      return [item.objective, item.response, item.reason].some((value) => value?.toLowerCase().includes(term))
+    })
+  })
+  const clear = () => {
+    setQuery("")
+    setPhase("all")
+    setWorker("all")
+  }
+
+  createEffect(() => {
+    props.id
+    clear()
+  })
 
   const name = (id: string) => {
     for (const item of items()) {
@@ -344,8 +382,43 @@ export const OrganizationActivity: Component<{
         )}
       </Show>
       <Show when={items().length}>
+        <div class="routines-organization-work-filters" aria-label="Filter work">
+          <label class="routines-field">
+            Search work
+            <input
+              type="search"
+              value={query()}
+              placeholder="Outcome or report"
+              onInput={(event) => setQuery(event.currentTarget.value)}
+            />
+          </label>
+          <label class="routines-field">
+            State
+            <select value={phase()} onChange={(event) => setPhase(event.currentTarget.value)}>
+              <option value="all">All states</option>
+              <For each={[...states]}>{(state) => <option value={state}>{label(state)}</option>}</For>
+            </select>
+          </label>
+          <label class="routines-field">
+            Worker
+            <select value={worker()} onChange={(event) => setWorker(event.currentTarget.value)}>
+              <option value="all">All workers</option>
+              <For each={workers()}>{(person) => <option value={person.id}>{person.name}</option>}</For>
+            </select>
+          </label>
+          <Show when={query() || phase() !== "all" || worker() !== "all"}>
+            <Button variant="ghost" size="small" onClick={clear}>
+              Clear filters
+            </Button>
+          </Show>
+        </div>
+        <p class="routines-organization-work-count" role="status">
+          Showing {visible().length} of {items().length} loaded
+        </p>
+      </Show>
+      <Show when={visible().length}>
         <ol class="routines-organization-work-list">
-          <For each={items()}>
+          <For each={visible()}>
             {(item) => (
               <li>
                 <div class="routines-organization-work-route">
@@ -451,6 +524,9 @@ export const OrganizationActivity: Component<{
             )}
           </For>
         </ol>
+      </Show>
+      <Show when={items().length && !visible().length}>
+        <p class="routines-empty">No work matches these filters.</p>
       </Show>
       <Show when={!items().length && !error()}>
         <p class="routines-empty">{busy() ? "Loading work…" : "No delegated work yet."}</p>

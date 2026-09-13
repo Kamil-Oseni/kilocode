@@ -767,6 +767,23 @@
   border-bottom: 1px solid var(--border-weak, var(--vscode-widget-border));
 }
 
+.routines-organization-work-filters {
+  display: grid;
+  grid-template-columns: minmax(10rem, 1fr) repeat(2, minmax(8rem, 0.55fr)) auto;
+  gap: var(--raya-space-8);
+  align-items: end;
+}
+
+.routines-organization-work-filters > button {
+  align-self: end;
+}
+
+.routines-organization-work-count {
+  margin: 0;
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-size: var(--kilo-font-size-12);
+}
+
 .routines-assignment {
   display: flex;
   flex-direction: column;
@@ -848,6 +865,10 @@
 }
 
 @media (max-width: 500px) {
+  .routines-organization-work-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .routines-assignment-route {
     grid-template-columns: minmax(0, 1fr);
   }

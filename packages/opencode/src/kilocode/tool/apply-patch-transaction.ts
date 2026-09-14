@@ -153,27 +153,38 @@ export function recover(
         const committed = state.outcome.decision === "commit" || state.outcome.phase === "committed"
         if (committed) {
           if (state.outcome.phase === "committed") yield* advance("cleaning", 0)
-          for (const entry of state.entries) yield* finalizeTransaction(entry, true)
-          if (state.outcome.phase === "cleaning") yield* advance("cleaning", state.entries.length)
+          for (const [index, entry] of state.entries.entries()) {
+            if (index < state.outcome.cursor) continue
+            yield* finalizeTransaction(entry, true)
+            yield* advance("cleaning", index + 1)
+          }
           yield* advance("releasing", state.entries.length)
           return yield* advance("done", state.entries.length)
         }
         if (state.outcome.phase === "cleaning" && state.outcome.decision === "rollback") {
-          for (const entry of state.entries) yield* finalizeTransaction(entry, false)
-          yield* advance("cleaning", state.entries.length)
+          for (const [index, entry] of state.entries.entries()) {
+            if (index < state.outcome.cursor) continue
+            yield* finalizeTransaction(entry, false)
+            yield* advance("cleaning", index + 1)
+          }
           yield* advance("releasing", state.entries.length)
           return yield* advance("done", state.entries.length)
         }
         if (state.outcome.phase !== "rolling_back" && state.outcome.phase !== "rolled_back")
           yield* advance("rolling_back", 0)
         if (state.outcome.phase === "rolling_back") {
-          for (const entry of state.entries.toReversed()) yield* restoreTransaction(entry)
-          yield* advance("rolling_back", state.entries.length)
+          for (const [index, entry] of state.entries.toReversed().entries()) {
+            if (index < state.outcome.cursor) continue
+            yield* restoreTransaction(entry)
+            yield* advance("rolling_back", index + 1)
+          }
           yield* advance("rolled_back", state.entries.length)
         }
         yield* advance("cleaning", 0)
-        for (const entry of state.entries) yield* finalizeTransaction(entry, false)
-        yield* advance("cleaning", state.entries.length)
+        for (const [index, entry] of state.entries.entries()) {
+          yield* finalizeTransaction(entry, false)
+          yield* advance("cleaning", index + 1)
+        }
         yield* advance("releasing", state.entries.length)
         return yield* advance("done", state.entries.length)
       })

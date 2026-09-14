@@ -184,6 +184,22 @@ const run = Effect.gen(function* () {
     process.stdout.write(`${JSON.stringify(done)}\n`)
     return
   }
+  if (mode === "matrix-recovery-crash") {
+    const calls = { value: 0 }
+    const stalled = {
+      ...storage,
+      create: (key: string[], content: unknown) => {
+        calls.value++
+        if (calls.value !== 4) return storage.create(key, content)
+        return Effect.gen(function* () {
+          process.stdout.write("READY\n")
+          return yield* Effect.never
+        })
+      },
+    }
+    yield* recover(stalled, id)
+    return
+  }
   if (mode === "matrix-recover") {
     const outcome = yield* recover(storage, id)
     process.stdout.write(`${JSON.stringify(outcome)}\n`)

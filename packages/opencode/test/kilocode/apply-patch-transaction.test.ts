@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { link, readdir, readFile, stat, writeFile } from "node:fs/promises"
+import { link, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { expect } from "bun:test"
@@ -76,6 +76,22 @@ async function child(mode: string, args: string[]) {
   if (code !== 0) throw new Error(failure)
   return Schema.decodeUnknownSync(Outcome)(JSON.parse(output.trim()))
 }
+
+async function attempt(mode: string, args: string[]) {
+  const proc = Bun.spawn([process.execPath, fixture, mode, ...args], {
+    stdout: "pipe",
+    stderr: "pipe",
+    env: isolate(args[1]),
+  })
+  const [output, failure, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ])
+  return { output, failure, code }
+}
+
+const transaction = (spec: string) => `killed-${spec.replace(/[^a-z0-9-]/gi, "-")}`
 
 function instance<A, E>(dir: string, run: (storage: Storage.Interface) => Effect.Effect<A, E>) {
   return Effect.gen(function* () {
@@ -394,3 +410,119 @@ for (const [decision, checkpoint] of [
       }),
     30_000,
   )
+
+for (const scenario of [
+  "changed-destination",
+  "recreated-source",
+  "changed-commit",
+  "replaced-stage",
+  "replaced-hold",
+] as const)
+  it.live(
+    `retains a recovery conflict for ${scenario}`,
+    () =>
+      Effect.gen(function* () {
+        const root = yield* tmpdirScoped()
+        const dir = path.join(root, "storage")
+        const source = path.join(root, "source.txt")
+        const moved = path.join(root, "moved.txt")
+        yield* Effect.promise(() => writeFile(source, "source before"))
+        const spec =
+          scenario === "changed-commit"
+            ? "mixed:commit:committed"
+            : scenario === "replaced-stage"
+              ? "mixed:rollback:staging-1"
+              : "mixed:rollback:publish-2"
+        const id = transaction(spec)
+        const stage = path.join(root, `.raya-txn-${id}-destination.stage`)
+        const hold = path.join(root, `.raya-txn-${id}-source.hold`)
+        yield* Effect.promise(() => kill("matrix-crash", [dir, root, spec]))
+        if (scenario === "recreated-source") yield* Effect.promise(() => writeFile(source, "user recreated"))
+        if (scenario === "changed-destination" || scenario === "changed-commit")
+          yield* Effect.promise(() => writeFile(moved, "user destination"))
+        if (scenario === "replaced-stage")
+          yield* Effect.promise(async () => {
+            await unlink(stage)
+            await writeFile(stage, "foreign stage")
+          })
+        if (scenario === "replaced-hold")
+          yield* Effect.promise(async () => {
+            await unlink(hold)
+            await writeFile(hold, "foreign hold")
+          })
+        const result = yield* Effect.promise(() => attempt("matrix-recover", [dir, root, spec]))
+        expect(result.code).not.toBe(0)
+        const outcome = yield* instance(dir, (storage) => journals(storage).get(transaction(spec)))
+        expect(outcome?.phase).toBe("conflict")
+        if (scenario === "recreated-source") {
+          expect(yield* Effect.promise(() => readFile(source, "utf8"))).toBe("user recreated")
+          expect(yield* Effect.promise(() => readFile(moved, "utf8"))).toBe("source before")
+        }
+        if (scenario === "changed-destination" || scenario === "changed-commit") {
+          expect(yield* Effect.promise(() => readFile(moved, "utf8"))).toBe("user destination")
+        }
+        if (scenario === "replaced-stage") {
+          expect(yield* Effect.promise(() => readFile(stage, "utf8"))).toBe("foreign stage")
+          expect(yield* Effect.promise(() => readFile(source, "utf8"))).toBe("source before")
+          expect(yield* Effect.promise(() => Bun.file(moved).exists())).toBe(false)
+        }
+        if (scenario === "replaced-hold") {
+          expect(yield* Effect.promise(() => readFile(hold, "utf8"))).toBe("foreign hold")
+          expect(yield* Effect.promise(() => Bun.file(source).exists())).toBe(false)
+          expect(yield* Effect.promise(() => readFile(moved, "utf8"))).toBe("source before")
+        }
+        expect((yield* Effect.promise(() => readdir(root))).some((name) => name.startsWith(".raya-txn-"))).toBe(true)
+      }),
+    30_000,
+  )
+
+it.live(
+  "restores newer bytes written through a displaced preimage after process death",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      const dir = path.join(root, "storage")
+      const source = path.join(root, "source.txt")
+      const moved = path.join(root, "moved.txt")
+      const spec = "mixed:rollback:publish-2"
+      const hold = path.join(root, `.raya-txn-${transaction(spec)}-source.hold`)
+      yield* Effect.promise(() => writeFile(source, "source before"))
+      yield* Effect.promise(() => kill("matrix-crash", [dir, root, spec]))
+      yield* Effect.promise(() => writeFile(hold, "user newer"))
+      const outcome = yield* Effect.promise(() => child("matrix-recover", [dir, root, spec]))
+      expect(outcome.phase).toBe("done")
+      expect(outcome.decision).toBe("rollback")
+      expect(yield* Effect.promise(() => readFile(source, "utf8"))).toBe("user newer")
+      expect(yield* Effect.promise(() => Bun.file(moved).exists())).toBe(false)
+      expect((yield* Effect.promise(() => readdir(root))).some((name) => name.startsWith(".raya-txn-"))).toBe(false)
+    }),
+  30_000,
+)
+
+it.live(
+  "recovers after the recovery process is killed between restore and cursor publication",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      const dir = path.join(root, "storage")
+      const source = path.join(root, "source.txt")
+      const moved = path.join(root, "moved.txt")
+      const spec = "mixed:rollback:publish-2"
+      yield* Effect.promise(() => writeFile(source, "source before"))
+      yield* Effect.promise(() => kill("matrix-crash", [dir, root, spec]))
+      yield* Effect.promise(() => kill("matrix-recovery-crash", [dir, root, spec]))
+      expect(yield* Effect.promise(() => readFile(source, "utf8"))).toBe("source before")
+      expect(yield* Effect.promise(() => readFile(moved, "utf8"))).toBe("source before")
+      const outcome = yield* Effect.promise(() => child("matrix-recover", [dir, root, spec]))
+      expect(outcome.phase).toBe("done")
+      expect(outcome.decision).toBe("rollback")
+      expect(yield* Effect.promise(() => readFile(source, "utf8"))).toBe("source before")
+      expect(yield* Effect.promise(() => Bun.file(moved).exists())).toBe(false)
+      expect((yield* Effect.promise(() => readdir(root))).some((name) => name.startsWith(".raya-txn-"))).toBe(false)
+      const repeated = yield* Effect.promise(() => child("matrix-recover", [dir, root, spec]))
+      expect(repeated.phase).toBe("done")
+      expect(repeated.decision).toBe("rollback")
+      expect(yield* Effect.promise(() => readFile(source, "utf8"))).toBe("source before")
+    }),
+  30_000,
+)

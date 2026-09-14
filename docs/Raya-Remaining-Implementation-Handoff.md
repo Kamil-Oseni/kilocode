@@ -4488,3 +4488,21 @@ Preserve this evidence:
 Implement bounded startup reconciliation next. Add a Kilo-owned function that lists at most 1,025 keys beneath `raya/agent-stage`, processes no more than 1,024 sequentially, validates each record independently and returns retained issues instead of hiding them. Run it from `KilocodeBootstrap.init` before the Routine lifecycle begins. Do not touch a live owner. For a stopped owner: remove a receipt with no worker; retire a receipt when an exact active worker is already in the exact target organization; activate an exact disabled member; and consider deleting an exact disabled orphan only after production queries prove it has never belonged to any active or archived organization and has no run, queue, delegation, inbox, draft, attachment, authority or other independent history. Any malformed receipt, changed worker, foreign membership, history, unknown process state or failed proof must remain disabled with a surfaced issue. Make receipt retirement and worker removal replay-safe when killed between each durable operation. Test with independent Storage/Database instances and real process termination where practical.
 
 Installed source is still `1a02f8aea4`. The next coherent snapshot should batch product commits `2701c802a5`, `d3dd5ed3f9` and `61436630d6`; do not rebuild approximately 519 MB for this receipt-only increment.
+
+## ChatGPT 2026-09-14 17:41 America/Toronto - Conservative staging scan delivered
+
+Product commit `5139915332` is pushed to `origin/main`. `RayaTask.recoverStages` lists and sorts `raya/agent-stage`, processes a maximum of 1,024 records under the existing cross-process Routine mutation gate, and returns `{ recovered, pending, issues, truncated }`. `KilocodeBootstrap.init` awaits it before watcher/session/Routine lifecycle startup and logs retained issues or truncation without hiding unrelated bootstrap work.
+
+The decision matrix is deliberately narrow:
+
+- Live or unprovably stopped owner: retain the receipt and count it pending.
+- Malformed record, key/worker mismatch or read failure: retain and report it.
+- Stopped owner with no worker and no target organization: remove only the receipt.
+- Stopped owner with an exact active worker in its unarchived target organization: remove only the stale receipt.
+- Missing worker referenced by an organization, missing/archived organization with a worker, disabled worker, changed worker or missing membership: retain and report it.
+
+Evidence: `routine-management-tool.test.ts` passes 7 / 113 and covers live retention, stopped empty-stage cleanup, stopped orphan preservation, exact active receipt retirement and malformed receipt preservation alongside all company recovery behavior. `tool-registry-indexing.test.ts -t "logs indexing bootstrap failures"` passes 1 / 3 and loads the real bootstrap path. Scoped one-thread Oxlint has zero errors and 22 older warnings; annotation, Effect-facade, Markdown-table and diff guards pass. No broad typecheck or high-memory command ran.
+
+Next change the versioned stage receipt before implementing more recovery. Retain the originally intended `enabled` value and a canonical hash or normalized copy of the complete organization creation/update plan. Startup may activate a disabled member only when the current organization exactly equals that retained graph and the worker exactly equals the retained disabled definition. Then add bounded production queries for every historical-use domain before orphan deletion: active and archived organization revisions, all runs, queued/terminal occurrences, all delegation states in either role, inbox messages/drafts/attachments and authority edits. If any proof is unavailable or positive, preserve the worker and receipt. Test changed graphs, archived companies, changed/reverted workers, receipt-removal failure, two startup processes and interruption during reconciliation.
+
+Installed source remains `1a02f8aea4`. Batch `2701c802a5`, `d3dd5ed3f9`, `61436630d6` and `5139915332` into the next coherent low-memory snapshot after one more complete lifecycle slice.

@@ -8,12 +8,14 @@ import { Project } from "@/project/project"
 import { InstanceRef } from "@/effect/instance-ref"
 import * as Accounting from "@opencode-ai/core/kilocode/accounting-summary" // kilocode_change
 import { costLabel } from "@opencode-ai/core/kilocode/accounting-label" // kilocode_change
+import { ProjectUsage } from "@/kilocode/session/project-usage" // kilocode_change
 
 interface SessionStats {
   totalSessions: number
   totalMessages: number
   totalCost: number
   accounting?: ReturnType<typeof Accounting.empty> // kilocode_change
+  charges: ProjectUsage.Charges // kilocode_change
   totalTokens: {
     input: number
     output: number
@@ -116,22 +118,18 @@ export const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* 
     return days
   })()
 
-  let filteredSessions = cutoffTime > 0 ? sessions.filter((session) => session.time.updated >= cutoffTime) : sessions
-
-  if (projectFilter !== undefined) {
-    if (projectFilter === "") {
-      if (!currentProject) throw new Error("currentProject required when projectFilter is empty string")
-      filteredSessions = filteredSessions.filter((session) => session.projectID === currentProject.id)
-    } else {
-      filteredSessions = filteredSessions.filter((session) => session.projectID === projectFilter)
-    }
-  }
+  if (projectFilter === "" && !currentProject)
+    throw new Error("currentProject required when projectFilter is empty string")
+  const projectID = projectFilter === "" ? currentProject!.id : projectFilter
+  const selected = projectID === undefined ? sessions : sessions.filter((session) => session.projectID === projectID)
+  const filteredSessions = cutoffTime > 0 ? selected.filter((session) => session.time.updated >= cutoffTime) : selected
 
   const stats: SessionStats = {
     totalSessions: filteredSessions.length,
     totalMessages: 0,
     totalCost: 0,
     accounting: Accounting.empty(), // kilocode_change
+    charges: { items: [], goals: 0, unreadable: 0, conflicts: 0 }, // kilocode_change
     totalTokens: {
       input: 0,
       output: 0,
@@ -211,7 +209,7 @@ export const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* 
             }
             sessionModelUsage[modelKey].messages++
             sessionModelUsage[modelKey].cost += cost // kilocode_change
-            Accounting.merge(sessionModelUsage[modelKey].accounting ??= Accounting.empty(), summary) // kilocode_change
+            Accounting.merge((sessionModelUsage[modelKey].accounting ??= Accounting.empty()), summary) // kilocode_change
 
             if (message.info.tokens) {
               if (!session.tokens) {
@@ -271,7 +269,7 @@ export const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* 
     stats.totalTokens.reasoning += result.sessionTokens.reasoning
     stats.totalTokens.cache.read += result.sessionTokens.cache.read
     stats.totalTokens.cache.write += result.sessionTokens.cache.write
-    Accounting.merge(stats.accounting ??= Accounting.empty(), result.accounting) // kilocode_change
+    Accounting.merge((stats.accounting ??= Accounting.empty()), result.accounting) // kilocode_change
 
     for (const [tool, count] of Object.entries(result.sessionToolUsage)) {
       stats.toolUsage[tool] = (stats.toolUsage[tool] || 0) + count
@@ -291,9 +289,20 @@ export const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* 
       stats.modelUsage[model].tokens.cache.read += usage.tokens.cache.read
       stats.modelUsage[model].tokens.cache.write += usage.tokens.cache.write
       stats.modelUsage[model].cost += usage.cost
-      Accounting.merge(stats.modelUsage[model].accounting ??= Accounting.empty(), usage.accounting ?? Accounting.empty()) // kilocode_change
+      Accounting.merge(
+        (stats.modelUsage[model].accounting ??= Accounting.empty()),
+        usage.accounting ?? Accounting.empty(),
+      ) // kilocode_change
     }
   }
+
+  // kilocode_change start - keep retained non-model charges separate by currency
+  stats.charges = yield* ProjectUsage.charges(
+    selected.map((session) => session.id),
+    cutoffTime || null,
+    Date.now(),
+  )
+  // kilocode_change end
 
   const rangeDays = Math.max(1, Math.ceil((latestTime - earliestTime) / MS_IN_DAY))
   const effectiveDays = windowDays ?? rangeDays
@@ -351,10 +360,22 @@ export function displayStats(stats: SessionStats, toolLimit?: number, modelLimit
   const tokensPerSession = isNaN(stats.tokensPerSession) ? 0 : stats.tokensPerSession
   // kilocode_change start - preserve cost provenance in CLI statistics
   console.log(renderRow("Model Cost", costLabel({ cost, accounting: stats.accounting }, "en-US", true)))
-  console.log(renderRow("Avg Model Cost/Day", costLabel({
-    cost: costPerDay,
-    accounting: stats.accounting && { ...stats.accounting, amount: stats.accounting.amount / Math.max(1, stats.days) },
-  }, "en-US", true)))
+  console.log(
+    renderRow(
+      "Avg Model Cost/Day",
+      costLabel(
+        {
+          cost: costPerDay,
+          accounting: stats.accounting && {
+            ...stats.accounting,
+            amount: stats.accounting.amount / Math.max(1, stats.days),
+          },
+        },
+        "en-US",
+        true,
+      ),
+    ),
+  )
   // kilocode_change end
   console.log(renderRow("Avg Tokens/Session", formatNumber(Math.round(tokensPerSession))))
   const medianTokensPerSession = isNaN(stats.medianTokensPerSession) ? 0 : stats.medianTokensPerSession
@@ -368,6 +389,13 @@ export function displayStats(stats: SessionStats, toolLimit?: number, modelLimit
 
   // Model Usage section
   console.log("Model costs cover recorded steps in the selected sessions; ≈ estimated, partial incomplete.") // kilocode_change
+  // kilocode_change start - disclose retained goal charges without merging currencies or unknown amounts
+  if (stats.charges.goals || stats.charges.items.length || stats.charges.unreadable || stats.charges.conflicts) {
+    console.log()
+    console.log("NON-MODEL CHARGES")
+    for (const line of chargeLines(stats.charges)) console.log(line)
+  }
+  // kilocode_change end
   if (modelLimit !== undefined && Object.keys(stats.modelUsage).length > 0) {
     const sortedModels = Object.entries(stats.modelUsage).sort(([, a], [, b]) => b.messages - a.messages)
     const modelsToDisplay = modelLimit === Infinity ? sortedModels : sortedModels.slice(0, modelLimit)
@@ -421,6 +449,24 @@ export function displayStats(stats: SessionStats, toolLimit?: number, modelLimit
   }
   console.log()
 }
+
+// kilocode_change start - keep CLI charge rendering deterministic and failure-testable
+export function chargeLines(charges: ProjectUsage.Charges) {
+  const lines = charges.items.map((item) => {
+    const name = item.service ?? item.provider ?? item.source
+    const amount =
+      item.amount === undefined || !item.currency ? "amount unavailable" : `${item.currency} ${item.amount}`
+    const unknown = item.unknown ? `; ${item.unknown} amount unavailable` : ""
+    return `${name}: ${amount} (${item.recorded} recorded${unknown})`
+  })
+  if (!lines.length) lines.push("No retained non-model charges in this range.")
+  if (charges.unreadable || charges.conflicts)
+    lines.push(
+      `Incomplete coverage: ${charges.unreadable} unreadable goal records; ${charges.conflicts} conflicting receipts excluded.`,
+    )
+  return lines
+}
+// kilocode_change end
 
 function formatNumber(num: number): string {
   if (num >= 1000000) {

@@ -8,18 +8,23 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
-import { aggregateSessionStats } from "../../src/cli/cmd/stats"
+import { aggregateSessionStats, chargeLines } from "../../src/cli/cmd/stats"
 import { MessageV2 } from "../../src/session/message-v2"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { Session } from "../../src/session/session"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import * as Log from "@opencode-ai/core/util/log"
+import { Storage } from "../../src/storage/storage"
+import { RayaGoal } from "../../src/kilocode/goal"
+import { sql } from "drizzle-orm"
 import { testEffect } from "../lib/effect"
 
 void Log.init({ print: false })
 
-const it = testEffect(LayerNode.compile(LayerNode.group([Session.node, SessionProjector.node, Database.node])))
+const it = testEffect(
+  LayerNode.compile(LayerNode.group([Session.node, SessionProjector.node, Database.node, Storage.node])),
+)
 
 const ref = {
   providerID: ProviderV2.ID.make("test"),
@@ -118,6 +123,35 @@ describe("stats subagent cost", () => {
           yield* step(child.id, childMsg.id, 0.5, evidence ? "estimated" : undefined)
           yield* tool(child.id, childMsg.id)
 
+          const storage = yield* Storage.Service
+          const goals = RayaGoal.make({ storage, sessions: svc })
+          yield* Effect.addFinalizer(() => goals.clear(parent.id))
+          const goal = yield* goals.create(parent.id, "Account for CLI statistics")
+          const origin = { sessionID: parent.id, callID: "call_stats_charge" }
+          yield* goals.charged(parent.id, {
+            id: "stats-provider-zero",
+            kind: "tool",
+            provider: "Kilo",
+            service: "Provider zero",
+            source: "provider.receipt",
+            origin,
+            at: goal.createdAt,
+            coverage: "recorded",
+            amount: 0,
+            currency: "USD",
+          })
+          yield* goals.charged(parent.id, {
+            id: "stats-unknown-charge",
+            kind: "tool",
+            provider: "Kilo",
+            service: "Interrupted search",
+            source: "provider-response-without-receipt",
+            origin,
+            at: goal.createdAt,
+            coverage: "unknown",
+            reason: "The response was lost after dispatch.",
+          })
+
           const stats = yield* aggregateSessionStats()
           const model = stats.modelUsage["test/test-model"]
           expect(stats.totalCost).toBeCloseTo(1.5, 6)
@@ -136,6 +170,45 @@ describe("stats subagent cost", () => {
               : { amount: 0, reported: 0, estimated: 0, partial: 0, unknown: 0, legacy: 2 },
           )
           expect(model.accounting).toEqual(stats.accounting)
+          expect(stats.charges).toEqual({
+            goals: 1,
+            unreadable: 0,
+            conflicts: 0,
+            items: [
+              {
+                currency: "USD",
+                provider: "Kilo",
+                service: "Provider zero",
+                source: "provider.receipt",
+                amount: 0,
+                recorded: 1,
+                unknown: 0,
+              },
+              {
+                provider: "Kilo",
+                service: "Interrupted search",
+                source: "provider-response-without-receipt",
+                recorded: 0,
+                unknown: 1,
+              },
+            ],
+          })
+
+          const { db } = yield* Database.Service
+          yield* db
+            .run(sql`UPDATE session SET time_updated = ${Date.now() - 2 * 86_400_000} WHERE id = ${parent.id}`)
+            .pipe(Effect.orDie)
+          const today = yield* aggregateSessionStats(0)
+          expect(today.totalSessions).toBe(1)
+          expect(today.charges).toEqual(stats.charges)
+          expect(chargeLines(today.charges)).toEqual([
+            "Provider zero: USD 0 (1 recorded)",
+            "Interrupted search: amount unavailable (0 recorded; 1 amount unavailable)",
+          ])
+          expect(chargeLines({ items: [], goals: 1, unreadable: 1, conflicts: 2 })).toEqual([
+            "No retained non-model charges in this range.",
+            "Incomplete coverage: 1 unreadable goal records; 2 conflicting receipts excluded.",
+          ])
         }),
       { git: true },
     )

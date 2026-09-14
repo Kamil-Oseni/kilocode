@@ -39,7 +39,7 @@ export namespace ProjectUsage {
 
   type Model = typeof Model.Type
 
-  const Charge = Schema.Struct({
+  export const Charge = Schema.Struct({
     currency: Schema.optional(Schema.String),
     provider: Schema.optional(Schema.String),
     service: Schema.optional(Schema.String),
@@ -48,13 +48,15 @@ export namespace ProjectUsage {
     recorded: NonNegativeInt,
     unknown: NonNegativeInt,
   })
+  export type Charge = typeof Charge.Type
 
-  const Charges = Schema.Struct({
+  export const Charges = Schema.Struct({
     items: Schema.Array(Charge),
     goals: NonNegativeInt,
     unreadable: NonNegativeInt,
     conflicts: NonNegativeInt,
   })
+  export type Charges = typeof Charges.Type
 
   export const Info = Schema.Struct({
     projectID: Schema.optional(ProjectV2.ID),
@@ -99,17 +101,13 @@ export namespace ProjectUsage {
     },
   })
 
-  const summarize = Effect.fn("ProjectUsage.charges")(function* (
-    projectID: ProjectV2.ID,
+  export const charges = Effect.fn("ProjectUsage.charges")(function* (
+    sessionIDs: Iterable<string>,
     since: number | null,
     until: number,
   ) {
-    const { db } = yield* Database.Service
     const storage = yield* Storage.Service
-    const rows = yield* db
-      .all<{ id: string }>(sql`SELECT id FROM session WHERE project_id = ${projectID}`)
-      .pipe(Effect.orDie)
-    const sessions = new Set(rows.map((row) => row.id))
+    const sessions = new Set(sessionIDs)
     const keys = yield* storage.list(["raya", "goal"]).pipe(Effect.orDie)
     const coverage = { goals: 0, unreadable: 0, conflicts: 0 }
     const receipts = new Map<string, RayaGoal.Charge>()
@@ -283,7 +281,14 @@ export namespace ProjectUsage {
     })
     const sessions = rows[0]?.sessions ?? 0
 
-    const charges = yield* summarize(projectID, since, until)
+    const linked = yield* db
+      .all<{ id: string }>(sql`SELECT id FROM session WHERE project_id = ${projectID}`)
+      .pipe(Effect.orDie)
+    const charges = yield* ProjectUsage.charges(
+      linked.map((row) => row.id),
+      since,
+      until,
+    )
     return {
       projectID,
       range,

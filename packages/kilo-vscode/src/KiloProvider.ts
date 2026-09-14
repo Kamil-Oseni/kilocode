@@ -4700,30 +4700,11 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         publish: async (record) => {
           const verification = record.verification!
           const artifact = `self-heal-verification:${record.id}:${verification.goalRevision}`
-          const { data: item } = await this.client!.kilocode.selfHeal.get(
-            { itemID: record.itemID, directory: store },
+          const { data: receipt } = await this.client!.kilocode.selfHeal.verificationPublish(
+            { itemID: record.itemID, directory: store, installationID: record.id, verification },
             { throwOnError: true },
           )
-          if (item.evidence.some((evidence) => evidence.artifact === artifact)) return
-          const sources = verification.requirements
-            .map(
-              (requirement) =>
-                `${requirement.requirement}: ${requirement.evidence.map((evidence) => `${evidence.summary} (${evidence.sessionID}/${evidence.messageID}/${evidence.callID})`).join("; ")}`,
-            )
-            .join(" | ")
-          const evidence = [
-            ...item.evidence,
-            {
-              summary: `${verification.summary} Verification session ${verification.sessionID}. ${sources}`,
-              artifact,
-              at: verification.reviewedAt,
-            },
-          ].slice(-50)
-          const { data: updated } = await this.client!.kilocode.selfHeal.update(
-            { itemID: record.itemID, directory: store, evidence },
-            { throwOnError: true },
-          )
-          if (!updated?.evidence.some((entry) => entry.artifact === artifact))
+          if (receipt.evidence.artifact !== artifact)
             throw new Error("The repair did not retain the reviewed verification evidence.")
         },
       })

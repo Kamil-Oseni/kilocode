@@ -165,6 +165,7 @@ export const CheckpointCreatePayload = RayaCheckpoint.CreatePayload // raya_chan
 export const DesignSystemSetPayload = RayaDesignSystem.SetPayload // raya_change - owner design-system lock
 export const SelfHealCreatePayload = RayaSelfHeal.Create // raya_change
 export const SelfHealUpdatePayload = RayaSelfHeal.Update // raya_change
+export const SelfHealVerificationPublishPayload = RayaSelfHeal.VerificationPublish // raya_change
 export const BrowserReplyPayload = Schema.Struct({ result: BrowserResult }) // raya_change - Milestone F
 export const BrowserRejectPayload = Schema.Struct({ error: BrowserFailure }) // raya_change - Milestone F
 export const CanvasReplyPayload = Schema.Struct({ result: CanvasResult }) // raya_change - Milestone E
@@ -1206,6 +1207,20 @@ export const KilocodeApi = HttpApi.make("kilocode")
             summary: "Approve a reviewed self-heal artifact",
             description:
               "Bind one explicit release decision to the exact currently verified artifact identity. This makes the artifact install-ready; it does not install it.",
+          }),
+        ),
+        HttpApiEndpoint.post("selfHealVerificationPublish", `${KilocodePaths.selfHealItem}/verification`, {
+          params: { itemID: Schema.String },
+          query: WorkspaceRoutingQuery,
+          payload: SelfHealVerificationPublishPayload,
+          success: described(RayaSelfHeal.VerificationPublication, "Published self-heal verification evidence"),
+          error: [HttpApiError.NotFound, HttpApiError.Conflict],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.selfHeal.verificationPublish",
+            summary: "Publish reviewed self-heal verification",
+            description:
+              "Append one immutable, idempotent installed-repair verification receipt without replacing unrelated evidence.",
           }),
         ),
         HttpApiEndpoint.patch("selfHealUpdate", KilocodePaths.selfHealItem, {

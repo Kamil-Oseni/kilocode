@@ -24929,6 +24929,105 @@ export type KilocodeSelfHealArtifactReviewResponses = {
 export type KilocodeSelfHealArtifactReviewResponse =
   KilocodeSelfHealArtifactReviewResponses[keyof KilocodeSelfHealArtifactReviewResponses]
 
+export type KilocodeSelfHealVerificationPublishData = {
+  body?: {
+    installationID: string
+    verification: {
+      sessionID: string
+      goalRevision: string
+      summary: string
+      verifiedAt: number
+      reviewedAt: number
+      requirements: Array<{
+        requirement: string
+        passed: true
+        evidence: Array<{
+          sessionID: string
+          messageID: string
+          partID: string
+          callID: string
+          summary: string
+          record: {
+            version: 1
+            digest: string
+            at: number
+          }
+        }>
+      }>
+    }
+  }
+  path: {
+    itemID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/self-heal/{itemID}/verification"
+}
+
+export type KilocodeSelfHealVerificationPublishErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeSelfHealVerificationPublishError =
+  KilocodeSelfHealVerificationPublishErrors[keyof KilocodeSelfHealVerificationPublishErrors]
+
+export type KilocodeSelfHealVerificationPublishResponses = {
+  /**
+   * Published self-heal verification evidence
+   */
+  200: {
+    version: 1
+    itemID: string
+    installationID: string
+    goalRevision: string
+    evidence: {
+      summary: string
+      artifact: string
+      at: number
+    }
+    verification: {
+      sessionID: string
+      goalRevision: string
+      summary: string
+      verifiedAt: number
+      reviewedAt: number
+      requirements: Array<{
+        requirement: string
+        passed: true
+        evidence: Array<{
+          sessionID: string
+          messageID: string
+          partID: string
+          callID: string
+          summary: string
+          record: {
+            version: 1
+            digest: string
+            at: number
+          }
+        }>
+      }>
+    }
+    createdAt: number
+  }
+}
+
+export type KilocodeSelfHealVerificationPublishResponse =
+  KilocodeSelfHealVerificationPublishResponses[keyof KilocodeSelfHealVerificationPublishResponses]
+
 export type AnacondaDesktopStatusData = {
   body?: never
   path?: never

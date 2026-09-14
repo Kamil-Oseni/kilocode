@@ -1002,6 +1002,16 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       return approval
     })
 
+    const selfHealVerificationPublish = Effect.fn("KilocodeHttpApi.selfHealVerificationPublish")(function* (ctx: {
+      params: { itemID: string }
+      payload: typeof RayaSelfHeal.VerificationPublish.Type
+    }) {
+      if (!(yield* healing.get(ctx.params.itemID))) return yield* new HttpApiError.NotFound({})
+      return yield* healing
+        .publish(ctx.params.itemID, ctx.payload)
+        .pipe(Effect.catchTag("SelfHeal.PublicationConflict", () => Effect.fail(new HttpApiError.Conflict({}))))
+    })
+
     const selfHealUpdate = Effect.fn("KilocodeHttpApi.selfHealUpdate")(function* (ctx: {
       params: { itemID: string }
       payload: typeof SelfHealUpdatePayload.Type
@@ -1106,6 +1116,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .handle("selfHealList", selfHealList)
         .handle("selfHealGet", selfHealGet)
         .handle("selfHealArtifactReview", selfHealArtifactReview)
+        .handle("selfHealVerificationPublish", selfHealVerificationPublish)
         .handle("selfHealUpdate", selfHealUpdate)
     )
     // raya_change end

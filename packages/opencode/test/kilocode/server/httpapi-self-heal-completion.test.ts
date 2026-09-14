@@ -51,6 +51,53 @@ test("HTTP updates cannot assert tested or installed completion or reassign repa
   }
   const observed = await request("GET", `/kilocode/self-heal/${item.id}`)
   expect(await observed.json()).toMatchObject({ status: "triaged", reloadRequired: false })
+  const installationID = crypto.randomUUID()
+  const publication = {
+    installationID,
+    verification: {
+      sessionID: `ses_${crypto.randomUUID()}`,
+      goalRevision: `goal_${crypto.randomUUID()}`,
+      summary: "The installed repair passed its accepted audit.",
+      verifiedAt: 100,
+      reviewedAt: 101,
+      requirements: [
+        {
+          requirement: "The original failure no longer reproduces.",
+          passed: true,
+          evidence: [
+            {
+              sessionID: `ses_${crypto.randomUUID()}`,
+              messageID: `msg_${crypto.randomUUID()}`,
+              partID: `prt_${crypto.randomUUID()}`,
+              callID: `call_${crypto.randomUUID()}`,
+              summary: "The runtime reproduction passed.",
+              record: { version: 1, digest: "a".repeat(64), at: 99 },
+            },
+          ],
+        },
+      ],
+    },
+  }
+  const diagnostic = { summary: "Concurrent diagnostic", artifact: "diagnostic:http", at: 102 }
+  const [published, concurrent] = await Promise.all([
+    request("POST", `/kilocode/self-heal/${item.id}/verification`, publication),
+    request("PATCH", `/kilocode/self-heal/${item.id}`, { evidence: [diagnostic] }),
+  ])
+  expect(published.status).toBe(200)
+  expect(concurrent.status).toBe(200)
+  const receipt = await published.json()
+  expect(await (await request("GET", `/kilocode/self-heal/${item.id}`)).json()).toMatchObject({
+    evidence: expect.arrayContaining([diagnostic, receipt.evidence]),
+  })
+  const duplicate = await request("POST", `/kilocode/self-heal/${item.id}/verification`, publication)
+  expect(duplicate.status).toBe(200)
+  expect(await duplicate.json()).toEqual(receipt)
+  const conflict = await request("POST", `/kilocode/self-heal/${item.id}/verification`, {
+    ...publication,
+    verification: { ...publication.verification, summary: "Changed verification content." },
+  })
+  expect(conflict.status).toBe(409)
+  expect((await request("POST", "/kilocode/self-heal/heal_missing/verification", publication)).status).toBe(404)
   const review = {
     artifactID: crypto.randomUUID(),
     digest: "0".repeat(64),

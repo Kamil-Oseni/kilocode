@@ -1,6 +1,7 @@
 // raya_change - verify the durable global self-healing backlog
 import { describe, expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Exit } from "effect"
+import { createHash } from "node:crypto"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -106,6 +107,90 @@ describe("RayaSelfHeal", () => {
       expect(updated?.evidence).toHaveLength(50)
       expect(updated?.evidence[0]?.summary).toBe("Evidence 10")
       expect(updated?.evidence.at(-1)?.summary).toBe("Evidence 59")
+    }),
+  )
+
+  it.live("appends one immutable verification receipt without losing concurrent evidence", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const backlog = RayaSelfHeal.make(storage)
+      const item = yield* backlog.create({ description: `Concurrent verification publication ${crypto.randomUUID()}` })
+      const installationID = crypto.randomUUID()
+      const revision = `goal_${crypto.randomUUID()}`
+      const publication = [
+        "raya",
+        "self-heal",
+        "publication",
+        createHash("sha256").update(item.id).digest("hex"),
+        createHash("sha256")
+          .update(JSON.stringify([installationID, revision]))
+          .digest("hex"),
+      ]
+      yield* Effect.addFinalizer(() =>
+        Effect.all([
+          storage.remove(["raya", "self-heal", "item", item.id]).pipe(Effect.ignore),
+          storage.remove(publication).pipe(Effect.ignore),
+        ]).pipe(Effect.asVoid),
+      )
+      yield* backlog.update(item.id, {
+        evidence: Array.from({ length: 48 }, (_, index) => ({ summary: `Earlier evidence ${index}`, at: index })),
+      })
+      const input = {
+        installationID,
+        verification: {
+          sessionID: `ses_${crypto.randomUUID()}`,
+          goalRevision: revision,
+          summary: "The installed repair passed its accepted audit.",
+          verifiedAt: 100,
+          reviewedAt: 101,
+          requirements: [
+            {
+              requirement: "The original failure no longer reproduces.",
+              passed: true as const,
+              evidence: [
+                {
+                  sessionID: `ses_${crypto.randomUUID()}`,
+                  messageID: `msg_${crypto.randomUUID()}`,
+                  partID: `prt_${crypto.randomUUID()}`,
+                  callID: `call_${crypto.randomUUID()}`,
+                  summary: "The runtime reproduction passed.",
+                  record: { version: 1 as const, digest: "a".repeat(64), at: 99 },
+                },
+              ],
+            },
+          ],
+        },
+      }
+      const diagnostic = {
+        summary: "A concurrent diagnostic was retained.",
+        artifact: "diagnostic:concurrent",
+        at: 102,
+      }
+      const [receipt] = yield* Effect.all(
+        [backlog.publish(item.id, input), backlog.update(item.id, { evidence: [diagnostic] })],
+        { concurrency: "unbounded" },
+      )
+      const observed = yield* backlog.get(item.id)
+      expect(observed?.evidence).toHaveLength(50)
+      expect(observed?.evidence).toContainEqual(diagnostic)
+      expect(observed?.evidence).toContainEqual(receipt.evidence)
+      expect(yield* backlog.publish(item.id, input)).toEqual(receipt)
+      yield* backlog.update(item.id, {
+        evidence: Array.from({ length: 60 }, (_, index) => ({ summary: `Later evidence ${index}`, at: 200 + index })),
+      })
+      const bounded = yield* backlog.get(item.id)
+      expect(bounded?.evidence).toHaveLength(50)
+      expect(bounded?.evidence).toContainEqual(receipt.evidence)
+
+      const conflict = yield* backlog
+        .publish(item.id, {
+          ...input,
+          verification: { ...input.verification, summary: "Changed verification content." },
+        })
+        .pipe(Effect.exit)
+      expect(Exit.isFailure(conflict)).toBe(true)
+      const missing = yield* backlog.publish(`heal_missing_${crypto.randomUUID()}`, input).pipe(Effect.exit)
+      expect(Exit.isFailure(missing)).toBe(true)
     }),
   )
 })

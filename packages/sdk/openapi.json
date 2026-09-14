@@ -39930,6 +39930,351 @@
         ]
       }
     },
+    "/kilocode/self-heal/{itemID}/verification": {
+      "post": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.selfHeal.verificationPublish",
+        "parameters": [
+          {
+            "name": "itemID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Published self-heal verification evidence",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "number",
+                      "enum": [1]
+                    },
+                    "itemID": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "installationID": {
+                      "type": "string",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                      "format": "uuid"
+                    },
+                    "goalRevision": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "evidence": {
+                      "type": "object",
+                      "properties": {
+                        "summary": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "artifact": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "at": {
+                          "type": "number",
+                          "minimum": 0
+                        }
+                      },
+                      "required": ["summary", "artifact", "at"],
+                      "additionalProperties": false
+                    },
+                    "verification": {
+                      "type": "object",
+                      "properties": {
+                        "sessionID": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "goalRevision": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "summary": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "verifiedAt": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "reviewedAt": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "requirements": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "requirement": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "passed": {
+                                "type": "boolean",
+                                "enum": [true]
+                              },
+                              "evidence": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "sessionID": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "messageID": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "partID": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "callID": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "summary": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "record": {
+                                      "type": "object",
+                                      "properties": {
+                                        "version": {
+                                          "type": "number",
+                                          "enum": [1]
+                                        },
+                                        "digest": {
+                                          "type": "string",
+                                          "pattern": "^[a-f0-9]{64}$"
+                                        },
+                                        "at": {
+                                          "type": "number",
+                                          "minimum": 0
+                                        }
+                                      },
+                                      "required": ["version", "digest", "at"],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": ["sessionID", "messageID", "partID", "callID", "summary", "record"],
+                                  "additionalProperties": false
+                                },
+                                "minItems": 1
+                              }
+                            },
+                            "required": ["requirement", "passed", "evidence"],
+                            "additionalProperties": false
+                          },
+                          "minItems": 1
+                        }
+                      },
+                      "required": ["sessionID", "goalRevision", "summary", "verifiedAt", "reviewedAt", "requirements"],
+                      "additionalProperties": false
+                    },
+                    "createdAt": {
+                      "type": "number",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "version",
+                    "itemID",
+                    "installationID",
+                    "goalRevision",
+                    "evidence",
+                    "verification",
+                    "createdAt"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Published self-heal verification evidence"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_Conflict"
+                }
+              }
+            }
+          }
+        },
+        "description": "Append one immutable, idempotent installed-repair verification receipt without replacing unrelated evidence.",
+        "summary": "Publish reviewed self-heal verification",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "installationID": {
+                    "type": "string",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                    "format": "uuid"
+                  },
+                  "verification": {
+                    "type": "object",
+                    "properties": {
+                      "sessionID": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "goalRevision": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "summary": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "verifiedAt": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "reviewedAt": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "requirements": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "requirement": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "passed": {
+                              "type": "boolean",
+                              "enum": [true]
+                            },
+                            "evidence": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "sessionID": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "messageID": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "partID": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "callID": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "summary": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "record": {
+                                    "type": "object",
+                                    "properties": {
+                                      "version": {
+                                        "type": "number",
+                                        "enum": [1]
+                                      },
+                                      "digest": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      },
+                                      "at": {
+                                        "type": "number",
+                                        "minimum": 0
+                                      }
+                                    },
+                                    "required": ["version", "digest", "at"],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": ["sessionID", "messageID", "partID", "callID", "summary", "record"],
+                                "additionalProperties": false
+                              },
+                              "minItems": 1
+                            }
+                          },
+                          "required": ["requirement", "passed", "evidence"],
+                          "additionalProperties": false
+                        },
+                        "minItems": 1
+                      }
+                    },
+                    "required": ["sessionID", "goalRevision", "summary", "verifiedAt", "reviewedAt", "requirements"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["installationID", "verification"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.selfHeal.verificationPublish({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/kilocode/anaconda-desktop/status": {
       "get": {
         "tags": ["anaconda-desktop"],

@@ -6,6 +6,7 @@ import { repairs, Outcome, Admission, Granted, Advance, Prepare } from "./repair
 import { Completion, completions } from "./completion"
 import { SessionID } from "@/session/schema"
 import { artifacts, Approval, Delivery, Review } from "./artifact"
+import { publications, Publish, Receipt as PublicationReceipt } from "./publication"
 
 export namespace RayaSelfHeal {
   export const CompletionReceipt = Completion
@@ -20,6 +21,8 @@ export namespace RayaSelfHeal {
   export const RepairPrepare = Prepare
   export const ArtifactReview = Review
   export const ArtifactApproval = Approval
+  export const VerificationPublish = Publish
+  export const VerificationPublication = PublicationReceipt
 
   export const Category = Schema.Literals([
     "ui",
@@ -198,6 +201,7 @@ export namespace RayaSelfHeal {
     const repair = repairs(storage, root)
     const completion = completions(storage, repair)
     const delivery = artifacts(storage, root)
+    const publication = publications(storage)
     const decorate = Effect.fn(function* (item: Item) {
       const receipts = yield* storage.list(["raya", "self-heal", "reports", item.id]).pipe(Effect.orDie)
       const baseline = yield* storage.read<number>(["raya", "self-heal", "reports", item.id, "base"]).pipe(
@@ -212,8 +216,15 @@ export namespace RayaSelfHeal {
         ),
       )
       const tested = yield* completion.get(item.id)
+      const published = yield* publication.list(item.id)
+      const evidence = [...item.evidence, ...published.map((receipt) => receipt.evidence)]
+        .filter(
+          (entry, index, rows) => rows.findIndex((row) => JSON.stringify(row) === JSON.stringify(entry)) === index,
+        )
+        .slice(-50)
       return {
         ...item,
+        evidence,
         status: tested ? ("verified" as const) : item.status === "verified" ? ("blocked" as const) : item.status,
         legacyVerification: (!tested && (item.status === "verified" || item.legacyVerification)) || undefined,
         completion: tested,
@@ -353,15 +364,22 @@ export namespace RayaSelfHeal {
       if (!item) return
       if (input.workSessionID !== undefined && input.workSessionID !== (yield* repair.get(id))?.sessionID)
         return yield* new InputError({ message: "The repair session is assigned only by the durable repair journal." })
-      const next: Item = {
-        ...item,
-        ...input,
-        id: item.id,
-        fingerprint: item.fingerprint,
-        updatedAt: Date.now(),
-        evidence: (input.evidence ?? item.evidence).slice(-50),
-      } // raya_change - bound repeated verification evidence without losing the newest records
-      yield* storage.replace(key(id), next).pipe(Effect.orDie)
+      const next = yield* storage
+        .update<Item>(key(id), (current) => {
+          const evidence = input.evidence
+            ? [...current.evidence, ...input.evidence].filter(
+                (entry, index, rows) =>
+                  rows.findIndex((row) => JSON.stringify(row) === JSON.stringify(entry)) === index,
+              )
+            : current.evidence
+          Object.assign(current, input, {
+            id: current.id,
+            fingerprint: current.fingerprint,
+            updatedAt: Date.now(),
+            evidence: evidence.slice(-50),
+          })
+        })
+        .pipe(Effect.orDie) // raya_change - serialize item writers and bound repeated evidence without losing newer records
       return yield* decorate(next)
     })
 
@@ -396,6 +414,7 @@ export namespace RayaSelfHeal {
       link: completion.link,
       complete: completion.record,
       approve: delivery.approve,
+      publish: publication.publish,
     }
   }
 }

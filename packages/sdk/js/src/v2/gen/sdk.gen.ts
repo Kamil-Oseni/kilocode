@@ -337,6 +337,8 @@ import type {
   KilocodeSelfHealPrepareResponses,
   KilocodeSelfHealUpdateErrors,
   KilocodeSelfHealUpdateResponses,
+  KilocodeSelfHealVerificationPublishErrors,
+  KilocodeSelfHealVerificationPublishResponses,
   KilocodeSessionImportMessageErrors,
   KilocodeSessionImportMessageResponses,
   KilocodeSessionImportPartErrors,
@@ -10910,6 +10912,73 @@ export class SelfHeal extends HeyApiClient {
       ThrowOnError
     >({
       url: "/kilocode/self-heal/{itemID}/artifact/review",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Publish reviewed self-heal verification
+   *
+   * Append one immutable, idempotent installed-repair verification receipt without replacing unrelated evidence.
+   */
+  public verificationPublish<ThrowOnError extends boolean = false>(
+    parameters: {
+      itemID: string
+      directory?: string
+      workspace?: string
+      installationID?: string
+      verification?: {
+        sessionID: string
+        goalRevision: string
+        summary: string
+        verifiedAt: number
+        reviewedAt: number
+        requirements: Array<{
+          requirement: string
+          passed: true
+          evidence: Array<{
+            sessionID: string
+            messageID: string
+            partID: string
+            callID: string
+            summary: string
+            record: {
+              version: 1
+              digest: string
+              at: number
+            }
+          }>
+        }>
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "itemID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "installationID" },
+            { in: "body", key: "verification" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeSelfHealVerificationPublishResponses,
+      KilocodeSelfHealVerificationPublishErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/self-heal/{itemID}/verification",
       ...options,
       ...params,
       headers: {

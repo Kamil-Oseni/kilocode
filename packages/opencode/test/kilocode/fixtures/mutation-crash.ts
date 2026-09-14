@@ -13,7 +13,7 @@ import {
   type TransactionEntry,
 } from "@kilocode/sandbox"
 import { Git } from "../../../src/git"
-import { recover } from "../../../src/kilocode/tool/apply-patch-transaction"
+import { recover, recoverPending } from "../../../src/kilocode/tool/apply-patch-transaction"
 import { journals } from "../../../src/kilocode/tool/mutation-journal"
 import { Storage } from "../../../src/storage/storage"
 
@@ -22,11 +22,13 @@ if (!mode || !dir || !root) throw new Error("Expected mode, storage directory an
 const hash = (value: string) => createHash("sha256").update(value).digest("hex")
 const id = mode.startsWith("claim")
   ? "killed-claims"
-  : mode.startsWith("release")
-    ? "killed-release"
-    : mode.startsWith("matrix")
-      ? `killed-${decision?.replace(/[^a-z0-9-]/gi, "-")}`
-      : `killed-${decision === "commit"}`
+  : mode.startsWith("index")
+    ? "killed-index"
+    : mode.startsWith("release")
+      ? "killed-release"
+      : mode.startsWith("matrix")
+        ? `killed-${decision?.replace(/[^a-z0-9-]/gi, "-")}`
+        : `killed-${decision === "commit"}`
 const layer = LayerNode.compile(LayerNode.group([FSUtil.node, Git.node, CrossSpawnSpawner.node]))
 const proof = { identity: { dev: "1", ino: "2" }, sha256: hash("before") }
 const postimage = { identity: { dev: "3", ino: "4" }, sha256: hash("after") }
@@ -44,13 +46,34 @@ function entries(): TransactionEntry[] {
 
 const run = Effect.gen(function* () {
   const storage = yield* Storage.Service
+  if (mode === "index-crash") {
+    const calls = { value: 0 }
+    const stalled = {
+      ...storage,
+      create: (key: string[], content: unknown) => {
+        calls.value++
+        if (calls.value !== 2) return storage.create(key, content)
+        return Effect.gen(function* () {
+          process.stdout.write("READY\n")
+          return yield* Effect.never
+        })
+      },
+    }
+    yield* journals(stalled).admit({
+      invocation: id,
+      digest: hash(id),
+      workspace: root,
+      entries: [entries()[0]],
+    })
+    return
+  }
   if (mode === "claim-crash") {
     const calls = { value: 0 }
     const stalled = {
       ...storage,
       create: (key: string[], content: unknown) => {
         calls.value++
-        if (calls.value !== 3) return storage.create(key, content)
+        if (calls.value !== 4) return storage.create(key, content)
         return Effect.gen(function* () {
           process.stdout.write("READY\n")
           return yield* Effect.never
@@ -198,6 +221,12 @@ const run = Effect.gen(function* () {
       },
     }
     yield* recover(stalled, id)
+    return
+  }
+  if (mode === "matrix-startup") {
+    yield* recoverPending(storage)
+    const outcome = yield* journals(storage).get(id)
+    process.stdout.write(`${JSON.stringify(outcome)}\n`)
     return
   }
   if (mode === "matrix-recover") {

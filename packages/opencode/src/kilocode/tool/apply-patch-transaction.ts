@@ -22,7 +22,7 @@ export interface Plan {
   readonly items: ReadonlyArray<Item>
 }
 
-export function transact(storage: Pick<Storage.Interface, "create" | "read" | "remove">, input: Plan) {
+export function transact(storage: Pick<Storage.Interface, "create" | "read" | "remove" | "list">, input: Plan) {
   return Effect.uninterruptibleMask((restore) =>
     Effect.gen(function* () {
       const journal = journals(storage)
@@ -120,7 +120,7 @@ export function transact(storage: Pick<Storage.Interface, "create" | "read" | "r
 }
 
 export function recover(
-  storage: Pick<Storage.Interface, "create" | "read" | "remove">,
+  storage: Pick<Storage.Interface, "create" | "read" | "remove" | "list">,
   id: string,
   authorize?: (outcome: typeof Outcome.Type) => Effect.Effect<boolean>,
 ) {
@@ -202,4 +202,24 @@ export function recover(
       return yield* Effect.failCause(result.cause)
     }),
   )
+}
+
+export function recoverPending(storage: Pick<Storage.Interface, "create" | "read" | "remove" | "list">) {
+  return Effect.gen(function* () {
+    const journal = journals(storage)
+    const pending = yield* journal.pending()
+    const outcomes: (typeof Outcome.Type)[] = []
+    const issues = [...pending.issues]
+    for (const outcome of pending.outcomes) {
+      const result = yield* Effect.exit(recover(storage, outcome.invocation))
+      if (Exit.isSuccess(result) && result.value) {
+        outcomes.push(result.value)
+        continue
+      }
+      const current = yield* journal.get(outcome.invocation)
+      if (current) outcomes.push(current)
+      if (Exit.isFailure(result)) issues.push({ key: outcome.invocation, reason: Cause.pretty(result.cause) })
+    }
+    return { outcomes, issues, truncated: pending.truncated }
+  })
 }

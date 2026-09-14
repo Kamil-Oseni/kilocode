@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto"
 import os from "node:os"
 import path from "node:path"
-import { Effect, Schema } from "effect"
+import { Cause, Effect, Exit, Schema } from "effect"
 import { Storage } from "@/storage/storage"
 import { owner as identity, stopped } from "@/kilocode/task/owner"
 
@@ -67,12 +67,18 @@ const Permit = Schema.Struct({
   owner: Owner,
   secret: Schema.String,
 })
+const Active = Schema.Struct({
+  version: Schema.Literal(1),
+  id: Schema.String,
+  invocation: Schema.String,
+  owner: Owner,
+})
 
 export class Conflict extends Schema.TaggedErrorClass<Conflict>()("RayaMutationJournal.Conflict", {
   message: Schema.String,
 }) {}
 
-type Store = Pick<Storage.Interface, "create" | "read" | "remove">
+type Store = Pick<Storage.Interface, "create" | "read" | "remove" | "list">
 type Plan = {
   readonly invocation: string
   readonly digest: string
@@ -106,9 +112,12 @@ const lower = (value: string) => (process.platform === "win32" ? value.toLowerCa
 const journal = (id: string, revision: number) => ["raya", "file-transactions", hash(id), String(revision)]
 const ownership = (target: string) => ["raya", "file-transaction-targets", hash(lower(target))]
 const recovery = (id: string, prior: string) => ["raya", "file-transaction-recovery", hash(id), hash(prior)]
+const active = (id: string) => ["raya", "file-transaction-active", id]
+const activeRoot = ["raya", "file-transaction-active"]
 const decode = Schema.decodeUnknownEffect(Outcome)
 const decodeClaim = Schema.decodeUnknownEffect(Claim)
 const decodePermit = Schema.decodeUnknownEffect(Permit)
+const decodeActive = Schema.decodeUnknownEffect(Active)
 
 function valid(entries: ReadonlyArray<typeof Entry.Type>) {
   if (entries.length === 0 || entries.length > 256) return false
@@ -221,7 +230,16 @@ export function journals(storage: Store) {
       authority: owner,
       at: Date.now(),
     }
+    const index: typeof Active.Type = {
+      version: 1,
+      id: outcome.id,
+      invocation: outcome.invocation,
+      owner: outcome.owner,
+    }
+    if (!(yield* storage.create(active(outcome.id), index)))
+      return yield* new Conflict({ message: "Mutation active index ownership could not be recorded." })
     if (!(yield* storage.create(journal(input.invocation, 0), outcome))) {
+      yield* storage.remove(active(outcome.id))
       const previous = yield* read(input.invocation)
       if (!previous || previous.digest !== input.digest)
         return yield* new Conflict({ message: "This mutation invocation is already bound to different content." })
@@ -250,6 +268,7 @@ export function journals(storage: Store) {
       yield* release({ ...outcome, entries: acquired })
       if (!(yield* storage.create(journal(input.invocation, 1), conflict)))
         return yield* new Conflict({ message: "Mutation ownership conflict could not be recorded." })
+      yield* storage.remove(active(outcome.id))
       return { owned: false as const, outcome: conflict }
     }
     const staging: typeof Outcome.Type = { ...outcome, phase: "staging", revision: 1, at: Date.now() }
@@ -310,6 +329,7 @@ export function journals(storage: Store) {
     if (!(yield* storage.create(journal(id, outcome.revision), outcome)))
       return yield* new Conflict({ message: "Another caller already advanced this mutation." })
     if (outcome.phase === "releasing") yield* release(outcome, false)
+    if (outcome.phase === "done") yield* storage.remove(active(outcome.id))
     return outcome
   })
 
@@ -410,5 +430,54 @@ export function journals(storage: Store) {
     return yield* new Conflict({ message: "Mutation recovery ownership exceeded its bounded ancestry." })
   })
 
-  return { get, admit, advance, recover }
+  const pending = Effect.fn("RayaMutationJournal.pending")(function* () {
+    const keys = yield* storage.list(activeRoot)
+    const issues: { key: string; reason: string }[] = []
+    const outcomes: (typeof Outcome.Type)[] = []
+    if (keys.length > 1_024)
+      issues.push({ key: activeRoot.join("/"), reason: `Active mutation index exceeds the 1024-entry scan bound.` })
+    for (const key of keys.slice(0, 1_024)) {
+      const name = key.join("/")
+      if (key.length !== activeRoot.length + 1 || key[0] !== activeRoot[0] || key[1] !== activeRoot[1]) {
+        issues.push({ key: name, reason: "Active mutation index key is malformed." })
+        continue
+      }
+      const decoded = yield* Effect.exit(storage.read<unknown>(key).pipe(Effect.flatMap(decodeActive)))
+      if (Exit.isFailure(decoded)) {
+        issues.push({ key: name, reason: Cause.pretty(decoded.cause) })
+        continue
+      }
+      const index = decoded.value
+      if (index.id !== key[2]) {
+        issues.push({ key: name, reason: "Active mutation index identity is malformed." })
+        continue
+      }
+      const loaded = yield* Effect.exit(read(index.invocation))
+      if (Exit.isFailure(loaded)) {
+        issues.push({ key: name, reason: Cause.pretty(loaded.cause) })
+        continue
+      }
+      const outcome = loaded.value
+      if (!outcome) {
+        if (stopped(index.owner)) yield* storage.remove(key)
+        continue
+      }
+      if (outcome.id !== index.id) {
+        if (stopped(index.owner)) {
+          yield* storage.remove(key)
+          continue
+        }
+        issues.push({ key: name, reason: "Active mutation index references another transaction." })
+        continue
+      }
+      if (outcome.phase === "done") {
+        yield* storage.remove(key)
+        continue
+      }
+      outcomes.push(outcome)
+    }
+    return { outcomes, issues, truncated: keys.length > 1_024 }
+  })
+
+  return { get, admit, advance, recover, pending }
 }

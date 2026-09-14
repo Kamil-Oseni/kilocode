@@ -125,6 +125,9 @@ it.live("grants one durable owner across independent storage instances", () =>
     expect(success.filter((row) => row.owned && row.token)).toHaveLength(1)
     expect(success.every((row) => row.outcome.id === success[0]!.outcome.id)).toBe(true)
     expect((yield* instance(dir, (journal) => journal.get(input.invocation)))?.phase).toBe("staging")
+    const pending = yield* instance(dir, (journal) => journal.pending())
+    expect(pending.outcomes).toHaveLength(1)
+    expect(pending.issues).toHaveLength(0)
   }),
 )
 
@@ -319,7 +322,7 @@ it.live("recovers a reservation interrupted during target claim acquisition", ()
         ...storage,
         create: (key, content) => {
           calls.value++
-          if (calls.value === 3) return Effect.die("simulated admission crash")
+          if (calls.value === 4) return Effect.die("simulated admission crash")
           return storage.create(key, content)
         },
       })
@@ -401,7 +404,7 @@ it.live("releases partial claims when recovery finds a competing transaction", (
         ...storage,
         create: (key, content) => {
           calls.value++
-          if (calls.value === 3) return Effect.die("simulated admission crash")
+          if (calls.value === 4) return Effect.die("simulated admission crash")
           return storage.create(key, content)
         },
       })
@@ -487,9 +490,11 @@ it.live(
       const dir = path.join(root, "storage")
       yield* Effect.promise(() => kill("claim-crash", dir, root))
       expect((yield* instance(dir, (journal) => journal.get("killed-claims")))?.phase).toBe("reserved")
+      expect((yield* instance(dir, (journal) => journal.pending())).outcomes[0]?.phase).toBe("reserved")
       const outcome = yield* Effect.promise(() => child("claim-recover", dir, root))
       expect(outcome.phase).toBe("done")
       expect(outcome.decision).toBe("rollback")
+      expect((yield* instance(dir, (journal) => journal.pending())).outcomes).toHaveLength(0)
       const rows = yield* Effect.all(
         ["a.txt", "b.txt"].map((name, index) =>
           instance(dir, (journal) => journal.admit(plan(root, `process-reuse-${index}`, path.join(root, name)))),
@@ -511,12 +516,16 @@ it.live(
       const second = path.join(root, "b.txt")
       yield* Effect.promise(() => kill("release-crash", dir, root))
       expect((yield* instance(dir, (journal) => journal.get("killed-release")))?.phase).toBe("releasing")
+      expect((yield* instance(dir, (journal) => journal.pending())).outcomes[0]?.phase).toBe("releasing")
       expect((yield* instance(dir, (journal) => journal.admit(plan(root, "process-successor", first)))).owned).toBe(
         true,
       )
       const outcome = yield* Effect.promise(() => child("release-recover", dir, root))
       expect(outcome.phase).toBe("done")
       expect(outcome.decision).toBe("commit")
+      const pending = (yield* instance(dir, (journal) => journal.pending())).outcomes
+      expect(pending.some((item) => item.invocation === "killed-release")).toBe(false)
+      expect(pending.some((item) => item.invocation === "process-successor")).toBe(true)
       expect((yield* instance(dir, (journal) => journal.admit(plan(root, "process-released", second)))).owned).toBe(
         true,
       )
@@ -525,4 +534,38 @@ it.live(
       )
     }),
   30_000,
+)
+
+it.live(
+  "removes a stopped dangling active index whose reservation was never published",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      const dir = path.join(root, "storage")
+      yield* Effect.promise(() => kill("index-crash", dir, root))
+      const pending = yield* instance(dir, (journal) => journal.pending())
+      expect(pending.outcomes).toHaveLength(0)
+      expect(pending.issues).toHaveLength(0)
+      expect(pending.truncated).toBe(false)
+      expect(
+        (yield* instance(dir, (journal) => journal.admit(plan(root, "killed-index", path.join(root, "a.txt"))))).owned,
+      ).toBe(true)
+    }),
+  30_000,
+)
+
+it.live("reports a malformed active record without hiding valid pending work", () =>
+  Effect.gen(function* () {
+    const root = yield* tmpdirScoped()
+    const dir = path.join(root, "storage")
+    yield* service(dir, (storage) =>
+      storage.write(["raya", "file-transaction-active", "malformed"], { version: 99, invocation: 42 }),
+    )
+    const input = plan(root, "visible-pending")
+    expect((yield* instance(dir, (journal) => journal.admit(input))).owned).toBe(true)
+    const pending = yield* instance(dir, (journal) => journal.pending())
+    expect(pending.outcomes.map((outcome) => outcome.invocation)).toEqual(["visible-pending"])
+    expect(pending.issues).toHaveLength(1)
+    expect(pending.issues[0]?.key).toContain("malformed")
+  }),
 )

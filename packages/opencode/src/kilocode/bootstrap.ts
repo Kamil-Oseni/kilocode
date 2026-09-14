@@ -27,6 +27,7 @@ import { RayaGoalContinuation } from "@/kilocode/goal/continuation" // raya_chan
 import { RayaTaskRunner } from "@/kilocode/task/runner"
 import { Database } from "@opencode-ai/core/database/database"
 import { Config } from "@/config/config" // raya_change - Milestone I goal continuation setting
+import { recoverPending } from "@/kilocode/tool/apply-patch-transaction"
 
 const log = Log.create({ service: "kilocode-bootstrap" })
 
@@ -56,6 +57,16 @@ export namespace KilocodeBootstrap {
       const routines = storage ? yield* RayaTaskRunner.lifecycle({ bus, storage, sessions, database }) : undefined
 
       const init = Effect.fn("KilocodeBootstrap.init")(function* () {
+        if (storage) {
+          const recovery = yield* recoverPending(storage).pipe(
+            Effect.catchCause((cause) => {
+              log.warn("file transaction startup scan failed", { err: Cause.squash(cause) })
+              return Effect.succeed(undefined)
+            }),
+          )
+          if (recovery?.issues.length)
+            log.warn("file transaction startup scan retained conflicts", { issues: recovery.issues })
+        }
         yield* watcher.init()
         yield* kilo.init()
         yield* MemoryLifecycle.subscribe({ bus, sessions, summary, provider, memory })

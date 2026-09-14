@@ -526,3 +526,25 @@ it.live(
     }),
   30_000,
 )
+
+it.live(
+  "discovers and recovers a killed transaction through the bounded startup index",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      const dir = path.join(root, "storage")
+      const source = path.join(root, "source.txt")
+      const moved = path.join(root, "moved.txt")
+      const spec = "mixed:rollback:publish-2"
+      yield* Effect.promise(() => writeFile(source, "source before"))
+      yield* Effect.promise(() => kill("matrix-crash", [dir, root, spec]))
+      const outcome = yield* Effect.promise(() => child("matrix-startup", [dir, root, spec]))
+      expect(outcome.phase).toBe("done")
+      expect(outcome.decision).toBe("rollback")
+      expect(yield* Effect.promise(() => readFile(source, "utf8"))).toBe("source before")
+      expect(yield* Effect.promise(() => Bun.file(moved).exists())).toBe(false)
+      expect((yield* Effect.promise(() => readdir(root))).some((name) => name.startsWith(".raya-txn-"))).toBe(false)
+      expect((yield* instance(dir, (storage) => journals(storage).pending())).outcomes).toHaveLength(0)
+    }),
+  30_000,
+)

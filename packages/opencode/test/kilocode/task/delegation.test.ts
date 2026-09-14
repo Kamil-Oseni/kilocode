@@ -387,6 +387,49 @@ test("completion and cancellation cannot overwrite each other's terminal result"
   )
 })
 
+test("an exact terminal replay restores a reply after publication failed", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const store = RayaTaskDelegation.make(database)
+      const inbox = RayaTaskInbox.make(database)
+      const chief = agent("chief", "generalist")
+      const books = agent("books", "accountant")
+      const admitted = yield* store.admit(request("dlg_reply_recovery", chief.id, books.id), chief, books)
+      const taken = (yield* store.take(books.id))!
+      expect(taken.id).toBe(admitted.record.id)
+      yield* database.db.run(`
+        CREATE TRIGGER fail_delegation_reply
+        BEFORE INSERT ON raya_routine_message
+        WHEN NEW.source LIKE 'reply:%'
+        BEGIN
+          SELECT RAISE(ABORT, 'injected reply failure');
+        END
+      `)
+      expect(
+        Exit.isFailure(
+          yield* store
+            .finish(taken.id, "completed", books, "Recovered accounting result.")
+            .pipe(Effect.exit),
+        ),
+      ).toBe(true)
+      expect((yield* store.get(taken.id)).state).toBe("completed")
+      expect((yield* inbox.page(chief.id)).messages.filter((item) => item.source.startsWith("reply:"))).toEqual([])
+      yield* database.db.run("DROP TRIGGER fail_delegation_reply")
+
+      expect((yield* store.finish(taken.id, "completed", books, "Recovered accounting result.")).state).toBe(
+        "completed",
+      )
+      expect((yield* store.finish(taken.id, "completed", books, "Recovered accounting result.")).state).toBe(
+        "completed",
+      )
+      const replies = (yield* inbox.page(chief.id)).messages.filter((item) => item.source.startsWith("reply:"))
+      expect(replies).toHaveLength(1)
+      expect(replies[0]?.body).toContain("Recovered accounting result.")
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
 test("child cost is stored as a real amount and listed on the parent run without adding it", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {

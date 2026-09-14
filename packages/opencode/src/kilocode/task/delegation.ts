@@ -310,6 +310,10 @@ export namespace RayaTaskDelegation {
             ),
           ),
       )
+    const reply = (record: Record, recipient: RayaTask.Agent) => {
+      const item = replied(record, recipient)
+      return item ? publish([item]) : Effect.void
+    }
     const get = Effect.fn("RayaTaskDelegation.get")(function* (id: string) {
       const row = yield* db.select().from(Delegation).where(eq(Delegation.id, id)).get().pipe(Effect.orDie)
       if (!row) return yield* new Invalid({ message: "This delegation request was not found." })
@@ -559,8 +563,10 @@ export namespace RayaTaskDelegation {
       const prior = yield* get(id)
       const amount = typeof cost === "number" && Number.isFinite(cost) && cost >= 0 ? cost : undefined
       if (prior.state === "completed" || prior.state === "failed" || prior.state === "cancelled") {
-        if (prior.state === state && prior.response === response && prior.cost === amount && prior.reason === reason)
+        if (prior.state === state && prior.response === response && prior.cost === amount && prior.reason === reason) {
+          yield* reply(prior, recipient)
           return prior
+        }
         return yield* new Conflict({ message: "This delegation already has a different result." })
       }
       const now = Date.now()
@@ -584,13 +590,14 @@ export namespace RayaTaskDelegation {
           current.response === response &&
           current.cost === amount &&
           current.reason === reason
-        )
+        ) {
+          yield* reply(current, recipient)
           return current
+        }
         return yield* new Conflict({ message: "This delegation already has a different result." })
       }
       const record = decode(updated[0])
-      const item = replied(record, recipient)
-      if (item) yield* publish([item])
+      yield* reply(record, recipient)
       return record
     })
     const chain = Effect.fn("RayaTaskDelegation.chain")(function* (id: string) {

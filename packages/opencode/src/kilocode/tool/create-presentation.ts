@@ -14,6 +14,14 @@ import { assertExternalDirectoryEffect } from "@/tool/external-directory"
 import * as Tool from "@/tool/tool"
 
 const Copy = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(5_000))
+const Cell = Schema.String.check(Schema.isMaxLength(1_000))
+const Table = Schema.Struct({
+  rows: Schema.Array(Schema.Array(Cell).check(Schema.isMinLength(1), Schema.isMaxLength(6))).check(
+    Schema.isMinLength(1),
+    Schema.isMaxLength(12),
+  ),
+  header: Schema.optional(Schema.Boolean),
+})
 const Slide = Schema.Struct({
   title: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)),
   subtitle: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(500))),
@@ -25,6 +33,7 @@ const Slide = Schema.Struct({
     ),
   ),
   ordered: Schema.optional(Schema.Boolean),
+  table: Schema.optional(Table),
 })
 const Parameters = Schema.Struct({
   filePath: Schema.String.annotate({ description: "Destination path ending in .pptx." }),
@@ -76,6 +85,31 @@ function line(accent: string) {
   return `<p:sp><p:nvSpPr><p:cNvPr id="3" name="Accent line"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="731520" y="1371600"/><a:ext cx="10972800" cy="45720"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="${accent}"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>`
 }
 
+function table(input: typeof Table.Type, y: number) {
+  const rows = input.rows
+  const header = input.header ?? true
+  const width = Math.floor(10_972_800 / rows[0]!.length)
+  const height = Math.floor(3_657_600 / rows.length)
+  const grid = rows[0]!.map(() => `<a:gridCol w="${width}"/>`).join("")
+  const body = rows
+    .map((row, index) => {
+      const head = header && index === 0
+      const cells = row
+        .map((value) => {
+          const copy = para(value, { size: 1400, color: "252A34", face: "Outfit", bold: head })
+          const fill = head
+            ? '<a:solidFill><a:srgbClr val="E8EBF0"/></a:solidFill>'
+            : '<a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill>'
+          const edge = '<a:solidFill><a:srgbClr val="B9C0CC"/></a:solidFill><a:prstDash val="solid"/>'
+          return `<a:tc><a:txBody><a:bodyPr wrap="square"/><a:lstStyle/>${copy}</a:txBody><a:tcPr marL="91440" marR="91440" marT="68580" marB="68580"><a:lnL w="6350">${edge}</a:lnL><a:lnR w="6350">${edge}</a:lnR><a:lnT w="6350">${edge}</a:lnT><a:lnB w="6350">${edge}</a:lnB>${fill}</a:tcPr></a:tc>`
+        })
+        .join("")
+      return `<a:tr h="${height}">${cells}</a:tr>`
+    })
+    .join("")
+  return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="5" name="Table"/><p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="731520" y="${y}"/><a:ext cx="10972800" cy="3657600"/></p:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table"><a:tbl><a:tblPr firstRow="${header ? 1 : 0}" bandRow="0"/><a:tblGrid>${grid}</a:tblGrid>${body}</a:tbl></a:graphicData></a:graphic></p:graphicFrame>`
+}
+
 function slide(input: typeof Slide.Type, index: number, accent: string) {
   const title = textbox({
     id: 2,
@@ -117,6 +151,7 @@ function slide(input: typeof Slide.Type, index: number, accent: string) {
         paragraphs: copy,
       })
     : ""
+  const grid = input.table ? table(input.table, input.subtitle ? 2286000 : 1737360) : ""
   const number = textbox({
     id: 6,
     name: "Slide number",
@@ -126,7 +161,7 @@ function slide(input: typeof Slide.Type, index: number, accent: string) {
     cy: 274320,
     paragraphs: para(String(index), { size: 900, color: "737C8C", face: "Outfit" }),
   })
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:effectLst/></p:bgPr></p:bg><p:spTree>${group()}${title}${line(accent)}${subtitle}${body}${number}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:effectLst/></p:bgPr></p:bg><p:spTree>${group()}${title}${line(accent)}${subtitle}${body}${grid}${number}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`
 }
 
 async function presentation(input: typeof Parameters.Type) {
@@ -174,7 +209,7 @@ export const CreatePresentationTool = Tool.define(
     const events = yield* EventV2Bridge.Service
     return {
       description:
-        "Create a real widescreen PowerPoint .pptx deck from structured slide titles, subtitles, body text and bullet or numbered points. Uses Raya's restrained accent and typography by default and returns a verified local artifact receipt. It does not import templates, add images, charts, tables, notes or animation, embed fonts or guarantee identical pagination across presentation apps.",
+        "Create a real widescreen PowerPoint .pptx deck from structured slide titles, subtitles, body text, lists or tables. Tables accept 1 to 12 rectangular rows with 1 to 6 columns and cannot share a slide with body text or list points. Uses Raya's restrained accent and typography by default and returns a verified local artifact receipt. It does not import templates, add images, charts, notes or animation, embed fonts or guarantee identical layout across presentation apps.",
       parameters: Parameters,
       execute: (params: typeof Parameters.Type, ctx: Tool.Context) =>
         Effect.gen(function* () {
@@ -183,12 +218,38 @@ export const CreatePresentationTool = Tool.define(
             ? params.filePath
             : path.join(instance.directory, params.filePath)
           if (path.extname(filepath).toLowerCase() !== ".pptx") throw new Error("Choose a destination ending in .pptx.")
+          const tables = params.slides.flatMap((slide) => (slide.table ? [slide.table] : []))
+          for (const slide of params.slides) {
+            if (slide.table && (slide.body || slide.points))
+              throw new Error("A presentation table can't share a slide with body text or list points.")
+            if (!slide.table) continue
+            const columns = slide.table.rows[0]!.length
+            if (slide.table.rows.some((row) => row.length !== columns))
+              throw new Error("Every row in a presentation table must have the same number of columns.")
+            if (slide.table.rows.flat().every((value) => !value.trim()))
+              throw new Error("Each presentation table needs at least one non-blank cell.")
+          }
+          const cells = tables.reduce((sum, table) => sum + table.rows.length * table.rows[0]!.length, 0)
+          if (cells > 300) throw new Error("This presentation exceeds the 300-table-cell limit.")
           const values = [
             params.title,
             params.author,
-            ...params.slides.flatMap((slide) => [slide.title, slide.subtitle, slide.body, ...(slide.points ?? [])]),
+            ...params.slides.flatMap((slide) => [
+              slide.title,
+              slide.subtitle,
+              slide.body,
+              ...(slide.points ?? []),
+              ...(slide.table?.rows.flat() ?? []),
+            ]),
           ].filter((value): value is string => value !== undefined)
-          if (values.some((value) => !value.trim())) throw new Error("Presentation text can't be blank.")
+          const copy = params.slides.flatMap((slide) => [
+            slide.title,
+            slide.subtitle,
+            slide.body,
+            ...(slide.points ?? []),
+          ])
+          if ([params.title, params.author, ...copy].some((value) => value !== undefined && !value.trim()))
+            throw new Error("Presentation text can't be blank.")
           const characters = values.reduce((sum, value) => sum + value.length, 0)
           if (characters > 100_000) throw new Error("This presentation exceeds the 100,000-character limit.")
           assertMutablePath(filepath)
@@ -198,7 +259,7 @@ export const CreatePresentationTool = Tool.define(
             permission: "edit",
             patterns: [path.relative(instance.worktree, filepath)],
             always: ["*"],
-            metadata: { filepath, exists, format: "pptx", title: params.title, slides: params.slides.length },
+            metadata: { filepath, exists, format: "pptx", title: params.title, slides: params.slides.length, cells },
           })
           const bytes = yield* Effect.tryPromise({
             try: () => presentation(params),
@@ -226,7 +287,7 @@ export const CreatePresentationTool = Tool.define(
           return {
             title: path.relative(instance.worktree, filepath),
             output: `Created ${path.basename(filepath)} with ${params.slides.length === 1 ? "1 slide" : `${params.slides.length} slides`}.`,
-            metadata: { filepath, exists, slides: params.slides.length, characters, rayaRevision: revision },
+            metadata: { filepath, exists, slides: params.slides.length, cells, characters, rayaRevision: revision },
           }
         }).pipe(Effect.orDie),
     }

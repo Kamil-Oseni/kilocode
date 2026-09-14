@@ -448,24 +448,33 @@ it.instance(
           slides: [
             { title: "A calmer launch", subtitle: "One clear outcome", body: "Ship what matters & measure it." },
             { title: "The sequence", points: ["Invite the first cohort", "Review what changed"], ordered: true },
+            {
+              title: "Owners and outcomes",
+              table: {
+                rows: [
+                  ["Owner", "Outcome"],
+                  ["Design", "A clear flow"],
+                  ["Engineering", "A verified build"],
+                  ["Notes", ""],
+                ],
+              },
+            },
           ],
         },
         ctx,
       )
-      expect(created.output).toBe("Created launch-plan.pptx with 2 slides.")
+      expect(created.output).toBe("Created launch-plan.pptx with 3 slides.")
       expect(created.metadata).toMatchObject({
         filepath: target,
         exists: false,
-        slides: 2,
+        slides: 3,
+        cells: 8,
         rayaRevision: { version: 1, status: "captured", path: target },
       })
       const bytes = new Uint8Array(yield* Effect.promise(() => Bun.file(target).arrayBuffer()))
       const archive = new ZipReader(new Uint8ArrayReader(bytes))
-      const entries = yield* Effect.promise(() =>
-        archive.getEntries().then((items) => items.map((item) => item.filename)),
-      )
-      yield* Effect.promise(() => archive.close())
-      expect(entries).toEqual(
+      const items = yield* Effect.promise(() => archive.getEntries())
+      expect(items.map((item) => item.filename)).toEqual(
         expect.arrayContaining([
           "[Content_Types].xml",
           "_rels/.rels",
@@ -476,14 +485,26 @@ it.instance(
           "ppt/theme/theme1.xml",
           "ppt/slides/slide1.xml",
           "ppt/slides/slide2.xml",
+          "ppt/slides/slide3.xml",
         ]),
       )
+      const entry = items.find((item) => item.filename === "ppt/slides/slide3.xml")
+      expect(entry?.getData).toBeDefined()
+      const xml = yield* Effect.promise(() => entry!.getData!(new TextWriter()))
+      yield* Effect.promise(() => archive.close())
+      expect(xml).toContain("<a:tbl>")
+      expect(xml).toContain('firstRow="1"')
+      expect(xml).toContain('val="E8EBF0"')
+      expect(xml).toContain('typeface="Outfit"')
       const read = yield* defs.read.execute({ filePath: target }, ctx)
       expect(read.output).toContain("--- Slide: 1 ---")
       expect(read.output).toContain("A calmer launch")
       expect(read.output).toContain("Ship what matters & measure it.")
       expect(read.output).toContain("--- Slide: 2 ---")
       expect(read.output).toContain("Invite the first cohort")
+      expect(read.output).toContain("--- Slide: 3 ---")
+      for (const value of ["Owners and outcomes", "Owner", "Outcome", "Design", "A clear flow", "Engineering"])
+        expect(read.output).toContain(value)
       expect(approvals).toEqual(["edit", "read"])
 
       const before = yield* Effect.promise(() => Bun.file(target).arrayBuffer())
@@ -507,10 +528,25 @@ it.instance(
       for (const input of [
         { filePath: path.join(instance.directory, "wrong.pdf"), slides: [{ title: "No" }] },
         { filePath: path.join(instance.directory, "blank.pptx"), slides: [{ title: "   " }] },
+        {
+          filePath: path.join(instance.directory, "mixed.pptx"),
+          slides: [{ title: "Crowded", body: "Body", table: { rows: [["Table"]] } }],
+        },
+        {
+          filePath: path.join(instance.directory, "ragged.pptx"),
+          slides: [{ title: "Ragged", table: { rows: [["A", "B"], ["C"]] } }],
+        },
       ]) {
         expect(Exit.isFailure(yield* defs.presentation.execute(input, ctx).pipe(Effect.exit))).toBe(true)
         expect(yield* Effect.promise(() => Bun.file(input.filePath).exists())).toBe(false)
       }
+      const oversized = path.join(instance.directory, "oversized.pptx")
+      const rows = Array.from({ length: 12 }, () => Array.from({ length: 6 }, () => "Bounded"))
+      const slides = Array.from({ length: 5 }, (_, index) => ({ title: `Table ${index + 1}`, table: { rows } }))
+      expect(
+        Exit.isFailure(yield* defs.presentation.execute({ filePath: oversized, slides }, ctx).pipe(Effect.exit)),
+      ).toBe(true)
+      expect(yield* Effect.promise(() => Bun.file(oversized).exists())).toBe(false)
     }),
   60_000,
 )

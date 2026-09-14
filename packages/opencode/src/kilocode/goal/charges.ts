@@ -166,7 +166,11 @@ export const make = Effect.fn("RayaGoalCharges.make")(function* (deps: Deps) {
     return stale.length > 0
   })
 
-  const claim = Effect.fn("RayaGoalCharges.claim")(function* (sessionID: SessionID, currency: string) {
+  const claim = Effect.fn("RayaGoalCharges.claim")(function* (
+    sessionID: SessionID,
+    currency: string,
+    identity?: string,
+  ) {
     const noop = {
       dispatch: Effect.void,
       finish: Effect.void,
@@ -174,6 +178,8 @@ export const make = Effect.fn("RayaGoalCharges.make")(function* (deps: Deps) {
       uncertain: (_reason: string) => Effect.void,
       settle: (_charge: RayaGoal.Charge) => Effect.void,
     }
+    if (identity !== undefined && !/^[a-zA-Z0-9:_-]{1,256}$/.test(identity))
+      return yield* Effect.fail(new Error(`Goal ${currency} reservation identity is invalid.`))
     const found = yield* locate(sessionID)
     if (!found) return noop
     const owner: Owner = { id: found.id, createdAt: found.goal.createdAt }
@@ -186,7 +192,7 @@ export const make = Effect.fn("RayaGoalCharges.make")(function* (deps: Deps) {
       return yield* Effect.fail(
         new Error(`Goal ${currency} charge reservation cannot start while the goal is ${current.status}.`),
       )
-    const token = crypto.randomUUID()
+    const token = identity ?? crypto.randomUUID()
     const unknown = (reason: string): RayaGoal.Charge => ({
       id: `goal-reservation:${token}`,
       kind: "tool",
@@ -209,6 +215,11 @@ export const make = Effect.fn("RayaGoalCharges.make")(function* (deps: Deps) {
           return { kind: "inactive" as const }
         const limit = goal.budget?.chargeCosts?.find((item) => item.currency === currency)
         if (!limit) return { kind: "unlimited" as const }
+        const prior = record?.leases.find((item) => item.token === token)
+        if (prior) {
+          if (prior.origin !== sessionID) return { kind: "identity" as const }
+          return { kind: "admitted" as const }
+        }
         const items = goal.charges?.filter((item) => item.currency === currency) ?? []
         const spent = items.reduce((sum, item) => sum + (item.coverage === "recorded" ? item.amount : 0), 0)
         if (items.some((item) => item.coverage === "unknown")) return { kind: "unknown" as const, spent }
@@ -236,6 +247,8 @@ export const make = Effect.fn("RayaGoalCharges.make")(function* (deps: Deps) {
       return { ...noop, uncertain: (reason: string) => direct(unknown(reason)), settle: direct }
     if (admitted.kind === "inactive")
       return yield* Effect.fail(new Error(`Goal ${currency} charge reservation cannot start because the goal changed.`))
+    if (admitted.kind === "identity")
+      return yield* Effect.fail(new Error(`Goal ${currency} reservation identity belongs to another session.`))
     if (admitted.kind === "unknown") {
       yield* goals.limited(owner.id, owner.createdAt, currency, admitted.spent, true)
       return yield* Effect.fail(

@@ -228,6 +228,49 @@ describe("RayaGoal", () => {
     }),
   )
 
+  it.live("reacquires one stable charge reservation without duplicating capacity", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const root = SessionID.make(`ses_stable_charge_root_${crypto.randomUUID()}`)
+      const child = SessionID.make(`ses_stable_charge_child_${crypto.randomUUID()}`)
+      const rows: MessageV2.WithParts[] = []
+      const sessions = {
+        messages: () => Effect.succeed(rows),
+        children: () => Effect.succeed([]),
+        get: (id: SessionID) =>
+          id === child
+            ? Effect.succeed({ id: child, parentID: root } as Session.Info)
+            : Effect.succeed({ id: root } as Session.Info),
+      }
+      const goals = RayaGoal.make({ storage, sessions })
+      yield* Effect.addFinalizer(() => goals.clear(root))
+      yield* goals.create(root, "Retry one billed admission", undefined, undefined, undefined, undefined, {
+        chargeCosts: [{ currency: "USD", limit: 1, reservation: 0.6 }],
+      })
+      const first = yield* GoalCharges.make({ storage, sessions })
+      const restarted = yield* GoalCharges.make({ storage, sessions })
+      const token = `voice:${crypto.randomUUID()}`
+      const lease = yield* first.claim(child, "USD", token)
+      const retry = yield* restarted.claim(child, "USD", token)
+      const full = yield* restarted.claim(root, "USD").pipe(Effect.exit)
+      expect(Exit.isFailure(full)).toBe(true)
+      if (Exit.isFailure(full)) expect(Cause.pretty(full.cause)).toContain("reserved by another")
+      const denied = yield* restarted.claim(root, "USD", token).pipe(Effect.exit)
+      expect(Exit.isFailure(denied)).toBe(true)
+      if (Exit.isFailure(denied)) expect(Cause.pretty(denied.cause)).toContain("belongs to another session")
+      yield* lease.dispatch
+      const resumed = yield* restarted.claim(child, "USD", token)
+      yield* resumed.finish
+      yield* lease.release
+      yield* retry.release
+      yield* resumed.release
+
+      const available = yield* restarted.claim(root, "USD")
+      yield* available.release
+      expect((yield* goals.get(root))?.charges).toEqual([])
+    }),
+  )
+
   it.live("pauses a currency budget when the provider amount is unknown", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service

@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 import { expect } from "bun:test"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import { Effect, Exit } from "effect"
+import { Effect, Exit, Schema } from "effect"
 import { Git } from "@/git"
-import { journals } from "@/kilocode/tool/mutation-journal"
+import { journals, Outcome } from "@/kilocode/tool/mutation-journal"
 import { Storage } from "@/storage/storage"
 import { tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -14,6 +15,66 @@ import { testEffect } from "../lib/effect"
 const it = testEffect(LayerNode.compile(LayerNode.group([FSUtil.node, Git.node, CrossSpawnSpawner.node])))
 const hash = (value: string) => createHash("sha256").update(value).digest("hex")
 const proof = { identity: { dev: "1", ino: "2" }, sha256: hash("before") }
+const artifact = { identity: { dev: "3", ino: "4" }, sha256: hash("after") }
+const fixture = fileURLToPath(new URL("./fixtures/mutation-crash.ts", import.meta.url))
+
+function isolate(root: string) {
+  return {
+    ...process.env,
+    XDG_DATA_HOME: path.join(root, "xdg-data"),
+    XDG_STATE_HOME: path.join(root, "xdg-state"),
+    XDG_CACHE_HOME: path.join(root, "xdg-cache"),
+    XDG_CONFIG_HOME: path.join(root, "xdg-config"),
+    KILO_TEST_HOME: path.join(root, "home"),
+    KILO_DB: ":memory:",
+    KILO_DISABLE_MODELS_FETCH: "true",
+  }
+}
+
+async function kill(mode: string, dir: string, root: string) {
+  const proc = Bun.spawn([process.execPath, fixture, mode, dir, root], {
+    stdout: "pipe",
+    stderr: "pipe",
+    env: isolate(root),
+  })
+  const reader = proc.stdout.getReader()
+  const timer = { id: undefined as ReturnType<typeof setTimeout> | undefined }
+  const ready = async () => {
+    let text = ""
+    while (!text.includes("READY")) {
+      const chunk = await reader.read()
+      if (chunk.done) throw new Error(await new Response(proc.stderr).text())
+      text += new TextDecoder().decode(chunk.value)
+    }
+  }
+  try {
+    await Promise.race([
+      ready(),
+      new Promise((_, reject) => {
+        timer.id = setTimeout(() => reject(new Error(`${mode} did not reach its checkpoint`)), 20_000)
+      }),
+    ])
+  } finally {
+    if (timer.id) clearTimeout(timer.id)
+    proc.kill("SIGKILL")
+    await proc.exited
+  }
+}
+
+async function child(mode: string, dir: string, root: string) {
+  const proc = Bun.spawn([process.execPath, fixture, mode, dir, root], {
+    stdout: "pipe",
+    stderr: "pipe",
+    env: isolate(root),
+  })
+  const [output, failure, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ])
+  if (code !== 0) throw new Error(failure)
+  return Schema.decodeUnknownSync(Outcome)(JSON.parse(output.trim()))
+}
 
 function plan(root: string, invocation: string, target = path.join(root, "value.txt")) {
   return {
@@ -95,11 +156,11 @@ it.live("retains immutable phases across restart and rejects stale or forged adv
         revision: 1,
         phase: "prepared",
         cursor: 1,
-        entries: input.entries.map((entry) => ({ ...entry, artifact: proof })),
+        entries: input.entries.map((entry) => ({ ...entry, artifact })),
       }),
     )
     expect(prepared.phase).toBe("prepared")
-    expect((yield* instance(dir, (journal) => journal.get(input.invocation)))?.entries[0]?.artifact).toEqual(proof)
+    expect((yield* instance(dir, (journal) => journal.get(input.invocation)))?.entries[0]?.artifact).toEqual(artifact)
     expect(
       Exit.isFailure(
         yield* instance(dir, (journal) =>
@@ -149,6 +210,26 @@ it.live("rejects a changed request digest and ambiguous transaction plans", () =
         yield* instance(dir, (journal) =>
           journal
             .admit({ ...plan(root, "duplicate"), entries: [input.entries[0]!, input.entries[0]!] })
+            .pipe(Effect.exit),
+        ),
+      ),
+    ).toBe(true)
+    const malformed = yield* instance(dir, (journal) =>
+      journal.admit(plan(root, "artifact-mismatch", path.join(root, "artifact.txt"))),
+    )
+    expect(malformed.owned).toBe(true)
+    if (!malformed.owned) return
+    expect(
+      Exit.isFailure(
+        yield* instance(dir, (journal) =>
+          journal
+            .advance("artifact-mismatch", {
+              token: malformed.token,
+              revision: malformed.outcome.revision,
+              phase: "staging",
+              cursor: 1,
+              entries: malformed.outcome.entries.map((entry) => ({ ...entry, artifact: proof })),
+            })
             .pipe(Effect.exit),
         ),
       ),
@@ -346,7 +427,7 @@ it.live("recovers when completion is interrupted during claim release", () =>
     const admitted = yield* instance(dir, (journal) => journal.admit(input))
     expect(admitted.owned).toBe(true)
     if (!admitted.owned) return
-    const entries = input.entries.map((entry) => ({ ...entry, artifact: proof }))
+    const entries = input.entries.map((entry) => ({ ...entry, artifact }))
     const step = (revision: number, phase: "prepared" | "committing" | "committed" | "cleaning", cursor: number) =>
       instance(dir, (journal) =>
         journal.advance(input.invocation, { token: admitted.token, revision, phase, cursor, entries }),
@@ -396,4 +477,52 @@ it.live("recovers when completion is interrupted during claim release", () =>
     expect((yield* instance(dir, (journal) => journal.admit(plan(root, "released", targets[1])))).owned).toBe(true)
     expect((yield* instance(dir, (journal) => journal.admit(plan(root, "protected", targets[0])))).owned).toBe(false)
   }),
+)
+
+it.live(
+  "recovers partial admission after the owner process is killed",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      const dir = path.join(root, "storage")
+      yield* Effect.promise(() => kill("claim-crash", dir, root))
+      expect((yield* instance(dir, (journal) => journal.get("killed-claims")))?.phase).toBe("reserved")
+      const outcome = yield* Effect.promise(() => child("claim-recover", dir, root))
+      expect(outcome.phase).toBe("done")
+      expect(outcome.decision).toBe("rollback")
+      const rows = yield* Effect.all(
+        ["a.txt", "b.txt"].map((name, index) =>
+          instance(dir, (journal) => journal.admit(plan(root, `process-reuse-${index}`, path.join(root, name)))),
+        ),
+        { concurrency: 2 },
+      )
+      expect(rows.every((row) => row.owned)).toBe(true)
+    }),
+  30_000,
+)
+
+it.live(
+  "finishes partial claim release after the owner process is killed",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      const dir = path.join(root, "storage")
+      const first = path.join(root, "a.txt")
+      const second = path.join(root, "b.txt")
+      yield* Effect.promise(() => kill("release-crash", dir, root))
+      expect((yield* instance(dir, (journal) => journal.get("killed-release")))?.phase).toBe("releasing")
+      expect((yield* instance(dir, (journal) => journal.admit(plan(root, "process-successor", first)))).owned).toBe(
+        true,
+      )
+      const outcome = yield* Effect.promise(() => child("release-recover", dir, root))
+      expect(outcome.phase).toBe("done")
+      expect(outcome.decision).toBe("commit")
+      expect((yield* instance(dir, (journal) => journal.admit(plan(root, "process-released", second)))).owned).toBe(
+        true,
+      )
+      expect((yield* instance(dir, (journal) => journal.admit(plan(root, "process-protected", first)))).owned).toBe(
+        false,
+      )
+    }),
+  30_000,
 )

@@ -124,6 +124,7 @@ function valid(entries: ReadonlyArray<typeof Entry.Type>) {
     if (!entry.anchor && entry.kind === "create") return false
     if (!entry.stage && entry.kind !== "remove") return false
     if (!entry.hold && entry.kind !== "create") return false
+    if (entry.artifact && entry.result?.sha256 !== entry.artifact.sha256) return false
     for (const sidecar of [entry.stage, entry.hold]) {
       if (!sidecar) continue
       if (!path.isAbsolute(sidecar) || lower(path.dirname(sidecar)) !== lower(path.dirname(entry.target))) return false

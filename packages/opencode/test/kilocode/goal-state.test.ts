@@ -127,7 +127,7 @@ function setup(
 }
 
 describe("RayaGoal", () => {
-  it.live("atomically reserves the saved concurrent-child limit and resets live reservations on restart", () =>
+  it.live("durably shares the concurrent-child limit and recovers an expired backend lease", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service
       const root = SessionID.make(`ses_child_root_${crypto.randomUUID()}`)
@@ -143,13 +143,16 @@ describe("RayaGoal", () => {
       }
       const goals = RayaGoal.make({ storage, sessions })
       yield* Effect.addFinalizer(() => goals.clear(root))
-      yield* goals.create(root, "Bound delegated work", undefined, undefined, undefined, undefined, {
+      const created = yield* goals.create(root, "Bound delegated work", undefined, undefined, undefined, undefined, {
         concurrentChildren: 1,
       })
 
-      const first = yield* GoalChildren.make({ storage, sessions })
+      const time = { at: created.createdAt + 1 }
+      const opts = { storage, sessions, clock: () => time.at, ttl: 100, heartbeat: 100_000 }
+      const first = yield* GoalChildren.make(opts)
+      const other = yield* GoalChildren.make(opts)
       const lease = yield* first.claim(child)
-      const denied = yield* first.claim(root).pipe(Effect.exit)
+      const denied = yield* other.claim(root).pipe(Effect.exit)
       expect(Exit.isFailure(denied)).toBe(true)
       if (Exit.isFailure(denied)) expect(Cause.pretty(denied.cause)).toContain("concurrent-child limit reached (1)")
 
@@ -158,7 +161,10 @@ describe("RayaGoal", () => {
       yield* released.release
 
       const beforeRestart = yield* first.claim(root)
-      const restarted = yield* GoalChildren.make({ storage, sessions })
+      const restarted = yield* GoalChildren.make(opts)
+      const preserved = yield* restarted.claim(child).pipe(Effect.exit)
+      expect(Exit.isFailure(preserved)).toBe(true)
+      time.at += 101
       const afterRestart = yield* restarted.claim(child)
       yield* beforeRestart.release
       yield* afterRestart.release

@@ -315,3 +315,38 @@ for (const kind of ["create", "remove", "mixed"] as const)
         }),
       30_000,
     )
+
+for (const checkpoint of [
+  "staging-0",
+  "stage-1",
+  "staging-1",
+  "stage-2",
+  "staging-2",
+  "prepared",
+  "committing-0",
+  "publish-1",
+  "committing-1",
+  "publish-2",
+  "committing-2",
+] as const)
+  it.live(
+    `rolls a killed mixed transaction back from ${checkpoint}`,
+    () =>
+      Effect.gen(function* () {
+        const root = yield* tmpdirScoped()
+        const dir = path.join(root, "storage")
+        const source = path.join(root, "source.txt")
+        const moved = path.join(root, "moved.txt")
+        yield* Effect.promise(() => writeFile(source, "source before"))
+        yield* Effect.promise(() => kill("matrix-crash", [dir, root, `mixed:rollback:${checkpoint}`]))
+        const outcome = yield* Effect.promise(() =>
+          child("matrix-recover", [dir, root, `mixed:rollback:${checkpoint}`]),
+        )
+        expect(outcome.phase).toBe("done")
+        expect(outcome.decision).toBe("rollback")
+        expect(yield* Effect.promise(() => readFile(source, "utf8"))).toBe("source before")
+        expect(yield* Effect.promise(() => Bun.file(moved).exists())).toBe(false)
+        expect((yield* Effect.promise(() => readdir(root))).some((name) => name.startsWith(".raya-txn-"))).toBe(false)
+      }),
+    30_000,
+  )

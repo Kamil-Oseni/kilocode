@@ -19,7 +19,7 @@ const id = mode.startsWith("claim")
   : mode.startsWith("release")
     ? "killed-release"
     : mode.startsWith("matrix")
-      ? `killed-${decision?.replace(":", "-")}`
+      ? `killed-${decision?.replace(/[^a-z0-9-]/gi, "-")}`
       : `killed-${decision === "commit"}`
 const layer = LayerNode.compile(LayerNode.group([FSUtil.node, Git.node, CrossSpawnSpawner.node]))
 const proof = { identity: { dev: "1", ino: "2" }, sha256: hash("before") }
@@ -184,9 +184,16 @@ const run = Effect.gen(function* () {
     return
   }
   if (mode === "matrix-crash") {
-    const [kind, choice] = decision?.split(":") ?? []
+    const [kind, choice, checkpoint] = decision?.split(":") ?? []
     if (!kind || !["create", "remove", "mixed"].includes(kind) || !["commit", "rollback"].includes(choice ?? ""))
       throw new Error("Matrix fixture kind or decision is invalid")
+    const pause = (name: string) => {
+      if (checkpoint !== name) return Effect.void
+      return Effect.gen(function* () {
+        process.stdout.write("READY\n")
+        return yield* Effect.never
+      })
+    }
     const anchor = yield* Effect.promise(() => stat(root, { bigint: true }))
     const target = path.join(root, kind === "create" ? "created.txt" : "removed.txt")
     const prior = kind === "remove" ? yield* Effect.promise(() => stat(target, { bigint: true })) : undefined
@@ -257,27 +264,32 @@ const run = Effect.gen(function* () {
     })
     if (!admitted.owned) throw new Error("Matrix fixture did not own its journal")
     const staged = [...admitted.outcome.entries]
+    let outcome = admitted.outcome
+    yield* pause("staging-0")
     for (const [index, item] of plan.entries()) {
       if (item.entry.kind !== "remove") {
         if (!item.data) throw new Error("Matrix fixture data is missing")
         const artifact = yield* prepareTransaction(staged[index], item.data)
         staged[index] = { ...staged[index], artifact }
       }
-      yield* journal.advance(id, {
+      yield* pause(`stage-${index + 1}`)
+      outcome = yield* journal.advance(id, {
         token: admitted.token,
-        revision: (yield* journal.get(id))!.revision,
+        revision: outcome.revision,
         phase: "staging",
         cursor: index + 1,
         entries: staged,
       })
+      yield* pause(`staging-${index + 1}`)
     }
     const prepared = yield* journal.advance(id, {
       token: admitted.token,
-      revision: (yield* journal.get(id))!.revision,
+      revision: outcome.revision,
       phase: "prepared",
       cursor: staged.length,
       entries: staged,
     })
+    yield* pause("prepared")
     const committing = yield* journal.advance(id, {
       token: admitted.token,
       revision: prepared.revision,
@@ -285,9 +297,11 @@ const run = Effect.gen(function* () {
       cursor: 0,
       entries: staged,
     })
+    yield* pause("committing-0")
     let published = committing
     for (const [index, entry] of staged.entries()) {
       yield* publishTransaction(entry)
+      yield* pause(`publish-${index + 1}`)
       published = yield* journal.advance(id, {
         token: admitted.token,
         revision: published.revision,
@@ -295,8 +309,9 @@ const run = Effect.gen(function* () {
         cursor: index + 1,
         entries: staged,
       })
+      yield* pause(`committing-${index + 1}`)
     }
-    if (choice === "commit")
+    if (choice === "commit") {
       yield* journal.advance(id, {
         token: admitted.token,
         revision: published.revision,
@@ -304,6 +319,9 @@ const run = Effect.gen(function* () {
         cursor: staged.length,
         entries: staged,
       })
+      yield* pause("committed")
+    }
+    if (checkpoint) throw new Error(`Matrix checkpoint was not reached: ${checkpoint}`)
     process.stdout.write("READY\n")
     return yield* Effect.never
   }

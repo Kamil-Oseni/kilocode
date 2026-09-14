@@ -4395,3 +4395,27 @@ Fresh verification on 2026-09-14 passes:
 The first sandboxed Chromium launch failed before test execution because esbuild could not traverse the workspace; the identical authorized run passed. Do not treat that infrastructure denial as a product failure, and do not remove any adverse assertion. No product edit or reinstall was needed for this reconciliation.
 
 Continue PR-04 from its actual remaining boundaries: define and enforce the supported shell/OS confinement contract; retain attributable escalation requests and decisions; prevent trusted host plugins from silently widening a Routine; and exercise direct, delegated, browser and plugin actions through the real dispatch path. Keep the requirement **In progress** until those boundaries and their denial/retry/restart evidence are complete.
+
+## ChatGPT 2026-09-14 16:54 America/Toronto - Stable Routine creation replay checkpoint
+
+Product commit `d13a8757bc` is pushed to `origin/main`. The extension now sends the reviewed forecast UUID as the Routine creation ID. `TaskCreatePayload` accepts that optional UUID, the generated SDK serializes it, and the handler calls the existing replay-aware provisioning boundary when it is present. `RayaTask.create` returns an existing worker only after drafting the requested definition, replacing only its generated timestamps with the retained values, schema-normalizing optional fields and proving deep equality. Any changed retry with the same ID fails as a conflict. Callers without an ID keep the original random-ID behavior.
+
+The extension permits a submitted preview to retry only for `routineCreate`; schedule edits remain single-submit. It repeats the same forecast identity and rejects any server response with a different ID. The focused transport test intentionally drops the first creation response and proves the second POST uses the identical body and saves one stable identity. The real server test restarts the Effect service layer between identical POSTs, proves exact replay, rejects a changed objective and finds exactly one worker in the durable roster. Preserve these failure assertions.
+
+Verification receipt:
+
+- `bun test ./test/kilocode/server/routine-forecast.test.ts` from `packages/opencode`: 12 pass / 163 assertions.
+- `bun test ./tests/unit/routines-forecast.test.ts ./tests/unit/routines-output.test.ts` from `packages/kilo-vscode`: 7 pass / 47 assertions.
+- `routine-management-tool.test.ts` was also retained green at 5 pass / 76 assertions before this checkpoint, covering chat-created organizations, subordinate creation and delegation replay.
+- One-thread scoped Oxlint: zero errors; only older warnings elsewhere in the touched files.
+- Prettier, Knip, OpenCode annotation, Effect Promise-facade, Markdown-table and diff guards: pass.
+- No CLI-wide typecheck, root test/lint, broad Turbo command, repository-wide `tsgolint` or parallel heavy process ran.
+
+Next exact steps:
+
+1. Include `b83a561993` and `d13a8757bc` in one authorized low-memory snapshot. From `packages/kilo-vscode` only, run `$env:RAYA_LOW_MEMORY='1'; bun run snapshot:install`. Keep it as the only heavy process.
+2. Record the installed extension version, source commit, retained VSIX path/size/SHA-256, embedded CLI size/SHA-256, cleanup result, free disk and active vault pointer in both documents. The open host may remain on the older pointer until reload; do not claim active-host acceptance from package installation.
+3. After reload, create a manual Routine from a fresh preview and verify the roster shows the exact forecast identity. If the installed harness can drop the first HTTP response without changing the request, retry and verify one worker. If it cannot, retain the real HTTP restart test as automated evidence and label installed response-loss acceptance pending.
+4. Continue the lowest-human-dependency remaining requirement, but address its highest-risk denial/interruption/restart boundary first. For EN-02/OVR-05, the remaining work is execution fencing, multi-store transaction review and representative organization execution. For PR-04, continue shell/OS confinement, durable escalation decisions, trusted host-plugin confinement and real dispatch acceptance.
+
+The UI preview token remains process-local for ten minutes. A host reload does not reconstruct or resubmit that intent. If storage committed before the crash, the durable roster shows the worker after reload; if storage did not commit, the user must create a fresh preview. Do not describe this as durable client-intent replay. It is server-side stable identity plus same-process uncertain-response retry, which prevents duplicate creation without inventing a result.

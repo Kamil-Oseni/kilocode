@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { stat } from "node:fs/promises"
 import { assertPath, current } from "./context"
-import { writeChecked as write } from "./checked-write"
+import { validateChecked as validate, writeChecked as write } from "./checked-write"
 import { currentRunner } from "./mutation"
 import type { Identity } from "./checked-write"
 
@@ -13,6 +13,12 @@ export const inspect = (path: string) =>
       const info = await stat(path, { bigint: true })
       return { dev: info.dev.toString(), ino: info.ino.toString() }
     },
+    catch: wrap,
+  })
+
+export const validateFile = (path: string, identity: Identity, sha256: string) =>
+  Effect.tryPromise({
+    try: () => validate(path, identity, sha256),
     catch: wrap,
   })
 

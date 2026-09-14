@@ -1,7 +1,14 @@
 import { dirname, extname } from "node:path"
 import { createHash } from "node:crypto"
 import { Effect } from "effect"
-import { batchMutations, enabled, ensureDirectory, inspectFile, writeChecked as checkedWrite } from "@kilocode/sandbox"
+import {
+  batchMutations,
+  enabled,
+  ensureDirectory,
+  inspectFile,
+  validateFile,
+  writeChecked as checkedWrite,
+} from "@kilocode/sandbox"
 import type { FSUtil } from "@opencode-ai/core/fs-util"
 import * as Encoding from "../encoding"
 import * as Bom from "@/util/bom"
@@ -22,6 +29,9 @@ export const read = (fs: FSUtil.Interface, path: string) =>
   })
 
 export const identity = (path: string) => inspectFile(path).pipe(Effect.mapError(wrap))
+
+export const validate = (path: string, proof: { readonly dev: string; readonly ino: string }, sha256: string) =>
+  validateFile(path, proof, sha256).pipe(Effect.mapError(wrap))
 
 export const write = (fs: FSUtil.Interface, path: string, text: string, encoding: string = Encoding.DEFAULT) =>
   Effect.gen(function* () {

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { open } from "node:fs/promises"
+import { open, type FileHandle } from "node:fs/promises"
 
 export interface Identity {
   readonly dev: string
@@ -14,16 +14,29 @@ function stale(path: string, message = "File target or content changed after app
   })
 }
 
+async function verify(file: FileHandle, path: string, identity: Identity, sha256: string) {
+  const info = await file.stat({ bigint: true })
+  if (info.dev.toString() !== identity.dev || info.ino.toString() !== identity.ino) throw stale(path)
+  if (info.nlink !== 1n) {
+    throw stale(path, "Hard-linked files cannot be changed by an agent. Replace it with an independent copy first.")
+  }
+  const current = await file.readFile()
+  if (createHash("sha256").update(current).digest("hex") !== sha256) throw stale(path)
+}
+
+export async function validateChecked(path: string, identity: Identity, sha256: string) {
+  const file = await open(path, "r")
+  try {
+    await verify(file, path, identity, sha256)
+  } finally {
+    await file.close()
+  }
+}
+
 export async function writeChecked(path: string, data: Uint8Array, identity: Identity, sha256: string) {
   const file = await open(path, "r+")
   try {
-    const info = await file.stat({ bigint: true })
-    if (info.dev.toString() !== identity.dev || info.ino.toString() !== identity.ino) throw stale(path)
-    if (info.nlink !== 1n) {
-      throw stale(path, "Hard-linked files cannot be changed by an agent. Replace it with an independent copy first.")
-    }
-    const current = await file.readFile()
-    if (createHash("sha256").update(current).digest("hex") !== sha256) throw stale(path)
+    await verify(file, path, identity, sha256)
     await file.truncate(0)
     for (let offset = 0; offset < data.byteLength; ) {
       const result = await file.write(data, offset, data.byteLength - offset, offset)

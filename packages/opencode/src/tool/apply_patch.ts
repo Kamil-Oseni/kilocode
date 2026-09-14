@@ -72,8 +72,30 @@ export const ApplyPatchTool = Tool.define(
         deletions: number
         bom: boolean
         encoding: string // kilocode_change - preserved per-file encoding
+        // kilocode_change start - bind every reviewed existing pathname to its exact bytes
+        proof?: { readonly dev: string; readonly ino: string }
+        sha256?: string
+        destinationProof?: { readonly dev: string; readonly ino: string }
+        destinationSha256?: string
+        destinationExists?: boolean
+        // kilocode_change end
       }> = []
       const targets = new Map<string, string>() // kilocode_change - retain each canonical target through approval
+      const owners = new Map<string, string>() // kilocode_change - one mutation per canonical pathname
+
+      // kilocode_change start - ambiguous patches can otherwise invalidate their own review proofs midway through commit
+      const reserve = (target: string, label: string) =>
+        Effect.gen(function* () {
+          const owner = owners.get(target)
+          if (!owner) {
+            owners.set(target, label)
+            return
+          }
+          return yield* Effect.fail(
+            new Error(`apply_patch verification failed: ${label} resolves to the same target as ${owner}`),
+          )
+        })
+      // kilocode_change end
 
       let totalDiff = ""
 
@@ -82,11 +104,22 @@ export const ApplyPatchTool = Tool.define(
         assertMutablePath(filePath) // kilocode_change
         const target = yield* RayaPath.canonical(afs, filePath) // kilocode_change
         assertMutablePath(target) // kilocode_change - path aliases cannot bypass protected worktree boundaries
+        yield* reserve(target, hunk.path) // kilocode_change
         targets.set(filePath, target) // kilocode_change
         yield* assertExternalDirectoryEffect(ctx, target) // kilocode_change - inspect the target behind a path alias
 
         switch (hunk.type) {
           case "add": {
+            // kilocode_change start - adding over an existing file is still an overwrite and needs an exact review proof
+            const stats = yield* afs.stat(target).pipe(Effect.catch(() => Effect.succeed(undefined)))
+            if (stats?.type === "Directory") {
+              return yield* Effect.fail(
+                new Error(`apply_patch verification failed: Cannot add over directory: ${filePath}`),
+              )
+            }
+            const prior = stats ? yield* EncodedIO.read(afs, target) : undefined
+            const proof = stats ? yield* EncodedIO.identity(target) : undefined
+            // kilocode_change end
             const oldContent = ""
             const newContent =
               hunk.contents.length === 0 || hunk.contents.endsWith("\n") ? hunk.contents : `${hunk.contents}\n`
@@ -110,6 +143,9 @@ export const ApplyPatchTool = Tool.define(
               deletions,
               bom: next.bom,
               encoding: "utf-8", // kilocode_change - new files default to utf-8
+              proof, // kilocode_change
+              sha256: prior?.sha256, // kilocode_change
+              destinationExists: Boolean(stats), // kilocode_change
             })
 
             totalDiff += diff + "\n"
@@ -128,7 +164,7 @@ export const ApplyPatchTool = Tool.define(
             // kilocode_change start - encoding-aware read so non-UTF-8 files decode without
             // mojibake; the resulting diff, additions/deletions counts, and permission-prompt
             // metadata shown to the user must reflect the real file contents.
-            const read = yield* EncodedIO.read(afs, filePath).pipe(
+            const read = yield* EncodedIO.read(afs, target).pipe(
               Effect.catch((error) =>
                 Effect.fail(
                   new Error(
@@ -138,6 +174,7 @@ export const ApplyPatchTool = Tool.define(
               ),
             )
             const source = Bom.split(read.text)
+            const proof = yield* EncodedIO.identity(target) // kilocode_change - identity pairs with reviewed bytes
             // kilocode_change end
             const oldContent = source.text
             let newContent = oldContent
@@ -171,6 +208,7 @@ export const ApplyPatchTool = Tool.define(
             if (movePath) {
               const target = yield* RayaPath.canonical(afs, movePath)
               assertMutablePath(target)
+              yield* reserve(target, hunk.move_path!)
               targets.set(movePath, target)
               yield* assertExternalDirectoryEffect(ctx, target)
             }
@@ -187,7 +225,28 @@ export const ApplyPatchTool = Tool.define(
               deletions,
               bom,
               encoding, // kilocode_change
+              proof, // kilocode_change
+              sha256: read.sha256, // kilocode_change
             })
+
+            // kilocode_change start - a move may overwrite a reviewed destination, so prove that pathname too
+            if (movePath) {
+              const destination = targets.get(movePath)!
+              const stats = yield* afs.stat(destination).pipe(Effect.catch(() => Effect.succeed(undefined)))
+              if (stats?.type === "Directory") {
+                return yield* Effect.fail(
+                  new Error(`apply_patch verification failed: Cannot move over directory: ${movePath}`),
+                )
+              }
+              const change = fileChanges.at(-1)!
+              change.destinationExists = Boolean(stats)
+              if (stats) {
+                const prior = yield* EncodedIO.read(afs, destination)
+                change.destinationProof = yield* EncodedIO.identity(destination)
+                change.destinationSha256 = prior.sha256
+              }
+            }
+            // kilocode_change end
 
             totalDiff += diff + "\n"
             break
@@ -195,7 +254,7 @@ export const ApplyPatchTool = Tool.define(
 
           case "delete": {
             // kilocode_change start - encoding-aware read so non-UTF-8 files decode without corruption
-            const deleteRead = yield* EncodedIO.read(afs, filePath).pipe(
+            const deleteRead = yield* EncodedIO.read(afs, target).pipe(
               Effect.catch((error) =>
                 Effect.fail(
                   new Error(
@@ -206,6 +265,7 @@ export const ApplyPatchTool = Tool.define(
             )
             const contentToDelete = deleteRead.text
             const source = Bom.split(contentToDelete)
+            const proof = yield* EncodedIO.identity(target) // kilocode_change - deletion is bound to reviewed identity
             // kilocode_change end
             const deleteDiff = trimDiff(createTwoFilesPatch(filePath, filePath, contentToDelete, ""))
 
@@ -221,6 +281,8 @@ export const ApplyPatchTool = Tool.define(
               deletions,
               bom: source.bom,
               encoding: deleteRead.encoding, // kilocode_change
+              proof, // kilocode_change
+              sha256: deleteRead.sha256, // kilocode_change
             })
 
             totalDiff += deleteDiff + "\n"
@@ -258,7 +320,35 @@ export const ApplyPatchTool = Tool.define(
         },
       })
 
-      for (const [file, target] of targets) yield* RayaPath.check(afs, file, target) // kilocode_change
+      // kilocode_change start - format every proposed result away from reviewed paths before any target mutation
+      for (const change of fileChanges) {
+        if (change.type === "delete") continue
+        const target = targets.get(change.movePath ?? change.filePath)!
+        if (!(yield* format.available(target))) continue
+        change.newContent = yield* EncodedIO.stage(
+          afs,
+          target,
+          Bom.join(change.newContent, change.bom),
+          change.encoding,
+          format.file,
+        )
+      }
+
+      // Validate the complete reviewed set after staging and before the first mutation. A stale later
+      // file therefore cannot leave earlier files partially updated.
+      for (const [file, target] of targets) yield* RayaPath.check(afs, file, target)
+      for (const change of fileChanges) {
+        const source = targets.get(change.filePath)!
+        if (change.proof && change.sha256) yield* EncodedIO.validate(source, change.proof, change.sha256)
+        const destination = change.movePath ? targets.get(change.movePath)! : source
+        if (change.destinationProof && change.destinationSha256) {
+          yield* EncodedIO.validate(destination, change.destinationProof, change.destinationSha256)
+        }
+        if (change.destinationExists === false && (yield* afs.exists(destination))) {
+          return yield* Effect.fail(new Error("File target changed after approval."))
+        }
+      }
+      // kilocode_change end
 
       // Apply the changes
       const updates: Array<{ file: string; event: "add" | "change" | "unlink" }> = []
@@ -268,35 +358,74 @@ export const ApplyPatchTool = Tool.define(
         switch (change.type) {
           case "add":
             // Create parent directories (recursive: true is safe on existing/root dirs)
-            yield* EncodedIO.write(afs, change.filePath, Bom.join(change.newContent, change.bom), change.encoding) // kilocode_change - encoding-aware write (mkdirs) replaces afs.writeWithDirs
+            // kilocode_change start - overwrite only the exact existing file that was reviewed
+            if (change.proof && change.sha256) {
+              yield* EncodedIO.checked(
+                targets.get(change.filePath)!,
+                Bom.join(change.newContent, change.bom),
+                change.encoding,
+                change.proof,
+                change.sha256,
+              )
+            } else {
+              yield* EncodedIO.write(
+                afs,
+                targets.get(change.filePath)!,
+                Bom.join(change.newContent, change.bom),
+                change.encoding,
+              )
+            }
+            // kilocode_change end
             updates.push({ file: change.filePath, event: "add" })
             break
 
           case "update":
-            yield* EncodedIO.write(afs, change.filePath, Bom.join(change.newContent, change.bom), change.encoding) // kilocode_change - encoding-aware write replaces afs.writeWithDirs
+            yield* EncodedIO.checked(
+              // kilocode_change - refuse stale content, replacements, and hard links
+              targets.get(change.filePath)!,
+              Bom.join(change.newContent, change.bom),
+              change.encoding,
+              change.proof!,
+              change.sha256!,
+            )
             updates.push({ file: change.filePath, event: "change" })
             break
 
           case "move":
             if (change.movePath) {
               // Create parent directories (recursive: true is safe on existing/root dirs)
-              yield* EncodedIO.write(afs, change.movePath, Bom.join(change.newContent, change.bom), change.encoding) // kilocode_change - encoding-aware write (mkdirs) replaces afs.writeWithDirs
-              yield* afs.remove(change.filePath)
+              // kilocode_change start - bind both ends of an overwrite move to reviewed bytes
+              const destination = targets.get(change.movePath)!
+              if (change.destinationProof && change.destinationSha256) {
+                yield* EncodedIO.checked(
+                  destination,
+                  Bom.join(change.newContent, change.bom),
+                  change.encoding,
+                  change.destinationProof,
+                  change.destinationSha256,
+                )
+              } else {
+                yield* EncodedIO.write(afs, destination, Bom.join(change.newContent, change.bom), change.encoding)
+              }
+              const source = targets.get(change.filePath)!
+              yield* EncodedIO.validate(source, change.proof!, change.sha256!)
+              yield* afs.remove(source)
+              // kilocode_change end
               updates.push({ file: change.filePath, event: "unlink" })
               updates.push({ file: change.movePath, event: "add" })
             }
             break
 
           case "delete":
-            yield* afs.remove(change.filePath)
+            // kilocode_change start - recheck immediately before the pathname removal
+            yield* EncodedIO.validate(targets.get(change.filePath)!, change.proof!, change.sha256!)
+            yield* afs.remove(targets.get(change.filePath)!)
+            // kilocode_change end
             updates.push({ file: change.filePath, event: "unlink" })
             break
         }
 
         if (edited) {
-          if (yield* format.file(edited)) {
-            yield* EncodedIO.sync(afs, edited, change.bom, change.encoding)
-          }
           yield* events.publish(FileSystem.Event.Edited, { file: edited })
         }
       }

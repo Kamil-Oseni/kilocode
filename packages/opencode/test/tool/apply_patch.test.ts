@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
 import path from "path"
+import { tmpdir } from "os" // kilocode_change
 import * as fs from "fs/promises"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Cause, Effect, Exit, Layer } from "effect"
@@ -75,6 +76,7 @@ const makeCtx = () => {
 const readText = (filepath: string) => Effect.promise(() => fs.readFile(filepath, "utf-8"))
 const writeText = (filepath: string, content: string) => Effect.promise(() => fs.writeFile(filepath, content, "utf-8"))
 const makeDir = (dir: string) => Effect.promise(() => fs.mkdir(dir, { recursive: true }))
+const marker = path.join(tmpdir(), `raya-apply-patch-format-${process.pid}`) // kilocode_change
 
 const expectFailure = <A, E, R>(effect: Effect.Effect<A, E, R>, message?: string) =>
   Effect.gen(function* () {
@@ -380,6 +382,180 @@ describe("tool.apply_patch freeform", () => {
       yield* expectReadFailure(path.join(test.directory, "created.txt"))
     }),
   )
+
+  // kilocode_change start - adverse review-boundary coverage
+  it.instance("leaves every file unchanged when permission is denied", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const target = path.join(test.directory, "denied.txt")
+      yield* writeText(target, "before\n")
+      const { ctx } = makeCtx()
+      const denied = {
+        ...ctx,
+        ask: () => Effect.fail(new Error("permission denied")),
+      }
+      const patchText = "*** Begin Patch\n*** Update File: denied.txt\n@@\n-before\n+after\n*** End Patch"
+
+      yield* expectFailure(execute({ patchText }, denied), "permission denied")
+      expect(yield* readText(target)).toBe("before\n")
+    }),
+  )
+
+  it.instance("rejects a stale later file before mutating an earlier file", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const first = path.join(test.directory, "first.txt")
+      const second = path.join(test.directory, "second.txt")
+      yield* writeText(first, "first before\n")
+      yield* writeText(second, "second before\n")
+      const { ctx } = makeCtx()
+      const changed = {
+        ...ctx,
+        ask: () => writeText(second, "newer user edit\n"),
+      }
+      const patchText =
+        "*** Begin Patch\n*** Update File: first.txt\n@@\n-first before\n+first after\n*** Update File: second.txt\n@@\n-second before\n+second after\n*** End Patch"
+
+      yield* expectFailure(execute({ patchText }, changed), "changed after approval")
+      expect(yield* readText(first)).toBe("first before\n")
+      expect(yield* readText(second)).toBe("newer user edit\n")
+    }),
+  )
+
+  it.instance("preserves a file created at an add target while approval is pending", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const target = path.join(test.directory, "claimed.txt")
+      const { ctx } = makeCtx()
+      const claimed = {
+        ...ctx,
+        ask: () => writeText(target, "user content\n"),
+      }
+      const patchText = "*** Begin Patch\n*** Add File: claimed.txt\n+agent content\n*** End Patch"
+
+      yield* expectFailure(execute({ patchText }, claimed), "target changed after approval")
+      expect(yield* readText(target)).toBe("user content\n")
+    }),
+  )
+
+  it.instance("preserves a changed move destination and its source", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const source = path.join(test.directory, "source.txt")
+      const destination = path.join(test.directory, "destination.txt")
+      yield* writeText(source, "source before\n")
+      yield* writeText(destination, "destination before\n")
+      const { ctx } = makeCtx()
+      const changed = {
+        ...ctx,
+        ask: () => writeText(destination, "newer destination\n"),
+      }
+      const patchText =
+        "*** Begin Patch\n*** Update File: source.txt\n*** Move to: destination.txt\n@@\n-source before\n+source after\n*** End Patch"
+
+      yield* expectFailure(execute({ patchText }, changed), "changed after approval")
+      expect(yield* readText(source)).toBe("source before\n")
+      expect(yield* readText(destination)).toBe("newer destination\n")
+    }),
+  )
+
+  it.instance("refuses a hard-linked update without changing either name", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const target = path.join(test.directory, "linked.txt")
+      const alias = path.join(test.directory, "alias.txt")
+      yield* writeText(target, "before\n")
+      yield* Effect.promise(() => fs.link(target, alias))
+      const { ctx } = makeCtx()
+      const patchText = "*** Begin Patch\n*** Update File: linked.txt\n@@\n-before\n+after\n*** End Patch"
+
+      yield* expectFailure(execute({ patchText }, ctx), "Hard-linked files")
+      expect(yield* readText(target)).toBe("before\n")
+      expect(yield* readText(alias)).toBe("before\n")
+    }),
+  )
+
+  it.instance("rejects duplicate canonical targets before asking for permission", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const target = path.join(test.directory, "duplicate.txt")
+      yield* writeText(target, "before\n")
+      const { ctx, calls } = makeCtx()
+      const patchText =
+        "*** Begin Patch\n*** Update File: duplicate.txt\n@@\n-before\n+after\n*** Delete File: duplicate.txt\n*** End Patch"
+
+      yield* expectFailure(execute({ patchText }, ctx), "resolves to the same target")
+      expect(calls).toHaveLength(0)
+      expect(yield* readText(target)).toBe("before\n")
+    }),
+  )
+
+  it.instance(
+    "formats a private staged copy and removes it before committing",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const target = path.join(test.directory, "formatted.staged")
+        yield* writeText(target, "before\n")
+        yield* Effect.promise(() => fs.rm(marker, { force: true }))
+        const { ctx } = makeCtx()
+        const patchText = "*** Begin Patch\n*** Update File: formatted.staged\n@@\n-before\n+after\n*** End Patch"
+
+        yield* execute({ patchText }, ctx)
+        expect(yield* readText(target)).toBe("after\n formatted")
+        const staged = yield* readText(marker)
+        expect(staged).toContain("raya-format-")
+        expect(staged).not.toBe(target)
+        expect(yield* Effect.promise(() => Bun.file(staged).exists())).toBe(false)
+        yield* Effect.promise(() => fs.rm(marker, { force: true }))
+      }),
+    {
+      config: {
+        formatter: {
+          staged: {
+            extensions: [".staged"],
+            command: [
+              "node",
+              "-e",
+              "const fs = require('fs'); const file = process.argv[1]; fs.writeFileSync(process.argv[2], file); fs.appendFileSync(file, ' formatted')",
+              "$FILE",
+              marker,
+            ],
+          },
+        },
+      },
+    },
+  )
+
+  it.instance(
+    "preserves every reviewed file when a formatter removes its staged input",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const first = path.join(test.directory, "first.txt")
+        const target = path.join(test.directory, "broken.deleted-stage")
+        yield* writeText(first, "first before\n")
+        yield* writeText(target, "target before\n")
+        const { ctx } = makeCtx()
+        const patchText =
+          "*** Begin Patch\n*** Update File: first.txt\n@@\n-first before\n+first after\n*** Update File: broken.deleted-stage\n@@\n-target before\n+target after\n*** End Patch"
+
+        yield* expectFailure(execute({ patchText }, ctx))
+        expect(yield* readText(first)).toBe("first before\n")
+        expect(yield* readText(target)).toBe("target before\n")
+      }),
+    {
+      config: {
+        formatter: {
+          staged: {
+            extensions: [".deleted-stage"],
+            command: ["node", "-e", "require('fs').unlinkSync(process.argv[1])", "$FILE"],
+          },
+        },
+      },
+    },
+  )
+  // kilocode_change end
 
   it.instance("supports end of file anchor", () =>
     Effect.gen(function* () {

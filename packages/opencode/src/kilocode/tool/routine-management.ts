@@ -520,7 +520,7 @@ export function routineManagementTools(input: {
                     })
                   return Effect.gen(function* () {
                     for (const worker of plan.workers)
-                      if (worker.kind === "new") yield* tasks.activate(worker.create, worker.id)
+                      if (worker.kind === "new") yield* tasks.activate(worker.create, worker.id, plan.id)
                     return organizationResult(item)
                   })
                 }),
@@ -533,11 +533,11 @@ export function routineManagementTools(input: {
                   yield* tasks.get(worker.id)
                   continue
                 }
-                yield* tasks.stage(worker.create, worker.id)
+                yield* tasks.stage(worker.create, worker.id, plan.id)
               }
               const item = yield* organizations.provision(plan.create, plan.id)
               for (const worker of plan.workers)
-                if (worker.kind === "new") yield* tasks.activate(worker.create, worker.id)
+                if (worker.kind === "new") yield* tasks.activate(worker.create, worker.id, plan.id)
               return organizationResult(item)
             }),
         }).pipe(
@@ -685,7 +685,7 @@ export function routineManagementTools(input: {
                   delegations: plan.delegations,
                 })
               ) {
-                const agent = yield* tasks.activate(plan.create, plan.childID)
+                const agent = yield* tasks.activate(plan.create, plan.childID, plan.organizationID)
                 if (matchesWorker(agent, plan.create)) {
                   yield* announce(organization, agent, plan)
                   return subordinateResult(organization, agent, plan.parentID)
@@ -712,7 +712,7 @@ export function routineManagementTools(input: {
                 metadata: params,
               })
               .pipe(
-                Effect.andThen(tasks.stage(plan.create, plan.childID)),
+                Effect.andThen(tasks.stage(plan.create, plan.childID, plan.organizationID)),
                 Effect.andThen(
                   organizations.update(plan.organizationID, {
                     expectedRevision: plan.expectedRevision,
@@ -721,7 +721,7 @@ export function routineManagementTools(input: {
                   }),
                 ),
                 Effect.flatMap((organization) =>
-                  tasks.activate(plan.create, plan.childID).pipe(
+                  tasks.activate(plan.create, plan.childID, plan.organizationID).pipe(
                     Effect.tap((active) => announce(organization, active, plan)),
                     Effect.map((active) => subordinateResult(organization, active, plan.parentID)),
                   ),

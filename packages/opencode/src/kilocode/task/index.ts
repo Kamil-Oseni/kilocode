@@ -280,8 +280,17 @@ export namespace RayaTask {
   const roster = ["raya", "agent"]
   const history = (id: string) => ["raya", "agent-runs", id]
   const memory = (id: string) => ["raya", "agent-memory", id]
+  const staging = (id: string) => ["raya", "agent-stage", id]
   const agents = Schema.decodeUnknownEffect(Schema.Array(Agent))
   const runs = Schema.decodeUnknownEffect(Schema.Array(Run))
+  const Stage = Schema.Struct({
+    version: Schema.Literal(1),
+    agentID: Schema.String,
+    organizationID: Schema.String,
+    definition: Agent,
+    owner: Schema.Struct({ host: Schema.String, pid: Schema.Int }),
+    createdAt: Timestamp,
+  })
 
   export function pending(run?: Run) {
     return run?.status === "running" || (run?.status === "blocked" && run.blockedReason === "waiting on you")
@@ -806,35 +815,93 @@ export namespace RayaTask {
       return agent
     })
 
-    const stage = Effect.fn("RayaTask.stage")(function* (input: Create, id: string) {
-      yield* draft(input, id)
+    const receipt = Effect.fn("RayaTask.stageReceipt")(function* (id: string) {
+      const raw = yield* deps.storage.read<unknown>(staging(id)).pipe(
+        Effect.catchIf(
+          (err) => Storage.NotFoundError.isInstance(err),
+          () => Effect.succeed(undefined),
+        ),
+        Effect.orDie,
+      )
+      if (raw === undefined) return undefined
+      return yield* Schema.decodeUnknownEffect(Stage)(raw).pipe(
+        Effect.mapError(
+          () => new GuardError({ kind: "conflict", message: "This routine's staging receipt is unreadable." }),
+        ),
+      )
+    })
+
+    const stage = Effect.fn("RayaTask.stage")(function* (input: Create, id: string, organizationID: string) {
       const paused = { ...input, enabled: false }
+      const saved = yield* Effect.gen(function* () {
+        const prior = yield* receipt(id)
+        if (prior) {
+          if (prior.organizationID === organizationID && (yield* equivalent(prior.definition, paused, id))) return prior
+          return yield* new GuardError({ kind: "conflict", message: "This routine belongs to another staging plan." })
+        }
+        const agent = yield* draft(paused, id)
+        const value = {
+          version: 1 as const,
+          agentID: id,
+          organizationID,
+          definition: agent,
+          owner: owner(),
+          createdAt: Date.now(),
+        }
+        if (yield* deps.storage.create(staging(id), value).pipe(Effect.orDie)) return value
+        const current = yield* receipt(id)
+        if (current?.organizationID === organizationID && (yield* equivalent(current.definition, paused, id)))
+          return current
+        return yield* new GuardError({ kind: "conflict", message: "This routine belongs to another staging plan." })
+      })
+      const agent = saved.definition
       const items = yield* list()
       const existing = items.find((item) => item.id === id)
       if (existing) {
-        if ((yield* equivalent(existing, paused, id)) || (yield* equivalent(existing, input, id))) return existing
+        if (isDeepStrictEqual(existing, agent) || (yield* equivalent(existing, input, id))) return existing
         return yield* new GuardError({ kind: "conflict", message: "A routine already uses this ID." })
       }
-      const agent = yield* draft(paused, id)
       yield* save([...items, agent])
       return agent
     })
 
-    const activate = Effect.fn("RayaTask.activate")(function* (input: Create, id: string) {
+    const activate = Effect.fn("RayaTask.activate")(function* (input: Create, id: string, organizationID: string) {
       const items = yield* list()
       const index = items.findIndex((item) => item.id === id)
       if (index < 0) return yield* new NotFoundError({ message: "Agent not found" })
       const existing = items[index]
-      if (yield* equivalent(existing, input, id)) return existing
-      if (!(input.enabled ?? true) || !(yield* equivalent(existing, { ...input, enabled: false }, id)))
+      if (!deps.database)
+        return yield* new GuardError({ kind: "unavailable", message: "The organization database is unavailable." })
+      const { RayaTaskOrganization } = yield* Effect.promise(() => import("./organization"))
+      const organization = yield* RayaTaskOrganization.make(deps.database, { get }, deps.storage)
+        .get(organizationID)
+        .pipe(
+          Effect.catchTag("RayaTaskOrganization.NotFound", () =>
+            Effect.fail(new GuardError({ kind: "conflict", message: "The staged routine's organization is missing." })),
+          ),
+        )
+      if (!organization.members.some((item) => item.agentID === id))
+        return yield* new GuardError({ kind: "conflict", message: "The staged routine is not in its organization." })
+      const prior = yield* receipt(id)
+      if (!prior) {
+        if (yield* equivalent(existing, input, id)) return existing
+        return yield* new GuardError({ kind: "conflict", message: "This routine's staging receipt is missing." })
+      }
+      if (
+        prior.organizationID !== organizationID ||
+        !(yield* equivalent(prior.definition, { ...input, enabled: false }, id))
+      )
+        return yield* new GuardError({ kind: "conflict", message: "This routine belongs to another staging plan." })
+      if (!(yield* equivalent(existing, { ...input, enabled: false }, id)) && !(yield* equivalent(existing, input, id)))
         return yield* new GuardError({
           kind: "conflict",
           message: "This provisioned routine changed before activation.",
         })
-      const next: Agent = { ...existing, enabled: true, updatedAt: Date.now() }
+      const next: Agent = (input.enabled ?? true) ? { ...existing, enabled: true, updatedAt: Date.now() } : existing
       const copy = [...items]
       copy[index] = next
       yield* save(copy)
+      yield* deps.storage.remove(staging(id)).pipe(Effect.orDie)
       return next
     })
 
@@ -1266,8 +1333,10 @@ export namespace RayaTask {
       check: (input: Create) => draft(input, crypto.randomUUID()).pipe(Effect.asVoid),
       create: (input: Create) => mutate(deps.storage, create(input)),
       provision: (input: Create, id: string) => mutate(deps.storage, create(input, id, true)),
-      stage: (input: Create, id: string) => mutate(deps.storage, stage(input, id)),
-      activate: (input: Create, id: string) => mutate(deps.storage, activate(input, id)),
+      stage: (input: Create, id: string, organizationID: string) =>
+        mutate(deps.storage, stage(input, id, organizationID)),
+      activate: (input: Create, id: string, organizationID: string) =>
+        mutate(deps.storage, activate(input, id, organizationID)),
       update: (...args: Parameters<typeof update>) => mutate(deps.storage, update(...args)),
       authority: (...args: Parameters<typeof authority>) => mutate(deps.storage, authority(...args)),
       remove: (id: string) => mutate(deps.storage, removeOwned(id)),

@@ -115,9 +115,40 @@ it.live(
         const staged = yield* RayaTask.make({ storage, database }).list()
         expect(staged).toHaveLength(1)
         expect(staged[0]?.enabled).toBe(false)
+        const worker = staged[0]
+        if (!worker) throw new Error("staged worker was not found")
+        const receipts = yield* storage.list(["raya", "agent-stage"])
+        expect(receipts).toHaveLength(2)
+        const binding = yield* storage.read<{ organizationID: string }>(["raya", "agent-stage", worker.id])
+        expect(binding).toMatchObject({
+          version: 1,
+          agentID: worker.id,
+          definition: { enabled: false },
+        })
         expect(
           (yield* RayaTaskOrganization.make(database, RayaTask.make({ storage, database }), storage).list()).items,
         ).toHaveLength(0)
+        const unbound = yield* RayaTask.make({ storage, database })
+          .activate(
+            {
+              name: worker.name,
+              role: worker.role,
+              objective: worker.objective,
+              output: worker.output,
+              capabilities: worker.capabilities,
+              memoryScope: worker.memoryScope,
+              schedule: worker.schedule,
+              enabled: true,
+              plan: worker.plan,
+              access: worker.access,
+              tools: worker.tools,
+            },
+            worker.id,
+            binding.organizationID,
+          )
+          .pipe(Effect.exit)
+        expect(Exit.isFailure(unbound)).toBe(true)
+        expect((yield* RayaTask.make({ storage, database }).get(worker.id)).enabled).toBe(false)
 
         const tools = routineManagementTools({ database, storage, sessions })
         const retry = yield* (yield* tools.create).init()
@@ -137,6 +168,7 @@ it.live(
           ["read", "browser_*"],
         ])
         expect(organizations.items).toHaveLength(1)
+        expect(yield* storage.list(["raya", "agent-stage"])).toHaveLength(0)
         expect(organizations.items[0]?.delegations).toEqual([
           { senderID: agents[0]?.id, recipientID: agents[1]?.id, position: 0 },
         ])
@@ -250,6 +282,7 @@ it.live(
         const staged = yield* tasks.list()
         expect(staged).toHaveLength(2)
         expect(staged.every((item) => !item.enabled)).toBe(true)
+        expect(yield* storage.list(["raya", "agent-stage"])).toHaveLength(2)
         expect((yield* tasks.preview(Date.now())).every((item) => item.nextRun === undefined)).toBe(true)
         expect((yield* RayaTaskOrganization.make(database, tasks, storage).list()).items).toHaveLength(1)
 
@@ -264,6 +297,7 @@ it.live(
         })
         expect(refused.output).toContain("changed before activation")
         expect((yield* tasks.list()).every((item) => !item.enabled)).toBe(true)
+        expect(yield* storage.list(["raya", "agent-stage"])).toHaveLength(2)
         yield* tasks.update(chief.id, { objective: "Coordinate the close" })
 
         const recovered = yield* retry.execute(params, {
@@ -274,6 +308,7 @@ it.live(
         const active = yield* tasks.list()
         expect(active).toHaveLength(2)
         expect(active.every((item) => item.enabled)).toBe(true)
+        expect(yield* storage.list(["raya", "agent-stage"])).toHaveLength(0)
         expect((yield* tasks.preview(Date.now())).find((item) => item.name === "Books")?.nextRun).toBeNumber()
       }).pipe(
         Effect.provide(

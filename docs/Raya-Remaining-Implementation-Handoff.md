@@ -4435,3 +4435,18 @@ Exact retained evidence:
 The active vault pointer is still the previous digest `69aff4b80dfdb67185b60348dd805ea99e6faa7ea03d4d1cbb9096e753f2963d`, because the open VS Code extension host has not reloaded. After reload, require the pointer `3029a750d9e42627a3a11fe5b6005d0c8b083c872ad5904b22ef18be9c6dfdf0` before installed-host acceptance. Do not infer activation from successful installation. This package contains product commits `b83a561993` and `d13a8757bc`.
 
 After activation, verify a new manual Routine persists across a host reload and appears once with the reviewed identity. Installed response-loss injection remains pending unless the harness can drop the reply while preserving the exact request and forecast UUID. Continue autonomous repository-level work without waiting for that manual step.
+
+## ChatGPT 2026-09-14 17:07 America/Toronto - Exact organization provisioning replay
+
+Product commit `2701c802a5` is pushed to `origin/main` and is newer than installed source `1a02f8aea4`. `RayaTaskOrganization.provision` now treats its deterministic ID as an idempotency key bound to the complete normalized revision-one company definition. It validates and normalizes members and delegation edges, reconstructs the expected company with only the original timestamps retained, and returns the saved organization only on deep equality. A changed retry returns `RayaTaskOrganization.Conflict` and leaves the original company untouched. A later edited or archived revision cannot be returned as if original provisioning succeeded.
+
+Preserve this evidence:
+
+- `bun test ./test/kilocode/task/organization.test.ts`: 4 pass / 46 assertions. The new case creates through one service object, replays through a recreated service object, rejects a changed purpose with the exact typed conflict, preserves the original and finds one matching company.
+- `bun test ./test/kilocode/routine-management-tool.test.ts`: 5 pass / 76 assertions. This retains the real main-chat lost-result, subordinate, delegation, update and service-restart matrix.
+- Scoped one-thread Oxlint: zero errors; four pre-existing warnings outside the changed behavior.
+- Prettier, OpenCode annotation, Effect Promise-facade and diff guards: pass.
+
+Do not claim this makes the worker-plus-organization sequence one atomic database transaction. Main-chat creation still provisions deterministic workers before the organization. Its workflow receipt can recover an exact interrupted request, and worker/company replays are now definition-bound, but an abandoned request after partial worker creation can retain orphan workers. The next low-human EN-02 slice should design a bounded durable provisioning plan with explicit phases and recovery or reviewed cleanup. It must keep already-admitted workers bound to the immutable plan, reject changed-plan reuse, avoid deleting workers that became members elsewhere or acquired independent history, and prove interruption after each worker plus before/after organization persistence. Use real storage/database boundaries; do not duplicate the production sequence in a test.
+
+Batch `2701c802a5` into the next coherent low-memory snapshot. Do not rebuild another approximately 519 MB package for this single backend guard.

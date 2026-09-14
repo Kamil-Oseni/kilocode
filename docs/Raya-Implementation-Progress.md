@@ -2,6 +2,14 @@
 
 Source of scope: [Comprehensive audit](Raya-Comprehensive-Audit.md). All sections and all ten overhauls remain in scope. Work proceeds in dependency order, with broader validation batched at checkpoints. A completed subtask does not mean the overall overhaul is complete.
 
+## ChatGPT 2026-09-14 00:40 America/Toronto - durable child and attributable-limit snapshot installed
+
+**Status: installed from source commit `50e3ead4a2`; pushed.** The authorized single-workflow `RAYA_LOW_MEMORY=1` build installed `eden.raya@7.4.23-snapshot+50e3ead4a2.kamil-oseni.1789360595896`. It includes durable cross-backend concurrent-child reservations from `e0b54ebbbd` and attributable goal-limit overrides from `03fefc60c7`.
+
+The retained vault artifact is `raya.9ad0f250c2a4a492b784e392d86b4db5cf2696f76dffd3fec6eeb4fc8bd71ca9.vsix`, 518,742,113 bytes, SHA-256 `9AD0F250C2A4A492B784E392D86B4DB5CF2696F76DFFD3FEC6EEB4FC8BD71CA9`; packaging reports 431 files. Its embedded Windows CLI is 230,103,552 bytes with SHA-256 `E8A14D0671FD83BFE813F901236F681BBA5E9BC5C9B60199EEB9A818E83E884A`. The exact installed directory is `C:\Users\User\.vscode\extensions\eden.raya-7.4.23-snapshot+50e3ead4a2.kamil-oseni.1789360595896`, timestamp 2026-09-14 00:39:16 -04:00.
+
+The workflow regenerated the changed SDK, rebuilt and smoke-tested the CLI, ran the extension host and webview typechecks sequentially, ran cached ESLint and production bundling, then packaged, retained and installed the VSIX. Retention removed one old vault package, one staged package and one extracted extension. Staging is empty; the vault remains bounded at three packages totaling 1,556,083,887 bytes; C has 95,216,631,808 bytes / 88.677 GiB free; no Bun process remains. The vault active pointer still identifies running digest `8261c1eb...` until VS Code reloads, so package installation is verified while activation and real-chat acceptance remain open.
+
 ## ChatGPT 2026-09-14 00:35 America/Toronto - attributable goal-limit overrides
 
 **Status: delivered in product commit `03fefc60c7`; pushed.** Every post-creation goal-limit change now requires a concise reason and appends a durable receipt containing the server-derived `user-control` authority, timestamp, exact previous limits and exact replacement limits. Raising, lowering and clearing limits use the same record. Receipts survive service recreation, move with completed goals into history, and remain attached to superseded requirement revisions. The model-facing goal update tool cannot author them. This identifies the trusted control boundary rather than claiming a named person or account identity that Raya does not authenticate.
@@ -10,7 +18,7 @@ The goal editor reveals one neutral `Why are these limits changing?` field only 
 
 Evidence: the complete goal-state suite passes 105 tests / 1,184 assertions, including missing-reason refusal and the exact durable receipt after a limit pause. The real HTTP create/reload/change/clear case passes 1 / 16 and retains both increase and removal receipts after service recreation. Focused extension goal-edit and report suites pass 11 / 32. A one-worker Chromium editor case passes and proves the conditional field, disabled/enabled save states and no horizontal overflow; ChatGPT inspected the 760 px result. Generated SDK and extension types, Knip, single-thread non-type-aware Oxlint, Prettier, OpenCode annotations, the Kilo marker guard and diff checks pass. The extension unit wrapper later reached an unrelated existing Agent Manager source-window assertion after the changed suites passed; that unrelated aggregate result is not presented as green. The package `typecheck` script ran its two extension checks concurrently and completed in 6.38 seconds; do not repeat it during this checkpoint. No repository-wide `tsgolint`, root test, root lint or Turbo graph ran.
 
-PR-05's attributable override subrequirement is complete. PR-05 and OVR-04 remain **In progress** for authoritative billing coverage, invoice/rate reconciliation, uncovered realtime/tool modalities and remaining ledger-aware consumers. This runtime checkpoint is pushed but not installed; the installed snapshot remains `3cd2e38095` until the next low-memory batch.
+PR-05's attributable override subrequirement is complete. PR-05 and OVR-04 remain **In progress** for authoritative billing coverage, invoice/rate reconciliation, uncovered realtime/tool modalities and remaining ledger-aware consumers. This runtime checkpoint is included in installed snapshot source `50e3ead4a2`; activation still requires a VS Code reload.
 
 ## ChatGPT 2026-09-14 00:15 America/Toronto - durable concurrent-child reservations
 

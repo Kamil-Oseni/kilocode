@@ -1,5 +1,12 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-14 19:40 America/Toronto - Terminal settlement replay matrix verified
+
+**Status: regression commit `5136b27249` is verified and pushed to `origin/main`.** Deterministic SQLite failures now prove the terminal replay order across the remaining delegation boundary. The first settlement commits terminal run history and one worker report, then fails the running-to-completed delegation update. Replay retains the same single report, completes the delegation and publishes one reply, then fails the queued-to-accepted update for the next request. A final replay starts that request once; repeating settlement creates no additional report, reply, session or run.
+
+No runtime change was needed beyond accepted-start recovery in `ff53513f4b`; the existing terminal replay branch already repeats `retain` and `close` in the required order, and the inbox/delegation stores use deterministic identities. The combined delegation suites pass **24 / 416** after formatting; the new adverse case passes independently after the final format. Scoped one-thread lint reports zero errors and only four existing file warnings; whitespace, annotation and Effect Promise-facade guards pass. EN-02/OVR-05 remain **In progress** for representative organization execution through real browser, hosting and outreach boundaries and the remaining product-wide audit. Installed source remains `17ff50e907`.
+
+
 ## ChatGPT 2026-09-14 19:33 America/Toronto - Accepted delegation startups recover without duplicate work
 
 **Status: product commit `ff53513f4b` is verified and pushed to `origin/main`; it is intentionally not installed alone.** Accepting a queued delegation now reserves its child run ID in the same SQLite compare-and-set that changes the row to `accepted`. The runner carries that identity through the per-worker startup claim and the session's `rayaRoutine` metadata, together with the delegation ID. Restart can therefore resume the same accepted request instead of leaving it stranded or inventing a replacement run.

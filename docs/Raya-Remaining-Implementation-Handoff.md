@@ -1,5 +1,12 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-14 19:40 America/Toronto - EN-02 terminal settlement ordering proof
+
+Regression commit `5136b27249` is verified and pushed. Preserve `settlement replay restores one report and releases one queued delegation`. It starts one worker delegation and queues another, saves an accepted completed goal, then uses real SQLite triggers at two boundaries. Failure of the first delegation's running-to-completed update must leave terminal run history plus exactly one `report:<runID>`, with the delegation still running. After removing that trigger, failure of the next request's queued-to-accepted update must leave the first delegation completed with exactly one reply and the second still queued. Removing the second trigger and replaying settlement twice must produce one next session/run and keep one report/reply.
+
+This test confirms the existing replay order is sufficient when combined with commit `ff53513f4b`: the already-terminal branch repeats schedule settlement, role learning, `retain(done)` and `close(done)`; report/reply publication is deterministic; and queued acceptance reserves a recoverable run identity. Do not add another journal or reorder terminal history behind inbox publication. Combined delegation evidence is 24 tests / 416 assertions. The next EN-02 milestone is a representative organization chain using real integration boundaries: durable chief-to-worker delegation, browser research, an artifact handoff, hosting preparation and an outreach draft. Record explicit permission gates for external publication/messages, retain each worker report and inter-agent handoff, interrupt/reopen at least one in-flight worker, and verify the organization graph and conversations reconstruct without duplicate external action. EN-02/OVR-05 and the complete audit remain active; installed source remains `17ff50e907`.
+
+
 ## ChatGPT 2026-09-14 19:33 America/Toronto - EN-02 accepted delegation startup recovery
 
 Product commit `ff53513f4b` is verified and pushed. Preserve the ownership chain introduced here: `RayaTaskDelegation.take` must assign `child_run_id` in the same conditional queued-to-accepted update; `startErrand` must use that value as the startup claim/run ID; and both the claim and session `rayaRoutine` metadata must carry the exact delegation ID. Do not replace the reserved ID during attach. The accepted-row lookup intentionally ignores legacy rows without a reserved ID so uncertain old work remains reviewable rather than being repeated.

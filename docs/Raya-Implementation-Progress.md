@@ -1,5 +1,13 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-14 04:14 America/Toronto - Routine folder-access snapshot installed
+
+**Status: installed from source `18883f82f8`; pushed source.** The authorized sequential low-memory workflow installed `eden.raya@7.4.23-snapshot+18883f82f8.kamil-oseni.1789373438292`, which contains product commit `4cfb240328` and the reviewed read-only/writable Routine folder-access contract.
+
+The retained package is `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.becda9397ac43aa335be313dcc9ec0712d96ecbc2f01f9d99e666e5e6bfbea3b.vsix`, 518,881,822 bytes, SHA-256 `BECDA9397AC43AA335BE313DCC9EC0712D96ECBC2F01F9D99E666E5E6BFBEA3B`. The exact installed directory is `C:\Users\User\.vscode\extensions\eden.raya-7.4.23-snapshot+18883f82f8.kamil-oseni.1789373438292`, timestamp 2026-09-14 04:13:22 -04:00. Its 230,230,528-byte Windows CLI has SHA-256 `1D2736AE6F38FD1429FE9F76E1C2301261EDFB352C38AED06B71E8AD2BDB172A`, matching the vault receipt exactly.
+
+SDK regeneration, the CLI build, CLI version/model/sandbox-worker smoke checks, extension-host and webview typechecks, cached ESLint, production bundling, packaging and installation all passed sequentially. Retention removed one vault package, one staged package and one stale extracted extension. Staging is empty, no Bun or tsgo process remains and C: has 91.177 GiB free. `HEAD` and `origin/main` both resolve to `18883f82f8`; the only untracked files are the user's preserved Codex research and Raya features documents. The vault active pointer still identifies running source `846c527c1b`, so VS Code must reload before this installed source can receive real-host acceptance. Installation alone does not verify the Routine interaction.
+
 ## ChatGPT 2026-09-14 04:06 America/Toronto - reviewed Routine folder access delivered
 
 **Status: delivered in product commit `4cfb240328`; pushed, not yet installed.** PR-04 now has a versioned `paths` contract for as many as 16 additional absolute folders. Each grant is explicitly read-only or read-and-write. Backend and extension validation reject relative, malformed, oversized and unknown-version input. Canonicalization resolves lexical absolute paths, treats Windows drive/UNC casing consistently, gives write precedence to duplicate grants, removes redundant descendants and omits folders already covered by the primary write folder. The saved contract survives storage reconstruction, and `expectedPaths` makes concurrent access reviews fail as stale instead of overwriting newer choices.

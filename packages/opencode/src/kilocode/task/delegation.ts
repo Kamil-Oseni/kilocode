@@ -564,7 +564,7 @@ export namespace RayaTaskDelegation {
         return yield* new Conflict({ message: "This delegation already has a different result." })
       }
       const now = Date.now()
-      yield* db
+      const updated = yield* db
         .update(Delegation)
         .set({
           state,
@@ -573,10 +573,22 @@ export namespace RayaTaskDelegation {
           reason: reason ?? null,
           time_updated: now,
         })
-        .where(eq(Delegation.id, id))
-        .run()
+        .where(and(eq(Delegation.id, id), eq(Delegation.state, prior.state)))
+        .returning()
+        .all()
         .pipe(Effect.orDie)
-      const record = yield* get(id)
+      if (!updated[0]) {
+        const current = yield* get(id)
+        if (
+          current.state === state &&
+          current.response === response &&
+          current.cost === amount &&
+          current.reason === reason
+        )
+          return current
+        return yield* new Conflict({ message: "This delegation already has a different result." })
+      }
+      const record = decode(updated[0])
       const item = replied(record, recipient)
       if (item) yield* publish([item])
       return record

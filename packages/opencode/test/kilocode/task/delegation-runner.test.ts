@@ -473,6 +473,90 @@ test("stopping a parent cancels live descendants without rewriting assignments",
   )
 })
 
+test("late settlement cannot replace cancellation or alter the recipient's next run", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const entered = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const starts: string[] = []
+      const runner = RayaTaskRunner.make({
+        database,
+        storage,
+        halt: () => Effect.void,
+        sessions: {
+          create: () =>
+            Effect.sync(() => {
+              const id = `ses_late_${starts.length + 1}`
+              starts.push(id)
+              return session(id)
+            }),
+          get: () => Effect.die("unused"),
+          messages: ({ sessionID }) =>
+            sessionID === SessionID.make("ses_late_1")
+              ? Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release)), Effect.as([]))
+              : Effect.succeed([]),
+          children: () => Effect.succeed([]),
+        },
+      })
+      const chief = yield* runner.tasks.create({
+        name: "Chief",
+        objective: "Assign work",
+        access: "brief",
+        schedule: { kind: "manual" },
+      })
+      const books = yield* runner.tasks.create({
+        name: "Books",
+        objective: "Review accounts",
+        access: "brief",
+        schedule: { kind: "manual" },
+      })
+      const first = yield* runner.delegate({
+        source: "dlg_late_first",
+        senderID: chief.id,
+        recipientID: books.id,
+        objective: "Review the first close.",
+      })
+      const now = Date.now()
+      yield* storage.write(["raya", "goal", first.sessionID!], {
+        objective: "Review the first close.",
+        status: "complete",
+        createdAt: now,
+        updatedAt: now,
+        usage: { turns: 1, continuations: 0, toolCalls: 0 },
+        progress: [],
+        audit: { summary: "The stale close says complete.", verifiedAt: now, requirements: [] },
+      })
+      const settling = yield* runner.settle(first.sessionID!).pipe(Effect.forkChild)
+      yield* Deferred.await(entered)
+      expect((yield* runner.stop(first.id)).state).toBe("cancelled")
+      const second = yield* runner.delegate({
+        source: "dlg_late_second",
+        senderID: chief.id,
+        recipientID: books.id,
+        objective: "Review the current close.",
+      })
+      expect(second.state).toBe("running")
+      yield* Deferred.succeed(release, undefined)
+      yield* Fiber.join(settling)
+
+      const store = RayaTaskDelegation.make(database)
+      expect((yield* store.get(first.id)).state).toBe("cancelled")
+      expect((yield* store.get(first.id)).response).toBeUndefined()
+      expect((yield* store.get(second.id)).state).toBe("running")
+      expect(starts).toEqual(["ses_late_1", "ses_late_2"])
+      const runs = yield* runner.tasks.runsFor(books.id)
+      expect(runs.find((run) => run.id === first.childRunID)?.status).toBe("error")
+      expect(runs.find((run) => run.id === second.childRunID)?.status).toBe("running")
+      const replies = (yield* RayaTaskInbox.make(database).page(chief.id)).messages.filter((item) =>
+        item.source.startsWith("reply:"),
+      )
+      expect(replies.filter((item) => item.body.includes("The stale close says complete."))).toEqual([])
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
 test("parent run cost stays independent of a completed child request", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {

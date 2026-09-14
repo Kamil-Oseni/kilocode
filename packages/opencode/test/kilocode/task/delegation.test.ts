@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
-import { Effect, Exit } from "effect"
+import path from "node:path"
+import { Context, Effect, Exit, Layer } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { SessionID } from "@/session/schema"
 import {
@@ -14,6 +15,7 @@ import {
 } from "@/kilocode/task/delegation"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import type { RayaTask } from "@/kilocode/task"
+import { tmpdir } from "../../fixture/fixture"
 
 const agent = (id: string, role: string, extra?: Partial<RayaTask.Agent>): RayaTask.Agent => ({
   id,
@@ -344,6 +346,44 @@ test("stopping a request keeps a completed child and does not rewrite the parent
       expect((yield* store.stop(child.record.id, extra, "Stopped by the user.")).state).toBe("completed")
       expect(kept.response).toBe("Named missing receipts.")
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
+test("completion and cancellation cannot overwrite each other's terminal result", async () => {
+  await using directory = await tmpdir()
+  const filename = path.join(directory.path, "delegation.sqlite")
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const first = RayaTaskDelegation.make(
+          Context.get(yield* Layer.build(Database.layerFromPath(filename)), Database.Service),
+        )
+        const second = RayaTaskDelegation.make(
+          Context.get(yield* Layer.build(Database.layerFromPath(filename)), Database.Service),
+        )
+        const chief = agent("chief", "generalist")
+        const books = agent("books", "accountant")
+        for (const index of Array.from({ length: 32 }, (_, index) => index)) {
+          const admitted = yield* first.admit(request(`dlg_terminal_${index}`, chief.id, books.id), chief, books)
+          const taken = (yield* first.take(books.id))!
+          expect(taken.id).toBe(admitted.record.id)
+          const exits = yield* Effect.all(
+            [
+              first.finish(taken.id, "completed", books, "Finished before cancellation.").pipe(Effect.exit),
+              second.stop(taken.id, books, "Stopped by the user.").pipe(Effect.exit),
+            ],
+            { concurrency: "unbounded" },
+          )
+          const saved = yield* first.get(taken.id)
+          const states = exits.flatMap((exit) => (Exit.isSuccess(exit) ? [exit.value.state] : []))
+          expect(states.length).toBeGreaterThan(0)
+          expect(states.every((state) => state === saved.state)).toBe(true)
+          expect(saved.state === "completed" || saved.state === "cancelled").toBe(true)
+          expect(saved.response).toBe(saved.state === "completed" ? "Finished before cancellation." : undefined)
+          expect(saved.reason).toBe(saved.state === "cancelled" ? "Stopped by the user." : undefined)
+        }
+      }),
+    ),
   )
 })
 

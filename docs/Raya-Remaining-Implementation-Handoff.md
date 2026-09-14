@@ -4170,3 +4170,9 @@ Continue in this exact order:
 6. Add identical-invocation retry convergence and changed-digest refusal through the actual Apply Patch tool and real HTTP/backend restart boundary. Run the complete Apply Patch regression and the smallest package checks. Update both documents with exact totals, limitations, commit and installation state after each coherent checkpoint.
 
 Do not claim sudden-power-loss durability from the current Node/Bun process-kill evidence. A platform-specific file and directory flush strategy is still required to prove that stronger guarantee on Windows. Do not install this local recovery layer until the actual Apply Patch path or startup recovery uses it coherently; the installed snapshot remains the earlier staged-replacement build.
+
+## ChatGPT 2026-09-14 13:21 America/Toronto - Failure-matrix correction after checkpoint
+
+The first added non-success recovery case found and fixed a real bug after the initial recovery commit: `cleaning` was incorrectly classified as committed regardless of the journal's retained decision. That would have attempted committed cleanup after a rollback had already restored the preimage. The coordinator now treats recovery as committed only for `decision: commit` or phase `committed`; `cleaning` with `decision: rollback` follows rollback cleanup. A real-filesystem test interrupts after `rolled_back` and after entry into `cleaning`, then proves original bytes, rollback decision, exact sidecar cleanup and terminal `done`. Focused coordinator/journal evidence is now 12 tests / 57 assertions.
+
+Do not remove this test or collapse it into the normal rollback test. Continue the named phase matrix because adjacent successful checkpoints do not prove one another. In particular, reservation and partial target-claim acquisition still need explicit crash evidence before startup recovery can be considered safe.

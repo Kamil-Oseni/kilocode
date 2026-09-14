@@ -84,13 +84,15 @@ const entries: Entry[] = [
     id: "spreadsheets.create",
     name: "Create an Excel workbook",
     tools: ["create_spreadsheet"],
-    inputs: ["structured cell values", "XLSX"],
-    description: "Create a local Excel workbook with one or more named sheets and return its verified file receipt.",
+    inputs: ["structured cell values", "safe same-sheet formulas", "XLSX"],
+    description:
+      "Create a local Excel workbook with one or more named sheets, typed values and safe formulas, then return its verified file receipt.",
     result: "Local XLSX file and artifact receipt",
     permission: "edit",
     limits: [
       "Creates a new workbook or replaces the whole destination after approval.",
-      "Does not evaluate formulas, run macros, import templates or preserve an existing workbook.",
+      "Formula cells require a cached value and support same-sheet references plus a bounded safe function set.",
+      "Does not calculate formulas, allow external formula links, run macros, import templates or preserve an existing workbook.",
     ],
   },
   {

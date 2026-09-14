@@ -4,7 +4,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { jsonSchema, tool, type Tool as AITool } from "ai"
-import { utils, write as workbook } from "xlsx"
+import { read as parseWorkbook, utils, write as workbook } from "xlsx"
 import { TextWriter, Uint8ArrayReader, Uint8ArrayWriter, ZipReader } from "@zip.js/zip.js"
 import path from "node:path"
 import { Agent } from "@/agent/agent"
@@ -706,6 +706,7 @@ it.instance(
                 ["Region", "Revenue", "Approved"],
                 ["North", 1250.5, true],
                 ["South", 980, false],
+                ["Total", { formula: "SUM(B2:B3)", value: 2230.5 }, null],
               ],
             },
             { name: "Notes", header: false, rows: [["Values are final."], [null, "Reviewed"]] },
@@ -718,12 +719,16 @@ it.instance(
         filepath: target,
         exists: false,
         sheets: ["Summary", "Notes"],
-        cells: 12,
+        cells: 15,
+        formulas: 1,
         rayaRevision: { version: 1, status: "captured", path: target },
       })
+      const book = parseWorkbook(yield* Effect.promise(() => Bun.file(target).arrayBuffer()), { type: "array" })
+      expect(book.Sheets.Summary?.B4).toMatchObject({ f: "SUM(B2:B3)", v: 2230.5, t: "n" })
       const read = yield* defs.read.execute({ filePath: target }, ctx)
       expect(read.output).toContain("--- Sheet: Summary ---")
       expect(read.output).toContain("North\t1250.5\tTRUE")
+      expect(read.output).toContain("Total\t2230.5")
       expect(read.output).toContain("--- Sheet: Notes ---")
       expect(read.output).toContain("Values are final.")
       expect(approvals).toEqual(["edit", "read"])
@@ -756,6 +761,14 @@ it.instance(
           ],
         },
         { filePath: path.join(instance.directory, "invalid.xlsx"), sheets: [{ name: "Sales/2026", rows: [[1]] }] },
+        {
+          filePath: path.join(instance.directory, "unsafe-formula.xlsx"),
+          sheets: [{ name: "Data", rows: [[{ formula: 'HYPERLINK("https://example.com")', value: "Open" }]] }],
+        },
+        {
+          filePath: path.join(instance.directory, "equals-formula.xlsx"),
+          sheets: [{ name: "Data", rows: [[{ formula: "=SUM(A1:A2)", value: 3 }]] }],
+        },
       ]) {
         expect(Exit.isFailure(yield* defs.spreadsheet.execute(input, ctx).pipe(Effect.exit))).toBe(true)
         expect(yield* Effect.promise(() => Bun.file(input.filePath).exists())).toBe(false)

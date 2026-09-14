@@ -1,7 +1,7 @@
 import path from "node:path"
 import { randomUUID } from "node:crypto"
 import { Effect, Schema } from "effect"
-import { utils, write, type WorkSheet } from "xlsx"
+import { utils, write, type CellObject, type WorkSheet } from "xlsx"
 import { batchMutations, enabled, ensureDirectory } from "@kilocode/sandbox"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { FileSystem } from "@opencode-ai/core/filesystem"
@@ -13,7 +13,15 @@ import { assertMutablePath } from "@/kilocode/agent-manager/protection"
 import * as Artifact from "@/kilocode/goal/artifact"
 import * as Tool from "@/tool/tool"
 
-const Cell = Schema.Union([Schema.String.check(Schema.isMaxLength(32_767)), Schema.Finite, Schema.Boolean, Schema.Null])
+const Scalar = Schema.Union([Schema.String.check(Schema.isMaxLength(32_767)), Schema.Finite, Schema.Boolean])
+const Formula = Schema.Struct({
+  formula: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(8_192)).annotate({
+    description:
+      "A same-sheet Excel formula without a leading equals sign. Supports arithmetic, comparisons, cell/range references and the documented safe functions.",
+  }),
+  value: Scalar.annotate({ description: "Required cached display value; Excel recalculates the formula when opened." }),
+})
+const Cell = Schema.Union([Scalar, Schema.Null, Formula])
 const Sheet = Schema.Struct({
   name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(31)),
   rows: Schema.Array(Schema.Array(Cell).check(Schema.isMaxLength(200))).check(Schema.isMaxLength(50_000)),
@@ -24,10 +32,66 @@ const Parameters = Schema.Struct({
   sheets: Schema.Array(Sheet).check(Schema.isMinLength(1), Schema.isMaxLength(10)),
 })
 
-function columns(sheet: WorkSheet, rows: ReadonlyArray<ReadonlyArray<string | number | boolean | null>>) {
+type Value = typeof Cell.Type
+
+const functions = new Set([
+  "ABS",
+  "AND",
+  "AVERAGE",
+  "COUNT",
+  "COUNTA",
+  "IF",
+  "MAX",
+  "MIN",
+  "NOT",
+  "OR",
+  "ROUND",
+  "ROUNDDOWN",
+  "ROUNDUP",
+  "SUM",
+])
+
+function formula(value: string) {
+  const text = value.trim()
+  if (!text || text.startsWith("=") || !/^[A-Za-z0-9$():,.+\-*/%^<>= \t]+$/.test(text))
+    throw new Error("Formulas must omit the leading = and use only safe same-sheet references and operators.")
+  const plain = text.replaceAll("$", "")
+  for (const match of plain.matchAll(/[A-Za-z_][A-Za-z0-9_.]*/g)) {
+    const token = match[0]!.toUpperCase()
+    const rest = plain.slice(match.index! + match[0]!.length).trimStart()
+    if (/^[A-Z]{1,3}[1-9][0-9]{0,6}$/.test(token)) {
+      const address = utils.decode_cell(token)
+      if (address.c <= 16_383 && address.r <= 1_048_575) continue
+      throw new Error(`Formula cell reference ${match[0]} is outside Excel's worksheet bounds.`)
+    }
+    if (token === "TRUE" || token === "FALSE") continue
+    if (rest.startsWith("(") && functions.has(token)) continue
+    throw new Error(`Formula token ${match[0]} is not a supported function or cell reference.`)
+  }
+  return text
+}
+
+function scalar(value: Value) {
+  return typeof value === "object" && value !== null && "formula" in value ? value.value : value
+}
+
+function cell(value: Value): string | number | boolean | null | CellObject {
+  if (typeof value !== "object" || value === null || !("formula" in value)) return value
+  const cached = value.value
+  return {
+    f: formula(value.formula),
+    v: cached,
+    t: typeof cached === "number" ? "n" : typeof cached === "boolean" ? "b" : "s",
+  }
+}
+
+function columns(sheet: WorkSheet, rows: ReadonlyArray<ReadonlyArray<Value>>) {
   const count = rows.reduce((max, row) => Math.max(max, row.length), 0)
   sheet["!cols"] = Array.from({ length: count }, (_, index) => ({
-    wch: Math.min(40, Math.max(8, ...rows.slice(0, 1_000).map((row) => String(row[index] ?? "").length + 2))),
+    wch: Math.min(
+      40,
+      Math.max(8, ...rows.slice(0, 1_000).map((row) => String(scalar(row[index] ?? null) ?? "").length + 2)),
+    ),
   }))
 }
 
@@ -38,7 +102,7 @@ export const CreateSpreadsheetTool = Tool.define(
     const events = yield* EventV2Bridge.Service
     return {
       description:
-        "Create a real Excel .xlsx workbook from structured cell values. Supports up to 10 named sheets, 50,000 rows per sheet, 200 columns per row and 200,000 cells total. Returns a verified local artifact receipt. It does not evaluate formulas, run macros, import templates or preserve an existing workbook.",
+        "Create a real Excel .xlsx workbook from structured values and safe same-sheet formulas. Formula objects require formula without a leading = plus a cached string, number or boolean value. Supported functions are SUM, AVERAGE, MIN, MAX, COUNT, COUNTA, ROUND, ROUNDUP, ROUNDDOWN, ABS, IF, AND, OR and NOT; formulas cannot use external links, named ranges or string literals. Supports up to 10 named sheets, 50,000 rows per sheet, 200 columns per row and 200,000 cells total. Returns a verified local artifact receipt. Raya does not calculate formulas; Excel recalculates them when opened. It does not run macros, import templates or preserve an existing workbook.",
       parameters: Parameters,
       execute: (params: typeof Parameters.Type, ctx: Tool.Context) =>
         Effect.gen(function* () {
@@ -54,6 +118,18 @@ export const CreateSpreadsheetTool = Tool.define(
             throw new Error("Each sheet needs a unique name.")
           const cells = params.sheets.reduce((sum, sheet) => sum + sheet.rows.reduce((n, row) => n + row.length, 0), 0)
           if (cells > 200_000) throw new Error("This workbook exceeds the 200,000-cell limit.")
+          const formulas = params.sheets.reduce(
+            (sum, sheet) =>
+              sum +
+              sheet.rows.reduce(
+                (count, row) => count + row.filter((value) => typeof value === "object" && value !== null).length,
+                0,
+              ),
+            0,
+          )
+          for (const sheet of params.sheets)
+            for (const row of sheet.rows)
+              for (const value of row) if (typeof value === "object" && value !== null) formula(value.formula)
           assertMutablePath(filepath)
           yield* assertExternalDirectoryEffect(ctx, filepath)
           const exists = yield* fs.existsSafe(filepath)
@@ -65,6 +141,7 @@ export const CreateSpreadsheetTool = Tool.define(
               filepath,
               exists,
               format: "xlsx",
+              formulas,
               sheets: names.map((name, index) => ({ name, rows: params.sheets[index]!.rows.length })),
             },
           })
@@ -72,7 +149,7 @@ export const CreateSpreadsheetTool = Tool.define(
             try: () => {
               const book = utils.book_new()
               for (const [index, input] of params.sheets.entries()) {
-                const sheet = utils.aoa_to_sheet(input.rows)
+                const sheet = utils.aoa_to_sheet(input.rows.map((row) => row.map(cell)))
                 columns(sheet, input.rows)
                 if (input.header !== false && input.rows.length && input.rows[0]!.length)
                   sheet["!autofilter"] = { ref: sheet["!ref"]! }
@@ -104,7 +181,7 @@ export const CreateSpreadsheetTool = Tool.define(
           return {
             title: path.relative(instance.worktree, filepath),
             output: `Created ${names.length === 1 ? "1 sheet" : `${names.length} sheets`} in ${path.basename(filepath)}.`,
-            metadata: { filepath, exists, sheets: names, cells, rayaRevision: revision },
+            metadata: { filepath, exists, sheets: names, cells, formulas, rayaRevision: revision },
           }
         }).pipe(Effect.orDie),
     }

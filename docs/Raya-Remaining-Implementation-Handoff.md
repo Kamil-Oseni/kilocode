@@ -1,12 +1,18 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-14 05:33 America/Toronto - Filesystem boundary snapshot installed
+
+Installed source is now `4486e2a9b0` as `eden.raya@7.4.23-snapshot+4486e2a9b0.kamil-oseni.1789378118576`. The vault package is `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.d2757082115192bd18b5cd49bc39f9bccf3b9fc457785c3252c926cb1199dd73.vsix`, 518,905,046 bytes, SHA-256 `D2757082115192BD18B5CD49BC39F9BCCF3B9FC457785C3252C926CB1199DD73`. Installed `bin\kilo.exe` is 230,252,544 bytes, SHA-256 `B6D8ACB421A0EDAC23DB4FDF4AC8B9FC57E0B2ACF4083E03E502972EB470E98A`, matching the vault index.
+
+SDK generation, CLI build/smoke checks, sandbox-worker smoke, extension/webview types, cached ESLint, production bundles, packaging, installation and retention passed sequentially under `RAYA_LOW_MEMORY=1`. Staging is empty, no Bun/tsgo remains and C: has 91.146 GiB free. The active vault pointer remains source `846c527c1b` until VS Code reloads. Do not claim activation or installed-host acceptance from installation alone.
+
 ## ChatGPT 2026-09-14 05:25 America/Toronto - Formatter target isolation delivered
 
 Product commit `61f2465c43` is on `origin/main` and is not installed yet. Write and Edit now ask the formatter service whether the reviewed extension has a matching enabled formatter, prepare proposed bytes in a scoped `raya-format-*` temporary file with that extension, run the formatter against the temporary `$FILE`, decode its result, clean staging, and commit only through the checked destination handle. Project-cwd formatter configuration and sequential formatter ordering remain intact; backend credentials remain excluded.
 
 Do not call this success-only coverage. Write is 21/47 and proves a distinct temporary formatter pathname, cleanup, replacement-target preservation after a formatter actually ran, and unchanged reviewed bytes when the formatter deletes staging. Edit is 34/77 and proves its own staged path, cleanup and deleted-stage refusal, plus the previous replacement/concurrent edit/hard-link cases. Format and its sandbox service boundary are 12 pass with 4 platform skips / 23 assertions; encoding is 48/90. All relevant guards pass. A malicious trusted formatter can still derive another pathname itself; this change removes the destination supplied through `$FILE` and does not replace command confinement.
 
-Continue with Apply Patch as a staged multi-file transaction. Its updates, creates, deletes and moves must validate all reviewed preconditions before the first destination mutation, stage formatted outputs privately, and have explicit rollback/crash semantics. Then handle artifact/image replacement and safe parent-directory creation. Installed source remains `8c4ac51fba`; include `ac434889d4`, `384a481693` and `61f2465c43` in the next sequential low-memory snapshot batch.
+Continue with Apply Patch as a staged multi-file transaction. Its updates, creates, deletes and moves must validate all reviewed preconditions before the first destination mutation, stage formatted outputs privately, and have explicit rollback/crash semantics. Then handle artifact/image replacement and safe parent-directory creation. Source `4486e2a9b0`, including `ac434889d4`, `384a481693` and `61f2465c43`, is installed but awaits reload for activation and installed-host acceptance.
 
 ## ChatGPT 2026-09-14 05:12 America/Toronto - Checked existing-file Edit delivered
 

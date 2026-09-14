@@ -313,9 +313,16 @@ export const generateImageTool = (goals?: GoalDeps) =>
             const req = buildRequest(resolved, params.prompt, model, inputImage)
             const lease = charges
               ? yield* charges.claim(ctx.sessionID, "USD")
-              : { release: Effect.void, settle: (_charge: RayaGoal.Charge) => Effect.void }
+              : {
+                  dispatch: Effect.void,
+                  finish: Effect.void,
+                  release: Effect.void,
+                  uncertain: (_reason: string) => Effect.void,
+                  settle: (_charge: RayaGoal.Charge) => Effect.void,
+                }
 
             return yield* Effect.gen(function* () {
+              yield* lease.dispatch
               const response = yield* http.execute(
                 HttpClientRequest.post(req.url).pipe(
                   HttpClientRequest.setHeaders(req.headers),
@@ -327,6 +334,7 @@ export const generateImageTool = (goals?: GoalDeps) =>
               if (status < 200 || status >= 300) {
                 const errText = yield* response.text
                 log.warn("image generation failed", { status, errText: errText.slice(0, 200) })
+                yield* lease.finish
                 return {
                   title: "Image generation failed",
                   output: `Image generation request failed (HTTP ${status}).`,
@@ -358,12 +366,23 @@ export const generateImageTool = (goals?: GoalDeps) =>
                 yield* ctx.metadata({
                   metadata: { provider: resolved.provider, rayaGoalCharge: { version: 1 as const, receipt: charge } },
                 })
+                yield* lease.settle(charge).pipe(
+                  Effect.catchCause((cause) =>
+                    Effect.sync(() =>
+                      log.warn("goal image charge settlement deferred to turn accounting", {
+                        cause: Cause.squash(cause),
+                      }),
+                    ),
+                  ),
+                )
+              }
+              if (!charge) {
                 yield* lease
-                  .settle(charge)
+                  .uncertain("The image provider completed the request without a stable billing receipt.")
                   .pipe(
                     Effect.catchCause((cause) =>
                       Effect.sync(() =>
-                        log.warn("goal image charge settlement deferred to turn accounting", {
+                        log.warn("unknown goal image charge settlement deferred to reservation recovery", {
                           cause: Cause.squash(cause),
                         }),
                       ),

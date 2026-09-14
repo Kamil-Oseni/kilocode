@@ -186,10 +186,12 @@ describe("RayaGoal", () => {
         chargeCosts: [{ currency: "USD", limit: 1, reservation: 0.6 }],
       })
       const claims = yield* GoalCharges.make({ storage, sessions })
+      const other = yield* GoalCharges.make({ storage, sessions })
       const first = yield* claims.claim(child, "USD")
-      const concurrent = yield* claims.claim(root, "USD").pipe(Effect.exit)
+      const concurrent = yield* other.claim(root, "USD").pipe(Effect.exit)
       expect(Exit.isFailure(concurrent)).toBe(true)
       if (Exit.isFailure(concurrent)) expect(Cause.pretty(concurrent.cause)).toContain("reserved by another")
+      yield* first.dispatch
       yield* first.settle({
         id: "generate-image:openrouter:reserved-1",
         kind: "tool",
@@ -237,6 +239,7 @@ describe("RayaGoal", () => {
       })
       const claims = yield* GoalCharges.make({ storage, sessions })
       const lease = yield* claims.claim(root, "USD")
+      yield* lease.dispatch
       yield* lease.settle({
         id: "generate-image:openrouter:unknown-1",
         kind: "tool",
@@ -267,6 +270,122 @@ describe("RayaGoal", () => {
       })
       expect(changed.state.status).toBe("active")
       expect(changed.state.budgetHit).toBeUndefined()
+    }),
+  )
+
+  it.live("recovers a dispatched reservation as an unknown charge after its backend expires", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const root = SessionID.make(`ses_expired_charge_${crypto.randomUUID()}`)
+      const rows: MessageV2.WithParts[] = []
+      const sessions = {
+        messages: () => Effect.succeed(rows),
+        children: () => Effect.succeed([]),
+        get: () => Effect.succeed({ id: root } as Session.Info),
+      }
+      const goals = RayaGoal.make({ storage, sessions })
+      yield* Effect.addFinalizer(() => goals.clear(root))
+      const created = yield* goals.create(
+        root,
+        "Stop after an interrupted billed request",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { chargeCosts: [{ currency: "USD", limit: 1, reservation: 0.5 }] },
+      )
+      const time = { at: created.createdAt + 1 }
+      const claims = yield* GoalCharges.make({
+        storage,
+        sessions,
+        clock: () => time.at,
+        ttl: 100,
+        heartbeat: 100_000,
+      })
+      const lease = yield* claims.claim(root, "USD")
+      yield* Effect.addFinalizer(() => lease.release)
+      yield* lease.dispatch
+      time.at += 101
+
+      const restarted = yield* GoalCharges.make({
+        storage,
+        sessions,
+        clock: () => time.at,
+        ttl: 100,
+        heartbeat: 100_000,
+      })
+      const result = yield* restarted.claim(root, "USD").pipe(Effect.exit)
+      expect(Exit.isFailure(result)).toBe(true)
+      if (Exit.isFailure(result)) expect(Cause.pretty(result.cause)).toContain("while the goal is paused")
+      const saved = yield* goals.get(root)
+      expect(saved?.status).toBe("paused")
+      expect(saved?.charges).toContainEqual(
+        expect.objectContaining({
+          kind: "tool",
+          source: "durable-reservation-expired",
+          coverage: "unknown",
+          currency: "USD",
+          origin: expect.objectContaining({ sessionID: root }),
+        }),
+      )
+    }),
+  )
+
+  it.live("releases an explicitly rejected billed request for another backend", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const root = SessionID.make(`ses_rejected_charge_${crypto.randomUUID()}`)
+      const rows: MessageV2.WithParts[] = []
+      const sessions = {
+        messages: () => Effect.succeed(rows),
+        children: () => Effect.succeed([]),
+        get: () => Effect.succeed({ id: root } as Session.Info),
+      }
+      const goals = RayaGoal.make({ storage, sessions })
+      yield* Effect.addFinalizer(() => goals.clear(root))
+      yield* goals.create(root, "Release rejected image requests", undefined, undefined, undefined, undefined, {
+        chargeCosts: [{ currency: "USD", limit: 1, reservation: 0.75 }],
+      })
+      const claims = yield* GoalCharges.make({ storage, sessions })
+      const other = yield* GoalCharges.make({ storage, sessions })
+      const rejected = yield* claims.claim(root, "USD")
+      yield* rejected.dispatch
+      yield* rejected.finish
+      yield* rejected.release
+      const admitted = yield* other.claim(root, "USD")
+      yield* admitted.release
+      expect((yield* goals.get(root))?.charges).toEqual([])
+    }),
+  )
+
+  it.live("records a missing provider receipt without a configured currency cap", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const root = SessionID.make(`ses_unlimited_charge_${crypto.randomUUID()}`)
+      const rows: MessageV2.WithParts[] = []
+      const sessions = {
+        messages: () => Effect.succeed(rows),
+        children: () => Effect.succeed([]),
+        get: () => Effect.succeed({ id: root } as Session.Info),
+      }
+      const goals = RayaGoal.make({ storage, sessions })
+      yield* Effect.addFinalizer(() => goals.clear(root))
+      yield* goals.create(root, "Keep the complete provider ledger")
+      const claims = yield* GoalCharges.make({ storage, sessions })
+      const lease = yield* claims.claim(root, "USD")
+      yield* lease.dispatch
+      yield* lease.uncertain("The provider omitted its billing ID.")
+      yield* lease.release
+      const saved = yield* goals.get(root)
+      expect(saved?.status).toBe("active")
+      expect(saved?.charges).toContainEqual(
+        expect.objectContaining({
+          source: "provider-response-without-receipt",
+          coverage: "unknown",
+          currency: "USD",
+          reason: "The provider omitted its billing ID.",
+        }),
+      )
     }),
   )
 

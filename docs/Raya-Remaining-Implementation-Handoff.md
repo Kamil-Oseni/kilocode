@@ -3782,3 +3782,11 @@ Product commit `776b6020d4` closes the expected-missing creation race for Apply 
 The sandbox typecheck passes. Focused sandbox evidence is 18 pass, 5 platform skips and 52 assertions, including successful exclusive creation, collision with a concurrently owned pathname, preservation of the owner's bytes, malformed protocol rejection and proof that checked/exclusive writes flush surrounding batches rather than deferring their failures. Apply Patch remains green at 35 tests and 95 assertions. OpenCode annotation and diff guards pass. No broad or high-memory check ran.
 
 Apply Patch is still **In progress**. Exclusive create removes one race, but checked delete/move removal and durable rollback/restart recovery remain. A failed multi-file commit can still leave earlier successful mutations in place. Do not describe the tool as atomic until injected mid-commit failures and killed-process recovery converge without overwriting newer user work.
+
+## ChatGPT 2026-09-14 05:55 America/Toronto - Apply Patch safety snapshot installed
+
+**Status: installed from pushed source `ab93c12b37`.** The authorized sequential `RAYA_LOW_MEMORY=1` workflow installed `eden.raya@7.4.23-snapshot+ab93c12b37.kamil-oseni.1789379502367`. It rebuilt and smoke-tested the CLI, generated the SDK, passed the sandbox mutation-worker smoke, extension-host and webview typechecks, cached ESLint, production bundling, packaging, vault retention and VS Code installation.
+
+The retained VSIX is `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.40a5d906833f7ec4b30c76ceba8328b185385dfa83a06f16bf8aa73d3ad4ebc0.vsix`, 518,917,635 bytes, SHA-256 `40A5D906833F7EC4B30C76CEBA8328B185385DFA83A06F16BF8AA73D3AD4EBC0`. The installed directory is `C:\Users\User\.vscode\extensions\eden.raya-7.4.23-snapshot+ab93c12b37.kamil-oseni.1789379502367`, timestamp 2026-09-14 05:54:24 -04:00. Its 230,264,832-byte `bin\kilo.exe` has SHA-256 `CB21D9AACE6C66F0EE178643525480C9AF7F2C2F84458ECE77A137F664FA7D26`, exactly matching the vault record.
+
+The vault active pointer remains the previously running `846c527c1b` package until VS Code reloads; installation is not activation evidence. Snapshot staging contains zero files, no Bun or tsgo process remains, and C: has 91.137 GiB free. The two owner-created untracked documents remain untouched.

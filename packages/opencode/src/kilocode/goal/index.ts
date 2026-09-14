@@ -395,6 +395,7 @@ export namespace RayaGoal {
   }
 
   const controls = new Set(["create_goal", "get_goal", "update_goal", "update_goal_plan"])
+  const bills = new Set(["generate_image", "websearch"])
   const supports = (part: SessionV1.ToolPart) => !controls.has(part.tool) && part.tool !== "task"
   const decode = Schema.decodeUnknownEffect(State)
   const key = (sessionID: SessionID) => ["raya", "goal", sessionID]
@@ -1713,7 +1714,7 @@ export namespace RayaGoal {
         Effect.gen(function* () {
           if (
             part.type !== "tool" ||
-            part.tool !== "generate_image" ||
+            !bills.has(part.tool) ||
             part.state.status === "pending" ||
             part.state.status === "running"
           )
@@ -1721,10 +1722,10 @@ export namespace RayaGoal {
           const envelope = part.state.metadata?.rayaGoalCharge
           if (envelope === undefined) return
           if (!envelope || typeof envelope !== "object" || !("version" in envelope) || envelope.version !== 1)
-            return yield* new AuditError({ message: "The image charge receipt envelope is invalid." })
+            return yield* new AuditError({ message: "The tool charge receipt envelope is invalid." })
           const receipt = "receipt" in envelope ? envelope.receipt : undefined
           if (!Schema.is(Charge)(receipt))
-            return yield* new AuditError({ message: "The image charge receipt is invalid." })
+            return yield* new AuditError({ message: "The tool charge receipt is invalid." })
           if (
             receipt.kind !== "tool" ||
             receipt.origin.sessionID !== part.sessionID ||
@@ -1732,7 +1733,7 @@ export namespace RayaGoal {
             receipt.origin.callID !== part.callID ||
             receipt.at < state.createdAt
           )
-            return yield* new AuditError({ message: "The image charge receipt does not match its tool result." })
+            return yield* new AuditError({ message: "The tool charge receipt does not match its tool result." })
           return receipt
         }),
       )
@@ -1741,7 +1742,7 @@ export namespace RayaGoal {
       for (const charge of additions) {
         const prior = charges.find((item) => item.id === charge.id)
         if (prior && !isDeepStrictEqual(prior, charge))
-          return yield* new AuditError({ message: "The image charge receipt ID was reused with different details." })
+          return yield* new AuditError({ message: "The tool charge receipt ID was reused with different details." })
         if (prior) continue
         if (charges.length >= 512)
           return yield* new AuditError({ message: "The goal non-model charge ledger is full." })

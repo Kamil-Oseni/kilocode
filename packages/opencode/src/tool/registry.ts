@@ -30,7 +30,7 @@ import z from "zod"
 import { Plugin } from "../plugin"
 import { Provider } from "@/provider/provider"
 
-import { WebSearchTool } from "./websearch"
+import { WebSearchTool, webSearchTool } from "./websearch" // kilocode_change - inject goal billing into hosted search
 import { KiloToolRegistry } from "../kilocode/tool/registry" // kilocode_change
 import { Notebook } from "@/kilocode/notebook/service" // kilocode_change
 import { AgentManager } from "@/kilocode/agent-manager/service" // kilocode_change
@@ -138,7 +138,7 @@ const layer = Layer.effect(
     const lsptool = yield* LspTool
     const plan = yield* PlanExitTool
     const webfetch = yield* WebFetchTool
-    const websearch = yield* WebSearchTool
+    const websearch = yield* webSearchTool(storage ? { storage, sessions } : undefined) // kilocode_change
     const clone = yield* RepoCloneTool // kilocode_change
     const overview = yield* RepoOverviewTool // kilocode_change
     const shell = yield* ShellTool

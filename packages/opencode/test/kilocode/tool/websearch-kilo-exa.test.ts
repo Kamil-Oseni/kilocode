@@ -1,13 +1,17 @@
 // kilocode_change - new file
 import { describe, expect, test } from "bun:test"
-import { Effect, Exit, Layer } from "effect"
+import { Effect, Exit } from "effect"
 import { HttpBody, HttpClient, HttpClientResponse } from "effect/unstable/http"
 import {
   KILO_EXA_URL,
   MAX_KILO_EXA_RESULTS,
   type KiloExaParams,
+  admitKiloExa,
   callKiloExa,
+  executeKiloExa,
+  webSearchCharge,
 } from "../../../src/kilocode/tool/websearch-kilo-exa"
+import { MessageID, SessionID } from "@/session/schema"
 
 type Recorded = {
   url?: string
@@ -102,9 +106,9 @@ describe("callKiloExa request shape", () => {
 })
 
 describe("callKiloExa response formatting", () => {
-  const okValue = <E>(exit: Exit.Exit<string, E>): string => {
+  const okResult = <A, E>(exit: Exit.Exit<A, E>): A => {
     if (Exit.isFailure(exit)) throw new Error("expected success")
-    return (exit as Extract<typeof exit, { _tag: "Success" }>).value as string
+    return (exit as Extract<typeof exit, { _tag: "Success" }>).value
   }
 
   test("formats results with title, url, date and highlights", async () => {
@@ -120,7 +124,7 @@ describe("callKiloExa response formatting", () => {
         ],
       }),
     )
-    const text = okValue(exit)
+    const text = okResult(exit).output
     expect(text).toContain("[1] A drone")
     expect(text).toContain("https://example.com/a")
     expect(text).toContain("(2025-01-02T00:00:00.000Z)")
@@ -130,15 +134,15 @@ describe("callKiloExa response formatting", () => {
 
   test("falls back to url when title is missing", async () => {
     const exit = await runCall({ query: "x" }, () => okJson({ results: [{ url: "https://example.com/no-title" }] }))
-    expect(okValue(exit)).toContain("[1] https://example.com/no-title")
+    expect(okResult(exit).output).toContain("[1] https://example.com/no-title")
   })
 
   test("returns NO_RESULTS message on empty results", async () => {
     const exit = await runCall({ query: "x" }, () => okJson({ results: [] }))
-    expect(okValue(exit)).toBe("No search results found. Please try a different query.")
+    expect(okResult(exit).output).toBe("No search results found. Please try a different query.")
   })
 
-  test("ignores costDollars on the response (cost accounting out of scope)", async () => {
+  test("retains authoritative costDollars and request identity", async () => {
     const exit = await runCall({ query: "x" }, () =>
       okJson({
         results: [{ url: "https://example.com" }],
@@ -146,7 +150,39 @@ describe("callKiloExa response formatting", () => {
         requestId: "req-123",
       }),
     )
-    expect(Exit.isSuccess(exit)).toBe(true)
+    expect(okResult(exit).billing).toEqual({ id: "req-123", amount: 0.007 })
+  })
+
+  test("missing and malformed cost evidence remains unknown instead of becoming free", async () => {
+    const missing = await runCall({ query: "x" }, () => okJson({ results: [] }))
+    expect(okResult(missing).billing).toMatchObject({ reason: expect.stringContaining("without reporting") })
+    const malformed = await runCall({ query: "x" }, () =>
+      okJson({ results: [], requestId: "req-bad", costDollars: { total: "0.007" } }),
+    )
+    expect(okResult(malformed).billing).toMatchObject({
+      id: "req-bad",
+      reason: expect.stringContaining("invalid billed amount"),
+    })
+  })
+
+  test("builds immutable recorded and unknown goal receipts from the host response", () => {
+    const sessionID = SessionID.make("ses_websearch_charge")
+    const messageID = MessageID.make("msg_websearch_charge")
+    const base = { sessionID, messageID, callID: "call_websearch", at: 123 }
+    expect(webSearchCharge({ ...base, billing: { id: "req-123", amount: 0.007 } })).toMatchObject({
+      kind: "tool",
+      provider: "Kilo",
+      service: "Exa Web Search",
+      source: "kilo-exa.costDollars.total",
+      origin: { sessionID, messageID, callID: "call_websearch" },
+      at: 123,
+      coverage: "recorded",
+      amount: 0.007,
+      currency: "USD",
+    })
+    const unknown = webSearchCharge({ ...base, billing: { reason: "Provider amount missing." } })
+    expect(unknown).toMatchObject({ coverage: "unknown", currency: "USD", reason: "Provider amount missing." })
+    expect(unknown.id).toMatch(/^websearch:kilo-exa:[a-f0-9]{64}$/)
   })
 })
 
@@ -176,5 +212,152 @@ describe("callKiloExa error handling", () => {
   test("dies when response body is not valid ExaResponse shape", async () => {
     const exit = await runCall({ query: "x" }, () => okJson({ nope: true }))
     expect(Exit.isFailure(exit)).toBe(true)
+  })
+})
+
+describe("executeKiloExa billing boundary", () => {
+  const ids = {
+    sessionID: SessionID.make("ses_websearch_boundary"),
+    messageID: MessageID.make("msg_websearch_boundary"),
+    callID: "call_websearch_boundary",
+    at: 123,
+  }
+
+  test("does not contact the provider when budget admission is denied", async () => {
+    const events: string[] = []
+    const exit = await Effect.runPromiseExit(
+      admitKiloExa({
+        http: fakeHttp(() => {
+          events.push("request")
+          return okJson({ results: [] })
+        }),
+        params: { query: "x" },
+        token: "token",
+        claim: Effect.fail(new Error("USD budget exhausted")),
+        ...ids,
+      }),
+    )
+    expect(Exit.isFailure(exit)).toBe(true)
+    expect(events).toEqual([])
+  })
+
+  test("dispatches before the request and settles the exact receipt before release", async () => {
+    const events: string[] = []
+    const http = fakeHttp(() => {
+      events.push("request")
+      return okJson({ results: [], requestId: "req-boundary", costDollars: { total: 0.007 } })
+    })
+    const result = await Effect.runPromise(
+      executeKiloExa({
+        http,
+        params: { query: "x" },
+        token: "token",
+        lease: {
+          dispatch: Effect.sync(() => events.push("dispatch")),
+          settle: (charge) =>
+            Effect.sync(() => {
+              events.push(`settle:${charge.id}:${charge.coverage}`)
+            }),
+          release: Effect.sync(() => events.push("release")),
+        },
+        ...ids,
+      }),
+    )
+    expect(events).toEqual(["dispatch", "request", `settle:${result.charge.id}:recorded`, "release"])
+    expect(result.charge).toMatchObject({ coverage: "recorded", amount: 0.007, currency: "USD" })
+  })
+
+  test("releases a reservation when dispatch fails and never calls the provider", async () => {
+    const events: string[] = []
+    const exit = await Effect.runPromiseExit(
+      executeKiloExa({
+        http: fakeHttp(() => {
+          events.push("request")
+          return okJson({ results: [] })
+        }),
+        params: { query: "x" },
+        token: "token",
+        lease: {
+          dispatch: Effect.fail(new Error("reservation lost")),
+          settle: () => Effect.sync(() => events.push("settle")),
+          release: Effect.sync(() => events.push("release")),
+        },
+        ...ids,
+      }),
+    )
+    expect(Exit.isFailure(exit)).toBe(true)
+    expect(events).toEqual(["release"])
+  })
+
+  test("does not release a dispatched lease when the provider response fails", async () => {
+    const events: string[] = []
+    const exit = await Effect.runPromiseExit(
+      executeKiloExa({
+        http: fakeHttp(() => {
+          events.push("request")
+          return jsonResponse(500, { error: "lost upstream receipt" })
+        }),
+        params: { query: "x" },
+        token: "token",
+        lease: {
+          dispatch: Effect.sync(() => events.push("dispatch")),
+          settle: () => Effect.sync(() => events.push("settle")),
+          release: Effect.sync(() => events.push("release")),
+        },
+        ...ids,
+      }),
+    )
+    expect(Exit.isFailure(exit)).toBe(true)
+    expect(events).toEqual(["dispatch", "request"])
+  })
+
+  test("does not release a dispatched lease when the provider never returns", async () => {
+    const events: string[] = []
+    const http = HttpClient.make(() => Effect.never)
+    const exit = await Effect.runPromiseExit(
+      executeKiloExa({
+        http,
+        params: { query: "x" },
+        token: "token",
+        lease: {
+          dispatch: Effect.sync(() => events.push("dispatch")),
+          settle: () => Effect.sync(() => events.push("settle")),
+          release: Effect.sync(() => events.push("release")),
+        },
+        ...ids,
+      }).pipe(Effect.timeout("10 millis")),
+    )
+    expect(Exit.isFailure(exit)).toBe(true)
+    expect(events).toEqual(["dispatch"])
+  })
+
+  test("keeps the receipt available and releases ownership when immediate settlement fails", async () => {
+    const events: string[] = []
+    const result = await Effect.runPromise(
+      executeKiloExa({
+        http: fakeHttp(() => {
+          events.push("request")
+          return okJson({ results: [], requestId: "req-deferred", costDollars: { total: 0.01 } })
+        }),
+        params: { query: "x" },
+        token: "token",
+        lease: {
+          dispatch: Effect.sync(() => events.push("dispatch")),
+          settle: () => Effect.fail(new Error("storage unavailable")),
+          release: Effect.sync(() => events.push("release")),
+        },
+        ...ids,
+      }),
+    )
+    expect(events).toEqual(["dispatch", "request", "release"])
+    expect(result.charge).toMatchObject({ coverage: "recorded", amount: 0.01 })
+  })
+
+  test("keeps same-call receipts immutable and separates a changed tool-call origin", () => {
+    const first = webSearchCharge({ ...ids, billing: { id: "req-retry", amount: 0.01 } })
+    const replay = webSearchCharge({ ...ids, billing: { id: "req-retry", amount: 0.01 } })
+    const next = webSearchCharge({ ...ids, callID: "call_retry", billing: { id: "req-retry", amount: 0.01 } })
+    expect(replay).toEqual(first)
+    expect(next.id).not.toBe(first.id)
   })
 })

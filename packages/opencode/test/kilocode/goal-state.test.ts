@@ -4899,6 +4899,67 @@ describe("RayaGoal", () => {
     }),
   )
 
+  it.live("accounts a completed hosted web search from its exact host-authored tool receipt", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const sessionID = SessionID.make(`ses_websearch_charge_${crypto.randomUUID()}`)
+      const rows: MessageV2.WithParts[] = []
+      const goals = setup(storage, () => rows)
+      yield* Effect.addFinalizer(() => goals.clear(sessionID))
+      const created = yield* goals.create(sessionID, "Search and account for one hosted result")
+      const data = transcript({ sessionID, tool: "websearch", metadata: {} })
+      const part = data.part!
+      const receipt: RayaGoal.Charge = {
+        id: "websearch:kilo-exa:receipt_goal_1",
+        kind: "tool",
+        provider: "Kilo",
+        service: "Exa Web Search",
+        source: "kilo-exa.costDollars.total",
+        origin: { sessionID, messageID: part.messageID, callID: part.callID },
+        at: created.createdAt,
+        coverage: "recorded",
+        amount: 0.007,
+        currency: "USD",
+      }
+      part.state.metadata.rayaGoalCharge = { version: 1, receipt }
+      rows.push(...data.rows)
+
+      const result = yield* goals.recordTurn(sessionID, data.rows[1].info.id)
+      expect(result?.state.charges).toEqual([receipt])
+      expect((yield* goals.get(sessionID))?.charges).toEqual([receipt])
+    }),
+  )
+
+  it.live("ignores a fabricated charge envelope from a tool without a billing contract", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const sessionID = SessionID.make(`ses_untrusted_charge_${crypto.randomUUID()}`)
+      const rows: MessageV2.WithParts[] = []
+      const goals = setup(storage, () => rows)
+      yield* Effect.addFinalizer(() => goals.clear(sessionID))
+      const created = yield* goals.create(sessionID, "Do not trust arbitrary tool billing metadata")
+      const data = transcript({ sessionID, tool: "bash", metadata: {} })
+      const part = data.part!
+      part.state.metadata.rayaGoalCharge = {
+        version: 1,
+        receipt: {
+          id: "fabricated-charge",
+          kind: "tool",
+          provider: "untrusted",
+          service: "shell",
+          origin: { sessionID, messageID: part.messageID, callID: part.callID },
+          at: created.createdAt,
+          coverage: "recorded",
+          amount: 999,
+          currency: "USD",
+        },
+      }
+      rows.push(...data.rows)
+
+      expect((yield* goals.recordTurn(sessionID, data.rows[1].info.id))?.state.charges).toEqual([])
+    }),
+  )
+
   it.live("accounts an image charge when file delivery fails after the billed response", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service

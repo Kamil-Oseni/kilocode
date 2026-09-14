@@ -1,4 +1,4 @@
-import { Effect, Option, Schema } from "effect" // kilocode_change - Option added for kilo-exa transport dispatch
+import { Effect, Schema } from "effect" // kilocode_change - hosted-search charge settlement
 import { HttpClient } from "effect/unstable/http"
 import * as Tool from "./tool"
 import * as McpWebSearch from "./mcp-websearch"
@@ -9,6 +9,11 @@ import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Auth } from "@/auth" // kilocode_change - source Kilo bearer for Kilo-REST transport
 import { Env } from "@/env" // kilocode_change - config via Env.Service instead of process.env reads
+import type { Storage } from "@/storage/storage" // kilocode_change - goal charge admission
+import type { Session } from "@/session/session" // kilocode_change - goal charge admission
+import * as ChargeReservations from "@/kilocode/goal/charges" // kilocode_change - hosted search admission
+import type { RayaGoal } from "@/kilocode/goal" // kilocode_change - hosted search receipt
+import { createHash } from "node:crypto" // kilocode_change - bounded stable reservation identity
 
 const MAX_RESULTS = 10 // kilocode_change - cap numResults across all transports
 
@@ -109,104 +114,150 @@ function callProvider(
   )
 }
 
-export const WebSearchTool = Tool.define(
-  "websearch",
-  Effect.gen(function* () {
-    const http = yield* HttpClient.HttpClient
-    const flags = yield* RuntimeFlags.Service
-    const authSvc = yield* Auth.Service // kilocode_change - source Kilo bearer for Kilo-REST transport
-    const env = yield* Env.Service // kilocode_change - config via Env.Service instead of process.env reads
+// kilocode_change start - inject goal accounting only from the host registry
+type GoalDeps = { storage: Storage.Interface; sessions: Session.Interface }
+export const webSearchTool = (goals?: GoalDeps) =>
+  Tool.define(
+    "websearch",
+    // kilocode_change end
+    Effect.gen(function* () {
+      const http = yield* HttpClient.HttpClient
+      const flags = yield* RuntimeFlags.Service
+      const authSvc = yield* Auth.Service // kilocode_change - source Kilo bearer for Kilo-REST transport
+      const env = yield* Env.Service // kilocode_change - config via Env.Service instead of process.env reads
+      const charges = goals ? yield* ChargeReservations.make(goals) : undefined // kilocode_change
 
-    return {
-      get description() {
-        return DESCRIPTION.replace("{{year}}", new Date().getFullYear().toString())
-      },
-      parameters: Parameters,
-      execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
-        Effect.gen(function* () {
-          // kilocode_change start - config via Env.Service instead of process.env reads
-          const [override, exaKey, parallelKey] = yield* Effect.all([
-            env.get("KILO_WEBSEARCH_PROVIDER"),
-            env.get("EXA_API_KEY"),
-            env.get("PARALLEL_API_KEY"),
-          ])
-          const provider = selectWebSearchProvider(
-            ctx.sessionID,
-            {
-              exa: flags.enableExa,
-              parallel: flags.enableParallel,
-            },
-            override,
-          )
-          // kilocode_change end
-          const title = webSearchProviderLabel(provider)
-          // kilocode_change start - Kilo-REST Exa transport
-          // Precedence:
-          //   provider="kilo-exa"          -> kilo-rest  (auth required)
-          //   provider="exa" + EXA_API_KEY -> mcp-exa-byok     (BYOK wins)
-          //   provider="exa" + Kilo auth   -> kilo-rest        (new default for authed users)
-          //   provider="exa" + no auth     -> mcp-exa-unauth   (preserves current fallback)
-          //   provider="parallel"          -> mcp-parallel     (unchanged)
-          const kiloToken = yield* Effect.gen(function* () {
-            if (provider !== "exa" && provider !== "kilo-exa") return undefined as string | undefined
-            const info = yield* authSvc.get("kilo")
-            if (!info) return undefined
-            return info.type === "api" ? info.key : info.type === "oauth" ? info.access : undefined
-          })
-          const transport =
-            provider === "kilo-exa"
-              ? "kilo-rest"
-              : provider === "parallel"
-                ? "mcp-parallel"
-                : provider === "exa" && exaKey
-                  ? "mcp-exa-byok"
-                  : provider === "exa" && kiloToken
-                    ? "kilo-rest"
-                    : "mcp-exa-unauth"
-          // kilocode_change end
-          // kilocode_change start - add transport to metadata
-          yield* ctx.metadata({
-            title: `${title} "${params.query}"`,
-            metadata: { provider, transport },
-          })
-          // kilocode_change end
+      return {
+        get description() {
+          return DESCRIPTION.replace("{{year}}", new Date().getFullYear().toString())
+        },
+        parameters: Parameters,
+        execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
+          Effect.gen(function* () {
+            // kilocode_change start - config via Env.Service instead of process.env reads
+            const [override, exaKey, parallelKey] = yield* Effect.all([
+              env.get("KILO_WEBSEARCH_PROVIDER"),
+              env.get("EXA_API_KEY"),
+              env.get("PARALLEL_API_KEY"),
+            ])
+            const provider = selectWebSearchProvider(
+              ctx.sessionID,
+              {
+                exa: flags.enableExa,
+                parallel: flags.enableParallel,
+              },
+              override,
+            )
+            // kilocode_change end
+            const title = webSearchProviderLabel(provider)
+            // kilocode_change start - Kilo-REST Exa transport
+            // Precedence:
+            //   provider="kilo-exa"          -> kilo-rest  (auth required)
+            //   provider="exa" + EXA_API_KEY -> mcp-exa-byok     (BYOK wins)
+            //   provider="exa" + Kilo auth   -> kilo-rest        (new default for authed users)
+            //   provider="exa" + no auth     -> mcp-exa-unauth   (preserves current fallback)
+            //   provider="parallel"          -> mcp-parallel     (unchanged)
+            const kiloToken = yield* Effect.gen(function* () {
+              if (provider !== "exa" && provider !== "kilo-exa") return undefined as string | undefined
+              const info = yield* authSvc.get("kilo")
+              if (!info) return undefined
+              return info.type === "api" ? info.key : info.type === "oauth" ? info.access : undefined
+            })
+            const transport =
+              provider === "kilo-exa"
+                ? "kilo-rest"
+                : provider === "parallel"
+                  ? "mcp-parallel"
+                  : provider === "exa" && exaKey
+                    ? "mcp-exa-byok"
+                    : provider === "exa" && kiloToken
+                      ? "kilo-rest"
+                      : "mcp-exa-unauth"
+            // kilocode_change end
+            // kilocode_change start - add transport to metadata
+            yield* ctx.metadata({
+              title: `${title} "${params.query}"`,
+              metadata: { provider, transport },
+            })
+            // kilocode_change end
 
-          yield* ctx.ask({
-            permission: "websearch",
-            patterns: [params.query],
-            always: ["*"],
-            metadata: {
-              query: params.query,
-              numResults: params.numResults,
-              livecrawl: params.livecrawl,
-              type: params.type,
-              contextMaxCharacters: params.contextMaxCharacters,
-              provider,
-            },
-          })
+            yield* ctx.ask({
+              permission: "websearch",
+              patterns: [params.query],
+              always: ["*"],
+              metadata: {
+                query: params.query,
+                numResults: params.numResults,
+                livecrawl: params.livecrawl,
+                type: params.type,
+                contextMaxCharacters: params.contextMaxCharacters,
+                provider,
+              },
+            })
 
-          // kilocode_change start - dispatch Kilo-REST transport
-          const result = yield* transport === "kilo-rest"
-            ? kiloToken
-              ? KiloExa.callKiloExa(
+            // kilocode_change start - reserve configured non-model capacity before the hosted paid request
+            if (transport === "kilo-rest" && !kiloToken)
+              return yield* Effect.die(
+                new Error("KILO_WEBSEARCH_PROVIDER=kilo-exa requires Kilo auth; run `kilo auth login`"),
+              )
+            const claim = charges
+              ? charges.claim(
+                  ctx.sessionID,
+                  "USD",
+                  `websearch:${createHash("sha256")
+                    .update(`${ctx.sessionID}:${ctx.messageID}:${ctx.callID ?? "unknown"}`)
+                    .digest("hex")}`,
+                )
+              : Effect.succeed({
+                  dispatch: Effect.void,
+                  release: Effect.void,
+                  settle: (_charge: RayaGoal.Charge) => Effect.void,
+                })
+            // kilocode_change end
+
+            // kilocode_change start - dispatch Kilo-REST transport
+            const result = yield* transport === "kilo-rest"
+              ? KiloExa.admitKiloExa({
                   http,
-                  {
+                  params: {
                     query: params.query,
                     type: params.type,
                     numResults: params.numResults,
                   },
-                  kiloToken,
-                )
-              : Effect.die(new Error("KILO_WEBSEARCH_PROVIDER=kilo-exa requires Kilo auth; run `kilo auth login`"))
-            : callProvider(http, provider, params, ctx, { exa: exaKey, parallel: parallelKey }) // kilocode_change
-          // kilocode_change end
+                  token: kiloToken,
+                  claim,
+                  sessionID: ctx.sessionID,
+                  messageID: ctx.messageID,
+                  callID: ctx.callID,
+                  at:
+                    ctx.messages.find((message) => message.info.id === ctx.messageID)?.info.time.created ?? Date.now(),
+                })
+              : callProvider(http, provider, params, ctx, { exa: exaKey, parallel: parallelKey }) // kilocode_change
+            // kilocode_change end
 
-          return {
-            output: result ?? "No search results found. Please try a different query.",
-            title: `${title}: ${params.query}`,
-            metadata: { provider, transport }, // kilocode_change - add transport
-          }
-        }).pipe(Effect.orDie),
-    }
-  }),
-)
+            // kilocode_change start - retain the authoritative Kilo-hosted search charge in goal accounting
+            const hosted = typeof result === "string" ? undefined : result
+            const output = typeof result === "string" ? result : result.output
+            const charge = hosted?.charge
+            if (charge) {
+              yield* ctx.metadata({
+                metadata: { provider, transport, rayaGoalCharge: { version: 1 as const, receipt: charge } },
+              })
+            }
+            // kilocode_change end
+
+            return {
+              output: output ?? "No search results found. Please try a different query.", // kilocode_change
+              title: `${title}: ${params.query}`,
+              metadata: {
+                provider,
+                transport,
+                ...(charge ? { rayaGoalCharge: { version: 1 as const, receipt: charge } } : {}),
+              }, // kilocode_change - add transport and authoritative hosted-search charge
+            }
+          }).pipe(Effect.orDie),
+      }
+    }),
+  )
+
+export const WebSearchTool = webSearchTool() // kilocode_change - compatibility identity for visibility checks

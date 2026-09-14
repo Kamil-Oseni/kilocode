@@ -37,6 +37,13 @@ const Field = Schema.Struct({
   value: Schema.optional(Schema.String.check(Schema.isMaxLength(200), Schema.isPattern(/^[^\r\n]*$/))),
   required: Schema.optional(Schema.Boolean),
 })
+const Check = Schema.Struct({
+  type: Schema.Literal("checkbox"),
+  name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(64), Schema.isPattern(/^[A-Za-z0-9_.-]+$/)),
+  label: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)),
+  checked: Schema.optional(Schema.Boolean),
+  required: Schema.optional(Schema.Boolean),
+})
 const Block = Schema.Union([
   Schema.Struct({ type: Schema.Literal("paragraph"), text: Text }),
   Schema.Struct({
@@ -62,6 +69,7 @@ const Block = Schema.Union([
   Image,
   Link,
   Field,
+  Check,
 ])
 const Parameters = Schema.Struct({
   filePath: Schema.String.annotate({ description: "Destination path ending in .pdf." }),
@@ -174,6 +182,7 @@ type Row =
   | { image: Loaded; before?: number; after?: number }
   | { link: { text: string; url: string }; before?: number; after?: number }
   | { field: { name: string; label: string; value?: string; required?: boolean }; before?: number; after?: number }
+  | { check: { name: string; label: string; checked?: boolean; required?: boolean }; before?: number; after?: number }
 
 type Mark =
   | { readonly kind: "link"; readonly x: number; readonly y: number; readonly width: number; readonly url: string }
@@ -185,6 +194,15 @@ type Mark =
       readonly name: string
       readonly label: string
       readonly value?: string
+      readonly required?: boolean
+    }
+  | {
+      readonly kind: "check"
+      readonly x: number
+      readonly y: number
+      readonly name: string
+      readonly label: string
+      readonly checked?: boolean
       readonly required?: boolean
     }
 
@@ -241,6 +259,10 @@ function pdf(input: typeof Parameters.Type, images: readonly Loaded[]) {
     }
     if (block.type === "text_field") {
       rows.push({ field: block, before: 5, after: 12 })
+      continue
+    }
+    if (block.type === "checkbox") {
+      rows.push({ check: block, before: 5, after: 10 })
       continue
     }
     for (const [index, item] of block.items.entries())
@@ -343,6 +365,38 @@ function pdf(input: typeof Parameters.Type, images: readonly Loaded[]) {
       y -= row.after ?? 0
       continue
     }
+    if ("check" in row) {
+      const lines = wrap(row.check.label.trim(), 10, 0, 478)
+      const height = Math.max(18, lines.length * 13.5)
+      if (y - height < 72) {
+        pages.push([])
+        marks.push([])
+        y = 720
+      }
+      const bottom = y - 18
+      pages.at(-1)!.push(`0.710 0.733 0.776 RG 0.75 w 54 ${bottom.toFixed(2)} 18 18 re S`)
+      if (row.check.checked)
+        pages
+          .at(-1)!
+          .push(
+            `0.090 0.102 0.129 RG 1.5 w 58 ${(bottom + 9).toFixed(2)} m 62 ${(bottom + 5).toFixed(2)} l 69 ${(bottom + 13).toFixed(2)} l S`,
+          )
+      for (const [index, line] of lines.entries())
+        pages
+          .at(-1)!
+          .push(`BT /F2 10 Tf 0.090 0.102 0.129 rg 80 ${(y - 13 - index * 13.5).toFixed(2)} Td <${encode(line)}> Tj ET`)
+      marks.at(-1)!.push({
+        kind: "check",
+        x: 54,
+        y: bottom,
+        name: row.check.name,
+        label: row.check.label.trim(),
+        checked: row.check.checked,
+        required: row.check.required,
+      })
+      y -= height + (row.after ?? 0)
+      continue
+    }
     if ("cells" in row) {
       const width = 504 / row.cells.length
       const cells = row.cells.map((cell) => wrap(cell.trim(), 9, 0, width - 12))
@@ -434,6 +488,22 @@ function pdf(input: typeof Parameters.Type, images: readonly Loaded[]) {
         return objects.push(
           `<< /Type /Annot /Subtype /Link /Rect [${mark.x.toFixed(2)} ${mark.y.toFixed(2)} ${(mark.x + mark.width).toFixed(2)} ${(mark.y + 15).toFixed(2)}] /Border [0 0 0] /A << /S /URI /URI <${utf8(mark.url)}> >> >>`,
         )
+      if (mark.kind === "check") {
+        const offStream = "q 1 1 1 rg 0 0 18 18 re f 0.710 0.733 0.776 RG 0.75 w 0.5 0.5 17 17 re S Q"
+        const yesStream = `${offStream}\nq 0.090 0.102 0.129 RG 1.5 w 4 9 m 8 5 l 15 13 l S Q`
+        const off = objects.push(
+          `<< /Type /XObject /Subtype /Form /BBox [0 0 18 18] /Resources << >> /Length ${offStream.length} >>\nstream\n${offStream}\nendstream`,
+        )
+        const yes = objects.push(
+          `<< /Type /XObject /Subtype /Form /BBox [0 0 18 18] /Resources << >> /Length ${yesStream.length} >>\nstream\n${yesStream}\nendstream`,
+        )
+        const state = mark.checked ? "Yes" : "Off"
+        const id = objects.push(
+          `<< /Type /Annot /Subtype /Widget /FT /Btn /T <${encode(mark.name)}> /TU <${encode(mark.label)}> /Rect [${mark.x.toFixed(2)} ${mark.y.toFixed(2)} ${(mark.x + 18).toFixed(2)} ${(mark.y + 18).toFixed(2)}] /F 4 /Ff ${mark.required ? 2 : 0} /V /${state} /DV /${state} /AS /${state} /AP << /N << /Off ${off} 0 R /Yes ${yes} 0 R >> >> /BS << /W 0.75 /S /S >> >>`,
+        )
+        fields.push(id)
+        return id
+      }
       const value = mark.value === undefined ? "" : ` /V <${encode(mark.value)}> /DV <${encode(mark.value)}>`
       const id = objects.push(
         `<< /Type /Annot /Subtype /Widget /FT /Tx /T <${encode(mark.name)}> /TU <${encode(mark.label)}> /Rect [${mark.x.toFixed(2)} ${mark.y.toFixed(2)} ${(mark.x + mark.width).toFixed(2)} ${(mark.y + 24).toFixed(2)}] /F 4 /Ff ${mark.required ? 2 : 0}${value} /DA (/F2 11 Tf 0.090 0.102 0.129 rg) /BS << /W 0.75 /S /S >> >>`,
@@ -486,7 +556,7 @@ export const CreatePdfTool = Tool.define(
     const events = yield* EventV2Bridge.Service
     return {
       description:
-        "Create a real paginated PDF from a title and structured headings, paragraphs, lists, rectangular tables, local PNG/JPEG images, credential-free http/https links or single-line text form fields. Images require alt text, read permission, valid headers and dimensions; PNG files must use 8-bit channels without interlacing. Images are limited to 10 files, 8 MiB each, 24 MiB combined and 20 megapixels combined. Tables support up to 8 columns and 100 rows each, with an optional first-row header. Links become visible text with native PDF annotations. Up to 50 uniquely named text fields retain a visible label, tooltip, optional default and required flag. The writer supports printable WinAnsi text, creates at most 200 pages and returns a verified local artifact receipt. It creates a new PDF or replaces the whole destination after approval. It does not fetch network images, open links while creating the file, import or edit an existing PDF, embed custom fonts, create checkbox/signature fields, produce a fully tagged accessible PDF, or guarantee archival conformance.",
+        "Create a real paginated PDF from a title and structured headings, paragraphs, lists, rectangular tables, local PNG/JPEG images, credential-free http/https links, single-line text fields or checkboxes. Images require alt text, read permission, valid headers and dimensions; PNG files must use 8-bit channels without interlacing. Images are limited to 10 files, 8 MiB each, 24 MiB combined and 20 megapixels combined. Tables support up to 8 columns and 100 rows each, with an optional first-row header. Links become visible text with native PDF annotations. Up to 50 uniquely named form fields retain visible labels and tooltips; text fields support an optional default, and checkboxes support an optional checked state. Either field can be required. The writer supports printable WinAnsi text, creates at most 200 pages and returns a verified local artifact receipt. It creates a new PDF or replaces the whole destination after approval. It does not fetch network images, open links while creating the file, import or edit an existing PDF, embed custom fonts, create signature fields, produce a fully tagged accessible PDF, or guarantee archival conformance.",
       parameters: Parameters,
       execute: (params: typeof Parameters.Type, ctx: Tool.Context) =>
         Effect.gen(function* () {
@@ -502,9 +572,11 @@ export const CreatePdfTool = Tool.define(
                 ? [block.alt, block.caption].filter((value): value is string => value !== undefined)
                 : block.type === "text_field"
                   ? [block.name, block.label, block.value].filter((value): value is string => value !== undefined)
-                  : "items" in block
-                    ? block.items
-                    : [block.text],
+                  : block.type === "checkbox"
+                    ? [block.name, block.label]
+                    : "items" in block
+                      ? block.items
+                      : [block.text],
           )
           const values = [params.title, params.author, ...text].filter((value): value is string => value !== undefined)
           const required = [
@@ -515,7 +587,7 @@ export const CreatePdfTool = Tool.define(
                 ? []
                 : block.type === "image"
                   ? [block.alt, block.caption].filter((value): value is string => value !== undefined)
-                  : block.type === "text_field"
+                  : block.type === "text_field" || block.type === "checkbox"
                     ? [block.name, block.label]
                     : "items" in block
                       ? block.items
@@ -535,11 +607,13 @@ export const CreatePdfTool = Tool.define(
           if (cells > 2_000) throw new Error("PDF tables are limited to 2,000 cells per document.")
           const sources = params.blocks.flatMap((block, index) => (block.type === "image" ? [{ block, index }] : []))
           const links = params.blocks.filter((block) => block.type === "link")
-          const fields = params.blocks.filter((block) => block.type === "text_field")
+          const fields = params.blocks.filter((block) => block.type === "text_field" || block.type === "checkbox")
+          const texts = params.blocks.filter((block) => block.type === "text_field")
+          const checks = params.blocks.filter((block) => block.type === "checkbox")
           for (const link of links) address(link.url)
-          if (fields.length > 50) throw new Error("A PDF can contain at most 50 text fields.")
+          if (fields.length > 50) throw new Error("A PDF can contain at most 50 form fields.")
           if (new Set(fields.map((field) => field.name.toLowerCase())).size !== fields.length)
-            throw new Error("Each PDF text field needs a unique name.")
+            throw new Error("Each PDF form field needs a unique name.")
           if (sources.length > 10) throw new Error("A PDF can contain at most 10 images.")
           const characters = [...values, ...links.map((link) => link.url)].reduce((sum, value) => sum + value.length, 0)
           if (characters > 100_000) throw new Error("This PDF exceeds the 100,000-character limit.")
@@ -620,6 +694,8 @@ export const CreatePdfTool = Tool.define(
               images: images.length,
               links: links.length,
               fields: fields.length,
+              textFields: texts.length,
+              checkboxes: checks.length,
             },
           })
           const result = yield* Effect.try({
@@ -659,6 +735,8 @@ export const CreatePdfTool = Tool.define(
               imagePixels: pixels,
               links: links.length,
               fields: fields.length,
+              textFields: texts.length,
+              checkboxes: checks.length,
               pages: result.pages,
               characters,
               rayaRevision: revision,

@@ -523,6 +523,8 @@ it.instance(
             { type: "link", text: "Open the verified report", url: "https://example.com/reports/q3?source=raya" },
             { type: "text_field", name: "reviewer", label: "Reviewer", value: "Kamil", required: true },
             { type: "text_field", name: "notes", label: "Review notes", value: "" },
+            { type: "checkbox", name: "approved", label: "Approved for publication", checked: true, required: true },
+            { type: "checkbox", name: "follow_up", label: "Follow-up required" },
             { type: "bullets", items: ["Customer retention improved", "Two risks need review"] },
             { type: "numbered", items: Array.from({ length: 90 }, (_, index) => `Follow-up action ${index + 1}`) },
           ],
@@ -533,13 +535,15 @@ it.instance(
       expect(created.metadata).toMatchObject({
         filepath: target,
         exists: false,
-        blocks: 9,
+        blocks: 11,
         tables: 1,
         cells: 6,
         images: 1,
         imagePixels: 1,
         links: 1,
-        fields: 2,
+        fields: 4,
+        textFields: 2,
+        checkboxes: 2,
         rayaRevision: { version: 1, status: "captured", path: target },
       })
       expect(Number(created.metadata.imageBytes)).toBeGreaterThan(0)
@@ -574,6 +578,13 @@ it.instance(
       expect(source).toContain("/TU <5265766965776572>".toUpperCase())
       expect(source).toContain("/V <4B616D696C>".toUpperCase())
       expect(source).toContain("/Ff 2")
+      expect(source).toContain("/Subtype /Widget /FT /Btn")
+      expect(source).toContain("/T <617070726F766564>".toUpperCase())
+      expect(source).toContain("/TU <417070726F76656420666F72207075626C69636174696F6E>".toUpperCase())
+      expect(source).toContain("/V /Yes /DV /Yes /AS /Yes")
+      expect(source).toContain("/V /Off /DV /Off /AS /Off")
+      expect(source).toContain("/AP << /N << /Off ")
+      expect(source).toContain("/Subtype /Form /BBox [0 0 18 18]")
       const start = Number(source.match(/startxref\n(\d+)/)?.[1])
       expect(source.slice(start)).toStartWith("xref\n")
       const offsets = [...source.matchAll(/(\d{10}) 00000 n \n/g)].map((match) => Number(match[1]))
@@ -631,7 +642,7 @@ it.instance(
           filePath: path.join(instance.directory, "duplicate-fields.pdf"),
           blocks: [
             { type: "text_field", name: "Owner", label: "Owner" },
-            { type: "text_field", name: "owner", label: "Backup owner" },
+            { type: "checkbox", name: "owner", label: "Confirm owner" },
           ],
         },
         {

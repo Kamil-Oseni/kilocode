@@ -277,6 +277,64 @@ describe("tool.edit", () => {
         yield* Deferred.await(updated)
       }),
     )
+
+    // kilocode_change start
+    it.instance("preserves a replacement file and approved original when the pathname changes during approval", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "report.txt")
+        const approved = path.join(test.directory, "approved.txt")
+        yield* put(filepath, "status: old")
+        const next = {
+          ...ctx,
+          ask: () =>
+            Effect.promise(async () => {
+              await fs.rename(filepath, approved)
+              await fs.writeFile(filepath, "status: replacement")
+            }),
+        }
+
+        const result = yield* run({ filePath: filepath, oldString: "old", newString: "agent" }, next).pipe(Effect.exit)
+        expect(Exit.isFailure(result)).toBe(true)
+        if (Exit.isFailure(result)) expect(Cause.pretty(result.cause)).toContain("changed after approval")
+        expect(yield* load(filepath)).toBe("status: replacement")
+        expect(yield* load(approved)).toBe("status: old")
+      }),
+    )
+
+    it.instance("preserves a newer user edit made while approval is pending", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "report.txt")
+        yield* put(filepath, "status: old")
+        const next = {
+          ...ctx,
+          ask: () => Effect.promise(() => fs.writeFile(filepath, "status: newer user value")),
+        }
+
+        const result = yield* run({ filePath: filepath, oldString: "old", newString: "agent" }, next).pipe(Effect.exit)
+        expect(Exit.isFailure(result)).toBe(true)
+        if (Exit.isFailure(result)) expect(Cause.pretty(result.cause)).toContain("changed after approval")
+        expect(yield* load(filepath)).toBe("status: newer user value")
+      }),
+    )
+
+    it.instance("refuses a hard-linked file without changing either name", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "report.txt")
+        const alias = path.join(test.directory, "report-copy.txt")
+        yield* put(filepath, "status: old")
+        yield* Effect.promise(() => fs.link(filepath, alias))
+
+        const result = yield* run({ filePath: filepath, oldString: "old", newString: "agent" }).pipe(Effect.exit)
+        expect(Exit.isFailure(result)).toBe(true)
+        if (Exit.isFailure(result)) expect(Cause.pretty(result.cause)).toContain("Hard-linked files")
+        expect(yield* load(filepath)).toBe("status: old")
+        expect(yield* load(alias)).toBe("status: old")
+      }),
+    )
+    // kilocode_change end
   })
 
   describe("edge cases", () => {

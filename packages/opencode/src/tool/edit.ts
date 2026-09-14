@@ -118,10 +118,11 @@ export const EditTool = Tool.define(
           let contentOld = ""
           let contentNew = ""
           let cachedFilediff: Snapshot.FileDiff | undefined // kilocode_change
-          yield* lock(filePath).withPermits(1)(
+          yield* lock(target).withPermits(1)(
+            // kilocode_change - aliases to one target share the same edit lock
             Effect.gen(function* () {
               if (params.oldString === "") {
-                const existed = yield* afs.existsSafe(filePath)
+                const existed = yield* afs.existsSafe(target) // kilocode_change - inspect the canonical destination
                 if (existed) {
                   throw new Error(
                     "oldString cannot be empty when editing an existing file. Provide the exact text to replace, or use write for an intentional full-file replacement.",
@@ -144,9 +145,9 @@ export const EditTool = Tool.define(
                   },
                 })
                 yield* RayaPath.check(afs, filePath, target) // kilocode_change - reject link swaps after approval
-                yield* EncodedIO.write(afs, filePath, Bom.join(contentNew, desiredBom), Encoding.DEFAULT) // kilocode_change - encoding-aware write (mkdirs) replaces afs.writeWithDirs
-                if (yield* format.file(filePath)) {
-                  contentNew = yield* EncodedIO.sync(afs, filePath, desiredBom, Encoding.DEFAULT)
+                yield* EncodedIO.write(afs, target, Bom.join(contentNew, desiredBom), Encoding.DEFAULT) // kilocode_change - write the reviewed canonical destination
+                if (yield* format.file(target)) {
+                  contentNew = yield* EncodedIO.syncChecked(afs, target, desiredBom, Encoding.DEFAULT) // kilocode_change
                 }
                 yield* events.publish(FileSystem.Event.Edited, { file: filePath })
                 yield* events.publish(Watcher.Event.Updated, {
@@ -156,12 +157,13 @@ export const EditTool = Tool.define(
                 return
               }
 
-              const info = yield* afs.stat(filePath).pipe(Effect.catch(() => Effect.succeed(undefined)))
+              const info = yield* afs.stat(target).pipe(Effect.catch(() => Effect.succeed(undefined))) // kilocode_change
               if (!info) throw new Error(`File ${filePath} not found`)
               if (info.type === "Directory") throw new Error(`Path is a directory, not a file: ${filePath}`)
               // kilocode_change start - encoding-aware read; Encoding.read strips UTF-8 BOMs so
               // derive the BOM flag from the detected encoding label instead of the decoded text.
-              const pre = yield* EncodedIO.read(afs, filePath)
+              const pre = yield* EncodedIO.read(afs, target)
+              const proof = yield* EncodedIO.identity(target)
               const source = { bom: pre.encoding === "utf-8-bom", text: pre.text, encoding: pre.encoding }
               // kilocode_change end
               contentOld = source.text
@@ -195,10 +197,12 @@ export const EditTool = Tool.define(
               })
 
               yield* RayaPath.check(afs, filePath, target) // kilocode_change - reject link swaps after approval
-              yield* EncodedIO.write(afs, filePath, Bom.join(contentNew, desiredBom), source.encoding) // kilocode_change - encoding-aware write replaces afs.writeWithDirs
-              if (yield* format.file(filePath)) {
-                contentNew = yield* EncodedIO.sync(afs, filePath, desiredBom, source.encoding)
+              // kilocode_change start - preserve concurrent user bytes and reject replaced or hard-linked targets
+              yield* EncodedIO.checked(target, Bom.join(contentNew, desiredBom), source.encoding, proof, pre.sha256)
+              if (yield* format.file(target)) {
+                contentNew = yield* EncodedIO.syncChecked(afs, target, desiredBom, source.encoding)
               }
+              // kilocode_change end
               yield* events.publish(FileSystem.Event.Edited, { file: filePath })
               yield* events.publish(Watcher.Event.Updated, {
                 file: filePath,
@@ -236,7 +240,7 @@ export const EditTool = Tool.define(
           return {
             metadata: {
               diagnostics: filterDiagnostics(diagnostics, [normalizedFilePath]), // kilocode_change
-              rayaRevision: yield* Artifact.capture(afs, filePath), // kilocode_change
+              rayaRevision: yield* Artifact.capture(afs, target), // kilocode_change
               diff,
               filediff, // kilocode_change
             },

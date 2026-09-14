@@ -1,11 +1,25 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises"
+import { createHash } from "node:crypto"
+import { link, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { isResponse, type Request } from "../src/mutation-protocol"
+import { isRequest, isResponse, type Request } from "../src/mutation-protocol"
 
 const roots: string[] = []
+
+const hash = (data: string) => createHash("sha256").update(data).digest("hex")
+
+async function checked(path: string, data: string): Promise<Request> {
+  const info = await stat(path, { bigint: true })
+  return {
+    op: "writeFileChecked",
+    path,
+    data: Buffer.from(data).toString("base64"),
+    identity: { dev: info.dev.toString(), ino: info.ino.toString() },
+    sha256: hash(await readFile(path, "utf8")),
+  }
+}
 
 async function worker(request: Request) {
   const entry = fileURLToPath(new URL("../src/kilo-sandbox-mutation-worker.ts", import.meta.url))
@@ -81,5 +95,83 @@ describe("filesystem mutation worker", () => {
     expect(response.error.operation).toBe("writeFileString")
     expect(response.error.code).toBe("ENOENT")
     expect(await Bun.file(skipped).exists()).toBe(false)
+  })
+
+  test("writes through the same file handle after identity and content validation", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "kilo-mutation-worker-"))
+    roots.push(root)
+    const file = path.join(root, "value.txt")
+    await writeFile(file, "approved")
+    const request = await checked(file, "changed")
+
+    expect(await worker(request)).toEqual({ ok: true })
+    expect(await readFile(file, "utf8")).toBe("changed")
+  })
+
+  test("refuses a pathname replaced after approval without changing either file", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "kilo-mutation-worker-"))
+    roots.push(root)
+    const file = path.join(root, "value.txt")
+    const moved = path.join(root, "approved.txt")
+    await writeFile(file, "approved")
+    const request = await checked(file, "changed")
+    await rename(file, moved)
+    await writeFile(file, "replacement")
+
+    const response = await worker(request)
+    expect(response.ok).toBe(false)
+    if (response.ok) return
+    expect(response.error.code).toBe("ESTALE")
+    expect(response.error.operation).toBe("writeFileChecked")
+    expect(await readFile(file, "utf8")).toBe("replacement")
+    expect(await readFile(moved, "utf8")).toBe("approved")
+  })
+
+  test("refuses changed content on the approved file without overwriting it", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "kilo-mutation-worker-"))
+    roots.push(root)
+    const file = path.join(root, "value.txt")
+    await writeFile(file, "approved")
+    const request = await checked(file, "agent change")
+    await writeFile(file, "newer user change")
+
+    const response = await worker(request)
+    expect(response.ok).toBe(false)
+    if (response.ok) return
+    expect(response.error.code).toBe("ESTALE")
+    expect(await readFile(file, "utf8")).toBe("newer user change")
+  })
+
+  test("refuses hard-linked files without changing either name", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "kilo-mutation-worker-"))
+    roots.push(root)
+    const file = path.join(root, "value.txt")
+    const alias = path.join(root, "alias.txt")
+    await writeFile(file, "approved")
+    await link(file, alias)
+    const request = await checked(file, "agent change")
+
+    const response = await worker(request)
+    expect(response.ok).toBe(false)
+    if (response.ok) return
+    expect(response.error.code).toBe("ESTALE")
+    expect(response.error.message).toContain("Hard-linked files")
+    expect(await readFile(file, "utf8")).toBe("approved")
+    expect(await readFile(alias, "utf8")).toBe("approved")
+  })
+
+  test("rejects malformed checked-write proofs and checked writes inside batches", () => {
+    const base = {
+      op: "writeFileChecked",
+      path: "value.txt",
+      data: "Y2hhbmdlZA==",
+      identity: { dev: "1", ino: "2" },
+      sha256: "a".repeat(64),
+    }
+    expect(isRequest(base)).toBe(true)
+    expect(isRequest({ ...base, identity: { dev: "-1", ino: "2" } })).toBe(false)
+    expect(isRequest({ ...base, identity: { dev: "1.5", ino: "2" } })).toBe(false)
+    expect(isRequest({ ...base, sha256: "not-a-hash" })).toBe(false)
+    expect(isRequest({ op: "batch", operations: [base] })).toBe(false)
   })
 })

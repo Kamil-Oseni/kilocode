@@ -52,10 +52,11 @@ export const WriteTool = Tool.define(
           assertMutablePath(target) // kilocode_change - path aliases cannot bypass protected worktree boundaries
           yield* assertExternalDirectoryEffect(ctx, target) // kilocode_change - inspect the target behind a path alias
 
-          const exists = yield* fs.existsSafe(filepath)
+          const exists = yield* fs.existsSafe(target) // kilocode_change - inspect the canonical destination
           // kilocode_change start - encoding-aware read; Encoding.read strips UTF-8 BOMs so
           // derive the BOM flag from the detected encoding label instead of the decoded text.
-          const pre = exists ? yield* EncodedIO.read(fs, filepath) : { text: "", encoding: "utf-8" }
+          const pre = exists ? yield* EncodedIO.read(fs, target) : { text: "", encoding: "utf-8", sha256: undefined }
+          const proof = exists ? yield* EncodedIO.identity(target) : undefined
           const source = { bom: pre.encoding === "utf-8-bom", text: pre.text, encoding: pre.encoding }
           // kilocode_change end
           const next = Bom.split(params.content)
@@ -77,10 +78,17 @@ export const WriteTool = Tool.define(
           })
 
           yield* RayaPath.check(fs, filepath, target) // kilocode_change - reject link swaps after approval
-          yield* EncodedIO.write(fs, filepath, Bom.join(contentNew, desiredBom), source.encoding) // kilocode_change - encoding-aware write (mkdirs) replaces fs.writeWithDirs
-          if (yield* format.file(filepath)) {
-            yield* EncodedIO.sync(fs, filepath, desiredBom, source.encoding)
+          // kilocode_change start - existing files are validated and written through the same
+          // open handle, so a stale path, concurrent edit, or hard link is refused without mutation.
+          if (exists && proof && pre.sha256) {
+            yield* EncodedIO.checked(target, Bom.join(contentNew, desiredBom), source.encoding, proof, pre.sha256)
+          } else {
+            yield* EncodedIO.write(fs, target, Bom.join(contentNew, desiredBom), source.encoding)
           }
+          if (yield* format.file(target)) {
+            yield* EncodedIO.syncChecked(fs, target, desiredBom, source.encoding)
+          }
+          // kilocode_change end
           yield* events.publish(FileSystem.Event.Edited, { file: filepath })
           yield* events.publish(Watcher.Event.Updated, {
             file: filepath,
@@ -112,7 +120,7 @@ export const WriteTool = Tool.define(
               diagnostics: filterDiagnostics(diagnostics, [normalizedFilepath]), // kilocode_change
               filepath,
               exists: exists,
-              rayaRevision: yield* Artifact.capture(fs, filepath), // kilocode_change - fingerprint actual encoded/formatted bytes
+              rayaRevision: yield* Artifact.capture(fs, target), // kilocode_change - fingerprint actual encoded/formatted bytes
               diff, // kilocode_change
               filediff, // kilocode_change
             },

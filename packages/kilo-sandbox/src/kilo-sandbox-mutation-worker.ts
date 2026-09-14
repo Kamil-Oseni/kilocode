@@ -3,6 +3,7 @@ import * as fs from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { isRequest, type Failure, type Operation, type Request, type Response, type Time } from "./mutation-protocol"
+import { writeChecked } from "./checked-write"
 
 function time(value: Time) {
   return value.type === "date" ? new Date(value.value) : value.value
@@ -104,6 +105,9 @@ async function mutate(request: Operation): Promise<string | undefined> {
       return undefined
     case "writeFileString":
       await fs.writeFile(request.path, request.data, request.options)
+      return undefined
+    case "writeFileChecked":
+      await writeChecked(request.path, Buffer.from(request.data, "base64"), request.identity, request.sha256)
       return undefined
   }
   throw new TypeError("Unsupported filesystem mutation")

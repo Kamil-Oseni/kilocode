@@ -1,6 +1,6 @@
 import { afterEach, describe, expect } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Effect, Layer } from "effect"
+import { Cause, Effect, Exit } from "effect" // kilocode_change
 import path from "path"
 import fs from "fs/promises"
 import { WriteTool } from "../../src/tool/write"
@@ -265,6 +265,64 @@ describe("tool.write", () => {
         expect(exit._tag).toBe("Failure")
       }),
     )
+
+    // kilocode_change start
+    it.instance("preserves a replacement file and the approved file when the pathname changes during approval", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "report.txt")
+        const approved = path.join(test.directory, "approved.txt")
+        yield* Effect.promise(() => fs.writeFile(filepath, "approved content"))
+        const next = {
+          ...ctx,
+          ask: () =>
+            Effect.promise(async () => {
+              await fs.rename(filepath, approved)
+              await fs.writeFile(filepath, "replacement content")
+            }),
+        }
+
+        const result = yield* run({ filePath: filepath, content: "agent content" }, next).pipe(Effect.exit)
+        expect(Exit.isFailure(result)).toBe(true)
+        if (Exit.isFailure(result)) expect(Cause.pretty(result.cause)).toContain("changed after approval")
+        expect(yield* Effect.promise(() => fs.readFile(filepath, "utf8"))).toBe("replacement content")
+        expect(yield* Effect.promise(() => fs.readFile(approved, "utf8"))).toBe("approved content")
+      }),
+    )
+
+    it.instance("preserves a newer user edit made while approval is pending", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "report.txt")
+        yield* Effect.promise(() => fs.writeFile(filepath, "approved content"))
+        const next = {
+          ...ctx,
+          ask: () => Effect.promise(() => fs.writeFile(filepath, "newer user content")),
+        }
+
+        const result = yield* run({ filePath: filepath, content: "agent content" }, next).pipe(Effect.exit)
+        expect(Exit.isFailure(result)).toBe(true)
+        if (Exit.isFailure(result)) expect(Cause.pretty(result.cause)).toContain("changed after approval")
+        expect(yield* Effect.promise(() => fs.readFile(filepath, "utf8"))).toBe("newer user content")
+      }),
+    )
+
+    it.instance("refuses a hard-linked file without changing either name", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "report.txt")
+        const alias = path.join(test.directory, "report-copy.txt")
+        yield* Effect.promise(() => fs.writeFile(filepath, "approved content"))
+        yield* Effect.promise(() => fs.link(filepath, alias))
+
+        const result = yield* run({ filePath: filepath, content: "agent content" }).pipe(Effect.exit)
+        expect(Exit.isFailure(result)).toBe(true)
+        if (Exit.isFailure(result)) expect(Cause.pretty(result.cause)).toContain("Hard-linked files")
+        expect(yield* Effect.promise(() => fs.readFile(filepath, "utf8"))).toBe("approved content")
+        expect(yield* Effect.promise(() => fs.readFile(alias, "utf8"))).toBe("approved content")
+      }),
+    )
+    // kilocode_change end
   })
 
   describe("title generation", () => {

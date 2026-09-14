@@ -1,10 +1,12 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
+import { createHash } from "node:crypto"
 import { lstat, mkdir, mkdtemp, readFile, realpath, rm, stat, symlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { NodeFileSystem } from "@effect/platform-node"
 import { Effect, FileSystem, Layer, Scope, Stream } from "effect"
 import { run } from "../src/context"
+import { writeChecked } from "../src/checked"
 import { layer } from "../src/filesystem"
 import { batchMutations, currentRunner, withRunner, type Runner } from "../src/mutation"
 import type { Request } from "../src/mutation-protocol"
@@ -118,6 +120,38 @@ describe("sandbox FileSystem", () => {
     expect(exit._tag).toBe("Failure")
     expect(requests).toHaveLength(1)
     expect(requests[0]).toMatchObject({ op: "batch", operations: [{ op: "writeFileString" }] })
+  })
+
+  test("flushes around checked writes so their result cannot be deferred", async () => {
+    await mkdir(allowed, { recursive: true })
+    const file = path.join(allowed, "checked.txt")
+    await writeFile(file, "approved")
+    const info = await stat(file, { bigint: true })
+    const requests: Request[] = []
+    const runner: Runner = (_profile, request) => Effect.sync(() => requests.push(request)).pipe(Effect.as(undefined))
+    await execute(
+      withRunner(
+        runner,
+        run(
+          makeProfile(allowed),
+          batchMutations(
+            Effect.gen(function* () {
+              const fs = yield* FileSystem.FileSystem
+              yield* fs.writeFileString(path.join(allowed, "before.txt"), "before")
+              yield* writeChecked(
+                file,
+                Buffer.from("changed"),
+                { dev: info.dev.toString(), ino: info.ino.toString() },
+                createHash("sha256").update("approved").digest("hex"),
+              )
+              yield* fs.writeFileString(path.join(allowed, "after.txt"), "after")
+            }),
+          ),
+        ),
+      ),
+    )
+
+    expect(requests.map((request) => request.op)).toEqual(["batch", "writeFileChecked", "batch"])
   })
 
   test("delegates runners retained after a batch closes", async () => {

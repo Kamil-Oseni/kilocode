@@ -1,4 +1,5 @@
 import type { OpenFlag } from "effect/FileSystem"
+import type { Identity } from "./checked-write"
 
 export interface Options {
   readonly flag?: OpenFlag | undefined
@@ -42,8 +43,18 @@ export type Operation =
       readonly data: string
       readonly options?: Options | undefined
     }
+  | {
+      readonly op: "writeFileChecked"
+      readonly path: string
+      readonly data: string
+      readonly identity: Identity
+      readonly sha256: string
+    }
 
-export type BatchOperation = Exclude<Operation, { readonly op: "makeTempDirectory" | "makeTempFile" }>
+export type BatchOperation = Exclude<
+  Operation,
+  { readonly op: "makeTempDirectory" | "makeTempFile" | "writeFileChecked" }
+>
 export type Request = Operation | { readonly op: "batch"; readonly operations: ReadonlyArray<BatchOperation> }
 
 export interface Failure {
@@ -104,13 +115,30 @@ function isOperation(value: unknown): value is Operation {
     case "writeFile":
     case "writeFileString":
       return path && typeof value.data === "string"
+    case "writeFileChecked":
+      return (
+        path &&
+        typeof value.data === "string" &&
+        isObject(value.identity) &&
+        typeof value.identity.dev === "string" &&
+        /^\d+$/.test(value.identity.dev) &&
+        typeof value.identity.ino === "string" &&
+        /^\d+$/.test(value.identity.ino) &&
+        typeof value.sha256 === "string" &&
+        /^[a-f0-9]{64}$/.test(value.sha256)
+      )
     default:
       return false
   }
 }
 
 function isBatchOperation(value: unknown): value is BatchOperation {
-  return isOperation(value) && value.op !== "makeTempDirectory" && value.op !== "makeTempFile"
+  return (
+    isOperation(value) &&
+    value.op !== "makeTempDirectory" &&
+    value.op !== "makeTempFile" &&
+    value.op !== "writeFileChecked"
+  )
 }
 
 export function isRequest(value: unknown): value is Request {

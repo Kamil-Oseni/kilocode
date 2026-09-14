@@ -28,6 +28,7 @@ function tag(code: string | undefined): PlatformError.SystemErrorTag {
     case "EISDIR":
     case "ELOOP":
     case "ENOTDIR":
+    case "ESTALE":
       return "BadResource"
     case "EBUSY":
       return "Busy"
@@ -199,6 +200,12 @@ function returnsValue(
   return request.op === "makeTempDirectory" || request.op === "makeTempFile"
 }
 
+function immediate(
+  request: Request,
+): request is Extract<Operation, { readonly op: "makeTempDirectory" | "makeTempFile" | "writeFileChecked" }> {
+  return returnsValue(request) || request.op === "writeFileChecked"
+}
+
 export function batchMutations<A, E, R>(effect: Effect.Effect<A, E, R>) {
   return Effect.gen(function* () {
     const upstream = yield* currentRunner
@@ -218,7 +225,7 @@ export function batchMutations<A, E, R>(effect: Effect.Effect<A, E, R>) {
       Effect.gen(function* () {
         if (state.closed) return yield* upstream(profile, request)
         if (state.profile && state.profile !== profile) yield* flush()
-        if (returnsValue(request)) {
+        if (immediate(request)) {
           yield* flush()
           return yield* upstream(profile, request)
         }

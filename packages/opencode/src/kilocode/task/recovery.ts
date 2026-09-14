@@ -15,6 +15,7 @@ const Record = Schema.Struct({
   phase: Schema.Literals(["claimed", "session-created"]),
   operation: Schema.optional(Schema.Literals(["remove", "cleanup"])),
   intent: Schema.optional(Schema.String),
+  delegationID: Schema.optional(Schema.String),
   owner: Owner,
   sessionID: Schema.optional(SessionID),
   trigger: Schema.optional(Schema.Unknown),

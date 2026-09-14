@@ -10,6 +10,7 @@ type Store = Pick<Storage.Interface, "create" | "replace" | "remove"> & {
   read: (key: string[]) => ReturnType<Storage.Interface["read"]>
 }
 type Claim = { id: string; at: number; link: (sessionID: SessionID) => Effect.Effect<void> }
+type Context = { runID: string; delegationID: string }
 const active = new Set<string>()
 
 export function starting(id: string) {
@@ -25,6 +26,7 @@ export function claim<A, E, R, B, F, S>(
   trigger?: (input: A) => RayaTask.Trigger,
   operation?: "remove" | "cleanup",
   intent?: string,
+  context?: Context,
 ) {
   return Effect.uninterruptibleMask((restore) =>
     Effect.gen(function* () {
@@ -32,11 +34,12 @@ export function claim<A, E, R, B, F, S>(
       const record = {
         version: 1,
         agentID: id,
-        id: crypto.randomUUID(),
+        id: context?.runID ?? crypto.randomUUID(),
         at: Date.now(),
         phase: "claimed",
         ...(operation ? { operation } : {}),
         ...(intent ? { intent } : {}),
+        ...(context ? { delegationID: context.delegationID } : {}),
         owner: identity(),
       }
       const acquired = yield* storage.create(key, record).pipe(Effect.orDie)

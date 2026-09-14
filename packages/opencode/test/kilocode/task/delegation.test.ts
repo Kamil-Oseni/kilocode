@@ -249,14 +249,14 @@ test("delegation admits once, refuses loops, and queues without duplicating a bu
       expect(taken?.id).toBe(first.record.id)
       expect(taken?.state).toBe("accepted")
       const sid = SessionID.make("ses_books")
-      const running = yield* store.attach(taken!.id, "run_1", sid)
+      const running = yield* store.attach(taken!.id, taken!.childRunID!, sid)
       expect(running.state).toBe("running")
       expect(
         (yield* inbox.page(chief.id)).messages.some(
           (item) => item.source.startsWith("start:") && item.body.includes("no longer only queued"),
         ),
       ).toBe(true)
-      expect((yield* store.attach(taken!.id, "run_1", sid)).sessionID).toBe(sid)
+      expect((yield* store.attach(taken!.id, taken!.childRunID!, sid)).sessionID).toBe(sid)
       expect(Exit.isFailure(yield* store.attach(taken!.id, "run_2", sid).pipe(Effect.exit))).toBe(true)
       const done = yield* store.finish(taken!.id, "completed", books, "Travel receipts are missing.")
       expect(done.state).toBe("completed")
@@ -325,7 +325,7 @@ test("stopping a request keeps a completed child and does not rewrite the parent
       const extra = agent("legal", "reviewer")
       const parent = yield* store.admit(request("dlg_open", chief.id, books.id), chief, books)
       const taken = yield* store.take(books.id)
-      yield* store.attach(taken!.id, "run_open", SessionID.make("ses_open"))
+      yield* store.attach(taken!.id, taken!.childRunID!, SessionID.make("ses_open"))
       const child = yield* store.admit(
         request("dlg_child", books.id, extra.id, { parentID: parent.record.id }),
         books,
@@ -408,9 +408,7 @@ test("an exact terminal replay restores a reply after publication failed", async
       `)
       expect(
         Exit.isFailure(
-          yield* store
-            .finish(taken.id, "completed", books, "Recovered accounting result.")
-            .pipe(Effect.exit),
+          yield* store.finish(taken.id, "completed", books, "Recovered accounting result.").pipe(Effect.exit),
         ),
       ).toBe(true)
       expect((yield* store.get(taken.id)).state).toBe("completed")
@@ -450,17 +448,17 @@ test("an exact attachment replay restores a start card after publication failed"
         END
       `)
       const sid = SessionID.make("ses_start_recovery")
-      expect(Exit.isFailure(yield* store.attach(taken.id, "run-start-recovery", sid).pipe(Effect.exit))).toBe(true)
+      expect(Exit.isFailure(yield* store.attach(taken.id, taken.childRunID!, sid).pipe(Effect.exit))).toBe(true)
       expect(yield* store.get(taken.id)).toMatchObject({
         state: "running",
-        childRunID: "run-start-recovery",
+        childRunID: taken.childRunID,
         sessionID: sid,
       })
       expect((yield* inbox.page(chief.id)).messages.filter((item) => item.source.startsWith("start:"))).toEqual([])
       yield* database.db.run("DROP TRIGGER fail_delegation_start")
 
-      expect((yield* store.attach(taken.id, "run-start-recovery", sid)).state).toBe("running")
-      expect((yield* store.attach(taken.id, "run-start-recovery", sid)).state).toBe("running")
+      expect((yield* store.attach(taken.id, taken.childRunID!, sid)).state).toBe("running")
+      expect((yield* store.attach(taken.id, taken.childRunID!, sid)).state).toBe("running")
       const starts = (yield* inbox.page(chief.id)).messages.filter((item) => item.source.startsWith("start:"))
       expect(starts).toHaveLength(1)
       expect(starts[0]?.body).toContain("no longer only queued")
@@ -481,7 +479,7 @@ test("child cost is stored as a real amount and listed on the parent run without
         books,
       )
       const taken = yield* store.take(books.id)
-      yield* store.attach(taken!.id, "run_books", SessionID.make("ses_books"))
+      yield* store.attach(taken!.id, taken!.childRunID!, SessionID.make("ses_books"))
       const done = yield* store.finish(taken!.id, "completed", books, "Travel receipts are missing.", 1.5)
       expect(done.cost).toBe(1.5)
       expect((yield* store.get(taken!.id)).cost).toBe(1.5)

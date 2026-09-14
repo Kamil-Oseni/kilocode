@@ -13,6 +13,7 @@ export const record = Schema.Struct({
   runID: Schema.String,
   scheduleVersion: Schema.Number,
   trigger: RayaTask.Trigger,
+  delegationID: Schema.optional(Schema.String),
 })
 
 /** Check scheduled session identity before dispatching another automatic turn. */

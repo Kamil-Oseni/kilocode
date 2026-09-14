@@ -488,7 +488,27 @@ export namespace RayaTaskDelegation {
       yield* publish(denial ? [...cards(record, sender, recipient), denial] : cards(record, sender, recipient))
       return { record, created: true }
     })
+    const accepted = Effect.fn("RayaTaskDelegation.accepted")(function* (recipientID: string) {
+      const row = yield* db
+        .select()
+        .from(Delegation)
+        .where(
+          and(
+            eq(Delegation.recipient_id, recipientID),
+            eq(Delegation.state, "accepted"),
+            isNotNull(Delegation.child_run_id),
+            or(isNull(Delegation.deadline), gt(Delegation.deadline, Date.now())),
+          ),
+        )
+        .orderBy(asc(Delegation.time_created), asc(Delegation.id))
+        .limit(1)
+        .get()
+        .pipe(Effect.orDie)
+      return row ? decode(row) : undefined
+    })
     const take = Effect.fn("RayaTaskDelegation.take")(function* (recipientID: string) {
+      const held = yield* accepted(recipientID)
+      if (held) return held
       const row = yield* db
         .select()
         .from(Delegation)
@@ -505,9 +525,10 @@ export namespace RayaTaskDelegation {
         .pipe(Effect.orDie)
       if (!row) return
       const now = Date.now()
+      const runID = crypto.randomUUID()
       const updated = yield* db
         .update(Delegation)
-        .set({ state: "accepted", time_updated: now })
+        .set({ state: "accepted", child_run_id: runID, time_updated: now })
         .where(and(eq(Delegation.id, row.id), eq(Delegation.state, "queued")))
         .returning()
         .all()
@@ -699,6 +720,7 @@ export namespace RayaTaskDelegation {
     return {
       admit,
       take,
+      accepted,
       authorize,
       attach,
       finish,

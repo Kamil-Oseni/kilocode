@@ -6,6 +6,7 @@ import type { Session } from "@/session/session"
 import { RayaGoal } from "@/kilocode/goal"
 import { RayaTask } from "."
 import { RayaTaskQueue } from "./queue"
+import { RayaTaskDelegation } from "./delegation"
 import { record } from "./continuation"
 import { recover } from "./recovery"
 import { SessionTable } from "@opencode-ai/core/session/sql"
@@ -21,10 +22,82 @@ export function reconcile(input: {
   const tasks = RayaTask.make(input)
   const goals = RayaGoal.make(input)
   const queue = RayaTaskQueue.make(input.database)
+  const errands = RayaTaskDelegation.make(input.database)
   const inspect = Effect.fn("RayaTaskRecovery.inspect")(function* (
     claim: Parameters<Parameters<typeof recover>[2]>[0],
   ) {
     if (claim.phase === "session-created" && !claim.sessionID) return undefined
+    if (claim.delegationID) {
+      const errand = yield* errands.get(claim.delegationID).pipe(Effect.orElseSucceed(() => undefined))
+      if (
+        !errand ||
+        errand.recipientID !== claim.agentID ||
+        errand.childRunID !== claim.id ||
+        (errand.state !== "accepted" && errand.state !== "running") ||
+        (errand.sessionID && claim.sessionID && errand.sessionID !== claim.sessionID)
+      )
+        return undefined
+      const matches = claim.sessionID
+        ? []
+        : yield* input.database.db
+            .select({ id: SessionTable.id })
+            .from(SessionTable)
+            .where(
+              sql`
+        CASE WHEN json_valid(${SessionTable.metadata}) THEN
+          json_extract(${SessionTable.metadata}, '$.rayaRoutine.agentID') = ${claim.agentID}
+          AND json_extract(${SessionTable.metadata}, '$.rayaRoutine.runID') = ${claim.id}
+          AND json_extract(${SessionTable.metadata}, '$.rayaRoutine.delegationID') = ${claim.delegationID}
+        ELSE 0 END
+      `,
+            )
+            .limit(2)
+            .all()
+            .pipe(Effect.orDie)
+      if (!claim.sessionID && matches.length === 0)
+        return claim.phase === "claimed" ? { kind: "delegation-empty" as const, errand } : undefined
+      if (!claim.sessionID && matches.length !== 1) return undefined
+      const sid = claim.sessionID ?? SessionID.make(matches[0].id)
+      const session = yield* input.sessions.get(sid).pipe(Effect.orElseSucceed(() => undefined))
+      if (!session || session.id !== sid || (errand.sessionID && errand.sessionID !== sid)) return undefined
+      const identity = yield* Schema.decodeUnknownEffect(record)(session.metadata?.rayaRoutine).pipe(
+        Effect.orElseSucceed(() => undefined),
+      )
+      if (
+        !identity ||
+        identity.trigger.kind === "timer" ||
+        identity.agentID !== claim.agentID ||
+        identity.runID !== claim.id ||
+        identity.delegationID !== claim.delegationID
+      )
+        return undefined
+      if (claim.trigger !== undefined && !isDeepStrictEqual(claim.trigger, identity.trigger)) return undefined
+      if (!(yield* tasks.list()).some((item) => item.id === claim.agentID)) return undefined
+      const goal = yield* goals.get(sid)
+      const history = yield* tasks.runsFor(claim.agentID)
+      const prior = history.find((run) => run.id === claim.id)
+      const run: RayaTask.Run = {
+        id: claim.id,
+        agentID: claim.agentID,
+        sessionID: sid,
+        at: claim.at,
+        scheduleVersion: identity.scheduleVersion,
+        trigger: identity.trigger,
+        status: goal ? "running" : "error",
+        ...(goal
+          ? {}
+          : { blockedReason: "No saved goal is available for this interrupted start. Recovery review is required." }),
+      }
+      if (
+        prior &&
+        (prior.sessionID !== run.sessionID ||
+          prior.at !== run.at ||
+          prior.scheduleVersion !== run.scheduleVersion ||
+          !isDeepStrictEqual(prior.trigger, run.trigger))
+      )
+        return undefined
+      return { kind: "delegation" as const, run, errand }
+    }
     const candidates = yield* queue.active(claim.agentID).pipe(Effect.orDie)
     if (
       !candidates.some(
@@ -102,7 +175,7 @@ export function reconcile(input: {
         !isDeepStrictEqual(prior.trigger, run.trigger))
     )
       return undefined
-    return { run, row }
+    return { kind: "timer" as const, run, row }
   })
   return (id: string) =>
     recover(
@@ -113,13 +186,31 @@ export function reconcile(input: {
         Effect.gen(function* () {
           const found = yield* inspect(claim)
           if (!found) return false
+          if (found.kind === "delegation-empty") return true
+          if (found.kind === "delegation") {
+            const attached = yield* errands.attach(found.errand.id, found.run.id, found.run.sessionID)
+            if (
+              attached.childRunID !== found.run.id ||
+              attached.sessionID !== found.run.sessionID ||
+              attached.state !== "running"
+            )
+              return false
+            const saved = yield* tasks.restore(found.run)
+            return (
+              saved.id === found.run.id &&
+              saved.sessionID === found.run.sessionID &&
+              saved.at === found.run.at &&
+              saved.scheduleVersion === found.run.scheduleVersion &&
+              isDeepStrictEqual(saved.trigger, found.run.trigger)
+            )
+          }
           if (found.row.state === "starting") {
             yield* queue
               .link({ id: found.row.id, claimID: claim.id, sessionID: found.run.sessionID, now: Date.now() })
               .pipe(Effect.orDie)
           }
           const linked = yield* inspect(claim)
-          if (!linked || linked.row.state !== "linked") return false
+          if (!linked || linked.kind !== "timer" || linked.row.state !== "linked") return false
           const run = linked.run
           const saved = yield* tasks.restore(run)
           return (

@@ -25,6 +25,7 @@ import {
   type Record as Errand,
 } from "./delegation"
 import { claim } from "./claim"
+import { record as ContinuationRecord } from "./continuation"
 import { inspect, recover } from "./recovery"
 import { stopped } from "./owner"
 import { poll } from "./poll"
@@ -317,6 +318,8 @@ export namespace RayaTaskRunner {
           view?: Pick<RayaTask.Agent, "role" | "access" | "tools">
           defer?: boolean
           guard?: Effect.Effect<void, RayaTask.GuardError>
+          runID?: string
+          delegationID?: string
         },
       ) =>
         tasks.enforce(id).pipe(
@@ -359,6 +362,7 @@ export namespace RayaTaskRunner {
                             runID: owner.id,
                             scheduleVersion: item.scheduleVersion ?? 1,
                             trigger: selected.trigger,
+                            ...(opts?.delegationID ? { delegationID: opts.delegationID } : {}),
                           },
                         },
                         model:
@@ -403,6 +407,9 @@ export namespace RayaTaskRunner {
                   return stored
                 }),
               (selected) => selected.trigger,
+              undefined,
+              undefined,
+              opts?.runID && opts.delegationID ? { runID: opts.runID, delegationID: opts.delegationID } : undefined,
             ),
           ),
         ),
@@ -489,6 +496,30 @@ export namespace RayaTaskRunner {
         })
       const sender = yield* tasks.get(taken.senderID)
       const recipient = yield* tasks.get(taken.recipientID)
+      if (!taken.childRunID)
+        return yield* new RayaTask.GuardError({
+          message: "This accepted delegation predates durable startup ownership and needs recovery review.",
+        })
+      const prior = (yield* tasks.runsFor(recipient.id)).find((run) => run.id === taken.childRunID)
+      if (prior) {
+        const session = yield* input.sessions.get(prior.sessionID).pipe(Effect.orElseSucceed(() => undefined))
+        const identity = session
+          ? yield* Schema.decodeUnknownEffect(ContinuationRecord)(session.metadata?.rayaRoutine).pipe(
+              Effect.orElseSucceed(() => undefined),
+            )
+          : undefined
+        if (
+          !session ||
+          !identity ||
+          identity.agentID !== recipient.id ||
+          identity.runID !== taken.childRunID ||
+          identity.delegationID !== taken.id
+        )
+          return yield* new RayaTask.GuardError({
+            message: "This delegation's saved run identity is inconsistent and needs recovery review.",
+          })
+        return yield* errands.attach(taken.id, prior.id, prior.sessionID)
+      }
       if (!(yield* errands.authorize(taken))) {
         yield* errands.finish(
           taken.id,
@@ -517,6 +548,8 @@ export namespace RayaTaskRunner {
       const run = yield* fire(recipient.id, undefined, note, {
         follow: false,
         view: ceiling(sender, recipient),
+        runID: taken.childRunID,
+        delegationID: taken.id,
         guard: Effect.gen(function* () {
           if (!(yield* errands.authorize(taken)))
             return yield* new RayaTask.GuardError({
@@ -529,6 +562,8 @@ export namespace RayaTaskRunner {
       }).pipe(
         Effect.catch((err) =>
           Effect.gen(function* () {
+            const claim = yield* inspect(input.storage, recipient.id)
+            if (claim) return yield* Effect.fail(err)
             yield* errands.finish(
               taken.id,
               "failed",
@@ -886,7 +921,21 @@ export namespace RayaTaskRunner {
         }
         const history = yield* tasks.runsFor(item.id)
         const run = history.findLast((entry) => entry.status === "running")
-        if (!run) continue
+        const held = errands ? yield* errands.accepted(item.id) : undefined
+        if (run && held?.childRunID === run.id) {
+          yield* start(held).pipe(
+            Effect.catch((err) => Effect.sync(() => log.error("delegated attachment recovery failed", { err }))),
+          )
+        }
+        if (!run) {
+          if (!errands || history.some(RayaTask.pending)) continue
+          const taken = yield* errands.take(item.id)
+          if (!taken) continue
+          yield* start(taken).pipe(
+            Effect.catch((err) => Effect.sync(() => log.error("delegated restart failed", { err }))),
+          )
+          continue
+        }
         yield* settle(run.sessionID)
         const again = (yield* tasks.runsFor(item.id)).find((entry) => entry.id === run.id)
         if (again?.status !== "running") continue

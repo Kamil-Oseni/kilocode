@@ -2,6 +2,9 @@ import { expect, test } from "bun:test"
 import { Deferred, Effect, Exit, Fiber } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectV2 } from "@opencode-ai/core/project"
+import { SessionTable } from "@opencode-ai/core/session/sql"
+import { sql } from "drizzle-orm"
+import { createHash } from "node:crypto"
 import { Storage } from "@/storage/storage"
 import { SessionID } from "@/session/schema"
 import { RayaTask } from "@/kilocode/task"
@@ -10,6 +13,8 @@ import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import { RayaTaskOrganization } from "@/kilocode/task/organization"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
+import { RayaGoal } from "@/kilocode/goal"
+import { owner } from "@/kilocode/task/owner"
 
 function memory() {
   const data = new Map<string, unknown>()
@@ -249,13 +254,15 @@ test("organization authority is rechecked after the worker startup claim is acqu
         ...base,
         create: (key: string[], value: unknown) => {
           if (key[1] !== "agent-claims") return base.create(key, value)
-          return base.create(key, value).pipe(
-            Effect.tap((created) =>
-              created
-                ? Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release)))
-                : Effect.void,
-            ),
-          )
+          return base
+            .create(key, value)
+            .pipe(
+              Effect.tap((created) =>
+                created
+                  ? Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release)))
+                  : Effect.void,
+              ),
+            )
         },
       }
       const starts: string[] = []
@@ -318,6 +325,229 @@ test("organization authority is rechecked after the worker startup claim is acqu
       expect(yield* RayaTaskSnapshot.make({ storage }).find(stopped.childRunID ?? "missing")).toBeUndefined()
       expect((yield* runner.tasks.runsFor(books.id)).filter((run) => run.status === "running")).toEqual([])
       expect(yield* storage.list(["raya", "agent-claims"])).toEqual([])
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
+test("restart resumes an accepted delegation that stopped before its startup claim", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const opened: Array<ReturnType<typeof session> & { metadata?: Record<string, unknown> }> = []
+      const runner = RayaTaskRunner.make({
+        database,
+        storage,
+        sessions: {
+          create: (value) =>
+            Effect.sync(() => {
+              const created = { ...session("ses_restart_accepted"), metadata: value?.metadata }
+              opened.push(created)
+              return created
+            }),
+          get: (id) => Effect.sync(() => opened.find((item) => item.id === id)!),
+          messages: () => Effect.succeed([]),
+          children: () => Effect.succeed([]),
+        },
+      })
+      const chief = yield* runner.tasks.create({
+        name: "Chief",
+        objective: "Assign work",
+        access: "brief",
+        schedule: { kind: "manual" },
+      })
+      const books = yield* runner.tasks.create({
+        name: "Books",
+        objective: "Review accounts",
+        access: "brief",
+        schedule: { kind: "manual" },
+      })
+      const store = RayaTaskDelegation.make(database)
+      const admitted = yield* store.admit(
+        {
+          source: "dlg_restart_before_claim",
+          senderID: chief.id,
+          recipientID: books.id,
+          objective: "Review the close.",
+        },
+        chief,
+        books,
+      )
+      const taken = (yield* store.take(books.id))!
+      expect(taken.state).toBe("accepted")
+      expect(taken.childRunID).toBeString()
+      expect(opened).toHaveLength(0)
+
+      yield* runner.revive()
+
+      const running = yield* store.get(admitted.record.id)
+      expect(running).toMatchObject({
+        state: "running",
+        childRunID: taken.childRunID,
+        sessionID: SessionID.make("ses_restart_accepted"),
+      })
+      expect(opened).toHaveLength(1)
+      expect((yield* runner.tasks.runsFor(books.id)).filter((run) => run.id === taken.childRunID)).toHaveLength(1)
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
+test("restart attaches the exact saved run when delegation attachment was interrupted", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const opened: Array<ReturnType<typeof session> & { metadata?: Record<string, unknown> }> = []
+      const sessions = {
+        create: (value?: { metadata?: Record<string, unknown> }) =>
+          Effect.sync(() => {
+            const created = { ...session("ses_restart_attach"), metadata: value?.metadata }
+            opened.push(created)
+            return created
+          }),
+        get: (id: SessionID) => Effect.sync(() => opened.find((item) => item.id === id)!),
+        messages: () => Effect.succeed([]),
+        children: () => Effect.succeed([]),
+      }
+      const runner = RayaTaskRunner.make({ database, storage, sessions })
+      const chief = yield* runner.tasks.create({
+        name: "Chief",
+        objective: "Assign work",
+        access: "brief",
+        schedule: { kind: "manual" },
+      })
+      const books = yield* runner.tasks.create({
+        name: "Books",
+        objective: "Review accounts",
+        access: "brief",
+        schedule: { kind: "manual" },
+      })
+      yield* database.db.run(`
+        CREATE TRIGGER fail_delegation_attach
+        BEFORE UPDATE ON raya_routine_delegation
+        WHEN OLD.state = 'accepted' AND NEW.state = 'running'
+        BEGIN
+          SELECT RAISE(ABORT, 'injected attachment failure');
+        END
+      `)
+      const failed = yield* runner
+        .delegate({
+          source: "dlg_restart_attach",
+          senderID: chief.id,
+          recipientID: books.id,
+          objective: "Review the close.",
+        })
+        .pipe(Effect.exit)
+      expect(Exit.isFailure(failed)).toBe(true)
+      const store = RayaTaskDelegation.make(database)
+      const accepted = (yield* store.lookup("dlg_restart_attach"))!
+      expect(accepted.state).toBe("accepted")
+      expect(opened).toHaveLength(1)
+      expect((yield* runner.tasks.runsFor(books.id)).filter((run) => run.id === accepted.childRunID)).toHaveLength(1)
+      yield* database.db.run("DROP TRIGGER fail_delegation_attach")
+
+      yield* RayaTaskRunner.make({ database, storage, sessions }).revive()
+
+      const running = yield* store.get(accepted.id)
+      expect(running).toMatchObject({
+        state: "running",
+        childRunID: accepted.childRunID,
+        sessionID: SessionID.make("ses_restart_attach"),
+      })
+      expect(opened).toHaveLength(1)
+      expect((yield* runner.tasks.runsFor(books.id)).filter((run) => run.id === accepted.childRunID)).toHaveLength(1)
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
+test("restart recovers the exact delegation session when history was not recorded", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const runner = RayaTaskRunner.make({
+        database,
+        storage,
+        sessions: {
+          create: () => Effect.die("must not create a second session"),
+          get: () => Effect.die("installed below"),
+          messages: () => Effect.succeed([]),
+          children: () => Effect.succeed([]),
+        },
+      })
+      const chief = yield* runner.tasks.create({
+        name: "Chief",
+        objective: "Assign work",
+        access: "brief",
+        schedule: { kind: "manual" },
+      })
+      const books = yield* runner.tasks.create({
+        name: "Books",
+        objective: "Review accounts",
+        access: "brief",
+        schedule: { kind: "manual" },
+      })
+      const store = RayaTaskDelegation.make(database)
+      const admitted = yield* store.admit(
+        {
+          source: "dlg_restart_session",
+          senderID: chief.id,
+          recipientID: books.id,
+          objective: "Review the close.",
+        },
+        chief,
+        books,
+      )
+      const taken = (yield* store.take(books.id))!
+      const at = Date.now()
+      const sid = SessionID.make("ses_restart_session")
+      const trigger = { kind: "manual" as const }
+      const metadata = {
+        rayaRoutine: {
+          version: 1 as const,
+          agentID: books.id,
+          runID: taken.childRunID!,
+          scheduleVersion: 1,
+          trigger,
+          delegationID: taken.id,
+        },
+      }
+      const saved = { ...session(sid), metadata }
+      yield* database.db.run(
+        sql`INSERT INTO project (id, worktree, sandboxes, time_created, time_updated) VALUES (${saved.projectID}, ${saved.directory}, ${JSON.stringify([])}, ${at}, ${at})`,
+      )
+      yield* database.db.run(
+        sql`INSERT INTO session (id, project_id, slug, directory, title, version, metadata, time_created, time_updated) VALUES (${sid}, ${saved.projectID}, ${saved.slug}, ${saved.directory}, ${saved.title}, ${saved.version}, ${JSON.stringify(metadata)}, ${at}, ${at})`,
+      )
+      const key = ["raya", "agent-claims", createHash("sha256").update(books.id).digest("hex")]
+      yield* storage.replace(key, {
+        version: 1,
+        agentID: books.id,
+        id: taken.childRunID,
+        at,
+        phase: "claimed",
+        owner: { ...owner(), pid: 2_147_483_647 },
+        trigger,
+        delegationID: taken.id,
+      })
+      const sessions = {
+        create: () => Effect.die("must not create a second session"),
+        get: (id: SessionID) => Effect.sync(() => (id === sid ? saved : undefined)!),
+        messages: () => Effect.succeed([]),
+        children: () => Effect.succeed([]),
+      }
+      yield* RayaGoal.make({ storage, sessions }).create(sid, "Review the close.")
+
+      yield* RayaTaskRunner.make({ database, storage, sessions }).revive()
+
+      expect(yield* store.get(admitted.record.id)).toMatchObject({
+        state: "running",
+        childRunID: taken.childRunID,
+        sessionID: sid,
+      })
+      expect((yield* runner.tasks.runsFor(books.id)).filter((run) => run.id === taken.childRunID)).toHaveLength(1)
+      expect(yield* storage.list(["raya", "agent-claims"])).toEqual([])
+      expect((yield* database.db.select().from(SessionTable).all()).filter((row) => row.id === sid)).toHaveLength(1)
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })

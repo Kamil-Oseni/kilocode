@@ -26,12 +26,12 @@ const log = vscode.window.createOutputChannel("Raya Updates")
 function config(): Omit<Config, "token"> {
   const cfg = vscode.workspace.getConfiguration("raya.update")
   return {
-    enabled: cfg.get<boolean>("enabled", true),
+    enabled: cfg.get("enabled", true),
     repo: cfg
-      .get<string>("repo", "")
+      .get("repo", "")
       .trim()
       .replace(/^\/+|\/+$/g, ""),
-    includePrereleases: cfg.get<boolean>("includePrereleases", false),
+    includePrereleases: cfg.get("includePrereleases", false),
   }
 }
 
@@ -78,31 +78,66 @@ async function installFrom(
     await vscode.env.openExternal(vscode.Uri.parse(release.html_url))
     return
   }
+  const result: { value?: Awaited<ReturnType<Installation["run"]>> } = {}
   await vscode.window.withProgress(
     { location: vscode.ProgressLocation.Notification, title: `Installing Raya ${version}…` },
     async () => {
       await stage(asset, cfg.repo, cfg.token, async (path) => {
         if (!active()) return
         await verify(path, { name: "raya", publisher: "eden", version, target })
-        await new PackageVault(join(context.globalStorageUri.fsPath, "package-vault")).retain(path, {
+        const retained = await new PackageVault(join(context.globalStorageUri.fsPath, "package-vault")).retain(path, {
           name: "raya",
           publisher: "eden",
           version,
           target,
         })
         if (!active()) return
-        await new Installation(context.globalState).run(
-          version,
-          String(context.extension.packageJSON.version),
+        result.value = await new Installation(context.globalState, context.globalStorageUri.fsPath).run(
+          {
+            schema: 2,
+            version,
+            previous: String(context.extension.packageJSON.version),
+            repo: cfg.repo,
+            target,
+            asset: {
+              name: asset.name,
+              url: asset.url,
+              size: asset.size,
+              digest: asset.digest,
+            },
+            artifact: retained.artifact,
+            package: retained.package,
+          },
           async () => {
             if (!active()) throw new Error("Update installation was canceled before dispatch.")
-            await vscode.commands.executeCommand("workbench.extensions.installExtension", vscode.Uri.file(path))
+            await verify(retained.package, {
+              name: "raya",
+              publisher: "eden",
+              version,
+              target,
+              artifact: retained.artifact,
+              binary: retained.binary,
+            })
+            await vscode.commands.executeCommand(
+              "workbench.extensions.installExtension",
+              vscode.Uri.file(retained.package),
+            )
           },
         )
       })
     },
   )
   if (!active()) return
+  if (!result.value) return
+  if (!result.value.dispatched && result.value.record.phase === "installing") {
+    const reload = await vscode.window.showWarningMessage(
+      `Raya already dispatched the ${version} installer, but completion was not confirmed. Reload the window to verify which version is active.`,
+      "Reload",
+      "Later",
+    )
+    if (reload === "Reload" && active()) await vscode.commands.executeCommand("workbench.action.reloadWindow")
+    return
+  }
   const reload = await vscode.window.showInformationMessage(
     `Raya ${version} installed. Reload the window to apply it.`,
     "Reload",
@@ -207,7 +242,7 @@ export function registerUpdateChecker(context: vscode.ExtensionContext): vscode.
   const recovered = runner
     .run(async (active) => {
       const current = String(context.extension.packageJSON.version)
-      const record = await new Installation(context.globalState).recover(current)
+      const record = await new Installation(context.globalState, context.globalStorageUri.fsPath).recover(current)
       if (!record || !active()) return
       const choice = await vscode.window.showWarningMessage(
         `Raya recorded an update to ${record.version}, but this extension host is running ${current}. Reload to verify the installation, or use Check for Updates to retry.`,

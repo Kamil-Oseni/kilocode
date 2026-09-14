@@ -8,6 +8,7 @@ import { assertExternalDirectoryEffect } from "./external-directory"
 import DESCRIPTION from "./grep.txt"
 import * as Tool from "./tool"
 import { RayaPath } from "@/kilocode/task/path-boundary" // kilocode_change
+import * as SearchTarget from "@opencode-ai/core/kilocode/search-target" // kilocode_change
 
 export const Parameters = Schema.Struct({
   pattern: Schema.String.annotate({ description: "Pattern to search for in file contents (regex by default)" }), // kilocode_change
@@ -79,6 +80,7 @@ export const GrepTool = Tool.define(
             bypass: false,
             kind: requestedInfo?.type === "Directory" ? "directory" : "file",
           })
+          const proof = requestedInfo ? yield* SearchTarget.inspect(fs, target) : undefined
           // kilocode_change end
 
           const search = FSUtil.resolve(target) // kilocode_change - search only the authorized canonical target
@@ -92,6 +94,7 @@ export const GrepTool = Tool.define(
             include: params.include,
             ...KiloGrep.options(params, limit, context), // kilocode_change
             signal: ctx.abort, // kilocode_change - stop ripgrep when the tool call is cancelled
+            validate: proof ? SearchTarget.validate(fs, proof) : undefined, // kilocode_change - retain file or directory identity throughout search
           })
           // kilocode_change start
           const matches = result.items

@@ -7,6 +7,7 @@ import { assertExternalDirectoryEffect } from "./external-directory"
 import DESCRIPTION from "./glob.txt"
 import * as Tool from "./tool"
 import { RayaPath } from "@/kilocode/task/path-boundary" // kilocode_change
+import * as SearchTarget from "@opencode-ai/core/kilocode/search-target" // kilocode_change
 
 // kilocode_change start — support absolute glob patterns (e.g. ~/.config/kilo/command/*.md)
 function normalize(p: string) {
@@ -82,6 +83,7 @@ export const GlobTool = Tool.define(
             bypass: false,
             kind: "directory",
           })
+          const proof = info ? yield* SearchTarget.inspect(fs, target) : undefined
           // kilocode_change end
 
           const limit = 100
@@ -91,6 +93,7 @@ export const GlobTool = Tool.define(
             pattern: absolute?.pattern ?? params.pattern, // kilocode_change - absolute patterns are split into cwd + relative glob
             limit,
             signal: ctx.abort, // kilocode_change - stop ripgrep when the tool call is cancelled
+            validate: proof ? SearchTarget.validate(fs, proof) : undefined, // kilocode_change - retain directory identity throughout search
           })
           const files = result.items
           const truncated = result.truncated

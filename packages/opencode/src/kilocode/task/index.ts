@@ -273,6 +273,12 @@ export namespace RayaTask {
   export type Create = typeof Create.Type
 
   const CAP = 50
+  const MemorySource = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/))
+  const Memory = Schema.Struct({
+    version: Schema.Literal(2),
+    text: Schema.String,
+    sources: Schema.Array(MemorySource).check(Schema.isMaxLength(CAP + 1)),
+  })
   const SAME = 3
   const sensitive = new Set(["accountant", "inbox"])
   const money = new Set(["money", "accounting", "books"])
@@ -295,6 +301,7 @@ export namespace RayaTask {
   const staging = (id: string) => ["raya", "agent-stage", id]
   const agents = Schema.decodeUnknownEffect(Schema.Array(Agent))
   const runs = Schema.decodeUnknownEffect(Schema.Array(Run))
+  const memories = Schema.decodeUnknownEffect(Memory)
   const StageV1 = Schema.Struct({
     version: Schema.Literal(1),
     agentID: Schema.String,
@@ -848,20 +855,42 @@ export namespace RayaTask {
         .pipe(Effect.orDie)
     })
 
-    const recall = Effect.fn("RayaTask.recall")(function* (id: string) {
-      return yield* deps.storage.read<string>(memory(id)).pipe(
-        Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed("")),
+    const memoryState = Effect.fn("RayaTask.memoryState")(function* (id: string) {
+      const raw = yield* deps.storage.read<unknown>(memory(id)).pipe(
+        Effect.catchIf(
+          (err) => Storage.NotFoundError.isInstance(err),
+          () => Effect.succeed(undefined),
+        ),
         Effect.orDie,
       )
+      if (raw === undefined) return { version: 2 as const, text: "", sources: [] as string[] }
+      if (typeof raw === "string") return { version: 2 as const, text: raw, sources: [] as string[] }
+      return yield* memories(raw).pipe(Effect.orDie)
+    })
+
+    const recall = Effect.fn("RayaTask.recall")(function* (id: string) {
+      return (yield* memoryState(id)).text
     })
 
     const remember = Effect.fn("RayaTask.remember")(function* (id: string, text: string) {
-      yield* deps.storage.replace(memory(id), text).pipe(Effect.orDie)
+      const state = yield* memoryState(id)
+      yield* deps.storage.replace(memory(id), { ...state, text }).pipe(Effect.orDie)
     })
 
     const append = Effect.fn("RayaTask.append")(function* (id: string, text: string) {
-      const prior = yield* recall(id)
-      yield* remember(id, [prior, text].filter(Boolean).join("\n\n").slice(-8000))
+      const state = yield* memoryState(id)
+      const value = [state.text, text].filter(Boolean).join("\n\n").slice(-8000)
+      yield* deps.storage.replace(memory(id), { ...state, text: value }).pipe(Effect.orDie)
+    })
+
+    const learn = Effect.fn("RayaTask.learn")(function* (id: string, source: string, text: string) {
+      const state = yield* memoryState(id)
+      const key = createHash("sha256").update(source).digest("hex")
+      if (state.sources.includes(key)) return
+      const retained = new Set((yield* runsFor(id)).map((run) => createHash("sha256").update(run.id).digest("hex")))
+      const sources = [...state.sources, key].filter((item) => retained.has(item))
+      const value = [state.text, text].filter(Boolean).join("\n\n").slice(-8000)
+      yield* deps.storage.replace(memory(id), { version: 2, text: value, sources }).pipe(Effect.orDie)
     })
 
     const output = Effect.fn("RayaTask.output")(function* (value: Output) {
@@ -1650,6 +1679,7 @@ export namespace RayaTask {
       transition: (...args: Parameters<typeof transition>) => mutate(deps.storage, transition(...args)),
       remember: (...args: Parameters<typeof remember>) => mutate(deps.storage, remember(...args)),
       append: (...args: Parameters<typeof append>) => mutate(deps.storage, append(...args)),
+      learn: (...args: Parameters<typeof learn>) => mutate(deps.storage, learn(...args)),
     }
   }
 

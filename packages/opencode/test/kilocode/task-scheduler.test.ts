@@ -797,6 +797,94 @@ it.live(
   30_000,
 )
 
+it.live("role learning recovers once per retained run after its first memory write failed", () =>
+  Effect.gen(function* () {
+    const directory = yield* tmpdirScoped()
+    yield* Effect.gen(function* () {
+      const base = yield* Storage.Service
+      const database = yield* Database.Service
+      const fail = { current: true }
+      const storage = {
+        ...base,
+        replace: (key: string[], value: unknown) =>
+          key[1] === "agent-memory" && fail.current
+            ? Effect.die("injected role-memory failure")
+            : base.replace(key, value),
+      }
+      const runner = RayaTaskRunner.make({ database, storage, sessions })
+      const agent = yield* runner.tasks.create({
+        name: "Learner",
+        objective: "Retain verified results",
+        memoryScope: "role",
+        schedule: { kind: "manual" },
+      })
+      yield* base.replace(["raya", "agent-memory", agent.id], "Legacy context")
+      const first = SessionID.make("ses_learning_first")
+      const at = Date.now()
+      yield* runner.tasks.record({
+        id: "run-learning-first",
+        agentID: agent.id,
+        sessionID: first,
+        at,
+        status: "running",
+      })
+      yield* base.replace(["raya", "goal", first], {
+        objective: agent.objective,
+        status: "complete",
+        createdAt: at,
+        updatedAt: at,
+        usage: { turns: 1, continuations: 0, toolCalls: 0 },
+        progress: [],
+        audit: { summary: "Learned once.", verifiedAt: at, requirements: [] },
+      })
+
+      expect(Exit.isFailure(yield* runner.settle(first).pipe(Effect.exit))).toBe(true)
+      expect((yield* runner.tasks.runsFor(agent.id))[0]?.status).toBe("complete")
+      expect(yield* runner.tasks.recall(agent.id)).toBe("Legacy context")
+      fail.current = false
+      yield* runner.settle(first)
+      yield* runner.settle(first)
+      expect(yield* runner.tasks.recall(agent.id)).toBe("Legacy context\n\nLearned once.")
+      expect(yield* base.read(["raya", "agent-memory", agent.id])).toEqual({
+        version: 2,
+        text: "Legacy context\n\nLearned once.",
+        sources: [createHash("sha256").update("run-learning-first").digest("hex")],
+      })
+
+      const second = SessionID.make("ses_learning_second")
+      yield* runner.tasks.record({
+        id: "run-learning-second",
+        agentID: agent.id,
+        sessionID: second,
+        at: at + 1,
+        status: "running",
+      })
+      yield* base.replace(["raya", "goal", second], {
+        objective: agent.objective,
+        status: "complete",
+        createdAt: at + 1,
+        updatedAt: at + 1,
+        usage: { turns: 1, continuations: 0, toolCalls: 0 },
+        progress: [],
+        audit: { summary: "Learned once.", verifiedAt: at + 1, requirements: [] },
+      })
+      yield* runner.settle(second)
+      expect(yield* runner.tasks.recall(agent.id)).toBe("Legacy context\n\nLearned once.\n\nLearned once.")
+      yield* runner.tasks.remember(agent.id, "Edited memory")
+      yield* runner.settle(first)
+      yield* runner.settle(second)
+      expect(yield* runner.tasks.recall(agent.id)).toBe("Edited memory")
+      expect(yield* base.read(["raya", "agent-memory", agent.id])).toEqual({
+        version: 2,
+        text: "Edited memory",
+        sources: ["run-learning-first", "run-learning-second"].map((id) =>
+          createHash("sha256").update(id).digest("hex"),
+        ),
+      })
+    }).pipe(Effect.provide(state(directory)))
+  }),
+)
+
 it.live(
   "settlement uses the startup definition and rejects conflicting snapshot evidence",
   () =>

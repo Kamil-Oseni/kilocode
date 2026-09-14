@@ -670,6 +670,17 @@ export namespace RayaTaskRunner {
         if (!run) {
           const done = history.findLast((entry) => entry.sessionID === sessionID && entry.status !== "running")
           if (done) {
+            const saved = yield* snapshots.find(done.id).pipe(Effect.orDie)
+            if (
+              saved &&
+              (saved.agentID !== done.agentID ||
+                saved.at !== done.at ||
+                (saved.definition.scheduleVersion ?? 1) !== (done.scheduleVersion ?? 1))
+            )
+              yield* Effect.die(new Error("Saved startup snapshot does not match run history."))
+            const definition = saved?.definition ?? item
+            if (definition.memoryScope === "role" && done.outcome?.summary)
+              yield* tasks.learn(item.id, done.id, done.outcome.summary)
             if (schedule && (done.status === "complete" || done.status === "blocked")) yield* schedule.settle(done)
             yield* retain(done)
             yield* close(done)
@@ -728,7 +739,7 @@ export namespace RayaTaskRunner {
           },
         })
         if (changed && definition.memoryScope === "role" && summary) {
-          yield* tasks.append(item.id, summary)
+          yield* tasks.learn(item.id, run.id, summary)
         }
         if (changed && schedule && (status === "complete" || status === "blocked"))
           yield* schedule.settle({ ...run, status, blockedReason: goal?.blockedReason })

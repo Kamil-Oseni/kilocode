@@ -4353,3 +4353,16 @@ Evidence to preserve:
 - Scoped one-thread Oxlint: zero warnings/errors. Prettier completed. CLI `bun run typecheck` was stopped when `tsgo` reached about 7.8 GB RAM; no Bun/tsgo process remains. Do not rerun the broad typecheck on this machine.
 
 After commit/push, include this CLI fix in the next coherent low-memory extension snapshot with the already pushed credential-lifecycle hardening. Do not install a separate 500 MB snapshot solely for this small backend checkpoint unless another coherent product slice is not imminent. EN-02/OVR-05 remain **In progress**: continue broader execution fencing and multi-store transaction review before representative discovery -> design -> code -> hosting -> outreach organization acceptance. Keep adverse tests for contention, denial, malformed state, failure after partial persistence, interruption, timeout, retry, restart and recovery.
+
+## ChatGPT 2026-09-14 16:03 America/Toronto - Packaged checkpoint for credentials and routine contention
+
+The authorized sequential low-memory workflow installed `eden.raya@7.4.23-snapshot+70febf3958.kamil-oseni.1789415927782`. SDK generation left no source diff. CLI version/model/sandbox-worker smoke tests, sequential extension-host and webview typechecks, cached extension lint, production bundling, 431-file VSIX packaging and VS Code installation passed.
+
+Exact receipt:
+
+- VSIX: `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.69aff4b80dfdb67185b60348dd805ea99e6faa7ea03d4d1cbb9096e753f2963d.vsix`; 519,256,304 bytes; SHA-256 `69AFF4B80DFDB67185B60348DD805EA99E6FAA7EA03D4D1CBB9096E753F2963D`.
+- Installed CLI: 230,567,936 bytes; SHA-256 `DBD54BB779421D733736CB131ED06D1976FC3F87FF62DB1069E7C6846AFA554D`.
+- Vault manifest: exact VSIX and CLI size/digest match; open-host active pointer remains `8261c1ebfb4872827fd4d9db7272240d03a584678aae583efd77203f843ec973` until reload. Expected new pointer is `69aff4b80dfdb67185b60348dd805ea99e6faa7ea03d4d1cbb9096e753f2963d`.
+- Cleanup/state: one old extension, staged package and vault package removed; C: free 97,234,104,320 bytes; zero Bun/tsgo processes.
+
+Do not claim active-host acceptance before reload. The installed package contains credential product commit `dbb70f8a08` and routine contention product commit `6e80421812`. Continue deterministic work without waiting for reload; retain native SecretStorage/live revoked-token and installed contention checks as later controlled acceptance.

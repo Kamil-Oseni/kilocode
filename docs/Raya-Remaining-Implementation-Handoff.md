@@ -1,5 +1,13 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-14 15:38 America/Toronto - EN-09 credential scope and deletion ordering
+
+**State: product commit `dbb70f8a08` is verified and pushed; not installed.** `UpdateCredentials` now enumerates global, workspace and workspace-folder legacy values. Matching trimmed values migrate once; distinct nonblank values refuse migration and retain every source. Blank legacy residue is still removed. Replacement stores and read-verifies the secret before settings cleanup. Deletion reverses the side-effect order: remove every legacy settings value first, then delete and read-verify SecretStorage. If cleanup stops partway, the old secret remains and the command reports failure; retry finishes cleanup and deletion. This prevents a later automatic check from treating a leftover setting as a new credential.
+
+The service receives `globalStorageUri.fsPath` and shares `raya-update-credentials` through the same filesystem lock directory used by updater coordination. Keep both ownership levels: the promise queue serializes calls within one service and `Flock` serializes separate services/windows. The adversarial two-service test pauses migration after it reads the legacy value, starts deletion through another service, and proves deletion waits, then removes the migrated secret with no resurrection. The focused file passes 8 tests / 47 assertions; the updater group passes 44 / 194. Extension-host typecheck, targeted ESLint/Oxlint with zero findings, Prettier, Knip and the marker guard pass.
+
+Batch `dbb70f8a08` into a later low-memory snapshot rather than rebuilding immediately after `a2ac983ce2`. Do not read or alter a real token for automation. After that package is installed and the host reloads, native SecretStorage save/remove and a controlled revoked-token response still need human/live acceptance. EN-09 also retains clean-dependency installation and controlled installed-host interruption/rollback reconciliation.
+
 ## ChatGPT 2026-09-14 15:31 America/Toronto - EN-09 updater checkpoint installed
 
 Product commit `97d4bf77af` and documentation source `a2ac983ce2` are pushed and installed as `eden.raya@7.4.23-snapshot+a2ac983ce2.kamil-oseni.1789414101877`. Retained package: `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.b56c2908f2f7bc87bdd834f94db6942893da1c8a0ee2c0dbe0647f1a9a21b967.vsix`; 519,251,625 bytes; SHA-256 `B56C2908F2F7BC87BDD834F94DB6942893DA1C8A0EE2C0DBE0647F1A9A21B967`. Installed directory: `C:\Users\User\.vscode\extensions\eden.raya-7.4.23-snapshot+a2ac983ce2.kamil-oseni.1789414101877`. Installed CLI: 230,564,352 bytes; SHA-256 `1D34AF7A4AEFCF79112EBC0BEEC8365A0F71F13AE00501C8934B1829A1418C18`, matching the package-vault manifest.
@@ -931,7 +939,7 @@ The following sections retain the full 39-item scope. Related findings and overh
 
 ### EN-09 — Harden the update path and credential storage
 
-**Recorded status:** In progress. Release eligibility, SecretStorage migration, exact platform filenames, bounded streamed downloads, SHA-256 verification, credential-safe redirects, and temporary staging tested. VSIX internal identity, bounded release-response validation/pagination, and persistent installation intent are also tested. Credential lifecycle edges, cross-window ownership, actual interruption/rollback, clean dependency installation, and packaged validation remain open.
+**Recorded status:** In progress. Release eligibility, exact platform assets, bounded streamed downloads, SHA-256 verification, credential-safe redirects, VSIX identity, bounded release pagination, package-vault retention, shared cross-window installation ownership, uncertain-dispatch suppression and packaged installation are tested. Legacy credentials now reconcile global/workspace/folder scopes under shared storage ownership; conflicts and failed deletion cleanup fail closed. Native SecretStorage acceptance, live revoked-token behavior, active-host interruption/rollback reconciliation, and clean dependency installation remain open.
 
 **Implementation and verification:**
 

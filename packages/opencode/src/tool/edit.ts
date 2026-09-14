@@ -145,10 +145,18 @@ export const EditTool = Tool.define(
                   },
                 })
                 yield* RayaPath.check(afs, filePath, target) // kilocode_change - reject link swaps after approval
-                yield* EncodedIO.write(afs, target, Bom.join(contentNew, desiredBom), Encoding.DEFAULT) // kilocode_change - write the reviewed canonical destination
-                if (yield* format.file(target)) {
-                  contentNew = yield* EncodedIO.syncChecked(afs, target, desiredBom, Encoding.DEFAULT) // kilocode_change
+                // kilocode_change start - format a private temporary copy before creating the reviewed target
+                if (yield* format.available(target)) {
+                  contentNew = yield* EncodedIO.stage(
+                    afs,
+                    target,
+                    Bom.join(contentNew, desiredBom),
+                    Encoding.DEFAULT,
+                    format.file,
+                  )
                 }
+                yield* EncodedIO.write(afs, target, Bom.join(contentNew, desiredBom), Encoding.DEFAULT) // kilocode_change - write the reviewed canonical destination
+                // kilocode_change end
                 yield* events.publish(FileSystem.Event.Edited, { file: filePath })
                 yield* events.publish(Watcher.Event.Updated, {
                   file: filePath,
@@ -198,10 +206,16 @@ export const EditTool = Tool.define(
 
               yield* RayaPath.check(afs, filePath, target) // kilocode_change - reject link swaps after approval
               // kilocode_change start - preserve concurrent user bytes and reject replaced or hard-linked targets
-              yield* EncodedIO.checked(target, Bom.join(contentNew, desiredBom), source.encoding, proof, pre.sha256)
-              if (yield* format.file(target)) {
-                contentNew = yield* EncodedIO.syncChecked(afs, target, desiredBom, source.encoding)
+              if (yield* format.available(target)) {
+                contentNew = yield* EncodedIO.stage(
+                  afs,
+                  target,
+                  Bom.join(contentNew, desiredBom),
+                  source.encoding,
+                  format.file,
+                )
               }
+              yield* EncodedIO.checked(target, Bom.join(contentNew, desiredBom), source.encoding, proof, pre.sha256)
               // kilocode_change end
               yield* events.publish(FileSystem.Event.Edited, { file: filePath })
               yield* events.publish(Watcher.Event.Updated, {

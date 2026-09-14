@@ -1,4 +1,4 @@
-import { dirname } from "node:path"
+import { dirname, extname } from "node:path"
 import { createHash } from "node:crypto"
 import { Effect } from "effect"
 import { batchMutations, enabled, ensureDirectory, inspectFile, writeChecked as checkedWrite } from "@kilocode/sandbox"
@@ -43,6 +43,22 @@ export const checked = (
   sha256: string,
 ) => checkedWrite(path, Encoding.encode(text, encoding), proof, sha256).pipe(Effect.mapError(wrap))
 
+export const stage = (
+  fs: FSUtil.Interface,
+  path: string,
+  text: string,
+  encoding: string,
+  run: (path: string) => Effect.Effect<boolean>,
+) =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const temp = yield* fs.makeTempFileScoped({ prefix: "raya-format-", suffix: extname(path) })
+      yield* fs.writeFile(temp, Encoding.encode(text, encoding))
+      if (!(yield* run(temp))) return Bom.split(text).text
+      return (yield* read(fs, temp)).text
+    }),
+  ).pipe(Effect.mapError(wrap))
+
 export const sync = (fs: FSUtil.Interface, path: string, bom: boolean, encoding: string) =>
   Effect.gen(function* () {
     const current = yield* read(fs, path)
@@ -53,19 +69,5 @@ export const sync = (fs: FSUtil.Interface, path: string, bom: boolean, encoding:
           ? Encoding.UTF8_BOM
           : encoding
     yield* write(fs, path, Bom.join(current.text, bom), target)
-    return current.text
-  })
-
-export const syncChecked = (fs: FSUtil.Interface, path: string, bom: boolean, encoding: string) =>
-  Effect.gen(function* () {
-    const current = yield* read(fs, path)
-    const proof = yield* identity(path)
-    const target =
-      encoding === Encoding.UTF8_BOM && !bom
-        ? Encoding.DEFAULT
-        : encoding === Encoding.DEFAULT && bom
-          ? Encoding.UTF8_BOM
-          : encoding
-    yield* checked(path, Bom.join(current.text, bom), target, proof, current.sha256)
     return current.text
   })

@@ -102,6 +102,7 @@ describe("Format", () => {
         const file = `${test.directory}/test.txt`
         yield* Effect.promise(() => Bun.write(file, "x"))
 
+        expect(yield* Format.use.available(file)).toBe(false) // kilocode_change
         const formatted = yield* Format.use.file(file)
         expect(formatted).toBe(false)
       }),
@@ -201,6 +202,8 @@ describe("Format", () => {
         yield* Format.Service.use((fmt) =>
           Effect.gen(function* () {
             yield* fmt.init()
+            expect(yield* fmt.available(file)).toBe(true) // kilocode_change
+            expect(yield* fmt.available(`${test.directory}/test.txt`)).toBe(false) // kilocode_change
             expect(yield* fmt.file(file)).toBe(true)
           }),
         )

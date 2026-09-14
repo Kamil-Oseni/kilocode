@@ -177,6 +177,66 @@ describe("tool.edit", () => {
       }),
     )
 
+    // kilocode_change start
+    it.instance(
+      "formats a private staged copy before committing an edit",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const filepath = path.join(test.directory, "report.stage-edit")
+          yield* put(filepath, "status: old")
+
+          yield* run({ filePath: filepath, oldString: "old", newString: "agent" })
+
+          const content = yield* load(filepath)
+          expect(content).toStartWith("status: agent\nformatted:")
+          const staged = content.split("formatted:")[1]
+          expect(staged).toContain("raya-format-")
+          expect(staged).not.toBe(filepath)
+          expect(yield* Effect.promise(() => Bun.file(staged).exists())).toBe(false)
+        }),
+      {
+        config: {
+          formatter: {
+            staged: {
+              extensions: [".stage-edit"],
+              command: [
+                "node",
+                "-e",
+                "const fs = require('fs'); const file = process.argv[1]; fs.appendFileSync(file, '\\nformatted:' + file)",
+                "$FILE",
+              ],
+            },
+          },
+        },
+      },
+    )
+
+    it.instance(
+      "preserves the reviewed file when an edit formatter removes its staged copy",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const filepath = path.join(test.directory, "report.deleted-edit-stage")
+          yield* put(filepath, "status: old")
+
+          const result = yield* run({ filePath: filepath, oldString: "old", newString: "agent" }).pipe(Effect.exit)
+          expect(Exit.isFailure(result)).toBe(true)
+          expect(yield* load(filepath)).toBe("status: old")
+        }),
+      {
+        config: {
+          formatter: {
+            staged: {
+              extensions: [".deleted-edit-stage"],
+              command: ["node", "-e", "require('fs').unlinkSync(process.argv[1])", "$FILE"],
+            },
+          },
+        },
+      },
+    )
+    // kilocode_change end
+
     it.instance("throws error when file does not exist", () =>
       Effect.gen(function* () {
         const test = yield* TestInstance

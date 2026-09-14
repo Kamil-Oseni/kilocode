@@ -119,6 +119,7 @@ const lsp = Layer.mock(LSP.Service)({
   diagnostics: () => Effect.succeed({}),
 })
 const format = Layer.mock(Format.Service)({
+  available: () => Effect.succeed(false),
   file: () => Effect.succeed(false),
 })
 const truncate = Layer.mock(Truncate.Service)({

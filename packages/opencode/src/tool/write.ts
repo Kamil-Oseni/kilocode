@@ -80,13 +80,13 @@ export const WriteTool = Tool.define(
           yield* RayaPath.check(fs, filepath, target) // kilocode_change - reject link swaps after approval
           // kilocode_change start - existing files are validated and written through the same
           // open handle, so a stale path, concurrent edit, or hard link is refused without mutation.
+          const final = (yield* format.available(target))
+            ? yield* EncodedIO.stage(fs, target, Bom.join(contentNew, desiredBom), source.encoding, format.file)
+            : contentNew
           if (exists && proof && pre.sha256) {
-            yield* EncodedIO.checked(target, Bom.join(contentNew, desiredBom), source.encoding, proof, pre.sha256)
+            yield* EncodedIO.checked(target, Bom.join(final, desiredBom), source.encoding, proof, pre.sha256)
           } else {
-            yield* EncodedIO.write(fs, target, Bom.join(contentNew, desiredBom), source.encoding)
-          }
-          if (yield* format.file(target)) {
-            yield* EncodedIO.syncChecked(fs, target, desiredBom, source.encoding)
+            yield* EncodedIO.write(fs, target, Bom.join(final, desiredBom), source.encoding)
           }
           // kilocode_change end
           yield* events.publish(FileSystem.Event.Edited, { file: filepath })

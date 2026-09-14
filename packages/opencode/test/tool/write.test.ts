@@ -3,6 +3,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Cause, Effect, Exit } from "effect" // kilocode_change
 import path from "path"
 import fs from "fs/promises"
+import { tmpdir } from "node:os" // kilocode_change
 import { WriteTool } from "../../src/tool/write"
 import { LSP } from "@/lsp/lsp"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -28,8 +29,11 @@ const ctx = {
   ask: () => Effect.void,
 }
 
+const marker = path.join(tmpdir(), `raya-format-marker-${process.pid}`) // kilocode_change
+
 afterEach(async () => {
   await disposeAllInstances()
+  await fs.rm(marker, { force: true }) // kilocode_change
 })
 
 const it = testEffect(
@@ -161,6 +165,41 @@ describe("tool.write", () => {
         },
       },
     )
+
+    // kilocode_change start
+    it.instance(
+      "formats a private staged copy before committing the reviewed file",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const filepath = path.join(test.directory, "formatted.stage")
+          yield* Effect.promise(() => fs.writeFile(filepath, "old content", "utf8"))
+
+          yield* run({ filePath: filepath, content: "new content" })
+
+          const content = yield* Effect.promise(() => fs.readFile(filepath, "utf8"))
+          expect(content).toStartWith("new content\nformatted:")
+          expect(content).toContain("raya-format-")
+          expect(content).not.toContain(`formatted:${filepath}`)
+          expect(yield* Effect.promise(() => Bun.file(content.split("formatted:")[1]).exists())).toBe(false)
+        }),
+      {
+        config: {
+          formatter: {
+            staged: {
+              extensions: [".stage"],
+              command: [
+                "node",
+                "-e",
+                "const fs = require('fs'); const file = process.argv[1]; fs.writeFileSync(file, fs.readFileSync(file, 'utf8') + '\\nformatted:' + file)",
+                "$FILE",
+              ],
+            },
+          },
+        },
+      },
+    )
+    // kilocode_change end
 
     it.instance("returns diff in metadata for existing files", () =>
       Effect.gen(function* () {
@@ -321,6 +360,74 @@ describe("tool.write", () => {
         expect(yield* Effect.promise(() => fs.readFile(filepath, "utf8"))).toBe("approved content")
         expect(yield* Effect.promise(() => fs.readFile(alias, "utf8"))).toBe("approved content")
       }),
+    )
+
+    it.instance(
+      "formats only the staged copy when the reviewed pathname was replaced",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const filepath = path.join(test.directory, "report.stale")
+          const approved = path.join(test.directory, "approved.stale")
+          yield* Effect.promise(() => fs.writeFile(filepath, "approved content"))
+          const next = {
+            ...ctx,
+            ask: () =>
+              Effect.promise(async () => {
+                await fs.rename(filepath, approved)
+                await fs.writeFile(filepath, "replacement content")
+              }),
+          }
+
+          const result = yield* run({ filePath: filepath, content: "agent content" }, next).pipe(Effect.exit)
+          expect(Exit.isFailure(result)).toBe(true)
+          expect(yield* Effect.promise(() => fs.readFile(filepath, "utf8"))).toBe("replacement content")
+          expect(yield* Effect.promise(() => fs.readFile(approved, "utf8"))).toBe("approved content")
+          const staged = yield* Effect.promise(() => fs.readFile(marker, "utf8"))
+          expect(staged).toContain("raya-format-")
+          expect(staged).not.toBe(filepath)
+          expect(yield* Effect.promise(() => Bun.file(staged).exists())).toBe(false)
+        }),
+      {
+        config: {
+          formatter: {
+            staged: {
+              extensions: [".stale"],
+              command: [
+                "node",
+                "-e",
+                "const fs = require('fs'); const file = process.argv[1]; fs.writeFileSync(process.argv[2], file); fs.appendFileSync(file, ' formatted')",
+                "$FILE",
+                marker,
+              ],
+            },
+          },
+        },
+      },
+    )
+
+    it.instance(
+      "preserves the reviewed file when a formatter removes its staged copy",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const filepath = path.join(test.directory, "report.deleted-stage")
+          yield* Effect.promise(() => fs.writeFile(filepath, "approved content"))
+
+          const result = yield* run({ filePath: filepath, content: "agent content" }).pipe(Effect.exit)
+          expect(Exit.isFailure(result)).toBe(true)
+          expect(yield* Effect.promise(() => fs.readFile(filepath, "utf8"))).toBe("approved content")
+        }),
+      {
+        config: {
+          formatter: {
+            staged: {
+              extensions: [".deleted-stage"],
+              command: ["node", "-e", "require('fs').unlinkSync(process.argv[1])", "$FILE"],
+            },
+          },
+        },
+      },
     )
     // kilocode_change end
   })

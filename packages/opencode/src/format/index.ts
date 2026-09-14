@@ -22,6 +22,7 @@ export type Status = Schema.Schema.Type<typeof Status>
 export interface Interface {
   readonly init: () => Effect.Effect<void>
   readonly status: () => Effect.Effect<Status[]>
+  readonly available: (filepath: string) => Effect.Effect<boolean> // kilocode_change - stage formatter output before target mutation
   readonly file: (filepath: string) => Effect.Effect<boolean>
 }
 
@@ -123,6 +124,7 @@ const layer = Layer.effect(
           yield* Effect.logInfo("init")
           return {
             formatters,
+            getFormatter, // kilocode_change - let tools avoid staging when no formatter matches
             isEnabled,
             formatFile,
           }
@@ -162,6 +164,7 @@ const layer = Layer.effect(
 
         return {
           formatters,
+          getFormatter, // kilocode_change - let tools avoid staging when no formatter matches
           isEnabled,
           formatFile,
         }
@@ -191,7 +194,14 @@ const layer = Layer.effect(
       return yield* formatFile(filepath)
     })
 
-    return Service.of({ init, status, file })
+    // kilocode_change start - formatter-aware file tools stage work away from the reviewed target
+    const available = Effect.fn("Format.available")(function* (filepath: string) {
+      const { getFormatter } = yield* InstanceState.get(state)
+      return (yield* Effect.promise(() => getFormatter(path.extname(filepath)))).length > 0
+    })
+    // kilocode_change end
+
+    return Service.of({ init, status, available, file }) // kilocode_change
   }),
 )
 

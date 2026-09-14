@@ -279,6 +279,16 @@ it.instance(
       const bound = bind([defs.read, defs.document, defs.discover])
       yield* prepare(bound.tools)
       const target = path.join(instance.directory, "project-brief.docx")
+      const image = path.join(instance.directory, "workflow.png")
+      yield* Effect.promise(() =>
+        Bun.write(
+          image,
+          Buffer.from(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=",
+            "base64",
+          ),
+        ),
+      )
       const approvals: string[] = []
       const ctx = {
         ...bound.ctx,
@@ -312,16 +322,24 @@ it.instance(
                 ["Notes", ""],
               ],
             },
+            {
+              type: "image",
+              filePath: image,
+              alt: "Workflow status mark",
+              caption: "The current workflow is ready for review.",
+              width: 1.5,
+            },
           ],
         },
         ctx,
       )
-      expect(created.output).toBe("Created project-brief.docx with 6 blocks.")
+      expect(created.output).toBe("Created project-brief.docx with 7 blocks.")
       expect(created.metadata).toMatchObject({
         filepath: target,
         exists: false,
-        blocks: 6,
+        blocks: 7,
         cells: 8,
+        images: 1,
         rayaRevision: { version: 1, status: "captured", path: target },
       })
       const bytes = new Uint8Array(yield* Effect.promise(() => Bun.file(target).arrayBuffer()))
@@ -329,16 +347,25 @@ it.instance(
       const entries = yield* Effect.promise(() => archive.getEntries())
       const entry = entries.find((item) => item.filename === "word/document.xml")
       const styles = entries.find((item) => item.filename === "word/styles.xml")
+      const rels = entries.find((item) => item.filename === "word/_rels/document.xml.rels")
       expect(entry?.getData).toBeDefined()
       expect(styles?.getData).toBeDefined()
+      expect(rels?.getData).toBeDefined()
+      expect(entries.some((item) => item.filename === "word/media/image1.png")).toBe(true)
       const xml = yield* Effect.promise(() => entry!.getData!(new TextWriter()))
       const css = yield* Effect.promise(() => styles!.getData!(new TextWriter()))
+      const links = yield* Effect.promise(() => rels!.getData!(new TextWriter()))
       yield* Effect.promise(() => archive.close())
       expect(xml).toContain("<w:tbl>")
       expect(xml).toContain("<w:tblHeader/>")
       expect(xml).toContain('w:fill="E8EBF0"')
+      expect(xml).toContain("<w:drawing>")
+      expect(xml).toContain('descr="Workflow status mark"')
+      expect(xml).toContain('r:embed="rId3"')
       expect(css).toContain('w:ascii="Instrument Serif"')
       expect(css).toContain('w:ascii="Outfit"')
+      expect(css).toContain('w:styleId="Caption"')
+      expect(links).toContain('Target="media/image1.png"')
       const read = yield* defs.read.execute({ filePath: target }, ctx)
       for (const value of [
         "Project North Star",
@@ -354,9 +381,10 @@ it.instance(
         "Approve the flow",
         "Engineering",
         "Verify the build",
+        "The current workflow is ready for review.",
       ])
         expect(read.output).toContain(value)
-      expect(approvals).toEqual(["edit", "read"])
+      expect(approvals).toEqual(["read", "edit", "read"])
 
       const before = yield* Effect.promise(() => Bun.file(target).arrayBuffer())
       const denied = yield* defs.document
@@ -414,6 +442,23 @@ it.instance(
         ),
       ).toBe(true)
       expect(yield* Effect.promise(() => Bun.file(oversized).exists())).toBe(false)
+      const invalid = path.join(instance.directory, "invalid-image.docx")
+      const corrupt = path.join(instance.directory, "corrupt.png")
+      yield* Effect.promise(() => Bun.write(corrupt, "not a png"))
+      expect(
+        Exit.isFailure(
+          yield* defs.document
+            .execute(
+              {
+                filePath: invalid,
+                blocks: [{ type: "image", filePath: corrupt, alt: "Corrupt image" }],
+              },
+              ctx,
+            )
+            .pipe(Effect.exit),
+        ),
+      ).toBe(true)
+      expect(yield* Effect.promise(() => Bun.file(invalid).exists())).toBe(false)
     }),
   60_000,
 )

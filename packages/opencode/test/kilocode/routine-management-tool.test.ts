@@ -122,9 +122,12 @@ it.live(
         expect(receipts).toHaveLength(2)
         const binding = yield* storage.read<{ organizationID: string }>(["raya", "agent-stage", worker.id])
         expect(binding).toMatchObject({
-          version: 1,
+          version: 2,
           agentID: worker.id,
           definition: { enabled: false },
+          desiredEnabled: true,
+          organizationRevision: 1,
+          organization: { name: params.name, purpose: params.purpose },
         })
         expect(
           (yield* RayaTaskOrganization.make(database, RayaTask.make({ storage, database }), storage).list()).items,
@@ -329,8 +332,20 @@ it.live(
         })
         expect(refused.output).toContain("changed before activation")
         expect((yield* tasks.list()).every((item) => !item.enabled)).toBe(true)
-        expect(yield* storage.list(["raya", "agent-stage"])).toHaveLength(2)
+        const receipts = yield* storage.list(["raya", "agent-stage"])
+        expect(receipts).toHaveLength(2)
+        for (const key of receipts) {
+          const value = yield* storage.read<Record<string, unknown>>(key)
+          yield* storage.replace(key, { ...value, owner: { host: hostname(), pid: 2_147_483_647 } })
+        }
+        const conflicted = yield* tasks.recoverStages()
+        expect(conflicted.recovered).toBe(0)
+        expect(conflicted.issues).toHaveLength(2)
+        expect((yield* tasks.list()).every((item) => !item.enabled)).toBe(true)
         yield* tasks.update(chief.id, { objective: "Coordinate the close" })
+        expect(yield* tasks.recoverStages()).toEqual({ recovered: 2, pending: 0, issues: [], truncated: false })
+        expect((yield* tasks.list()).every((item) => item.enabled)).toBe(true)
+        expect(yield* storage.list(["raya", "agent-stage"])).toHaveLength(0)
 
         const recovered = yield* retry.execute(params, {
           ...context("activate-company"),
@@ -425,6 +440,75 @@ it.live(
         expect(result.output).toContain("changed before Raya could confirm creation")
         expect((yield* tasks.list()).filter((item) => item.name === "Chief")).toHaveLength(1)
         expect((yield* organizations.list()).items).toEqual([changed])
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            Storage.layerFromDir(path.join(directory, "storage")),
+            Database.layerFromPath(path.join(directory, "queue.sqlite")),
+          ),
+        ),
+      ),
+    ),
+  30_000,
+)
+
+it.live(
+  "startup does not activate a staged worker after its organization revision changes",
+  () =>
+    provideTmpdirInstance((directory) =>
+      Effect.gen(function* () {
+        const storage = yield* Storage.Service
+        const database = yield* Database.Service
+        const failed = { saves: 0 }
+        const unreliable = {
+          ...storage,
+          replace: (key: string[], value: unknown) =>
+            key[0] === "raya" && key[1] === "agent" && ++failed.saves === 2
+              ? Effect.sync(() => {
+                  throw new Error("simulated crash before activation")
+                })
+              : storage.replace(key, value),
+        }
+        const params = {
+          name: "Revision Company",
+          purpose: "Preserve the reviewed graph.",
+          workers: [
+            {
+              kind: "new" as const,
+              key: "worker",
+              name: "Worker",
+              role: "Researcher",
+              objective: "Research the market",
+              output: output("Research"),
+              capabilities: [],
+              access: "brief" as const,
+              tools: ["read"],
+              when: "only when I ask",
+            },
+          ],
+        }
+        const create = yield* (yield* routineManagementTools({ database, storage: unreliable, sessions }).create).init()
+        expect(Exit.isFailure(yield* create.execute(params, context("revision-company")).pipe(Effect.exit))).toBe(true)
+
+        const tasks = RayaTask.make({ storage, database })
+        const organizations = RayaTaskOrganization.make(database, tasks, storage)
+        const worker = (yield* tasks.list())[0]
+        const company = (yield* organizations.list()).items[0]
+        if (!worker || !company) throw new Error("staged company was not created")
+        expect(worker.enabled).toBe(false)
+        yield* organizations.update(company.id, { expectedRevision: company.revision, purpose: "Changed graph." })
+        const keys = yield* storage.list(["raya", "agent-stage"])
+        expect(keys).toHaveLength(1)
+        const key = keys[0]
+        if (!key) throw new Error("staging receipt was not created")
+        const receipt = yield* storage.read<Record<string, unknown>>(key)
+        yield* storage.replace(key, { ...receipt, owner: { host: hostname(), pid: 2_147_483_647 } })
+
+        const recovered = yield* tasks.recoverStages()
+        expect(recovered.recovered).toBe(0)
+        expect(recovered.issues).toHaveLength(1)
+        expect((yield* tasks.get(worker.id)).enabled).toBe(false)
+        expect(yield* storage.list(["raya", "agent-stage"])).toHaveLength(1)
       }).pipe(
         Effect.provide(
           Layer.mergeAll(

@@ -89,6 +89,15 @@ export type Update = typeof Update.Type
 export type Archive = typeof Archive.Type
 export type Query = typeof Query.Type
 
+export function matchesDefinition(item: Organization, input: Create) {
+  if (item.name !== input.name.trim() || item.purpose !== input.purpose?.trim()) return false
+  if (!isDeepStrictEqual(item.members, normalize(input.members))) return false
+  return isDeepStrictEqual(
+    item.delegations,
+    (input.delegations ?? []).map((edge, position) => ({ ...edge, position })),
+  )
+}
+
 export class Invalid extends Schema.TaggedErrorClass<Invalid>()("RayaTaskOrganization.Invalid", {
   message: Schema.String,
 }) {}

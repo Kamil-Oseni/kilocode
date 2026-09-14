@@ -14,6 +14,7 @@ import { owner, stopped } from "./owner"
 import { removals } from "./removal"
 import { archive as indexed, InvalidCursor } from "./archive"
 import { RayaTaskQueue } from "./queue"
+import { Create as OrganizationCreate, matchesDefinition } from "./organization"
 import type { Database } from "@opencode-ai/core/database/database"
 import * as Log from "@opencode-ai/core/util/log"
 
@@ -283,7 +284,7 @@ export namespace RayaTask {
   const staging = (id: string) => ["raya", "agent-stage", id]
   const agents = Schema.decodeUnknownEffect(Schema.Array(Agent))
   const runs = Schema.decodeUnknownEffect(Schema.Array(Run))
-  const Stage = Schema.Struct({
+  const StageV1 = Schema.Struct({
     version: Schema.Literal(1),
     agentID: Schema.String,
     organizationID: Schema.String,
@@ -291,6 +292,35 @@ export namespace RayaTask {
     owner: Schema.Struct({ host: Schema.String, pid: Schema.Int }),
     createdAt: Timestamp,
   })
+  const StageV2 = Schema.Struct({
+    ...StageV1.fields,
+    version: Schema.Literal(2),
+    desiredEnabled: Schema.Boolean,
+    organization: OrganizationCreate,
+    organizationRevision: Version,
+  })
+  const Stage = Schema.Union([StageV1, StageV2])
+
+  function creation(value: typeof StageV2.Type): Create {
+    return {
+      name: value.definition.name,
+      role: value.definition.role,
+      objective: value.definition.objective,
+      output: value.definition.output,
+      capabilities: value.definition.capabilities,
+      memoryScope: value.definition.memoryScope,
+      schedule: value.definition.schedule,
+      avatar: value.definition.avatar,
+      enabled: value.desiredEnabled,
+      plan: value.definition.plan,
+      model: value.definition.model,
+      mode: value.definition.mode,
+      dir: value.definition.dir,
+      paths: value.definition.paths,
+      access: value.definition.access,
+      tools: value.definition.tools,
+    }
+  }
 
   export function pending(run?: Run) {
     return run?.status === "running" || (run?.status === "blocked" && run.blockedReason === "waiting on you")
@@ -831,27 +861,60 @@ export namespace RayaTask {
       )
     })
 
-    const stage = Effect.fn("RayaTask.stage")(function* (input: Create, id: string, organizationID: string) {
+    const stage = Effect.fn("RayaTask.stage")(function* (
+      input: Create,
+      id: string,
+      organizationID: string,
+      organization?: typeof OrganizationCreate.Type,
+      organizationRevision?: number,
+    ) {
       const paused = { ...input, enabled: false }
       const saved = yield* Effect.gen(function* () {
         const prior = yield* receipt(id)
         if (prior) {
-          if (prior.organizationID === organizationID && (yield* equivalent(prior.definition, paused, id))) return prior
+          const matches =
+            prior.organizationID === organizationID &&
+            (yield* equivalent(prior.definition, paused, id)) &&
+            (prior.version === 1 ||
+              (organization !== undefined &&
+                organizationRevision === prior.organizationRevision &&
+                isDeepStrictEqual(prior.organization, organization)))
+          if (matches) return prior
           return yield* new GuardError({ kind: "conflict", message: "This routine belongs to another staging plan." })
         }
         const agent = yield* draft(paused, id)
-        const value = {
-          version: 1 as const,
-          agentID: id,
-          organizationID,
-          definition: agent,
-          owner: owner(),
-          createdAt: Date.now(),
-        }
+        const value =
+          organization && organizationRevision
+            ? {
+                version: 2 as const,
+                agentID: id,
+                organizationID,
+                definition: agent,
+                desiredEnabled: input.enabled ?? true,
+                organization,
+                organizationRevision,
+                owner: owner(),
+                createdAt: Date.now(),
+              }
+            : {
+                version: 1 as const,
+                agentID: id,
+                organizationID,
+                definition: agent,
+                owner: owner(),
+                createdAt: Date.now(),
+              }
         if (yield* deps.storage.create(staging(id), value).pipe(Effect.orDie)) return value
         const current = yield* receipt(id)
-        if (current?.organizationID === organizationID && (yield* equivalent(current.definition, paused, id)))
-          return current
+        if (current?.organizationID === organizationID && (yield* equivalent(current.definition, paused, id))) {
+          if (current.version === 1) return current
+          if (
+            organization !== undefined &&
+            organizationRevision === current.organizationRevision &&
+            isDeepStrictEqual(current.organization, organization)
+          )
+            return current
+        }
         return yield* new GuardError({ kind: "conflict", message: "This routine belongs to another staging plan." })
       })
       const agent = saved.definition
@@ -865,7 +928,13 @@ export namespace RayaTask {
       return agent
     })
 
-    const activate = Effect.fn("RayaTask.activate")(function* (input: Create, id: string, organizationID: string) {
+    const activate = Effect.fn("RayaTask.activate")(function* (
+      input: Create,
+      id: string,
+      organizationID: string,
+      expected?: typeof OrganizationCreate.Type,
+      expectedRevision?: number,
+    ) {
       const items = yield* list()
       const index = items.findIndex((item) => item.id === id)
       if (index < 0) return yield* new NotFoundError({ message: "Agent not found" })
@@ -884,12 +953,23 @@ export namespace RayaTask {
         return yield* new GuardError({ kind: "conflict", message: "The staged routine is not in its organization." })
       const prior = yield* receipt(id)
       if (!prior) {
+        if (
+          expected !== undefined &&
+          (organization.revision !== expectedRevision || !matchesDefinition(organization, expected))
+        )
+          return yield* new GuardError({ kind: "conflict", message: "The staged routine's organization changed." })
         if (yield* equivalent(existing, input, id)) return existing
         return yield* new GuardError({ kind: "conflict", message: "This routine's staging receipt is missing." })
       }
       if (
         prior.organizationID !== organizationID ||
-        !(yield* equivalent(prior.definition, { ...input, enabled: false }, id))
+        !(yield* equivalent(prior.definition, { ...input, enabled: false }, id)) ||
+        (prior.version === 2 &&
+          (expected === undefined ||
+            expectedRevision !== prior.organizationRevision ||
+            organization.revision !== prior.organizationRevision ||
+            !isDeepStrictEqual(prior.organization, expected) ||
+            !matchesDefinition(organization, prior.organization)))
       )
         return yield* new GuardError({ kind: "conflict", message: "This routine belongs to another staging plan." })
       if (!(yield* equivalent(existing, { ...input, enabled: false }, id)) && !(yield* equivalent(existing, input, id)))
@@ -912,6 +992,8 @@ export namespace RayaTask {
       const issues: string[] = []
       let recovered = 0
       let pending = 0
+      const totals = new Map<string, number>()
+      const groups = new Map<string, Array<{ value: typeof StageV2.Type; agent: Agent }>>()
       for (const key of keys.slice(0, 1_024)) {
         if (key.length !== 3 || key[0] !== "raya" || key[1] !== "agent-stage") {
           issues.push(`Unreadable staged-worker key: ${key.join("/")}`)
@@ -928,6 +1010,7 @@ export namespace RayaTask {
           continue
         }
         const value = decoded.value
+        if (value.version === 2) totals.set(value.organizationID, (totals.get(value.organizationID) ?? 0) + 1)
         if (!stopped(value.owner)) {
           pending++
           continue
@@ -953,13 +1036,44 @@ export namespace RayaTask {
           continue
         }
         const member = organization.members.some((item) => item.agentID === value.agentID)
+        if (
+          value.version === 2 &&
+          member &&
+          organization.revision === value.organizationRevision &&
+          matchesDefinition(organization, value.organization)
+        ) {
+          const planned = creation(value)
+          const disabled = yield* equivalent(agent, { ...planned, enabled: false }, value.agentID)
+          const desired = yield* equivalent(agent, planned, value.agentID)
+          if (disabled || desired) {
+            groups.set(value.organizationID, [...(groups.get(value.organizationID) ?? []), { value, agent }])
+            continue
+          }
+        }
         const expected = { ...value.definition, enabled: true, updatedAt: agent.updatedAt }
-        if (member && agent.enabled && isDeepStrictEqual(agent, expected)) {
+        if (value.version === 1 && member && agent.enabled && isDeepStrictEqual(agent, expected)) {
           yield* deps.storage.remove(key).pipe(Effect.orDie)
           recovered++
           continue
         }
         issues.push(`Staged worker ${value.agentID} remains disabled or changed and requires review.`)
+      }
+      for (const [organizationID, group] of groups) {
+        if (group.length !== totals.get(organizationID)) {
+          issues.push(`Staged organization ${organizationID} has incomplete or live worker receipts.`)
+          continue
+        }
+        for (const item of group) {
+          const planned = creation(item.value)
+          yield* activate(
+            planned,
+            item.value.agentID,
+            organizationID,
+            item.value.organization,
+            item.value.organizationRevision,
+          )
+          recovered++
+        }
       }
       return { recovered, pending, issues, truncated: keys.length > 1_024 }
     })
@@ -1392,10 +1506,20 @@ export namespace RayaTask {
       check: (input: Create) => draft(input, crypto.randomUUID()).pipe(Effect.asVoid),
       create: (input: Create) => mutate(deps.storage, create(input)),
       provision: (input: Create, id: string) => mutate(deps.storage, create(input, id, true)),
-      stage: (input: Create, id: string, organizationID: string) =>
-        mutate(deps.storage, stage(input, id, organizationID)),
-      activate: (input: Create, id: string, organizationID: string) =>
-        mutate(deps.storage, activate(input, id, organizationID)),
+      stage: (
+        input: Create,
+        id: string,
+        organizationID: string,
+        organization?: typeof OrganizationCreate.Type,
+        revision?: number,
+      ) => mutate(deps.storage, stage(input, id, organizationID, organization, revision)),
+      activate: (
+        input: Create,
+        id: string,
+        organizationID: string,
+        organization?: typeof OrganizationCreate.Type,
+        revision?: number,
+      ) => mutate(deps.storage, activate(input, id, organizationID, organization, revision)),
       recoverStages: () => mutate(deps.storage, recoverStages(), "Routine staging"),
       update: (...args: Parameters<typeof update>) => mutate(deps.storage, update(...args)),
       authority: (...args: Parameters<typeof authority>) => mutate(deps.storage, authority(...args)),

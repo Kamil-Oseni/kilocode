@@ -162,6 +162,7 @@ const SubordinatePlan = Schema.Struct({
   parentID: Schema.String,
   childID: Schema.String,
   create: RayaTask.Create,
+  organization: Schema.optional(OrganizationCreate),
   members: Schema.Array(MemberInput),
   delegations: Schema.Array(DelegationInput),
 })
@@ -520,7 +521,8 @@ export function routineManagementTools(input: {
                     })
                   return Effect.gen(function* () {
                     for (const worker of plan.workers)
-                      if (worker.kind === "new") yield* tasks.activate(worker.create, worker.id, plan.id)
+                      if (worker.kind === "new")
+                        yield* tasks.activate(worker.create, worker.id, plan.id, plan.create, 1)
                     return organizationResult(item)
                   })
                 }),
@@ -533,11 +535,11 @@ export function routineManagementTools(input: {
                   yield* tasks.get(worker.id)
                   continue
                 }
-                yield* tasks.stage(worker.create, worker.id, plan.id)
+                yield* tasks.stage(worker.create, worker.id, plan.id, plan.create, 1)
               }
               const item = yield* organizations.provision(plan.create, plan.id)
               for (const worker of plan.workers)
-                if (worker.kind === "new") yield* tasks.activate(worker.create, worker.id, plan.id)
+                if (worker.kind === "new") yield* tasks.activate(worker.create, worker.id, plan.id, plan.create, 1)
               return organizationResult(item)
             }),
         }).pipe(
@@ -646,28 +648,36 @@ export function routineManagementTools(input: {
             yield* tasks.check(create)
             const seed = JSON.stringify([ctx.sessionID, ctx.messageID, ctx.callID, parent.id, organization.id])
             const childID = uuid(`${seed}:subordinate`)
+            const roster = [
+              ...organization.members.map((item) => ({
+                agentID: item.agentID,
+                role: item.role,
+                ...(item.supervisorID ? { supervisorID: item.supervisorID } : {}),
+              })),
+              { agentID: childID, role: params.role, supervisorID: parent.id },
+            ]
+            const routes = [
+              ...organization.delegations.map((item) => ({
+                senderID: item.senderID,
+                recipientID: item.recipientID,
+              })),
+              { senderID: parent.id, recipientID: childID },
+              ...recipients.map((recipientID) => ({ senderID: childID, recipientID })),
+            ]
             return yield* Schema.decodeUnknownEffect(SubordinatePlan)({
               organizationID: organization.id,
               expectedRevision: organization.revision,
               parentID: parent.id,
               childID,
               create,
-              members: [
-                ...organization.members.map((item) => ({
-                  agentID: item.agentID,
-                  role: item.role,
-                  ...(item.supervisorID ? { supervisorID: item.supervisorID } : {}),
-                })),
-                { agentID: childID, role: params.role, supervisorID: parent.id },
-              ],
-              delegations: [
-                ...organization.delegations.map((item) => ({
-                  senderID: item.senderID,
-                  recipientID: item.recipientID,
-                })),
-                { senderID: parent.id, recipientID: childID },
-                ...recipients.map((recipientID) => ({ senderID: childID, recipientID })),
-              ],
+              organization: {
+                name: organization.name,
+                purpose: organization.purpose,
+                members: roster,
+                delegations: routes,
+              },
+              members: roster,
+              delegations: routes,
             })
           }),
           decode: Schema.decodeUnknownEffect(SubordinatePlan),
@@ -685,7 +695,13 @@ export function routineManagementTools(input: {
                   delegations: plan.delegations,
                 })
               ) {
-                const agent = yield* tasks.activate(plan.create, plan.childID, plan.organizationID)
+                const agent = yield* tasks.activate(
+                  plan.create,
+                  plan.childID,
+                  plan.organizationID,
+                  plan.organization,
+                  plan.expectedRevision + 1,
+                )
                 if (matchesWorker(agent, plan.create)) {
                   yield* announce(organization, agent, plan)
                   return subordinateResult(organization, agent, plan.parentID)
@@ -712,7 +728,15 @@ export function routineManagementTools(input: {
                 metadata: params,
               })
               .pipe(
-                Effect.andThen(tasks.stage(plan.create, plan.childID, plan.organizationID)),
+                Effect.andThen(
+                  tasks.stage(
+                    plan.create,
+                    plan.childID,
+                    plan.organizationID,
+                    plan.organization,
+                    plan.expectedRevision + 1,
+                  ),
+                ),
                 Effect.andThen(
                   organizations.update(plan.organizationID, {
                     expectedRevision: plan.expectedRevision,
@@ -721,10 +745,18 @@ export function routineManagementTools(input: {
                   }),
                 ),
                 Effect.flatMap((organization) =>
-                  tasks.activate(plan.create, plan.childID, plan.organizationID).pipe(
-                    Effect.tap((active) => announce(organization, active, plan)),
-                    Effect.map((active) => subordinateResult(organization, active, plan.parentID)),
-                  ),
+                  tasks
+                    .activate(
+                      plan.create,
+                      plan.childID,
+                      plan.organizationID,
+                      plan.organization,
+                      plan.expectedRevision + 1,
+                    )
+                    .pipe(
+                      Effect.tap((active) => announce(organization, active, plan)),
+                      Effect.map((active) => subordinateResult(organization, active, plan.parentID)),
+                    ),
                 ),
               ),
         }).pipe(

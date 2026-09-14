@@ -1589,6 +1589,106 @@ it.live(
   30_000,
 )
 
+for (const stage of ["session", "history"] as const) {
+  it.live(
+    `a delegation stopped after ${stage} persistence recovers its exact session and run`,
+    () =>
+      Effect.gen(function* () {
+        const directory = yield* tmpdirScoped()
+        const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+        yield* Effect.gen(function* () {
+          const storage = yield* Storage.Service
+          const database = yield* Database.Service
+          const tasks = RayaTask.make({ storage, database })
+          const chief = yield* tasks.create({
+            name: "Chief",
+            objective: "Assign work",
+            access: "brief",
+            schedule: { kind: "manual" },
+          })
+          const books = yield* tasks.create({
+            name: "Books",
+            objective: "Review accounts",
+            access: "brief",
+            schedule: { kind: "manual" },
+          })
+          const store = RayaTaskDelegation.make(database)
+          const admitted = yield* store.admit(
+            {
+              source: `dlg_process_${stage}`,
+              senderID: chief.id,
+              recipientID: books.id,
+              objective: "Review the close.",
+            },
+            chief,
+            books,
+          )
+          const fixture = fileURLToPath(new URL("./fixtures/delegation-start.ts", import.meta.url))
+          const code = yield* spawner.exitCode(
+            ChildProcess.make(
+              process.execPath,
+              [fixture, path.join(directory, "queue.sqlite"), path.join(directory, "storage"), books.id, stage],
+              { stdin: "ignore", stdout: "ignore", stderr: "ignore", detached: false },
+            ),
+          )
+          expect(Number(code)).toBe(21)
+          const accepted = yield* store.get(admitted.record.id)
+          expect(accepted).toMatchObject({ state: "accepted" })
+          expect(accepted.childRunID).toBeString()
+          const sid = SessionID.make(`ses_process_${stage}`)
+          const metadata = {
+            rayaRoutine: {
+              version: 1 as const,
+              agentID: books.id,
+              runID: accepted.childRunID!,
+              scheduleVersion: 1,
+              trigger: { kind: "manual" as const },
+              delegationID: accepted.id,
+            },
+          }
+          const saved = {
+            id: sid,
+            slug: "routine",
+            projectID: ProjectV2.ID.make(`project_process_${stage}`),
+            directory: path.join(directory, "storage"),
+            title: books.name,
+            version: "test",
+            time: { created: Date.now(), updated: Date.now() },
+            metadata,
+          }
+          const opened: string[] = []
+          const runner = RayaTaskRunner.make({
+            database,
+            storage,
+            sessions: {
+              create: () =>
+                Effect.sync(() => {
+                  opened.push("duplicate")
+                  return saved
+                }),
+              get: (id) => (id === sid ? Effect.succeed(saved) : Effect.die("unexpected session")),
+              messages: () => Effect.succeed([]),
+              children: () => Effect.succeed([]),
+            },
+          })
+
+          yield* runner.revive()
+          yield* runner.revive()
+
+          expect(yield* store.get(admitted.record.id)).toMatchObject({
+            state: "running",
+            childRunID: accepted.childRunID,
+            sessionID: sid,
+          })
+          expect(opened).toEqual([])
+          expect((yield* tasks.runsFor(books.id)).filter((run) => run.id === accepted.childRunID)).toHaveLength(1)
+          expect(yield* storage.list(["raya", "agent-claims"])).toEqual([])
+        }).pipe(Effect.provide(state(directory)))
+      }),
+    30_000,
+  )
+}
+
 it.live("archive integration validates legacy data once and stops writing the source file", () =>
   Effect.gen(function* () {
     const directory = yield* tmpdirScoped()

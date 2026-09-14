@@ -2,6 +2,12 @@
 
 Source of scope: [Comprehensive audit](Raya-Comprehensive-Audit.md). All sections and all ten overhauls remain in scope. Work proceeds in dependency order, with broader validation batched at checkpoints. A completed subtask does not mean the overall overhaul is complete.
 
+## ChatGPT 2026-09-13 22:55 America/Toronto - native Excel number formats delivered
+
+**Status: delivered in product commit `2862bd059b`; pushed.** OVR-08 `create_spreadsheet` now accepts native formatted-number cells for grouped numbers, percentages and USD, CAD, EUR, GBP or JPY currency. The structured cell shape is `{ number, format, decimals? }`; percentage inputs use decimal form, and decimals are bounded from 0 through 4. Numeric formula cells can apply the same format, so totals and other calculated financial values retain their intended display after recalculation. Arbitrary Excel format strings are not accepted.
+
+The permission and artifact metadata reports the formatted-cell count, capability discovery advertises native number formatting, and Raya's workbook reader returns the formatted display text. Validation rejects excess precision and refuses a number format on a formula whose cached value is text or boolean. The production capability suite passes 7 / 7 tests with 176 assertions. It reparses the generated XLSX with number-format metadata and verifies literal USD, CAD and percentage cells plus a formatted native `SUM` result. ChatGPT opened the retained production-tool workbook in installed Microsoft Excel: Excel displayed `$1,250.50`, `17.5%`, `$980` and `$2,230.50`; retained the expected locale-aware number formats; reported the formula as `=SUM(B2:B3)` with numeric value `2230.5`; used automatic calculation; and found no external link sources. Scoped single-thread non-type-aware Oxlint, formatting, annotations, the Effect-facade guard and `git diff --check` pass. The temporary workbook and test-only preservation hook were removed. This source checkpoint is pushed but is not in the installed `6db117d0d5` snapshot; batch it with the next coherent OVR-08 slice or install before switching overhaul.
+
 ## ChatGPT 2026-09-13 22:43 America/Toronto - Office capability batch installed
 
 **Status: installed from source commit `6db117d0d5`; pushed.** The authorized single-process low-memory workflow regenerated the SDK, rebuilt and smoke-tested the Windows x64 CLI, passed sequential extension-host and webview typechecks, cached ESLint and production bundling, then packaged and installed `eden.raya@7.4.23-snapshot+6db117d0d5.kamil-oseni.1789353604821`. This snapshot contains native PowerPoint images, safe native Excel formulas, timezone-safe Excel calendar dates and the preceding bounded snapshot-vault fix.
@@ -406,7 +412,7 @@ This checkpoint delivers explicit organization delegation permissions, admission
 
 ## Current work
 
-Latest pushed product checkpoint: `f6703a8632`. Latest verified installed snapshot source: `f92ca44782`, installed as `eden.raya@7.4.23-snapshot+f92ca44782.kamil-oseni.1789345490928`. Its active vault receipt and running backend are verified. Native XLSX/DOCX/PPTX creation, PPTX extraction and automatic snapshot pruning are pushed but await the next batched low-memory installation. Full live rebuild-survival acceptance, paid Live voice/device acceptance, the Go companion rebuild and the remaining audit work stay open.
+Latest pushed product checkpoint: `2862bd059b`. Latest verified installed snapshot source: `6db117d0d5`, installed as `eden.raya@7.4.23-snapshot+6db117d0d5.kamil-oseni.1789353604821`. The package and embedded CLI identities are verified; the open VS Code host still runs `846c527c1b` until reload. Native XLSX/DOCX/PPTX creation, PPTX extraction and bounded snapshot retention are installed. Native Excel number/currency/percentage formats are pushed and await the next batched low-memory installation. Full live rebuild-survival acceptance, paid Live voice/device acceptance, the Go companion rebuild and the remaining audit work stay open.
 
 The browser simplification is delivered through source, tests, push and installed snapshot. Durable spoken snapshots, warm handoff, live device/provider acceptance, organization delegation/provisioning and the full 39-requirement audit remain open.
 

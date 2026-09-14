@@ -1,5 +1,23 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-14 18:36 America/Toronto - EN-02 organization revision and queue-release boundary
+
+Product commit `4044e6ba08` is verified and pushed. `RayaTaskDelegation.authorize` must continue supplying the persisted `organizationRevision` to the organization policy. Do not relax this to an omitted/current-revision check: admission and delayed start must authorize the same reviewed graph revision. The adverse runner case deliberately queues revision-1 company work behind another assignment, updates the company to revision 2 and proves settlement fails the queued row before `sessions.create` runs.
+
+`RayaTaskRunner.closeErrand` must also keep queue release for terminal runs that have no delegation row. Resolve the recipient as `row?.recipientID ?? run.agentID`; finish the owning delegation only when `row` exists, then retain the existing busy check and atomic `errands.take`. This closes the starvation case where a manual or scheduled worker run completed while delegated work waited forever. Do not release on `needs_input`: the waiting run is intentionally still active. The regression settles the same manual session twice and proves only one queued session starts.
+
+Evidence to preserve:
+
+- `bun test ./test/kilocode/task/delegation.test.ts ./test/kilocode/task/delegation-runner.test.ts`: 15 pass / 158 assertions.
+- `bun test ./test/kilocode/task-scheduler.test.ts`: 28 pass / 406 assertions.
+- Scoped one-thread Oxlint: zero errors and 22 existing warnings outside the new lines.
+- OpenCode annotation and Effect Promise-facade guards, Markdown-table guard and `git diff --check`: pass.
+- No broad typecheck, root test/lint, Turbo, repository-wide `tsgolint` or parallel heavy checker ran. No Bun or tsgo process remained.
+
+Continue EN-02 by defining and proving the exact authority linearization. Today, start authorization reads the company before `fire` creates the child session; a company mutation can occur between those operations. Prefer a Kilo-owned start guard at the worker's serialized admission boundary immediately before snapshot/session creation. Decide explicitly whether a mutation after that point cancels admitted in-flight work or only prevents future admission; do not imply atomicity without a durable claim or a tested linearization point. Add a controlled race test that blocks recipient start, mutates the organization and proves the chosen rule without duplicate sessions. Then review stop/cancel ownership and reject late child results from a superseded or cancelled run before moving to representative hosted/browser/outreach company execution.
+
+EN-02 and OVR-05 remain **In progress**. Installed source remains `17ff50e907`; do not rebuild a roughly 519 MB package for this small backend slice. Retained installed digest is `6a01d16c5c719ddf5cb59ed01eadf37e3dfa94065a6c10c1308088c5e9687cec`; active-host digest remains the older `69aff4b80dfdb67185b60348dd805ea99e6faa7ea03d4d1cbb9096e753f2963d` until reload.
+
 ## ChatGPT 2026-09-14 15:38 America/Toronto - EN-09 credential scope and deletion ordering
 
 **State: product commit `dbb70f8a08` is verified and pushed; not installed.** `UpdateCredentials` now enumerates global, workspace and workspace-folder legacy values. Matching trimmed values migrate once; distinct nonblank values refuse migration and retain every source. Blank legacy residue is still removed. Replacement stores and read-verifies the secret before settings cleanup. Deletion reverses the side-effect order: remove every legacy settings value first, then delete and read-verify SecretStorage. If cleanup stops partway, the old secret remains and the command reports failure; retry finishes cleanup and deletion. This prevents a later automatic check from treating a leftover setting as a new credential.

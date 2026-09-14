@@ -1,5 +1,15 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-14 18:36 America/Toronto - Queued organization execution fenced
+
+**Status: product commit `4044e6ba08` is verified and pushed to `origin/main`; it is intentionally not installed as a standalone snapshot.** Organization-scoped delegation now carries its admitted `organizationRevision` into the start-time policy check. A request queued under revision 1 cannot begin after the company changes to revision 2, even when the same workers and route still exist: Raya marks the durable request failed with `The organization no longer authorizes this delegation.`, creates no replacement session and leaves no running recipient run.
+
+Worker queue release now also applies when the run that made the recipient busy was started manually or by its schedule. Settling that terminal run looks up the worker from the run itself when no delegation row owns the session, then atomically takes and starts the next durable delegation. Waiting-for-input remains busy and does not release the queue. Replaying settlement cannot duplicate a start because the recipient busy check and database `take` transition admit only the queued row.
+
+Focused evidence: delegation service and runner tests pass **15 / 158**, including exact revision checks at admission and start, stale-company rejection before session creation, manual-run queue release and replay idempotence. The scheduler regression passes **28 / 406**. Scoped one-thread Oxlint has zero errors and only 22 older wider-file warnings; OpenCode annotation, Effect Promise-facade, Markdown-table and diff guards pass. No broad typecheck, root test/lint, Turbo or repository-wide `tsgolint` ran, and no Bun or tsgo process remained.
+
+EN-02 and OVR-05 remain **In progress**. The organization policy read and session creation are still separate operations; define the admission linearization before claiming atomic authority. Broader ownership, cancellation and late-result fencing plus representative company execution through real integrations remain open. The latest installed source remains `17ff50e907`, retained VSIX digest `6a01d16c5c719ddf5cb59ed01eadf37e3dfa94065a6c10c1308088c5e9687cec`; the active host still points to the older `69aff4b80dfdb67185b60348dd805ea99e6faa7ea03d4d1cbb9096e753f2963d` package.
+
 ## ChatGPT 2026-09-14 15:38 America/Toronto - Legacy update credentials cannot survive or race deletion
 
 **Status: product commit `dbb70f8a08` is verified and pushed; it is intentionally not installed because the preceding updater checkpoint was just rebuilt.** Update credential migration now inspects global, workspace and workspace-folder legacy settings. One matching nonblank value migrates to SecretStorage, verifies there, and then removes every defined legacy setting including blank residue. Distinct nonblank values fail closed without changing the secret or erasing evidence. An explicit replacement writes and verifies the new secret before cleanup. Explicit deletion performs all legacy cleanup first and deletes/verifies the secret last, so a partial settings failure cannot let a later migration resurrect a token the user tried to remove.

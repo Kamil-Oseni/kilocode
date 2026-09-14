@@ -6,7 +6,7 @@ import path from "node:path"
 import { NodeFileSystem } from "@effect/platform-node"
 import { Effect, FileSystem, Layer, Scope, Stream } from "effect"
 import { run } from "../src/context"
-import { createAnchored, createFile, removeChecked, writeChecked } from "../src/checked"
+import { createAnchored, createFile, removeChecked, replaceChecked, writeChecked } from "../src/checked"
 import { layer } from "../src/filesystem"
 import { batchMutations, currentRunner, withRunner, type Runner } from "../src/mutation"
 import type { Request } from "../src/mutation-protocol"
@@ -150,6 +150,12 @@ describe("sandbox FileSystem", () => {
                 dev: root.dev.toString(),
                 ino: root.ino.toString(),
               })
+              yield* replaceChecked(
+                file,
+                Buffer.from("replaced"),
+                { dev: info.dev.toString(), ino: info.ino.toString() },
+                createHash("sha256").update("approved").digest("hex"),
+              )
               const changed = yield* Effect.promise(() => stat(file, { bigint: true }))
               yield* removeChecked(
                 file,
@@ -168,6 +174,7 @@ describe("sandbox FileSystem", () => {
       "writeFileChecked",
       "writeFileExclusive",
       "writeFileAnchored",
+      "replaceFileChecked",
       "removeFileChecked",
       "batch",
     ])

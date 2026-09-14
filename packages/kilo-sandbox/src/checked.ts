@@ -5,6 +5,7 @@ import {
   createAnchored as anchored,
   createChecked as create,
   removeChecked as remove,
+  replaceChecked as replace,
   validateChecked as validate,
   writeChecked as write,
 } from "./checked-write"
@@ -81,6 +82,27 @@ export function writeChecked(path: string, data: Uint8Array, identity: Identity,
     const run = yield* currentRunner
     return yield* run(profile, {
       op: "writeFileChecked",
+      path,
+      data: Buffer.from(data).toString("base64"),
+      identity,
+      sha256,
+    })
+  })
+}
+
+export function replaceChecked(path: string, data: Uint8Array, identity: Identity, sha256: string) {
+  return Effect.gen(function* () {
+    const profile = yield* current
+    if (!profile) {
+      return yield* Effect.tryPromise({
+        try: () => replace(path, data, identity, sha256),
+        catch: wrap,
+      })
+    }
+    yield* assertPath(path, "replaceFileChecked")
+    const run = yield* currentRunner
+    return yield* run(profile, {
+      op: "replaceFileChecked",
       path,
       data: Buffer.from(data).toString("base64"),
       identity,

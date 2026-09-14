@@ -9,8 +9,8 @@ import {
   ensureDirectory,
   inspectFile,
   removeChecked,
+  replaceChecked,
   validateFile,
-  writeChecked as checkedWrite,
 } from "@kilocode/sandbox"
 import type { FSUtil } from "@opencode-ai/core/fs-util"
 import * as Encoding from "../encoding"
@@ -79,7 +79,7 @@ export const checked = (
   encoding: string,
   proof: { readonly dev: string; readonly ino: string },
   sha256: string,
-) => checkedWrite(path, Encoding.encode(text, encoding), proof, sha256).pipe(Effect.mapError(wrap))
+) => replaceChecked(path, Encoding.encode(text, encoding), proof, sha256).pipe(Effect.mapError(wrap))
 
 export const remove = (path: string, proof: { readonly dev: string; readonly ino: string }, sha256: string) =>
   removeChecked(path, proof, sha256).pipe(Effect.mapError(wrap))

@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto"
 import { dirname, join, resolve } from "node:path"
-import { link, mkdir, open, realpath, rename, stat, unlink, type FileHandle } from "node:fs/promises"
+import { chmod, link, mkdir, open, realpath, rename, stat, unlink, type FileHandle } from "node:fs/promises"
 
 export interface Identity {
   readonly dev: string
@@ -28,6 +28,7 @@ async function verify(file: FileHandle, path: string, identity: Identity, sha256
   }
   const current = await file.readFile()
   if (createHash("sha256").update(current).digest("hex") !== sha256) throw stale(path, undefined, syscall)
+  return info
 }
 
 async function anchor(path: string, identity: Identity) {
@@ -128,6 +129,93 @@ export async function writeChecked(path: string, data: Uint8Array, identity: Ide
     await write(file, path, data)
   } finally {
     await file.close()
+  }
+}
+
+export async function replaceChecked(path: string, data: Uint8Array, identity: Identity, sha256: string) {
+  const approved = await open(path, "r+")
+  try {
+    await verify(approved, path, identity, sha256, "replaceFileChecked")
+  } finally {
+    await approved.close()
+  }
+  const id = randomUUID()
+  const stage = join(dirname(path), `.raya-stage-${id}`)
+  const hold = join(dirname(path), `.raya-replace-${id}`)
+  const digest = createHash("sha256").update(data).digest("hex")
+  await createChecked(stage, data)
+  const staged = await stat(stage, { bigint: true })
+  try {
+    await rename(path, hold)
+  } catch (cause) {
+    await removeChecked(stage, { dev: staged.dev.toString(), ino: staged.ino.toString() }, digest)
+    throw cause
+  }
+  try {
+    const file = await open(hold, "r")
+    const info = await (async () => {
+      try {
+        return await verify(file, path, identity, sha256, "replaceFileChecked")
+      } finally {
+        await file.close()
+      }
+    })()
+    await chmod(stage, Number(info.mode & 0o777n))
+  } catch (cause) {
+    const restored = await restore(hold, path, cause).then(
+      () => ({ ok: true as const }),
+      (error: unknown) => ({ ok: false as const, error }),
+    )
+    const cleaned = await removeChecked(stage, { dev: staged.dev.toString(), ino: staged.ino.toString() }, digest).then(
+      () => ({ ok: true as const }),
+      (error: unknown) => ({ ok: false as const, error }),
+    )
+    if (!restored.ok || !cleaned.ok) {
+      const errors = [cause, restored.ok ? undefined : restored.error, cleaned.ok ? undefined : cleaned.error].filter(
+        (error) => error !== undefined,
+      )
+      throw Object.assign(new Error(`Checked replacement failed. Retained recovery files beside ${path}.`), {
+        code: "ESTALE",
+        path,
+        syscall: "replaceFileChecked",
+        cause: new AggregateError(errors),
+      })
+    }
+    throw cause
+  }
+  try {
+    await link(stage, path)
+  } catch (cause) {
+    const restored = await restore(hold, path, cause).then(
+      () => ({ ok: true as const }),
+      (error: unknown) => ({ ok: false as const, error }),
+    )
+    const cleaned = await removeChecked(stage, { dev: staged.dev.toString(), ino: staged.ino.toString() }, digest).then(
+      () => ({ ok: true as const }),
+      (error: unknown) => ({ ok: false as const, error }),
+    )
+    if (!restored.ok || !cleaned.ok) {
+      const errors = [cause, restored.ok ? undefined : restored.error, cleaned.ok ? undefined : cleaned.error].filter(
+        (error) => error !== undefined,
+      )
+      throw Object.assign(new Error(`Checked replacement was interrupted. Retained recovery files beside ${path}.`), {
+        code: "ESTALE",
+        path,
+        syscall: "replaceFileChecked",
+        cause: new AggregateError(errors),
+      })
+    }
+    throw cause
+  }
+  const cleanup = await Promise.allSettled([unlink(stage), unlink(hold)])
+  const failed = cleanup.filter((item): item is PromiseRejectedResult => item.status === "rejected")
+  if (failed.length > 0) {
+    throw Object.assign(new Error(`Checked replacement committed but retained recovery files beside ${path}.`), {
+      code: "EIO",
+      path,
+      syscall: "replaceFileChecked",
+      cause: new AggregateError(failed.map((item) => item.reason)),
+    })
   }
 }
 

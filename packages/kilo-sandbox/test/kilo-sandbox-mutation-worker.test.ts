@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { createHash } from "node:crypto"
-import { link, mkdir, mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises"
+import { chmod, link, mkdir, mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -26,6 +26,17 @@ async function removal(path: string): Promise<Request> {
   return {
     op: "removeFileChecked",
     path,
+    identity: { dev: info.dev.toString(), ino: info.ino.toString() },
+    sha256: hash(await readFile(path, "utf8")),
+  }
+}
+
+async function replacement(path: string, data: string): Promise<Request> {
+  const info = await stat(path, { bigint: true })
+  return {
+    op: "replaceFileChecked",
+    path,
+    data: Buffer.from(data).toString("base64"),
     identity: { dev: info.dev.toString(), ino: info.ino.toString() },
     sha256: hash(await readFile(path, "utf8")),
   }
@@ -62,7 +73,7 @@ async function worker(request: Request) {
   return response
 }
 
-const holds = (root: string) => readdir(root).then((items) => items.filter((item) => item.includes(".raya-remove-")))
+const holds = (root: string) => readdir(root).then((items) => items.filter((item) => item.includes(".raya-")))
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
@@ -143,6 +154,66 @@ describe("filesystem mutation worker", () => {
 
     expect(await worker(request)).toEqual({ ok: true })
     expect(await readFile(file, "utf8")).toBe("created")
+  })
+
+  test("publishes a complete checked replacement and preserves its mode", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "kilo-mutation-worker-"))
+    roots.push(root)
+    const file = path.join(root, "value.txt")
+    await writeFile(file, "approved")
+    if (process.platform !== "win32") await chmod(file, 0o640)
+
+    expect(await worker(await replacement(file, "changed"))).toEqual({ ok: true })
+    expect(await readFile(file, "utf8")).toBe("changed")
+    if (process.platform !== "win32") expect((await stat(file)).mode & 0o777).toBe(0o640)
+    expect(await holds(root)).toEqual([])
+  })
+
+  test("restores a stale target when checked replacement validation fails", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "kilo-mutation-worker-"))
+    roots.push(root)
+    const file = path.join(root, "value.txt")
+    const moved = path.join(root, "approved.txt")
+    await writeFile(file, "approved")
+    const request = await replacement(file, "agent content")
+    await rename(file, moved)
+    await writeFile(file, "replacement")
+
+    const response = await worker(request)
+    expect(response.ok).toBe(false)
+    if (response.ok) return
+    expect(response.error.code).toBe("ESTALE")
+    expect(response.error.operation).toBe("replaceFileChecked")
+    expect(await readFile(file, "utf8")).toBe("replacement")
+    expect(await readFile(moved, "utf8")).toBe("approved")
+    expect(await holds(root)).toEqual([])
+  })
+
+  test("restores changed and hard-linked targets refused by checked replacement", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "kilo-mutation-worker-"))
+    roots.push(root)
+    {
+      const file = path.join(root, "changed.txt")
+      await writeFile(file, "approved")
+      const request = await replacement(file, "agent content")
+      await writeFile(file, "newer user content")
+      expect((await worker(request)).ok).toBe(false)
+      expect(await readFile(file, "utf8")).toBe("newer user content")
+    }
+    {
+      const file = path.join(root, "linked.txt")
+      const alias = path.join(root, "alias.txt")
+      await writeFile(file, "approved")
+      const request = await replacement(file, "agent content")
+      await link(file, alias)
+      const response = await worker(request)
+      expect(response.ok).toBe(false)
+      if (response.ok) return
+      expect(response.error.message).toContain("Hard-linked files")
+      expect(await readFile(file, "utf8")).toBe("approved")
+      expect(await readFile(alias, "utf8")).toBe("approved")
+    }
+    expect(await holds(root)).toEqual([])
   })
 
   test("creates nested content only beneath the reviewed ancestor", async () => {
@@ -340,5 +411,9 @@ describe("filesystem mutation worker", () => {
     expect(isRequest(removal)).toBe(true)
     expect(isRequest({ ...removal, identity: { dev: "-1", ino: "2" } })).toBe(false)
     expect(isRequest({ op: "batch", operations: [removal] })).toBe(false)
+    const replacement = { ...base, op: "replaceFileChecked" }
+    expect(isRequest(replacement)).toBe(true)
+    expect(isRequest({ ...replacement, data: 1 })).toBe(false)
+    expect(isRequest({ op: "batch", operations: [replacement] })).toBe(false)
   })
 })

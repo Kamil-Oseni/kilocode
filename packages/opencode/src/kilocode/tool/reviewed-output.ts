@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto"
 import { dirname } from "node:path"
-import { createAnchored, inspectFile, writeChecked } from "@kilocode/sandbox"
+import { createAnchored, inspectFile, replaceChecked } from "@kilocode/sandbox"
 import type { FSUtil } from "@opencode-ai/core/fs-util"
 import { Effect } from "effect"
 import * as EncodedIO from "./encoded-io"
@@ -34,6 +34,6 @@ export const review = (fs: FSUtil.Interface, path: string): Effect.Effect<Review
 
 export const commit = (path: string, bytes: Uint8Array, review: Review) =>
   (review.exists
-    ? writeChecked(path, bytes, review.proof, review.sha256)
+    ? replaceChecked(path, bytes, review.proof, review.sha256)
     : createAnchored(path, bytes, review.anchor.path, review.anchor.identity)
   ).pipe(Effect.mapError(wrap))

@@ -210,6 +210,7 @@ function immediate(request: Request): request is Extract<
       | "writeFileExclusive"
       | "writeFileAnchored"
       | "removeFileChecked"
+      | "replaceFileChecked"
   }
 > {
   return (
@@ -217,7 +218,8 @@ function immediate(request: Request): request is Extract<
     request.op === "writeFileChecked" ||
     request.op === "writeFileExclusive" ||
     request.op === "writeFileAnchored" ||
-    request.op === "removeFileChecked"
+    request.op === "removeFileChecked" ||
+    request.op === "replaceFileChecked"
   )
 }
 

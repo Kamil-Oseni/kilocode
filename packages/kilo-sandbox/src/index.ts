@@ -9,6 +9,7 @@ export {
   createFile,
   inspect as inspectFile,
   removeChecked,
+  replaceChecked,
   validateFile,
   writeChecked,
   type FileIdentity,

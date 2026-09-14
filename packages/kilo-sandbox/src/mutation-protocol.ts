@@ -68,6 +68,13 @@ export type Operation =
       readonly identity: Identity
       readonly sha256: string
     }
+  | {
+      readonly op: "replaceFileChecked"
+      readonly path: string
+      readonly data: string
+      readonly identity: Identity
+      readonly sha256: string
+    }
 
 export type BatchOperation = Exclude<
   Operation,
@@ -79,6 +86,7 @@ export type BatchOperation = Exclude<
       | "writeFileExclusive"
       | "writeFileAnchored"
       | "removeFileChecked"
+      | "replaceFileChecked"
   }
 >
 export type Request = Operation | { readonly op: "batch"; readonly operations: ReadonlyArray<BatchOperation> }
@@ -155,6 +163,7 @@ function isOperation(value: unknown): value is Operation {
       )
     case "writeFileChecked":
     case "removeFileChecked":
+    case "replaceFileChecked":
       return (
         path &&
         (value.op === "removeFileChecked" || typeof value.data === "string") &&
@@ -179,7 +188,8 @@ function isBatchOperation(value: unknown): value is BatchOperation {
     value.op !== "writeFileChecked" &&
     value.op !== "writeFileExclusive" &&
     value.op !== "writeFileAnchored" &&
-    value.op !== "removeFileChecked"
+    value.op !== "removeFileChecked" &&
+    value.op !== "replaceFileChecked"
   )
 }
 

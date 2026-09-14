@@ -18517,58 +18517,6 @@
                       "required": ["objective", "revision", "at", "tasks"],
                       "additionalProperties": false
                     },
-                    "budget": {
-                      "type": "object",
-                      "properties": {
-                        "activeMs": {
-                          "type": "integer",
-                          "minimum": 1000,
-                          "maximum": 31536000000
-                        },
-                        "modelCost": {
-                          "type": "number",
-                          "exclusiveMinimum": 0,
-                          "maximum": 1000000
-                        },
-                        "recoveryAttempts": {
-                          "type": "integer",
-                          "minimum": 1,
-                          "maximum": 100
-                        },
-                        "concurrentChildren": {
-                          "type": "integer",
-                          "minimum": 1,
-                          "maximum": 32
-                        },
-                        "chargeCosts": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "currency": {
-                                "type": "string",
-                                "pattern": "^[A-Z]{3,8}$"
-                              },
-                              "limit": {
-                                "type": "number",
-                                "exclusiveMinimum": 0,
-                                "maximum": 1000000
-                              },
-                              "reservation": {
-                                "type": "number",
-                                "exclusiveMinimum": 0,
-                                "maximum": 1000000
-                              }
-                            },
-                            "required": ["currency", "limit", "reservation"],
-                            "additionalProperties": false
-                          },
-                          "minItems": 1,
-                          "maxItems": 8
-                        }
-                      },
-                      "additionalProperties": false
-                    },
                     "objective": {
                       "type": "string"
                     },
@@ -18881,6 +18829,58 @@
                         "$ref": "#/components/schemas/RayaGoalCharge"
                       },
                       "maxItems": 512
+                    },
+                    "budget": {
+                      "type": "object",
+                      "properties": {
+                        "activeMs": {
+                          "type": "integer",
+                          "minimum": 1000,
+                          "maximum": 31536000000
+                        },
+                        "modelCost": {
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "maximum": 1000000
+                        },
+                        "recoveryAttempts": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100
+                        },
+                        "concurrentChildren": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 32
+                        },
+                        "chargeCosts": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "currency": {
+                                "type": "string",
+                                "pattern": "^[A-Z]{3,8}$"
+                              },
+                              "limit": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "maximum": 1000000
+                              },
+                              "reservation": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "maximum": 1000000
+                              }
+                            },
+                            "required": ["currency", "limit", "reservation"],
+                            "additionalProperties": false
+                          },
+                          "minItems": 1,
+                          "maxItems": 8
+                        }
+                      },
+                      "additionalProperties": false
                     },
                     "budgetHit": {
                       "type": "object",
@@ -21401,58 +21401,6 @@
                       "required": ["objective", "revision", "at", "tasks"],
                       "additionalProperties": false
                     },
-                    "budget": {
-                      "type": "object",
-                      "properties": {
-                        "activeMs": {
-                          "type": "integer",
-                          "minimum": 1000,
-                          "maximum": 31536000000
-                        },
-                        "modelCost": {
-                          "type": "number",
-                          "exclusiveMinimum": 0,
-                          "maximum": 1000000
-                        },
-                        "recoveryAttempts": {
-                          "type": "integer",
-                          "minimum": 1,
-                          "maximum": 100
-                        },
-                        "concurrentChildren": {
-                          "type": "integer",
-                          "minimum": 1,
-                          "maximum": 32
-                        },
-                        "chargeCosts": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "currency": {
-                                "type": "string",
-                                "pattern": "^[A-Z]{3,8}$"
-                              },
-                              "limit": {
-                                "type": "number",
-                                "exclusiveMinimum": 0,
-                                "maximum": 1000000
-                              },
-                              "reservation": {
-                                "type": "number",
-                                "exclusiveMinimum": 0,
-                                "maximum": 1000000
-                              }
-                            },
-                            "required": ["currency", "limit", "reservation"],
-                            "additionalProperties": false
-                          },
-                          "minItems": 1,
-                          "maxItems": 8
-                        }
-                      },
-                      "additionalProperties": false
-                    },
                     "objective": {
                       "type": "string"
                     },
@@ -21765,6 +21713,58 @@
                         "$ref": "#/components/schemas/RayaGoalCharge"
                       },
                       "maxItems": 512
+                    },
+                    "budget": {
+                      "type": "object",
+                      "properties": {
+                        "activeMs": {
+                          "type": "integer",
+                          "minimum": 1000,
+                          "maximum": 31536000000
+                        },
+                        "modelCost": {
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "maximum": 1000000
+                        },
+                        "recoveryAttempts": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100
+                        },
+                        "concurrentChildren": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 32
+                        },
+                        "chargeCosts": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "currency": {
+                                "type": "string",
+                                "pattern": "^[A-Z]{3,8}$"
+                              },
+                              "limit": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "maximum": 1000000
+                              },
+                              "reservation": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "maximum": 1000000
+                              }
+                            },
+                            "required": ["currency", "limit", "reservation"],
+                            "additionalProperties": false
+                          },
+                          "minItems": 1,
+                          "maxItems": 8
+                        }
+                      },
+                      "additionalProperties": false
                     },
                     "budgetHit": {
                       "type": "object",
@@ -24203,58 +24203,6 @@
                       "required": ["objective", "revision", "at", "tasks"],
                       "additionalProperties": false
                     },
-                    "budget": {
-                      "type": "object",
-                      "properties": {
-                        "activeMs": {
-                          "type": "integer",
-                          "minimum": 1000,
-                          "maximum": 31536000000
-                        },
-                        "modelCost": {
-                          "type": "number",
-                          "exclusiveMinimum": 0,
-                          "maximum": 1000000
-                        },
-                        "recoveryAttempts": {
-                          "type": "integer",
-                          "minimum": 1,
-                          "maximum": 100
-                        },
-                        "concurrentChildren": {
-                          "type": "integer",
-                          "minimum": 1,
-                          "maximum": 32
-                        },
-                        "chargeCosts": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "currency": {
-                                "type": "string",
-                                "pattern": "^[A-Z]{3,8}$"
-                              },
-                              "limit": {
-                                "type": "number",
-                                "exclusiveMinimum": 0,
-                                "maximum": 1000000
-                              },
-                              "reservation": {
-                                "type": "number",
-                                "exclusiveMinimum": 0,
-                                "maximum": 1000000
-                              }
-                            },
-                            "required": ["currency", "limit", "reservation"],
-                            "additionalProperties": false
-                          },
-                          "minItems": 1,
-                          "maxItems": 8
-                        }
-                      },
-                      "additionalProperties": false
-                    },
                     "objective": {
                       "type": "string"
                     },
@@ -24567,6 +24515,58 @@
                         "$ref": "#/components/schemas/RayaGoalCharge"
                       },
                       "maxItems": 512
+                    },
+                    "budget": {
+                      "type": "object",
+                      "properties": {
+                        "activeMs": {
+                          "type": "integer",
+                          "minimum": 1000,
+                          "maximum": 31536000000
+                        },
+                        "modelCost": {
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "maximum": 1000000
+                        },
+                        "recoveryAttempts": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100
+                        },
+                        "concurrentChildren": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 32
+                        },
+                        "chargeCosts": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "currency": {
+                                "type": "string",
+                                "pattern": "^[A-Z]{3,8}$"
+                              },
+                              "limit": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "maximum": 1000000
+                              },
+                              "reservation": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "maximum": 1000000
+                              }
+                            },
+                            "required": ["currency", "limit", "reservation"],
+                            "additionalProperties": false
+                          },
+                          "minItems": 1,
+                          "maxItems": 8
+                        }
+                      },
+                      "additionalProperties": false
                     },
                     "budgetHit": {
                       "type": "object",
@@ -70322,7 +70322,15 @@
               },
               "tool": {
                 "type": "string",
-                "enum": ["write", "edit", "apply_patch", "create_document", "create_spreadsheet", "create_presentation"]
+                "enum": [
+                  "write",
+                  "edit",
+                  "apply_patch",
+                  "create_document",
+                  "create_spreadsheet",
+                  "create_presentation",
+                  "generate_image"
+                ]
               },
               "evidence": {
                 "type": "object",

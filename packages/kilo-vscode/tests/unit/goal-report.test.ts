@@ -115,6 +115,26 @@ test("goal reports preserve exact references and mark legacy records instead of 
           },
         },
         {
+          kind: "file",
+          path: "/workspace/hero.png",
+          revision: {
+            version: 1,
+            status: "captured",
+            path: "/workspace/hero.png",
+            canonical: "/workspace/hero.png",
+            sha256: "d".repeat(64),
+            mode: 420,
+          },
+          tool: "generate_image",
+          evidence: {
+            callID: "image-call",
+            sessionID: "child",
+            messageID: "image-message",
+            partID: "image-part",
+            summary: "Generated the hero image",
+          },
+        },
+        {
           kind: "browser-download",
           path: "C:\\browser-artifacts\\transfer-report\\artifact",
           transferID: "transfer-report",
@@ -190,6 +210,10 @@ test("goal reports preserve exact references and mark legacy records instead of 
   expect(saved).toContain("Source tool: create_document")
   expect(saved).toContain("> Call: document-call")
   expect(saved).toContain("> Created the Word report")
+  expect(saved).toContain("> /workspace/hero.png")
+  expect(saved).toContain("Source tool: generate_image")
+  expect(saved).toContain("> Call: image-call")
+  expect(saved).toContain("> Generated the hero image")
   expect(saved).toContain("### Canvas")
   expect(saved).toContain("> .raya/canvases/sales-report.canvas.tsx")
   expect(saved).toContain("Recorded version: 3")

@@ -1,6 +1,6 @@
 // kilocode_change - new file
 import { Cause, Effect, Schema } from "effect"
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import * as path from "path"
 import { readFile } from "fs/promises"
 import * as Tool from "../../tool/tool"
@@ -16,6 +16,7 @@ import type { RayaGoal } from "@/kilocode/goal"
 import * as ChargeReservations from "@/kilocode/goal/charges"
 import type { Storage } from "@/storage/storage"
 import type { Session } from "@/session/session"
+import * as Artifact from "@/kilocode/goal/artifact"
 
 const log = Log.create({ service: "tool.generate_image" })
 
@@ -252,6 +253,7 @@ type Meta = {
   provider?: "kilo" | "openrouter"
   error?: string
   rayaGoalCharge?: { version: 1; receipt: RayaGoal.Charge }
+  rayaRevision?: unknown
 }
 
 type GoalDeps = { storage: Storage.Interface; sessions: Session.Interface }
@@ -393,6 +395,7 @@ export const generateImageTool = (goals?: GoalDeps) =>
 
               const buf = Buffer.from(parsed.base64, "base64")
               yield* fs.writeWithDirs(absPath, buf)
+              const revision = yield* Artifact.capture(fs, absPath)
 
               return {
                 title: path.relative(instance.worktree, absPath),
@@ -401,6 +404,7 @@ export const generateImageTool = (goals?: GoalDeps) =>
                   format: parsed.format,
                   filepath: absPath,
                   provider: resolved.provider,
+                  rayaRevision: revision,
                   ...(charge ? { rayaGoalCharge: { version: 1 as const, receipt: charge } } : {}),
                 } as Meta,
                 attachments: [

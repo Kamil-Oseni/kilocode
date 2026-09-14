@@ -53,6 +53,7 @@ export namespace RayaGoal {
     "create_document",
     "create_spreadsheet",
     "create_presentation",
+    "generate_image",
   ])
   type FileTool = typeof FileTool.Type
   const fileTool = (tool: string): tool is FileTool => Schema.is(FileTool)(tool)

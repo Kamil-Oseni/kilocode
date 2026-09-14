@@ -36,7 +36,14 @@ type GoalDeliverable =
       kind?: "file"
       path: string
       revision: GoalArtifactRevision
-      tool: "write" | "edit" | "apply_patch" | "create_document" | "create_spreadsheet" | "create_presentation"
+      tool:
+        | "write"
+        | "edit"
+        | "apply_patch"
+        | "create_document"
+        | "create_spreadsheet"
+        | "create_presentation"
+        | "generate_image"
       evidence: GoalEvidence
     }
   | {

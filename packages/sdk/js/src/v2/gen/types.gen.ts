@@ -5769,7 +5769,14 @@ export type RayaGoalDeliverable =
             path: string
             parent: string
           }
-      tool: "write" | "edit" | "apply_patch" | "create_document" | "create_spreadsheet" | "create_presentation"
+      tool:
+        | "write"
+        | "edit"
+        | "apply_patch"
+        | "create_document"
+        | "create_spreadsheet"
+        | "create_presentation"
+        | "generate_image"
       evidence: {
         messageID?: string
         partID?: string
@@ -20109,17 +20116,6 @@ export type KilocodeGoalGetResponses = {
         dependencies: Array<string>
       }>
     }
-    budget?: {
-      activeMs?: number
-      modelCost?: number
-      recoveryAttempts?: number
-      concurrentChildren?: number
-      chargeCosts?: Array<{
-        currency: string
-        limit: number
-        reservation: number
-      }>
-    }
     objective: string
     revision?: string
     intent?: string
@@ -20164,6 +20160,17 @@ export type KilocodeGoalGetResponses = {
     activeAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     usage: RayaGoalUsage
     charges?: Array<RayaGoalCharge>
+    budget?: {
+      activeMs?: number
+      modelCost?: number
+      recoveryAttempts?: number
+      concurrentChildren?: number
+      chargeCosts?: Array<{
+        currency: string
+        limit: number
+        reservation: number
+      }>
+    }
     budgetHit?: {
       kind: "active-time" | "model-cost" | "charge-cost" | "recovery-attempts"
       limit: number
@@ -20627,17 +20634,6 @@ export type KilocodeGoalUpdateResponses = {
         dependencies: Array<string>
       }>
     }
-    budget?: {
-      activeMs?: number
-      modelCost?: number
-      recoveryAttempts?: number
-      concurrentChildren?: number
-      chargeCosts?: Array<{
-        currency: string
-        limit: number
-        reservation: number
-      }>
-    }
     objective: string
     revision?: string
     intent?: string
@@ -20682,6 +20678,17 @@ export type KilocodeGoalUpdateResponses = {
     activeAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     usage: RayaGoalUsage
     charges?: Array<RayaGoalCharge>
+    budget?: {
+      activeMs?: number
+      modelCost?: number
+      recoveryAttempts?: number
+      concurrentChildren?: number
+      chargeCosts?: Array<{
+        currency: string
+        limit: number
+        reservation: number
+      }>
+    }
     budgetHit?: {
       kind: "active-time" | "model-cost" | "charge-cost" | "recovery-attempts"
       limit: number
@@ -21127,17 +21134,6 @@ export type KilocodeGoalCreateResponses = {
         dependencies: Array<string>
       }>
     }
-    budget?: {
-      activeMs?: number
-      modelCost?: number
-      recoveryAttempts?: number
-      concurrentChildren?: number
-      chargeCosts?: Array<{
-        currency: string
-        limit: number
-        reservation: number
-      }>
-    }
     objective: string
     revision?: string
     intent?: string
@@ -21182,6 +21178,17 @@ export type KilocodeGoalCreateResponses = {
     activeAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     usage: RayaGoalUsage
     charges?: Array<RayaGoalCharge>
+    budget?: {
+      activeMs?: number
+      modelCost?: number
+      recoveryAttempts?: number
+      concurrentChildren?: number
+      chargeCosts?: Array<{
+        currency: string
+        limit: number
+        reservation: number
+      }>
+    }
     budgetHit?: {
       kind: "active-time" | "model-cost" | "charge-cost" | "recovery-attempts"
       limit: number

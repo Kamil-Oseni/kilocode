@@ -979,12 +979,12 @@ describe("RayaGoal", () => {
     }),
   )
 
-  it.live("retains cited Office artifacts and rejects a stale generated file", () =>
+  it.live("retains cited generated file artifacts and rejects a stale workbook", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service
       const fs = yield* FSUtil.Service
       const directory = yield* tmpdirScoped()
-      for (const tool of ["create_document", "create_spreadsheet", "create_presentation"] as const) {
+      for (const tool of ["create_document", "create_spreadsheet", "create_presentation", "generate_image"] as const) {
         const sessionID = SessionID.make(`ses_office_deliverable_${crypto.randomUUID()}`)
         const rows: MessageV2.WithParts[] = []
         const goals = setup(storage, () => rows)

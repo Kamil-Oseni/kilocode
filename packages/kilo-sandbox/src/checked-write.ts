@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto"
-import { dirname, join } from "node:path"
-import { link, open, rename, unlink, type FileHandle } from "node:fs/promises"
+import { dirname, join, resolve } from "node:path"
+import { link, mkdir, open, realpath, rename, stat, unlink, type FileHandle } from "node:fs/promises"
 
 export interface Identity {
   readonly dev: string
@@ -28,6 +28,17 @@ async function verify(file: FileHandle, path: string, identity: Identity, sha256
   }
   const current = await file.readFile()
   if (createHash("sha256").update(current).digest("hex") !== sha256) throw stale(path, undefined, syscall)
+}
+
+async function anchor(path: string, identity: Identity) {
+  const info = await stat(path, { bigint: true })
+  if (info.dev.toString() !== identity.dev || info.ino.toString() !== identity.ino)
+    throw stale(path, "File parent changed after approval.", "writeFileAnchored")
+}
+
+function same(left: string, right: string) {
+  const paths = [left, right].map((item) => resolve(item))
+  return process.platform === "win32" ? paths[0].toLowerCase() === paths[1].toLowerCase() : paths[0] === paths[1]
 }
 
 async function restore(hold: string, path: string, cause: unknown) {
@@ -61,6 +72,43 @@ export async function createChecked(path: string, data: Uint8Array) {
   } finally {
     await file.close()
   }
+}
+
+export async function createAnchored(path: string, data: Uint8Array, root: string, identity: Identity) {
+  await anchor(root, identity)
+  await mkdir(dirname(path), { recursive: true })
+  const file = await open(path, "wx+")
+  const outcome = await (async () => {
+    await anchor(root, identity)
+    const parent = await realpath(dirname(path))
+    if (!same(parent, dirname(path))) throw stale(path, "File parent changed after approval.", "writeFileAnchored")
+    await write(file, path, data)
+  })().then(
+    () => ({ ok: true as const }),
+    (cause: unknown) => ({ ok: false as const, cause }),
+  )
+  if (outcome.ok) {
+    await file.close()
+    return
+  }
+  const info = await file.stat({ bigint: true })
+  const current = await file.readFile()
+  await file.close()
+  try {
+    await removeChecked(
+      path,
+      { dev: info.dev.toString(), ino: info.ino.toString() },
+      createHash("sha256").update(current).digest("hex"),
+    )
+  } catch (cleanup) {
+    throw Object.assign(new Error(`Anchored creation failed and its private file could not be removed at ${path}.`), {
+      code: "ESTALE",
+      path,
+      syscall: "writeFileAnchored",
+      cause: new AggregateError([outcome.cause, cleanup]),
+    })
+  }
+  throw outcome.cause
 }
 
 export async function validateChecked(path: string, identity: Identity, sha256: string) {

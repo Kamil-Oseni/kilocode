@@ -57,6 +57,7 @@ export const WriteTool = Tool.define(
           // derive the BOM flag from the detected encoding label instead of the decoded text.
           const pre = exists ? yield* EncodedIO.read(fs, target) : { text: "", encoding: "utf-8", sha256: undefined }
           const proof = exists ? yield* EncodedIO.identity(target) : undefined
+          const anchor = exists ? undefined : yield* EncodedIO.anchor(fs, path.dirname(target)) // kilocode_change
           const source = { bom: pre.encoding === "utf-8-bom", text: pre.text, encoding: pre.encoding }
           // kilocode_change end
           const next = Bom.split(params.content)
@@ -86,7 +87,7 @@ export const WriteTool = Tool.define(
           if (exists && proof && pre.sha256) {
             yield* EncodedIO.checked(target, Bom.join(final, desiredBom), source.encoding, proof, pre.sha256)
           } else {
-            yield* EncodedIO.write(fs, target, Bom.join(final, desiredBom), source.encoding)
+            yield* EncodedIO.anchored(target, Bom.join(final, desiredBom), anchor!, source.encoding)
           }
           // kilocode_change end
           yield* events.publish(FileSystem.Event.Edited, { file: filepath })

@@ -131,6 +131,51 @@ describe("tool.edit", () => {
       }),
     )
 
+    // kilocode_change start
+    it.instance("preserves a user file created while new-file approval is pending", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "claimed.txt")
+        const next = {
+          ...ctx,
+          ask: () => Effect.promise(() => fs.writeFile(filepath, "user content")),
+        }
+
+        const result = yield* run({ filePath: filepath, oldString: "", newString: "agent content" }, next).pipe(
+          Effect.exit,
+        )
+        expect(Exit.isFailure(result)).toBe(true)
+        expect(yield* load(filepath)).toBe("user content")
+      }),
+    )
+
+    it.instance("refuses a new file after its reviewed parent is replaced", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const parent = path.join(test.directory, "reviewed")
+        const moved = path.join(test.directory, "moved")
+        const filepath = path.join(parent, "private.txt")
+        yield* Effect.promise(() => fs.mkdir(parent))
+        const next = {
+          ...ctx,
+          ask: () =>
+            Effect.promise(async () => {
+              await fs.rename(parent, moved)
+              await fs.mkdir(parent)
+            }),
+        }
+
+        const result = yield* run({ filePath: filepath, oldString: "", newString: "private content" }, next).pipe(
+          Effect.exit,
+        )
+        expect(Exit.isFailure(result)).toBe(true)
+        if (Exit.isFailure(result)) expect(Cause.pretty(result.cause)).toContain("parent changed after approval")
+        expect(yield* Effect.promise(() => Bun.file(filepath).exists())).toBe(false)
+        expect(yield* Effect.promise(() => Bun.file(path.join(moved, "private.txt")).exists())).toBe(false)
+      }),
+    )
+    // kilocode_change end
+
     it.instance("emits add event for new files", () =>
       Effect.gen(function* () {
         const test = yield* TestInstance

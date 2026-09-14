@@ -5,6 +5,7 @@ export { assertNetwork, assertSandbox, decorateHttpClient, httpLayer as networkH
 export { batchMutations, mutate, withRunner, type Runner as MutationRunner } from "./mutation"
 export type { Request as MutationRequest } from "./mutation-protocol"
 export {
+  createAnchored,
   createFile,
   inspect as inspectFile,
   removeChecked,

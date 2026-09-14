@@ -3,6 +3,7 @@ import { createHash } from "node:crypto"
 import { Effect } from "effect"
 import {
   batchMutations,
+  createAnchored,
   createFile,
   enabled,
   ensureDirectory,
@@ -32,6 +33,18 @@ export const read = (fs: FSUtil.Interface, path: string) =>
 
 export const identity = (path: string) => inspectFile(path).pipe(Effect.mapError(wrap))
 
+export const anchor = (
+  fs: FSUtil.Interface,
+  path: string,
+): Effect.Effect<{ path: string; identity: { dev: string; ino: string } }, Error> =>
+  fs
+    .existsSafe(path)
+    .pipe(
+      Effect.flatMap((exists) =>
+        exists ? identity(path).pipe(Effect.map((proof) => ({ path, identity: proof }))) : anchor(fs, dirname(path)),
+      ),
+    )
+
 export const validate = (path: string, proof: { readonly dev: string; readonly ino: string }, sha256: string) =>
   validateFile(path, proof, sha256).pipe(Effect.mapError(wrap))
 
@@ -40,6 +53,13 @@ export const exclusive = (fs: FSUtil.Interface, path: string, text: string, enco
     yield* ensureDirectory(fs, dirname(path))
     yield* createFile(path, Encoding.encode(text, encoding))
   }).pipe(Effect.mapError(wrap))
+
+export const anchored = (
+  path: string,
+  text: string,
+  root: { path: string; identity: { dev: string; ino: string } },
+  encoding: string = Encoding.DEFAULT,
+) => createAnchored(path, Encoding.encode(text, encoding), root.path, root.identity).pipe(Effect.mapError(wrap))
 
 export const write = (fs: FSUtil.Interface, path: string, text: string, encoding: string = Encoding.DEFAULT) =>
   Effect.gen(function* () {

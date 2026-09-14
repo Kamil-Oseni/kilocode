@@ -129,6 +129,7 @@ export const EditTool = Tool.define(
                   )
                 }
                 const next = Bom.split(params.newString)
+                const anchor = yield* EncodedIO.anchor(afs, path.dirname(target)) // kilocode_change
                 const desiredBom = next.bom
                 contentOld = ""
                 contentNew = next.text
@@ -155,7 +156,7 @@ export const EditTool = Tool.define(
                     format.file,
                   )
                 }
-                yield* EncodedIO.write(afs, target, Bom.join(contentNew, desiredBom), Encoding.DEFAULT) // kilocode_change - write the reviewed canonical destination
+                yield* EncodedIO.anchored(target, Bom.join(contentNew, desiredBom), anchor, Encoding.DEFAULT) // kilocode_change - create only beneath the reviewed parent identity
                 // kilocode_change end
                 yield* events.publish(FileSystem.Event.Edited, { file: filePath })
                 yield* events.publish(Watcher.Event.Updated, {

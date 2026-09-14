@@ -203,13 +203,20 @@ function returnsValue(
 function immediate(request: Request): request is Extract<
   Operation,
   {
-    readonly op: "makeTempDirectory" | "makeTempFile" | "writeFileChecked" | "writeFileExclusive" | "removeFileChecked"
+    readonly op:
+      | "makeTempDirectory"
+      | "makeTempFile"
+      | "writeFileChecked"
+      | "writeFileExclusive"
+      | "writeFileAnchored"
+      | "removeFileChecked"
   }
 > {
   return (
     returnsValue(request) ||
     request.op === "writeFileChecked" ||
     request.op === "writeFileExclusive" ||
+    request.op === "writeFileAnchored" ||
     request.op === "removeFileChecked"
   )
 }

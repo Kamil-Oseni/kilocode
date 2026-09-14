@@ -2,6 +2,7 @@ import { Effect } from "effect"
 import { stat } from "node:fs/promises"
 import { assertPath, current } from "./context"
 import {
+  createAnchored as anchored,
   createChecked as create,
   removeChecked as remove,
   validateChecked as validate,
@@ -42,6 +43,27 @@ export function createFile(path: string, data: Uint8Array) {
       op: "writeFileExclusive",
       path,
       data: Buffer.from(data).toString("base64"),
+    })
+  })
+}
+
+export function createAnchored(path: string, data: Uint8Array, root: string, identity: Identity) {
+  return Effect.gen(function* () {
+    const profile = yield* current
+    if (!profile) {
+      return yield* Effect.tryPromise({
+        try: () => anchored(path, data, root, identity),
+        catch: wrap,
+      })
+    }
+    yield* assertPath(path, "writeFileAnchored")
+    const run = yield* currentRunner
+    return yield* run(profile, {
+      op: "writeFileAnchored",
+      path,
+      data: Buffer.from(data).toString("base64"),
+      root,
+      identity,
     })
   })
 }

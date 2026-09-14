@@ -56,6 +56,13 @@ export type Operation =
       readonly data: string
     }
   | {
+      readonly op: "writeFileAnchored"
+      readonly path: string
+      readonly data: string
+      readonly root: string
+      readonly identity: Identity
+    }
+  | {
       readonly op: "removeFileChecked"
       readonly path: string
       readonly identity: Identity
@@ -65,7 +72,13 @@ export type Operation =
 export type BatchOperation = Exclude<
   Operation,
   {
-    readonly op: "makeTempDirectory" | "makeTempFile" | "writeFileChecked" | "writeFileExclusive" | "removeFileChecked"
+    readonly op:
+      | "makeTempDirectory"
+      | "makeTempFile"
+      | "writeFileChecked"
+      | "writeFileExclusive"
+      | "writeFileAnchored"
+      | "removeFileChecked"
   }
 >
 export type Request = Operation | { readonly op: "batch"; readonly operations: ReadonlyArray<BatchOperation> }
@@ -129,6 +142,17 @@ function isOperation(value: unknown): value is Operation {
     case "writeFileString":
     case "writeFileExclusive":
       return path && typeof value.data === "string"
+    case "writeFileAnchored":
+      return (
+        path &&
+        typeof value.data === "string" &&
+        typeof value.root === "string" &&
+        isObject(value.identity) &&
+        typeof value.identity.dev === "string" &&
+        /^\d+$/.test(value.identity.dev) &&
+        typeof value.identity.ino === "string" &&
+        /^\d+$/.test(value.identity.ino)
+      )
     case "writeFileChecked":
     case "removeFileChecked":
       return (
@@ -154,6 +178,7 @@ function isBatchOperation(value: unknown): value is BatchOperation {
     value.op !== "makeTempFile" &&
     value.op !== "writeFileChecked" &&
     value.op !== "writeFileExclusive" &&
+    value.op !== "writeFileAnchored" &&
     value.op !== "removeFileChecked"
   )
 }

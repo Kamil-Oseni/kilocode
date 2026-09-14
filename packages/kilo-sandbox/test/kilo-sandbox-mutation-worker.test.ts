@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { createHash } from "node:crypto"
-import { link, mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises"
+import { link, mkdir, mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -28,6 +28,17 @@ async function removal(path: string): Promise<Request> {
     path,
     identity: { dev: info.dev.toString(), ino: info.ino.toString() },
     sha256: hash(await readFile(path, "utf8")),
+  }
+}
+
+async function anchored(file: string, root: string, data: string): Promise<Request> {
+  const info = await stat(root, { bigint: true })
+  return {
+    op: "writeFileAnchored",
+    path: file,
+    data: Buffer.from(data).toString("base64"),
+    root,
+    identity: { dev: info.dev.toString(), ino: info.ino.toString() },
   }
 }
 
@@ -132,6 +143,35 @@ describe("filesystem mutation worker", () => {
 
     expect(await worker(request)).toEqual({ ok: true })
     expect(await readFile(file, "utf8")).toBe("created")
+  })
+
+  test("creates nested content only beneath the reviewed ancestor", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "kilo-mutation-worker-"))
+    roots.push(root)
+    const file = path.join(root, "nested", "deep", "value.txt")
+
+    expect(await worker(await anchored(file, root, "created"))).toEqual({ ok: true })
+    expect(await readFile(file, "utf8")).toBe("created")
+  })
+
+  test("refuses an anchored create after the reviewed parent is replaced", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "kilo-mutation-worker-"))
+    roots.push(root)
+    const parent = path.join(root, "reviewed")
+    const moved = path.join(root, "moved")
+    const file = path.join(parent, "nested", "value.txt")
+    await mkdir(parent)
+    const request = await anchored(file, parent, "private content")
+    await rename(parent, moved)
+    await mkdir(parent)
+
+    const response = await worker(request)
+    expect(response.ok).toBe(false)
+    if (response.ok) return
+    expect(response.error.code).toBe("ESTALE")
+    expect(response.error.operation).toBe("writeFileAnchored")
+    expect(await Bun.file(file).exists()).toBe(false)
+    expect(await Bun.file(path.join(moved, "nested", "value.txt")).exists()).toBe(false)
   })
 
   test("removes only a file with the reviewed identity and content", async () => {
@@ -280,6 +320,17 @@ describe("filesystem mutation worker", () => {
     const exclusive = { op: "writeFileExclusive", path: "value.txt", data: "Y3JlYXRlZA==" }
     expect(isRequest(exclusive)).toBe(true)
     expect(isRequest({ op: "batch", operations: [exclusive] })).toBe(false)
+    const anchored = {
+      op: "writeFileAnchored",
+      path: "value.txt",
+      data: "Y3JlYXRlZA==",
+      root: ".",
+      identity: { dev: "1", ino: "2" },
+    }
+    expect(isRequest(anchored)).toBe(true)
+    expect(isRequest({ ...anchored, root: 1 })).toBe(false)
+    expect(isRequest({ ...anchored, identity: { dev: "-1", ino: "2" } })).toBe(false)
+    expect(isRequest({ op: "batch", operations: [anchored] })).toBe(false)
     const removal = {
       op: "removeFileChecked",
       path: "value.txt",

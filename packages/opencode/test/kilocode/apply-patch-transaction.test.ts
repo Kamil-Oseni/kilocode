@@ -7,7 +7,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Effect, Exit, Schema } from "effect"
-import { prepareTransaction, publishTransaction } from "@kilocode/sandbox"
+import { prepareTransaction, publishTransaction, restoreTransaction } from "@kilocode/sandbox"
 import { Git } from "@/git"
 import { recover, transact, type Item } from "@/kilocode/tool/apply-patch-transaction"
 import { journals, Outcome } from "@/kilocode/tool/mutation-journal"
@@ -164,9 +164,10 @@ it.live("rolls back earlier files when a later checked mutation fails", () =>
   }),
 )
 
-for (const committed of [false, true])
-  it.live(`recovers a replacement ${committed ? "after" : "before"} the durable commit decision`, () =>
+for (const checkpoint of ["precommit", "committed", "rollback-cleaning"] as const)
+  it.live(`recovers a replacement from ${checkpoint}`, () =>
     Effect.gen(function* () {
+      const committed = checkpoint === "committed"
       const root = yield* tmpdirScoped()
       const dir = path.join(root, "storage")
       const target = path.join(root, "recover.txt")
@@ -175,15 +176,15 @@ for (const committed of [false, true])
       const entry: Item["entry"] = {
         kind: "replace",
         target,
-        stage: path.join(root, `.raya-txn-recover-${committed}.stage`),
-        hold: path.join(root, `.raya-txn-recover-${committed}.hold`),
+        stage: path.join(root, `.raya-txn-recover-${checkpoint}.stage`),
+        hold: path.join(root, `.raya-txn-recover-${checkpoint}.hold`),
         review: {
           identity: { dev: info.dev.toString(), ino: info.ino.toString() },
           sha256: hash("before"),
         },
         result: { sha256: hash("after") },
       }
-      const id = `recover-${committed}`
+      const id = `recover-${checkpoint}`
       const admitted = yield* instance(dir, (storage) =>
         journals(storage).admit({ invocation: id, digest: hash(id), workspace: root, entries: [entry] }),
       )
@@ -191,7 +192,11 @@ for (const committed of [false, true])
       if (!admitted.owned) return
       const artifact = yield* prepareTransaction(entry, Buffer.from("after"))
       const staged = { ...entry, artifact }
-      const journal = (revision: number, phase: "staging" | "prepared" | "committing" | "committed", cursor: number) =>
+      const journal = (
+        revision: number,
+        phase: "staging" | "prepared" | "committing" | "committed" | "rolling_back" | "rolled_back" | "cleaning",
+        cursor: number,
+      ) =>
         instance(dir, (storage) =>
           journals(storage).advance(id, {
             token: admitted.token,
@@ -207,6 +212,13 @@ for (const committed of [false, true])
       yield* publishTransaction(staged)
       const published = yield* journal(committing.revision, "committing", 1)
       if (committed) yield* journal(published.revision, "committed", 1)
+      if (checkpoint === "rollback-cleaning") {
+        const rolling = yield* journal(published.revision, "rolling_back", 0)
+        yield* restoreTransaction(staged)
+        const restored = yield* journal(rolling.revision, "rolling_back", 1)
+        const rolled = yield* journal(restored.revision, "rolled_back", 1)
+        yield* journal(rolled.revision, "cleaning", 0)
+      }
 
       const outcome = yield* instance(dir, (storage) => recover(storage, id, () => Effect.succeed(true)))
       expect(outcome?.phase).toBe("done")

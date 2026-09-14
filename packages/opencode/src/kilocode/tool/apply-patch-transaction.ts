@@ -147,7 +147,7 @@ export function recover(
           }
           yield* advance("staging", state.outcome.cursor)
         }
-        const committed = state.outcome.decision === "commit" || ["committed", "cleaning"].includes(state.outcome.phase)
+        const committed = state.outcome.decision === "commit" || state.outcome.phase === "committed"
         if (committed) {
           if (state.outcome.phase === "committed") yield* advance("cleaning", 0)
           for (const entry of state.entries) yield* finalizeTransaction(entry, true)

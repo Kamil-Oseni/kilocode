@@ -5,7 +5,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { jsonSchema, tool, type Tool as AITool } from "ai"
 import { utils, write as workbook } from "xlsx"
-import { TextWriter, Uint8ArrayReader, ZipReader } from "@zip.js/zip.js"
+import { TextWriter, Uint8ArrayReader, Uint8ArrayWriter, ZipReader } from "@zip.js/zip.js"
 import path from "node:path"
 import { Agent } from "@/agent/agent"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -472,6 +472,16 @@ it.instance(
       const bound = bind([defs.read, defs.presentation, defs.discover])
       yield* prepare(bound.tools)
       const target = path.join(instance.directory, "launch-plan.pptx")
+      const image = path.join(instance.directory, "workflow.png")
+      yield* Effect.promise(() =>
+        Bun.write(
+          image,
+          Buffer.from(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=",
+            "base64",
+          ),
+        ),
+      )
       const approvals: string[] = []
       const ctx = {
         ...bound.ctx,
@@ -504,16 +514,26 @@ it.instance(
                 ],
               },
             },
+            {
+              title: "Workflow status",
+              image: {
+                filePath: image,
+                alt: "Workflow status mark",
+                caption: "The current workflow is ready for review.",
+                width: 2,
+              },
+            },
           ],
         },
         ctx,
       )
-      expect(created.output).toBe("Created launch-plan.pptx with 3 slides.")
+      expect(created.output).toBe("Created launch-plan.pptx with 4 slides.")
       expect(created.metadata).toMatchObject({
         filepath: target,
         exists: false,
-        slides: 3,
+        slides: 4,
         cells: 8,
+        images: 1,
         rayaRevision: { version: 1, status: "captured", path: target },
       })
       const bytes = new Uint8Array(yield* Effect.promise(() => Bun.file(target).arrayBuffer()))
@@ -531,17 +551,35 @@ it.instance(
           "ppt/slides/slide1.xml",
           "ppt/slides/slide2.xml",
           "ppt/slides/slide3.xml",
+          "ppt/slides/slide4.xml",
+          "ppt/slides/_rels/slide4.xml.rels",
+          "ppt/media/image1.png",
         ]),
       )
       const entry = items.find((item) => item.filename === "ppt/slides/slide3.xml")
       expect(entry?.getData).toBeDefined()
       const xml = yield* Effect.promise(() => entry!.getData!(new TextWriter()))
+      const picture = items.find((item) => item.filename === "ppt/slides/slide4.xml")
+      const relationships = items.find((item) => item.filename === "ppt/slides/_rels/slide4.xml.rels")
+      const media = items.find((item) => item.filename === "ppt/media/image1.png")
+      expect(picture?.getData).toBeDefined()
+      expect(relationships?.getData).toBeDefined()
+      expect(media?.getData).toBeDefined()
+      const visual = yield* Effect.promise(() => picture!.getData!(new TextWriter()))
+      const links = yield* Effect.promise(() => relationships!.getData!(new TextWriter()))
+      const embedded = yield* Effect.promise(() => media!.getData!(new Uint8ArrayWriter()))
       yield* Effect.promise(() => archive.close())
       expect(xml).toContain("<a:tbl>")
       expect(xml).toContain('firstRow="1"')
       expect(xml).toContain('val="E8EBF0"')
       expect(xml).toContain('typeface="Outfit"')
       const read = yield* defs.read.execute({ filePath: target }, ctx)
+      expect(visual).toContain("<p:pic>")
+      expect(visual).toContain('descr="Workflow status mark"')
+      expect(visual).toContain('r:embed="rId2"')
+      expect(visual).toContain("The current workflow is ready for review.")
+      expect(links).toContain('Target="../media/image1.png"')
+      expect(embedded).toEqual(new Uint8Array(yield* Effect.promise(() => Bun.file(image).arrayBuffer())))
       expect(read.output).toContain("--- Slide: 1 ---")
       expect(read.output).toContain("A calmer launch")
       expect(read.output).toContain("Ship what matters & measure it.")
@@ -550,7 +588,10 @@ it.instance(
       expect(read.output).toContain("--- Slide: 3 ---")
       for (const value of ["Owners and outcomes", "Owner", "Outcome", "Design", "A clear flow", "Engineering"])
         expect(read.output).toContain(value)
-      expect(approvals).toEqual(["edit", "read"])
+      expect(read.output).toContain("--- Slide: 4 ---")
+      expect(read.output).toContain("Workflow status")
+      expect(read.output).toContain("The current workflow is ready for review.")
+      expect(approvals).toEqual(["read", "edit", "read"])
 
       const before = yield* Effect.promise(() => Bun.file(target).arrayBuffer())
       const denied = yield* defs.presentation
@@ -581,6 +622,10 @@ it.instance(
           filePath: path.join(instance.directory, "ragged.pptx"),
           slides: [{ title: "Ragged", table: { rows: [["A", "B"], ["C"]] } }],
         },
+        {
+          filePath: path.join(instance.directory, "mixed-image.pptx"),
+          slides: [{ title: "Crowded image", body: "Body", image: { filePath: image, alt: "Visual" } }],
+        },
       ]) {
         expect(Exit.isFailure(yield* defs.presentation.execute(input, ctx).pipe(Effect.exit))).toBe(true)
         expect(yield* Effect.promise(() => Bun.file(input.filePath).exists())).toBe(false)
@@ -592,6 +637,38 @@ it.instance(
         Exit.isFailure(yield* defs.presentation.execute({ filePath: oversized, slides }, ctx).pipe(Effect.exit)),
       ).toBe(true)
       expect(yield* Effect.promise(() => Bun.file(oversized).exists())).toBe(false)
+      const tooMany = path.join(instance.directory, "too-many-images.pptx")
+      expect(
+        Exit.isFailure(
+          yield* defs.presentation
+            .execute(
+              {
+                filePath: tooMany,
+                slides: Array.from({ length: 21 }, (_, index) => ({
+                  title: `Image ${index + 1}`,
+                  image: { filePath: image, alt: `Visual ${index + 1}` },
+                })),
+              },
+              ctx,
+            )
+            .pipe(Effect.exit),
+        ),
+      ).toBe(true)
+      expect(yield* Effect.promise(() => Bun.file(tooMany).exists())).toBe(false)
+      const corrupt = path.join(instance.directory, "corrupt.png")
+      const invalid = path.join(instance.directory, "invalid-image.pptx")
+      yield* Effect.promise(() => Bun.write(corrupt, "not a png"))
+      expect(
+        Exit.isFailure(
+          yield* defs.presentation
+            .execute(
+              { filePath: invalid, slides: [{ title: "Invalid", image: { filePath: corrupt, alt: "Corrupt" } }] },
+              ctx,
+            )
+            .pipe(Effect.exit),
+        ),
+      ).toBe(true)
+      expect(yield* Effect.promise(() => Bun.file(invalid).exists())).toBe(false)
     }),
   60_000,
 )

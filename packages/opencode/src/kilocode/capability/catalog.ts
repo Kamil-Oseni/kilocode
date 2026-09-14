@@ -132,14 +132,15 @@ const entries: Entry[] = [
     id: "presentations.create",
     name: "Create a PowerPoint presentation",
     tools: ["create_presentation"],
-    inputs: ["structured slide content", "tables", "PPTX"],
-    description: "Create a local widescreen slide deck with titles, body text, lists and tables.",
+    inputs: ["structured slide content", "tables", "local PNG/JPEG images", "PPTX"],
+    description: "Create a local widescreen slide deck with titles, body text, lists, tables and images.",
     result: "Local PPTX file and artifact receipt",
     permission: "edit",
     limits: [
       "Creates a new deck or replaces the whole destination after approval.",
       "Tables are rectangular, limited to 12 rows, 6 columns and 300 cells across the deck.",
-      "Does not import templates, add images, charts, notes or animation, or embed fonts.",
+      "Images require alt text and are limited to 20 local files, 10 MiB each and 40 MiB combined.",
+      "Does not fetch network images, import templates, add charts, notes or animation, or embed fonts.",
     ],
   },
   {

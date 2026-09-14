@@ -9,6 +9,8 @@ Improve goal steering, completion controls, elapsed progress, review accuracy, r
 
 Bound local snapshot storage by pruning stale vault packages while preserving the active version, the newest snapshots, and release packages.
 
+Create PowerPoint slides with bounded local PNG or JPEG images, alternative text and optional captions.
+
 Show Keep all and Undo all from this chat's file edits, keep Review changes readable in a narrow sidebar, and accept a completion audit when the summary is only at the top level.
 
 Let Auto continue with task after a mid-turn steer, resume or complete a blocked goal, count bash-created and detached-HEAD files in Review changes, and highlight slash commands such as /goal in chat.

@@ -131,15 +131,19 @@ describe("filesystem mutation worker", () => {
     expect(await Bun.file(skipped).exists()).toBe(false)
   })
 
-  test("writes through the same file handle after identity and content validation", async () => {
+  test("stages a legacy checked write without truncating the reviewed inode", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "kilo-mutation-worker-"))
     roots.push(root)
     const file = path.join(root, "value.txt")
     await writeFile(file, "approved")
     const request = await checked(file, "changed")
+    const before = await stat(file, { bigint: true })
 
     expect(await worker(request)).toEqual({ ok: true })
     expect(await readFile(file, "utf8")).toBe("changed")
+    const after = await stat(file, { bigint: true })
+    expect({ dev: after.dev, ino: after.ino }).not.toEqual({ dev: before.dev, ino: before.ino })
+    expect(await holds(root)).toEqual([])
   })
 
   test("creates a missing file exclusively", async () => {

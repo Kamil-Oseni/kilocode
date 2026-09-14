@@ -122,14 +122,7 @@ export async function validateChecked(path: string, identity: Identity, sha256: 
 }
 
 export async function writeChecked(path: string, data: Uint8Array, identity: Identity, sha256: string) {
-  const file = await open(path, "r+")
-  try {
-    await verify(file, path, identity, sha256)
-    await file.truncate(0)
-    await write(file, path, data)
-  } finally {
-    await file.close()
-  }
+  await replaceChecked(path, data, identity, sha256)
 }
 
 export async function replaceChecked(path: string, data: Uint8Array, identity: Identity, sha256: string) {

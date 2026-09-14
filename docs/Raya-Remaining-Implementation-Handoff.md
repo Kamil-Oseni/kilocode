@@ -4419,3 +4419,19 @@ Next exact steps:
 4. Continue the lowest-human-dependency remaining requirement, but address its highest-risk denial/interruption/restart boundary first. For EN-02/OVR-05, the remaining work is execution fencing, multi-store transaction review and representative organization execution. For PR-04, continue shell/OS confinement, durable escalation decisions, trusted host-plugin confinement and real dispatch acceptance.
 
 The UI preview token remains process-local for ten minutes. A host reload does not reconstruct or resubmit that intent. If storage committed before the crash, the durable roster shows the worker after reload; if storage did not commit, the user must create a fresh preview. Do not describe this as durable client-intent replay. It is server-side stable identity plus same-process uncertain-response retry, which prevents duplicate creation without inventing a result.
+
+## ChatGPT 2026-09-14 17:01 America/Toronto - Installed Routine recovery checkpoint
+
+The authorized low-memory workflow completed from source/docs commit `1a02f8aea4` and installed `eden.raya@7.4.23-snapshot+1a02f8aea4.kamil-oseni.1789419401026`. SDK regeneration, source CLI/Kilo Console build, CLI version/model/sandbox-worker smoke tests, sequential extension and webview typechecks, cached extension lint, production bundling, 431-file VSIX packaging and VS Code installation all passed.
+
+Exact retained evidence:
+
+- VSIX: `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.3029a750d9e42627a3a11fe5b6005d0c8b083c872ad5904b22ef18be9c6dfdf0.vsix`; 519,260,638 bytes; SHA-256 `3029A750D9E42627A3A11FE5B6005D0C8B083C872AD5904B22EF18BE9C6DFDF0`.
+- Installed directory: `C:\Users\User\.vscode\extensions\eden.raya-7.4.23-snapshot+1a02f8aea4.kamil-oseni.1789419401026`.
+- Installed `bin\kilo.exe`: 230,572,032 bytes; SHA-256 `1EC57B0AA19FB61A5D68F44ACA397B05AF7DBC9767C6EC11566F27CF9F507804`.
+- Both independent hashes and sizes match `package-vault/packages.json`.
+- Cleanup removed two old vault packages, one staged package and one old extension. C: has 95,328,649,216 bytes free. No Bun or tsgo process remains.
+
+The active vault pointer is still the previous digest `69aff4b80dfdb67185b60348dd805ea99e6faa7ea03d4d1cbb9096e753f2963d`, because the open VS Code extension host has not reloaded. After reload, require the pointer `3029a750d9e42627a3a11fe5b6005d0c8b083c872ad5904b22ef18be9c6dfdf0` before installed-host acceptance. Do not infer activation from successful installation. This package contains product commits `b83a561993` and `d13a8757bc`.
+
+After activation, verify a new manual Routine persists across a host reload and appears once with the reviewed identity. Installed response-loss injection remains pending unless the harness can drop the reply while preserving the exact request and forecast UUID. Continue autonomous repository-level work without waiting for that manual step.

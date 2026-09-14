@@ -1,5 +1,13 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-14 15:08 America/Toronto - Retention package receipt and activation boundary
+
+Product commit `074c4fc17e` and documentation commit `7f46668c4a` are pushed. The low-memory production workflow installed `eden.raya@7.4.23-snapshot+7f46668c4a.kamil-oseni.1789412668594`. The first sandboxed invocation failed before any compile or package gate because Kilo's SDK generator could not write its normal state-directory probe under `C:\Users\User\.local`; the identical authorized out-of-sandbox invocation passed. Do not report that environmental denial as a product failure.
+
+Retained package: `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.720fead6eb8e0ec6b8bb1471f7b7a53b1ea08356f14e8db7a956a94df2e3ab9d.vsix`; 519,247,071 bytes; SHA-256 `720FEAD6EB8E0EC6B8BB1471F7B7A53B1EA08356F14E8DB7A956A94DF2E3AB9D`. Installed directory: `C:\Users\User\.vscode\extensions\eden.raya-7.4.23-snapshot+7f46668c4a.kamil-oseni.1789412668594`. Installed CLI: 230,564,352 bytes; SHA-256 `1D34AF7A4AEFCF79112EBC0BEEC8365A0F71F13AE00501C8934B1829A1418C18`, matching the vault manifest. SDK generation, CLI/Kilo Console builds, version/model/mutation-worker smoke checks, both sequential typechecks, ESLint, production bundling, packaging, retention and installation passed.
+
+Temporary snapshot staging and vault staging are empty, no Bun or tsgo process remains, and C: free space is 97,289,973,760 bytes. The open extension host still owns active digest `8261c1ebfb4872827fd4d9db7272240d03a584678aae583efd77203f843ec973`. After the user wakes and runs **Developer: Reload Window**, require active digest `720fead6eb8e0ec6b8bb1471f7b7a53b1ea08356f14e8db7a956a94df2e3ab9d` before installed-host acceptance. Then exercise exact response replay and deletion of a session containing a completed Apply Patch invocation; verify no duplicate file/artifact notifications and no indexed replay/journal records remain. Preserve all existing adverse assertions.
+
 ## ChatGPT 2026-09-14 15:01 America/Toronto - Session-owned Apply Patch replay cleanup
 
 **State: implemented and verified locally; commit/push/install pending.** Continue from this exact implementation rather than adding a broad age-based deletion job.

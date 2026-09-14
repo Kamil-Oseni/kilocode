@@ -23,6 +23,7 @@ export function claim<A, E, R, B, F, S>(
   check: Effect.Effect<A, E, R>,
   start: (input: A, claim: Claim) => Effect.Effect<B, F, S>,
   trigger?: (input: A) => RayaTask.Trigger,
+  operation?: "remove",
 ) {
   return Effect.uninterruptibleMask((restore) =>
     Effect.gen(function* () {
@@ -33,6 +34,7 @@ export function claim<A, E, R, B, F, S>(
         id: crypto.randomUUID(),
         at: Date.now(),
         phase: "claimed",
+        ...(operation ? { operation } : {}),
         owner: identity(),
       }
       const acquired = yield* storage.create(key, record).pipe(Effect.orDie)

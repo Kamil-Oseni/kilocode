@@ -15,6 +15,7 @@ import { RayaTask } from "@/kilocode/task"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import { claim } from "@/kilocode/task/claim"
+import { inspect } from "@/kilocode/task/recovery"
 import { RayaTaskQueue } from "@/kilocode/task/queue"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
 import { scheduler } from "@/kilocode/task/scheduler"
@@ -28,6 +29,8 @@ import { eq, sql } from "drizzle-orm"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { createHash } from "node:crypto"
 import { spawnSync } from "node:child_process"
+import { fileURLToPath } from "node:url"
+import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { owner, stopped } from "@/kilocode/task/owner"
 import { testEffect } from "../lib/effect"
 import { tmpdirScoped } from "../fixture/fixture"
@@ -1328,6 +1331,7 @@ it.live("a failed roster removal cannot retire the still-present routine's queue
         },
       })
       expect(Exit.isFailure(yield* broken.remove(agent.id).pipe(Effect.exit))).toBe(true)
+      expect((yield* inspect(input.storage, agent.id))?.state).toBe("recovery")
       expect(yield* removals(input.storage).pending()).toHaveLength(1)
       yield* scheduler(input).clean()
       expect((yield* tasks.page()).items).toEqual([])
@@ -1340,8 +1344,77 @@ it.live("a failed roster removal cannot retire the still-present routine's queue
       expect(Exit.isFailure(yield* tasks.page().pipe(Effect.exit))).toBe(true)
       expect(yield* queue.pending(agent.id, 1)).toEqual(rows)
       yield* input.storage.replace(["raya", "agent"], roster)
+      expect(yield* tasks.remove(agent.id)).toBe(true)
+      yield* scheduler(input).clean()
+      expect((yield* tasks.page()).items.map((item) => item.definition.id)).toEqual([agent.id])
+      expect(yield* queue.pending(agent.id, 1)).toEqual([])
+      expect(yield* removals(input.storage).pending()).toEqual([])
     }).pipe(Effect.provide(state(directory)))
   }),
+)
+
+it.live("a completed removal resumes exactly when claim acknowledgement fails", () =>
+  Effect.gen(function* () {
+    const directory = yield* tmpdirScoped()
+    yield* Effect.gen(function* () {
+      const input = { storage: yield* Storage.Service, database: yield* Database.Service }
+      const tasks = RayaTask.make(input)
+      const agent = yield* tasks.create({
+        name: "Removal acknowledgement",
+        objective: "Work",
+        schedule: { kind: "manual" },
+      })
+      const broken = RayaTask.make({
+        ...input,
+        storage: {
+          ...input.storage,
+          remove: (key) =>
+            key[1] === "agent-claims"
+              ? Effect.die(new Error("Claim acknowledgement unavailable"))
+              : input.storage.remove(key),
+        },
+      })
+      expect(Exit.isFailure(yield* broken.remove(agent.id).pipe(Effect.exit))).toBe(true)
+      expect((yield* inspect(input.storage, agent.id))?.state).toBe("recovery")
+      expect(Exit.isFailure(yield* tasks.get(agent.id).pipe(Effect.exit))).toBe(true)
+      expect(yield* tasks.remove(agent.id)).toBe(true)
+      expect(yield* inspect(input.storage, agent.id)).toBeUndefined()
+      expect((yield* tasks.page()).items.map((item) => item.definition.id)).toEqual([agent.id])
+      yield* scheduler(input).clean()
+      expect(yield* removals(input.storage).pending()).toEqual([])
+    }).pipe(Effect.provide(state(directory)))
+  }),
+)
+
+it.live(
+  "stopped removal claims resume safely but never clear uncertain startup claims",
+  () =>
+    Effect.gen(function* () {
+      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+      const fixture = fileURLToPath(new URL("./fixtures/task-claim.ts", import.meta.url))
+      const id = "00000000-0000-4000-8000-000000000001"
+      for (const mode of ["startup", "remove-crash"] as const) {
+        const directory = yield* tmpdirScoped()
+        yield* Effect.gen(function* () {
+          const tasks = RayaTask.make({ storage: yield* Storage.Service, database: yield* Database.Service })
+          yield* tasks.provision({ name: "Recover removal", objective: "Work", schedule: { kind: "manual" } }, id)
+          const args = [fixture, path.join(directory, "storage"), mode, mode === "startup" ? "start" : mode, id]
+          const code = yield* spawner.exitCode(
+            ChildProcess.make(process.execPath, args, { stdin: "ignore", detached: false }),
+          )
+          expect(Number(code)).toBe(mode === "startup" ? 20 : 21)
+          if (mode === "startup") {
+            expect(Exit.isFailure(yield* tasks.remove(id).pipe(Effect.exit))).toBe(true)
+            expect((yield* tasks.get(id)).id).toBe(id)
+            return
+          }
+          expect(yield* tasks.remove(id)).toBe(true)
+          expect(Exit.isFailure(yield* tasks.get(id).pipe(Effect.exit))).toBe(true)
+          expect((yield* tasks.page()).items.map((item) => item.definition.id)).toEqual([id])
+        }).pipe(Effect.provide(state(directory)))
+      }
+    }),
+  30_000,
 )
 
 it.live("archive integration validates legacy data once and stops writing the source file", () =>

@@ -8,7 +8,9 @@ import { Permission } from "@/permission"
 import { next as cronNext, parse as cronParse, upcoming } from "./cron"
 import { mutate } from "./mutation"
 import { local } from "./local"
-import { claim } from "./claim"
+import { claim, starting } from "./claim"
+import { recover } from "./recovery"
+import { owner, stopped } from "./owner"
 import { removals } from "./removal"
 import { archive as indexed, InvalidCursor } from "./archive"
 import { RayaTaskQueue } from "./queue"
@@ -1173,6 +1175,35 @@ export namespace RayaTask {
       return { found, remaining: items.filter((item) => item.id !== id) }
     })
 
+    const erase = (selected: Effect.Success<ReturnType<typeof remove>>) =>
+      retain(selected.found).pipe(
+        Effect.andThen(removals(deps.storage).stage(selected.found.id)),
+        Effect.andThen(save(selected.remaining)),
+        Effect.as(true),
+      )
+
+    const removeOwned = Effect.fn("RayaTask.removeOwned")(function* (id: string) {
+      const recovered = yield* recover(
+        deps.storage,
+        id,
+        (record) => Effect.succeed(record.operation === "remove"),
+        () =>
+          Effect.gen(function* () {
+            const items = yield* list()
+            if (!items.some((item) => item.id === id)) return true
+            yield* erase(yield* remove(id))
+            return true
+          }),
+        (record) => {
+          const current = owner()
+          const local = record.owner.host === current.host && record.owner.pid === current.pid && !starting(record.id)
+          return Effect.succeed(record.operation === "remove" && (local || stopped(record.owner)))
+        },
+      )
+      if (recovered) return true
+      return yield* claim(deps.storage, id, remove(id), erase, undefined, "remove")
+    })
+
     return {
       list,
       page,
@@ -1193,17 +1224,7 @@ export namespace RayaTask {
       provision: (input: Create, id: string) => mutate(deps.storage, create(input, id, true)),
       update: (...args: Parameters<typeof update>) => mutate(deps.storage, update(...args)),
       authority: (...args: Parameters<typeof authority>) => mutate(deps.storage, authority(...args)),
-      remove: (id: string) =>
-        mutate(
-          deps.storage,
-          claim(deps.storage, id, remove(id), (selected) =>
-            retain(selected.found).pipe(
-              Effect.andThen(removals(deps.storage).stage(id)),
-              Effect.andThen(save(selected.remaining)),
-              Effect.as(true),
-            ),
-          ),
-        ),
+      remove: (id: string) => mutate(deps.storage, removeOwned(id)),
       record: (...args: Parameters<typeof record>) => mutate(deps.storage, record(...args)),
       restore: (...args: Parameters<typeof restore>) => mutate(deps.storage, restore(...args)),
       transition: (...args: Parameters<typeof transition>) => mutate(deps.storage, transition(...args)),

@@ -13,6 +13,7 @@ const Record = Schema.Struct({
   id: Schema.String,
   at: Schema.Number,
   phase: Schema.Literals(["claimed", "session-created"]),
+  operation: Schema.optional(Schema.Literal("remove")),
   owner: Owner,
   sessionID: Schema.optional(SessionID),
   trigger: Schema.optional(Schema.Unknown),

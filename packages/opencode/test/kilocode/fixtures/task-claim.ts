@@ -9,6 +9,7 @@ import { publish } from "../../../src/kilocode/session/review-publish"
 const directory = process.argv[2]
 const owner = process.argv[3]
 if (!directory || !owner) throw new Error("Expected directory and owner")
+const target = process.argv[5] ?? "routine"
 process.exitCode = await Effect.runPromise(
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
@@ -25,10 +26,10 @@ process.exitCode = await Effect.runPromise(
       replace: (key: string[], value: unknown) => publish(fs, file(key), value, true).pipe(Effect.asVoid),
       remove: (key: string[]) => fs.remove(file(key)),
     }
-    if (process.argv[4] === "recover") return (yield* recover(storage, "routine", () => Effect.succeed(true))) ? 0 : 10
+    if (process.argv[4] === "recover") return (yield* recover(storage, target, () => Effect.succeed(true))) ? 0 : 10
     if (process.argv[4] === "recover-crash") {
       let checks = 0
-      return (yield* recover(storage, "routine", () =>
+      return (yield* recover(storage, target, () =>
         Effect.sync(() => {
           checks++
           if (checks === 2) process.exit(21)
@@ -38,7 +39,9 @@ process.exitCode = await Effect.runPromise(
         ? 0
         : 10
     }
-    return yield* claim(storage, "routine", Effect.void, () =>
+    if (process.argv[4] === "remove-crash")
+      return yield* claim(storage, target, Effect.void, () => Effect.sync(() => process.exit(21)), undefined, "remove")
+    return yield* claim(storage, target, Effect.void, () =>
       Effect.gen(function* () {
         yield* fs.writeFileString(path.join(directory, "started.txt"), owner)
         return yield* Effect.fail("simulated-stop" as const)

@@ -23,6 +23,8 @@ import { assertMutablePath } from "../kilocode/agent-manager/protection" // kilo
 import { RayaPath } from "@/kilocode/task/path-boundary" // kilocode_change
 import { Storage } from "@/storage/storage" // kilocode_change
 import { transact, type Item } from "@/kilocode/tool/apply-patch-transaction" // kilocode_change
+import { records, seal, type Intent } from "@/kilocode/tool/apply-patch-receipt" // kilocode_change
+import { Conflict, journals } from "@/kilocode/tool/mutation-journal" // kilocode_change
 
 export const Parameters = Schema.Struct({
   patchText: Schema.String.annotate({ description: "The full patch text that describes all changes to be made" }),
@@ -63,6 +65,101 @@ export const ApplyPatchTool = Tool.define(
       }
 
       const instance = yield* InstanceState.context
+      // kilocode_change start - bind retries before reading mutable preimages
+      const invocation = JSON.stringify([
+        ctx.sessionID,
+        ctx.messageID,
+        ctx.callID || createHash("sha256").update(params.patchText).digest("hex"),
+        instance.worktree,
+      ])
+      const request = createHash("sha256")
+        .update(JSON.stringify([instance.worktree, params.patchText]))
+        .digest("hex")
+      const replay = records(storage)
+      const finish = Effect.fn("ApplyPatchTool.finish")(function* (intent: Intent) {
+        for (const change of intent.changes) {
+          if (change.type === "delete") continue
+          yield* lsp.touchFile(change.movePath ?? change.filePath, "document")
+        }
+        const diagnostics = yield* lsp.diagnostics()
+        const summary = intent.changes.map((change) => {
+          if (change.type === "add")
+            return `A ${path.relative(intent.workspace, change.filePath).replaceAll("\\", "/")}`
+          if (change.type === "delete")
+            return `D ${path.relative(intent.workspace, change.filePath).replaceAll("\\", "/")}`
+          return `M ${path.relative(intent.workspace, change.movePath ?? change.filePath).replaceAll("\\", "/")}`
+        })
+        let output = `Success. Updated the following files:\n${summary.join("\n")}`
+        const changed = intent.changes
+          .filter((change) => change.type !== "delete")
+          .map((change) => FSUtil.normalizePath(change.movePath ?? change.filePath))
+        for (const change of intent.changes) {
+          if (change.type === "delete") continue
+          const target = change.movePath ?? change.filePath
+          const block = LSP.Diagnostic.report(target, diagnostics[FSUtil.normalizePath(target)] ?? [])
+          if (block) {
+            const rel = path.relative(intent.workspace, target).replaceAll("\\", "/")
+            output += `\n\nLSP errors detected in ${rel}, please fix:\n${block}`
+          }
+          output += yield* Effect.promise(() => ConfigValidation.check(target))
+        }
+        const result = {
+          title: output,
+          metadata: {
+            diff: intent.diff,
+            files: intent.files,
+            diagnostics: filterDiagnostics(diagnostics, changed),
+            rayaRevision: yield* Artifact.patch(afs, intent.changes),
+          },
+          output,
+        }
+        const saved = yield* replay.publish({
+          version: 1,
+          invocation: intent.invocation,
+          request: intent.request,
+          digest: intent.digest,
+          result,
+        })
+        if (!saved.owned) return saved.receipt.result
+        const updates: Array<{ file: string; event: "add" | "change" | "unlink" }> = []
+        for (const change of intent.changes) {
+          const edited = change.type === "delete" ? undefined : (change.movePath ?? change.filePath)
+          if (change.type === "add") updates.push({ file: change.filePath, event: "add" })
+          if (change.type === "update") updates.push({ file: change.filePath, event: "change" })
+          if (change.type === "delete") updates.push({ file: change.filePath, event: "unlink" })
+          if (change.type === "move" && change.movePath) {
+            updates.push({ file: change.filePath, event: "unlink" })
+            updates.push({ file: change.movePath, event: "add" })
+          }
+          if (edited) yield* events.publish(FileSystem.Event.Edited, { file: edited })
+        }
+        for (const update of updates) yield* events.publish(Watcher.Event.Updated, update)
+        return saved.receipt.result
+      })
+      const cached = yield* replay.getReceipt(invocation)
+      const retained = yield* replay.getIntent(invocation)
+      if (cached && !retained)
+        return yield* new Conflict({ message: "Apply Patch response receipt has no retained intent." })
+      if (retained) {
+        if (retained.request !== request)
+          return yield* new Conflict({ message: "This Apply Patch invocation is already bound to different content." })
+        const outcome = yield* journals(storage).get(invocation)
+        if (outcome && outcome.digest !== retained.digest)
+          return yield* new Conflict({ message: "Apply Patch replay state is not bound to its transaction." })
+        if (cached && outcome) {
+          if (cached.request !== request || cached.digest !== retained.digest)
+            return yield* new Conflict({ message: "This Apply Patch invocation has a conflicting response receipt." })
+          if (outcome.phase !== "done" || outcome.decision !== "commit")
+            return yield* new Conflict({ message: "Apply Patch response exists without a committed transaction." })
+          return cached.result
+        }
+        if (outcome?.phase === "done" && outcome.decision === "commit") return yield* finish(retained)
+        if (outcome)
+          return yield* new Conflict({
+            message: `Apply Patch invocation is retained at ${outcome.phase}/${outcome.decision ?? "undecided"}.`,
+          })
+      }
+      // kilocode_change end
 
       // Validate file paths and check permissions
       const fileChanges: Array<{
@@ -360,12 +457,6 @@ export const ApplyPatchTool = Tool.define(
       // kilocode_change end
 
       // kilocode_change start - apply the complete reviewed set as one durable transaction
-      const invocation = JSON.stringify([
-        ctx.sessionID,
-        ctx.messageID,
-        ctx.callID || createHash("sha256").update(params.patchText).digest("hex"),
-        instance.worktree,
-      ])
       const seed = createHash("sha256").update(invocation).digest("hex").slice(0, 32)
       const items: Item[] = []
       const append = (input: {
@@ -430,106 +521,23 @@ export const ApplyPatchTool = Tool.define(
         })
         append({ kind: "remove", target: source, review })
       }
-      const digest = createHash("sha256")
-        .update(
-          JSON.stringify(
-            items.map((item) => ({
-              entry: item.entry,
-              data: item.data ? createHash("sha256").update(item.data).digest("hex") : undefined,
-            })),
-          ),
-        )
-        .digest("hex")
-      yield* transact(storage, { invocation, digest, workspace: instance.worktree, items })
-
-      const updates: Array<{ file: string; event: "add" | "change" | "unlink" }> = []
-      for (const change of fileChanges) {
-        const edited = change.type === "delete" ? undefined : (change.movePath ?? change.filePath)
-        switch (change.type) {
-          case "add":
-            updates.push({ file: change.filePath, event: "add" })
-            break
-
-          case "update":
-            updates.push({ file: change.filePath, event: "change" })
-            break
-
-          case "move":
-            if (change.movePath) {
-              updates.push({ file: change.filePath, event: "unlink" })
-              updates.push({ file: change.movePath, event: "add" })
-            }
-            break
-
-          case "delete":
-            updates.push({ file: change.filePath, event: "unlink" })
-            break
-        }
-
-        if (edited) {
-          yield* events.publish(FileSystem.Event.Edited, { file: edited })
-        }
-      }
+      const proposed = {
+        version: 1,
+        invocation,
+        request,
+        workspace: instance.worktree,
+        diff: totalDiff,
+        files,
+        changes: fileChanges.map((change) => ({
+          filePath: change.filePath,
+          type: change.type,
+          movePath: change.movePath,
+        })),
+      } as const
+      const intent = yield* replay.prepare({ ...proposed, digest: seal(proposed) })
+      yield* transact(storage, { invocation, digest: intent.digest, workspace: instance.worktree, items })
+      return yield* finish(intent)
       // kilocode_change end
-
-      // Publish file change events
-      for (const update of updates) {
-        yield* events.publish(Watcher.Event.Updated, update)
-      }
-
-      // Notify LSP of file changes and collect diagnostics
-      for (const change of fileChanges) {
-        if (change.type === "delete") continue
-        const target = change.movePath ?? change.filePath
-        yield* lsp.touchFile(target, "document")
-      }
-      const diagnostics = yield* lsp.diagnostics()
-
-      // Generate output summary
-      const summaryLines = fileChanges.map((change) => {
-        if (change.type === "add") {
-          return `A ${path.relative(instance.worktree, change.filePath).replaceAll("\\", "/")}`
-        }
-        if (change.type === "delete") {
-          return `D ${path.relative(instance.worktree, change.filePath).replaceAll("\\", "/")}`
-        }
-        const target = change.movePath ?? change.filePath
-        return `M ${path.relative(instance.worktree, target).replaceAll("\\", "/")}`
-      })
-      let output = `Success. Updated the following files:\n${summaryLines.join("\n")}`
-
-      // kilocode_change start
-      const changedPaths = fileChanges
-        .filter((c) => c.type !== "delete")
-        .map((c) => FSUtil.normalizePath(c.movePath ?? c.filePath))
-      // kilocode_change end
-
-      for (const change of fileChanges) {
-        if (change.type === "delete") continue
-        const target = change.movePath ?? change.filePath
-        const block = LSP.Diagnostic.report(target, diagnostics[FSUtil.normalizePath(target)] ?? [])
-        if (!block) continue
-        const rel = path.relative(instance.worktree, target).replaceAll("\\", "/")
-        output += `\n\nLSP errors detected in ${rel}, please fix:\n${block}`
-      }
-
-      // kilocode_change start - append Kilo config validation warnings
-      for (const changed of fileChanges) {
-        if (changed.type === "delete") continue
-        output += yield* Effect.promise(() => ConfigValidation.check(changed.movePath ?? changed.filePath))
-      }
-      // kilocode_change end
-
-      return {
-        title: output,
-        metadata: {
-          diff: totalDiff,
-          files,
-          diagnostics: filterDiagnostics(diagnostics, changedPaths), // kilocode_change
-          rayaRevision: yield* Artifact.patch(afs, fileChanges), // kilocode_change
-        },
-        output,
-      }
     })
 
     return {

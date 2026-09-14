@@ -205,6 +205,171 @@ describe("tool.apply_patch freeform", () => {
     { git: true },
   )
 
+  // kilocode_change start - durable response replay and interruption coverage
+  it.instance(
+    "replays the exact response without rereading files or duplicating events",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const events = yield* EventV2Bridge.Service
+        const emitted: string[] = []
+        const observed: typeof events = {
+          ...events,
+          publish: (definition, data, options) => {
+            emitted.push(definition.type)
+            return events.publish(definition, data, options)
+          },
+        }
+        const { ctx, calls } = makeCtx()
+        const call = { ...ctx, callID: "exact-replay" }
+        const patchText = "*** Begin Patch\n*** Add File: replay.txt\n+once\n*** End Patch"
+        const first = yield* execute({ patchText }, call).pipe(
+          Effect.provideService(EventV2Bridge.Service, observed),
+        )
+        const count = emitted.length
+        expect(count).toBeGreaterThan(0)
+
+        const second = yield* execute({ patchText }, call).pipe(
+          Effect.provideService(EventV2Bridge.Service, observed),
+        )
+        expect(second).toEqual(first)
+        expect(emitted).toHaveLength(count)
+        expect(calls).toHaveLength(1)
+        expect(yield* readText(path.join(test.directory, "replay.txt"))).toBe("once\n")
+
+        const changed = "*** Begin Patch\n*** Add File: replay.txt\n+twice\n*** End Patch"
+        yield* expectFailure(
+          execute({ patchText: changed }, call).pipe(Effect.provideService(EventV2Bridge.Service, observed)),
+          "already bound to different content",
+        )
+        expect(calls).toHaveLength(1)
+        expect(emitted).toHaveLength(count)
+        expect(yield* readText(path.join(test.directory, "replay.txt"))).toBe("once\n")
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "reconstructs a missing response receipt after the filesystem commit",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const storage = yield* Storage.Service
+        const events = yield* EventV2Bridge.Service
+        const state = { failed: false }
+        const stalled: Storage.Interface = {
+          ...storage,
+          create: (key, content) => {
+            if (!state.failed && key[0] === "raya" && key[1] === "apply-patch-receipts") {
+              state.failed = true
+              return Effect.die(new Error("injected response receipt failure"))
+            }
+            return storage.create(key, content)
+          },
+        }
+        const emitted: string[] = []
+        const observed: typeof events = {
+          ...events,
+          publish: (definition, data, options) => {
+            emitted.push(definition.type)
+            return events.publish(definition, data, options)
+          },
+        }
+        const { ctx, calls } = makeCtx()
+        const call = { ...ctx, callID: "receipt-recovery" }
+        const patchText = "*** Begin Patch\n*** Add File: recovered-receipt.txt\n+committed\n*** End Patch"
+        yield* expectFailure(
+          execute({ patchText }, call).pipe(
+            Effect.provideService(Storage.Service, stalled),
+            Effect.provideService(EventV2Bridge.Service, observed),
+          ),
+          "injected response receipt failure",
+        )
+        expect(state.failed).toBe(true)
+        expect(emitted).toHaveLength(0)
+        expect(yield* readText(path.join(test.directory, "recovered-receipt.txt"))).toBe("committed\n")
+
+        const result = yield* execute({ patchText }, call).pipe(
+          Effect.provideService(EventV2Bridge.Service, observed),
+        )
+        const count = emitted.length
+        expect(result.output).toContain("A recovered-receipt.txt")
+        expect(count).toBeGreaterThan(0)
+        expect(calls).toHaveLength(1)
+        expect(yield* execute({ patchText }, call)).toEqual(result)
+        expect(emitted).toHaveLength(count)
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "returns the retained response without duplicating a failed notification",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const events = yield* EventV2Bridge.Service
+        const state = { calls: 0 }
+        const stalled: typeof events = {
+          ...events,
+          publish: () => {
+            state.calls++
+            return Effect.die(new Error("injected notification failure"))
+          },
+        }
+        const { ctx, calls } = makeCtx()
+        const call = { ...ctx, callID: "notification-recovery" }
+        const patchText = "*** Begin Patch\n*** Add File: notification.txt\n+committed\n*** End Patch"
+        yield* expectFailure(
+          execute({ patchText }, call).pipe(Effect.provideService(EventV2Bridge.Service, stalled)),
+          "injected notification failure",
+        )
+        expect(state.calls).toBe(1)
+        expect(yield* readText(path.join(test.directory, "notification.txt"))).toBe("committed\n")
+
+        const result = yield* execute({ patchText }, call).pipe(Effect.provideService(EventV2Bridge.Service, stalled))
+        expect(result.output).toContain("A notification.txt")
+        expect(state.calls).toBe(1)
+        expect(calls).toHaveLength(1)
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "retries safely when admission fails after the durable intent",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const storage = yield* Storage.Service
+        const state = { failed: false }
+        const stalled: Storage.Interface = {
+          ...storage,
+          create: (key, content) => {
+            if (!state.failed && key[0] === "raya" && key[1] === "file-transaction-active") {
+              state.failed = true
+              return Effect.die(new Error("injected admission failure"))
+            }
+            return storage.create(key, content)
+          },
+        }
+        const { ctx, calls } = makeCtx()
+        const call = { ...ctx, callID: "intent-recovery" }
+        const patchText = "*** Begin Patch\n*** Add File: intent-retry.txt\n+created\n*** End Patch"
+        yield* expectFailure(
+          execute({ patchText }, call).pipe(Effect.provideService(Storage.Service, stalled)),
+          "injected admission failure",
+        )
+        expect(state.failed).toBe(true)
+        yield* expectReadFailure(path.join(test.directory, "intent-retry.txt"))
+
+        const result = yield* execute({ patchText }, call)
+        expect(result.output).toContain("A intent-retry.txt")
+        expect(calls).toHaveLength(2)
+        expect(yield* readText(path.join(test.directory, "intent-retry.txt"))).toBe("created\n")
+      }),
+    { git: true },
+  )
+  // kilocode_change end
+
   it.instance("applies multiple hunks to one file", () =>
     Effect.gen(function* () {
       const test = yield* TestInstance

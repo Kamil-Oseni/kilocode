@@ -2,4 +2,4 @@
 "@kilocode/cli": patch
 ---
 
-Recover interrupted verified file transactions according to their durable commit or rollback decision.
+Apply reviewed multi-file patches as one recoverable transaction and resume interrupted work according to its durable commit or rollback decision.

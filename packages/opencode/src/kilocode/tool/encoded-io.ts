@@ -48,6 +48,8 @@ export const anchor = (
 export const validate = (path: string, proof: { readonly dev: string; readonly ino: string }, sha256: string) =>
   validateFile(path, proof, sha256).pipe(Effect.mapError(wrap))
 
+export const encode = (text: string, encoding: string = Encoding.DEFAULT) => Encoding.encode(text, encoding)
+
 export const exclusive = (fs: FSUtil.Interface, path: string, text: string, encoding: string = Encoding.DEFAULT) =>
   Effect.gen(function* () {
     yield* ensureDirectory(fs, dirname(path))

@@ -1,4 +1,5 @@
 import * as path from "path"
+import { createHash } from "node:crypto" // kilocode_change
 import { Effect, Schema } from "effect"
 import * as Tool from "./tool"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -20,6 +21,8 @@ import { Format } from "../format"
 import * as Bom from "@/util/bom"
 import { assertMutablePath } from "../kilocode/agent-manager/protection" // kilocode_change
 import { RayaPath } from "@/kilocode/task/path-boundary" // kilocode_change
+import { Storage } from "@/storage/storage" // kilocode_change
+import { transact, type Item } from "@/kilocode/tool/apply-patch-transaction" // kilocode_change
 
 export const Parameters = Schema.Struct({
   patchText: Schema.String.annotate({ description: "The full patch text that describes all changes to be made" }),
@@ -32,6 +35,7 @@ export const ApplyPatchTool = Tool.define(
     const afs = yield* FSUtil.Service
     const format = yield* Format.Service
     const events = yield* EventV2Bridge.Service
+    const storage = yield* Storage.Service // kilocode_change - durable all-file transaction journal
 
     const run = Effect.fn("ApplyPatchTool.execute")(function* (
       params: Schema.Schema.Type<typeof Parameters>,
@@ -355,80 +359,109 @@ export const ApplyPatchTool = Tool.define(
       }
       // kilocode_change end
 
-      // Apply the changes
-      const updates: Array<{ file: string; event: "add" | "change" | "unlink" }> = []
+      // kilocode_change start - apply the complete reviewed set as one durable transaction
+      const invocation = JSON.stringify([
+        ctx.sessionID,
+        ctx.messageID,
+        ctx.callID || createHash("sha256").update(params.patchText).digest("hex"),
+        instance.worktree,
+      ])
+      const seed = createHash("sha256").update(invocation).digest("hex").slice(0, 32)
+      const items: Item[] = []
+      const append = (input: {
+        kind: "create" | "replace" | "remove"
+        target: string
+        data?: Uint8Array
+        review?: { readonly identity: { readonly dev: string; readonly ino: string }; readonly sha256: string }
+        anchor?: { readonly path: string; readonly identity: { readonly dev: string; readonly ino: string } }
+      }) => {
+        const index = items.length
+        const stem = path.join(path.dirname(input.target), `.raya-txn-${seed}-${index}`)
+        const result = input.data
+          ? { sha256: createHash("sha256").update(input.data).digest("hex") }
+          : undefined
+        items.push({
+          entry: {
+            kind: input.kind,
+            target: input.target,
+            ...(input.kind !== "remove" ? { stage: `${stem}.stage`, result } : {}),
+            ...(input.kind !== "create" ? { hold: `${stem}.hold`, review: input.review } : {}),
+            ...(input.kind === "create" ? { anchor: input.anchor } : {}),
+          },
+          ...(input.data ? { data: input.data } : {}),
+        })
+      }
+      for (const change of fileChanges) {
+        const source = targets.get(change.filePath)!
+        const data =
+          change.type === "delete"
+            ? undefined
+            : EncodedIO.encode(Bom.join(change.newContent, change.bom), change.encoding)
+        const review = change.proof && change.sha256 ? { identity: change.proof, sha256: change.sha256 } : undefined
+        if (change.type === "add") {
+          append({
+            kind: review ? "replace" : "create",
+            target: source,
+            data,
+            review,
+            anchor: change.destinationAnchor,
+          })
+          continue
+        }
+        if (change.type === "update") {
+          append({ kind: "replace", target: source, data, review })
+          continue
+        }
+        if (change.type === "delete") {
+          append({ kind: "remove", target: source, review })
+          continue
+        }
+        const destination = targets.get(change.movePath!)!
+        const prior =
+          change.destinationProof && change.destinationSha256
+            ? { identity: change.destinationProof, sha256: change.destinationSha256 }
+            : undefined
+        append({
+          kind: prior ? "replace" : "create",
+          target: destination,
+          data,
+          review: prior,
+          anchor: change.destinationAnchor,
+        })
+        append({ kind: "remove", target: source, review })
+      }
+      const digest = createHash("sha256")
+        .update(
+          JSON.stringify(
+            items.map((item) => ({
+              entry: item.entry,
+              data: item.data ? createHash("sha256").update(item.data).digest("hex") : undefined,
+            })),
+          ),
+        )
+        .digest("hex")
+      yield* transact(storage, { invocation, digest, workspace: instance.worktree, items })
 
+      const updates: Array<{ file: string; event: "add" | "change" | "unlink" }> = []
       for (const change of fileChanges) {
         const edited = change.type === "delete" ? undefined : (change.movePath ?? change.filePath)
         switch (change.type) {
           case "add":
-            // Create parent directories (recursive: true is safe on existing/root dirs)
-            // kilocode_change start - overwrite only the exact existing file that was reviewed
-            if (change.proof && change.sha256) {
-              yield* EncodedIO.checked(
-                targets.get(change.filePath)!,
-                Bom.join(change.newContent, change.bom),
-                change.encoding,
-                change.proof,
-                change.sha256,
-              )
-            } else {
-              yield* EncodedIO.anchored(
-                targets.get(change.filePath)!,
-                Bom.join(change.newContent, change.bom),
-                change.destinationAnchor!,
-                change.encoding,
-              )
-            }
-            // kilocode_change end
             updates.push({ file: change.filePath, event: "add" })
             break
 
           case "update":
-            yield* EncodedIO.checked(
-              // kilocode_change - refuse stale content, replacements, and hard links
-              targets.get(change.filePath)!,
-              Bom.join(change.newContent, change.bom),
-              change.encoding,
-              change.proof!,
-              change.sha256!,
-            )
             updates.push({ file: change.filePath, event: "change" })
             break
 
           case "move":
             if (change.movePath) {
-              // Create parent directories (recursive: true is safe on existing/root dirs)
-              // kilocode_change start - bind both ends of an overwrite move to reviewed bytes
-              const destination = targets.get(change.movePath)!
-              if (change.destinationProof && change.destinationSha256) {
-                yield* EncodedIO.checked(
-                  destination,
-                  Bom.join(change.newContent, change.bom),
-                  change.encoding,
-                  change.destinationProof,
-                  change.destinationSha256,
-                )
-              } else {
-                yield* EncodedIO.anchored(
-                  destination,
-                  Bom.join(change.newContent, change.bom),
-                  change.destinationAnchor!,
-                  change.encoding,
-                )
-              }
-              const source = targets.get(change.filePath)!
-              yield* EncodedIO.remove(source, change.proof!, change.sha256!)
-              // kilocode_change end
               updates.push({ file: change.filePath, event: "unlink" })
               updates.push({ file: change.movePath, event: "add" })
             }
             break
 
           case "delete":
-            // kilocode_change start - recheck immediately before the pathname removal
-            yield* EncodedIO.remove(targets.get(change.filePath)!, change.proof!, change.sha256!)
-            // kilocode_change end
             updates.push({ file: change.filePath, event: "unlink" })
             break
         }
@@ -437,6 +470,7 @@ export const ApplyPatchTool = Tool.define(
           yield* events.publish(FileSystem.Event.Edited, { file: edited })
         }
       }
+      // kilocode_change end
 
       // Publish file change events
       for (const update of updates) {

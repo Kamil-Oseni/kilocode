@@ -1,5 +1,6 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, setDefaultTimeout } from "bun:test" // kilocode_change
 import path from "path"
+import { createHash } from "node:crypto" // kilocode_change
 import { tmpdir } from "os" // kilocode_change
 import * as fs from "fs/promises"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -11,13 +12,17 @@ import { Format } from "../../src/format"
 import { Agent } from "../../src/agent/agent"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { Truncate } from "@/tool/truncate"
+import { Storage } from "@/storage/storage" // kilocode_change
+import { journals } from "@/kilocode/tool/mutation-journal" // kilocode_change
+
+setDefaultTimeout(15_000) // kilocode_change - durable storage initialization can exceed Bun's five-second default on Windows
 import { TestInstance } from "../fixture/fixture"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(
   LayerNode.compile(
-    LayerNode.group([LSP.node, FSUtil.node, Format.node, EventV2Bridge.node, Truncate.node, Agent.node]),
+    LayerNode.group([LSP.node, FSUtil.node, Format.node, EventV2Bridge.node, Truncate.node, Agent.node, Storage.node]), // kilocode_change
   ),
 )
 
@@ -124,6 +129,20 @@ describe("tool.apply_patch freeform", () => {
           "*** Begin Patch\n*** Add File: nested/new.txt\n+created\n*** Delete File: delete.txt\n*** Update File: modify.txt\n@@\n-line2\n+changed\n*** End Patch"
 
         const result = yield* execute({ patchText }, ctx)
+
+        // kilocode_change start - the public tool must reach a durable whole-patch commit, not its legacy write loop
+        const storage = yield* Storage.Service
+        const invocation = JSON.stringify([
+          ctx.sessionID,
+          ctx.messageID,
+          createHash("sha256").update(patchText).digest("hex"),
+          test.directory,
+        ])
+        const outcome = yield* journals(storage).get(invocation)
+        expect(outcome?.phase).toBe("done")
+        expect(outcome?.decision).toBe("commit")
+        expect((yield* Effect.promise(() => fs.readdir(test.directory))).some((name) => name.startsWith(".raya-txn-"))).toBe(false)
+        // kilocode_change end
 
         expect(result.title).toContain("Success. Updated the following files")
         expect(result.output).toContain("Success. Updated the following files")

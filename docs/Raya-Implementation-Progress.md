@@ -2,6 +2,14 @@
 
 Source of scope: [Comprehensive audit](Raya-Comprehensive-Audit.md). All sections and all ten overhauls remain in scope. Work proceeds in dependency order, with broader validation batched at checkpoints. A completed subtask does not mean the overall overhaul is complete.
 
+## ChatGPT 2026-09-13 23:27 America/Toronto - generated-artifact goal integration installed
+
+**Status: installed from source commit `d033cbda64`; pushed.** The authorized one-process low-memory workflow regenerated the SDK without tracked drift, rebuilt and smoke-tested the Windows x64 CLI, ran extension-host and webview typechecks sequentially, ran cached ESLint and production bundling, then packaged and installed `eden.raya@7.4.23-snapshot+d033cbda64.kamil-oseni.1789356249408`. This is the first installed package that connects native Word, Excel and PowerPoint creation plus generated images to OVR-06's revision-safe goal deliverable inventory.
+
+The verified package-vault artifact is `raya.0ad465f78888ef8d4db0767787ee9b3852082e0e2e9ecb0483a3810a1418e7a8.vsix`, 518,697,787 bytes, SHA-256 `0AD465F78888EF8D4DB0767787EE9B3852082E0E2E9ECB0483A3810A1418E7A8`; packaging reports 431 files. The installed 230,067,712-byte `bin/kilo.exe` hashes to `45A1A053072004185BE26D68972B4E827690FAB9FA56DCD2F13DB13217AB9BD5`, exactly matching the vault receipt. The installed directory timestamp is 2026-09-13 23:26:47 -04:00 and its manifest exposes the exact version.
+
+Retention removed one old vault package, one staged package and one stale extracted extension. Staging contains zero files; the vault is bounded at three verified packages totaling 1,556,013,687 bytes / 1.449 GiB; no Bun process remains; and C has 89.350 GiB free. `HEAD` and `origin/main` both resolve to `d033cbda64`, the regenerated SDK is clean, and the only untracked paths are the user's two preserved documentation files. The vault active pointer still names digest `8261c1eb...` for running source `846c527c1b`; installation is proven, while activation and real-chat acceptance of generated-artifact goal retention require a VS Code reload and remain unclaimed.
+
 ## ChatGPT 2026-09-13 23:22 America/Toronto - generated images retained by goals
 
 **Status: delivered in product commit `f8e8db898b`; pushed.** OVR-06 now treats `generate_image` as a first-class revision-safe file source. After the provider returns an image and Raya writes the approved destination, the tool captures the actual local bytes with the shared artifact service and publishes that receipt beside the existing provider billing receipt. A cited successful image result can therefore enter the goal deliverable inventory with its exact path, SHA-256, producer and evidence identity. Completion revalidates the current file; a later replacement or deletion cannot pass from the older image receipt. Provider response text, base64 data and attachment URLs are never parsed as goal evidence.
@@ -430,7 +438,7 @@ This checkpoint delivers explicit organization delegation permissions, admission
 
 ## Current work
 
-Latest pushed product checkpoint: `f8e8db898b`. Latest verified installed snapshot source: `826762b910`, installed as `eden.raya@7.4.23-snapshot+826762b910.kamil-oseni.1789354709135`. The package and embedded CLI identities are verified; the open VS Code host still runs `846c527c1b` until reload. Native XLSX/DOCX/PPTX creation, PPTX extraction, Excel number/currency/percentage formats and bounded snapshot retention are installed. Goal retention of generated Office and image artifacts is pushed and awaits the next batched snapshot. Full live rebuild-survival acceptance, paid Live voice/device acceptance, the Go companion rebuild and the remaining audit work stay open.
+Latest pushed product and documentation source: `d033cbda64`. Latest verified installed snapshot source: `d033cbda64`, installed as `eden.raya@7.4.23-snapshot+d033cbda64.kamil-oseni.1789356249408`. The package and embedded CLI identities are verified; the open VS Code host still runs `846c527c1b` until reload. Native XLSX/DOCX/PPTX creation, PPTX extraction, Excel number/currency/percentage formats, bounded snapshot retention and goal retention of generated Office and image artifacts are installed. Post-reload real-chat acceptance of the newest goal contract, full live rebuild-survival acceptance, paid Live voice/device acceptance, the Go companion rebuild and the remaining audit work stay open.
 
 The browser simplification is delivered through source, tests, push and installed snapshot. Durable spoken snapshots, warm handoff, live device/provider acceptance, organization delegation/provisioning and the full 39-requirement audit remain open.
 

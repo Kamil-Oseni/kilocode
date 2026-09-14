@@ -616,29 +616,30 @@ export namespace RayaTaskRunner {
     const close = Effect.fn("RayaTaskRunner.closeErrand")(function* (run: RayaTask.Run) {
       if (!errands) return
       const row = yield* errands.bySession(run.sessionID)
-      if (!row) return
-      const recipient = yield* tasks.get(row.recipientID)
-      const state =
-        run.status === "complete"
-          ? ("completed" as const)
-          : run.status === "blocked" && run.blockedReason === WAIT
-            ? ("needs_input" as const)
-            : run.status === "blocked" || run.status === "error"
-              ? ("failed" as const)
-              : undefined
-      if (!state) return
-      yield* errands
-        .finish(row.id, state, recipient, run.outcome?.summary, run.outcome?.cost, run.blockedReason)
-        .pipe(
-          Effect.catch((error) =>
-            typeof error === "object" &&
-            error !== null &&
-            "_tag" in error &&
-            error._tag === "RayaTaskDelegation.Conflict"
-              ? Effect.void
-              : Effect.die(error),
-          ),
-        )
+      const recipient = yield* tasks.get(row?.recipientID ?? run.agentID)
+      if (row) {
+        const state =
+          run.status === "complete"
+            ? ("completed" as const)
+            : run.status === "blocked" && run.blockedReason === WAIT
+              ? ("needs_input" as const)
+              : run.status === "blocked" || run.status === "error"
+                ? ("failed" as const)
+                : undefined
+        if (!state) return
+        yield* errands
+          .finish(row.id, state, recipient, run.outcome?.summary, run.outcome?.cost, run.blockedReason)
+          .pipe(
+            Effect.catch((error) =>
+              typeof error === "object" &&
+              error !== null &&
+              "_tag" in error &&
+              error._tag === "RayaTaskDelegation.Conflict"
+                ? Effect.void
+                : Effect.die(error),
+            ),
+          )
+      }
       if (yield* busy(recipient.id)) return
       const taken = yield* errands.take(recipient.id)
       if (!taken) return

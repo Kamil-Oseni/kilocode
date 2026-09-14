@@ -517,6 +517,7 @@ export namespace RayaTaskDelegation {
       if (!policy) return false
       return yield* policy({
         id: row.organizationID,
+        revision: row.organizationRevision,
         senderID: row.senderID,
         recipientID: row.recipientID,
       }).pipe(

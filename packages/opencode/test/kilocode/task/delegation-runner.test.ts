@@ -7,6 +7,7 @@ import { SessionID } from "@/session/schema"
 import { RayaTask } from "@/kilocode/task"
 import { RayaTaskDelegation } from "@/kilocode/task/delegation"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
+import { RayaTaskOrganization } from "@/kilocode/task/organization"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
 
@@ -120,13 +121,15 @@ test("chief of staff obtains a tracked accounting result without rewriting eithe
       expect(saved?.objective).toContain("unchanged")
       expect((yield* runner.tasks.get(chief.id)).objective).toBe("Coordinate Friday close.")
       expect((yield* runner.tasks.get(books.id)).objective).toBe("Reconcile receipts.")
-      expect((yield* runner.delegate({
-        source: "dlg_friday",
-        senderID: chief.id,
-        recipientID: books.id,
-        objective: "List missing Friday receipts.",
-        expected: "Named missing receipts, not a payment.",
-      })).state).toBe("running")
+      expect(
+        (yield* runner.delegate({
+          source: "dlg_friday",
+          senderID: chief.id,
+          recipientID: books.id,
+          objective: "List missing Friday receipts.",
+          expected: "Named missing receipts, not a payment.",
+        })).state,
+      ).toBe("running")
       expect(starts).toEqual(["start"])
       const paused = yield* runner.tasks.create({
         name: "Quiet",
@@ -143,6 +146,163 @@ test("chief of staff obtains a tracked accounting result without rewriting eithe
         objective: "Review the Friday close.",
       })
       expect(denied.state).toBe("failed")
+      expect(starts).toEqual(["start"])
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
+test("queued organization work cannot start under a later company revision", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const starts: string[] = []
+      const runner = RayaTaskRunner.make({
+        database,
+        storage,
+        sessions: {
+          create: () =>
+            Effect.sync(() => {
+              starts.push("start")
+              return session("ses_stale_organization")
+            }),
+          get: () => Effect.die("unused"),
+          messages: () => Effect.succeed([]),
+          children: () => Effect.succeed([]),
+        },
+      })
+      const chief = yield* runner.tasks.create({
+        name: "Chief",
+        objective: "Assign work",
+        access: "brief",
+        schedule: { kind: "manual" },
+      })
+      const books = yield* runner.tasks.create({
+        name: "Books",
+        role: "accountant",
+        objective: "Review accounts",
+        capabilities: ["accounting"],
+        access: "brief",
+        schedule: { kind: "manual" },
+      })
+      const organizations = RayaTaskOrganization.make(database, runner.tasks, storage)
+      const organization = yield* organizations.create({
+        name: "Company",
+        members: [
+          { agentID: chief.id, role: "Chief" },
+          { agentID: books.id, role: "Books" },
+        ],
+        delegations: [{ senderID: chief.id, recipientID: books.id }],
+      })
+      const outsider = yield* runner.tasks.create({
+        name: "Outside lead",
+        objective: "Assign independent work",
+        access: "brief",
+        schedule: { kind: "manual" },
+      })
+      const first = yield* runner.delegate({
+        source: "dlg_first",
+        senderID: outsider.id,
+        recipientID: books.id,
+        objective: "Complete the earlier review.",
+      })
+      expect(first.state).toBe("running")
+      const queued = yield* runner.delegate({
+        source: "dlg_stale_organization",
+        senderID: chief.id,
+        recipientID: books.id,
+        organizationID: organization.id,
+        organizationRevision: organization.revision,
+        objective: "Review this company close.",
+      })
+      expect(queued.state).toBe("queued")
+      yield* organizations.update(organization.id, { expectedRevision: 1, name: "Renamed company" })
+      const now = Date.now()
+      yield* storage.write(["raya", "goal", first.sessionID!], {
+        objective: "Complete the earlier review.",
+        status: "complete",
+        createdAt: now,
+        updatedAt: now,
+        usage: { turns: 1, continuations: 0, toolCalls: 0 },
+        progress: [],
+        audit: { summary: "Earlier review complete.", verifiedAt: now, requirements: [] },
+      })
+
+      yield* runner.settle(first.sessionID!)
+      const stopped = yield* RayaTaskDelegation.make(database).get(queued.id)
+      expect(stopped.state).toBe("failed")
+      expect(stopped.reason).toBe("The organization no longer authorizes this delegation.")
+      expect(starts).toEqual(["start"])
+      expect((yield* runner.tasks.runsFor(books.id)).filter((run) => run.status === "running")).toEqual([])
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
+test("a completed manual run releases the worker's next queued delegation", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const starts: string[] = []
+      const runner = RayaTaskRunner.make({
+        database,
+        storage,
+        sessions: {
+          create: () =>
+            Effect.sync(() => {
+              starts.push("start")
+              return session("ses_queued_after_manual")
+            }),
+          get: () => Effect.die("unused"),
+          messages: () => Effect.succeed([]),
+          children: () => Effect.succeed([]),
+        },
+      })
+      const sender = yield* runner.tasks.create({
+        name: "Sender",
+        objective: "Assign work",
+        access: "brief",
+        schedule: { kind: "manual" },
+      })
+      const recipient = yield* runner.tasks.create({
+        name: "Recipient",
+        objective: "Complete work",
+        access: "brief",
+        schedule: { kind: "manual" },
+      })
+      const sid = SessionID.make("ses_manual_busy")
+      yield* runner.tasks.record({
+        id: "run_manual_busy",
+        agentID: recipient.id,
+        at: 1,
+        sessionID: sid,
+        status: "running",
+      })
+      const queued = yield* runner.delegate({
+        source: "dlg_after_manual",
+        senderID: sender.id,
+        recipientID: recipient.id,
+        objective: "Start after the manual review.",
+      })
+      expect(queued.state).toBe("queued")
+      const now = Date.now()
+      yield* storage.write(["raya", "goal", sid], {
+        objective: "Complete work",
+        status: "complete",
+        createdAt: now,
+        updatedAt: now,
+        usage: { turns: 1, continuations: 0, toolCalls: 0 },
+        progress: [],
+        audit: { summary: "Manual review complete.", verifiedAt: now, requirements: [] },
+      })
+
+      yield* runner.settle(sid)
+      const started = yield* RayaTaskDelegation.make(database).get(queued.id)
+      expect(started.state).toBe("running")
+      expect(started.sessionID).toBe(SessionID.make("ses_queued_after_manual"))
+      expect(starts).toEqual(["start"])
+      expect((yield* runner.tasks.runsFor(recipient.id)).filter((run) => run.status === "running")).toHaveLength(1)
+      yield* runner.settle(sid)
       expect(starts).toEqual(["start"])
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
@@ -539,7 +699,11 @@ test("stopping a parent keeps a completed child result", async () => {
       expect(kept.state).toBe("completed")
       const run = (yield* runner.tasks.runsFor(legal.id)).at(-1)
       expect(run).toBeDefined()
-      yield* runner.tasks.transition(run!, { ...run!, status: "complete", outcome: { kind: "notify", summary: "Named missing receipts.", cost: 0 } })
+      yield* runner.tasks.transition(run!, {
+        ...run!,
+        status: "complete",
+        outcome: { kind: "notify", summary: "Named missing receipts.", cost: 0 },
+      })
       const stopped = yield* runner.stop(parent.id)
       expect(stopped.state).toBe("cancelled")
       expect((yield* store.get(child.id)).state).toBe("completed")

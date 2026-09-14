@@ -65,14 +65,19 @@ test("organization-scoped delegation persists admission provenance and revalidat
       const database = yield* Database.Service
       const organizationID = "org_11111111111111111111111111111111"
       const allowed = { current: true }
+      const revisions: Array<number | undefined> = []
       const policy = (input: { id: string; revision?: number; senderID: string; recipientID: string }) =>
-        allowed.current &&
-        input.id === organizationID &&
-        input.senderID === "chief" &&
-        input.recipientID === "books" &&
-        (input.revision === undefined || input.revision === 3)
-          ? Effect.succeed({ id: organizationID, name: "Website Builders", revision: 3 })
-          : Effect.fail(new Error("denied"))
+        Effect.sync(() => revisions.push(input.revision)).pipe(
+          Effect.andThen(
+            allowed.current &&
+              input.id === organizationID &&
+              input.senderID === "chief" &&
+              input.recipientID === "books" &&
+              input.revision === 3
+              ? Effect.succeed({ id: organizationID, name: "Website Builders", revision: 3 })
+              : Effect.fail(new Error("denied")),
+          ),
+        )
       const store = RayaTaskDelegation.make(database, policy, () => Effect.succeed(true))
       const chief = agent("chief", "generalist")
       const books = agent("books", "accountant")
@@ -88,6 +93,7 @@ test("organization-scoped delegation persists admission provenance and revalidat
       })
       const taken = (yield* store.take(books.id))!
       expect(yield* store.authorize(taken)).toBe(true)
+      expect(revisions).toEqual([3, 3])
       allowed.current = false
       expect(yield* store.authorize(taken)).toBe(false)
       expect(

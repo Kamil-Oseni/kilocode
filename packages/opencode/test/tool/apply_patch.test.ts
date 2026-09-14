@@ -438,6 +438,29 @@ describe("tool.apply_patch freeform", () => {
     }),
   )
 
+  it.instance("refuses an add after its reviewed parent directory is replaced", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const parent = path.join(test.directory, "reviewed")
+      const moved = path.join(test.directory, "moved")
+      yield* makeDir(parent)
+      const { ctx } = makeCtx()
+      const changed = {
+        ...ctx,
+        ask: () =>
+          Effect.promise(async () => {
+            await fs.rename(parent, moved)
+            await fs.mkdir(parent)
+          }),
+      }
+      const patchText = "*** Begin Patch\n*** Add File: reviewed/private.txt\n+private content\n*** End Patch"
+
+      yield* expectFailure(execute({ patchText }, changed), "parent changed after approval")
+      expect(yield* Effect.promise(() => Bun.file(path.join(parent, "private.txt")).exists())).toBe(false)
+      expect(yield* Effect.promise(() => Bun.file(path.join(moved, "private.txt")).exists())).toBe(false)
+    }),
+  )
+
   it.instance("preserves a changed move destination and its source", () =>
     Effect.gen(function* () {
       const test = yield* TestInstance
@@ -456,6 +479,33 @@ describe("tool.apply_patch freeform", () => {
       yield* expectFailure(execute({ patchText }, changed), "changed after approval")
       expect(yield* readText(source)).toBe("source before\n")
       expect(yield* readText(destination)).toBe("newer destination\n")
+    }),
+  )
+
+  it.instance("preserves a move source after its missing destination parent is replaced", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const source = path.join(test.directory, "source.txt")
+      const parent = path.join(test.directory, "reviewed")
+      const moved = path.join(test.directory, "moved")
+      yield* writeText(source, "source before\n")
+      yield* makeDir(parent)
+      const { ctx } = makeCtx()
+      const changed = {
+        ...ctx,
+        ask: () =>
+          Effect.promise(async () => {
+            await fs.rename(parent, moved)
+            await fs.mkdir(parent)
+          }),
+      }
+      const patchText =
+        "*** Begin Patch\n*** Update File: source.txt\n*** Move to: reviewed/private.txt\n@@\n-source before\n+source after\n*** End Patch"
+
+      yield* expectFailure(execute({ patchText }, changed), "parent changed after approval")
+      expect(yield* readText(source)).toBe("source before\n")
+      expect(yield* Effect.promise(() => Bun.file(path.join(parent, "private.txt")).exists())).toBe(false)
+      expect(yield* Effect.promise(() => Bun.file(path.join(moved, "private.txt")).exists())).toBe(false)
     }),
   )
 

@@ -78,6 +78,7 @@ export const ApplyPatchTool = Tool.define(
         destinationProof?: { readonly dev: string; readonly ino: string }
         destinationSha256?: string
         destinationExists?: boolean
+        destinationAnchor?: { readonly path: string; readonly identity: { readonly dev: string; readonly ino: string } }
         // kilocode_change end
       }> = []
       const targets = new Map<string, string>() // kilocode_change - retain each canonical target through approval
@@ -119,6 +120,7 @@ export const ApplyPatchTool = Tool.define(
             }
             const prior = stats ? yield* EncodedIO.read(afs, target) : undefined
             const proof = stats ? yield* EncodedIO.identity(target) : undefined
+            const anchor = stats ? undefined : yield* EncodedIO.anchor(afs, path.dirname(target))
             // kilocode_change end
             const oldContent = ""
             const newContent =
@@ -146,6 +148,7 @@ export const ApplyPatchTool = Tool.define(
               proof, // kilocode_change
               sha256: prior?.sha256, // kilocode_change
               destinationExists: Boolean(stats), // kilocode_change
+              destinationAnchor: anchor, // kilocode_change
             })
 
             totalDiff += diff + "\n"
@@ -244,6 +247,8 @@ export const ApplyPatchTool = Tool.define(
                 const prior = yield* EncodedIO.read(afs, destination)
                 change.destinationProof = yield* EncodedIO.identity(destination)
                 change.destinationSha256 = prior.sha256
+              } else {
+                change.destinationAnchor = yield* EncodedIO.anchor(afs, path.dirname(destination))
               }
             }
             // kilocode_change end
@@ -368,10 +373,10 @@ export const ApplyPatchTool = Tool.define(
                 change.sha256,
               )
             } else {
-              yield* EncodedIO.exclusive(
-                afs,
+              yield* EncodedIO.anchored(
                 targets.get(change.filePath)!,
                 Bom.join(change.newContent, change.bom),
+                change.destinationAnchor!,
                 change.encoding,
               )
             }
@@ -405,7 +410,12 @@ export const ApplyPatchTool = Tool.define(
                   change.destinationSha256,
                 )
               } else {
-                yield* EncodedIO.exclusive(afs, destination, Bom.join(change.newContent, change.bom), change.encoding)
+                yield* EncodedIO.anchored(
+                  destination,
+                  Bom.join(change.newContent, change.bom),
+                  change.destinationAnchor!,
+                  change.encoding,
+                )
               }
               const source = targets.get(change.filePath)!
               yield* EncodedIO.remove(source, change.proof!, change.sha256!)

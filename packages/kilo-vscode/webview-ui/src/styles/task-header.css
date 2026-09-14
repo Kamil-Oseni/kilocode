@@ -703,7 +703,11 @@ html[data-theme="kilo-vscode"] [data-slot="task-header-title-label"] {
    the well with a dark top-inset plus a light lower-edge inset, instead of a flat
    single shadow that just read as a raised chip. Theme-aware to match Eden. */
 .usage-history__ranges button[data-active] {
-  background: color-mix(in srgb, var(--text-base, var(--vscode-foreground)) 10%, var(--surface-raised-base, var(--vscode-editor-background)));
+  background: color-mix(
+    in srgb,
+    var(--text-base, var(--vscode-foreground)) 10%,
+    var(--surface-raised-base, var(--vscode-editor-background))
+  );
   color: var(--text-strong, var(--vscode-foreground));
   box-shadow:
     inset -1px -1px 2px rgba(255, 255, 255, 0.1),
@@ -743,6 +747,22 @@ html[data-theme="kilo-vscode"] [data-slot="task-header-title-label"] {
 .usage-history__model strong {
   color: var(--text-strong, var(--vscode-foreground));
   font-weight: 600;
+}
+
+@media (max-width: 420px) {
+  .usage-history__charge {
+    grid-template-columns: minmax(0, 1fr) max-content;
+  }
+
+  .usage-history__charge span:nth-child(2) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .usage-history__charge strong {
+    grid-column: 2;
+    grid-row: 1;
+  }
 }
 /* raya_change end */
 

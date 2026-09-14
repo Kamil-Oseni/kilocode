@@ -322,7 +322,7 @@ export const KilocodeApi = HttpApi.make("kilocode")
         ),
         HttpApiEndpoint.get("projectUsage", KilocodePaths.projectUsage, {
           query: ProjectUsageQuery,
-          success: described(ProjectUsage.Info, "Project model token and cost history"),
+          success: described(ProjectUsage.Info, "Project model and non-model usage history"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "kilocode.projectUsage",

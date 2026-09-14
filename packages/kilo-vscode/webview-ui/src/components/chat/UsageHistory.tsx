@@ -35,23 +35,28 @@ export const UsageHistoryView: Component<{
   notice?: string
 }> = (props) => {
   const groups = createMemo(() => groupModelUsage(props.usage?.models ?? [], props.providers))
+  const charges = () => props.usage?.charges
   const tokens = (usage: ProjectUsage["totals"]) =>
     usage.tokens.input +
     usage.tokens.output +
     usage.tokens.reasoning +
     usage.tokens.cache.read +
     usage.tokens.cache.write
+  const money = (item: ProjectUsage["charges"]["items"][number]) => {
+    if (!item.currency || !item.recorded || item.amount === undefined) return "Amount unavailable"
+    return new Intl.NumberFormat(props.locale, { style: "currency", currency: item.currency }).format(item.amount)
+  }
 
   return (
-    <section class="usage-history" aria-label="Model usage history">
+    <section class="usage-history" aria-label="Project usage history">
       <header>
         <div>
-          <h4>Model spend</h4>
+          <h4>Project spend</h4>
           <Show when={props.usage}>
             {(data) => (
               <span>
                 {costLabel(data().totals, props.locale)} · {formatCompactCount(tokens(data().totals))} tokens ·{" "}
-                {data().sessions} sessions
+                {data().sessions} model sessions
               </span>
             )}
           </Show>
@@ -86,11 +91,22 @@ export const UsageHistoryView: Component<{
       <Show when={props.usage}>
         {(data) => (
           <p class="usage-history__empty">
-            Settled model steps ·{" "}
+            Recorded activity ·{" "}
             {data().since === undefined ? "All recorded time" : new Date(data().since!).toISOString()} through{" "}
-            {new Date(data().until).toISOString()} (UTC). Tools and media may be billed separately.
+            {new Date(data().until).toISOString()} (UTC). Model costs and other charges stay separate.
           </p>
         )}
+      </Show>
+      <Show when={props.usage && !charges()}>
+        <p role="status" class="usage-history__empty">
+          Other charge history isn't available from this backend.
+        </p>
+      </Show>
+      <Show when={charges()?.unreadable || charges()?.conflicts}>
+        <p role="alert" class="usage-history__empty">
+          {charges()!.unreadable} goal records couldn't be read. {charges()!.conflicts} conflicting receipts were left
+          out.
+        </p>
       </Show>
       <Show when={props.notice}>
         {(notice) => (
@@ -130,6 +146,22 @@ export const UsageHistoryView: Component<{
           </div>
         )}
       </For>
+      <Show when={charges()?.items.length}>
+        <div class="usage-history__provider">
+          <h5>Other charges</h5>
+          <For each={charges()!.items}>
+            {(item) => (
+              <div class="usage-history__model usage-history__charge">
+                <span title={item.source}>{item.service ?? item.provider ?? item.source}</span>
+                <span>
+                  {item.recorded} recorded{item.unknown ? ` · ${item.unknown} amount unavailable` : ""}
+                </span>
+                <strong>{money(item)}</strong>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
     </section>
   )
 }

@@ -21,6 +21,20 @@ const [accounting, set] = createSignal({ amount: 0, reported: 0, estimated: 0, p
 const [failure, setFailure] = createSignal<string>()
 const [copying, setCopying] = createSignal(false)
 const [notice, setNotice] = createSignal<string>()
+const [charges, setCharges] = createSignal<{
+  goals: number
+  unreadable: number
+  conflicts: number
+  items: Array<{
+    currency?: string
+    provider?: string
+    service?: string
+    source: string
+    amount?: number
+    recorded: number
+    unknown: number
+  }>
+}>()
 let copies = 0
 let refreshes = 0
 const root = document.createElement("div")
@@ -43,6 +57,7 @@ const dispose = render(
         sessions: 1,
         totals: { steps: 1, cost: 0, tokens, accounting: accounting() },
         models: [{ providerID: "test", modelID: "test-model", steps: 1, cost: 0, tokens, accounting: accounting() }],
+        charges: charges()!,
       }}
     />
   ),
@@ -50,6 +65,43 @@ const dispose = render(
 )
 assert.match(root.textContent!, /Cost unavailable/)
 assert.doesNotMatch(root.textContent!, /\$0\.00/)
+assert.match(root.textContent!, /Other charge history isn't available from this backend/)
+setCharges({
+  goals: 2,
+  unreadable: 1,
+  conflicts: 1,
+  items: [
+    {
+      currency: "USD",
+      provider: "Kilo",
+      service: "Provider zero",
+      source: "provider.receipt",
+      amount: 0,
+      recorded: 1,
+      unknown: 0,
+    },
+    {
+      currency: "CAD",
+      service: "Hosting",
+      source: "external.invoice",
+      amount: 0.5,
+      recorded: 1,
+      unknown: 0,
+    },
+    {
+      currency: "USD",
+      service: "Interrupted search",
+      source: "provider-response-without-receipt",
+      recorded: 0,
+      unknown: 1,
+    },
+  ],
+})
+assert.match(root.textContent!, /Other charges/)
+assert.match(root.textContent!, /Provider zero.*1 recorded.*\$0\.00/)
+assert.match(root.textContent!, /Hosting.*1 recorded.*CA\$0\.50/)
+assert.match(root.textContent!, /Interrupted search.*1 amount unavailable.*Amount unavailable/)
+assert.match(root.textContent!, /1 goal records couldn't be read\. 1 conflicting receipts were left out\./)
 assert.equal(costLabel({ cost: 0, accounting: accounting() }, "en-US", true), "Cost unknown")
 set({ amount: 0, reported: 1, estimated: 0, partial: 0, unknown: 0, legacy: 0 })
 assert.match(root.textContent!, /\$0\.00 · reported by provider/)

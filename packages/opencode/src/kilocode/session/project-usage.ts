@@ -4,8 +4,11 @@ import { Database } from "@opencode-ai/core/database/database"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { NonNegativeInt } from "@opencode-ai/core/schema"
+import { RayaGoal } from "@/kilocode/goal"
+import { Storage } from "@/storage/storage"
 import { sql } from "drizzle-orm"
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
+import { isDeepStrictEqual } from "node:util"
 
 export namespace ProjectUsage {
   export const Range = Schema.Literals(["24h", "7d", "30d", "all"])
@@ -36,6 +39,23 @@ export namespace ProjectUsage {
 
   type Model = typeof Model.Type
 
+  const Charge = Schema.Struct({
+    currency: Schema.optional(Schema.String),
+    provider: Schema.optional(Schema.String),
+    service: Schema.optional(Schema.String),
+    source: Schema.String,
+    amount: Schema.optional(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))),
+    recorded: NonNegativeInt,
+    unknown: NonNegativeInt,
+  })
+
+  const Charges = Schema.Struct({
+    items: Schema.Array(Charge),
+    goals: NonNegativeInt,
+    unreadable: NonNegativeInt,
+    conflicts: NonNegativeInt,
+  })
+
   export const Info = Schema.Struct({
     projectID: Schema.optional(ProjectV2.ID),
     range: Range,
@@ -45,6 +65,7 @@ export namespace ProjectUsage {
     sessions: NonNegativeInt,
     totals: Usage,
     models: Schema.Array(Model),
+    charges: Charges,
   })
 
   type Row = typeof Accounting.Summary.Type & {
@@ -76,6 +97,110 @@ export namespace ProjectUsage {
       reasoning: 0,
       cache: { read: 0, write: 0 },
     },
+  })
+
+  const summarize = Effect.fn("ProjectUsage.charges")(function* (
+    projectID: ProjectV2.ID,
+    since: number | null,
+    until: number,
+  ) {
+    const { db } = yield* Database.Service
+    const storage = yield* Storage.Service
+    const rows = yield* db
+      .all<{ id: string }>(sql`SELECT id FROM session WHERE project_id = ${projectID}`)
+      .pipe(Effect.orDie)
+    const sessions = new Set(rows.map((row) => row.id))
+    const keys = yield* storage.list(["raya", "goal"]).pipe(Effect.orDie)
+    const coverage = { goals: 0, unreadable: 0, conflicts: 0 }
+    const receipts = new Map<string, RayaGoal.Charge>()
+    const conflicts = new Map<string, Set<number>>()
+    for (const key of keys) {
+      const sessionID = key[2]
+      if (!sessionID || !sessions.has(sessionID)) continue
+      coverage.goals++
+      const raw = yield* storage.read<unknown>(key).pipe(Effect.option)
+      if (Option.isNone(raw)) {
+        coverage.unreadable++
+        continue
+      }
+      const state = Schema.decodeUnknownOption(RayaGoal.State)(raw.value, { onExcessProperty: "preserve" })
+      if (Option.isNone(state)) {
+        coverage.unreadable++
+        continue
+      }
+      const charges = [
+        ...(state.value.charges ?? []),
+        ...(state.value.history?.flatMap((item) => item.charges ?? []) ?? []),
+      ]
+      for (const charge of charges) {
+        const prior = receipts.get(charge.id)
+        if (!prior) {
+          receipts.set(charge.id, charge)
+          continue
+        }
+        if (isDeepStrictEqual(prior, charge)) continue
+        const times = conflicts.get(charge.id) ?? new Set<number>()
+        times.add(prior.at)
+        times.add(charge.at)
+        conflicts.set(charge.id, times)
+      }
+    }
+    coverage.conflicts = [...conflicts.values()].filter((times) =>
+      [...times].some((at) => (since === null || at >= since) && at <= until),
+    ).length
+    const groups = new Map<
+      string,
+      {
+        currency?: string
+        provider?: string
+        service?: string
+        source: string
+        amount: number
+        recorded: number
+        unknown: number
+      }
+    >()
+    for (const charge of receipts.values()) {
+      if (conflicts.has(charge.id) || (since !== null && charge.at < since) || charge.at > until) continue
+      const key = JSON.stringify([
+        charge.currency ?? null,
+        charge.provider ?? null,
+        charge.service ?? null,
+        charge.source,
+      ])
+      const item = groups.get(key) ?? {
+        ...(charge.currency ? { currency: charge.currency } : {}),
+        ...(charge.provider ? { provider: charge.provider } : {}),
+        ...(charge.service ? { service: charge.service } : {}),
+        source: charge.source ?? "unavailable",
+        amount: 0,
+        recorded: 0,
+        unknown: 0,
+      }
+      if (charge.coverage === "recorded") {
+        item.amount += charge.amount
+        item.recorded++
+      } else item.unknown++
+      groups.set(key, item)
+    }
+    const items = [...groups.values()]
+      .map((item) => {
+        if (item.recorded) return item
+        return {
+          ...(item.currency ? { currency: item.currency } : {}),
+          ...(item.provider ? { provider: item.provider } : {}),
+          ...(item.service ? { service: item.service } : {}),
+          source: item.source,
+          recorded: item.recorded,
+          unknown: item.unknown,
+        }
+      })
+      .sort((a, b) =>
+        JSON.stringify([a.currency, a.provider, a.service, a.source]).localeCompare(
+          JSON.stringify([b.currency, b.provider, b.service, b.source]),
+        ),
+      )
+    return { items, ...coverage }
   })
 
   export const get = Effect.fn("ProjectUsage.get")(function* (
@@ -158,6 +283,17 @@ export namespace ProjectUsage {
     })
     const sessions = rows[0]?.sessions ?? 0
 
-    return { projectID, range, since: since ?? undefined, until, timezone: "UTC" as const, sessions, totals, models }
+    const charges = yield* summarize(projectID, since, until)
+    return {
+      projectID,
+      range,
+      since: since ?? undefined,
+      until,
+      timezone: "UTC" as const,
+      sessions,
+      totals,
+      models,
+      charges,
+    }
   })
 }

@@ -19254,7 +19254,7 @@ export type KilocodeProjectUsageError = KilocodeProjectUsageErrors[keyof Kilocod
 
 export type KilocodeProjectUsageResponses = {
   /**
-   * Project model token and cost history
+   * Project model and non-model usage history
    */
   200: {
     projectID?: string
@@ -19307,6 +19307,20 @@ export type KilocodeProjectUsageResponses = {
         }
       }
     }>
+    charges: {
+      items: Array<{
+        currency?: string
+        provider?: string
+        service?: string
+        source: string
+        amount?: number
+        recorded: number
+        unknown: number
+      }>
+      goals: number
+      unreadable: number
+      conflicts: number
+    }
   }
 }
 

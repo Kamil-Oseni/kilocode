@@ -5,7 +5,7 @@ import path from "node:path"
 const root = path.join(import.meta.dir, "../..")
 
 describe("model usage history", () => {
-  it("requests selectable project ranges and renders per-model token cost rows", async () => {
+  it("requests selectable project ranges and renders model plus non-model usage rows", async () => {
     const view = await Bun.file(path.join(root, "webview-ui/src/components/chat/UsageHistory.tsx")).text()
     const host = await Bun.file(path.join(root, "src/KiloProvider.ts")).text()
     const sdk = await Bun.file(path.join(root, "../sdk/js/src/v2/gen/sdk.gen.ts")).text()
@@ -15,6 +15,9 @@ describe("model usage history", () => {
     expect(view).toContain('message.type !== "projectUsageLoaded"')
     expect(view).toContain("modelUsageName(model")
     expect(view).toContain("formatCompactCount(tokens(model))")
+    expect(view).toContain("Other charges")
+    expect(view).toContain("Other charge history isn't available from this backend.")
+    expect(view).toContain("conflicting receipts were left")
     expect(host).toContain("client.kilocode.projectUsage({ directory, range }")
     expect(sdk).toContain("public projectUsage")
   })

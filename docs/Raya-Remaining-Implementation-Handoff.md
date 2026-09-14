@@ -787,7 +787,7 @@ The following sections retain the full 39-item scope. Related findings and overh
 
 ### PR-04 — Define a routine's authority in capabilities, not its persona
 
-**Recorded status:** In progress. Brief routines deny unlisted permission categories; saved tool wildcards cannot enable shell, browser actions or delegation; one saved write folder confines direct file-tool writes; and `c3fd388970` exposes exact, bounded tool grants for each currently connected MCP service. Creation/access review explains broad full access and the lack of OS confinement. Readable/multiple-writable path scopes, shell confinement, escalation receipts, trusted-plugin enforcement and full browser/delegation dispatch acceptance remain open.
+**Recorded status:** In progress. Brief routines deny unlisted permission categories; saved tool wildcards cannot enable shell, browser actions or delegation; exact bounded tools can be granted per connected service; and installed commit `4cfb240328` enforces a primary write folder plus up to 16 canonical read or write grants with optimistic stale-update refusal. Additional path scopes deny commands and workspace-wide LSP until those routes have proven confinement. Shell/OS confinement, escalation receipts, trusted-plugin enforcement and full browser/delegation/plugin dispatch acceptance remain open.
 
 **Implementation and verification:**
 
@@ -4382,3 +4382,16 @@ Verification evidence to preserve:
 Do not weaken these adverse assertions. `happy-dom` remains only a DOM runtime name and has no bearing on the required failure coverage. When extending this area, add real interruption, malformed-state, foreign-owner and partial-side-effect cases first; correct fixtures or production behavior when they fail.
 
 Continue using the agreed ordering: choose the remaining requirement with the lowest implementation effort and least human verification, then address its highest-risk blocking failure boundary before its ordinary success flow. Keep EN-02 and OVR-05 marked **In progress** until execution fencing, multi-store transaction boundaries and representative organization execution are complete. A pre-`b83a561993` untyped removal claim is intentionally unrecoverable because it cannot be distinguished safely from startup. The installed snapshot remains source `70febf3958`; include `b83a561993` in the next coherent low-memory installation batch rather than installing this single backend checkpoint alone.
+
+## ChatGPT 2026-09-14 16:28 America/Toronto - Do not reimplement Routine folder scopes
+
+The PR-04 requirement text previously contradicted newer authoritative state. Readable and multiple writable paths are delivered by product commit `4cfb240328`, included in installed source `70febf3958`, and exposed through the production `AccessReview` editor. The schema is version 1, capped at 16 absolute grants and normalized for duplicates, overlap and Windows path identity. `expectedPaths` prevents stale access review from overwriting another change. Runtime permission rules distinguish read grants from write grants, deny unrelated external directories and remove command/LSP routes when additional path constraints are present.
+
+Fresh verification on 2026-09-14 passes:
+
+- Backend `task.test.ts` selection for canonical persistence and readable/writable enforcement: 2 tests / 20 assertions.
+- Production Routine access Chromium selection with `--workers=1`: 1 pass, including stale-save failure, reload, access change, command exclusion, successful save, WCAG scan and horizontal-overflow check.
+
+The first sandboxed Chromium launch failed before test execution because esbuild could not traverse the workspace; the identical authorized run passed. Do not treat that infrastructure denial as a product failure, and do not remove any adverse assertion. No product edit or reinstall was needed for this reconciliation.
+
+Continue PR-04 from its actual remaining boundaries: define and enforce the supported shell/OS confinement contract; retain attributable escalation requests and decisions; prevent trusted host plugins from silently widening a Routine; and exercise direct, delegated, browser and plugin actions through the real dispatch path. Keep the requirement **In progress** until those boundaries and their denial/retry/restart evidence are complete.

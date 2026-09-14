@@ -4192,3 +4192,9 @@ The existing process fixture now covers the two internal claim boundaries. `clai
 The journal suite passes 10 tests / 46 assertions. It also now rejects an artifact proof whose hash differs from the intended result. The first run exposed two fixture faults rather than weakening expectations: the malformed-artifact case shared an already-reserved pathname, and a fixture constant was shadowed by a later local binding. Both setups were corrected; the original assertions pass.
 
 Next extend the process fixture across create and remove, then a mixed destination-plus-source move plan. Add named stops after each journal phase and each entry cursor. Verify exact user bytes and residue in a fresh process for every stop. Only after that matrix is green should startup scanning and shared Apply Patch integration begin.
+
+## ChatGPT 2026-09-14 13:41 America/Toronto - File-shape kill matrix checkpoint
+
+The process fixture and coordinator tests now cover create, remove and mixed move plans before and after the durable commit decision. The mixed plan publishes a destination create and then a checked source removal. Pre-decision recovery reverses both in reverse order; post-decision recovery retains both effects. Exact content, existence, journal decision, terminal `done` and zero transaction sidecars are asserted for all six combinations. Apply Patch coordinator evidence is 13 / 79; focused coordinator plus journal evidence is 23 / 125.
+
+Do not generalize these end-of-publication cases to intermediate cursors. The next task is checkpoint injection at every durable phase and per-entry cursor, with the two-entry mixed plan as the primary proof. Recovery before `committed` must always reconstruct the original source-only state; recovery after `committed` must always reconstruct the destination-only state. Foreign-state cases must end in retained `conflict`, never forced convergence.

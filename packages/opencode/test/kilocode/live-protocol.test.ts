@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { prompt, valid } from "../../src/kilocode/voice/live-protocol"
+import { pricing, prompt, valid } from "../../src/kilocode/voice/live-protocol"
 
 const user = {
   id: "frag_user_1",
@@ -54,4 +54,22 @@ test("live prompt labels transcript uncertainty and does not treat captions as h
   expect(text).toContain("Earlier assistant text may be generated but unheard")
   expect(text).toContain(user.text)
   expect(text).toContain('"incomplete":true')
+})
+
+test("live duration pricing uses the published per-second GPT-Live rate", () => {
+  expect(pricing({ id: "duration_zero", model: "gpt-live-1", seconds: 0 })).toEqual({
+    amount: 0,
+    currency: "USD",
+    quantity: 0,
+    unit: "seconds",
+    source: "openai-model-doc:gpt-live-1:2026-09-14",
+  })
+  expect(pricing({ id: "duration_partial", model: "gpt-live-1", seconds: 6 })).toMatchObject({
+    amount: 0.005,
+    quantity: 6,
+  })
+  expect(pricing({ id: "duration_limit", model: "gpt-live-1", seconds: 86_400 })).toMatchObject({
+    amount: 72,
+    quantity: 86_400,
+  })
 })

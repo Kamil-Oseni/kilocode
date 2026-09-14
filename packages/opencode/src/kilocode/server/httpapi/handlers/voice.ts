@@ -9,6 +9,7 @@ import { Storage } from "@/storage/storage"
 import { RayaVoice } from "@/kilocode/voice/service"
 import { Envelope, Start, type VoiceSessionID } from "@/kilocode/voice/protocol"
 import * as OpenAIVoice from "@/kilocode/voice/openai"
+import { pricing as livePricing } from "@/kilocode/voice/live-protocol"
 import * as TaskWorker from "@/kilocode/session/task-worker"
 import { InstanceState } from "@/effect/instance-state"
 import { RayaGoal } from "@/kilocode/goal"
@@ -54,25 +55,29 @@ export const voiceHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-voice",
         reservations
           .complete(sessionID, "USD", identity)
           .pipe(Effect.mapError((error) => new OpenAIVoice.VoiceError({ code: "conflict", message: error.message }))),
-      charges: (input) =>
-        goals
+      charges: (input) => {
+        const price = livePricing({ id: input.id, model: "gpt-live-1", seconds: input.seconds })
+        return goals
           .charged(input.sessionID, {
             id: input.id,
             kind: "gpt-live",
             provider: "OpenAI",
             service: "GPT-Live 1",
+            source: price.source,
             origin: { sessionID: input.sessionID, callID: input.callID },
             at: input.at,
-            quantity: input.seconds,
-            unit: "seconds",
-            coverage: "unknown",
-            reason: "The provider duration was retained, but a monetary amount was not reported.",
+            quantity: price.quantity,
+            unit: price.unit,
+            coverage: "recorded",
+            amount: price.amount,
+            currency: price.currency,
           })
           .pipe(
             Effect.asVoid,
             Effect.catchTag("RayaGoal.NotFoundError", () => Effect.void),
             Effect.mapError((error) => new OpenAIVoice.VoiceError({ code: "conflict", message: error.message })),
-          ),
+          )
+      },
       usageCharges: (input) => {
         const price = input.pricing
         const receipt =

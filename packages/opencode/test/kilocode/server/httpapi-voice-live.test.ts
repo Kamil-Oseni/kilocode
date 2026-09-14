@@ -228,12 +228,14 @@ test("the shipped Live voice routes keep duration and delegation behind auth and
         kind: "gpt-live",
         provider: "OpenAI",
         service: "GPT-Live 1",
+        source: "openai-model-doc:gpt-live-1:2026-09-14",
         origin: { sessionID: parent.id, callID: binding.id },
         at: binding.createdAt,
         quantity: receipt.seconds,
         unit: "seconds",
-        coverage: "unknown",
-        reason: "The provider duration was retained, but a monetary amount was not reported.",
+        coverage: "recorded",
+        amount: 0.00375,
+        currency: "USD",
       },
     ])
     expect((await request("POST", duration, { ...meter, receipt: { ...receipt, seconds: 9 } })).status).toBe(409)

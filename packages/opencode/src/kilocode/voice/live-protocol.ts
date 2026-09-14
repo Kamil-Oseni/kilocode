@@ -35,6 +35,23 @@ export const LiveDuration = Schema.Struct({
 })
 export const LiveMeter = Schema.Struct({ generation: VoiceID, receipt: LiveDuration })
 
+const rate = {
+  currency: "USD",
+  perMinute: 0.05,
+  source: "openai-model-doc:gpt-live-1:2026-09-14",
+} as const
+
+/** Versioned GPT-Live session price from the exact provider-reported duration. */
+export function pricing(receipt: typeof LiveDuration.Type) {
+  return {
+    amount: Number(((receipt.seconds / 60) * rate.perMinute).toFixed(12)),
+    currency: rate.currency,
+    quantity: receipt.seconds,
+    unit: "seconds" as const,
+    source: rate.source,
+  }
+}
+
 export function valid(input: typeof LiveCall.Type) {
   const fragments = input.context.fragments
   return (

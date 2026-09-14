@@ -1,5 +1,6 @@
 import { expect } from "bun:test"
 import path from "node:path"
+import { hostname } from "node:os"
 import { Effect, Exit, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -149,6 +150,20 @@ it.live(
           .pipe(Effect.exit)
         expect(Exit.isFailure(unbound)).toBe(true)
         expect((yield* RayaTask.make({ storage, database }).get(worker.id)).enabled).toBe(false)
+        expect(yield* RayaTask.make({ storage, database }).recoverStages()).toMatchObject({
+          recovered: 0,
+          pending: 2,
+          issues: [],
+          truncated: false,
+        })
+        for (const key of receipts) {
+          const value = yield* storage.read<Record<string, unknown>>(key)
+          yield* storage.replace(key, { ...value, owner: { host: hostname(), pid: 2_147_483_647 } })
+        }
+        const startup = yield* RayaTask.make({ storage, database }).recoverStages()
+        expect(startup).toMatchObject({ recovered: 1, pending: 0, truncated: false })
+        expect(startup.issues).toHaveLength(1)
+        expect(yield* storage.list(["raya", "agent-stage"])).toHaveLength(1)
 
         const tools = routineManagementTools({ database, storage, sessions })
         const retry = yield* (yield* tools.create).init()
@@ -169,6 +184,23 @@ it.live(
         ])
         expect(organizations.items).toHaveLength(1)
         expect(yield* storage.list(["raya", "agent-stage"])).toHaveLength(0)
+        yield* storage.replace(["raya", "agent-stage", worker.id], {
+          ...binding,
+          owner: { host: hostname(), pid: 2_147_483_647 },
+        })
+        expect(yield* RayaTask.make({ storage, database }).recoverStages()).toEqual({
+          recovered: 1,
+          pending: 0,
+          issues: [],
+          truncated: false,
+        })
+        expect(yield* storage.list(["raya", "agent-stage"])).toHaveLength(0)
+        yield* storage.replace(["raya", "agent-stage", "malformed"], { version: 1 })
+        const malformed = yield* RayaTask.make({ storage, database }).recoverStages()
+        expect(malformed).toMatchObject({ recovered: 0, pending: 0, truncated: false })
+        expect(malformed.issues).toEqual(["Staged worker malformed has an unreadable receipt."])
+        expect(yield* storage.list(["raya", "agent-stage"])).toHaveLength(1)
+        yield* storage.remove(["raya", "agent-stage", "malformed"])
         expect(organizations.items[0]?.delegations).toEqual([
           { senderID: agents[0]?.id, recipientID: agents[1]?.id, position: 0 },
         ])

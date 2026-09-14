@@ -25,6 +25,7 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder" // ki
 import { Storage } from "@/storage/storage" // raya_change - Milestone A durable goal storage
 import { RayaGoalContinuation } from "@/kilocode/goal/continuation" // raya_change - Milestone A idle continuation
 import { RayaTaskRunner } from "@/kilocode/task/runner"
+import { RayaTask } from "@/kilocode/task"
 import { Database } from "@opencode-ai/core/database/database"
 import { Config } from "@/config/config" // raya_change - Milestone I goal continuation setting
 import { recoverPending } from "@/kilocode/tool/apply-patch-transaction"
@@ -66,6 +67,19 @@ export namespace KilocodeBootstrap {
           )
           if (recovery?.issues.length)
             log.warn("file transaction startup scan retained conflicts", { issues: recovery.issues })
+          const staged = yield* RayaTask.make({ storage, database })
+            .recoverStages()
+            .pipe(
+              Effect.catchCause((cause) => {
+                log.warn("routine staging startup scan failed", { err: Cause.squash(cause) })
+                return Effect.succeed(undefined)
+              }),
+            )
+          if (staged && (staged.issues.length || staged.truncated))
+            log.warn("routine staging startup scan retained conflicts", {
+              issues: staged.issues,
+              truncated: staged.truncated,
+            })
         }
         yield* watcher.init()
         yield* kilo.init()

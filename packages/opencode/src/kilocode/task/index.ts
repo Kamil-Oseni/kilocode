@@ -276,7 +276,7 @@ export namespace RayaTask {
     message: Schema.String,
   }) {}
 
-  type Store = Pick<Storage.Interface, "read" | "replace" | "create" | "remove">
+  type Store = Pick<Storage.Interface, "read" | "replace" | "create" | "remove" | "list">
   const roster = ["raya", "agent"]
   const history = (id: string) => ["raya", "agent-runs", id]
   const memory = (id: string) => ["raya", "agent-memory", id]
@@ -905,6 +905,65 @@ export namespace RayaTask {
       return next
     })
 
+    const recoverStages = Effect.fn("RayaTask.recoverStages")(function* () {
+      const keys = (yield* deps.storage.list(["raya", "agent-stage"]).pipe(Effect.orDie)).sort((a, b) =>
+        a.join("/").localeCompare(b.join("/")),
+      )
+      const issues: string[] = []
+      let recovered = 0
+      let pending = 0
+      for (const key of keys.slice(0, 1_024)) {
+        if (key.length !== 3 || key[0] !== "raya" || key[1] !== "agent-stage") {
+          issues.push(`Unreadable staged-worker key: ${key.join("/")}`)
+          continue
+        }
+        const raw = yield* deps.storage.read<unknown>(key).pipe(Effect.exit)
+        if (Exit.isFailure(raw)) {
+          issues.push(`Could not read staged worker ${key[2]}.`)
+          continue
+        }
+        const decoded = yield* Schema.decodeUnknownEffect(Stage)(raw.value).pipe(Effect.exit)
+        if (Exit.isFailure(decoded) || decoded.value.agentID !== key[2]) {
+          issues.push(`Staged worker ${key[2]} has an unreadable receipt.`)
+          continue
+        }
+        const value = decoded.value
+        if (!stopped(value.owner)) {
+          pending++
+          continue
+        }
+        const agent = yield* get(value.agentID).pipe(
+          Effect.catchTag("RayaTask.NotFoundError", () => Effect.succeed(undefined)),
+        )
+        if (!deps.database) {
+          issues.push(`Staged worker ${value.agentID} cannot be reconciled without the organization database.`)
+          continue
+        }
+        const { RayaTaskOrganization } = yield* Effect.promise(() => import("./organization"))
+        const organization = yield* RayaTaskOrganization.make(deps.database, { get }, deps.storage)
+          .get(value.organizationID)
+          .pipe(Effect.catchTag("RayaTaskOrganization.NotFound", () => Effect.succeed(undefined)))
+        if (!agent && !organization) {
+          yield* deps.storage.remove(key).pipe(Effect.orDie)
+          recovered++
+          continue
+        }
+        if (!agent || !organization || organization.archived) {
+          issues.push(`Staged worker ${value.agentID} requires review before recovery.`)
+          continue
+        }
+        const member = organization.members.some((item) => item.agentID === value.agentID)
+        const expected = { ...value.definition, enabled: true, updatedAt: agent.updatedAt }
+        if (member && agent.enabled && isDeepStrictEqual(agent, expected)) {
+          yield* deps.storage.remove(key).pipe(Effect.orDie)
+          recovered++
+          continue
+        }
+        issues.push(`Staged worker ${value.agentID} remains disabled or changed and requires review.`)
+      }
+      return { recovered, pending, issues, truncated: keys.length > 1_024 }
+    })
+
     const update = Effect.fn("RayaTask.update")(function* (
       id: string,
       patch: Partial<Create> & {
@@ -1337,6 +1396,7 @@ export namespace RayaTask {
         mutate(deps.storage, stage(input, id, organizationID)),
       activate: (input: Create, id: string, organizationID: string) =>
         mutate(deps.storage, activate(input, id, organizationID)),
+      recoverStages: () => mutate(deps.storage, recoverStages(), "Routine staging"),
       update: (...args: Parameters<typeof update>) => mutate(deps.storage, update(...args)),
       authority: (...args: Parameters<typeof authority>) => mutate(deps.storage, authority(...args)),
       remove: (id: string) => mutate(deps.storage, removeOwned(id)),

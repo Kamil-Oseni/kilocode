@@ -2,6 +2,12 @@
 
 Source of scope: [Comprehensive audit](Raya-Comprehensive-Audit.md). All sections and all ten overhauls remain in scope. Work proceeds in dependency order, with broader validation batched at checkpoints. A completed subtask does not mean the overall overhaul is complete.
 
+## ChatGPT 2026-09-14 00:46 America/Toronto - EN-14 ledger reconciliation and reconnect test repair
+
+**Status: EN-14 remains Verified; test-only commit `b9b7ca79e8` is pushed.** The earlier measured workload was already delivered in `b8d869ceab`: its production-view Chromium case renders 40 workers and 1,000 messages, measures search and composer response, render and reconnect latency, collects retained JavaScript heap after browser garbage collection, verifies unique message identities and requires the busy state to clear. The real SDK/SSE adapter test separately drops a loopback HTTP event stream and measures establishment of the replacement stream. The recorded final Windows results remain 45.7 ms search p95, 14.6 ms composer response, 176.9 ms render, 49.4 ms webview recovery, 7,838,060 bytes retained heap growth and 282.1 ms live SSE recovery. This reconciles the stale later handoff text that incorrectly called the browser measurements open; no new performance claim or product code was added.
+
+The extension unit wrapper exposed a brittle Agent Manager architecture assertion after all goal-limit suites had passed. It searched only 800 source characters after the connected-state handler and stopped before the existing `flushPendingSessionRefresh("sse-connected")` call as that handler grew. The test now bounds the handler with the next stable subscription boundary and still asserts the real reconnect flush call. `bun test tests/unit/agent-manager-arch.test.ts` passes 71 tests / 273 assertions. This is a test-harness repair with no runtime or installed-package change; the installed source remains `50e3ead4a2`. No broad, parallel or high-memory validation ran.
+
 ## ChatGPT 2026-09-14 00:40 America/Toronto - durable child and attributable-limit snapshot installed
 
 **Status: installed from source commit `50e3ead4a2`; pushed.** The authorized single-workflow `RAYA_LOW_MEMORY=1` build installed `eden.raya@7.4.23-snapshot+50e3ead4a2.kamil-oseni.1789360595896`. It includes durable cross-backend concurrent-child reservations from `e0b54ebbbd` and attributable goal-limit overrides from `03fefc60c7`.

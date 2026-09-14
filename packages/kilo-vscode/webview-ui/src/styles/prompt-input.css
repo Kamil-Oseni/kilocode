@@ -756,6 +756,23 @@
   }
 }
 
+@media (forced-colors: active) {
+  .prompt-input-hint-actions [data-component="button"],
+  .prompt-input-hint-actions [data-component="icon-button"],
+  .prompt-input-hint-actions .prompt-voice-orb {
+    border: 1px solid ButtonText !important;
+    color: ButtonText !important;
+  }
+
+  .prompt-input-hint-actions [data-slot="icon-svg"] {
+    color: ButtonText !important;
+  }
+
+  .prompt-voice-orb__sheen {
+    display: none;
+  }
+}
+
 .prompt-indexing-button {
   position: relative;
 

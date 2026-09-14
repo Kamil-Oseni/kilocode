@@ -30,7 +30,29 @@ for (const theme of ["light", "dark", "contrast"])
       const prompt = page.locator("textarea.prompt-input")
       const disclosure = page.locator(".composer-configuration")
       const summary = disclosure.locator('[data-slot="collapsible-trigger"]')
+      const logo = page.getByRole("img", { name: "Raya" })
       await expect(page.getByRole("heading", { name: "What would you like to get done?" })).toBeVisible()
+      await expect(logo).toBeVisible()
+      if (theme === "contrast") {
+        const colors = await logo.evaluate((node) => ({
+          fill: getComputedStyle(node.querySelector("path")!).fill,
+          text: getComputedStyle(document.body).color,
+        }))
+        expect(colors.fill).toBe(colors.text)
+        const controls = await page
+          .locator(
+            '.prompt-input-hint-actions [data-component="button"], .prompt-input-hint-actions [data-component="icon-button"], .prompt-input-hint-actions .prompt-voice-orb',
+          )
+          .evaluateAll((nodes) =>
+            nodes.map((node) => ({
+              border: getComputedStyle(node).borderTopColor,
+              style: getComputedStyle(node).borderTopStyle,
+              text: getComputedStyle(document.body).color,
+            })),
+          )
+        expect(controls.length).toBeGreaterThanOrEqual(3)
+        expect(controls.every((item) => item.border === item.text && item.style === "solid")).toBe(true)
+      }
       await expect(summary).toContainText("Preferred model")
       await expect(summary).toContainText("Claude Sonnet 4.6")
       await expect(summary).toContainText("Kilo")

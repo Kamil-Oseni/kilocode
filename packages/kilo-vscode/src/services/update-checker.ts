@@ -238,7 +238,11 @@ async function offer(
 
 export function registerUpdateChecker(context: vscode.ExtensionContext): vscode.Disposable {
   const runner = new UpdateRun()
-  const credentials = new UpdateCredentials(context.secrets, () => vscode.workspace.getConfiguration("raya.update"))
+  const credentials = new UpdateCredentials(
+    context.secrets,
+    () => vscode.workspace.getConfiguration("raya.update"),
+    context.globalStorageUri.fsPath,
+  )
   const recovered = runner
     .run(async (active) => {
       const current = String(context.extension.packageJSON.version)

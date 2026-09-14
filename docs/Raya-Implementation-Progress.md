@@ -1,5 +1,12 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-14 19:51 America/Toronto - Real-process session and history interruption proof
+
+**Status: regression commit `fe617a63e3` is verified and pushed to `origin/main`.** A second real child-process fixture now follows the production delegation ownership chain: it accepts the queued row, creates the startup snapshot and exact session metadata, links the durable claim, saves the goal, and exits either before or after run-history publication. Restart against the same filesystem storage and SQLite database repairs both cases without calling session creation, retains one reserved run/session, attaches the delegation and removes the stopped claim. Repeating restart remains idempotent.
+
+Together with `d55a81c808`, real process exits now cover acceptance, session persistence and history persistence. The complete scheduler/recovery suite passes **33 / 440**. Scoped one-thread lint has zero errors and only two existing scheduler-test warnings; formatting, whitespace, annotation and Effect Promise-facade guards pass. EN-02's requested process-level startup interruption matrix is substantially stronger; waiting-for-user and active execution-generation races plus representative organization execution remain open. Installed source remains `17ff50e907`.
+
+
 ## ChatGPT 2026-09-14 19:45 America/Toronto - Cross-process accepted-start recovery verified
 
 **Status: regression commit `d55a81c808` is verified and pushed to `origin/main`.** A dedicated child process now opens the shared SQLite database, atomically accepts a delegation and exits immediately before creating any startup claim. Reopening the real filesystem storage and database twice starts the request once with the child run ID reserved by the stopped process. The full scheduler suite passes **31 / 426**, including timer ownership, startup reconciliation, removal and archive recovery. Scoped one-thread lint has zero errors and only two existing scheduler-test warnings; formatting and affected guards pass. This adds real process-boundary evidence to `ff53513f4b`; EN-02/OVR-05 remain **In progress** for representative company execution and broader lifecycle acceptance. Installed source remains `17ff50e907`.

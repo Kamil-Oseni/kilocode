@@ -1,5 +1,12 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-14 19:51 America/Toronto - EN-02 process-stage session/history proof
+
+Regression commit `fe617a63e3` is verified and pushed. Preserve `fixtures/delegation-start.ts` and its two scheduler cases. The fixture runs in a separate Bun process over the shared real storage/database, reserves the delegation run ID, creates the startup snapshot and SQLite session with exact agent/run/delegation metadata, links the claim, saves the active goal, and exits with code 21 either before or after `tasks.record`. The parent invokes `revive` twice and requires zero replacement session creations, one exact running history row, the same attached delegation identity and no remaining startup claim.
+
+The complete scheduler suite is 33 / 440. This closes the requested real-process kill evidence at acceptance/session/history startup boundaries for delegated manual work. Do not remove the in-process database-trigger cases: they separately prove publication and replay ordering. EN-02 still needs waiting-for-user ownership and stale active-worker generation races under process stop/archive/delete, followed by representative organization execution through real integration boundaries. Installed source remains `17ff50e907`.
+
+
 ## ChatGPT 2026-09-14 19:45 America/Toronto - EN-02 real-process acceptance stop proof
 
 Regression commit `d55a81c808` is verified and pushed. `fixtures/delegation-take.ts` is the real second-process crash fixture: it opens the shared database, calls `RayaTaskDelegation.take(recipient)`, requires the reserved child run ID and exits with code 21 immediately after the acceptance commit. The scheduler regression then reopens the same SQLite and filesystem storage, calls `revive` twice and requires one session, one run, the same reserved ID and one running delegation. Keep this alongside the in-process session/history/attachment failures; together they prove the first process boundary and all three persistence stages. The complete scheduler suite is 31 / 426. Next work remains representative organization execution through real integration boundaries and the other still-open audit parents; do not weaken this proof into an in-memory-only case.

@@ -5167,3 +5167,11 @@ This proves whole-plan convergence after all entries are published. It does not 
 All 11 cases pass with 55 assertions. Each ends `done/rollback`, restores the source's exact bytes, leaves the destination absent and removes all owned `.raya-txn-*` artifacts. This includes the dangerous syscall-versus-journal windows where the filesystem changed but the corresponding cursor had not yet been appended.
 
 The first run failed without weakening expectations because the fixture embedded colon-separated checkpoint names in Windows sidecar filenames. Windows treated those as alternate-stream syntax, producing invalid hard links and misleading residue. The fixture now derives its ID through a strict alphanumeric/hyphen sanitizer; the unchanged phase matrix passes. Continue with explicit rollback and commit/rollback cleanup checkpoints.
+
+## ChatGPT 2026-09-14 13:49 America/Toronto - Rollback and cleanup process-kill matrix
+
+**Status: implemented and verified locally.** The mixed move child now executes explicit rollback and decision-specific cleanup sequences with stoppable boundaries. Twelve rollback checkpoints cover `rolling_back/0`, each restore syscall before its cursor, each rollback cursor, `rolled_back`, `cleaning/0`, each rollback cleanup syscall before its cursor, each cleaning cursor and `releasing`. Six committed checkpoints cover `cleaning/0`, each committed cleanup syscall before its cursor, each cleaning cursor and `releasing`.
+
+All 18 new checkpoints pass in fresh processes. The targeted run also retained the two end-of-publication mixed cases, for 20 tests / 124 assertions. Every rollback checkpoint converges to the exact source-only state and `done/rollback`; every committed checkpoint converges to the destination-only state and `done/commit`. All owned stages and holds are removed. The tests include the idempotence-critical gaps after an actual filesystem restore or cleanup has succeeded but before its next immutable journal revision exists.
+
+Together with the 11 pre-commit checkpoints, the mixed move now has process-kill evidence across staging, publication, rollback, both cleanup directions and target-claim release. Remaining recovery work before integration is hostile external state during a stopped transaction, repeated/aborted recovery, a bounded startup scan, and actual Apply Patch retry/restart behavior.

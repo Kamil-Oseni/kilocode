@@ -479,7 +479,12 @@ export namespace RayaTaskRunner {
       const reports = inbox ? (yield* inbox.page(id)).messages : []
       const note = brief(item, reports, question)
       const last = (yield* tasks.runsFor(id)).at(-1)
-      if (last && RayaTask.pending(last)) return yield* steer(last, note, opts?.defer)
+      if (last && RayaTask.pending(last)) {
+        const run = yield* steer(last, note, opts?.defer)
+        const row = errands ? yield* errands.bySession(run.sessionID) : undefined
+        if (row?.state === "needs_input") yield* errands.resume(row.id, run.id, run.sessionID)
+        return run
+      }
       return yield* fire(id, undefined, note, { follow: true, defer: opts?.defer })
     })
     const resume = Effect.fn("RayaTaskRunner.resume")(function* (sessionID: SessionID) {

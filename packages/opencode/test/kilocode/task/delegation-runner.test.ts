@@ -733,6 +733,97 @@ test("settlement replay restores one report and releases one queued delegation",
   )
 })
 
+test("waiting for the user survives restart and holds the next delegation", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const starts: string[] = []
+      const halted: string[] = []
+      const sessions = {
+        create: () =>
+          Effect.sync(() => {
+            const id = `ses_wait_restart_${starts.length + 1}`
+            starts.push(id)
+            return session(id)
+          }),
+        get: () => Effect.die("unused"),
+        messages: () => Effect.succeed([]),
+        children: () => Effect.succeed([]),
+      }
+      const input = {
+        database,
+        storage,
+        sessions,
+        halt: (id: SessionID) =>
+          Effect.sync(() => {
+            halted.push(id)
+          }),
+      }
+      const runner = RayaTaskRunner.make(input)
+      const chief = yield* runner.tasks.create({
+        name: "Chief",
+        objective: "Assign work",
+        access: "brief",
+        schedule: { kind: "manual" },
+      })
+      const books = yield* runner.tasks.create({
+        name: "Books",
+        objective: "Review accounts",
+        access: "brief",
+        schedule: { kind: "manual" },
+      })
+      const first = yield* runner.delegate({
+        source: "dlg_wait_first",
+        senderID: chief.id,
+        recipientID: books.id,
+        objective: "Ask which ledger to use.",
+      })
+      const second = yield* runner.delegate({
+        source: "dlg_wait_second",
+        senderID: chief.id,
+        recipientID: books.id,
+        objective: "Review the next close.",
+      })
+      expect(first.state).toBe("running")
+      expect(second.state).toBe("queued")
+
+      yield* runner.park(first.sessionID!, true)
+      yield* runner.settle(first.sessionID!)
+      const store = RayaTaskDelegation.make(database)
+      expect(yield* store.get(first.id)).toMatchObject({ state: "needs_input", sessionID: first.sessionID })
+      expect((yield* runner.tasks.runsFor(books.id)).find((run) => run.id === first.childRunID)).toMatchObject({
+        status: "blocked",
+        blockedReason: "waiting on you",
+      })
+
+      const reopened = RayaTaskRunner.make(input)
+      yield* reopened.revive()
+      yield* reopened.revive()
+
+      expect((yield* store.get(second.id)).state).toBe("queued")
+      expect(starts).toEqual(["ses_wait_restart_1"])
+      expect((yield* reopened.tasks.runsFor(books.id)).filter(RayaTask.pending)).toHaveLength(1)
+
+      const resumed = yield* reopened.ask(books.id, "Use the general ledger.", { defer: true })
+      expect(resumed).toMatchObject({ id: first.childRunID, sessionID: first.sessionID, status: "blocked" })
+      expect((yield* reopened.tasks.runsFor(books.id)).find((run) => run.id === first.childRunID)?.status).toBe(
+        "running",
+      )
+      expect(yield* store.get(first.id)).toMatchObject({ state: "running", sessionID: first.sessionID })
+      expect((yield* store.get(second.id)).state).toBe("queued")
+      expect(starts).toEqual(["ses_wait_restart_1"])
+
+      expect((yield* reopened.stop(first.id)).state).toBe("cancelled")
+      const running = yield* store.get(second.id)
+      expect(running.state).toBe("running")
+      expect(starts).toEqual(["ses_wait_restart_1", "ses_wait_restart_2"])
+      expect(halted).toEqual([first.sessionID])
+      expect((yield* reopened.tasks.runsFor(books.id)).filter((run) => run.id === running.childRunID)).toHaveLength(1)
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
 test("stopping a parent cancels live descendants without rewriting assignments", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {

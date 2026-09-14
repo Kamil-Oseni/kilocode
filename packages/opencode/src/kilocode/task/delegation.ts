@@ -627,6 +627,25 @@ export namespace RayaTaskDelegation {
       yield* reply(record, recipient)
       return record
     })
+    const resume = Effect.fn("RayaTaskDelegation.resume")(function* (id: string, runID: string, sessionID: SessionID) {
+      const prior = yield* get(id)
+      if (prior.childRunID !== runID || prior.sessionID !== sessionID)
+        return yield* new Conflict({ message: "This delegation is attached to another run or session." })
+      if (prior.state === "running") return prior
+      if (prior.state !== "needs_input")
+        return yield* new Conflict({ message: "This delegation is not waiting for a response." })
+      const updated = yield* db
+        .update(Delegation)
+        .set({ state: "running", time_updated: Date.now() })
+        .where(and(eq(Delegation.id, id), eq(Delegation.state, "needs_input")))
+        .returning()
+        .all()
+        .pipe(Effect.orDie)
+      if (updated[0]) return decode(updated[0])
+      const current = yield* get(id)
+      if (current.state === "running" && current.childRunID === runID && current.sessionID === sessionID) return current
+      return yield* new Conflict({ message: "This delegation changed while its response was being applied." })
+    })
     const chain = Effect.fn("RayaTaskDelegation.chain")(function* (id: string) {
       const current = yield* get(id)
       const above = yield* ancestors(current.parentID)
@@ -724,6 +743,7 @@ export namespace RayaTaskDelegation {
       authorize,
       attach,
       finish,
+      resume,
       get,
       lookup,
       chain,

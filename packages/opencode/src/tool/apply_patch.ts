@@ -408,8 +408,7 @@ export const ApplyPatchTool = Tool.define(
                 yield* EncodedIO.exclusive(afs, destination, Bom.join(change.newContent, change.bom), change.encoding)
               }
               const source = targets.get(change.filePath)!
-              yield* EncodedIO.validate(source, change.proof!, change.sha256!)
-              yield* afs.remove(source)
+              yield* EncodedIO.remove(source, change.proof!, change.sha256!)
               // kilocode_change end
               updates.push({ file: change.filePath, event: "unlink" })
               updates.push({ file: change.movePath, event: "add" })
@@ -418,8 +417,7 @@ export const ApplyPatchTool = Tool.define(
 
           case "delete":
             // kilocode_change start - recheck immediately before the pathname removal
-            yield* EncodedIO.validate(targets.get(change.filePath)!, change.proof!, change.sha256!)
-            yield* afs.remove(targets.get(change.filePath)!)
+            yield* EncodedIO.remove(targets.get(change.filePath)!, change.proof!, change.sha256!)
             // kilocode_change end
             updates.push({ file: change.filePath, event: "unlink" })
             break

@@ -6,7 +6,7 @@ import path from "node:path"
 import { NodeFileSystem } from "@effect/platform-node"
 import { Effect, FileSystem, Layer, Scope, Stream } from "effect"
 import { run } from "../src/context"
-import { createFile, writeChecked } from "../src/checked"
+import { createFile, removeChecked, writeChecked } from "../src/checked"
 import { layer } from "../src/filesystem"
 import { batchMutations, currentRunner, withRunner, type Runner } from "../src/mutation"
 import type { Request } from "../src/mutation-protocol"
@@ -122,7 +122,7 @@ describe("sandbox FileSystem", () => {
     expect(requests[0]).toMatchObject({ op: "batch", operations: [{ op: "writeFileString" }] })
   })
 
-  test("flushes around checked and exclusive writes so their result cannot be deferred", async () => {
+  test("flushes around checked writes, exclusive writes and checked removals", async () => {
     await mkdir(allowed, { recursive: true })
     const file = path.join(allowed, "checked.txt")
     await writeFile(file, "approved")
@@ -145,6 +145,12 @@ describe("sandbox FileSystem", () => {
                 createHash("sha256").update("approved").digest("hex"),
               )
               yield* createFile(path.join(allowed, "exclusive.txt"), Buffer.from("created"))
+              const changed = yield* Effect.promise(() => stat(file, { bigint: true }))
+              yield* removeChecked(
+                file,
+                { dev: changed.dev.toString(), ino: changed.ino.toString() },
+                createHash("sha256").update("changed").digest("hex"),
+              )
               yield* fs.writeFileString(path.join(allowed, "after.txt"), "after")
             }),
           ),
@@ -152,7 +158,13 @@ describe("sandbox FileSystem", () => {
       ),
     )
 
-    expect(requests.map((request) => request.op)).toEqual(["batch", "writeFileChecked", "writeFileExclusive", "batch"])
+    expect(requests.map((request) => request.op)).toEqual([
+      "batch",
+      "writeFileChecked",
+      "writeFileExclusive",
+      "removeFileChecked",
+      "batch",
+    ])
   })
 
   test("delegates runners retained after a batch closes", async () => {

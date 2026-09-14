@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { createHash } from "node:crypto"
-import { link, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises"
+import { link, mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -16,6 +16,16 @@ async function checked(path: string, data: string): Promise<Request> {
     op: "writeFileChecked",
     path,
     data: Buffer.from(data).toString("base64"),
+    identity: { dev: info.dev.toString(), ino: info.ino.toString() },
+    sha256: hash(await readFile(path, "utf8")),
+  }
+}
+
+async function removal(path: string): Promise<Request> {
+  const info = await stat(path, { bigint: true })
+  return {
+    op: "removeFileChecked",
+    path,
     identity: { dev: info.dev.toString(), ino: info.ino.toString() },
     sha256: hash(await readFile(path, "utf8")),
   }
@@ -40,6 +50,8 @@ async function worker(request: Request) {
   if (!isResponse(response)) throw new Error("Filesystem worker returned an invalid response")
   return response
 }
+
+const holds = (root: string) => readdir(root).then((items) => items.filter((item) => item.includes(".raya-remove-")))
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
@@ -120,6 +132,66 @@ describe("filesystem mutation worker", () => {
 
     expect(await worker(request)).toEqual({ ok: true })
     expect(await readFile(file, "utf8")).toBe("created")
+  })
+
+  test("removes only a file with the reviewed identity and content", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "kilo-mutation-worker-"))
+    roots.push(root)
+    const file = path.join(root, "value.txt")
+    await writeFile(file, "approved")
+
+    expect(await worker(await removal(file))).toEqual({ ok: true })
+    expect(await Bun.file(file).exists()).toBe(false)
+    expect(await holds(root)).toEqual([])
+  })
+
+  test("restores a replacement file when checked removal detects a stale target", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "kilo-mutation-worker-"))
+    roots.push(root)
+    const file = path.join(root, "value.txt")
+    const moved = path.join(root, "approved.txt")
+    await writeFile(file, "approved")
+    const request = await removal(file)
+    await rename(file, moved)
+    await writeFile(file, "replacement")
+
+    const response = await worker(request)
+    expect(response.ok).toBe(false)
+    if (response.ok) return
+    expect(response.error.code).toBe("ESTALE")
+    expect(response.error.operation).toBe("removeFileChecked")
+    expect(await readFile(file, "utf8")).toBe("replacement")
+    expect(await readFile(moved, "utf8")).toBe("approved")
+    expect(await holds(root)).toEqual([])
+  })
+
+  test("restores changed and hard-linked files refused by checked removal", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "kilo-mutation-worker-"))
+    roots.push(root)
+    {
+      const file = path.join(root, "changed.txt")
+      await writeFile(file, "approved")
+      const request = await removal(file)
+      await writeFile(file, "newer user content")
+      const response = await worker(request)
+      expect(response.ok).toBe(false)
+      expect(await readFile(file, "utf8")).toBe("newer user content")
+    }
+
+    {
+      const file = path.join(root, "linked.txt")
+      const alias = path.join(root, "alias.txt")
+      await writeFile(file, "approved")
+      const request = await removal(file)
+      await link(file, alias)
+      const response = await worker(request)
+      expect(response.ok).toBe(false)
+      if (response.ok) return
+      expect(response.error.message).toContain("Hard-linked files")
+      expect(await readFile(file, "utf8")).toBe("approved")
+      expect(await readFile(alias, "utf8")).toBe("approved")
+    }
+    expect(await holds(root)).toEqual([])
   })
 
   test("refuses an exclusive create when another writer already owns the pathname", async () => {
@@ -208,5 +280,14 @@ describe("filesystem mutation worker", () => {
     const exclusive = { op: "writeFileExclusive", path: "value.txt", data: "Y3JlYXRlZA==" }
     expect(isRequest(exclusive)).toBe(true)
     expect(isRequest({ op: "batch", operations: [exclusive] })).toBe(false)
+    const removal = {
+      op: "removeFileChecked",
+      path: "value.txt",
+      identity: { dev: "1", ino: "2" },
+      sha256: "a".repeat(64),
+    }
+    expect(isRequest(removal)).toBe(true)
+    expect(isRequest({ ...removal, identity: { dev: "-1", ino: "2" } })).toBe(false)
+    expect(isRequest({ op: "batch", operations: [removal] })).toBe(false)
   })
 })

@@ -1,7 +1,12 @@
 import { Effect } from "effect"
 import { stat } from "node:fs/promises"
 import { assertPath, current } from "./context"
-import { createChecked as create, validateChecked as validate, writeChecked as write } from "./checked-write"
+import {
+  createChecked as create,
+  removeChecked as remove,
+  validateChecked as validate,
+  writeChecked as write,
+} from "./checked-write"
 import { currentRunner } from "./mutation"
 import type { Identity } from "./checked-write"
 
@@ -59,6 +64,21 @@ export function writeChecked(path: string, data: Uint8Array, identity: Identity,
       identity,
       sha256,
     })
+  })
+}
+
+export function removeChecked(path: string, identity: Identity, sha256: string) {
+  return Effect.gen(function* () {
+    const profile = yield* current
+    if (!profile) {
+      return yield* Effect.tryPromise({
+        try: () => remove(path, identity, sha256),
+        catch: wrap,
+      })
+    }
+    yield* assertPath(path, "removeFileChecked")
+    const run = yield* currentRunner
+    return yield* run(profile, { op: "removeFileChecked", path, identity, sha256 })
   })
 }
 

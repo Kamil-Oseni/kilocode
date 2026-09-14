@@ -200,13 +200,18 @@ function returnsValue(
   return request.op === "makeTempDirectory" || request.op === "makeTempFile"
 }
 
-function immediate(
-  request: Request,
-): request is Extract<
+function immediate(request: Request): request is Extract<
   Operation,
-  { readonly op: "makeTempDirectory" | "makeTempFile" | "writeFileChecked" | "writeFileExclusive" }
+  {
+    readonly op: "makeTempDirectory" | "makeTempFile" | "writeFileChecked" | "writeFileExclusive" | "removeFileChecked"
+  }
 > {
-  return returnsValue(request) || request.op === "writeFileChecked" || request.op === "writeFileExclusive"
+  return (
+    returnsValue(request) ||
+    request.op === "writeFileChecked" ||
+    request.op === "writeFileExclusive" ||
+    request.op === "removeFileChecked"
+  )
 }
 
 export function batchMutations<A, E, R>(effect: Effect.Effect<A, E, R>) {

@@ -7,6 +7,7 @@ import {
   enabled,
   ensureDirectory,
   inspectFile,
+  removeChecked,
   validateFile,
   writeChecked as checkedWrite,
 } from "@kilocode/sandbox"
@@ -59,6 +60,9 @@ export const checked = (
   proof: { readonly dev: string; readonly ino: string },
   sha256: string,
 ) => checkedWrite(path, Encoding.encode(text, encoding), proof, sha256).pipe(Effect.mapError(wrap))
+
+export const remove = (path: string, proof: { readonly dev: string; readonly ino: string }, sha256: string) =>
+  removeChecked(path, proof, sha256).pipe(Effect.mapError(wrap))
 
 export const stage = (
   fs: FSUtil.Interface,

@@ -1,5 +1,13 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-14 19:14 America/Toronto - Role learning recovers exactly once per run
+
+**Status: product commit `958b5b81da` is verified and pushed to `origin/main`; it is intentionally not installed alone.** Routine role memory now stores visible text and the SHA-256 identities of learned retained runs in one atomic version-2 record. Plain legacy strings remain readable and migrate on the next memory write. Settlement uses the terminal run ID when learning; replay after a failed first memory write adds the summary once, while later replay sees the same source and does nothing. Distinct runs with identical summaries remain independently attributable. Manual memory edits preserve learned identities, so stale settlement cannot restore text the person replaced.
+
+Source metadata is bounded to the same terminal history Raya can still replay: the last 50 retained results plus the schedule anchor. Fixed-size digests prevent unbounded run IDs from inflating the record. The adverse test begins with legacy memory, fails the first memory publication after run history commits, recovers twice, adds a second identically worded result, edits memory manually and replays both old runs. Every stage retains the expected text and sources. The scheduler suite passes **30 / 420**; task persistence passes **8 / 84**; targeted memory/removal compatibility passes **2 / 6**. Scoped one-thread lint has zero errors and no new warnings; affected guards pass. No broad/high-memory checker ran and no Bun or tsgo process remained.
+
+EN-02/OVR-05 remain **In progress** for remaining report/delegation/next-queue crash orderings and representative company execution. Installed source remains `17ff50e907`.
+
 ## ChatGPT 2026-09-14 19:06 America/Toronto - Linked schedule settlement recovers after run commit
 
 **Status: product commit `48a0b512f3` is verified and pushed to `origin/main`; it is intentionally not installed alone.** Replaying settlement for an already terminal run now repeats the idempotent schedule reconciliation before report and delegation processing. If run history committed but the linked occurrence update failed, the next settlement closes that exact occurrence instead of leaving permanent active ownership that blocks later runs.

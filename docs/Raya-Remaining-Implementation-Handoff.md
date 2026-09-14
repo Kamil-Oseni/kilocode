@@ -1,5 +1,13 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-14 19:14 America/Toronto - EN-02 source-aware role memory
+
+Product commit `958b5b81da` is verified and pushed. Routine memory at `raya/agent-memory/<agentID>` now accepts a legacy string or version 2 `{ version, text, sources }`. `sources` contains at most 51 lowercase SHA-256 run-ID digests: the terminal histories retained by `writeRuns` plus its possible schedule anchor. `remember` changes visible text while preserving sources; ordinary `append` preserves sources; `learn(agentID, runID, text)` filters sources against currently retained run history and atomically adds text plus the new digest only when absent. Keep these fields in one storage record; splitting the source ledger from text recreates a crash window.
+
+Both live settlement and its already-terminal replay branch use `learn` with the saved startup definition's memory scope. The replay branch validates a retained startup snapshot before learning, just as first settlement does. Preserve the failure test: start from plain `Legacy context`, commit a terminal run, fail the first `agent-memory` replace, then require two replays to yield one learned summary. A second run with identical text must add a second summary and source. After `remember("Edited memory")`, replaying both runs must leave that edit unchanged. Evidence: scheduler 30 / 420, persistence 8 / 84, targeted compatibility 2 / 6; scoped lint and guards pass.
+
+Continue settlement recovery around report publication, delegation close and queued-next start. A failure after report insertion but before delegation finish must converge to one report and one reply. A failure after delegation finish but before taking or starting the next queued row must not strand it; replay must drain it once without changing a cancelled result. Prefer deterministic database triggers and storage failure injection over success-only DOM tests. EN-02/OVR-05 remain **In progress**; installed source remains `17ff50e907`, so batch this backend slice into a later coherent low-memory snapshot.
+
 ## ChatGPT 2026-09-14 19:06 America/Toronto - EN-02 linked occurrence settlement replay
 
 Product commit `48a0b512f3` is verified and pushed. In the `settle` branch that finds an already terminal run, preserve `schedule.settle(done)` for complete or blocked states before `retain(done)` and `close(done)`. The live transition path already used that order. Without the replay call, a crash or database failure after run transition but before occurrence settlement leaves the occurrence linked forever even though run history is terminal.

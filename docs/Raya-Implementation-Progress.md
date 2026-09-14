@@ -2,6 +2,14 @@
 
 Source of scope: [Comprehensive audit](Raya-Comprehensive-Audit.md). All sections and all ten overhauls remain in scope. Work proceeds in dependency order, with broader validation batched at checkpoints. A completed subtask does not mean the overall overhaul is complete.
 
+## ChatGPT 2026-09-13 22:32 America/Toronto - safe native Excel formulas delivered
+
+**Status: delivered in product commit `f59da8e3c4`; pushed.** OVR-08 `create_spreadsheet` now accepts formula cells as `{ formula, value }`, where `formula` omits the leading equals sign and `value` is the required cached string, finite number or boolean shown before a spreadsheet application recalculates. The schema uses Excel's 8,192-character formula ceiling. The safe first contract supports same-sheet cell/range references, arithmetic and comparisons plus `SUM`, `AVERAGE`, `MIN`, `MAX`, `COUNT`, `COUNTA`, `ROUND`, `ROUNDUP`, `ROUNDDOWN`, `ABS`, `IF`, `AND`, `OR` and `NOT`.
+
+The admission boundary rejects a leading `=`, unsupported identifiers and functions, string literals, bracket/bang syntax, external workbook/sheet references, URLs and cell references outside Excel's row/column bounds. This prevents formulas from becoming an external-link or DDE transport. Raya writes a native formula with the typed cached value, includes formulas in permission/artifact metadata, sizes columns from the cached display value and states that Raya itself does not calculate formulas. The existing XLSX reader returns the cached/displayed result without claiming it is current.
+
+The production capability suite passes 7 / 7 tests with 165 assertions. It reparses the actual workbook and finds `SUM(B2:B3)` with numeric cached value `2230.5`, reads that displayed total through Raya, and proves unsafe `HYPERLINK` and leading-equals formulas create no output. ChatGPT also opened the retained workbook through installed Microsoft Excel: Excel reported two sheets, native formula `=SUM(B2:B3)`, cached value `2230.5`, recalculated value `2230.5`, automatic calculation and zero external link sources. Scoped single-thread non-type-aware Oxlint, formatting, annotation and Effect-facade guards pass. No broad or high-memory check ran. The temporary workbook and test-only export hook were removed. This checkpoint is pushed but not installed; batch it with the next coherent OVR-08 slice.
+
 ## ChatGPT 2026-09-13 22:24 America/Toronto - native PowerPoint image embedding delivered
 
 **Status: delivered in product commit `9234442b89`; pushed.** OVR-08 `create_presentation` now accepts one optional local PNG or JPEG image per slide with required alternative text, an optional caption and an optional width from 1 to 10.5 inches. An image may share a slide with its title and subtitle, but not body text, list points or a table because those occupy the same content region. A deck is limited to 20 images, 10 MiB per image and 40 MiB combined. Network images are not fetched.

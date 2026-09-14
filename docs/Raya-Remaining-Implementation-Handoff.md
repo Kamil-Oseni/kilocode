@@ -1,5 +1,29 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-14 15:01 America/Toronto - Session-owned Apply Patch replay cleanup
+
+**State: implemented and verified locally; commit/push/install pending.** Continue from this exact implementation rather than adding a broad age-based deletion job.
+
+`packages/opencode/src/kilocode/tool/apply-patch-receipt.ts` now creates `raya/apply-patch-sessions/<sha256(session)>/<sha256(invocation)>` before the immutable intent. The version-1 value retains the exact session and invocation, and an existing value must match both. `prepare` lists that session's ownership keys after the create; more than 4,096 fails admission and removes the new claim. This prevents one live session from producing an uncleanable unbounded replay set while preserving exact retries already inside the cap.
+
+The exported `cleanup(storage, session)` performs two phases. First it lists at most 4,096 exact session keys, validates their shapes and values, and asks `journals(storage).removable(invocation)` to prove that every transaction is missing or `done`. Any active phase or `conflict` refuses the whole preflight before deletion. Second it removes each journal, receipt, intent and finally its session index. The index-last order makes an interrupted cleanup discoverable and repeatable. Do not change this to age-only expiry: a live or restartable session still needs its exact response receipt, and a conflict can retain sidecars or foreign-state evidence that must not be erased.
+
+`packages/opencode/src/kilocode/tool/mutation-journal.ts` adds `removable` and `erase`. The cleanup plan is capped at 2,049 revision files and 64 recovery permits and validates every key before deletion. It removes a leftover terminal active index if one exists. `packages/opencode/src/kilocode/session/retention.ts` calls replay cleanup inside `reviews`, after session cancellation/draining has begun and before deletion publication/event erasure. The existing recursive session deletion therefore cleans each child under its own stable session identity. `.changeset/raya-checked-transaction-phases.md` includes the user-facing lifecycle behavior.
+
+Authoritative local evidence:
+
+- `bun test ./test/kilocode/apply-patch-retention.test.ts` from `packages/opencode`: 2 pass / 16 assertions. It proves terminal commit cleanup, another session untouched, idempotent retry, active refusal with exact evidence retained, malformed ownership refusal, malformed journal-key refusal and the 4,096-entry admission cap without an orphan intent/index.
+- `bun test ./test/kilocode/sandbox/session.test.ts`: 11 pass. Its new real `Session.Service.remove` case prepares an intent with no admitted transaction, deletes that session, and proves the intent is gone through the same `SessionRetention` service used by production.
+- `bun test ./test/tool/apply_patch.test.ts`: 42 pass / 150 assertions. Exact replay, changed reuse, receipt reconstruction and all pre-existing adverse file/permission/transaction cases remain green.
+- `bun test ./test/kilocode/mutation-journal.test.ts`: 12 pass / 61 assertions.
+- One-thread scoped Oxlint: zero errors; 14 warnings are older findings in pre-existing Apply Patch/journal/session fixture lines. OpenCode annotation, Effect Promise-facade and Markdown-table guards pass.
+
+The real session assertion initially failed because the fixture supplied Storage privately to `Session.layer` but did not expose that same service to the test body. The assertion was retained. The fixture now provides the memoized Storage node at the top level, and the unchanged product expectation passes. This is the standing policy: `happy-dom` is only a DOM implementation name. Never remove or weaken an adverse assertion to make a flow green; repair its setup or prove it at the real HTTP, storage, filesystem, Chromium or installed-host boundary.
+
+Before installation, run formatting, the focused suites above as justified by further edits, one-thread scoped Oxlint, annotation/Promise-facade/Markdown-table/diff guards, then commit product and docs conventionally and push `git push --no-verify origin main`. Use only `$env:RAYA_LOW_MEMORY='1'; bun run snapshot:install` from `packages/kilo-vscode`. Record the exact source, extension ID, VSIX and CLI hashes, staging/process/free-space state and active pointer in both documents. Do not ask the sleeping user to reload; the currently installed `6d185cafc9` package is still not active in the open host.
+
+Known limit: replay state created before this ownership-index contract has no session index and is not selected by this cleanup. The local `6d185cafc9` package had not become active when this implementation was written, so no installed-host replay record is known to have entered that gap. Add a bounded legacy backfill only if inspection finds pre-index intent files; do not scan or delete unbounded protected storage speculatively.
+
 ## ChatGPT 2026-09-14 05:33 America/Toronto - Filesystem boundary snapshot installed
 
 Installed source is now `4486e2a9b0` as `eden.raya@7.4.23-snapshot+4486e2a9b0.kamil-oseni.1789378118576`. The vault package is `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.d2757082115192bd18b5cd49bc39f9bccf3b9fc457785c3252c926cb1199dd73.vsix`, 518,905,046 bytes, SHA-256 `D2757082115192BD18B5CD49BC39F9BCCF3B9FC457785C3252C926CB1199DD73`. Installed `bin\kilo.exe` is 230,252,544 bytes, SHA-256 `B6D8ACB421A0EDAC23DB4FDF4AC8B9FC57E0B2ACF4083E03E502972EB470E98A`, matching the vault index.

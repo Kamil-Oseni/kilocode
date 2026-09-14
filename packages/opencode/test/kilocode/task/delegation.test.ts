@@ -430,6 +430,44 @@ test("an exact terminal replay restores a reply after publication failed", async
   )
 })
 
+test("an exact attachment replay restores a start card after publication failed", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const store = RayaTaskDelegation.make(database)
+      const inbox = RayaTaskInbox.make(database)
+      const chief = agent("chief", "generalist")
+      const books = agent("books", "accountant")
+      const admitted = yield* store.admit(request("dlg_start_recovery", chief.id, books.id), chief, books)
+      const taken = (yield* store.take(books.id))!
+      expect(taken.id).toBe(admitted.record.id)
+      yield* database.db.run(`
+        CREATE TRIGGER fail_delegation_start
+        BEFORE INSERT ON raya_routine_message
+        WHEN NEW.source LIKE 'start:%'
+        BEGIN
+          SELECT RAISE(ABORT, 'injected start-card failure');
+        END
+      `)
+      const sid = SessionID.make("ses_start_recovery")
+      expect(Exit.isFailure(yield* store.attach(taken.id, "run-start-recovery", sid).pipe(Effect.exit))).toBe(true)
+      expect(yield* store.get(taken.id)).toMatchObject({
+        state: "running",
+        childRunID: "run-start-recovery",
+        sessionID: sid,
+      })
+      expect((yield* inbox.page(chief.id)).messages.filter((item) => item.source.startsWith("start:"))).toEqual([])
+      yield* database.db.run("DROP TRIGGER fail_delegation_start")
+
+      expect((yield* store.attach(taken.id, "run-start-recovery", sid)).state).toBe("running")
+      expect((yield* store.attach(taken.id, "run-start-recovery", sid)).state).toBe("running")
+      const starts = (yield* inbox.page(chief.id)).messages.filter((item) => item.source.startsWith("start:"))
+      expect(starts).toHaveLength(1)
+      expect(starts[0]?.body).toContain("no longer only queued")
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
 test("child cost is stored as a real amount and listed on the parent run without adding it", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {

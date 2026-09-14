@@ -314,6 +314,10 @@ export namespace RayaTaskDelegation {
       const item = replied(record, recipient)
       return item ? publish([item]) : Effect.void
     }
+    const begin = (record: Record) => {
+      const item = begun(record)
+      return item ? publish([item]) : Effect.void
+    }
     const get = Effect.fn("RayaTaskDelegation.get")(function* (id: string) {
       const row = yield* db.select().from(Delegation).where(eq(Delegation.id, id)).get().pipe(Effect.orDie)
       if (!row) return yield* new Invalid({ message: "This delegation request was not found." })
@@ -535,7 +539,10 @@ export namespace RayaTaskDelegation {
         return yield* new Conflict({ message: "This delegation is already attached to another run." })
       if (prior.sessionID && prior.sessionID !== sessionID)
         return yield* new Conflict({ message: "This delegation is already attached to another session." })
-      if (prior.childRunID === runID && prior.sessionID === sessionID) return prior
+      if (prior.childRunID === runID && prior.sessionID === sessionID) {
+        yield* begin(prior)
+        return prior
+      }
       if (prior.state !== "accepted" && prior.state !== "running")
         return yield* new Conflict({ message: "This delegation cannot start from its current state." })
       const now = Date.now()
@@ -548,8 +555,7 @@ export namespace RayaTaskDelegation {
       const record = decode({
         ...(yield* db.select().from(Delegation).where(eq(Delegation.id, id)).get().pipe(Effect.orDie))!,
       })
-      const item = begun(record)
-      if (item) yield* publish([item])
+      yield* begin(record)
       return record
     })
     const finish = Effect.fn("RayaTaskDelegation.finish")(function* (

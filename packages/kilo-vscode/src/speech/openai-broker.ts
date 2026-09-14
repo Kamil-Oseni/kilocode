@@ -29,6 +29,11 @@ type Binding = {
   directory: string
   model: string
 }
+type Reservation = {
+  parentSessionID: string
+  requestID: string
+  model: typeof model
+}
 
 type Input = { requestID: string; sessionID: string; sdp: string }
 type Work = { id: string; name: unknown; arguments: string; responseID?: string; itemID?: string }
@@ -48,6 +53,7 @@ type Claim = {
   config?: Config
   remote?: string
   binding?: Binding
+  reservation?: Reservation
   socket?: WebSocket
   timer?: ReturnType<typeof setInterval>
   closing?: Promise<string | undefined>
@@ -88,6 +94,12 @@ const tool = {
   },
 }
 
+class BackendError extends Error {
+  constructor(readonly status: number) {
+    super(`Raya voice work could not be confirmed (${status}). Review the conversation before retrying.`)
+  }
+}
+
 /** Provider credentials and work dispatch never enter the webview. */
 export class OpenAIBroker {
   private claim?: Claim
@@ -96,6 +108,7 @@ export class OpenAIBroker {
   constructor(
     private readonly request: typeof fetch = fetch,
     private readonly connect = (url: string, options: WebSocket.ClientOptions) => new WebSocket(url, options),
+    private readonly reservationTimeout = 30_000,
   ) {}
 
   get active() {
@@ -226,6 +239,29 @@ export class OpenAIBroker {
         audio: { output: { voice: cfg.voice } },
       }),
     )
+    const reservation: Reservation = {
+      parentSessionID: claim.input.sessionID,
+      requestID: claim.input.requestID,
+      model,
+    }
+    claim.uncertain = true
+    const admitted = await this.backend(claim, "/reservation", {
+      method: "POST",
+      body: JSON.stringify(reservation),
+    }).catch((error: unknown) => {
+      if (error instanceof BackendError && error.status >= 400 && error.status < 500 && error.status !== 408)
+        claim.uncertain = false
+      throw error
+    })
+    if (
+      admitted.requestID !== reservation.requestID ||
+      admitted.model !== reservation.model ||
+      admitted.status !== "reserved"
+    )
+      throw new Error("Raya voice reservation was not confirmed")
+    claim.reservation = reservation
+    claim.uncertain = false
+    this.assert(claim)
     claim.uncertain = true
     const response = await this.request(endpoint, {
       method: "POST",
@@ -255,6 +291,7 @@ export class OpenAIBroker {
       }),
     })
     claim.binding = admission(binding, claim)
+    claim.reservation = undefined
     claim.usage = new OpenAIUsage(
       claim.abort.signal,
       (receipt) =>
@@ -521,13 +558,14 @@ export class OpenAIBroker {
       },
       signal: cleanup
         ? AbortSignal.timeout(15_000)
-        : AbortSignal.any([claim.abort.signal, AbortSignal.timeout(30_000)]),
+        : AbortSignal.any([
+            claim.abort.signal,
+            AbortSignal.timeout(path === "/reservation" ? this.reservationTimeout : 30_000),
+          ]),
     })
     if (!response.ok) {
       await response.body?.cancel()
-      throw new Error(
-        `Raya voice work could not be confirmed (${response.status}). Review the conversation before retrying.`,
-      )
+      throw new BackendError(response.status)
     }
     const value = object(await bounded(response))
     if (!value) throw new Error("Invalid Raya voice response")
@@ -559,6 +597,24 @@ export class OpenAIBroker {
                   throw new Error("Raya voice work release remains unconfirmed")
               },
             ),
+          ]
+        : []),
+      ...(claim.reservation && !claim.uncertain
+        ? [
+            this.backend(
+              claim,
+              "/reservation/release",
+              { method: "POST", body: JSON.stringify(claim.reservation) },
+              true,
+            ).then((receipt) => {
+              if (
+                receipt.requestID !== claim.reservation!.requestID ||
+                receipt.model !== claim.reservation!.model ||
+                receipt.status !== "released"
+              )
+                throw new Error("Raya voice reservation release remains unconfirmed")
+              claim.reservation = undefined
+            }),
           ]
         : []),
     ])

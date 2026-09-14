@@ -59,6 +59,18 @@ export const make = Effect.fn("RayaGoalCharges.make")(function* (deps: Deps) {
     }
   })
 
+  const locateAny = Effect.fn("RayaGoalCharges.locateAny")(function* (sessionID: SessionID) {
+    let id: SessionID | undefined = sessionID
+    for (let depth = 0; id && depth < 64; depth++) {
+      const goal = yield* goals.get(id).pipe(Effect.catchTag("RayaGoal.NotFoundError", () => Effect.succeed(undefined)))
+      if (goal) return { id, goal }
+      const session = yield* deps.sessions
+        .get(id)
+        .pipe(Effect.catchTag("NotFoundError", () => Effect.succeed(undefined)))
+      id = session?.parentID
+    }
+  })
+
   const key = (owner: Owner, currency: string) => [
     "raya",
     "goal-charge-reservations",
@@ -164,6 +176,36 @@ export const make = Effect.fn("RayaGoalCharges.make")(function* (deps: Deps) {
       yield* remove(owner, currency, item.token)
     }
     return stale.length > 0
+  })
+
+  const complete = Effect.fn("RayaGoalCharges.complete")(function* (
+    sessionID: SessionID,
+    currency: string,
+    identity: string,
+  ) {
+    if (!/^[a-zA-Z0-9:_-]{1,256}$/.test(identity))
+      return yield* Effect.fail(new Error(`Goal ${currency} reservation identity is invalid.`))
+    const found = yield* locateAny(sessionID)
+    if (!found) return false
+    const owner: Owner = { id: found.id, createdAt: found.goal.createdAt }
+    return yield* change(
+      owner,
+      currency,
+      Effect.fnUntraced(function* (record) {
+        const item = record?.leases.find((entry) => entry.token === identity)
+        if (!record || !item) return false
+        if (item.origin !== sessionID)
+          return yield* Effect.fail(new Error(`Goal ${currency} reservation identity belongs to another session.`))
+        if (item.state === "settling" || item.state === "recovering")
+          return yield* Effect.fail(new Error(`Goal ${currency} reservation is already reconciling a receipt.`))
+        yield* save(
+          owner,
+          currency,
+          record.leases.filter((entry) => entry.token !== identity),
+        )
+        return true
+      }),
+    )
   })
 
   const claim = Effect.fn("RayaGoalCharges.claim")(function* (
@@ -297,9 +339,11 @@ export const make = Effect.fn("RayaGoalCharges.make")(function* (deps: Deps) {
       Effect.forever,
       Effect.forkScoped,
     )
-    const dispatch = update((item) =>
-      item.state === "reserved" ? { ...item, state: "dispatched", expiresAt: now() + ttl } : undefined,
-    ).pipe(
+    const dispatch = update((item) => {
+      if (item.state === "dispatched") return { ...item, expiresAt: now() + ttl }
+      if (item.state === "reserved") return { ...item, state: "dispatched", expiresAt: now() + ttl }
+      return undefined
+    }).pipe(
       Effect.flatMap((changed) =>
         changed ? Effect.void : Effect.fail(new Error(`Goal ${currency} reservation cannot be dispatched.`)),
       ),
@@ -335,5 +379,5 @@ export const make = Effect.fn("RayaGoalCharges.make")(function* (deps: Deps) {
     return { dispatch, finish, release, uncertain, settle }
   })
 
-  return { claim }
+  return { claim, complete }
 })

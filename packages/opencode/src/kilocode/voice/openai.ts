@@ -17,6 +17,8 @@ import {
   OpenAIStart,
   OpenAIImage,
   OpenAIImageInput,
+  OpenAIReservation,
+  OpenAIReserve,
   VoiceID,
   VoiceKey,
 } from "./openai-protocol"
@@ -26,6 +28,16 @@ type Call = typeof OpenAICall.Type
 type Input = typeof OpenAICallInput.Type
 type Image = { receipt: typeof OpenAIImage.Type; data: string }
 type Stored = Store.Stored
+type Admission = {
+  dispatch: Effect.Effect<void, VoiceError>
+  finish: Effect.Effect<void, VoiceError>
+  release: Effect.Effect<void, never>
+}
+type Reservation = {
+  fingerprint: string
+  input: typeof OpenAIReserve.Type
+  lease: Admission
+}
 type Deps = {
   database: Database.Interface
   storage: Storage.Interface
@@ -47,6 +59,8 @@ type Deps = {
     model: "gpt-realtime-2.1" | "gpt-live-transcribe"
     pricing: OpenAIPricing
   }) => Effect.Effect<void, VoiceError>
+  admissions?: (sessionID: SessionID, identity: string) => Effect.Effect<Admission, VoiceError>
+  completions?: (sessionID: SessionID, identity: string) => Effect.Effect<boolean, VoiceError>
 }
 
 export class VoiceError extends Schema.TaggedErrorClass<VoiceError>()("VoiceError", {
@@ -127,6 +141,7 @@ export const make = (deps: Deps) =>
     const scope = yield* Scope.Scope
     const owner = crypto.randomUUID()
     const gates = new Map<string, { semaphore: ReturnType<typeof Semaphore.makeUnsafe>; refs: number }>()
+    const reservations = new Map<string, Reservation>()
     const locked = <A, E, R>(id: string, work: Effect.Effect<A, E, R>) =>
       Effect.acquireUseRelease(
         Effect.sync(() => {
@@ -143,6 +158,15 @@ export const make = (deps: Deps) =>
           }),
       )
     const store = Store.make(deps.database, deps.storage)
+    const reservation = (input: typeof OpenAIReserve.Type, secret: string, directory: string) =>
+      digest(JSON.stringify([directory, input.parentSessionID, input.requestID, input.model, digest(secret)]))
+    const reserved = (input: typeof OpenAIReserve.Type): typeof OpenAIReservation.Type => ({
+      requestID: input.requestID,
+      model: input.model,
+      status: "reserved",
+    })
+    const finishReservation = (key: string, entry: Reservation) =>
+      entry.lease.finish.pipe(Effect.tap(() => Effect.sync(() => reservations.delete(key))))
     const save = (stored: Stored) =>
       store
         .replace(stored)
@@ -319,6 +343,70 @@ export const make = (deps: Deps) =>
         ),
       )
 
+    const reserve = (input: typeof OpenAIReserve.Type, secret: string, directory: string) =>
+      Effect.gen(function* () {
+        if (!Schema.is(VoiceKey)(secret)) return yield* refuse("unauthorized", "Invalid voice capability.")
+        if (!Schema.is(OpenAIReserve)(input)) return yield* refuse("invalid", "Invalid voice reservation request.")
+        const dir = yield* canonical(directory)
+        const parent = yield* deps.sessions.get(input.parentSessionID)
+        if ((yield* canonical(parent.directory)) !== dir)
+          return yield* refuse("conflict", "Parent session belongs to another directory.")
+        const id = digest(JSON.stringify([dir, input.requestID]))
+        const proof = reservation(input, secret, dir)
+        return yield* locked(
+          `reservation:${id}`,
+          Effect.gen(function* () {
+            const prior = reservations.get(id)
+            if (prior) {
+              if (prior.fingerprint !== proof)
+                return yield* refuse("conflict", "Voice reservation identity was reused with different input.")
+              return reserved(prior.input)
+            }
+            if (reservations.size >= 64)
+              return yield* refuse("conflict", "Voice reservation capacity is held by unresolved calls.")
+            const lease = deps.admissions
+              ? yield* deps.admissions(parent.id, `voice:${proof}`)
+              : { dispatch: Effect.void, finish: Effect.void, release: Effect.void }
+            const entry = { fingerprint: proof, input, lease }
+            reservations.set(id, entry)
+            const dispatched = yield* lease.dispatch.pipe(Effect.exit)
+            if (Exit.isFailure(dispatched)) {
+              reservations.delete(id)
+              yield* lease.release
+              return yield* Effect.failCause(dispatched.cause)
+            }
+            return reserved(input)
+          }).pipe(Effect.uninterruptible),
+        )
+      })
+
+    const release = (input: typeof OpenAIReserve.Type, secret: string, directory: string) =>
+      Effect.gen(function* () {
+        if (!Schema.is(VoiceKey)(secret)) return yield* refuse("unauthorized", "Invalid voice capability.")
+        if (!Schema.is(OpenAIReserve)(input)) return yield* refuse("invalid", "Invalid voice reservation request.")
+        const dir = yield* canonical(directory)
+        const parent = yield* deps.sessions.get(input.parentSessionID)
+        if ((yield* canonical(parent.directory)) !== dir)
+          return yield* refuse("conflict", "Parent session belongs to another directory.")
+        const id = digest(JSON.stringify([dir, input.requestID]))
+        const proof = reservation(input, secret, dir)
+        return yield* locked(
+          `reservation:${id}`,
+          Effect.gen(function* () {
+            const entry = reservations.get(id)
+            if (!entry) {
+              if (deps.completions) yield* deps.completions(parent.id, `voice:${proof}`)
+              return { ...reserved(input), status: "released" as const }
+            }
+            if (entry.fingerprint !== proof)
+              return yield* refuse("conflict", "Voice reservation identity was reused with different input.")
+            yield* finishReservation(id, entry)
+            yield* entry.lease.release
+            return { ...reserved(input), status: "released" as const }
+          }).pipe(Effect.uninterruptible),
+        )
+      })
+
     const start = (input: typeof OpenAIStart.Type, secret: string, directory: string) =>
       Effect.gen(function* () {
         if (!Schema.is(VoiceKey)(secret)) return yield* refuse("unauthorized", "Invalid voice capability.")
@@ -327,42 +415,77 @@ export const make = (deps: Deps) =>
         if ((yield* canonical(parent.directory)) !== dir)
           return yield* refuse("conflict", "Parent session belongs to another directory.")
         const id = `rov_${digest(JSON.stringify([dir, input.providerCallID])).slice(0, 48)}`
+        const model = input.model ?? "gpt-realtime-2.1"
+        const reservationInput = { parentSessionID: parent.id, requestID: input.requestID, model }
+        const reservationID = digest(JSON.stringify([dir, input.requestID]))
         return yield* locked(
-          id,
-          Effect.gen(function* () {
-            const now = Date.now()
-            const stored: Stored = {
-              owner,
-              hash: digest(secret),
-              requestID: input.requestID,
-              calls: {},
-              binding: {
-                id,
-                generation: crypto.randomUUID(),
-                parentSessionID: parent.id,
-                directory: dir,
-                providerCallID: input.providerCallID,
-                model: input.model ?? "gpt-realtime-2.1",
-                status: "active",
-                createdAt: now,
-                expiresAt: now + 60 * 60 * 1000,
-              },
-            }
-            if (
-              yield* store
-                .create(stored)
-                .pipe(Effect.mapError((error) => new VoiceError({ code: error.code, message: error.message })))
-            )
-              return stored.binding
-            const existing = yield* load(id, secret, dir)
-            if (
-              existing.requestID !== input.requestID ||
-              existing.binding.parentSessionID !== parent.id ||
-              existing.binding.model !== (input.model ?? "gpt-realtime-2.1")
-            )
-              return yield* refuse("conflict", "Provider call already has another binding.")
-            return visible(existing)
-          }),
+          `reservation:${reservationID}`,
+          locked(
+            id,
+            Effect.gen(function* () {
+              const prior = yield* load(id, secret, dir).pipe(
+                Effect.catchTag("VoiceError", (error) =>
+                  error.code === "missing" ? Effect.succeed(undefined) : Effect.fail(error),
+                ),
+              )
+              const admission = reservations.get(reservationID)
+              const proof = reservation(reservationInput, secret, dir)
+              if (prior) {
+                if (
+                  prior.requestID !== input.requestID ||
+                  prior.binding.parentSessionID !== parent.id ||
+                  prior.binding.model !== model
+                )
+                  return yield* refuse("conflict", "Provider call already has another binding.")
+                if (admission) {
+                  if (admission.fingerprint !== proof)
+                    return yield* refuse("conflict", "Voice reservation does not match the provider binding.")
+                  yield* finishReservation(reservationID, admission)
+                  yield* admission.lease.release
+                }
+                return visible(prior)
+              }
+              if (!admission || admission.fingerprint !== proof)
+                return yield* refuse("conflict", "Reserve voice budget before starting the provider call.")
+              const now = Date.now()
+              const stored: Stored = {
+                owner,
+                hash: digest(secret),
+                requestID: input.requestID,
+                calls: {},
+                binding: {
+                  id,
+                  generation: crypto.randomUUID(),
+                  parentSessionID: parent.id,
+                  directory: dir,
+                  providerCallID: input.providerCallID,
+                  model,
+                  status: "active",
+                  createdAt: now,
+                  expiresAt: now + 60 * 60 * 1000,
+                },
+              }
+              if (
+                yield* store
+                  .create(stored)
+                  .pipe(Effect.mapError((error) => new VoiceError({ code: error.code, message: error.message })))
+              ) {
+                yield* finishReservation(reservationID, admission)
+                yield* admission.lease.release
+                return stored.binding
+              }
+              const existing = yield* load(id, secret, dir)
+              if (
+                existing.requestID !== input.requestID ||
+                existing.binding.parentSessionID !== parent.id ||
+                existing.binding.model !== model
+              )
+                return yield* refuse("conflict", "Provider call already has another binding.")
+              yield* finishReservation(reservationID, admission)
+              yield* admission.lease.release
+              return visible(existing)
+            }),
+          ),
         )
       })
     const stage = (id: string, input: typeof OpenAIImageInput.Type, secret: string, directory: string) =>
@@ -595,5 +718,5 @@ export const make = (deps: Deps) =>
           return stored.binding
         }),
       )
-    return { start, stage, meter, usage, submit, delegate, duration, get, cancel, close }
+    return { reserve, release, start, stage, meter, usage, submit, delegate, duration, get, cancel, close }
   })

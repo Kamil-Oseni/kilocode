@@ -10,12 +10,27 @@ const sdp = "v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n"
 const input = { requestID: "request_1", sessionID: "session_1", sdp }
 const remote = "rtc_live_1"
 
-async function calls(
-  hold: Promise<void> | undefined,
+function admission(
   mode: string,
+  path: string,
   method: string,
   body: Record<string, unknown>,
+  binding: Record<string, unknown>,
 ) {
+  if (path.endsWith("/reservation/release"))
+    return Response.json({ requestID: body.requestID, model: body.model, status: "released" })
+  if (path.endsWith("/reservation")) {
+    if (mode === "reservation-rejected") return new Response("budget refused", { status: 409 })
+    return Response.json({
+      requestID: mode === "reservation-malformed" ? "other" : body.requestID,
+      model: body.model,
+      status: "reserved",
+    })
+  }
+  if (method === "DELETE") return Response.json({ ...binding, status: "closed" })
+}
+
+async function calls(hold: Promise<void> | undefined, mode: string, method: string, body: Record<string, unknown>) {
   if (hold && method === "POST") await hold
   const context =
     body.context && typeof body.context === "object" ? (body.context as Record<string, unknown>) : undefined
@@ -65,6 +80,7 @@ function fixture(startup = 12_000) {
     control: undefined as WebSocket | undefined,
     hold: undefined as Promise<void> | undefined,
     session: undefined as Record<string, unknown> | undefined,
+    order: [] as string[],
   }
   const binding = {
     id: "binding_1",
@@ -87,6 +103,7 @@ function fixture(startup = 12_000) {
         return new Response("upgrade failed", { status: 400 })
       }
       if (url.pathname === "/v1/live/sessions") {
+        state.order.push("provider")
         expect(request.headers.get("authorization")).toBe("Bearer openai-only")
         expect(request.headers.get("X-Raya-Voice-Key")).toBeNull()
         const body = (await request.json()) as Record<string, unknown>
@@ -109,6 +126,7 @@ function fixture(startup = 12_000) {
         capability: request.headers.get("X-Raya-Voice-Key"),
         directory: url.searchParams.get("directory"),
       })
+      state.order.push(url.pathname)
       if (url.pathname.endsWith("/hangup")) return new Response(null, { status: state.mode === "cleanup" ? 503 : 200 })
       expect(request.headers.get("authorization")).toBe("Basic backend-only")
       expect(url.searchParams.get("directory")).toBe("C:/project")
@@ -116,7 +134,8 @@ function fixture(startup = 12_000) {
       expect(capability).toMatch(/^[a-f0-9]{64}$/)
       if (!state.capability) state.capability = capability!
       expect(capability).toBe(state.capability)
-      if (request.method === "DELETE") return Response.json({ ...binding, status: "closed" })
+      const admitted = admission(state.mode, url.pathname, request.method, body, binding)
+      if (admitted) return admitted
       if (url.pathname.endsWith("/session"))
         return Response.json({ ...binding, parentSessionID: state.mode === "binding" ? "unrelated" : input.sessionID })
       if (url.pathname.endsWith("/duration")) return Response.json(body.receipt)
@@ -162,6 +181,12 @@ function fixture(startup = 12_000) {
   const request: typeof fetch = (value, init) => {
     const url = new URL(value instanceof Request ? value.url : value)
     expect(["https://api.openai.com", server.url.origin]).toContain(url.origin)
+    if (state.mode === "reservation-offline" && url.pathname.endsWith("/reservation"))
+      return Promise.reject(new Error("backend offline"))
+    if (state.mode === "reservation-timeout" && url.pathname.endsWith("/reservation"))
+      return new Promise<Response>((_, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true })
+      })
     return fetch(new URL(url.pathname + url.search, server.url), init)
   }
   const broker = new LiveBroker(
@@ -174,6 +199,7 @@ function fixture(startup = 12_000) {
       return socket
     },
     startup,
+    80,
   )
   return {
     state,
@@ -222,6 +248,11 @@ test("Live creation forbids client mutation events and delivers SDP before sessi
   const f = fixture()
   try {
     await f.start()
+    expect(f.state.order.slice(0, 3)).toEqual([
+      "/kilocode/voice/openai/reservation",
+      "provider",
+      "/kilocode/voice/openai/session",
+    ])
     expect(f.state.ready).toEqual([{ sdp, providerSessionID: remote }])
     expect(f.state.started).toBe(0)
     expect(f.state.session).toMatchObject({
@@ -261,6 +292,40 @@ test("Live creation forbids client mutation events and delivers SDP before sessi
     await f.close()
   }
 })
+
+test("a definite Live provider refusal releases its preflight without creating a binding", async () => {
+  const f = fixture()
+  try {
+    f.state.mode = "rejected"
+    await f.start()
+    expect(f.broker.active).toBe(false)
+    expect(f.state.ready).toEqual([])
+    expect(f.state.order).toEqual([
+      "/kilocode/voice/openai/reservation",
+      "provider",
+      "/kilocode/voice/openai/reservation/release",
+    ])
+    expect(f.state.requests.some((request) => request.path.endsWith("/session"))).toBe(false)
+  } finally {
+    await f.close()
+  }
+})
+
+for (const mode of ["reservation-rejected", "reservation-malformed", "reservation-offline", "reservation-timeout"]) {
+  test(`Live ${mode} never reaches the paid provider boundary`, async () => {
+    const f = fixture()
+    try {
+      f.state.mode = mode
+      await f.start()
+      expect(f.state.order).not.toContain("provider")
+      expect(f.state.ready).toEqual([])
+      expect(f.broker.active).toBe(mode !== "reservation-rejected")
+      if (mode !== "reservation-rejected") expect(f.state.errors.at(-1)).toContain("unconfirmed")
+    } finally {
+      await f.close()
+    }
+  })
+}
 
 test("missing session.started closes the paid call through a host timeout", async () => {
   const f = fixture(80)
@@ -488,9 +553,7 @@ test("long non-ASCII Live results split at 500 scalars", async () => {
     f.send(started())
     await until(() => f.state.started === 1)
     request(f)
-    await until(
-      () => f.state.events.filter((event) => event.type === "session.commentary.append").length === 2,
-    )
+    await until(() => f.state.events.filter((event) => event.type === "session.commentary.append").length === 2)
     const spoken = f.state.events.filter((event) => event.type === "session.commentary.append")
     expect(spoken.map((event) => String(event.content))).toEqual(["字".repeat(500), "字"])
   } finally {
@@ -537,7 +600,9 @@ test("busy Live work narrates a waiting request and later speech requires clarif
     )
     expect(f.state.requests.filter((item) => item.path.includes("/calls") && item.method === "POST")).toHaveLength(1)
     expect(
-      f.state.events.filter((event) => event.type === "session.commentary.append" && String(event.content).includes("Verified Live result")),
+      f.state.events.filter(
+        (event) => event.type === "session.commentary.append" && String(event.content).includes("Verified Live result"),
+      ),
     ).toHaveLength(1)
   } finally {
     release()

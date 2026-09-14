@@ -260,6 +260,7 @@ describe("RayaGoal", () => {
       if (Exit.isFailure(denied)) expect(Cause.pretty(denied.cause)).toContain("belongs to another session")
       yield* lease.dispatch
       const resumed = yield* restarted.claim(child, "USD", token)
+      yield* resumed.dispatch
       yield* resumed.finish
       yield* lease.release
       yield* retry.release
@@ -267,6 +268,10 @@ describe("RayaGoal", () => {
 
       const available = yield* restarted.claim(root, "USD")
       yield* available.release
+      const pending = yield* first.claim(child, "USD", token)
+      yield* pending.dispatch
+      expect(yield* restarted.complete(child, "USD", token)).toBe(true)
+      expect(yield* restarted.complete(child, "USD", token)).toBe(false)
       expect((yield* goals.get(root))?.charges).toEqual([])
     }),
   )

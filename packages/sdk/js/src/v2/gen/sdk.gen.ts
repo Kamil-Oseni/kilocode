@@ -369,6 +369,10 @@ import type {
   KilocodeVoiceOpenaiImageResponses,
   KilocodeVoiceOpenaiMeterErrors,
   KilocodeVoiceOpenaiMeterResponses,
+  KilocodeVoiceOpenaiReleaseErrors,
+  KilocodeVoiceOpenaiReleaseResponses,
+  KilocodeVoiceOpenaiReserveErrors,
+  KilocodeVoiceOpenaiReserveResponses,
   KilocodeVoiceOpenaiResultErrors,
   KilocodeVoiceOpenaiResultResponses,
   KilocodeVoiceOpenaiStartErrors,
@@ -453,6 +457,7 @@ import type {
   NotebookResult,
   OpenAiVoiceCallInput,
   OpenAiVoiceImageInput,
+  OpenAiVoiceReserve,
   OpenAiVoiceStart,
   OpenAiVoiceUsage,
   OutputFormat,
@@ -11553,6 +11558,88 @@ export class Live extends HeyApiClient {
 }
 
 export class Openai extends HeyApiClient {
+  /**
+   * Reserve goal budget before starting a billable OpenAI voice session
+   */
+  public reserve<ThrowOnError extends boolean = false>(
+    parameters?: {
+      "x-raya-voice-key"?: string
+      directory?: string
+      workspace?: string
+      openAiVoiceReserve?: OpenAiVoiceReserve
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "headers", key: "x-raya-voice-key" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "openAiVoiceReserve", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeVoiceOpenaiReserveResponses,
+      KilocodeVoiceOpenaiReserveErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/voice/openai/reservation",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Release a voice reservation after a definite provider refusal
+   */
+  public release<ThrowOnError extends boolean = false>(
+    parameters?: {
+      "x-raya-voice-key"?: string
+      directory?: string
+      workspace?: string
+      openAiVoiceReserve?: OpenAiVoiceReserve
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "headers", key: "x-raya-voice-key" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "openAiVoiceReserve", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeVoiceOpenaiReleaseResponses,
+      KilocodeVoiceOpenaiReleaseErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/voice/openai/reservation/release",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
   /**
    * Bind an OpenAI realtime call to an existing Raya session
    */

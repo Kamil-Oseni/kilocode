@@ -5950,6 +5950,18 @@ export type OpenAiVoiceCall = {
   }
 }
 
+export type OpenAiVoiceReserve = {
+  parentSessionID: string
+  requestID: string
+  model: "gpt-realtime-2.1" | "gpt-live-1"
+}
+
+export type OpenAiVoiceReservation = {
+  requestID: string
+  model: "gpt-realtime-2.1" | "gpt-live-1"
+  status: "reserved" | "released"
+}
+
 export type OpenAiVoiceStart = {
   parentSessionID: string
   providerCallID: string
@@ -27153,6 +27165,86 @@ export type KilocodeVoiceLiveDurationResponses = {
 
 export type KilocodeVoiceLiveDurationResponse =
   KilocodeVoiceLiveDurationResponses[keyof KilocodeVoiceLiveDurationResponses]
+
+export type KilocodeVoiceOpenaiReserveData = {
+  body?: OpenAiVoiceReserve
+  headers?: {
+    "x-raya-voice-key"?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/voice/openai/reservation"
+}
+
+export type KilocodeVoiceOpenaiReserveErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeVoiceOpenaiReserveError = KilocodeVoiceOpenaiReserveErrors[keyof KilocodeVoiceOpenaiReserveErrors]
+
+export type KilocodeVoiceOpenaiReserveResponses = {
+  /**
+   * OpenAIVoiceReservation
+   */
+  200: OpenAiVoiceReservation
+}
+
+export type KilocodeVoiceOpenaiReserveResponse =
+  KilocodeVoiceOpenaiReserveResponses[keyof KilocodeVoiceOpenaiReserveResponses]
+
+export type KilocodeVoiceOpenaiReleaseData = {
+  body?: OpenAiVoiceReserve
+  headers?: {
+    "x-raya-voice-key"?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/voice/openai/reservation/release"
+}
+
+export type KilocodeVoiceOpenaiReleaseErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeVoiceOpenaiReleaseError = KilocodeVoiceOpenaiReleaseErrors[keyof KilocodeVoiceOpenaiReleaseErrors]
+
+export type KilocodeVoiceOpenaiReleaseResponses = {
+  /**
+   * OpenAIVoiceReservation
+   */
+  200: OpenAiVoiceReservation
+}
+
+export type KilocodeVoiceOpenaiReleaseResponse =
+  KilocodeVoiceOpenaiReleaseResponses[keyof KilocodeVoiceOpenaiReleaseResponses]
 
 export type KilocodeVoiceOpenaiStartData = {
   body?: OpenAiVoiceStart

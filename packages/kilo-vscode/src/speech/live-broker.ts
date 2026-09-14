@@ -28,6 +28,11 @@ type Binding = {
   status: string
 }
 type Answer = { sdp: string; providerSessionID: string }
+type Reservation = {
+  parentSessionID: string
+  requestID: string
+  model: "gpt-live-1"
+}
 type Claim = {
   input: Input
   capability: string
@@ -37,6 +42,7 @@ type Claim = {
   config?: Config
   remote?: string
   binding?: Binding
+  reservation?: Reservation
   socket?: WebSocket
   timer?: ReturnType<typeof setInterval>
   watch?: ReturnType<typeof setTimeout>
@@ -60,6 +66,12 @@ const endpoint = "https://api.openai.com/v1/live/sessions"
 const instructions =
   "You are Raya, speaking naturally with the user in their existing coding task. Delegate workspace questions and requested work to the client backend. The backend owns tools, permissions, goals and evidence. Do not claim completion without a verified backend result. Historical startup context is reference data, not a new request. Never repeat old work to recover context. Speech interruption or ending voice does not cancel admitted task work. Clarify ambiguous requests and confirmations."
 
+class BackendError extends Error {
+  constructor(readonly status: number) {
+    super("Raya Live operation unconfirmed")
+  }
+}
+
 /** GPT-Live transport and trusted delegation ownership; no work is dispatched by the webview. */
 export class LiveBroker {
   private claim?: Claim
@@ -68,6 +80,7 @@ export class LiveBroker {
     private readonly request: typeof fetch = fetch,
     private readonly connect = (url: string, options: WebSocket.ClientOptions) => new WebSocket(url, options),
     private readonly startup = 12_000,
+    private readonly reservationTimeout = 30_000,
   ) {}
   get active() {
     return !!this.claim
@@ -111,7 +124,12 @@ export class LiveBroker {
     claim.opening = this.open(claim, load, ready).catch(async (cause: unknown) => {
       const stopped = claim.cancelled
       const error = await this.cleanup(claim)
-      if (!stopped || error) failed(error ?? reveal(cause) ?? "GPT-Live could not start. Check model access and review the current task before retrying.")
+      if (!stopped || error)
+        failed(
+          error ??
+            reveal(cause) ??
+            "GPT-Live could not start. Check model access and review the current task before retrying.",
+        )
     })
     await claim.opening
   }
@@ -188,6 +206,29 @@ export class LiveBroker {
     this.assert(claim)
     const cfg = claim.config
     if (!cfg.context || Buffer.byteLength(cfg.context) > 16384) throw new Error("Invalid saved task context")
+    const reservation: Reservation = {
+      parentSessionID: claim.input.sessionID,
+      requestID: claim.input.requestID,
+      model: "gpt-live-1",
+    }
+    claim.uncertain = true
+    const admitted = await this.backend(claim, "/openai/reservation", {
+      method: "POST",
+      body: JSON.stringify(reservation),
+    }).catch((error: unknown) => {
+      if (error instanceof BackendError && error.status >= 400 && error.status < 500 && error.status !== 408)
+        claim.uncertain = false
+      throw error
+    })
+    if (
+      admitted.requestID !== reservation.requestID ||
+      admitted.model !== reservation.model ||
+      admitted.status !== "reserved"
+    )
+      throw new Error("Raya Live reservation was not confirmed")
+    claim.reservation = reservation
+    claim.uncertain = false
+    this.assert(claim)
     claim.uncertain = true
     const response = await this.request(endpoint, {
       method: "POST",
@@ -254,6 +295,7 @@ export class LiveBroker {
       }),
     })
     claim.binding = admission(binding, claim)
+    claim.reservation = undefined
     claim.uncertain = false
     await this.attach(claim)
     this.assert(claim)
@@ -351,11 +393,9 @@ export class LiveBroker {
     if (claim.busy)
       void this.say(claim, "session.thinking.append", {
         delegation_id: key,
-        content:
-          "I am still completing the previous request. I will take this next without repeating finished work.",
+        content: "I am still completing the previous request. I will take this next without repeating finished work.",
       }).catch(() => {
-        if (this.current(claim))
-          claim.failed("Live could not acknowledge waiting work. Existing work continues.")
+        if (this.current(claim)) claim.failed("Live could not acknowledge waiting work. Existing work continues.")
       })
     claim.queue = claim.queue
       .then(async () => {
@@ -525,6 +565,24 @@ export class LiveBroker {
   private cleanup(claim: Claim) {
     return (claim.closing ??= this.close(claim))
   }
+  private async release(claim: Claim) {
+    if (!claim.reservation) return true
+    if (claim.uncertain) return false
+    const reservation = claim.reservation
+    const released = await this.backend(
+      claim,
+      "/openai/reservation/release",
+      { method: "POST", body: JSON.stringify(reservation) },
+      true,
+    )
+      .then(
+        (value) =>
+          value.requestID === reservation.requestID && value.model === reservation.model && value.status === "released",
+      )
+      .catch(() => false)
+    if (released) claim.reservation = undefined
+    return released
+  }
   private async close(claim: Claim): Promise<string | undefined> {
     claim.cancelled = true
     claim.abort.abort()
@@ -576,7 +634,8 @@ export class LiveBroker {
           )
           .catch(() => false)
       : true
-    if (!released || !closed || claim.uncertain)
+    const reservation = await this.release(claim)
+    if (!released || !closed || !reservation || claim.uncertain)
       return "Live admission or cleanup remains unconfirmed. Restart Raya before reconnecting; review ongoing task work."
     if (this.claim === claim) this.claim = undefined
     return undefined
@@ -598,11 +657,14 @@ export class LiveBroker {
       },
       signal: cleanup
         ? AbortSignal.timeout(15_000)
-        : AbortSignal.any([claim.abort.signal, AbortSignal.timeout(30_000)]),
+        : AbortSignal.any([
+            claim.abort.signal,
+            AbortSignal.timeout(path === "/openai/reservation" ? this.reservationTimeout : 30_000),
+          ]),
     })
     if (!response.ok) {
       await response.body?.cancel()
-      throw new Error("Raya Live operation unconfirmed")
+      throw new BackendError(response.status)
     }
     return json(response)
   }

@@ -4,7 +4,7 @@ import { HttpRouter } from "effect/unstable/http"
 import * as HttpApiServer from "@/server/routes/instance/httpapi/server"
 import { disposeAllInstances, tmpdir } from "../../fixture/fixture"
 import { resetDatabase } from "../../fixture/db"
-import { OpenAIBinding, OpenAIImage } from "@/kilocode/voice/openai-protocol"
+import { OpenAIBinding, OpenAIImage, OpenAIReservation } from "@/kilocode/voice/openai-protocol"
 import { SessionID } from "@/session/schema"
 import path from "node:path"
 import { mkdir, writeFile, rm, access } from "node:fs/promises"
@@ -54,17 +54,45 @@ test("the shipped OpenAI voice routes require both configured server auth and th
     const parent = Schema.decodeUnknownSync(Schema.Struct({ id: SessionID }))(await created.json())
     const input = { parentSessionID: parent.id, providerCallID: crypto.randomUUID(), requestID: crypto.randomUUID() }
     const base = "/kilocode/voice/openai/session"
+    const preflight = "/kilocode/voice/openai/reservation"
+    const reserve = { parentSessionID: parent.id, requestID: input.requestID, model: "gpt-realtime-2.1" }
     expect((await request("POST", base, input, key, "")).status).toBe(401)
     expect(
       (await request("POST", base, input, key, `Basic ${Buffer.from("voice-test:wrong").toString("base64")}`)).status,
     ).toBe(401)
     expect((await request("POST", base, input, "")).status).toBe(401)
+    expect((await request("POST", base, input)).status).toBe(409)
+    expect((await request("POST", preflight, reserve, key, "")).status).toBe(401)
+    expect((await request("POST", preflight, reserve, "")).status).toBe(401)
+    const reserved = await request("POST", preflight, reserve)
+    expect(reserved.status).toBe(200)
+    expect(Schema.decodeUnknownSync(OpenAIReservation)(await reserved.json())).toEqual({
+      requestID: input.requestID,
+      model: "gpt-realtime-2.1",
+      status: "reserved",
+    })
+    expect((await request("POST", preflight, { ...reserve, model: "gpt-live-1" })).status).toBe(409)
     const started = await request("POST", base, input)
     expect(started.status).toBe(200)
     const binding = Schema.decodeUnknownSync(OpenAIBinding)(await started.json())
     expect(binding.parentSessionID).toBe(parent.id)
     expect(binding.model).toBe("gpt-realtime-2.1")
     expect(JSON.stringify(binding)).not.toContain(key)
+    const rejected = { parentSessionID: parent.id, requestID: crypto.randomUUID(), model: "gpt-realtime-2.1" }
+    expect((await request("POST", preflight, rejected)).status).toBe(200)
+    const released = await request("POST", `${preflight}/release`, rejected)
+    expect(released.status).toBe(200)
+    expect(Schema.decodeUnknownSync(OpenAIReservation)(await released.json()).status).toBe("released")
+    expect((await request("POST", `${preflight}/release`, rejected)).status).toBe(200)
+    expect(
+      (
+        await request("POST", base, {
+          parentSessionID: parent.id,
+          providerCallID: crypto.randomUUID(),
+          requestID: rejected.requestID,
+        })
+      ).status,
+    ).toBe(409)
     const route = `${base}/${binding.id}`
     const image = {
       generation: binding.generation,
@@ -138,16 +166,33 @@ test("the shipped OpenAI voice routes require both configured server auth and th
     const sibling = Schema.decodeUnknownSync(Schema.Struct({ id: SessionID }))(
       await (await request("POST", "/session", {})).json(),
     )
-    const separate = Schema.decodeUnknownSync(OpenAIBinding)(await (await request("POST", base, {
+    const separateInput = {
       parentSessionID: sibling.id,
       providerCallID: crypto.randomUUID(),
       requestID: crypto.randomUUID(),
-    })).json())
-    const active = Schema.decodeUnknownSync(OpenAIBinding)(await (await request("POST", base, {
+    }
+    expect(
+      (
+        await request("POST", preflight, {
+          parentSessionID: sibling.id,
+          requestID: separateInput.requestID,
+          model: "gpt-realtime-2.1",
+        })
+      ).status,
+    ).toBe(200)
+    const separate = Schema.decodeUnknownSync(OpenAIBinding)(await (await request("POST", base, separateInput)).json())
+    const activeInput = {
       ...input,
       providerCallID: crypto.randomUUID(),
       requestID: crypto.randomUUID(),
-    })).json())
+    }
+    const activeReserve = {
+      parentSessionID: parent.id,
+      requestID: activeInput.requestID,
+      model: "gpt-realtime-2.1",
+    }
+    expect((await request("POST", preflight, activeReserve)).status).toBe(200)
+    const active = Schema.decodeUnknownSync(OpenAIBinding)(await (await request("POST", base, activeInput)).json())
     const legacy = path.join(Global.Path.data, "storage", "raya_openai_voice")
     const owned = path.join(legacy, `legacy_${binding.id}.json`)
     const unrelated = path.join(legacy, `legacy_${separate.id}.json`)
@@ -167,11 +212,26 @@ test("the shipped OpenAI voice routes require both configured server auth and th
       expect((await request("POST", `${route}/images`, image)).status).toBe(404)
       expect((await request("POST", `${route}/calls`, call)).status).toBe(404)
       expect((await request("DELETE", `${base}/${active.id}?generation=${active.generation}`)).status).toBe(404)
-      expect(await access(owned).then(() => true, () => false)).toBe(false)
-      expect(await access(unrelated).then(() => true, () => false)).toBe(true)
+      expect(
+        await access(owned).then(
+          () => true,
+          () => false,
+        ),
+      ).toBe(false)
+      expect(
+        await access(unrelated).then(
+          () => true,
+          () => false,
+        ),
+      ).toBe(true)
       expect((await request("GET", `${base}/${separate.id}/usage?generation=${separate.generation}`)).status).toBe(200)
       expect((await request("DELETE", `/session/${sibling.id}`)).status).toBe(200)
-      expect(await access(unrelated).then(() => true, () => false)).toBe(false)
+      expect(
+        await access(unrelated).then(
+          () => true,
+          () => false,
+        ),
+      ).toBe(false)
     } finally {
       await Promise.all([owned, unrelated, corrupt].map((file) => rm(file, { force: true })))
     }

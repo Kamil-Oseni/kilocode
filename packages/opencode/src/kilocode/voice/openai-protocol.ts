@@ -3,6 +3,16 @@ import { MessageID, PartID, SessionID } from "@/session/schema"
 
 export const VoiceID = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_-]{1,128}$/))
 export const VoiceKey = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/))
+export const OpenAIReserve = Schema.Struct({
+  parentSessionID: SessionID,
+  requestID: VoiceID,
+  model: Schema.Literals(["gpt-realtime-2.1", "gpt-live-1"]),
+}).annotate({ identifier: "OpenAIVoiceReserve" })
+export const OpenAIReservation = Schema.Struct({
+  requestID: VoiceID,
+  model: OpenAIReserve.fields.model,
+  status: Schema.Literals(["reserved", "released"]),
+}).annotate({ identifier: "OpenAIVoiceReservation" })
 export const OpenAIStart = Schema.Struct({
   parentSessionID: SessionID,
   providerCallID: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256), Schema.isPattern(/^\S+$/)),

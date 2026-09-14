@@ -8,6 +8,26 @@ import { OPENAI_VOICE_MODEL } from "../../src/shared/speech"
 const sdp = "v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n"
 const input = { requestID: "request_1", sessionID: "session_1", sdp }
 
+function admission(
+  mode: string,
+  path: string,
+  method: string,
+  body: Record<string, unknown>,
+  binding: Record<string, unknown>,
+) {
+  if (path.endsWith("/reservation/release"))
+    return Response.json({ requestID: body.requestID, model: body.model, status: "released" })
+  if (path.endsWith("/reservation")) {
+    if (mode === "reservation-rejected") return new Response("budget refused", { status: 409 })
+    return Response.json({
+      requestID: mode === "reservation-malformed" ? "other" : body.requestID,
+      model: body.model,
+      status: "reserved",
+    })
+  }
+  if (method === "DELETE") return Response.json({ ...binding, status: "closed" })
+}
+
 // Real loopback HTTP + WebSocket transports; only the remote provider and backend
 // boundary are fixtures. The production broker performs admission and dispatch.
 function fixture() {
@@ -34,6 +54,7 @@ function fixture() {
     polls: [] as string[],
     conflicts: 0,
     form: undefined as Record<string, unknown> | undefined,
+    order: [] as string[],
   }
   const binding = {
     id: "binding_1",
@@ -90,6 +111,7 @@ function fixture() {
         return new Response("upgrade failed", { status: 400 })
       }
       if (url.pathname === "/v1/realtime/calls") {
+        state.order.push("provider")
         expect(request.headers.get("authorization")).toBe("Bearer openai-only")
         expect(request.headers.get("X-Raya-Voice-Key")).toBeNull()
         const form = await request.formData()
@@ -118,6 +140,7 @@ function fixture() {
         capability: request.headers.get("X-Raya-Voice-Key"),
         directory: url.searchParams.get("directory"),
       })
+      state.order.push(url.pathname)
       if (url.pathname.endsWith("/hangup")) return new Response(null, { status: state.mode === "cleanup" ? 503 : 200 })
       expect(request.headers.get("authorization")).toBe("Basic backend-only")
       expect(url.searchParams.get("directory")).toBe("C:/project")
@@ -125,7 +148,8 @@ function fixture() {
       expect(capability).toMatch(/^[a-f0-9]{64}$/)
       if (!state.capability) state.capability = capability!
       expect(capability).toBe(state.capability)
-      if (request.method === "DELETE") return Response.json({ ...binding, status: "closed" })
+      const admitted = admission(state.mode, url.pathname, request.method, body, binding)
+      if (admitted) return admitted
       if (url.pathname.endsWith("/session"))
         return Response.json({ ...binding, parentSessionID: state.mode === "binding" ? "unrelated" : input.sessionID })
       if (url.pathname.endsWith("/usage")) return Response.json(body.receipt)
@@ -172,15 +196,25 @@ function fixture() {
   const request: typeof fetch = (value, init) => {
     const url = new URL(value instanceof Request ? value.url : value)
     expect(["https://api.openai.com", server.url.origin]).toContain(url.origin)
+    if (state.mode === "reservation-offline" && url.pathname.endsWith("/reservation"))
+      return Promise.reject(new Error("backend offline"))
+    if (state.mode === "reservation-timeout" && url.pathname.endsWith("/reservation"))
+      return new Promise<Response>((_, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true })
+      })
     return fetch(new URL(url.pathname + url.search, server.url), init)
   }
-  const broker = new OpenAIBroker(request, (url, options) => {
-    expect(url.startsWith("wss://api.openai.com/v1/realtime?")).toBe(true)
-    const path = new URL(url)
-    const socket = new WebSocket(`ws://127.0.0.1:${server.port}${path.pathname}${path.search}`, options)
-    state.control = socket
-    return socket
-  })
+  const broker = new OpenAIBroker(
+    request,
+    (url, options) => {
+      expect(url.startsWith("wss://api.openai.com/v1/realtime?")).toBe(true)
+      const path = new URL(url)
+      const socket = new WebSocket(`ws://127.0.0.1:${server.port}${path.pathname}${path.search}`, options)
+      state.control = socket
+      return socket
+    },
+    80,
+  )
   return {
     state,
     broker,
@@ -590,12 +624,35 @@ for (const mode of ["location", "binding", "cleanup", "rejected"]) {
       if (mode === "cleanup") expect(await f.broker.stop(input.requestID)).toContain("unconfirmed")
       expect(f.broker.active).toBe(mode !== "rejected")
       if (mode !== "cleanup") expect(f.state.ready).toEqual([])
+      expect(f.state.order.indexOf("/kilocode/voice/openai/reservation")).toBeLessThan(
+        f.state.order.indexOf("provider"),
+      )
+      if (mode === "rejected") {
+        expect(f.state.order.at(-1)).toBe("/kilocode/voice/openai/reservation/release")
+        expect(f.state.requests.some((request) => request.path.endsWith("/session"))).toBe(false)
+      }
       const count = f.state.requests.length
       if (mode !== "rejected") {
         await f.start()
         expect(f.state.requests).toHaveLength(count)
         expect(f.state.errors.at(-1)).toContain("already owns")
       }
+    } finally {
+      await f.close()
+    }
+  })
+}
+
+for (const mode of ["reservation-rejected", "reservation-malformed", "reservation-offline", "reservation-timeout"]) {
+  test(`voice ${mode} never reaches the paid provider boundary`, async () => {
+    const f = fixture()
+    try {
+      f.state.mode = mode
+      await f.start()
+      expect(f.state.order).not.toContain("provider")
+      expect(f.state.ready).toEqual([])
+      expect(f.broker.active).toBe(mode !== "reservation-rejected")
+      if (mode !== "reservation-rejected") expect(f.state.errors.at(-1)).toContain("unconfirmed")
     } finally {
       await f.close()
     }

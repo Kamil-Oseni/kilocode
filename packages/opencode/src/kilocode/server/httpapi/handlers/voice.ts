@@ -12,6 +12,7 @@ import * as OpenAIVoice from "@/kilocode/voice/openai"
 import * as TaskWorker from "@/kilocode/session/task-worker"
 import { InstanceState } from "@/effect/instance-state"
 import { RayaGoal } from "@/kilocode/goal"
+import * as GoalCharges from "@/kilocode/goal/charges"
 
 const failure = (error: OpenAIVoice.VoiceError) => {
   if (error.code === "unauthorized") return new HttpApiError.Unauthorized({})
@@ -29,12 +30,30 @@ export const voiceHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-voice",
     const workers = yield* TaskWorker.Service
     const database = yield* Database.Service
     const goals = RayaGoal.make({ sessions, storage })
+    const reservations = yield* GoalCharges.make({ sessions, storage })
     const openai = yield* OpenAIVoice.make({
       sessions,
       prompts,
       storage,
       workers,
       database,
+      admissions: (sessionID, identity) =>
+        reservations.claim(sessionID, "USD", identity).pipe(
+          Effect.map((lease) => ({
+            dispatch: lease.dispatch.pipe(
+              Effect.mapError((error) => new OpenAIVoice.VoiceError({ code: "conflict", message: error.message })),
+            ),
+            finish: lease.finish.pipe(
+              Effect.mapError((error) => new OpenAIVoice.VoiceError({ code: "conflict", message: error.message })),
+            ),
+            release: lease.release,
+          })),
+          Effect.mapError((error) => new OpenAIVoice.VoiceError({ code: "conflict", message: error.message })),
+        ),
+      completions: (sessionID, identity) =>
+        reservations
+          .complete(sessionID, "USD", identity)
+          .pipe(Effect.mapError((error) => new OpenAIVoice.VoiceError({ code: "conflict", message: error.message }))),
       charges: (input) =>
         goals
           .charged(input.sessionID, {
@@ -121,6 +140,30 @@ export const voiceHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-voice",
       .handle("voiceOpenAIStart", (ctx) =>
         Effect.gen(function* () {
           return yield* openai.start(ctx.payload, ctx.headers["x-raya-voice-key"] ?? "", yield* InstanceState.directory)
+        }).pipe(
+          Effect.catchTag("VoiceError", (error) => Effect.fail(failure(error))),
+          Effect.catchTag("NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+        ),
+      )
+      .handle("voiceOpenAIReserve", (ctx) =>
+        Effect.gen(function* () {
+          return yield* openai.reserve(
+            ctx.payload,
+            ctx.headers["x-raya-voice-key"] ?? "",
+            yield* InstanceState.directory,
+          )
+        }).pipe(
+          Effect.catchTag("VoiceError", (error) => Effect.fail(failure(error))),
+          Effect.catchTag("NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+        ),
+      )
+      .handle("voiceOpenAIRelease", (ctx) =>
+        Effect.gen(function* () {
+          return yield* openai.release(
+            ctx.payload,
+            ctx.headers["x-raya-voice-key"] ?? "",
+            yield* InstanceState.directory,
+          )
         }).pipe(
           Effect.catchTag("VoiceError", (error) => Effect.fail(failure(error))),
           Effect.catchTag("NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),

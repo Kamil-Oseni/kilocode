@@ -123,6 +123,15 @@ const fixture = (
     model: "gpt-realtime-2.1" | "gpt-live-transcribe"
     pricing: OpenAIPricing
   }) => Effect.Effect<void>,
+  admissions?: (
+    sessionID: SessionID,
+    identity: string,
+  ) => Effect.Effect<{
+    dispatch: Effect.Effect<void>
+    finish: Effect.Effect<void>
+    release: Effect.Effect<void>
+  }>,
+  completions?: (sessionID: SessionID, identity: string) => Effect.Effect<boolean>,
 ) =>
   Effect.gen(function* () {
     const storage = yield* Storage.Service
@@ -174,9 +183,16 @@ const fixture = (
           ),
       },
       ...(usageCharges ? { usageCharges } : {}),
+      ...(admissions ? { admissions } : {}),
+      ...(completions ? { completions } : {}),
     }
     const voice = yield* make(deps)
     const start = { parentSessionID: session, providerCallID: crypto.randomUUID(), requestID: crypto.randomUUID() }
+    yield* voice.reserve(
+      { parentSessionID: session, requestID: start.requestID, model: "gpt-realtime-2.1" },
+      secret,
+      root,
+    )
     const binding = yield* voice.start(start, secret, root)
     const input: typeof OpenAICallInput.Type = {
       generation: binding.generation,
@@ -186,6 +202,120 @@ const fixture = (
     }
     return { voice, deps, binding, input, start, calls, workers, runner }
   })
+
+it.live(
+  "requires one matching preflight and releases definite refusals idempotently",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const events: string[] = []
+        const admissions = (sessionID: SessionID, identity: string) =>
+          Effect.succeed({
+            dispatch: Effect.sync(() => events.push(`dispatch:${sessionID}:${identity}`)).pipe(Effect.asVoid),
+            finish: Effect.sync(() => events.push(`finish:${sessionID}:${identity}`)).pipe(Effect.asVoid),
+            release: Effect.sync(() => events.push(`release:${sessionID}:${identity}`)).pipe(Effect.asVoid),
+          })
+        const completions = (sessionID: SessionID, identity: string) =>
+          Effect.sync(() => {
+            events.push(`complete:${sessionID}:${identity}`)
+            return true
+          })
+        const state = yield* fixture(root, undefined, undefined, admissions, completions)
+        expect(events.map((event) => event.split(":")[0])).toEqual(["dispatch", "finish", "release"])
+        events.length = 0
+        const voice = yield* make({ ...state.deps, admissions })
+        const requestID = crypto.randomUUID()
+        const input = { parentSessionID: session, requestID, model: "gpt-realtime-2.1" as const }
+        const start = { parentSessionID: session, requestID, providerCallID: crypto.randomUUID() }
+        expect(Exit.isFailure(yield* voice.start(start, secret, root).pipe(Effect.exit))).toBe(true)
+        expect(yield* voice.reserve(input, secret, root)).toEqual({
+          requestID,
+          model: "gpt-realtime-2.1",
+          status: "reserved",
+        })
+        expect(yield* voice.reserve(input, secret, root)).toEqual({
+          requestID,
+          model: "gpt-realtime-2.1",
+          status: "reserved",
+        })
+        expect(events.filter((event) => event.startsWith("dispatch:")).length).toBe(1)
+        expect(
+          Exit.isFailure(yield* voice.reserve({ ...input, model: "gpt-live-1" }, secret, root).pipe(Effect.exit)),
+        ).toBe(true)
+        expect(yield* voice.release(input, secret, root)).toEqual({
+          requestID,
+          model: "gpt-realtime-2.1",
+          status: "released",
+        })
+        expect(yield* voice.release(input, secret, root)).toEqual({
+          requestID,
+          model: "gpt-realtime-2.1",
+          status: "released",
+        })
+        expect(events.map((event) => event.split(":")[0])).toEqual(["dispatch", "finish", "release", "complete"])
+        expect(Exit.isFailure(yield* voice.start(start, secret, root).pipe(Effect.exit))).toBe(true)
+        const orphan = { ...input, requestID: crypto.randomUUID() }
+        yield* voice.reserve(orphan, secret, root)
+        const restarted = yield* make({ ...state.deps, admissions, completions })
+        expect((yield* restarted.release(orphan, secret, root)).status).toBe("released")
+        expect(events.filter((event) => event.startsWith(`complete:${session}:voice:`))).toHaveLength(2)
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
+    }),
+  30_000,
+)
+
+it.live(
+  "serializes durable binding consumption against concurrent reservation release",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const state = yield* fixture(root)
+        const entered = yield* Deferred.make<void>()
+        const gate = yield* Deferred.make<void>()
+        const events: string[] = []
+        const voice = yield* make({
+          ...state.deps,
+          admissions: () =>
+            Effect.succeed({
+              dispatch: Effect.void,
+              finish: Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(gate))),
+              release: Effect.sync(() => events.push("lease-released")).pipe(Effect.asVoid),
+            }),
+          completions: () =>
+            Effect.sync(() => {
+              events.push("durable-completion")
+              return true
+            }),
+        })
+        const requestID = crypto.randomUUID()
+        const reserve = { parentSessionID: session, requestID, model: "gpt-realtime-2.1" as const }
+        const start = { parentSessionID: session, requestID, providerCallID: crypto.randomUUID() }
+        yield* voice.reserve(reserve, secret, root)
+        const starting = yield* voice.start(start, secret, root).pipe(Effect.forkChild)
+        yield* Deferred.await(entered)
+        const releasing = yield* voice.release(reserve, secret, root).pipe(Effect.forkChild)
+        yield* Effect.sleep("20 millis")
+        expect(events).toEqual([])
+        yield* Deferred.succeed(gate, undefined)
+        expect((yield* Fiber.join(starting)).providerCallID).toBe(start.providerCallID)
+        expect((yield* Fiber.join(releasing)).status).toBe("released")
+        expect(events).toEqual(["lease-released", "durable-completion"])
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
+    }),
+  30_000,
+)
 
 const settled = (read: Effect.Effect<typeof OpenAICall.Type, unknown>) =>
   Effect.gen(function* () {
@@ -675,6 +805,11 @@ it.live(
                 .pipe(Effect.exit),
             ),
           ).toBe(true)
+        yield* state.voice.reserve(
+          { parentSessionID: session, requestID: state.start.requestID, model: "gpt-realtime-2.1" },
+          secret,
+          root,
+        )
         const second = yield* state.voice.start({ ...state.start, providerCallID: crypto.randomUUID() }, secret, root)
         expect(
           Exit.isFailure(

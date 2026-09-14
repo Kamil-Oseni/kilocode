@@ -19,6 +19,8 @@ import {
   OpenAIGeneration,
   OpenAIImage,
   OpenAIImageInput,
+  OpenAIReservation,
+  OpenAIReserve,
   OpenAIStart,
   VoiceID,
 } from "@/kilocode/voice/openai-protocol"
@@ -30,6 +32,8 @@ export const VoicePaths = {
   state: `${root}/session/:voiceSessionID`,
   event: `${root}/events`,
   openai: `${root}/openai/session`,
+  reserve: `${root}/openai/reservation`,
+  release: `${root}/openai/reservation/release`,
   binding: `${root}/openai/session/:id`,
   calls: `${root}/openai/session/:id/calls`,
   images: `${root}/openai/session/:id/images`,
@@ -79,6 +83,34 @@ export const VoiceApi = HttpApi.make("raya-voice").add(
         OpenApi.annotations({
           identifier: "kilocode.voice.live.duration",
           summary: "Retain final provider-reported Live voice duration",
+        }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.post("voiceOpenAIReserve", VoicePaths.reserve, {
+        headers,
+        query: WorkspaceRoutingQuery,
+        payload: OpenAIReserve,
+        success: OpenAIReservation,
+        error: errors,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "kilocode.voice.openai.reserve",
+          summary: "Reserve goal budget before starting a billable OpenAI voice session",
+        }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.post("voiceOpenAIRelease", VoicePaths.release, {
+        headers,
+        query: WorkspaceRoutingQuery,
+        payload: OpenAIReserve,
+        success: OpenAIReservation,
+        error: errors,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "kilocode.voice.openai.release",
+          summary: "Release a voice reservation after a definite provider refusal",
         }),
       ),
     )

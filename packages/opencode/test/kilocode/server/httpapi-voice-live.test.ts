@@ -125,9 +125,14 @@ test("the shipped Live voice routes keep duration and delegation behind auth and
     const media = Schema.decodeUnknownSync(Info)(await voice.json())
     expect(media.controlToken).toMatch(/^[A-Za-z0-9_-]{43}$/)
     expect((await request("DELETE", `/kilocode/voice/session/${media.id}`)).status).toBe(200)
-    expect((await request("POST", `/session/${parent.id}/goal`, { objective: "Account for Live voice" })).status).toBe(
-      200,
-    )
+    expect(
+      (
+        await request("POST", `/session/${parent.id}/goal`, {
+          objective: "Account for Live voice",
+          budget: { chargeCosts: [{ currency: "USD", limit: 1, reservation: 0.6 }] },
+        })
+      ).status,
+    ).toBe(200)
     const openai = "/kilocode/voice/openai/session"
     const live = "/kilocode/voice/live/session"
     const input = {
@@ -138,12 +143,25 @@ test("the shipped Live voice routes keep duration and delegation behind auth and
     }
     expect((await request("POST", openai, input, key, "")).status).toBe(401)
     expect((await request("POST", openai, input, "")).status).toBe(401)
+    expect(
+      (
+        await request("POST", "/kilocode/voice/openai/reservation", {
+          parentSessionID: parent.id,
+          requestID: input.requestID,
+          model: "gpt-live-1",
+        })
+      ).status,
+    ).toBe(200)
+    const rival = { parentSessionID: parent.id, requestID: crypto.randomUUID(), model: "gpt-live-1" }
+    expect((await request("POST", "/kilocode/voice/openai/reservation", rival)).status).toBe(409)
     const started = await request("POST", openai, input)
     expect(started.status).toBe(200)
     const binding = Schema.decodeUnknownSync(OpenAIBinding)(await started.json())
     expect(binding.model).toBe("gpt-live-1")
     expect(binding.parentSessionID).toBe(parent.id)
     expect(JSON.stringify(binding)).not.toContain(key)
+    expect((await request("POST", "/kilocode/voice/openai/reservation", rival)).status).toBe(200)
+    expect((await request("POST", "/kilocode/voice/openai/reservation/release", rival)).status).toBe(200)
     const calls = `${live}/${binding.id}/calls`
     const duration = `${live}/${binding.id}/duration`
     const receipt = { id: "evt_duration_1", model: "gpt-live-1" as const, seconds: 4.5 }
@@ -219,14 +237,22 @@ test("the shipped Live voice routes keep duration and delegation behind auth and
       },
     ])
     expect((await request("POST", duration, { ...meter, receipt: { ...receipt, seconds: 9 } })).status).toBe(409)
-    const realtime = Schema.decodeUnknownSync(OpenAIBinding)(
-      await (
-        await request("POST", openai, {
+    const realtimeInput = {
+      parentSessionID: sibling.id,
+      providerCallID: crypto.randomUUID(),
+      requestID: crypto.randomUUID(),
+    }
+    expect(
+      (
+        await request("POST", "/kilocode/voice/openai/reservation", {
           parentSessionID: sibling.id,
-          providerCallID: crypto.randomUUID(),
-          requestID: crypto.randomUUID(),
+          requestID: realtimeInput.requestID,
+          model: "gpt-realtime-2.1",
         })
-      ).json(),
+      ).status,
+    ).toBe(200)
+    const realtime = Schema.decodeUnknownSync(OpenAIBinding)(
+      await (await request("POST", openai, realtimeInput)).json(),
     )
     expect(realtime.model).toBe("gpt-realtime-2.1")
     expect(
@@ -237,16 +263,22 @@ test("the shipped Live voice routes keep duration and delegation behind auth and
         })
       ).status,
     ).toBe(409)
-    const other = Schema.decodeUnknownSync(OpenAIBinding)(
-      await (
-        await request("POST", openai, {
+    const otherInput = {
+      parentSessionID: sibling.id,
+      providerCallID: crypto.randomUUID(),
+      requestID: crypto.randomUUID(),
+      model: "gpt-live-1" as const,
+    }
+    expect(
+      (
+        await request("POST", "/kilocode/voice/openai/reservation", {
           parentSessionID: sibling.id,
-          providerCallID: crypto.randomUUID(),
-          requestID: crypto.randomUUID(),
+          requestID: otherInput.requestID,
           model: "gpt-live-1",
         })
-      ).json(),
-    )
+      ).status,
+    ).toBe(200)
+    const other = Schema.decodeUnknownSync(OpenAIBinding)(await (await request("POST", openai, otherInput)).json())
     expect((await request("DELETE", `/session/${parent.id}`)).status).toBe(200)
     expect((await request("GET", `/session/${parent.id}`)).status).toBe(404)
     expect((await request("POST", duration, meter)).status).toBe(404)

@@ -32,8 +32,8 @@ function isolate(root: string) {
   }
 }
 
-async function crash(args: string[]) {
-  const proc = Bun.spawn([process.execPath, fixture, "crash", ...args], {
+async function kill(mode: string, args: string[]) {
+  const proc = Bun.spawn([process.execPath, fixture, mode, ...args], {
     stdout: "pipe",
     stderr: "pipe",
     env: isolate(args[1]),
@@ -52,7 +52,7 @@ async function crash(args: string[]) {
     await Promise.race([
       ready(),
       new Promise((_, reject) => {
-        timer.id = setTimeout(() => reject(new Error("Crash fixture did not reach its checkpoint")), 20_000)
+        timer.id = setTimeout(() => reject(new Error(`${mode} did not reach its checkpoint`)), 20_000)
       }),
     ])
   } finally {
@@ -60,6 +60,21 @@ async function crash(args: string[]) {
     proc.kill("SIGKILL")
     await proc.exited
   }
+}
+
+async function child(mode: string, args: string[]) {
+  const proc = Bun.spawn([process.execPath, fixture, mode, ...args], {
+    stdout: "pipe",
+    stderr: "pipe",
+    env: isolate(args[1]),
+  })
+  const [output, failure, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ])
+  if (code !== 0) throw new Error(failure)
+  return Schema.decodeUnknownSync(Outcome)(JSON.parse(output.trim()))
 }
 
 function instance<A, E>(dir: string, run: (storage: Storage.Interface) => Effect.Effect<A, E>) {
@@ -237,7 +252,7 @@ for (const committed of [false, true])
         const dir = path.join(root, "storage")
         const target = path.join(root, "killed.txt")
         yield* Effect.promise(() => writeFile(target, "before"))
-        yield* Effect.promise(() => crash([dir, root, committed ? "commit" : "rollback"]))
+        yield* Effect.promise(() => kill("crash", [dir, root, committed ? "commit" : "rollback"]))
         expect(yield* Effect.promise(() => readFile(target, "utf8"))).toBe("after")
         const proc = Bun.spawn([process.execPath, fixture, "recover", dir, root, committed ? "commit" : "rollback"], {
           stdout: "pipe",
@@ -256,3 +271,47 @@ for (const committed of [false, true])
       }),
     30_000,
   )
+
+for (const kind of ["create", "remove", "mixed"] as const)
+  for (const committed of [false, true])
+    it.live(
+      `recovers a killed ${kind} transaction ${committed ? "after" : "before"} commit`,
+      () =>
+        Effect.gen(function* () {
+          const root = yield* tmpdirScoped()
+          const dir = path.join(root, "storage")
+          const created = path.join(root, "created.txt")
+          const removed = path.join(root, "removed.txt")
+          const source = path.join(root, "source.txt")
+          const moved = path.join(root, "moved.txt")
+          if (kind === "remove") yield* Effect.promise(() => writeFile(removed, "removed before"))
+          if (kind === "mixed") yield* Effect.promise(() => writeFile(source, "source before"))
+          const decision = committed ? "commit" : "rollback"
+          yield* Effect.promise(() => kill("matrix-crash", [dir, root, `${kind}:${decision}`]))
+          if (kind === "create") expect(yield* Effect.promise(() => readFile(created, "utf8"))).toBe("created")
+          if (kind === "remove") expect(yield* Effect.promise(() => Bun.file(removed).exists())).toBe(false)
+          if (kind === "mixed") {
+            expect(yield* Effect.promise(() => readFile(moved, "utf8"))).toBe("source before")
+            expect(yield* Effect.promise(() => Bun.file(source).exists())).toBe(false)
+          }
+          const outcome = yield* Effect.promise(() => child("matrix-recover", [dir, root, `${kind}:${decision}`]))
+          expect(outcome.phase).toBe("done")
+          expect(outcome.decision).toBe(committed ? "commit" : "rollback")
+          if (kind === "create") {
+            expect(yield* Effect.promise(() => Bun.file(created).exists())).toBe(committed)
+            if (committed) expect(yield* Effect.promise(() => readFile(created, "utf8"))).toBe("created")
+          }
+          if (kind === "remove") {
+            expect(yield* Effect.promise(() => Bun.file(removed).exists())).toBe(!committed)
+            if (!committed) expect(yield* Effect.promise(() => readFile(removed, "utf8"))).toBe("removed before")
+          }
+          if (kind === "mixed") {
+            expect(yield* Effect.promise(() => Bun.file(moved).exists())).toBe(committed)
+            expect(yield* Effect.promise(() => Bun.file(source).exists())).toBe(!committed)
+            const target = committed ? moved : source
+            expect(yield* Effect.promise(() => readFile(target, "utf8"))).toBe("source before")
+          }
+          expect((yield* Effect.promise(() => readdir(root))).some((name) => name.startsWith(".raya-txn-"))).toBe(false)
+        }),
+      30_000,
+    )

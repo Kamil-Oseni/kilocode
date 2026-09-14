@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { stat } from "node:fs/promises"
+import { readFile, stat } from "node:fs/promises"
 import path from "node:path"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -18,7 +18,9 @@ const id = mode.startsWith("claim")
   ? "killed-claims"
   : mode.startsWith("release")
     ? "killed-release"
-    : `killed-${decision === "commit"}`
+    : mode.startsWith("matrix")
+      ? `killed-${decision?.replace(":", "-")}`
+      : `killed-${decision === "commit"}`
 const layer = LayerNode.compile(LayerNode.group([FSUtil.node, Git.node, CrossSpawnSpawner.node]))
 const proof = { identity: { dev: "1", ino: "2" }, sha256: hash("before") }
 const postimage = { identity: { dev: "3", ino: "4" }, sha256: hash("after") }
@@ -175,6 +177,135 @@ const run = Effect.gen(function* () {
     })
     process.stdout.write(`${JSON.stringify(done)}\n`)
     return
+  }
+  if (mode === "matrix-recover") {
+    const outcome = yield* recover(storage, id)
+    process.stdout.write(`${JSON.stringify(outcome)}\n`)
+    return
+  }
+  if (mode === "matrix-crash") {
+    const [kind, choice] = decision?.split(":") ?? []
+    if (!kind || !["create", "remove", "mixed"].includes(kind) || !["commit", "rollback"].includes(choice ?? ""))
+      throw new Error("Matrix fixture kind or decision is invalid")
+    const anchor = yield* Effect.promise(() => stat(root, { bigint: true }))
+    const target = path.join(root, kind === "create" ? "created.txt" : "removed.txt")
+    const prior = kind === "remove" ? yield* Effect.promise(() => stat(target, { bigint: true })) : undefined
+    const before = prior ? yield* Effect.promise(() => readFile(target)) : undefined
+    const source = path.join(root, "source.txt")
+    const sourceInfo = kind === "mixed" ? yield* Effect.promise(() => stat(source, { bigint: true })) : undefined
+    const sourceData = kind === "mixed" ? yield* Effect.promise(() => readFile(source)) : undefined
+    const plan: { entry: TransactionEntry; data?: Uint8Array }[] =
+      kind === "mixed"
+        ? [
+            {
+              entry: {
+                kind: "create",
+                target: path.join(root, "moved.txt"),
+                stage: path.join(root, `.raya-txn-${id}-destination.stage`),
+                anchor: {
+                  path: root,
+                  identity: { dev: anchor.dev.toString(), ino: anchor.ino.toString() },
+                },
+                result: { sha256: hash("source before") },
+              },
+              data: sourceData,
+            },
+            {
+              entry: {
+                kind: "remove",
+                target: source,
+                hold: path.join(root, `.raya-txn-${id}-source.hold`),
+                review: {
+                  identity: { dev: sourceInfo!.dev.toString(), ino: sourceInfo!.ino.toString() },
+                  sha256: hash("source before"),
+                },
+              },
+            },
+          ]
+        : [
+            {
+              entry:
+                kind === "create"
+                  ? {
+                      kind: "create",
+                      target,
+                      stage: path.join(root, `.raya-txn-${id}.stage`),
+                      anchor: {
+                        path: root,
+                        identity: { dev: anchor.dev.toString(), ino: anchor.ino.toString() },
+                      },
+                      result: { sha256: hash("created") },
+                    }
+                  : {
+                      kind: "remove",
+                      target,
+                      hold: path.join(root, `.raya-txn-${id}.hold`),
+                      review: {
+                        identity: { dev: prior!.dev.toString(), ino: prior!.ino.toString() },
+                        sha256: createHash("sha256").update(before!).digest("hex"),
+                      },
+                    },
+              data: kind === "create" ? Buffer.from("created") : undefined,
+            },
+          ]
+    const journal = journals(storage)
+    const admitted = yield* journal.admit({
+      invocation: id,
+      digest: hash(id),
+      workspace: root,
+      entries: plan.map((item) => item.entry),
+    })
+    if (!admitted.owned) throw new Error("Matrix fixture did not own its journal")
+    const staged = [...admitted.outcome.entries]
+    for (const [index, item] of plan.entries()) {
+      if (item.entry.kind !== "remove") {
+        if (!item.data) throw new Error("Matrix fixture data is missing")
+        const artifact = yield* prepareTransaction(staged[index], item.data)
+        staged[index] = { ...staged[index], artifact }
+      }
+      yield* journal.advance(id, {
+        token: admitted.token,
+        revision: (yield* journal.get(id))!.revision,
+        phase: "staging",
+        cursor: index + 1,
+        entries: staged,
+      })
+    }
+    const prepared = yield* journal.advance(id, {
+      token: admitted.token,
+      revision: (yield* journal.get(id))!.revision,
+      phase: "prepared",
+      cursor: staged.length,
+      entries: staged,
+    })
+    const committing = yield* journal.advance(id, {
+      token: admitted.token,
+      revision: prepared.revision,
+      phase: "committing",
+      cursor: 0,
+      entries: staged,
+    })
+    let published = committing
+    for (const [index, entry] of staged.entries()) {
+      yield* publishTransaction(entry)
+      published = yield* journal.advance(id, {
+        token: admitted.token,
+        revision: published.revision,
+        phase: "committing",
+        cursor: index + 1,
+        entries: staged,
+      })
+    }
+    if (choice === "commit")
+      yield* journal.advance(id, {
+        token: admitted.token,
+        revision: published.revision,
+        phase: "committed",
+        cursor: staged.length,
+        entries: staged,
+      })
+    process.stdout.write("READY\n")
+    return yield* Effect.never
   }
   if (mode === "recover") {
     const outcome = yield* recover(storage, id)

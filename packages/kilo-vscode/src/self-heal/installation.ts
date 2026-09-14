@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { constants } from "node:fs"
-import { copyFile, open, readFile, rename, mkdir } from "node:fs/promises"
+import { copyFile, open, readFile, rename, mkdir, rm } from "node:fs/promises"
 import { isAbsolute, join } from "node:path"
 import { Flock } from "@opencode-ai/core/util/flock"
 import { z } from "zod"
@@ -56,6 +56,24 @@ const rollback = z.object({
   artifact: bytes,
   binary: bytes,
 })
+const completion = z.object({
+  version: z.literal(1),
+  installationID: z.string().uuid(),
+  itemID: z.string().min(1),
+  approvalID: z.string().min(1),
+  artifactID: z.string().min(1),
+  repaired: z.string().min(1),
+  previous: z.string().min(1),
+  terminal: z.enum(["verified-active", "rollback-verified"]),
+  artifact: bytes,
+  binary: bytes,
+  rollbackArtifact: bytes,
+  rollbackBinary: bytes,
+  replaySessionID: z.string().min(1).optional(),
+  goalRevision: z.string().min(1).optional(),
+  reviewedAt: z.number().finite().nonnegative().optional(),
+  completedAt: z.number().finite().nonnegative(),
+})
 const schema = z.object({
   version: z.literal(1),
   id: z.string().uuid(),
@@ -89,8 +107,10 @@ const schema = z.object({
     "rollback-unknown",
     "rollback-verified",
     "rollback-failed",
+    "cleanup-pending",
     "failed",
   ]),
+  terminal: z.enum(["verified-active", "rollback-verified"]).optional(),
   replaySessionID: z.string().min(1).optional(),
   verification: result.optional(),
   reason: z.string().optional(),
@@ -101,9 +121,20 @@ const schema = z.object({
 export type Record = z.infer<typeof schema>
 export type Plan = Omit<
   Record,
-  "version" | "id" | "package" | "rollback" | "phase" | "reason" | "createdAt" | "updatedAt"
+  | "version"
+  | "id"
+  | "package"
+  | "rollback"
+  | "phase"
+  | "terminal"
+  | "replaySessionID"
+  | "verification"
+  | "reason"
+  | "createdAt"
+  | "updatedAt"
 > & { rollback: Omit<Record["rollback"], "package"> }
 export type Verification = NonNullable<Record["verification"]>
+export type Completion = z.infer<typeof completion>
 
 function message(err: unknown) {
   return err instanceof Error ? err.message : String(err)
@@ -111,10 +142,12 @@ function message(err: unknown) {
 
 export class SelfHealInstallation {
   private readonly file: string
+  private readonly completed: string
   private readonly locks: string
 
   constructor(private readonly root: string) {
     this.file = join(root, "installation.json")
+    this.completed = join(root, "completed.json")
     this.locks = join(root, ".locks")
   }
 
@@ -174,6 +207,22 @@ export class SelfHealInstallation {
 
   inspect() {
     return this.lock(() => this.read())
+  }
+
+  receipt() {
+    return this.lock(async () => {
+      const raw = await readFile(this.completed, "utf8").then(
+        (value) => value,
+        (err: NodeJS.ErrnoException) => {
+          if (err.code === "ENOENT") return undefined
+          throw err
+        },
+      )
+      if (raw === undefined) return
+      const saved = completion.safeParse(JSON.parse(raw))
+      if (!saved.success) throw new Error("The saved self-heal completion receipt is invalid and was retained.")
+      return saved.data
+    })
   }
 
   run(plan: Plan, install: (path: string) => Promise<void>) {
@@ -238,6 +287,7 @@ export class SelfHealInstallation {
     return this.lock(async () => {
       const record = await this.read()
       if (!record) return
+      if (record.phase === "cleanup-pending") return { record, changed: false }
       if (record.phase.startsWith("rollback-")) {
         if (record.phase === "rollback-verified" || record.phase === "rollback-failed" || record.previous !== version)
           return { record, changed: false }
@@ -448,6 +498,73 @@ export class SelfHealInstallation {
       }
       await this.write(pending)
       return { record: pending, dispatched: true }
+    })
+  }
+
+  cleanup() {
+    return this.lock(async () => {
+      const record = await this.read()
+      if (!record) {
+        const raw = await readFile(this.completed, "utf8").then(
+          (value) => value,
+          (err: NodeJS.ErrnoException) => {
+            if (err.code === "ENOENT") return undefined
+            throw err
+          },
+        )
+        if (raw === undefined) throw new Error("No completed self-heal installation is retained for cleanup.")
+        return { receipt: completion.parse(JSON.parse(raw)), cleaned: false }
+      }
+      const terminal = record.phase === "cleanup-pending" ? record.terminal : record.phase
+      if (terminal !== "verified-active" && terminal !== "rollback-verified")
+        throw new Error("Self-heal installation cleanup requires a verified repair or verified rollback.")
+      const pending: Record =
+        record.phase === "cleanup-pending"
+          ? record
+          : { ...record, phase: "cleanup-pending", terminal, reason: undefined, updatedAt: Date.now() }
+      if (record.phase !== "cleanup-pending") await this.write(pending)
+      const receipt = completion.parse({
+        version: 1,
+        installationID: pending.id,
+        itemID: pending.itemID,
+        approvalID: pending.approvalID,
+        artifactID: pending.artifactID,
+        repaired: pending.extension,
+        previous: pending.previous,
+        terminal,
+        artifact: pending.artifact,
+        binary: pending.binary,
+        rollbackArtifact: pending.rollback.artifact,
+        rollbackBinary: pending.rollback.binary,
+        replaySessionID: pending.replaySessionID,
+        goalRevision: pending.verification?.goalRevision,
+        reviewedAt: pending.verification?.reviewedAt,
+        completedAt: pending.updatedAt,
+      })
+      const existing = await readFile(this.completed, "utf8").then(
+        (value) => completion.parse(JSON.parse(value)),
+        (err: NodeJS.ErrnoException) => {
+          if (err.code === "ENOENT") return undefined
+          throw err
+        },
+      )
+      if (existing && JSON.stringify(existing) !== JSON.stringify(receipt))
+        throw new Error("A different self-heal completion receipt is already retained.")
+      if (!existing) {
+        const tmp = join(this.root, `completed.${process.pid}.${randomUUID()}.tmp`)
+        const file = await open(tmp, "wx", 0o600)
+        try {
+          await file.writeFile(JSON.stringify(receipt))
+          await file.sync()
+        } finally {
+          await file.close()
+        }
+        await rename(tmp, this.completed)
+      }
+      await rm(pending.package, { force: true })
+      await rm(pending.rollback.package, { force: true })
+      await rm(this.file, { force: true })
+      return { receipt, cleaned: true }
     })
   }
 }

@@ -205,6 +205,7 @@ import {
   verify as verifySelfHeal,
 } from "./self-heal/verification"
 import { detail as selfHealRollbackDetail, rollback as rollbackSelfHeal } from "./self-heal/rollback"
+import { cleanup as cleanupSelfHeal, detail as selfHealCleanupDetail } from "./self-heal/cleanup"
 import { SpeechService } from "./speech/service" // raya_change - Milestone H voice orchestration
 import {
   buildIndexingSettingsMessage,
@@ -4756,6 +4757,25 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         )
         if (choice === "Reload") await vscode.commands.executeCommand("workbench.action.reloadWindow")
       }
+      return { handled: true }
+    }
+    if (command.kind === "cleanup") {
+      const root = path.join(
+        this.extensionContext?.globalStorageUri.fsPath ?? this.extensionUri.fsPath,
+        "self-heal-install",
+      )
+      const action = "Remove retained packages"
+      const result = await cleanupSelfHeal({
+        itemID: command.id,
+        journal: new SelfHealInstallation(root),
+        confirm: async (view) =>
+          (await vscode.window.showWarningMessage(
+            `Clean up repair: ${view.itemID}`,
+            { modal: true, detail: selfHealCleanupDetail(view) },
+            action,
+          )) === action,
+      })
+      this.postMessage({ type: "goalState", sessionID: reporter, notice: result.notice })
       return { handled: true }
     }
     if (command.kind === "list") {

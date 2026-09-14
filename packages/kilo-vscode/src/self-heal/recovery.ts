@@ -4,9 +4,18 @@ import { SelfHealInstallation } from "./installation"
 
 export async function recover(context: vscode.ExtensionContext) {
   const root = join(context.globalStorageUri.fsPath, "self-heal-install")
+  const journal = new SelfHealInstallation(root)
+  const retained = await journal.inspect()
+  if (retained?.phase === "cleanup-pending") {
+    const result = await journal.cleanup()
+    await vscode.window.showInformationMessage(
+      `Raya finished cleanup for self-heal installation ${result.receipt.installationID}. Its completion receipt was kept.`,
+    )
+    return
+  }
   const binary = join(context.extensionUri.fsPath, "bin", process.platform === "win32" ? "kilo.exe" : "kilo")
   const version = String(context.extension.packageJSON.version)
-  const result = await new SelfHealInstallation(root).activate(version, binary)
+  const result = await journal.activate(version, binary)
   if (!result) return
   const record = result.record
   if (record.phase === "rollback-verified" && result.changed) {

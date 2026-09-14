@@ -8,6 +8,7 @@ import { pipeline } from "node:stream/promises"
 import type { Readable } from "node:stream"
 import { expect, test } from "bun:test"
 import { createKiloClient } from "@kilocode/sdk/v2/client"
+import { cleanup as runCleanup, detail as cleanupDetail } from "../../src/self-heal/cleanup"
 import { install as runInstall } from "../../src/self-heal/install"
 import { SelfHealInstallation, type Plan } from "../../src/self-heal/installation"
 import { detail as rollbackDetail, rollback as runRollback } from "../../src/self-heal/rollback"
@@ -986,6 +987,103 @@ test("changed rollback bytes fail before dispatch", async () => {
       phase: "rollback-failed",
       reason: expect.stringContaining("could not be verified"),
     })
+  } finally {
+    await rm(run.root, { recursive: true, force: true })
+  }
+})
+
+test("cleans verified rollback packages once and retains a compact receipt", async () => {
+  const run = await fixture()
+  try {
+    const root = join(run.root, "state")
+    const journal = new SelfHealInstallation(root)
+    const installed = await journal.run(run.plan, async () => undefined)
+    const repaired = join(run.root, "repaired.exe")
+    await writeFile(repaired, run.binary)
+    await journal.activate(run.plan.extension, repaired)
+    await journal.rollback(async () => undefined)
+    const previous = join(run.root, "previous.exe")
+    await writeFile(previous, run.previous)
+    await journal.activate(run.plan.previous, previous)
+    let confirmed = 0
+    const result = await runCleanup({
+      itemID: run.plan.itemID,
+      journal,
+      confirm: async (view) => {
+        confirmed++
+        expect(cleanupDetail(view)).toContain("compact completion receipt remains")
+        return true
+      },
+    })
+    expect(result).toMatchObject({
+      notice: expect.stringContaining("is cleaned up"),
+      receipt: {
+        installationID: installed.record.id,
+        terminal: "rollback-verified",
+        rollbackArtifact: run.plan.rollback.artifact,
+      },
+    })
+    expect(await exists(installed.record.package)).toBe(false)
+    expect(await exists(installed.record.rollback.package)).toBe(false)
+    expect(await journal.inspect()).toBeUndefined()
+    expect(await journal.receipt()).toEqual(result.receipt)
+    const duplicate = await runCleanup({
+      itemID: run.plan.itemID,
+      journal: new SelfHealInstallation(root),
+      confirm: async () => {
+        confirmed++
+        return true
+      },
+    })
+    expect(duplicate.notice).toContain("already cleaned up")
+    expect(confirmed).toBe(1)
+  } finally {
+    await rm(run.root, { recursive: true, force: true })
+  }
+})
+
+test("cleanup refuses uncertain work and resumes a confirmed pending cleanup", async () => {
+  const run = await fixture()
+  try {
+    const root = join(run.root, "state")
+    const journal = new SelfHealInstallation(root)
+    const installed = await journal.run(run.plan, async () => undefined)
+    let confirmed = false
+    const refused = await runCleanup({
+      itemID: run.plan.itemID,
+      journal,
+      confirm: async () => {
+        confirmed = true
+        return true
+      },
+    })
+    expect(refused.notice).toContain("not in a verified terminal state")
+    expect(confirmed).toBe(false)
+    const repaired = join(run.root, "repaired.exe")
+    await writeFile(repaired, run.binary)
+    await journal.activate(run.plan.extension, repaired)
+    await journal.rollback(async () => undefined)
+    const previous = join(run.root, "previous.exe")
+    await writeFile(previous, run.previous)
+    const restored = await journal.activate(run.plan.previous, previous)
+    await writeFile(
+      join(root, "installation.json"),
+      JSON.stringify({ ...restored!.record, phase: "cleanup-pending", terminal: "rollback-verified" }),
+    )
+    const resumed = await runCleanup({
+      itemID: run.plan.itemID,
+      journal: new SelfHealInstallation(root),
+      confirm: async () => {
+        confirmed = true
+        return false
+      },
+    })
+    expect(resumed).toMatchObject({
+      receipt: { installationID: installed.record.id },
+      notice: expect.stringContaining("cleaned up"),
+    })
+    expect(confirmed).toBe(false)
+    expect(await journal.inspect()).toBeUndefined()
   } finally {
     await rm(run.root, { recursive: true, force: true })
   }

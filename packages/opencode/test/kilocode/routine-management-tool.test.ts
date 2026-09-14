@@ -9,9 +9,11 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Agent } from "@/agent/agent"
 import { Git } from "@/git"
 import { RayaTask } from "@/kilocode/task"
+import { archive as indexed } from "@/kilocode/task/archive"
 import { RayaTaskDelegation } from "@/kilocode/task/delegation"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import { RayaTaskOrganization } from "@/kilocode/task/organization"
+import { RayaTaskQueue } from "@/kilocode/task/queue"
 import { KiloToolRegistry } from "@/kilocode/tool/registry"
 import { routineManagementTools } from "@/kilocode/tool/routine-management"
 import * as Permission from "@/permission"
@@ -164,9 +166,8 @@ it.live(
           yield* storage.replace(key, { ...value, owner: { host: hostname(), pid: 2_147_483_647 } })
         }
         const startup = yield* RayaTask.make({ storage, database }).recoverStages()
-        expect(startup).toMatchObject({ recovered: 1, pending: 0, truncated: false })
-        expect(startup.issues).toHaveLength(1)
-        expect(yield* storage.list(["raya", "agent-stage"])).toHaveLength(1)
+        expect(startup).toEqual({ recovered: 2, pending: 0, issues: [], truncated: false })
+        expect(yield* storage.list(["raya", "agent-stage"])).toHaveLength(0)
 
         const tools = routineManagementTools({ database, storage, sessions })
         const retry = yield* (yield* tools.create).init()
@@ -248,6 +249,180 @@ it.live(
         expect(
           (yield* RayaTaskOrganization.make(database, RayaTask.make({ storage, database }), storage).list()).items,
         ).toHaveLength(2)
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            Storage.layerFromDir(path.join(directory, "storage")),
+            Database.layerFromPath(path.join(directory, "queue.sqlite")),
+          ),
+        ),
+      ),
+    ),
+  30_000,
+)
+
+it.live(
+  "staged orphan cleanup converges after roster removal and before claim acknowledgement",
+  () =>
+    provideTmpdirInstance((directory) =>
+      Effect.gen(function* () {
+        const storage = yield* Storage.Service
+        const database = yield* Database.Service
+        const id = crypto.randomUUID()
+        const organizationID = `org_${"9".repeat(32)}`
+        const input = {
+          name: "Abandoned worker",
+          role: "Researcher",
+          objective: "Research abandoned work",
+          capabilities: [],
+          schedule: { kind: "manual" as const },
+          enabled: true,
+          access: "brief" as const,
+        }
+        const organization = {
+          name: "Abandoned company",
+          members: [{ agentID: id, role: "Researcher" }],
+          delegations: [],
+        }
+        const tasks = RayaTask.make({ storage, database })
+        yield* tasks.stage(input, id, organizationID, organization, 1)
+        const key = ["raya", "agent-stage", id]
+        const receipt = yield* storage.read<Record<string, unknown>>(key)
+        yield* storage.replace(key, { ...receipt, owner: { host: hostname(), pid: 2_147_483_647 } })
+        const failed = { claim: false }
+        const unreliable = {
+          ...storage,
+          remove: (path: string[]) =>
+            path[0] === "raya" && path[1] === "agent-claims" && !failed.claim
+              ? Effect.sync(() => {
+                  failed.claim = true
+                  throw new Error("simulated crash after roster removal")
+                })
+              : storage.remove(path),
+        }
+
+        const interrupted = yield* RayaTask.make({ storage: unreliable, database }).recoverStages()
+        expect(interrupted).toMatchObject({ recovered: 0, pending: 0, truncated: false })
+        expect(interrupted.issues).toEqual([`Staged worker ${id} could not prove that cleanup is safe.`])
+        expect(Exit.isFailure(yield* tasks.get(id).pipe(Effect.exit))).toBe(true)
+        expect(yield* storage.list(["raya", "agent-stage"])).toEqual([key])
+        expect(yield* storage.list(["raya", "agent-claims"])).toHaveLength(1)
+        expect(yield* indexed(database).get(id)).toBeUndefined()
+
+        const restarted = yield* RayaTask.make({ storage, database }).recoverStages()
+        expect(restarted).toEqual({ recovered: 1, pending: 0, issues: [], truncated: false })
+        expect(yield* storage.list(["raya", "agent-stage"])).toEqual([])
+        expect(yield* storage.list(["raya", "agent-claims"])).toEqual([])
+        expect(yield* indexed(database).get(id)).toBeUndefined()
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            Storage.layerFromDir(path.join(directory, "storage")),
+            Database.layerFromPath(path.join(directory, "queue.sqlite")),
+          ),
+        ),
+      ),
+    ),
+  30_000,
+)
+
+it.live(
+  "staged orphan cleanup preserves every used or unavailable worker",
+  () =>
+    provideTmpdirInstance((directory) =>
+      Effect.gen(function* () {
+        const storage = yield* Storage.Service
+        const database = yield* Database.Service
+        const tasks = RayaTask.make({ storage, database })
+        const ids = {
+          run: crypto.randomUUID(),
+          archive: crypto.randomUUID(),
+          organization: crypto.randomUUID(),
+          queue: crypto.randomUUID(),
+          delegation: crypto.randomUUID(),
+          inbox: crypto.randomUUID(),
+          memory: crypto.randomUUID(),
+          unavailable: crypto.randomUUID(),
+        }
+        const receipt = (id: string) => ["raya", "agent-stage", id]
+        for (const [reason, id] of Object.entries(ids)) {
+          const input = {
+            name: `${reason} worker`,
+            role: "Researcher",
+            objective: `Retain ${reason} evidence`,
+            capabilities: [],
+            schedule: { kind: "manual" as const },
+            enabled: true,
+            access: "brief" as const,
+          }
+          yield* tasks.stage(
+            input,
+            id,
+            `org_${id.replaceAll("-", "")}`,
+            { name: `${reason} plan`, members: [{ agentID: id, role: "Researcher" }], delegations: [] },
+            1,
+          )
+          const value = yield* storage.read<Record<string, unknown>>(receipt(id))
+          yield* storage.replace(receipt(id), { ...value, owner: { host: hostname(), pid: 2_147_483_647 } })
+        }
+        yield* storage.replace(
+          ["raya", "agent-runs", ids.run],
+          [
+            {
+              id: "run_cleanup_guard",
+              agentID: ids.run,
+              at: 1,
+              sessionID: SessionID.make("ses_cleanup_guard"),
+              status: "complete",
+            },
+          ],
+        )
+        yield* indexed(database).put({
+          id: ids.archive,
+          archived_at: 1,
+          definition: JSON.stringify(yield* tasks.get(ids.archive)),
+        })
+        yield* RayaTaskOrganization.make(database, tasks, storage).create({
+          name: "Historical owner",
+          members: [{ agentID: ids.organization, role: "Owner" }],
+        })
+        yield* RayaTaskQueue.make(database).publish({
+          agentID: ids.queue,
+          version: 1,
+          occurrences: [{ at: 1, observedAt: 2 }],
+        })
+        const peer = yield* tasks.create({ name: "Peer", objective: "Help", schedule: { kind: "manual" } })
+        yield* RayaTaskDelegation.make(database).admit(
+          { source: "cleanup_guard", senderID: ids.delegation, recipientID: peer.id, objective: "Help" },
+          yield* tasks.get(ids.delegation),
+          peer,
+        )
+        yield* RayaTaskInbox.make(database).publish({
+          agentID: ids.inbox,
+          source: "cleanup_guard",
+          kind: "system",
+          body: "Retain this conversation.",
+        })
+        yield* tasks.remember(ids.memory, "Retain this memory.")
+        const unavailable = {
+          ...storage,
+          read: <T>(path: string[]) =>
+            path.join("/") === `raya/agent-runs/${ids.unavailable}`
+              ? Effect.die(new Error("simulated unreadable run history"))
+              : storage.read<T>(path),
+        }
+
+        const result = yield* RayaTask.make({ storage: unavailable, database }).recoverStages()
+        expect(result).toMatchObject({ recovered: 0, pending: 0, truncated: false })
+        expect(result.issues).toHaveLength(Object.keys(ids).length)
+        expect(yield* storage.list(["raya", "agent-stage"])).toHaveLength(Object.keys(ids).length)
+        const roster = yield* tasks.list()
+        expect(Object.values(ids).every((id) => roster.some((item) => item.id === id))).toBe(true)
+        for (const reason of ["run", "archive", "organization", "queue", "delegation", "inbox", "memory"] as const)
+          expect((yield* tasks.usage(ids[reason])).used).toContain(reason)
+        expect((yield* RayaTask.make({ storage: unavailable, database }).usage(ids.unavailable)).unavailable).toContain(
+          "run",
+        )
       }).pipe(
         Effect.provide(
           Layer.mergeAll(

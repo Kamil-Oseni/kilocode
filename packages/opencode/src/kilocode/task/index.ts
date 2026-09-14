@@ -1,4 +1,5 @@
 import { Effect, Exit, Schema } from "effect"
+import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
 import path from "node:path"
 import { Storage } from "@/storage/storage"
@@ -775,6 +776,60 @@ export namespace RayaTask {
       return { used, unavailable }
     })
 
+    const cleanup = Effect.fn("RayaTask.cleanupStage")(function* (value: typeof StageV2.Type, key: string[]) {
+      const database = deps.database
+      if (!database) return false
+      const digest = createHash("sha256").update(JSON.stringify(value)).digest("hex")
+      const proof = Effect.fn("RayaTask.cleanupProof")(function* () {
+        const current = yield* receipt(value.agentID)
+        if (!current || current.version !== 2 || !isDeepStrictEqual(current, value))
+          return yield* new GuardError({ kind: "conflict", message: "This staged routine receipt changed." })
+        const { RayaTaskOrganization } = yield* Effect.promise(() => import("./organization"))
+        const organization = yield* RayaTaskOrganization.make(database, { get }, deps.storage)
+          .get(value.organizationID)
+          .pipe(Effect.catchTag("RayaTaskOrganization.NotFound", () => Effect.succeed(undefined)))
+        if (organization)
+          return yield* new GuardError({ kind: "conflict", message: "This staged routine now belongs to a company." })
+        const items = yield* list()
+        const agent = items.find((item) => item.id === value.agentID)
+        if (!agent) return { items, found: false as const }
+        if (!isDeepStrictEqual(agent, value.definition))
+          return yield* new GuardError({ kind: "conflict", message: "This staged routine changed." })
+        const evidence = yield* usage(value.agentID)
+        if (evidence.used.length || evidence.unavailable.length)
+          return yield* new GuardError({
+            kind: "conflict",
+            message: `This staged routine has retained or unavailable history: ${[
+              ...evidence.used,
+              ...evidence.unavailable.map((item) => `${item} unavailable`),
+            ].join(", ")}.`,
+          })
+        return { items, found: true as const }
+      })
+      const erase = (input: Effect.Success<ReturnType<typeof proof>>) =>
+        input.found
+          ? removals(deps.storage)
+              .stage(value.agentID)
+              .pipe(Effect.andThen(save(input.items.filter((item) => item.id !== value.agentID))), Effect.as(true))
+          : Effect.succeed(true)
+      const recovered = yield* recover(
+        deps.storage,
+        value.agentID,
+        (record) => Effect.succeed(record.operation === "cleanup" && record.intent === digest),
+        () => proof().pipe(Effect.flatMap(erase)),
+        (record) => {
+          const current = owner()
+          const local = record.owner.host === current.host && record.owner.pid === current.pid && !starting(record.id)
+          return Effect.succeed(
+            record.operation === "cleanup" && record.intent === digest && (local || stopped(record.owner)),
+          )
+        },
+      )
+      if (!recovered) yield* claim(deps.storage, value.agentID, proof(), erase, undefined, "cleanup", digest)
+      yield* deps.storage.remove(key).pipe(Effect.orDie)
+      return true
+    })
+
     const writeRuns = Effect.fn("RayaTask.writeRuns")(function* (id: string, items: Run[]) {
       const retained = new Set(
         items
@@ -1080,6 +1135,16 @@ export namespace RayaTask {
         const organization = yield* RayaTaskOrganization.make(deps.database, { get }, deps.storage)
           .get(value.organizationID)
           .pipe(Effect.catchTag("RayaTaskOrganization.NotFound", () => Effect.succeed(undefined)))
+        if (value.version === 2 && !organization) {
+          const cleaned = yield* cleanup(value, key).pipe(Effect.exit)
+          if (Exit.isSuccess(cleaned) && cleaned.value) {
+            recovered++
+            continue
+          }
+          if (agent) issues.push(`Staged worker ${value.agentID} could not prove that cleanup is safe.`)
+          else issues.push(`Staged worker ${value.agentID} has an interrupted cleanup that requires review.`)
+          continue
+        }
         if (!agent && !organization) {
           yield* deps.storage.remove(key).pipe(Effect.orDie)
           recovered++

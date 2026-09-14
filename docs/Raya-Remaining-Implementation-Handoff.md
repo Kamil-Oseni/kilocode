@@ -1,5 +1,13 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-14 19:01 America/Toronto - EN-02 delegation reply publication recovery
+
+Product commit `557f4169a1` is verified and pushed. `RayaTaskDelegation.finish` routes every matching terminal path through `reply(record, recipient)`: the first successful compare-and-set, an exact already-terminal replay, and an exact concurrent-winner replay. Preserve this. Returning an exact terminal record before publication strands a missing worker DM reply if the prior attempt committed the row and failed during inbox insertion. `RayaTaskInbox.publish` already uses deterministic agent/source identity, so replay produces one message and safely absorbs an exact conflict.
+
+Preserve `an exact terminal replay restores a reply after publication failed`. It creates a SQLite trigger that aborts inserts into `raya_routine_message` only when `NEW.source LIKE 'reply:%'`. The first `finish` must fail while the delegation remains completed and the inbox remains empty. After dropping the trigger, two identical finishes must both return completed while the inbox contains exactly one reply with the retained response. Combined delegation evidence is 19 / 374; scoped one-thread lint and affected guards pass.
+
+Continue the multi-store matrix at worker report publication. Review `settle` ordering across run transition, schedule settlement, `retain(latest)` and `close(latest)`. Inject failure after run transition and before report publication, after report publication and before delegation finish, and after delegation finish before queued-next start. Replays must publish each deterministic artifact once, preserve terminal ownership and start at most one queued request. Keep EN-02/OVR-05 **In progress** and batch this small backend change into a later low-memory snapshot; installed source remains `17ff50e907`.
+
 ## ChatGPT 2026-09-14 18:57 America/Toronto - EN-02 terminal result compare-and-set
 
 Product commit `a61ad81327` is verified and pushed. Preserve the conditional mutation in `RayaTaskDelegation.finish`: after reading `prior`, its `UPDATE ... RETURNING` must match both delegation ID and `prior.state`. If no row updates, re-read and accept only a byte-equivalent replay of the requested state, response, normalized cost and reason; otherwise return `RayaTaskDelegation.Conflict`. Updating by ID alone reintroduces the cancellation/completion last-writer-wins bug.

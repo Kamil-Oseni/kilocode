@@ -1,5 +1,13 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-14 19:01 America/Toronto - Missing delegation replies recover through exact replay
+
+**Status: product commit `557f4169a1` is verified and pushed to `origin/main`; it is intentionally not installed alone.** A terminal delegation replay now republishes its deterministic DM reply before returning the saved result. This closes the crash/failure window where the terminal database update succeeded but inbox publication failed: retry converges to one reply because inbox identity is stable and an existing exact message is treated idempotently. A conflicting terminal result still fails and cannot publish replacement content.
+
+The regression installs a real SQLite trigger that aborts only delegation-reply insertion. The first completion fails after its terminal row commits, and the sender inbox has no reply. After removing the trigger, two exact retries retain the same completed row and produce exactly one reply containing the saved result. Together with terminal ownership and late-settlement cases, the combined delegation suites pass **19 / 374**. Scoped one-thread lint has zero errors and only existing warnings; all affected guards pass. No broad/high-memory checker ran and no Bun or tsgo process remained.
+
+EN-02/OVR-05 remain **In progress** for the remaining run/schedule/report/delegation multi-store failure orderings and representative real-integration company execution. Installed source remains `17ff50e907`; batch this backend checkpoint later.
+
 ## ChatGPT 2026-09-14 18:57 America/Toronto - Terminal delegation ownership and late-result fencing
 
 **Status: product commit `a61ad81327` is verified and pushed to `origin/main`; it is intentionally not installed alone.** Delegation result writes now compare and set against the exact state read before mutation. Completion, failure, timeout, needs-input and cancellation can no longer both read a live row and overwrite one another by updating only its ID. The first terminal disposition remains durable; an exact replay returns that result, while a conflicting late disposition receives `RayaTaskDelegation.Conflict` and publishes no replacement reply.

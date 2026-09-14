@@ -92,6 +92,7 @@ const transcript = Array.from({ length: 1_000 }, (_, index) => ({
   time: index + 1,
 }))
 let stopped = false
+let serviceAttempts = 0
 let assignment:
   | {
       source: string
@@ -207,19 +208,55 @@ const calendar = (message: WebviewMessage) => {
   return true
 }
 
-const preview = (message: WebviewMessage) => {
-  if (message.type === "routineAuthorityServices") {
+const services = (message: Extract<WebviewMessage, { type: "routineAuthorityServices" }>) => {
+  serviceAttempts++
+  if (scene === "services-timeout" && serviceAttempts === 1) return true
+  if (scene === "services-error" && serviceAttempts === 1) {
     emit({
       type: "routineAuthorityServices",
       requestID: message.requestID,
-      services: [
-        { name: "GitHub", tools: ["github_create_issue", "github_read_issue"] },
-        { name: "Slack", tools: ["slack_send_message"] },
-      ],
-      truncated: false,
+      error: "The connected service list is unavailable.",
+      recovery: { next: "Try again." },
     })
     return true
   }
+  if (scene === "services-empty") {
+    emit({ type: "routineAuthorityServices", requestID: message.requestID, services: [], truncated: false })
+    return true
+  }
+  if (scene === "services-stale") {
+    emit({
+      type: "routineAuthorityServices",
+      requestID: `${message.requestID}-stale`,
+      services: [{ name: "Wrong response", tools: ["wrong_tool"] }],
+      truncated: false,
+    })
+    setTimeout(
+      () =>
+        emit({
+          type: "routineAuthorityServices",
+          requestID: message.requestID,
+          services: [{ name: "GitHub", tools: ["github_create_issue", "github_read_issue"] }],
+          truncated: true,
+        }),
+      500,
+    )
+    return true
+  }
+  emit({
+    type: "routineAuthorityServices",
+    requestID: message.requestID,
+    services: [
+      { name: "GitHub", tools: ["github_create_issue", "github_read_issue"] },
+      { name: "Slack", tools: ["slack_send_message"] },
+    ],
+    truncated: false,
+  })
+  return true
+}
+
+const preview = (message: WebviewMessage) => {
+  if (message.type === "routineAuthorityServices") return services(message)
   if (message.type === "routineAccessUpdate") {
     books.access = message.access
     books.tools = message.tools

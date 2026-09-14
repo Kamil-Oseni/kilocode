@@ -60,11 +60,23 @@ export function AccessReview(props: {
   const extras = createMemo(() => selected().filter((tool) => !known.has(tool) && !covered().has(tool)))
   let root: HTMLElement | undefined
   let timer: ReturnType<typeof setTimeout> | undefined
-  onMount(() => {
-    root?.focus()
+  let catalogTimer: ReturnType<typeof setTimeout> | undefined
+  const load = () => {
+    clearTimeout(catalogTimer)
     const requestID = crypto.randomUUID()
     setCatalogRequest(requestID)
+    setCatalogError("")
+    setTruncated(false)
+    catalogTimer = setTimeout(() => {
+      if (catalogRequest() !== requestID) return
+      setCatalogRequest("")
+      setCatalogError("Connected services could not be confirmed. Try again.")
+    }, 15_000)
     vscode.postMessage({ type: "routineAuthorityServices", requestID })
+  }
+  onMount(() => {
+    root?.focus()
+    load()
   })
   const tools = () => {
     if (choice() === "brief") return reads
@@ -79,6 +91,7 @@ export function AccessReview(props: {
     })
   const unsub = vscode.onMessage((msg) => {
     if (msg.type === "routineAuthorityServices" && msg.requestID === catalogRequest()) {
+      clearTimeout(catalogTimer)
       setCatalogRequest("")
       if (msg.error) {
         setCatalogError([msg.error, msg.recovery?.next].filter(Boolean).join(" "))
@@ -105,6 +118,7 @@ export function AccessReview(props: {
   })
   onCleanup(() => {
     clearTimeout(timer)
+    clearTimeout(catalogTimer)
     unsub()
   })
   const save = () => {
@@ -189,9 +203,14 @@ export function AccessReview(props: {
             <p class="routines-hint">No connected services are available.</p>
           </Show>
           <Show when={catalogError()}>
-            <p role="alert" class="routines-error">
-              {catalogError()}
-            </p>
+            <div>
+              <p role="alert" class="routines-error">
+                {catalogError()}
+              </p>
+              <Button size="small" variant="ghost" disabled={!!catalogRequest()} onClick={load}>
+                Retry connected services
+              </Button>
+            </div>
           </Show>
           <Show when={truncated()}>
             <p class="routines-hint">Some connected tools aren't shown. Only the tools listed here can be saved.</p>

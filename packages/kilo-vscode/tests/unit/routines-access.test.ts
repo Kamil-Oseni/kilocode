@@ -113,3 +113,43 @@ test("access review lists exact tools for each connected service", async () => {
     truncated: false,
   })
 })
+
+test("connected service review reports offline and malformed catalogs without accepting them", async () => {
+  const messages: unknown[] = []
+  const message = { type: "routineAuthorityServices", requestID: "catalog-error" }
+  await handleRoutineMessage({
+    client: null,
+    directory: "workspace",
+    post: (msg) => messages.push(msg),
+    message,
+  })
+  expect(messages[0]).toMatchObject({
+    type: "routineAuthorityServices",
+    requestID: "catalog-error",
+    error: "Raya is not connected.",
+  })
+
+  const client = createKiloClient({
+    baseUrl: "http://localhost:4096",
+    fetch: async () =>
+      Response.json({
+        services: [
+          { name: "github", tools: ["shared_tool"] },
+          { name: "slack", tools: ["shared_tool"] },
+        ],
+        truncated: false,
+      }),
+  })
+  await handleRoutineMessage({
+    client,
+    directory: "workspace",
+    post: (msg) => messages.push(msg),
+    message: { ...message, requestID: "catalog-malformed" },
+  })
+  expect(messages[1]).toMatchObject({
+    type: "routineAuthorityServices",
+    requestID: "catalog-malformed",
+    error: "The connected service list could not be verified. Reload the routine.",
+  })
+  expect(messages[1]).not.toHaveProperty("services")
+})

@@ -670,6 +670,7 @@ export namespace RayaTaskRunner {
         if (!run) {
           const done = history.findLast((entry) => entry.sessionID === sessionID && entry.status !== "running")
           if (done) {
+            if (schedule && (done.status === "complete" || done.status === "blocked")) yield* schedule.settle(done)
             yield* retain(done)
             yield* close(done)
           }

@@ -1587,6 +1587,63 @@ it.live("a terminal run reconciles its queue entry but an active foreign owner i
   }),
 )
 
+it.live("settlement replay closes a linked occurrence after its first queue update failed", () =>
+  Effect.gen(function* () {
+    const directory = yield* tmpdirScoped()
+    yield* Effect.gen(function* () {
+      const input = { storage: yield* Storage.Service, database: yield* Database.Service }
+      const queue = RayaTaskQueue.make(input.database)
+      const runner = RayaTaskRunner.make({ ...input, sessions })
+      const at = Date.now()
+      const agent = yield* runner.tasks.create({ name: "Once", objective: "Work", schedule: { kind: "once", at } })
+      const trigger = yield* scheduler(input).prepare(agent.id, at)
+      if (!trigger) throw new Error("Expected queued work")
+      const sid = SessionID.make("ses_settlement_replay")
+      const run = {
+        id: "run-settlement-replay",
+        agentID: agent.id,
+        sessionID: sid,
+        at,
+        status: "running" as const,
+        trigger,
+      }
+      yield* queue.claim({ id: trigger.id, claimID: run.id, owner: "backend", now: at, until: at + 60_000 })
+      yield* queue.link({ id: trigger.id, claimID: run.id, sessionID: sid, now: at })
+      yield* runner.tasks.record(run)
+      yield* input.storage.replace(["raya", "goal", sid], {
+        objective: "Work",
+        status: "complete",
+        createdAt: at,
+        updatedAt: at,
+        usage: { turns: 1, continuations: 0, toolCalls: 0 },
+        progress: [],
+        audit: { summary: "Work completed.", verifiedAt: at, requirements: [] },
+      })
+      yield* input.database.db.run(sql`
+        CREATE TRIGGER fail_occurrence_settlement
+        BEFORE UPDATE OF state ON raya_routine_occurrence
+        WHEN NEW.state = 'complete'
+        BEGIN
+          SELECT RAISE(ABORT, 'injected occurrence settlement failure');
+        END
+      `)
+
+      expect(Exit.isFailure(yield* runner.settle(sid).pipe(Effect.exit))).toBe(true)
+      expect((yield* runner.tasks.runsFor(agent.id)).find((item) => item.id === run.id)?.status).toBe("complete")
+      expect((yield* queue.get(trigger.id))?.state).toBe("linked")
+      yield* input.database.db.run(sql`DROP TRIGGER fail_occurrence_settlement`)
+      yield* runner.settle(sid)
+      expect((yield* queue.get(trigger.id))?.state).toBe("complete")
+      expect(yield* queue.active(agent.id)).toEqual([])
+      expect(
+        (yield* RayaTaskInbox.make(input.database).page(agent.id)).messages.filter(
+          (item) => item.source === `report:${run.id}`,
+        ),
+      ).toHaveLength(1)
+    }).pipe(Effect.provide(state(directory)))
+  }),
+)
+
 it.live("interruption after history publication retains one linked occurrence and session identity", () =>
   Effect.gen(function* () {
     const directory = yield* tmpdirScoped()

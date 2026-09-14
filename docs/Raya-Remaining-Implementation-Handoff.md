@@ -4524,3 +4524,30 @@ Evidence to retain:
 Continue with abandoned-orphan eligibility, not deletion first. Add bounded read-only `used(agentID)` evidence to the organization, queue, delegation and inbox services. Organization evidence must include current active and archived membership plus every saved revision, because removal from a later graph does not erase prior membership. Queue/delegation evidence must include terminal rows as well as active work. Inbox evidence must include messages, drafts and attachments. Combine these with `runsFor`, provisioning/authority metadata and the Routine archive. Return named positive or unavailable reasons. Add tests proving each domain independently prevents cleanup. Only then let stopped version-two reconciliation remove an exact disabled worker whose target organization is absent and whose complete use proof is empty; use the existing replay-safe removal claim and remove the stage receipt last. Kill between roster removal and receipt cleanup and prove restart convergence.
 
 Installed source remains `1a02f8aea4`. The next coherent low-memory package should include `2701c802a5`, `d3dd5ed3f9`, `61436630d6`, `5139915332`, `7f0f202261` and `276733d071` after orphan cleanup reaches a complete verified boundary.
+
+## ChatGPT 2026-09-14 18:11 America/Toronto - Fail-closed worker-use evidence delivered
+
+Product commit `f75af2dcbf` is pushed to `origin/main`. Do not add deletion by bypassing these probes. `RayaTask.usage(agentID)` is the single aggregate decision input and returns `{ used, unavailable }` with named domains. Any non-empty array blocks cleanup. Its current production evidence is:
+
+- `run`: retained storage under `raya/agent-runs/<agentID>`, including terminal runs retained by the bounded history policy.
+- `memory`: non-empty `raya/agent-memory/<agentID>` content.
+- `authority`: the worker's persisted `provisioning` change metadata. Authority enable/disable operations retain this record rather than erasing it on reversal.
+- `archive`: both the legacy `raya/agent-archive` array and the indexed archive row. The proof reads both and does not trigger archive migration.
+- `organization`: any current member row, active or archived, or any validated saved revision among the first 1,024 rows. Malformed history or more than 1,024 revisions yields `unavailable: ["organization"]` unless positive evidence was already found.
+- `queue`: any cursor or occurrence for the worker. The query has no live-state filter, so completed and skipped history count.
+- `delegation`: any sender or recipient row. The query has no state filter, so completed, failed and cancelled history count.
+- `inbox`: any message, attachment, non-empty draft or retained draft-attachment metadata. `ensure()` alone creates an empty conversation shell and correctly remains unused.
+
+Verification: the organization, queue, delegation and inbox suites pass together at **23 / 271**. The organization cases prove historical membership after removal, archived membership and malformed-history refusal. The aggregate case performs real writes through every owning service and receives all eight reason names in stable order. `routine-management-tool.test.ts` remains **8 / 129**. Scoped one-thread lint has zero errors and only pre-existing warnings; the annotation, Promise-facade, Markdown-table and diff guards pass. No CLI-wide typecheck or other high-memory command ran.
+
+Implement replay-safe cleanup next:
+
+1. Extend the claim schema with a cleanup-specific discriminator; do not make an interrupted cleanup indistinguishable from ordinary `remove`, because ordinary removal calls `retain()` and creates an archive row.
+2. In stopped version-two stage recovery, consider cleanup only when the target organization is absent, the roster contains the exact disabled `StageV2.definition`, the receipt owner is stopped and the complete expected graph has not been saved.
+3. While holding the existing cross-process Routine mutation gate, call `usage(agentID)`. Continue only when both `used` and `unavailable` are empty. Re-read the stage receipt, roster and organization after acquiring the cleanup claim so a stale preflight cannot authorize deletion.
+4. Persist a cleanup receipt/claim before the first removal write. Its identity must bind the agent ID, stage receipt version/content and target organization ID. Changed receipt reuse must fail closed.
+5. Remove the exact roster entry without calling `retain()`; abandoned provisioning cleanup must not manufacture user-visible archive history. Keep unrelated workers byte-for-byte unchanged.
+6. Remove `raya/agent-stage/<agentID>` only after the roster save is durable. Clear the cleanup claim last. A restart after roster removal but before stage-receipt removal must verify the same receipt, confirm the worker is absent, remove the receipt and settle the claim without recreating or archiving the worker.
+7. Add real interruption tests after claim publication, after roster removal and after stage-receipt removal. Add independent blockers for every positive/unavailable usage reason, changed worker, newly created organization, live owner and changed receipt. Preserve each item and surface an issue.
+
+Installed source remains `1a02f8aea4`. The next low-memory snapshot should batch `2701c802a5`, `d3dd5ed3f9`, `61436630d6`, `5139915332`, `7f0f202261`, `276733d071` and `f75af2dcbf` after cleanup interruption recovery is complete.

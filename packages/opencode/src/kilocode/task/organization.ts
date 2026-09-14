@@ -1,5 +1,6 @@
 import { and, asc, count, desc, eq, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm"
 import { Effect, Schema } from "effect"
+import { isDeepStrictEqual } from "node:util"
 import type { Database } from "@opencode-ai/core/database/database"
 import {
   RayaRoutineOrganizationDelegationTable as DelegationRow,
@@ -254,7 +255,23 @@ export namespace RayaTaskOrganization {
         Effect.catchTag("RayaTaskOrganization.NotFound", () => Effect.succeed(undefined)),
       )
       if (existing) {
-        if (replay) return existing
+        if (replay) {
+          const graph = yield* validate(value.members, value.delegations ?? [])
+          const expected: Organization = {
+            version: 1,
+            id,
+            name: value.name.trim(),
+            ...(value.purpose ? { purpose: value.purpose.trim() } : {}),
+            revision: 1,
+            archived: false,
+            createdAt: existing.createdAt,
+            updatedAt: existing.updatedAt,
+            members: graph.members,
+            delegations: graph.delegations,
+          }
+          if (isDeepStrictEqual(existing, expected)) return existing
+          return yield* new Conflict({ message: "An organization already uses this ID with different details." })
+        }
         return yield* Effect.die(new Error("An organization already uses this ID."))
       }
       if (!Schema.is(Organization.fields.id)(id)) return yield* new Invalid({ message: "Organization ID is invalid." })

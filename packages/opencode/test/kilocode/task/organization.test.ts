@@ -5,7 +5,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { RayaRoutineOrganizationRevisionTable as Revision } from "@opencode-ai/core/kilocode/routine.sql"
 import { RayaTask } from "@/kilocode/task"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
-import { RayaTaskOrganization } from "@/kilocode/task/organization"
+import { Conflict, RayaTaskOrganization } from "@/kilocode/task/organization"
 import { Storage } from "@/storage/storage"
 
 function memory() {
@@ -203,6 +203,32 @@ test("routine organizations reject invalid membership and supervisor graphs", as
         expect(Exit.isFailure(result)).toBe(true)
       }
       expect((yield* organizations.list()).items).toEqual([])
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
+test("organization provisioning replays only the exact saved definition", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const tasks = RayaTask.make({ storage, database })
+      const worker = yield* tasks.create({ name: "Worker", objective: "Work", schedule: { kind: "manual" } })
+      const input = {
+        name: "Operations",
+        purpose: "Run the company.",
+        members: [{ agentID: worker.id, role: "Owner" }],
+        delegations: [],
+      }
+      const id = `org_${"1".repeat(32)}`
+      const created = yield* RayaTaskOrganization.make(database, tasks, storage).provision(input, id)
+      const restarted = RayaTaskOrganization.make(database, tasks, storage)
+      expect(yield* restarted.provision(input, id)).toEqual(created)
+
+      const changed = yield* restarted.provision({ ...input, purpose: "Replace the company." }, id).pipe(Effect.flip)
+      expect(changed).toEqual(new Conflict({ message: "An organization already uses this ID with different details." }))
+      expect(yield* restarted.get(id)).toEqual(created)
+      expect((yield* restarted.list()).items.filter((item) => item.id === id)).toHaveLength(1)
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })

@@ -214,6 +214,7 @@ export const make = Effect.fn("RayaGoalCharges.make")(function* (deps: Deps) {
     identity?: string,
   ) {
     const noop = {
+      amount: undefined,
       dispatch: Effect.void,
       finish: Effect.void,
       release: Effect.void,
@@ -376,7 +377,7 @@ export const make = Effect.fn("RayaGoalCharges.make")(function* (deps: Deps) {
       ),
       Effect.asVoid,
     )
-    return { dispatch, finish, release, uncertain, settle }
+    return { amount: cfg.reservation, dispatch, finish, release, uncertain, settle }
   })
 
   return { claim, complete }

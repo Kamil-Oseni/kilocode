@@ -127,6 +127,7 @@ const fixture = (
     sessionID: SessionID,
     identity: string,
   ) => Effect.Effect<{
+    amount?: number
     dispatch: Effect.Effect<void>
     finish: Effect.Effect<void>
     release: Effect.Effect<void>
@@ -259,6 +260,10 @@ it.live(
         yield* voice.reserve(orphan, secret, root)
         const restarted = yield* make({ ...state.deps, admissions, completions })
         expect((yield* restarted.release(orphan, secret, root)).status).toBe("released")
+        expect(events.filter((event) => event.startsWith(`complete:${session}:voice:`))).toHaveLength(2)
+        const live = { ...orphan, requestID: crypto.randomUUID(), model: "gpt-live-1" as const }
+        yield* voice.reserve(live, secret, root)
+        expect(Exit.isFailure(yield* restarted.release(live, secret, root).pipe(Effect.exit))).toBe(true)
         expect(events.filter((event) => event.startsWith(`complete:${session}:voice:`))).toHaveLength(2)
       }).pipe(
         Effect.provide([

@@ -46,6 +46,7 @@ type Claim = {
   socket?: WebSocket
   timer?: ReturnType<typeof setInterval>
   watch?: ReturnType<typeof setTimeout>
+  budget?: ReturnType<typeof setTimeout>
   cancelled: boolean
   uncertain: boolean
   started: boolean
@@ -81,6 +82,7 @@ export class LiveBroker {
     private readonly connect = (url: string, options: WebSocket.ClientOptions) => new WebSocket(url, options),
     private readonly startup = 12_000,
     private readonly reservationTimeout = 30_000,
+    private readonly margin = 15_000,
   ) {}
   get active() {
     return !!this.claim
@@ -220,15 +222,7 @@ export class LiveBroker {
         claim.uncertain = false
       throw error
     })
-    if (
-      admitted.requestID !== reservation.requestID ||
-      admitted.model !== reservation.model ||
-      admitted.status !== "reserved"
-    )
-      throw new Error("Raya Live reservation was not confirmed")
-    claim.reservation = reservation
-    claim.uncertain = false
-    this.assert(claim)
+    this.admit(claim, reservation, admitted)
     claim.uncertain = true
     const response = await this.request(endpoint, {
       method: "POST",
@@ -313,6 +307,44 @@ export class LiveBroker {
     }, this.startup)
     claim.watch.unref()
     ready({ sdp: transport.sdp, providerSessionID: claim.remote })
+  }
+
+  private admit(claim: Claim, reservation: Reservation, value: Record<string, unknown>) {
+    if (
+      value.requestID !== reservation.requestID ||
+      value.model !== reservation.model ||
+      value.status !== "reserved" ||
+      (value.amount === undefined) !== (value.currency === undefined) ||
+      (value.amount === undefined) !== (value.maximumSeconds === undefined) ||
+      (value.amount !== undefined &&
+        (typeof value.amount !== "number" ||
+          !Number.isFinite(value.amount) ||
+          value.amount <= 0 ||
+          value.currency !== "USD" ||
+          typeof value.maximumSeconds !== "number" ||
+          !Number.isInteger(value.maximumSeconds) ||
+          value.maximumSeconds < 0 ||
+          value.maximumSeconds > 86_400))
+    )
+      throw new Error("Raya Live reservation was not confirmed")
+    claim.reservation = reservation
+    claim.uncertain = false
+    this.assert(claim)
+    if (typeof value.amount !== "number") return
+    const period = Number(value.maximumSeconds) * 1000
+    if (period <= this.margin)
+      throw new Error("The saved voice reservation is too small for a Live call. Increase it and try again.")
+    claim.budget = setTimeout(
+      () => {
+        if (!this.current(claim)) return
+        claim.failed(
+          "Live voice reached its reserved session cost. The call is closing; task work remains separate. Increase the USD reservation before reconnecting.",
+        )
+        void this.stop(claim.input.requestID)
+      },
+      Math.floor(period - this.margin),
+    )
+    claim.budget.unref()
   }
 
   private attach(claim: Claim) {
@@ -567,6 +599,10 @@ export class LiveBroker {
   }
   private async release(claim: Claim) {
     if (!claim.reservation) return true
+    if (claim.binding?.model === "gpt-live-1") {
+      claim.reservation = undefined
+      return true
+    }
     if (claim.uncertain) return false
     const reservation = claim.reservation
     const released = await this.backend(
@@ -588,6 +624,7 @@ export class LiveBroker {
     claim.abort.abort()
     clearInterval(claim.timer)
     clearTimeout(claim.watch)
+    clearTimeout(claim.budget)
     claim.commands.close()
     let released = !claim.remote
     if (claim.remote && !claim.final && claim.socket?.readyState === WebSocket.OPEN) {

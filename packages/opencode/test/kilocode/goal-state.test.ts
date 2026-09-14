@@ -194,6 +194,7 @@ describe("RayaGoal", () => {
       const claims = yield* GoalCharges.make({ storage, sessions })
       const other = yield* GoalCharges.make({ storage, sessions })
       const first = yield* claims.claim(child, "USD")
+      expect(first.amount).toBe(0.6)
       const concurrent = yield* other.claim(root, "USD").pipe(Effect.exit)
       expect(Exit.isFailure(concurrent)).toBe(true)
       if (Exit.isFailure(concurrent)) expect(Cause.pretty(concurrent.cause)).toContain("reserved by another")
@@ -252,6 +253,8 @@ describe("RayaGoal", () => {
       const token = `voice:${crypto.randomUUID()}`
       const lease = yield* first.claim(child, "USD", token)
       const retry = yield* restarted.claim(child, "USD", token)
+      expect(lease.amount).toBe(0.6)
+      expect(retry.amount).toBe(0.6)
       const full = yield* restarted.claim(root, "USD").pipe(Effect.exit)
       expect(Exit.isFailure(full)).toBe(true)
       if (Exit.isFailure(full)) expect(Cause.pretty(full.cause)).toContain("reserved by another")

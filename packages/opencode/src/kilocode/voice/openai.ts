@@ -1,5 +1,11 @@
 import { OpenAIUsageInput, valid, fingerprint, pricing, type OpenAIPricing } from "./openai-usage"
-import { LiveCall, LiveMeter, prompt as livePrompt, valid as liveValid } from "./live-protocol"
+import {
+  allowance as liveAllowance,
+  LiveCall,
+  LiveMeter,
+  prompt as livePrompt,
+  valid as liveValid,
+} from "./live-protocol"
 import fs from "node:fs/promises"
 import { createHash, timingSafeEqual } from "node:crypto"
 import { Cause, Effect, Exit, Fiber, Schema, Scope, Semaphore } from "effect"
@@ -31,6 +37,7 @@ type Image = { receipt: typeof OpenAIImage.Type; data: string }
 type Usage = (typeof OpenAIUsageInput.Type)["receipt"]
 type Stored = Store.Stored
 type Admission = {
+  amount?: number
   dispatch: Effect.Effect<void, VoiceError>
   finish: Effect.Effect<void, VoiceError>
   release: Effect.Effect<void, never>
@@ -39,6 +46,7 @@ type Reservation = {
   fingerprint: string
   input: typeof OpenAIReserve.Type
   lease: Admission
+  bound?: boolean
 }
 const Count = Schema.Number.check(
   Schema.isInt(),
@@ -186,13 +194,42 @@ export const make = (deps: Deps) =>
     const store = Store.make(deps.database, deps.storage)
     const reservation = (input: typeof OpenAIReserve.Type, secret: string, directory: string) =>
       digest(JSON.stringify([directory, input.parentSessionID, input.requestID, input.model, digest(secret)]))
-    const reserved = (input: typeof OpenAIReserve.Type): typeof OpenAIReservation.Type => ({
+    const reserved = (input: typeof OpenAIReserve.Type, entry?: Reservation): typeof OpenAIReservation.Type => ({
       requestID: input.requestID,
       model: input.model,
       status: "reserved",
+      ...(entry?.lease.amount !== undefined ? { amount: entry.lease.amount, currency: "USD" as const } : {}),
+      ...(entry?.lease.amount !== undefined && input.model === "gpt-live-1"
+        ? { maximumSeconds: liveAllowance(entry.lease.amount) }
+        : {}),
     })
     const finishReservation = (key: string, entry: Reservation) =>
       entry.lease.finish.pipe(Effect.tap(() => Effect.sync(() => reservations.delete(key))))
+    const releaseReservation = (key: string, entry: Reservation) =>
+      finishReservation(key, entry).pipe(Effect.andThen(entry.lease.release))
+    const resolveLive = (stored: Stored, secret: string, outcome: "recorded" | "deferred") =>
+      Effect.gen(function* () {
+        const input = {
+          parentSessionID: stored.binding.parentSessionID,
+          requestID: stored.requestID,
+          model: "gpt-live-1" as const,
+        }
+        const id = digest(JSON.stringify([stored.binding.directory, stored.requestID]))
+        const proof = reservation(input, secret, stored.binding.directory)
+        const entry = reservations.get(id)
+        if (entry) {
+          if (entry.fingerprint !== proof)
+            return yield* refuse("conflict", "Live reservation does not match the provider binding.")
+          if (outcome === "recorded") yield* finishReservation(id, entry)
+          if (outcome === "recorded") reservations.delete(id)
+          yield* entry.lease.release
+          return
+        }
+        if (outcome === "recorded") {
+          if (deps.completions) yield* deps.completions(stored.binding.parentSessionID, `voice:${proof}`)
+          return
+        }
+      })
     const save = (stored: Stored) =>
       store
         .replace(stored)
@@ -520,13 +557,18 @@ export const make = (deps: Deps) =>
             if (prior) {
               if (prior.fingerprint !== proof)
                 return yield* refuse("conflict", "Voice reservation identity was reused with different input.")
-              return reserved(prior.input)
+              return reserved(prior.input, prior)
             }
             if (reservations.size >= 64)
               return yield* refuse("conflict", "Voice reservation capacity is held by unresolved calls.")
             const lease = deps.admissions
               ? yield* deps.admissions(parent.id, `voice:${proof}`)
-              : { dispatch: Effect.void, finish: Effect.void, release: Effect.void }
+              : {
+                  amount: undefined,
+                  dispatch: Effect.void,
+                  finish: Effect.void,
+                  release: Effect.void,
+                }
             const entry = { fingerprint: proof, input, lease }
             reservations.set(id, entry)
             const dispatched = yield* lease.dispatch.pipe(Effect.exit)
@@ -535,7 +577,7 @@ export const make = (deps: Deps) =>
               yield* lease.release
               return yield* Effect.failCause(dispatched.cause)
             }
-            return reserved(input)
+            return reserved(input, entry)
           }).pipe(Effect.uninterruptible),
         )
       })
@@ -555,14 +597,17 @@ export const make = (deps: Deps) =>
           Effect.gen(function* () {
             const entry = reservations.get(id)
             if (!entry) {
+              if (input.model === "gpt-live-1")
+                return yield* refuse("conflict", "Live reservation ownership cannot be released without its binding.")
               if (deps.completions) yield* deps.completions(parent.id, `voice:${proof}`)
               return { ...reserved(input), status: "released" as const }
             }
             if (entry.fingerprint !== proof)
               return yield* refuse("conflict", "Voice reservation identity was reused with different input.")
+            if (entry.bound) return yield* refuse("conflict", "A provider call is using this voice reservation.")
             yield* finishReservation(id, entry)
             yield* entry.lease.release
-            return { ...reserved(input), status: "released" as const }
+            return { ...reserved(input, entry), status: "released" as const }
           }).pipe(Effect.uninterruptible),
         )
       })
@@ -600,8 +645,8 @@ export const make = (deps: Deps) =>
                 if (admission) {
                   if (admission.fingerprint !== proof)
                     return yield* refuse("conflict", "Voice reservation does not match the provider binding.")
-                  yield* finishReservation(reservationID, admission)
-                  yield* admission.lease.release
+                  if (model === "gpt-live-1") admission.bound = true
+                  if (model !== "gpt-live-1") yield* releaseReservation(reservationID, admission)
                 }
                 return visible(prior)
               }
@@ -630,8 +675,8 @@ export const make = (deps: Deps) =>
                   .create(stored)
                   .pipe(Effect.mapError((error) => new VoiceError({ code: error.code, message: error.message })))
               ) {
-                yield* finishReservation(reservationID, admission)
-                yield* admission.lease.release
+                if (model === "gpt-live-1") admission.bound = true
+                if (model !== "gpt-live-1") yield* releaseReservation(reservationID, admission)
                 return stored.binding
               }
               const existing = yield* load(id, secret, dir)
@@ -641,8 +686,8 @@ export const make = (deps: Deps) =>
                 existing.binding.model !== model
               )
                 return yield* refuse("conflict", "Provider call already has another binding.")
-              yield* finishReservation(reservationID, admission)
-              yield* admission.lease.release
+              if (model === "gpt-live-1") admission.bound = true
+              if (model !== "gpt-live-1") yield* releaseReservation(reservationID, admission)
               return visible(existing)
             }),
           ),
@@ -792,35 +837,44 @@ export const make = (deps: Deps) =>
         )
       })
     const duration = (id: string, input: typeof LiveMeter.Type, secret: string, directory: string) =>
-      locked(
-        id,
-        Effect.gen(function* () {
-          if (!Schema.is(LiveMeter)(input) || !Number.isFinite(input.receipt.seconds))
-            return yield* refuse("invalid", "Invalid Live duration receipt.")
-          const stored = yield* load(id, secret, directory, input.generation)
-          if (stored.owner !== owner || stored.binding.model !== "gpt-live-1")
-            return yield* refuse("conflict", "Live duration belongs to another voice binding.")
-          const retain = deps.charges
-            ? deps.charges({
-                sessionID: stored.binding.parentSessionID,
-                id: `gpt-live:${stored.binding.id}:${input.receipt.id}`,
-                callID: stored.binding.id,
-                at: stored.binding.createdAt,
-                seconds: input.receipt.seconds,
-              })
-            : Effect.void
-          if (stored.duration) {
-            if (JSON.stringify(stored.duration) !== JSON.stringify(input.receipt))
-              return yield* refuse("conflict", "Final Live duration is immutable.")
-            yield* retain
-            return stored.duration
-          }
-          stored.duration = input.receipt
-          yield* save(stored)
-          yield* retain
-          return input.receipt
-        }).pipe(Effect.uninterruptible),
-      )
+      Effect.gen(function* () {
+        if (!Schema.is(LiveMeter)(input) || !Number.isFinite(input.receipt.seconds))
+          return yield* refuse("invalid", "Invalid Live duration receipt.")
+        const initial = yield* load(id, secret, directory, input.generation)
+        const reservationID = digest(JSON.stringify([initial.binding.directory, initial.requestID]))
+        return yield* locked(
+          `reservation:${reservationID}`,
+          locked(
+            id,
+            Effect.gen(function* () {
+              const stored = yield* load(id, secret, directory, input.generation)
+              if (stored.owner !== owner || stored.binding.model !== "gpt-live-1")
+                return yield* refuse("conflict", "Live duration belongs to another voice binding.")
+              const retain = deps.charges
+                ? deps.charges({
+                    sessionID: stored.binding.parentSessionID,
+                    id: `gpt-live:${stored.binding.id}:${input.receipt.id}`,
+                    callID: stored.binding.id,
+                    at: stored.binding.createdAt,
+                    seconds: input.receipt.seconds,
+                  })
+                : Effect.void
+              if (stored.duration) {
+                if (JSON.stringify(stored.duration) !== JSON.stringify(input.receipt))
+                  return yield* refuse("conflict", "Final Live duration is immutable.")
+                yield* retain
+                yield* resolveLive(stored, secret, "recorded")
+                return stored.duration
+              }
+              stored.duration = input.receipt
+              yield* save(stored)
+              yield* retain
+              yield* resolveLive(stored, secret, "recorded")
+              return input.receipt
+            }).pipe(Effect.uninterruptible),
+          ),
+        )
+      })
     const get = (id: string, callID: string, generation: string, secret: string, directory: string) =>
       locked(
         id,
@@ -859,16 +913,38 @@ export const make = (deps: Deps) =>
         }),
       )
     const close = (id: string, generation: string, secret: string, directory: string) =>
-      locked(
-        id,
-        Effect.gen(function* () {
-          const stored = yield* load(id, secret, directory, generation)
-          if (stored.owner !== owner) return visible(stored)
-          // Closing speech admission does not revoke already-admitted parent-session work.
-          stored.binding = { ...stored.binding, status: "closed" }
-          yield* save(stored)
-          return stored.binding
-        }),
-      )
+      Effect.gen(function* () {
+        const initial = yield* load(id, secret, directory, generation)
+        if (initial.binding.model !== "gpt-live-1")
+          return yield* locked(
+            id,
+            Effect.gen(function* () {
+              const stored = yield* load(id, secret, directory, generation)
+              if (stored.owner === owner) {
+                stored.binding = { ...stored.binding, status: "closed" }
+                yield* save(stored)
+              }
+              return visible(stored)
+            }),
+          )
+        const reservationID = digest(JSON.stringify([initial.binding.directory, initial.requestID]))
+        return yield* locked(
+          `reservation:${reservationID}`,
+          locked(
+            id,
+            Effect.gen(function* () {
+              const stored = yield* load(id, secret, directory, generation)
+              if (stored.owner !== owner) return visible(stored)
+              // Closing speech admission does not revoke already-admitted parent-session work.
+              stored.binding = { ...stored.binding, status: "closed" }
+              yield* save(stored)
+              // Stop the heartbeat but leave the dispatched lease durable. A late final duration can
+              // still reconcile it; otherwise the existing expiry path records an unknown charge.
+              if (!stored.duration) yield* resolveLive(stored, secret, "deferred")
+              return stored.binding
+            }),
+          ),
+        )
+      })
     return { reserve, release, start, stage, meter, usage, reconcile, submit, delegate, duration, get, cancel, close }
   })

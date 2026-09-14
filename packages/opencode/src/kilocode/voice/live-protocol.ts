@@ -52,6 +52,11 @@ export function pricing(receipt: typeof LiveDuration.Type) {
   }
 }
 
+/** Maximum whole billed seconds covered by one configured reservation. */
+export function allowance(amount: number) {
+  return Math.min(86_400, Math.floor(Number((amount / (rate.perMinute / 60)).toFixed(9))))
+}
+
 export function valid(input: typeof LiveCall.Type) {
   const fragments = input.context.fragments
   return (

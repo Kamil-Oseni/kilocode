@@ -143,15 +143,18 @@ test("the shipped Live voice routes keep duration and delegation behind auth and
     }
     expect((await request("POST", openai, input, key, "")).status).toBe(401)
     expect((await request("POST", openai, input, "")).status).toBe(401)
-    expect(
-      (
-        await request("POST", "/kilocode/voice/openai/reservation", {
-          parentSessionID: parent.id,
-          requestID: input.requestID,
-          model: "gpt-live-1",
-        })
-      ).status,
-    ).toBe(200)
+    const reservation = await request("POST", "/kilocode/voice/openai/reservation", {
+      parentSessionID: parent.id,
+      requestID: input.requestID,
+      model: "gpt-live-1",
+    })
+    expect(reservation.status).toBe(200)
+    expect(await reservation.json()).toMatchObject({
+      amount: 0.6,
+      currency: "USD",
+      maximumSeconds: 720,
+      status: "reserved",
+    })
     const rival = { parentSessionID: parent.id, requestID: crypto.randomUUID(), model: "gpt-live-1" }
     expect((await request("POST", "/kilocode/voice/openai/reservation", rival)).status).toBe(409)
     const started = await request("POST", openai, input)
@@ -160,8 +163,8 @@ test("the shipped Live voice routes keep duration and delegation behind auth and
     expect(binding.model).toBe("gpt-live-1")
     expect(binding.parentSessionID).toBe(parent.id)
     expect(JSON.stringify(binding)).not.toContain(key)
-    expect((await request("POST", "/kilocode/voice/openai/reservation", rival)).status).toBe(200)
-    expect((await request("POST", "/kilocode/voice/openai/reservation/release", rival)).status).toBe(200)
+    expect((await request("POST", "/kilocode/voice/openai/reservation", rival)).status).toBe(409)
+    expect((await request("POST", "/kilocode/voice/openai/reservation/release", input)).status).toBe(409)
     const calls = `${live}/${binding.id}/calls`
     const duration = `${live}/${binding.id}/duration`
     const receipt = { id: "evt_duration_1", model: "gpt-live-1" as const, seconds: 4.5 }
@@ -212,6 +215,8 @@ test("the shipped Live voice routes keep duration and delegation behind auth and
     const closed = await request("DELETE", `${openai}/${binding.id}?generation=${binding.generation}`)
     expect(closed.status).toBe(200)
     expect(Schema.decodeUnknownSync(OpenAIBinding)(await closed.json()).status).toBe("closed")
+    expect((await request("POST", "/kilocode/voice/openai/reservation", rival)).status).toBe(409)
+    expect((await request("POST", "/kilocode/voice/openai/reservation/release", input)).status).toBe(409)
     expect((await request("POST", calls, context(binding.generation, "dlg_3", 2))).status).toBe(409)
     const saved = await request("POST", duration, meter)
     expect(saved.status).toBe(200)
@@ -238,6 +243,8 @@ test("the shipped Live voice routes keep duration and delegation behind auth and
         currency: "USD",
       },
     ])
+    expect((await request("POST", "/kilocode/voice/openai/reservation", rival)).status).toBe(200)
+    expect((await request("POST", "/kilocode/voice/openai/reservation/release", rival)).status).toBe(200)
     expect((await request("POST", duration, { ...meter, receipt: { ...receipt, seconds: 9 } })).status).toBe(409)
     const realtimeInput = {
       parentSessionID: sibling.id,

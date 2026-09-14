@@ -25,6 +25,9 @@ function admission(
       requestID: mode === "reservation-malformed" ? "other" : body.requestID,
       model: body.model,
       status: "reserved",
+      ...(mode === "reservation-currency" ? { amount: 0.1 } : {}),
+      ...(mode === "budget-short" ? { amount: 0.001, currency: "USD", maximumSeconds: 1 } : {}),
+      ...(mode === "budget-tiny" ? { amount: 0.000001, currency: "USD", maximumSeconds: 0 } : {}),
     })
   }
   if (method === "DELETE") return Response.json({ ...binding, status: "closed" })
@@ -58,7 +61,7 @@ async function calls(hold: Promise<void> | undefined, mode: string, method: stri
   })
 }
 
-function fixture(startup = 12_000) {
+function fixture(startup = 12_000, margin = 15_000) {
   const state = {
     mode: "normal" as string,
     current: true,
@@ -200,6 +203,7 @@ function fixture(startup = 12_000) {
     },
     startup,
     80,
+    margin,
   )
   return {
     state,
@@ -311,7 +315,13 @@ test("a definite Live provider refusal releases its preflight without creating a
   }
 })
 
-for (const mode of ["reservation-rejected", "reservation-malformed", "reservation-offline", "reservation-timeout"]) {
+for (const mode of [
+  "reservation-rejected",
+  "reservation-malformed",
+  "reservation-currency",
+  "reservation-offline",
+  "reservation-timeout",
+]) {
   test(`Live ${mode} never reaches the paid provider boundary`, async () => {
     const f = fixture()
     try {
@@ -326,6 +336,38 @@ for (const mode of ["reservation-rejected", "reservation-malformed", "reservatio
     }
   })
 }
+
+test("a reservation too small for the cleanup margin never reaches the paid provider", async () => {
+  const f = fixture(12_000, 20)
+  try {
+    f.state.mode = "budget-tiny"
+    await f.start()
+    expect(f.state.order).toEqual(["/kilocode/voice/openai/reservation", "/kilocode/voice/openai/reservation/release"])
+    expect(f.state.ready).toEqual([])
+    expect(f.state.errors.at(-1)).toContain("too small")
+    expect(f.broker.active).toBe(false)
+  } finally {
+    await f.close()
+  }
+})
+
+test("a priced reservation closes the paid call before its admitted duration is exhausted", async () => {
+  const f = fixture(12_000, 980)
+  try {
+    f.state.mode = "budget-short"
+    await f.start()
+    f.send(started())
+    await until(() => f.state.started === 1)
+    await until(() => !f.broker.active)
+    expect(f.state.errors.some((error) => error.includes("reserved session cost"))).toBe(true)
+    expect(f.state.events.some((event) => event.type === "session.close")).toBe(true)
+    expect(f.state.requests.some((request) => request.path.endsWith("/hangup"))).toBe(true)
+    expect(f.state.requests.some((request) => request.method === "DELETE")).toBe(true)
+    expect(f.state.requests.some((request) => request.path.endsWith("/reservation/release"))).toBe(false)
+  } finally {
+    await f.close()
+  }
+})
 
 test("missing session.started closes the paid call through a host timeout", async () => {
   const f = fixture(80)

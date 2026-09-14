@@ -12,6 +12,11 @@ export const OpenAIReservation = Schema.Struct({
   requestID: VoiceID,
   model: OpenAIReserve.fields.model,
   status: Schema.Literals(["reserved", "released"]),
+  amount: Schema.optional(Schema.Number.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(1_000_000))),
+  currency: Schema.optional(Schema.Literal("USD")),
+  maximumSeconds: Schema.optional(
+    Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(86_400)),
+  ),
 }).annotate({ identifier: "OpenAIVoiceReservation" })
 export const OpenAIStart = Schema.Struct({
   parentSessionID: SessionID,

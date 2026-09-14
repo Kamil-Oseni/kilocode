@@ -3,4 +3,4 @@
 "raya": patch
 ---
 
-Record GPT-Live voice duration as a priced goal charge using OpenAI's published per-second billing rate.
+Record GPT-Live voice duration as a priced goal charge and close limited calls before their reserved session cost is exhausted.

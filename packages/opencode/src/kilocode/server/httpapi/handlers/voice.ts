@@ -41,6 +41,7 @@ export const voiceHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-voice",
       admissions: (sessionID, identity) =>
         reservations.claim(sessionID, "USD", identity).pipe(
           Effect.map((lease) => ({
+            amount: lease.amount,
             dispatch: lease.dispatch.pipe(
               Effect.mapError((error) => new OpenAIVoice.VoiceError({ code: "conflict", message: error.message })),
             ),

@@ -73411,6 +73411,20 @@
           "status": {
             "type": "string",
             "enum": ["reserved", "released"]
+          },
+          "amount": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1000000
+          },
+          "currency": {
+            "type": "string",
+            "enum": ["USD"]
+          },
+          "maximumSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 86400
           }
         },
         "required": ["requestID", "model", "status"],

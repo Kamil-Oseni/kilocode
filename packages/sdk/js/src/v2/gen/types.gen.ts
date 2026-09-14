@@ -5960,6 +5960,9 @@ export type OpenAiVoiceReservation = {
   requestID: string
   model: "gpt-realtime-2.1" | "gpt-live-1"
   status: "reserved" | "released"
+  amount?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  currency?: "USD"
+  maximumSeconds?: number
 }
 
 export type OpenAiVoiceStart = {

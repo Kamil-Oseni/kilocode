@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { pricing, prompt, valid } from "../../src/kilocode/voice/live-protocol"
+import { allowance, pricing, prompt, valid } from "../../src/kilocode/voice/live-protocol"
 
 const user = {
   id: "frag_user_1",
@@ -72,4 +72,7 @@ test("live duration pricing uses the published per-second GPT-Live rate", () => 
     amount: 72,
     quantity: 86_400,
   })
+  expect(allowance(0.000_001)).toBe(0)
+  expect(allowance(0.6)).toBe(720)
+  expect(allowance(1_000_000)).toBe(86_400)
 })

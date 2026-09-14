@@ -5,6 +5,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { jsonSchema, tool, type Tool as AITool } from "ai"
 import { utils, write as workbook } from "xlsx"
+import { Uint8ArrayReader, ZipReader } from "@zip.js/zip.js"
 import path from "node:path"
 import { Agent } from "@/agent/agent"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -26,6 +27,7 @@ import { CapabilityCatalog } from "@/kilocode/capability/catalog"
 import { DiscoverCapabilitiesTool } from "@/kilocode/tool/discover-capabilities"
 import { CreateSpreadsheetTool } from "@/kilocode/tool/create-spreadsheet"
 import { CreateDocumentTool } from "@/kilocode/tool/create-document"
+import { CreatePresentationTool } from "@/kilocode/tool/create-presentation"
 import { builtin } from "@/kilocode/sandbox/network"
 import { RayaChief } from "@/kilocode/chief"
 import { ProviderTest } from "../fake/provider"
@@ -86,6 +88,7 @@ const definitions = Effect.gen(function* () {
     discover: DiscoverCapabilitiesTool.pipe(Effect.flatMap(Tool.init)),
     spreadsheet: CreateSpreadsheetTool.pipe(Effect.flatMap(Tool.init)),
     document: CreateDocumentTool.pipe(Effect.flatMap(Tool.init)),
+    presentation: CreatePresentationTool.pipe(Effect.flatMap(Tool.init)),
   })
 })
 
@@ -350,6 +353,103 @@ it.instance(
         },
       ]) {
         expect(Exit.isFailure(yield* defs.document.execute(input, ctx).pipe(Effect.exit))).toBe(true)
+        expect(yield* Effect.promise(() => Bun.file(input.filePath).exists())).toBe(false)
+      }
+    }),
+  60_000,
+)
+
+it.instance(
+  "creates and extracts a structured PPTX with a complete package and artifact receipt",
+  () =>
+    Effect.gen(function* () {
+      const instance = yield* TestInstance
+      const defs = yield* definitions
+      const bound = bind([defs.read, defs.presentation, defs.discover])
+      yield* prepare(bound.tools)
+      const target = path.join(instance.directory, "launch-plan.pptx")
+      const approvals: string[] = []
+      const ctx = {
+        ...bound.ctx,
+        ask: (request: Parameters<Tool.Context["ask"]>[0]) =>
+          Effect.sync(() => {
+            approvals.push(request.permission)
+          }),
+      }
+      expect(CapabilityCatalog.inspect(bound.ctx, { query: "create PowerPoint" }).capabilities[0]).toMatchObject({
+        id: "presentations.create",
+        status: "available",
+        tools: ["create_presentation"],
+      })
+      const created = yield* defs.presentation.execute(
+        {
+          filePath: target,
+          title: "Launch plan",
+          author: "Raya",
+          slides: [
+            { title: "A calmer launch", subtitle: "One clear outcome", body: "Ship what matters & measure it." },
+            { title: "The sequence", points: ["Invite the first cohort", "Review what changed"], ordered: true },
+          ],
+        },
+        ctx,
+      )
+      expect(created.output).toBe("Created launch-plan.pptx with 2 slides.")
+      expect(created.metadata).toMatchObject({
+        filepath: target,
+        exists: false,
+        slides: 2,
+        rayaRevision: { version: 1, status: "captured", path: target },
+      })
+      const bytes = new Uint8Array(yield* Effect.promise(() => Bun.file(target).arrayBuffer()))
+      const archive = new ZipReader(new Uint8ArrayReader(bytes))
+      const entries = yield* Effect.promise(() =>
+        archive.getEntries().then((items) => items.map((item) => item.filename)),
+      )
+      yield* Effect.promise(() => archive.close())
+      expect(entries).toEqual(
+        expect.arrayContaining([
+          "[Content_Types].xml",
+          "_rels/.rels",
+          "ppt/presentation.xml",
+          "ppt/_rels/presentation.xml.rels",
+          "ppt/slideMasters/slideMaster1.xml",
+          "ppt/slideLayouts/slideLayout1.xml",
+          "ppt/theme/theme1.xml",
+          "ppt/slides/slide1.xml",
+          "ppt/slides/slide2.xml",
+        ]),
+      )
+      const read = yield* defs.read.execute({ filePath: target }, ctx)
+      expect(read.output).toContain("--- Slide: 1 ---")
+      expect(read.output).toContain("A calmer launch")
+      expect(read.output).toContain("Ship what matters & measure it.")
+      expect(read.output).toContain("--- Slide: 2 ---")
+      expect(read.output).toContain("Invite the first cohort")
+      expect(approvals).toEqual(["edit", "read"])
+
+      const before = yield* Effect.promise(() => Bun.file(target).arrayBuffer())
+      const denied = yield* defs.presentation
+        .execute(
+          { filePath: target, slides: [{ title: "must not replace" }] },
+          { ...ctx, ask: () => Effect.die(new Error("Denied by fixture approval boundary")) },
+        )
+        .pipe(Effect.exit)
+      expect(Exit.isFailure(denied)).toBe(true)
+      expect(yield* Effect.promise(() => Bun.file(target).arrayBuffer())).toEqual(before)
+      const replaced = yield* defs.presentation.execute(
+        { filePath: target, slides: [{ title: "Revised deck", body: "Approved replacement" }] },
+        ctx,
+      )
+      expect(replaced.metadata).toMatchObject({ filepath: target, exists: true, slides: 1 })
+      const reread = yield* defs.read.execute({ filePath: target }, ctx)
+      expect(reread.output).toContain("Revised deck")
+      expect(reread.output).toContain("Approved replacement")
+      expect(reread.output).not.toContain("A calmer launch")
+      for (const input of [
+        { filePath: path.join(instance.directory, "wrong.pdf"), slides: [{ title: "No" }] },
+        { filePath: path.join(instance.directory, "blank.pptx"), slides: [{ title: "   " }] },
+      ]) {
+        expect(Exit.isFailure(yield* defs.presentation.execute(input, ctx).pipe(Effect.exit))).toBe(true)
         expect(yield* Effect.promise(() => Bun.file(input.filePath).exists())).toBe(false)
       }
     }),

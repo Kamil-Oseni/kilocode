@@ -30,6 +30,13 @@ const Link = Schema.Struct({
   text: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(300)),
   url: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(2_048)),
 })
+const Field = Schema.Struct({
+  type: Schema.Literal("text_field"),
+  name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(64), Schema.isPattern(/^[A-Za-z0-9_.-]+$/)),
+  label: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)),
+  value: Schema.optional(Schema.String.check(Schema.isMaxLength(200), Schema.isPattern(/^[^\r\n]*$/))),
+  required: Schema.optional(Schema.Boolean),
+})
 const Block = Schema.Union([
   Schema.Struct({ type: Schema.Literal("paragraph"), text: Text }),
   Schema.Struct({
@@ -54,6 +61,7 @@ const Block = Schema.Union([
   }),
   Image,
   Link,
+  Field,
 ])
 const Parameters = Schema.Struct({
   filePath: Schema.String.annotate({ description: "Destination path ending in .pdf." }),
@@ -165,8 +173,20 @@ type Row =
   | { cells: readonly string[]; header: boolean; before?: number; after?: number }
   | { image: Loaded; before?: number; after?: number }
   | { link: { text: string; url: string }; before?: number; after?: number }
+  | { field: { name: string; label: string; value?: string; required?: boolean }; before?: number; after?: number }
 
-type Mark = { readonly x: number; readonly y: number; readonly width: number; readonly url: string }
+type Mark =
+  | { readonly kind: "link"; readonly x: number; readonly y: number; readonly width: number; readonly url: string }
+  | {
+      readonly kind: "field"
+      readonly x: number
+      readonly y: number
+      readonly width: number
+      readonly name: string
+      readonly label: string
+      readonly value?: string
+      readonly required?: boolean
+    }
 
 type Loaded = PdfImage & {
   readonly index: number
@@ -217,6 +237,10 @@ function pdf(input: typeof Parameters.Type, images: readonly Loaded[]) {
     }
     if (block.type === "link") {
       rows.push({ link: { text: block.text, url: address(block.url) }, before: 3, after: 9 })
+      continue
+    }
+    if (block.type === "text_field") {
+      rows.push({ field: block, before: 5, after: 12 })
       continue
     }
     for (const [index, item] of block.items.entries())
@@ -282,10 +306,40 @@ function pdf(input: typeof Parameters.Type, images: readonly Loaded[]) {
             .push(
               `BT /F2 11 Tf ${rgb.join(" ")} rg 54 ${y.toFixed(2)} Td <${encode(line)}> Tj ET ${rgb.join(" ")} rg 54 ${(y - 2).toFixed(2)} ${width.toFixed(2)} 0.5 re f`,
             )
-          marks.at(-1)!.push({ x: 54, y: y - 3, width, url: row.link.url })
+          marks.at(-1)!.push({ kind: "link", x: 54, y: y - 3, width, url: row.link.url })
         }
         y -= height
       }
+      y -= row.after ?? 0
+      continue
+    }
+    if ("field" in row) {
+      if (y - 46 < 72) {
+        pages.push([])
+        marks.push([])
+        y = 720
+      }
+      pages
+        .at(-1)!
+        .push(`BT /F2 10 Tf 0.090 0.102 0.129 rg 54 ${y.toFixed(2)} Td <${encode(row.field.label.trim())}> Tj ET`)
+      y -= 30
+      pages.at(-1)!.push(`0.710 0.733 0.776 RG 0.75 w 54 ${y.toFixed(2)} 504 24 re S`)
+      if (row.field.value)
+        pages
+          .at(-1)!
+          .push(
+            `q 54 ${y.toFixed(2)} 504 24 re W n BT /F2 11 Tf 0.090 0.102 0.129 rg 60 ${(y + 7).toFixed(2)} Td <${encode(row.field.value)}> Tj ET Q`,
+          )
+      marks.at(-1)!.push({
+        kind: "field",
+        x: 54,
+        y,
+        width: 504,
+        name: row.field.name,
+        label: row.field.label.trim(),
+        value: row.field.value,
+        required: row.field.required,
+      })
       y -= row.after ?? 0
       continue
     }
@@ -369,23 +423,36 @@ function pdf(input: typeof Parameters.Type, images: readonly Loaded[]) {
     ? ` /XObject << ${images.map((image) => `/Im${image.index + 1} ${refs.get(image.index)} 0 R`).join(" ")} >>`
     : ""
   const kids: number[] = []
+  const fields: number[] = []
   for (const [index, page] of pages.entries()) {
     const stream = page.join("\n")
     const content = objects.push(
       `<< /Length ${new TextEncoder().encode(stream).length} >>\nstream\n${stream}\nendstream`,
     )
-    const annotations = marks[index]!.map((mark) =>
-      objects.push(
-        `<< /Type /Annot /Subtype /Link /Rect [${mark.x.toFixed(2)} ${mark.y.toFixed(2)} ${(mark.x + mark.width).toFixed(2)} ${(mark.y + 15).toFixed(2)}] /Border [0 0 0] /A << /S /URI /URI <${utf8(mark.url)}> >> >>`,
-      ),
-    )
+    const annotations = marks[index]!.map((mark) => {
+      if (mark.kind === "link")
+        return objects.push(
+          `<< /Type /Annot /Subtype /Link /Rect [${mark.x.toFixed(2)} ${mark.y.toFixed(2)} ${(mark.x + mark.width).toFixed(2)} ${(mark.y + 15).toFixed(2)}] /Border [0 0 0] /A << /S /URI /URI <${utf8(mark.url)}> >> >>`,
+        )
+      const value = mark.value === undefined ? "" : ` /V <${encode(mark.value)}> /DV <${encode(mark.value)}>`
+      const id = objects.push(
+        `<< /Type /Annot /Subtype /Widget /FT /Tx /T <${encode(mark.name)}> /TU <${encode(mark.label)}> /Rect [${mark.x.toFixed(2)} ${mark.y.toFixed(2)} ${(mark.x + mark.width).toFixed(2)} ${(mark.y + 24).toFixed(2)}] /F 4 /Ff ${mark.required ? 2 : 0}${value} /DA (/F2 11 Tf 0.090 0.102 0.129 rg) /BS << /W 0.75 /S /S >> >>`,
+      )
+      fields.push(id)
+      return id
+    })
     const annots = annotations.length ? ` /Annots [${annotations.map((id) => `${id} 0 R`).join(" ")}]` : ""
     const id = objects.push(
       `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >>${xobjects} >> /Contents ${content} 0 R${annots} >>`,
     )
     kids.push(id)
   }
-  objects[0] = "<< /Type /Catalog /Pages 2 0 R >>"
+  const form = fields.length
+    ? objects.push(
+        `<< /Fields [${fields.map((id) => `${id} 0 R`).join(" ")}] /NeedAppearances true /DR << /Font << /F2 4 0 R >> >> /DA (/F2 11 Tf 0.090 0.102 0.129 rg) >>`,
+      )
+    : undefined
+  objects[0] = `<< /Type /Catalog /Pages 2 0 R${form ? ` /AcroForm ${form} 0 R` : ""} >>`
   objects[1] = `<< /Type /Pages /Count ${kids.length} /Kids [${kids.map((id) => `${id} 0 R`).join(" ")}] >>`
 
   const parts: Uint8Array[] = [encoder.encode("%PDF-1.7\n%Raya\n")]
@@ -419,7 +486,7 @@ export const CreatePdfTool = Tool.define(
     const events = yield* EventV2Bridge.Service
     return {
       description:
-        "Create a real paginated PDF from a title and structured headings, paragraphs, lists, rectangular tables, local PNG/JPEG images or credential-free http/https links. Images require alt text, read permission, valid headers and dimensions; PNG files must use 8-bit channels without interlacing. Images are limited to 10 files, 8 MiB each, 24 MiB combined and 20 megapixels combined. Tables support up to 8 columns and 100 rows each, with an optional first-row header. Links become visible text with native PDF annotations. The writer supports printable WinAnsi text, creates at most 200 pages and returns a verified local artifact receipt. It creates a new PDF or replaces the whole destination after approval. It does not fetch network images, open links while creating the file, import or edit an existing PDF, embed custom fonts, create forms, produce a fully tagged accessible PDF, or guarantee archival conformance.",
+        "Create a real paginated PDF from a title and structured headings, paragraphs, lists, rectangular tables, local PNG/JPEG images, credential-free http/https links or single-line text form fields. Images require alt text, read permission, valid headers and dimensions; PNG files must use 8-bit channels without interlacing. Images are limited to 10 files, 8 MiB each, 24 MiB combined and 20 megapixels combined. Tables support up to 8 columns and 100 rows each, with an optional first-row header. Links become visible text with native PDF annotations. Up to 50 uniquely named text fields retain a visible label, tooltip, optional default and required flag. The writer supports printable WinAnsi text, creates at most 200 pages and returns a verified local artifact receipt. It creates a new PDF or replaces the whole destination after approval. It does not fetch network images, open links while creating the file, import or edit an existing PDF, embed custom fonts, create checkbox/signature fields, produce a fully tagged accessible PDF, or guarantee archival conformance.",
       parameters: Parameters,
       execute: (params: typeof Parameters.Type, ctx: Tool.Context) =>
         Effect.gen(function* () {
@@ -433,9 +500,11 @@ export const CreatePdfTool = Tool.define(
               ? block.rows.flat()
               : block.type === "image"
                 ? [block.alt, block.caption].filter((value): value is string => value !== undefined)
-                : "items" in block
-                  ? block.items
-                  : [block.text],
+                : block.type === "text_field"
+                  ? [block.name, block.label, block.value].filter((value): value is string => value !== undefined)
+                  : "items" in block
+                    ? block.items
+                    : [block.text],
           )
           const values = [params.title, params.author, ...text].filter((value): value is string => value !== undefined)
           const required = [
@@ -446,9 +515,11 @@ export const CreatePdfTool = Tool.define(
                 ? []
                 : block.type === "image"
                   ? [block.alt, block.caption].filter((value): value is string => value !== undefined)
-                  : "items" in block
-                    ? block.items
-                    : [block.text],
+                  : block.type === "text_field"
+                    ? [block.name, block.label]
+                    : "items" in block
+                      ? block.items
+                      : [block.text],
             ),
           ].filter((value): value is string => value !== undefined)
           if (required.some((value) => !value.trim())) throw new Error("PDF text can't be blank.")
@@ -464,7 +535,11 @@ export const CreatePdfTool = Tool.define(
           if (cells > 2_000) throw new Error("PDF tables are limited to 2,000 cells per document.")
           const sources = params.blocks.flatMap((block, index) => (block.type === "image" ? [{ block, index }] : []))
           const links = params.blocks.filter((block) => block.type === "link")
+          const fields = params.blocks.filter((block) => block.type === "text_field")
           for (const link of links) address(link.url)
+          if (fields.length > 50) throw new Error("A PDF can contain at most 50 text fields.")
+          if (new Set(fields.map((field) => field.name.toLowerCase())).size !== fields.length)
+            throw new Error("Each PDF text field needs a unique name.")
           if (sources.length > 10) throw new Error("A PDF can contain at most 10 images.")
           const characters = [...values, ...links.map((link) => link.url)].reduce((sum, value) => sum + value.length, 0)
           if (characters > 100_000) throw new Error("This PDF exceeds the 100,000-character limit.")
@@ -544,6 +619,7 @@ export const CreatePdfTool = Tool.define(
               cells,
               images: images.length,
               links: links.length,
+              fields: fields.length,
             },
           })
           const result = yield* Effect.try({
@@ -582,6 +658,7 @@ export const CreatePdfTool = Tool.define(
               imageBytes: bytes,
               imagePixels: pixels,
               links: links.length,
+              fields: fields.length,
               pages: result.pages,
               characters,
               rayaRevision: revision,

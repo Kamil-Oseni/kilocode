@@ -709,7 +709,11 @@ it.instance(
                 ["Total", { formula: "SUM(B2:B3)", value: 2230.5 }, null],
               ],
             },
-            { name: "Notes", header: false, rows: [["Values are final."], [null, "Reviewed"]] },
+            {
+              name: "Notes",
+              header: false,
+              rows: [["Values are final."], [null, "Reviewed"], ["As of", { date: "2026-09-13" }]],
+            },
           ],
         },
         ctx,
@@ -719,18 +723,21 @@ it.instance(
         filepath: target,
         exists: false,
         sheets: ["Summary", "Notes"],
-        cells: 15,
+        cells: 17,
         formulas: 1,
+        dates: 1,
         rayaRevision: { version: 1, status: "captured", path: target },
       })
       const book = parseWorkbook(yield* Effect.promise(() => Bun.file(target).arrayBuffer()), { type: "array" })
       expect(book.Sheets.Summary?.B4).toMatchObject({ f: "SUM(B2:B3)", v: 2230.5, t: "n" })
+      expect(book.Sheets.Notes?.B3).toMatchObject({ v: 46_278, t: "n", w: "2026-09-13" })
       const read = yield* defs.read.execute({ filePath: target }, ctx)
       expect(read.output).toContain("--- Sheet: Summary ---")
       expect(read.output).toContain("North\t1250.5\tTRUE")
       expect(read.output).toContain("Total\t2230.5")
       expect(read.output).toContain("--- Sheet: Notes ---")
       expect(read.output).toContain("Values are final.")
+      expect(read.output).toContain("As of\t2026-09-13")
       expect(approvals).toEqual(["edit", "read"])
 
       const before = yield* Effect.promise(() => Bun.file(target).arrayBuffer())
@@ -768,6 +775,10 @@ it.instance(
         {
           filePath: path.join(instance.directory, "equals-formula.xlsx"),
           sheets: [{ name: "Data", rows: [[{ formula: "=SUM(A1:A2)", value: 3 }]] }],
+        },
+        {
+          filePath: path.join(instance.directory, "invalid-date.xlsx"),
+          sheets: [{ name: "Data", rows: [[{ date: "2026-02-29" }]] }],
         },
       ]) {
         expect(Exit.isFailure(yield* defs.spreadsheet.execute(input, ctx).pipe(Effect.exit))).toBe(true)

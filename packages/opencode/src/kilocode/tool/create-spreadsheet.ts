@@ -21,7 +21,12 @@ const Formula = Schema.Struct({
   }),
   value: Scalar.annotate({ description: "Required cached display value; Excel recalculates the formula when opened." }),
 })
-const Cell = Schema.Union([Scalar, Schema.Null, Formula])
+const DateCell = Schema.Struct({
+  date: Schema.String.check(Schema.isMinLength(10), Schema.isMaxLength(10)).annotate({
+    description: "A calendar date from 1900-01-01 through 9999-12-31 in exact YYYY-MM-DD form.",
+  }),
+})
+const Cell = Schema.Union([Scalar, Schema.Null, Formula, DateCell])
 const Sheet = Schema.Struct({
   name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(31)),
   rows: Schema.Array(Schema.Array(Cell).check(Schema.isMaxLength(200))).check(Schema.isMaxLength(50_000)),
@@ -71,12 +76,34 @@ function formula(value: string) {
   return text
 }
 
+function date(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  if (!match) throw new Error("Spreadsheet dates must use exact YYYY-MM-DD form.")
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  const time = Date.UTC(year, month - 1, day)
+  const parsed = new Date(time)
+  if (
+    year < 1900 ||
+    year > 9999 ||
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  )
+    throw new Error("Spreadsheet date is not a valid calendar day from 1900-01-01 through 9999-12-31.")
+  return time / 86_400_000 + 25_569 - (time < Date.UTC(1900, 2, 1) ? 1 : 0)
+}
+
 function scalar(value: Value) {
-  return typeof value === "object" && value !== null && "formula" in value ? value.value : value
+  if (typeof value !== "object" || value === null) return value
+  if ("formula" in value) return value.value
+  return value.date
 }
 
 function cell(value: Value): string | number | boolean | null | CellObject {
-  if (typeof value !== "object" || value === null || !("formula" in value)) return value
+  if (typeof value !== "object" || value === null) return value
+  if ("date" in value) return { t: "n", v: date(value.date), z: "yyyy-mm-dd" }
   const cached = value.value
   return {
     f: formula(value.formula),
@@ -102,7 +129,7 @@ export const CreateSpreadsheetTool = Tool.define(
     const events = yield* EventV2Bridge.Service
     return {
       description:
-        "Create a real Excel .xlsx workbook from structured values and safe same-sheet formulas. Formula objects require formula without a leading = plus a cached string, number or boolean value. Supported functions are SUM, AVERAGE, MIN, MAX, COUNT, COUNTA, ROUND, ROUNDUP, ROUNDDOWN, ABS, IF, AND, OR and NOT; formulas cannot use external links, named ranges or string literals. Supports up to 10 named sheets, 50,000 rows per sheet, 200 columns per row and 200,000 cells total. Returns a verified local artifact receipt. Raya does not calculate formulas; Excel recalculates them when opened. It does not run macros, import templates or preserve an existing workbook.",
+        "Create a real Excel .xlsx workbook from structured values, timezone-safe YYYY-MM-DD calendar dates and safe same-sheet formulas. Formula objects require formula without a leading = plus a cached string, number or boolean value. Supported functions are SUM, AVERAGE, MIN, MAX, COUNT, COUNTA, ROUND, ROUNDUP, ROUNDDOWN, ABS, IF, AND, OR and NOT; formulas cannot use external links, named ranges or string literals. Supports up to 10 named sheets, 50,000 rows per sheet, 200 columns per row and 200,000 cells total. Returns a verified local artifact receipt. Raya does not calculate formulas; Excel recalculates them when opened. It does not run macros, import templates or preserve an existing workbook.",
       parameters: Parameters,
       execute: (params: typeof Parameters.Type, ctx: Tool.Context) =>
         Effect.gen(function* () {
@@ -122,14 +149,30 @@ export const CreateSpreadsheetTool = Tool.define(
             (sum, sheet) =>
               sum +
               sheet.rows.reduce(
-                (count, row) => count + row.filter((value) => typeof value === "object" && value !== null).length,
+                (count, row) =>
+                  count +
+                  row.filter((value) => typeof value === "object" && value !== null && "formula" in value).length,
+                0,
+              ),
+            0,
+          )
+          const dates = params.sheets.reduce(
+            (sum, sheet) =>
+              sum +
+              sheet.rows.reduce(
+                (count, row) =>
+                  count + row.filter((value) => typeof value === "object" && value !== null && "date" in value).length,
                 0,
               ),
             0,
           )
           for (const sheet of params.sheets)
             for (const row of sheet.rows)
-              for (const value of row) if (typeof value === "object" && value !== null) formula(value.formula)
+              for (const value of row) {
+                if (typeof value !== "object" || value === null) continue
+                if ("formula" in value) formula(value.formula)
+                if ("date" in value) date(value.date)
+              }
           assertMutablePath(filepath)
           yield* assertExternalDirectoryEffect(ctx, filepath)
           const exists = yield* fs.existsSafe(filepath)
@@ -142,6 +185,7 @@ export const CreateSpreadsheetTool = Tool.define(
               exists,
               format: "xlsx",
               formulas,
+              dates,
               sheets: names.map((name, index) => ({ name, rows: params.sheets[index]!.rows.length })),
             },
           })
@@ -181,7 +225,7 @@ export const CreateSpreadsheetTool = Tool.define(
           return {
             title: path.relative(instance.worktree, filepath),
             output: `Created ${names.length === 1 ? "1 sheet" : `${names.length} sheets`} in ${path.basename(filepath)}.`,
-            metadata: { filepath, exists, sheets: names, cells, formulas, rayaRevision: revision },
+            metadata: { filepath, exists, sheets: names, cells, formulas, dates, rayaRevision: revision },
           }
         }).pipe(Effect.orDie),
     }

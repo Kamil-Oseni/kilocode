@@ -18,6 +18,7 @@ import { testEffect } from "../lib/effect"
 const it = testEffect(LayerNode.compile(LayerNode.group([FSUtil.node, Git.node, CrossSpawnSpawner.node])))
 const hash = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex")
 const fixture = fileURLToPath(new URL("./fixtures/mutation-crash.ts", import.meta.url))
+const cli = fileURLToPath(new URL("../../src/index.ts", import.meta.url))
 
 function isolate(root: string) {
   return {
@@ -89,6 +90,45 @@ async function attempt(mode: string, args: string[]) {
     proc.exited,
   ])
   return { output, failure, code }
+}
+
+async function boot(root: string) {
+  const proc = Bun.spawn([process.execPath, "--conditions=browser", cli, "serve", "--hostname", "127.0.0.1", "--port", "0"], {
+    cwd: path.dirname(path.dirname(cli)),
+    stdout: "pipe",
+    stderr: "pipe",
+    env: {
+      ...isolate(root),
+      KILO_DISABLE_DEFAULT_PLUGINS: "true",
+      KILO_TELEMETRY_LEVEL: "off",
+    },
+  })
+  const reader = proc.stdout.getReader()
+  const timer = { id: undefined as ReturnType<typeof setTimeout> | undefined }
+  const listening = async () => {
+    let output = ""
+    while (true) {
+      const chunk = await reader.read()
+      if (chunk.done) throw new Error(await new Response(proc.stderr).text())
+      output += new TextDecoder().decode(chunk.value)
+      const match = output.match(/kilo server listening on (http:\/\/[^\s]+)/)
+      if (match) return match[1]
+    }
+  }
+  try {
+    const url = await Promise.race([
+      listening(),
+      new Promise<never>((_, reject) => {
+        timer.id = setTimeout(() => reject(new Error("Development backend did not start")), 30_000)
+      }),
+    ])
+    const response = await fetch(`${url}/config?directory=${encodeURIComponent(root)}`)
+    if (!response.ok) throw new Error(`Development backend returned ${response.status}: ${await response.text()}`)
+  } finally {
+    if (timer.id) clearTimeout(timer.id)
+    proc.kill("SIGKILL")
+    await proc.exited
+  }
 }
 
 const transaction = (spec: string) => `killed-${spec.replace(/[^a-z0-9-]/gi, "-")}`
@@ -547,4 +587,30 @@ it.live(
       expect((yield* instance(dir, (storage) => journals(storage).pending())).outcomes).toHaveLength(0)
     }),
   30_000,
+)
+
+it.live(
+  "recovers a killed transaction when a fresh development backend loads the workspace",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      const dir = path.join(root, "xdg-data", "kilo", "storage")
+      const source = path.join(root, "source.txt")
+      const moved = path.join(root, "moved.txt")
+      const spec = "mixed:rollback:publish-2"
+      yield* Effect.promise(() => writeFile(source, "source before"))
+      yield* Effect.promise(() => kill("matrix-crash", [dir, root, spec]))
+      expect(yield* Effect.promise(() => readFile(moved, "utf8"))).toBe("source before")
+
+      yield* Effect.promise(() => boot(root))
+
+      const outcome = yield* instance(dir, (storage) => journals(storage).get(transaction(spec)))
+      expect(outcome?.phase).toBe("done")
+      expect(outcome?.decision).toBe("rollback")
+      expect(yield* Effect.promise(() => readFile(source, "utf8"))).toBe("source before")
+      expect(yield* Effect.promise(() => Bun.file(moved).exists())).toBe(false)
+      expect((yield* Effect.promise(() => readdir(root))).some((name) => name.startsWith(".raya-txn-"))).toBe(false)
+      expect((yield* instance(dir, (storage) => journals(storage).pending())).outcomes).toHaveLength(0)
+    }),
+  45_000,
 )

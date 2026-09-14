@@ -622,6 +622,117 @@ test("a completed manual run releases the worker's next queued delegation", asyn
   )
 })
 
+test("settlement replay restores one report and releases one queued delegation", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const starts: string[] = []
+      const runner = RayaTaskRunner.make({
+        database,
+        storage,
+        sessions: {
+          create: () =>
+            Effect.sync(() => {
+              const id = `ses_settlement_replay_${starts.length + 1}`
+              starts.push(id)
+              return session(id)
+            }),
+          get: () => Effect.die("unused"),
+          messages: () => Effect.succeed([]),
+          children: () => Effect.succeed([]),
+        },
+      })
+      const chief = yield* runner.tasks.create({
+        name: "Chief",
+        objective: "Assign work",
+        access: "brief",
+        schedule: { kind: "manual" },
+      })
+      const books = yield* runner.tasks.create({
+        name: "Books",
+        objective: "Review accounts",
+        access: "brief",
+        schedule: { kind: "manual" },
+      })
+      const first = yield* runner.delegate({
+        source: "dlg_settlement_first",
+        senderID: chief.id,
+        recipientID: books.id,
+        objective: "Review the first close.",
+      })
+      const second = yield* runner.delegate({
+        source: "dlg_settlement_second",
+        senderID: chief.id,
+        recipientID: books.id,
+        objective: "Review the next close.",
+      })
+      expect(first.state).toBe("running")
+      expect(second.state).toBe("queued")
+      const now = Date.now()
+      yield* storage.write(["raya", "goal", first.sessionID!], {
+        objective: "Review the first close.",
+        status: "complete",
+        createdAt: now,
+        updatedAt: now,
+        usage: { turns: 1, continuations: 0, toolCalls: 0 },
+        progress: [],
+        audit: { summary: "The first close is reconciled.", verifiedAt: now, requirements: [] },
+      })
+      yield* database.db.run(`
+        CREATE TRIGGER fail_settlement_finish
+        BEFORE UPDATE ON raya_routine_delegation
+        WHEN OLD.state = 'running' AND NEW.state = 'completed'
+        BEGIN
+          SELECT RAISE(ABORT, 'injected delegation finish failure');
+        END
+      `)
+
+      expect(Exit.isFailure(yield* runner.settle(first.sessionID!).pipe(Effect.exit))).toBe(true)
+      const store = RayaTaskDelegation.make(database)
+      const inbox = RayaTaskInbox.make(database)
+      expect((yield* runner.tasks.runsFor(books.id)).find((run) => run.id === first.childRunID)?.status).toBe(
+        "complete",
+      )
+      expect((yield* store.get(first.id)).state).toBe("running")
+      expect(
+        (yield* inbox.page(books.id)).messages.filter((item) => item.source === `report:${first.childRunID}`),
+      ).toHaveLength(1)
+      yield* database.db.run("DROP TRIGGER fail_settlement_finish")
+      yield* database.db.run(`
+        CREATE TRIGGER fail_next_acceptance
+        BEFORE UPDATE ON raya_routine_delegation
+        WHEN OLD.state = 'queued' AND NEW.state = 'accepted'
+        BEGIN
+          SELECT RAISE(ABORT, 'injected next acceptance failure');
+        END
+      `)
+
+      expect(Exit.isFailure(yield* runner.settle(first.sessionID!).pipe(Effect.exit))).toBe(true)
+      expect((yield* store.get(first.id)).state).toBe("completed")
+      expect((yield* store.get(second.id)).state).toBe("queued")
+      expect((yield* inbox.page(chief.id)).messages.filter((item) => item.source.startsWith("reply:"))).toHaveLength(1)
+      expect(
+        (yield* inbox.page(books.id)).messages.filter((item) => item.source === `report:${first.childRunID}`),
+      ).toHaveLength(1)
+      expect(starts).toEqual(["ses_settlement_replay_1"])
+      yield* database.db.run("DROP TRIGGER fail_next_acceptance")
+
+      yield* runner.settle(first.sessionID!)
+      yield* runner.settle(first.sessionID!)
+
+      const running = yield* store.get(second.id)
+      expect(running.state).toBe("running")
+      expect(starts).toEqual(["ses_settlement_replay_1", "ses_settlement_replay_2"])
+      expect((yield* runner.tasks.runsFor(books.id)).filter((run) => run.id === running.childRunID)).toHaveLength(1)
+      expect((yield* inbox.page(chief.id)).messages.filter((item) => item.source.startsWith("reply:"))).toHaveLength(1)
+      expect(
+        (yield* inbox.page(books.id)).messages.filter((item) => item.source === `report:${first.childRunID}`),
+      ).toHaveLength(1)
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
 test("stopping a parent cancels live descendants without rewriting assignments", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {

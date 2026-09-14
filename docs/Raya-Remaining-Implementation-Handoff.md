@@ -916,7 +916,7 @@ The following sections retain the full 39-item scope. Related findings and overh
 
 ### OVR-04 — Calculated, explainable token and tool costs
 
-**Recorded status:** In progress. Persisted accounting provenance, rate evidence, extension disclosure, TUI, direct-run and CLI stats are installed. Current checkpoint adds immutable native voice token/duration receipts and incomplete-observation disclosure. Voice pricing, reservations, historical recovery, modality/tool reconciliation and remaining budget/export consumers are open.
+**Recorded status:** In progress. Persisted accounting provenance, rate evidence, extension disclosure, TUI, direct-run and CLI stats are installed. Historical project queries have verified inclusive start/end bounds and exclude future records. Current checkpoints add immutable native voice token/duration receipts and incomplete-observation disclosure. Voice pricing, reservations, historical recovery, modality/tool reconciliation and remaining budget/export consumers are open.
 
 **Implementation and verification:**
 
@@ -3554,3 +3554,9 @@ Step 4 is complete. Installed identity: `eden.raya@7.4.23-snapshot+f92ca44782.ka
 The package vault has three exact entries. The new `a1fda15e2d6ec67a40f4e039dc2a3aa7ed51a315b1a50522806daa3cf2c39dbe` entry matches the installed bytes and is intentionally not active before reload. The sequential low-memory workflow regenerated the SDK, rebuilt and smoke-tested the CLI, passed host/webview types, cached ESLint and production bundling, then packaged, retained and installed the VSIX. Its active-Bun fallback recovered from the known pinned-`bunx` missing-bin remap without `bun install --force`.
 
 Step 5 is now the only OVR-09 acceptance work. Ask the user to reload and perform the exact installed interaction script. Record every observed ID/state and the post-reload active vault digest in both ledgers. Mark OVR-09 verified only if the whole chain succeeds, including rollback and cleanup; otherwise retain the observed journal phase and write a precise repair handoff before continuing another parent requirement.
+
+## ChatGPT 2026-09-14 00:20 America/Toronto - OVR-04 bounded-query handoff correction
+
+Do not reimplement the project-usage upper bound. Commit `841483d2c5` already applies inclusive `since` and `until` bounds to settled-step timestamps in `packages/opencode/src/kilocode/session/project-usage.ts`. The production storage test at `packages/opencode/test/kilocode/project-usage.test.ts` includes a future outlier plus exact upper/lower boundary rows. ChatGPT reran it at this checkpoint: 1 test, 6 assertions, 0 failures.
+
+Treat this OVR-04 subrequirement as delivered and verified. The installed `3cd2e38095` snapshot contains the implementation because `841483d2c5` is its ancestor. Continue with the remaining ledger work: authoritative voice pricing and reservations, restart-safe historical reconciliation, uncovered modality/tool charges, attributable budget overrides and ledger-aware export/budget consumers. Keep these separate from the already-closed query-window behavior.

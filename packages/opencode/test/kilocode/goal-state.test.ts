@@ -979,6 +979,80 @@ describe("RayaGoal", () => {
     }),
   )
 
+  it.live("retains cited Office artifacts and rejects a stale generated file", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const fs = yield* FSUtil.Service
+      const directory = yield* tmpdirScoped()
+      for (const tool of ["create_document", "create_spreadsheet", "create_presentation"] as const) {
+        const sessionID = SessionID.make(`ses_office_deliverable_${crypto.randomUUID()}`)
+        const rows: MessageV2.WithParts[] = []
+        const goals = setup(storage, () => rows)
+        yield* Effect.addFinalizer(() => goals.clear(sessionID))
+        yield* goals.create(sessionID, `Create a verified artifact with ${tool}`)
+        const file = path.join(directory, `${tool}-${crypto.randomUUID()}.bin`)
+        yield* fs.writeFileString(file, `verified ${tool}`)
+        const revision = yield* Artifact.capture(fs, file)
+        const data = transcript({ sessionID, tool, metadata: { rayaRevision: revision } })
+        rows.push(...data.rows)
+        const completed = yield* goals.update(sessionID, {
+          status: "complete",
+          summary: "Office artifact verified",
+          requirements: [
+            {
+              requirement: "The generated Office artifact is current",
+              passed: true,
+              evidence: [{ callID: data.part!.callID, summary: "The cited generator produced this file" }],
+            },
+          ],
+        })
+        expect(completed.deliverables).toEqual([
+          expect.objectContaining({
+            kind: "file",
+            path: file,
+            revision,
+            tool,
+            evidence: expect.objectContaining({
+              callID: data.part!.callID,
+              messageID: data.part!.messageID,
+              partID: data.part!.id,
+              sessionID: data.part!.sessionID,
+            }),
+          }),
+        ])
+        expect((yield* setup(storage, () => rows).get(sessionID))?.deliverables).toEqual(completed.deliverables)
+      }
+
+      const sessionID = SessionID.make(`ses_stale_office_${crypto.randomUUID()}`)
+      const rows: MessageV2.WithParts[] = []
+      const goals = setup(storage, () => rows)
+      yield* Effect.addFinalizer(() => goals.clear(sessionID))
+      yield* goals.create(sessionID, "Create a current workbook")
+      const file = path.join(directory, `stale-${crypto.randomUUID()}.xlsx`)
+      yield* fs.writeFileString(file, "verified workbook")
+      const data = transcript({
+        sessionID,
+        tool: "create_spreadsheet",
+        metadata: { rayaRevision: yield* Artifact.capture(fs, file) },
+      })
+      rows.push(...data.rows)
+      yield* fs.writeFileString(file, "changed workbook")
+      const update = goals.update(sessionID, {
+        status: "complete",
+        summary: "Workbook verified",
+        requirements: [
+          {
+            requirement: "The generated workbook is current",
+            passed: true,
+            evidence: [{ callID: data.part!.callID, summary: "The cited generator produced this workbook" }],
+          },
+        ],
+      })
+      expect((yield* update.pipe(Effect.flip)).message).toContain("stale or its current revision could not be verified")
+      expect((yield* goals.get(sessionID))?.status).toBe("active")
+    }),
+  )
+
   it.live("retains the latest cited ready Canvas version as a non-file deliverable", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service

@@ -191,7 +191,7 @@ function deliverables(goal: Pick<Goal, "deliverables">) {
   }
   lines.push(
     "",
-    "Coverage: revision-safe file mutations, ready Canvas versions and host-verified completed browser downloads cited by the accepted completion audit. Links, other external records and uncited outputs are not included.",
+    "Coverage: revision-safe file outputs and mutations, ready Canvas versions and host-verified completed browser downloads cited by the accepted completion audit. Links, other external records and uncited outputs are not included.",
   )
   return lines
 }

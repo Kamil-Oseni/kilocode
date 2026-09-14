@@ -5769,7 +5769,7 @@ export type RayaGoalDeliverable =
             path: string
             parent: string
           }
-      tool: "write" | "edit" | "apply_patch"
+      tool: "write" | "edit" | "apply_patch" | "create_document" | "create_spreadsheet" | "create_presentation"
       evidence: {
         messageID?: string
         partID?: string

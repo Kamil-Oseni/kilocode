@@ -46,11 +46,22 @@ export namespace RayaGoal {
   })
   export type Evidence = typeof Evidence.Type
 
+  const FileTool = Schema.Literals([
+    "write",
+    "edit",
+    "apply_patch",
+    "create_document",
+    "create_spreadsheet",
+    "create_presentation",
+  ])
+  type FileTool = typeof FileTool.Type
+  const fileTool = (tool: string): tool is FileTool => Schema.is(FileTool)(tool)
+
   const FileDeliverable = Schema.Struct({
     kind: Schema.optional(Schema.Literal("file")),
     path: Schema.String,
     revision: Artifact.Entry,
-    tool: Schema.Literals(["write", "edit", "apply_patch"]),
+    tool: FileTool,
     evidence: Evidence,
   })
   const CanvasDeliverable = Schema.Struct({
@@ -261,7 +272,6 @@ export namespace RayaGoal {
     review: Schema.optional(Review),
     revisions: Schema.optional(Schema.Array(Revision)),
     plan: Schema.optional(Planning.Plan),
-    budget: Schema.optional(Budget),
     objective: Schema.String,
     revision: Schema.optional(Schema.String),
     intent: Schema.optional(Schema.String),
@@ -1120,7 +1130,7 @@ export namespace RayaGoal {
           }),
         )
         if (!evidence) continue
-        if (part.tool === "write" || part.tool === "edit" || part.tool === "apply_patch") {
+        if (fileTool(part.tool)) {
           for (const revision of Artifact.entries(part.state.metadata["rayaRevision"])) {
             const value =
               process.platform === "win32" ? path.normalize(revision.path).toLowerCase() : path.normalize(revision.path)
@@ -1558,7 +1568,7 @@ export namespace RayaGoal {
               .inspect(part)
               .pipe(Effect.catchCause((cause) => Effect.fail(new AuditError({ message: Cause.pretty(cause) }))))
           if (
-            (part.tool === "write" || part.tool === "edit" || part.tool === "apply_patch" || part.tool === "read") &&
+            (fileTool(part.tool) || part.tool === "read") &&
             "rayaRevision" in part.state.metadata &&
             !(yield* Artifact.current(part.state.metadata["rayaRevision"]))
           )

@@ -82,6 +82,26 @@ test("goal reports preserve exact references and mark legacy records instead of 
           },
         },
         {
+          kind: "file",
+          path: "/workspace/report.docx",
+          revision: {
+            version: 1,
+            status: "captured",
+            path: "/workspace/report.docx",
+            canonical: "/workspace/report.docx",
+            sha256: "c".repeat(64),
+            mode: 420,
+          },
+          tool: "create_document",
+          evidence: {
+            callID: "document-call",
+            sessionID: "child",
+            messageID: "document-message",
+            partID: "document-part",
+            summary: "Created the Word report",
+          },
+        },
+        {
           kind: "canvas",
           path: ".raya/canvases/sales-report.canvas.tsx",
           version: 3,
@@ -165,6 +185,11 @@ test("goal reports preserve exact references and mark legacy records instead of 
   expect(saved).toContain("> /workspace/output.md")
   expect(saved).toContain(`Captured SHA-256: ${"a".repeat(64)}`)
   expect(saved).toContain("Source tool: write")
+  expect(saved).toContain("> /workspace/report.docx")
+  expect(saved).toContain(`Captured SHA-256: ${"c".repeat(64)}`)
+  expect(saved).toContain("Source tool: create_document")
+  expect(saved).toContain("> Call: document-call")
+  expect(saved).toContain("> Created the Word report")
   expect(saved).toContain("### Canvas")
   expect(saved).toContain("> .raya/canvases/sales-report.canvas.tsx")
   expect(saved).toContain("Recorded version: 3")
@@ -182,7 +207,7 @@ test("goal reports preserve exact references and mark legacy records instead of 
   expect(saved).toContain("> Call: download-call")
   expect(saved).toContain("> Inspected the completed browser download")
   expect(saved).toContain(
-    "Coverage: revision-safe file mutations, ready Canvas versions and host-verified completed browser downloads cited by the accepted completion audit",
+    "Coverage: revision-safe file outputs and mutations, ready Canvas versions and host-verified completed browser downloads cited by the accepted completion audit",
   )
   expect(saved).toContain("Tokens: input 10; output 20; reasoning 3; cache read 4; cache write 5.")
   expect(saved).toContain(

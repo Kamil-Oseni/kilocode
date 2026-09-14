@@ -70322,7 +70322,7 @@
               },
               "tool": {
                 "type": "string",
-                "enum": ["write", "edit", "apply_patch"]
+                "enum": ["write", "edit", "apply_patch", "create_document", "create_spreadsheet", "create_presentation"]
               },
               "evidence": {
                 "type": "object",

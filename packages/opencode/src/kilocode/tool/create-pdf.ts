@@ -13,6 +13,7 @@ import { assertExternalDirectoryEffect } from "@/tool/external-directory"
 import * as Tool from "@/tool/tool"
 
 const Text = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(10_000))
+const Cell = Schema.String.check(Schema.isMaxLength(300))
 const Block = Schema.Union([
   Schema.Struct({ type: Schema.Literal("paragraph"), text: Text }),
   Schema.Struct({
@@ -26,6 +27,14 @@ const Block = Schema.Union([
       Schema.isMinLength(1),
       Schema.isMaxLength(100),
     ),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("table"),
+    rows: Schema.Array(Schema.Array(Cell).check(Schema.isMinLength(1), Schema.isMaxLength(8))).check(
+      Schema.isMinLength(1),
+      Schema.isMaxLength(100),
+    ),
+    header: Schema.optional(Schema.Boolean),
   }),
 ])
 const Parameters = Schema.Struct({
@@ -91,8 +100,8 @@ function encode(value: string) {
     .toUpperCase()
 }
 
-function wrap(value: string, size: number, indent = 0) {
-  const limit = Math.max(12, Math.floor((504 - indent) / (size * 0.52)))
+function wrap(value: string, size: number, indent = 0, width = 504 - indent) {
+  const limit = Math.max(1, Math.floor(width / (size * 0.52)))
   const lines: string[] = []
   for (const paragraph of value.split(/\r?\n/)) {
     const words = paragraph.trim().split(/\s+/).filter(Boolean)
@@ -117,7 +126,9 @@ function wrap(value: string, size: number, indent = 0) {
   return lines
 }
 
-type Row = { text: string; size: number; font: "F1" | "F2"; indent?: number; before?: number; after?: number }
+type Row =
+  | { text: string; size: number; font: "F1" | "F2"; indent?: number; before?: number; after?: number }
+  | { cells: readonly string[]; header: boolean; before?: number; after?: number }
 
 function pdf(input: typeof Parameters.Type) {
   const rows: Row[] = []
@@ -130,6 +141,16 @@ function pdf(input: typeof Parameters.Type) {
     }
     if (block.type === "paragraph") {
       rows.push({ text: block.text.trim(), size: 11, font: "F2", after: 9 })
+      continue
+    }
+    if (block.type === "table") {
+      for (const [index, cells] of block.rows.entries())
+        rows.push({
+          cells,
+          header: index === 0 && block.header !== false,
+          before: index === 0 ? 8 : 0,
+          after: index === block.rows.length - 1 ? 9 : 0,
+        })
       continue
     }
     for (const [index, item] of block.items.entries())
@@ -149,6 +170,31 @@ function pdf(input: typeof Parameters.Type) {
   let y = 720
   for (const [index, row] of rows.entries()) {
     y -= row.before ?? 0
+    if ("cells" in row) {
+      const width = 504 / row.cells.length
+      const cells = row.cells.map((cell) => wrap(cell.trim(), 9, 0, width - 12))
+      const height = Math.max(1, ...cells.map((lines) => lines.length)) * 12.15 + 10
+      if (y - height < 72) {
+        pages.push([])
+        y = 720
+      }
+      const page = pages.at(-1)!
+      if (row.header) page.push(`0.945 0.949 0.957 rg 54 ${(y - height).toFixed(2)} 504 ${height.toFixed(2)} re f`)
+      for (const [column, lines] of cells.entries()) {
+        const x = 54 + column * width
+        page.push(
+          `0.710 0.733 0.776 RG 0.5 w ${x.toFixed(2)} ${(y - height).toFixed(2)} ${width.toFixed(2)} ${height.toFixed(2)} re S`,
+        )
+        for (const [line, text] of lines.entries()) {
+          if (!text) continue
+          page.push(
+            `BT /${row.header ? "F1" : "F2"} 9 Tf 0.090 0.102 0.129 rg ${(x + 6).toFixed(2)} ${(y - 14 - line * 12.15).toFixed(2)} Td <${encode(text)}> Tj ET`,
+          )
+        }
+      }
+      y -= height + (row.after ?? 0)
+      continue
+    }
     const lines = wrap(row.text, row.size, row.indent)
     for (const line of lines) {
       const height = row.size * 1.35
@@ -228,7 +274,7 @@ export const CreatePdfTool = Tool.define(
     const events = yield* EventV2Bridge.Service
     return {
       description:
-        "Create a real paginated PDF from a title and structured headings, paragraphs or lists. The writer supports printable WinAnsi text, creates at most 200 pages and returns a verified local artifact receipt. It creates a new PDF or replaces the whole destination after approval. It does not import or edit an existing PDF, embed images or custom fonts, create tables or forms, add links, or guarantee archival conformance.",
+        "Create a real paginated PDF from a title and structured headings, paragraphs, lists or rectangular tables. Tables support up to 8 columns and 100 rows each, with an optional first-row header. The writer supports printable WinAnsi text, creates at most 200 pages and returns a verified local artifact receipt. It creates a new PDF or replaces the whole destination after approval. It does not import or edit an existing PDF, embed images or custom fonts, create forms, add links, or guarantee archival conformance.",
       parameters: Parameters,
       execute: (params: typeof Parameters.Type, ctx: Tool.Context) =>
         Effect.gen(function* () {
@@ -237,12 +283,28 @@ export const CreatePdfTool = Tool.define(
             ? params.filePath
             : path.join(instance.directory, params.filePath)
           if (path.extname(filepath).toLowerCase() !== ".pdf") throw new Error("Choose a destination ending in .pdf.")
-          const values = [
+          const text = params.blocks.flatMap((block) =>
+            block.type === "table" ? block.rows.flat() : "items" in block ? block.items : [block.text],
+          )
+          const values = [params.title, params.author, ...text].filter((value): value is string => value !== undefined)
+          const required = [
             params.title,
             params.author,
-            ...params.blocks.flatMap((block) => ("items" in block ? block.items : [block.text])),
+            ...params.blocks.flatMap((block) =>
+              block.type === "table" ? [] : "items" in block ? block.items : [block.text],
+            ),
           ].filter((value): value is string => value !== undefined)
-          if (values.some((value) => !value.trim())) throw new Error("PDF text can't be blank.")
+          if (required.some((value) => !value.trim())) throw new Error("PDF text can't be blank.")
+          const tables = params.blocks.filter((block) => block.type === "table")
+          let cells = 0
+          for (const table of tables) {
+            const columns = table.rows[0]!.length
+            if (table.rows.some((row) => row.length !== columns)) throw new Error("PDF table rows must be rectangular.")
+            if (!table.rows.some((row) => row.some((cell) => cell.trim())))
+              throw new Error("A PDF table must contain visible text.")
+            cells += table.rows.length * columns
+          }
+          if (cells > 2_000) throw new Error("PDF tables are limited to 2,000 cells per document.")
           const characters = values.reduce((sum, value) => sum + value.length, 0)
           if (characters > 100_000) throw new Error("This PDF exceeds the 100,000-character limit.")
           for (const value of values) encode(value)
@@ -254,7 +316,15 @@ export const CreatePdfTool = Tool.define(
             permission: "edit",
             patterns: [path.relative(instance.worktree, filepath)],
             always: ["*"],
-            metadata: { filepath, exists, format: "pdf", title: params.title, blocks: params.blocks.length },
+            metadata: {
+              filepath,
+              exists,
+              format: "pdf",
+              title: params.title,
+              blocks: params.blocks.length,
+              tables: tables.length,
+              cells,
+            },
           })
           const result = yield* Effect.try({
             try: () => pdf(params),
@@ -286,6 +356,8 @@ export const CreatePdfTool = Tool.define(
               filepath,
               exists,
               blocks: params.blocks.length,
+              tables: tables.length,
+              cells,
               pages: result.pages,
               characters,
               rayaRevision: revision,

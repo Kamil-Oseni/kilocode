@@ -495,6 +495,14 @@ it.instance(
           blocks: [
             { type: "heading", level: 1, text: "What changed" },
             { type: "paragraph", text: "Revenue increased 17% while operating costs remained within plan." },
+            {
+              type: "table",
+              rows: [
+                ["Metric", "Value"],
+                ["Revenue", "+17%"],
+                ["Risks", "2 open"],
+              ],
+            },
             { type: "bullets", items: ["Customer retention improved", "Two risks need review"] },
             { type: "numbered", items: Array.from({ length: 90 }, (_, index) => `Follow-up action ${index + 1}`) },
           ],
@@ -505,7 +513,9 @@ it.instance(
       expect(created.metadata).toMatchObject({
         filepath: target,
         exists: false,
-        blocks: 4,
+        blocks: 5,
+        tables: 1,
+        cells: 6,
         rayaRevision: { version: 1, status: "captured", path: target },
       })
       expect(Number(created.metadata.pages)).toBeGreaterThan(1)
@@ -519,6 +529,8 @@ it.instance(
       expect(source).toContain("startxref")
       expect(source).toEndWith("%%EOF\n")
       expect(source).toContain("<517561727465726C7920726576696577>".toUpperCase())
+      expect(source).toContain("<4D6574726963>")
+      expect(source).toContain(" re S")
       const start = Number(source.match(/startxref\n(\d+)/)?.[1])
       expect(source.slice(start)).toStartWith("xref\n")
       const offsets = [...source.matchAll(/(\d{10}) 00000 n \n/g)].map((match) => Number(match[1]))
@@ -541,10 +553,26 @@ it.instance(
           filePath: path.join(instance.directory, "unicode.pdf"),
           blocks: [{ type: "paragraph", text: "Unsupported 😀" }],
         },
+        {
+          filePath: path.join(instance.directory, "ragged.pdf"),
+          blocks: [{ type: "table", rows: [["A", "B"], ["Only one"]] }],
+        },
+        {
+          filePath: path.join(instance.directory, "empty-table.pdf"),
+          blocks: [{ type: "table", rows: [["", "   "]] }],
+        },
+        {
+          filePath: path.join(instance.directory, "too-many-cells.pdf"),
+          blocks: Array.from({ length: 251 }, () => ({
+            type: "table" as const,
+            rows: [["1", "2", "3", "4", "5", "6", "7", "8"]],
+          })),
+        },
       ]) {
         expect(Exit.isFailure(yield* defs.pdf.execute(input, ctx).pipe(Effect.exit))).toBe(true)
         expect(yield* Effect.promise(() => Bun.file(input.filePath).exists())).toBe(false)
       }
+      expect(approvals).toEqual(["edit"])
     }),
   60_000,
 )

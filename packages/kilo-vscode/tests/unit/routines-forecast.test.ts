@@ -16,7 +16,8 @@ test("local calendar proposals are preview-only and confirmation saves the resol
       calls.push({ path, body })
       if (path === "/kilocode/agent-forecast")
         return Response.json({ schedule, from: Date.now(), occurrences: [schedule.at], timezone: "America/Toronto" })
-      if (request.method === "POST") return Response.json({ id: "created" })
+      if (request.method === "POST")
+        return Response.json({ id: body && typeof body === "object" && "id" in body ? String(body.id) : "" })
       return Response.json([])
     },
   })
@@ -97,18 +98,25 @@ test("structured preview messages bypass phrase guessing and reject malformed sc
   })
 })
 
-test("does not resubmit a preview after an uncertain creation response", async () => {
-  const calls: string[] = []
+test("retries an uncertain creation with the same identity", async () => {
+  const calls: Array<{ method: string; path: string; body?: unknown }> = []
   const messages: unknown[] = []
+  let attempts = 0
   const client = createKiloClient({
     baseUrl: "http://localhost:4096",
     fetch: async (input, init) => {
       const request = new Request(input, init)
       const path = new URL(request.url).pathname
-      calls.push(path)
+      const body: unknown = request.method === "GET" ? undefined : await request.json()
+      calls.push({ method: request.method, path, body })
       if (path === "/kilocode/agent-forecast")
         return Response.json({ schedule: { kind: "manual" }, from: Date.now(), occurrences: [] })
-      throw new Error("Connection closed after submitting assignment")
+      if (request.method === "POST" && path === "/kilocode/agent") {
+        attempts++
+        if (attempts === 1) throw new Error("Connection closed after submitting assignment")
+        return Response.json({ id: body && typeof body === "object" && "id" in body ? String(body.id) : "" })
+      }
+      return Response.json([])
     },
   })
   const post = (msg: unknown) => messages.push(msg)
@@ -126,10 +134,13 @@ test("does not resubmit a preview after an uncertain creation response", async (
     post,
     message: { type: "routineCreate", forecastID: reply.forecastID },
   }
-  await Promise.all([handleRoutineMessage(input), handleRoutineMessage(input)])
   await handleRoutineMessage(input)
-  expect(calls).toEqual(["/kilocode/agent-forecast", "/kilocode/agent"])
-  expect(messages.at(-1)).toMatchObject({ type: "routineState", error: expect.stringContaining("already submitted") })
+  await handleRoutineMessage(input)
+  const creates = calls.filter((call) => call.method === "POST" && call.path === "/kilocode/agent")
+  expect(creates).toHaveLength(2)
+  expect(creates[0]?.body).toEqual(creates[1]?.body)
+  expect(creates[0]?.body).toMatchObject({ id: reply.forecastID, schedule: { kind: "manual" } })
+  expect(messages).toContainEqual(expect.objectContaining({ type: "routineState", saved: true }))
 })
 
 test("confirms the backend's exact schedule and scopes preview tokens to client and directory", async () => {
@@ -145,7 +156,8 @@ test("confirms the backend's exact schedule and scopes preview tokens to client 
       calls.push({ path, body })
       if (path === "/kilocode/agent-forecast")
         return Response.json({ schedule, from: Date.now(), occurrences: [schedule.at] })
-      if (request.method === "POST") return Response.json({ id: "created" })
+      if (request.method === "POST")
+        return Response.json({ id: body && typeof body === "object" && "id" in body ? String(body.id) : "" })
       return Response.json([])
     },
   })

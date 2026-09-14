@@ -72,7 +72,11 @@ test("routine creation validates output before consuming preview and forwards th
       })
       if (url.pathname === "/kilocode/agent-forecast")
         return Response.json({ schedule, from: Date.now(), occurrences: [] })
-      if (request.method === "POST") return Response.json({ id: "saved", output })
+      if (request.method === "POST")
+        return Response.json({
+          id: body && typeof body === "object" && "id" in body ? String(body.id) : "",
+          output,
+        })
       return Response.json([])
     },
   })

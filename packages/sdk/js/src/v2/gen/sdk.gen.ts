@@ -9875,6 +9875,7 @@ export class Routine extends HeyApiClient {
       }
       access?: "full" | "brief"
       tools?: Array<string>
+      id?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -9901,6 +9902,7 @@ export class Routine extends HeyApiClient {
             { in: "body", key: "paths" },
             { in: "body", key: "access" },
             { in: "body", key: "tools" },
+            { in: "body", key: "id" },
           ],
         },
       ],

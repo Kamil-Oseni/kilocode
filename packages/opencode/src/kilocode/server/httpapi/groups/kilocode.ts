@@ -122,7 +122,12 @@ export const NotebookReplyPayload = Schema.Struct({ result: NotebookResult })
 export const NotebookRejectPayload = Schema.Struct({ error: NotebookFailure })
 export const AgentManagerReplyPayload = Schema.Struct({ result: AgentManagerResult })
 export const AgentManagerRejectPayload = Schema.Struct({ error: AgentManagerFailure })
-export const TaskCreatePayload = RayaTask.Create
+export const TaskCreatePayload = Schema.Struct({
+  ...RayaTask.Create.fields,
+  id: Schema.optional(
+    Schema.String.check(Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)),
+  ),
+})
 export const TaskAuthorityPayload = RayaTask.Authority
 export const TaskRecoveryReceipt = Schema.Struct({
   agentID: Schema.String,

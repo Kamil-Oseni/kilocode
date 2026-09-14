@@ -22364,6 +22364,7 @@ export type KilocodeRoutineCreateData = {
     }
     access?: "full" | "brief"
     tools?: Array<string>
+    id?: string
   }
   path?: never
   query?: {

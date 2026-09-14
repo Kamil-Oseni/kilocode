@@ -96,8 +96,9 @@ function confirmed(ctx: Ctx) {
     ctx.message.type === "routineScheduleUpdate" ? item.edit?.agentID !== ctx.message.agentID : item.edit !== undefined
   )
     throw new Error("This preview belongs to a different routine or action. Preview the schedule again.")
-  if (item.submitted)
+  if (item.submitted && ctx.message.type !== "routineCreate")
     throw new Error("This assignment was already submitted. Check the routine list before trying again.")
+  if (item.submitted) return item.data.schedule
   if (item.data.schedule.kind === "once" && Number(item.data.schedule.at) <= Date.now())
     throw new Error("The previewed time has passed. Preview a new time before saving.")
   if (item.data.schedule.kind === "cron" && Number(item.data.occurrences[0]) <= Date.now())
@@ -771,6 +772,7 @@ async function create(ctx: Ctx) {
   const created = await ctx.kilo.create(
     {
       directory: ctx.dir,
+      id: String(msg.forecastID),
       name: typeof msg.name === "string" ? msg.name : undefined,
       role: typeof msg.role === "string" ? msg.role : undefined,
       objective: typeof msg.objective === "string" ? msg.objective : undefined,
@@ -787,6 +789,7 @@ async function create(ctx: Ctx) {
     { throwOnError: true },
   )
   const id = created.data?.id
+  if (id !== msg.forecastID) throw new Error("The created routine did not match this assignment. Reload the list.")
   if (typeof msg.forecastID === "string") previews.delete(msg.forecastID)
   if (msg.runNow && id) {
     const run = await ctx.kilo.run({ directory: ctx.dir, agentID: id }, { throwOnError: true })

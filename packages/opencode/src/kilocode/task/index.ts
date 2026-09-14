@@ -786,7 +786,19 @@ export namespace RayaTask {
       const items = yield* list()
       const existing = items.find((item) => item.id === id)
       if (existing) {
-        if (replay) return existing
+        if (replay) {
+          const agent = yield* draft(input, id)
+          const expected = {
+            ...agent,
+            createdAt: existing.createdAt,
+            updatedAt: existing.updatedAt,
+            scheduleUpdatedAt: existing.scheduleUpdatedAt,
+          }
+          const saved = yield* Schema.decodeUnknownEffect(Agent)(JSON.parse(JSON.stringify(expected))).pipe(
+            Effect.orDie,
+          )
+          if (isDeepStrictEqual(existing, saved)) return existing
+        }
         return yield* new GuardError({ kind: "conflict", message: "A routine already uses this ID." })
       }
       const agent = yield* draft(input, id)

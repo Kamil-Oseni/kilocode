@@ -556,13 +556,14 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     const agentCreate = Effect.fn("KilocodeHttpApi.agentCreate")(function* (ctx: {
       payload: typeof TaskCreatePayload.Type
     }) {
-      return yield* runner.tasks
-        .create(ctx.payload)
-        .pipe(
-          Effect.catchTag("RayaTask.GuardError", (err) =>
-            Effect.fail(new InvalidRequestError({ message: err.message, kind: err.kind, field: err.field })),
-          ),
-        )
+      const created = ctx.payload.id
+        ? runner.tasks.provision(ctx.payload, ctx.payload.id)
+        : runner.tasks.create(ctx.payload)
+      return yield* created.pipe(
+        Effect.catchTag("RayaTask.GuardError", (err) =>
+          Effect.fail(new InvalidRequestError({ message: err.message, kind: err.kind, field: err.field })),
+        ),
+      )
     })
     const agentUpdate = Effect.fn("KilocodeHttpApi.agentUpdate")(function* (ctx: {
       params: { agentID: string }

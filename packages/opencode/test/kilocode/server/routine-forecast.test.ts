@@ -629,3 +629,33 @@ test("archive pages stay bounded and anchored when newer removals arrive", async
   for (const query of ["?cursor=missing", "?cursor=", "?cursor=archived-49&agentID=archived-51"])
     expect((await app.request(`/kilocode/agent-archive${query}`, { headers })).status).toBe(400)
 }, 30_000)
+
+test("routine creation replays one stable identity and rejects changed retries", async () => {
+  await using directory = await tmpdir({ git: true })
+  const headers = { "content-type": "application/json", "x-kilo-directory": directory.path }
+  const app = Server.Default().app
+  const id = "00000000-0000-4000-8000-000000000001"
+  const body = { id, name: "Weekly books", objective: "Review the books", schedule: { kind: "manual" } }
+  const created = await app.request("/kilocode/agent", { method: "POST", headers, body: JSON.stringify(body) })
+  expect(created.status).toBe(200)
+  const agent = Schema.decodeUnknownSync(Schema.toCodecJson(RayaTask.Agent))(await created.json())
+  expect(agent.id).toBe(id)
+
+  await disposeAllInstances()
+  const replay = await app.request("/kilocode/agent", { method: "POST", headers, body: JSON.stringify(body) })
+  const repeated = await replay.json()
+  expect(replay.status, JSON.stringify(repeated)).toBe(200)
+  expect(repeated).toEqual(agent)
+
+  const changed = await app.request("/kilocode/agent", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ ...body, objective: "Change the assignment" }),
+  })
+  expect(changed.status).toBe(400)
+  expect(await changed.json()).toMatchObject({ kind: "conflict", message: "A routine already uses this ID." })
+  const listed = await app.request("/kilocode/agent", { headers })
+  const matches = (await listed.json()).filter((item: { id?: string }) => item.id === id)
+  expect(matches).toHaveLength(1)
+  expect(matches[0]).toMatchObject({ id, name: agent.name, objective: agent.objective, schedule: agent.schedule })
+}, 30_000)

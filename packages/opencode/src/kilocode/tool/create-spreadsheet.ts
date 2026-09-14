@@ -11,6 +11,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { assertExternalDirectoryEffect } from "@/tool/external-directory"
 import { assertMutablePath } from "@/kilocode/agent-manager/protection"
 import * as Artifact from "@/kilocode/goal/artifact"
+import { RayaPath } from "@/kilocode/task/path-boundary"
 import * as Tool from "@/tool/tool"
 
 const Scalar = Schema.Union([Schema.String.check(Schema.isMaxLength(32_767)), Schema.Finite, Schema.Boolean])
@@ -235,11 +236,13 @@ export const CreateSpreadsheetTool = Tool.define(
                 if ("number" in value) format(value)
               }
           assertMutablePath(filepath)
-          yield* assertExternalDirectoryEffect(ctx, filepath)
+          const target = yield* RayaPath.canonical(fs, filepath)
+          assertMutablePath(target)
+          yield* assertExternalDirectoryEffect(ctx, target)
           const exists = yield* fs.existsSafe(filepath)
           yield* ctx.ask({
             permission: "edit",
-            patterns: [path.relative(instance.worktree, filepath)],
+            patterns: RayaPath.patterns(instance.worktree, [filepath, target]),
             always: ["*"],
             metadata: {
               filepath,
@@ -265,6 +268,7 @@ export const CreateSpreadsheetTool = Tool.define(
             },
             catch: (cause) => new Error(`Raya couldn't create this workbook: ${String(cause)}`),
           })
+          yield* RayaPath.check(fs, filepath, target)
           const tmp = `${filepath}.raya-${randomUUID()}.tmp`
           const save = Effect.gen(function* () {
             if (!(yield* enabled)) {

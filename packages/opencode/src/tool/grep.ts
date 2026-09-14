@@ -7,6 +7,7 @@ import * as KiloGrep from "@/kilocode/tool/grep-signal-controls" // kilocode_cha
 import { assertExternalDirectoryEffect } from "./external-directory"
 import DESCRIPTION from "./grep.txt"
 import * as Tool from "./tool"
+import { RayaPath } from "@/kilocode/task/path-boundary" // kilocode_change
 
 export const Parameters = Schema.Struct({
   pattern: Schema.String.annotate({ description: "Pattern to search for in file contents (regex by default)" }), // kilocode_change
@@ -65,12 +66,22 @@ export const GrepTool = Tool.define(
           })
           // kilocode_change end
           const requestedInfo = yield* fs.stat(requested).pipe(Effect.catch(() => Effect.succeed(undefined)))
-          yield* assertExternalDirectoryEffect(ctx, requested, {
+          // kilocode_change start - authorize and search the target behind a file or directory link
+          const target = requestedInfo ? yield* RayaPath.canonical(fs, requested) : requested
+          if (target !== requested)
+            yield* ctx.ask({
+              permission: "read",
+              patterns: RayaPath.patterns(ins.worktree, [target]),
+              always: ["*"],
+              metadata: { filepath: target },
+            })
+          yield* assertExternalDirectoryEffect(ctx, target, {
             bypass: false,
             kind: requestedInfo?.type === "Directory" ? "directory" : "file",
           })
+          // kilocode_change end
 
-          const search = FSUtil.resolve(requested)
+          const search = FSUtil.resolve(target) // kilocode_change - search only the authorized canonical target
           const info = yield* fs.stat(search).pipe(Effect.catch(() => Effect.succeed(undefined)))
           if (!info || (info.type !== "File" && info.type !== "Directory")) return empty // kilocode_change
           const cwd = info?.type === "Directory" ? search : path.dirname(search)

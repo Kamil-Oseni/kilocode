@@ -10,6 +10,7 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { assertMutablePath } from "@/kilocode/agent-manager/protection"
 import * as Artifact from "@/kilocode/goal/artifact"
+import { RayaPath } from "@/kilocode/task/path-boundary"
 import { assertExternalDirectoryEffect } from "@/tool/external-directory"
 import * as Tool from "@/tool/tool"
 import { parseImage, type OfficeImage } from "./office-image"
@@ -258,11 +259,13 @@ export const CreateDocumentTool = Tool.define(
             })
           }
           assertMutablePath(filepath)
-          yield* assertExternalDirectoryEffect(ctx, filepath)
+          const target = yield* RayaPath.canonical(fs, filepath)
+          assertMutablePath(target)
+          yield* assertExternalDirectoryEffect(ctx, target)
           const exists = yield* fs.existsSafe(filepath)
           yield* ctx.ask({
             permission: "edit",
-            patterns: [path.relative(instance.worktree, filepath)],
+            patterns: RayaPath.patterns(instance.worktree, [filepath, target]),
             always: ["*"],
             metadata: {
               filepath,
@@ -278,6 +281,7 @@ export const CreateDocumentTool = Tool.define(
             try: () => document(params, images),
             catch: (cause) => new Error(`Raya couldn't create this document: ${String(cause)}`),
           })
+          yield* RayaPath.check(fs, filepath, target)
           const tmp = `${filepath}.raya-${randomUUID()}.tmp`
           const save = Effect.gen(function* () {
             if (!(yield* enabled)) {

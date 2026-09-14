@@ -19,6 +19,7 @@ import * as Artifact from "@/kilocode/goal/artifact" // kilocode_change
 import { Format } from "../format"
 import * as Bom from "@/util/bom"
 import { assertMutablePath } from "../kilocode/agent-manager/protection" // kilocode_change
+import { RayaPath } from "@/kilocode/task/path-boundary" // kilocode_change
 
 export const Parameters = Schema.Struct({
   patchText: Schema.String.annotate({ description: "The full patch text that describes all changes to be made" }),
@@ -72,13 +73,17 @@ export const ApplyPatchTool = Tool.define(
         bom: boolean
         encoding: string // kilocode_change - preserved per-file encoding
       }> = []
+      const targets = new Map<string, string>() // kilocode_change - retain each canonical target through approval
 
       let totalDiff = ""
 
       for (const hunk of hunks) {
         const filePath = path.resolve(instance.directory, hunk.path)
         assertMutablePath(filePath) // kilocode_change
-        yield* assertExternalDirectoryEffect(ctx, filePath)
+        const target = yield* RayaPath.canonical(afs, filePath) // kilocode_change
+        assertMutablePath(target) // kilocode_change - path aliases cannot bypass protected worktree boundaries
+        targets.set(filePath, target) // kilocode_change
+        yield* assertExternalDirectoryEffect(ctx, target) // kilocode_change - inspect the target behind a path alias
 
         switch (hunk.type) {
           case "add": {
@@ -162,7 +167,14 @@ export const ApplyPatchTool = Tool.define(
             }
 
             const movePath = hunk.move_path ? path.resolve(instance.directory, hunk.move_path) : undefined
-            yield* assertExternalDirectoryEffect(ctx, movePath)
+            // kilocode_change start - inspect the target behind a move destination alias
+            if (movePath) {
+              const target = yield* RayaPath.canonical(afs, movePath)
+              assertMutablePath(target)
+              targets.set(movePath, target)
+              yield* assertExternalDirectoryEffect(ctx, target)
+            }
+            // kilocode_change end
 
             fileChanges.push({
               filePath,
@@ -229,7 +241,12 @@ export const ApplyPatchTool = Tool.define(
       }))
 
       // Check permissions if needed
-      const relativePaths = fileChanges.map((c) => path.relative(instance.worktree, c.filePath).replaceAll("\\", "/"))
+      // kilocode_change start - require both visible aliases and canonical targets
+      const relativePaths = RayaPath.patterns(
+        instance.worktree,
+        [...targets].flatMap(([file, target]) => [file, target]),
+      )
+      // kilocode_change end
       yield* ctx.ask({
         permission: "edit",
         patterns: relativePaths,
@@ -240,6 +257,8 @@ export const ApplyPatchTool = Tool.define(
           files,
         },
       })
+
+      for (const [file, target] of targets) yield* RayaPath.check(afs, file, target) // kilocode_change
 
       // Apply the changes
       const updates: Array<{ file: string; event: "add" | "change" | "unlink" }> = []

@@ -17,6 +17,8 @@ import * as ChargeReservations from "@/kilocode/goal/charges"
 import type { Storage } from "@/storage/storage"
 import type { Session } from "@/session/session"
 import * as Artifact from "@/kilocode/goal/artifact"
+import { assertMutablePath } from "@/kilocode/agent-manager/protection"
+import { RayaPath } from "@/kilocode/task/path-boundary"
 
 const log = Log.create({ service: "tool.generate_image" })
 
@@ -404,15 +406,19 @@ export const generateImageTool = (goals?: GoalDeps) =>
 
               const finalPath = ensureExtension(params.path, parsed.format)
               const absPath = path.isAbsolute(finalPath) ? finalPath : path.join(instance.directory, finalPath)
-              yield* assertExternalDirectoryEffect(ctx, absPath)
+              assertMutablePath(absPath)
+              const target = yield* RayaPath.canonical(fs, absPath)
+              assertMutablePath(target)
+              yield* assertExternalDirectoryEffect(ctx, target)
               yield* ctx.ask({
                 permission: "write",
-                patterns: [path.relative(instance.worktree, absPath)],
+                patterns: RayaPath.patterns(instance.worktree, [absPath, target]),
                 always: ["*"],
                 metadata: { filepath: absPath },
               })
 
               const buf = Buffer.from(parsed.base64, "base64")
+              yield* RayaPath.check(fs, absPath, target)
               yield* fs.writeWithDirs(absPath, buf)
               const revision = yield* Artifact.capture(fs, absPath)
 

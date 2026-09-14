@@ -24,6 +24,7 @@ import * as EncodedIO from "../kilocode/tool/encoded-io" // kilocode_change
 import * as Encoding from "../kilocode/encoding" // kilocode_change
 import { assertMutablePath } from "../kilocode/agent-manager/protection" // kilocode_change
 import * as Artifact from "@/kilocode/goal/artifact" // kilocode_change
+import { RayaPath } from "@/kilocode/task/path-boundary" // kilocode_change
 
 const MAX_DIFF_CONTENT = 500_000 // kilocode_change
 
@@ -109,7 +110,9 @@ export const EditTool = Tool.define(
             ? params.filePath
             : path.join(instance.directory, params.filePath)
           assertMutablePath(filePath) // kilocode_change
-          yield* assertExternalDirectoryEffect(ctx, filePath)
+          const target = yield* RayaPath.canonical(afs, filePath) // kilocode_change
+          assertMutablePath(target) // kilocode_change - path aliases cannot bypass protected worktree boundaries
+          yield* assertExternalDirectoryEffect(ctx, target) // kilocode_change - inspect the target behind a path alias
 
           let diff = ""
           let contentOld = ""
@@ -132,7 +135,7 @@ export const EditTool = Tool.define(
                 cachedFilediff = buildFileDiff(filePath, contentOld, contentNew) // kilocode_change
                 yield* ctx.ask({
                   permission: "edit",
-                  patterns: [path.relative(instance.worktree, filePath)],
+                  patterns: RayaPath.patterns(instance.worktree, [filePath, target]), // kilocode_change
                   always: ["*"],
                   metadata: {
                     filepath: filePath,
@@ -140,6 +143,7 @@ export const EditTool = Tool.define(
                     filediff: cachedFilediff, // kilocode_change
                   },
                 })
+                yield* RayaPath.check(afs, filePath, target) // kilocode_change - reject link swaps after approval
                 yield* EncodedIO.write(afs, filePath, Bom.join(contentNew, desiredBom), Encoding.DEFAULT) // kilocode_change - encoding-aware write (mkdirs) replaces afs.writeWithDirs
                 if (yield* format.file(filePath)) {
                   contentNew = yield* EncodedIO.sync(afs, filePath, desiredBom, Encoding.DEFAULT)
@@ -181,7 +185,7 @@ export const EditTool = Tool.define(
               cachedFilediff = buildFileDiff(filePath, contentOld, contentNew) // kilocode_change
               yield* ctx.ask({
                 permission: "edit",
-                patterns: [path.relative(instance.worktree, filePath)],
+                patterns: RayaPath.patterns(instance.worktree, [filePath, target]), // kilocode_change
                 always: ["*"],
                 metadata: {
                   filepath: filePath,
@@ -190,6 +194,7 @@ export const EditTool = Tool.define(
                 },
               })
 
+              yield* RayaPath.check(afs, filePath, target) // kilocode_change - reject link swaps after approval
               yield* EncodedIO.write(afs, filePath, Bom.join(contentNew, desiredBom), source.encoding) // kilocode_change - encoding-aware write replaces afs.writeWithDirs
               if (yield* format.file(filePath)) {
                 contentNew = yield* EncodedIO.sync(afs, filePath, desiredBom, source.encoding)

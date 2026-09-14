@@ -6,6 +6,7 @@ import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import DESCRIPTION from "./glob.txt"
 import * as Tool from "./tool"
+import { RayaPath } from "@/kilocode/task/path-boundary" // kilocode_change
 
 // kilocode_change start — support absolute glob patterns (e.g. ~/.config/kilo/command/*.md)
 function normalize(p: string) {
@@ -68,15 +69,25 @@ export const GlobTool = Tool.define(
           if (info?.type === "File") {
             throw new Error(`glob path must be a directory: ${search}`)
           }
-          yield* assertExternalDirectoryEffect(ctx, search, {
+          // kilocode_change start - authorize and search the target behind a directory link
+          const target = info ? yield* RayaPath.canonical(fs, search) : search
+          if (target !== search)
+            yield* ctx.ask({
+              permission: "read",
+              patterns: RayaPath.patterns(ins.worktree, [target]),
+              always: ["*"],
+              metadata: { filepath: target },
+            })
+          yield* assertExternalDirectoryEffect(ctx, target, {
             bypass: false,
             kind: "directory",
           })
+          // kilocode_change end
 
           const limit = 100
           // kilocode_change start - retain bounded-search metadata from Core ripgrep.
           const result = yield* ripgrep.glob({
-            cwd: search,
+            cwd: target, // kilocode_change - search the authorized canonical directory
             pattern: absolute?.pattern ?? params.pattern, // kilocode_change - absolute patterns are split into cwd + relative glob
             limit,
             signal: ctx.abort, // kilocode_change - stop ripgrep when the tool call is cancelled

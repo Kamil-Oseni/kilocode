@@ -19,6 +19,7 @@ import * as EncodedIO from "../kilocode/tool/encoded-io" // kilocode_change
 import { assertMutablePath } from "../kilocode/agent-manager/protection" // kilocode_change
 import * as Bom from "@/util/bom"
 import * as Artifact from "@/kilocode/goal/artifact" // kilocode_change
+import { RayaPath } from "@/kilocode/task/path-boundary" // kilocode_change
 
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
 
@@ -47,7 +48,9 @@ export const WriteTool = Tool.define(
             ? params.filePath
             : path.join(instance.directory, params.filePath)
           assertMutablePath(filepath) // kilocode_change
-          yield* assertExternalDirectoryEffect(ctx, filepath)
+          const target = yield* RayaPath.canonical(fs, filepath) // kilocode_change
+          assertMutablePath(target) // kilocode_change - path aliases cannot bypass protected worktree boundaries
+          yield* assertExternalDirectoryEffect(ctx, target) // kilocode_change - inspect the target behind a path alias
 
           const exists = yield* fs.existsSafe(filepath)
           // kilocode_change start - encoding-aware read; Encoding.read strips UTF-8 BOMs so
@@ -64,7 +67,7 @@ export const WriteTool = Tool.define(
           const filediff = buildFileDiff(filepath, contentOld, contentNew) // kilocode_change
           yield* ctx.ask({
             permission: "edit",
-            patterns: [path.relative(instance.worktree, filepath)],
+            patterns: RayaPath.patterns(instance.worktree, [filepath, target]), // kilocode_change
             always: ["*"],
             metadata: {
               filepath,
@@ -73,6 +76,7 @@ export const WriteTool = Tool.define(
             },
           })
 
+          yield* RayaPath.check(fs, filepath, target) // kilocode_change - reject link swaps after approval
           yield* EncodedIO.write(fs, filepath, Bom.join(contentNew, desiredBom), source.encoding) // kilocode_change - encoding-aware write (mkdirs) replaces fs.writeWithDirs
           if (yield* format.file(filepath)) {
             yield* EncodedIO.sync(fs, filepath, desiredBom, source.encoding)

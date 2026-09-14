@@ -29,7 +29,11 @@ export const OpenAIUsage = Schema.Struct({
     }),
   ),
 }).annotate({ identifier: "OpenAIVoiceUsage" })
-export const OpenAIUsageInput = Schema.Struct({ generation: VoiceID, receipt: OpenAIUsage })
+export const OpenAIUsageInput = Schema.Struct({
+  generation: VoiceID,
+  receipt: OpenAIUsage,
+  reservationID: Schema.optional(VoiceID),
+})
 export const OpenAIUsageState = Schema.Struct({
   receipts: Schema.Array(OpenAIUsage).check(Schema.isMaxLength(512)),
 }).annotate({ identifier: "OpenAIVoiceUsageState" })

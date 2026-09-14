@@ -60,19 +60,21 @@ test("a failed usage observer cannot interrupt provider handling or receipt pers
 test("provider usage includes cancelled responses and separate transcription, without double counting cached or duplicate tokens", async () => {
   const abort = new AbortController()
   const writes: Record<string, unknown>[] = []
+  const reservations: (string | undefined)[] = []
   let latest: VoiceUsage | undefined
   const meter = new OpenAIUsage(
     abort.signal,
-    async (receipt) => {
+    async (receipt, reservationID) => {
       writes.push(receipt)
+      reservations.push(reservationID)
       return { ...receipt, tokens: receipt.tokens && Object.fromEntries(Object.entries(receipt.tokens).reverse()) }
     },
     (state) => (latest = state),
   )
   meter.receive({ type: "response.created", response: { id: "response_1" } })
   expect(latest?.pending).toBe(1)
-  meter.receive(report())
-  meter.receive(report())
+  meter.receive(report(), "raya_turn_admitted")
+  meter.receive(report(), "raya_turn_admitted")
   meter.receive({ type: "response.created", response: { id: "response_1" } })
   meter.receive({
     type: "conversation.item.input_audio_transcription.completed",
@@ -92,6 +94,7 @@ test("provider usage includes cancelled responses and separate transcription, wi
   })
   expect(writes[0]).toMatchObject({ model: "gpt-realtime-2.1", tokens: { cached: 2, inputAudio: 8, outputAudio: 2 } })
   expect(writes[1]).toMatchObject({ model: "gpt-live-transcribe" })
+  expect(reservations).toEqual(["raya_turn_admitted", undefined])
   expect(JSON.stringify(writes)).not.toContain("private speech")
   abort.abort()
 })

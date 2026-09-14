@@ -10,16 +10,60 @@ import { RayaVoice } from "@/kilocode/voice/service"
 import { Envelope, Start, type VoiceSessionID } from "@/kilocode/voice/protocol"
 import * as OpenAIVoice from "@/kilocode/voice/openai"
 import { pricing as livePricing } from "@/kilocode/voice/live-protocol"
+import type { OpenAIPricing } from "@/kilocode/voice/openai-usage"
 import * as TaskWorker from "@/kilocode/session/task-worker"
 import { InstanceState } from "@/effect/instance-state"
 import { RayaGoal } from "@/kilocode/goal"
 import * as GoalCharges from "@/kilocode/goal/charges"
+import { SessionID } from "@/session/schema"
 
 const failure = (error: OpenAIVoice.VoiceError) => {
   if (error.code === "unauthorized") return new HttpApiError.Unauthorized({})
   if (error.code === "missing") return new HttpApiError.NotFound({})
   if (error.code === "invalid") return new HttpApiError.BadRequest({})
   return new HttpApiError.Conflict({})
+}
+
+type Usage = {
+  sessionID: SessionID
+  id: string
+  callID: string
+  at: number
+  model: "gpt-realtime-2.1" | "gpt-live-transcribe"
+  pricing: OpenAIPricing
+}
+
+const receipt = (input: Usage): RayaGoal.Charge => {
+  const price = input.pricing
+  if (price.coverage === "recorded")
+    return {
+      id: input.id,
+      kind: "gpt-live",
+      provider: "OpenAI",
+      service: input.model,
+      source: price.source,
+      origin: { sessionID: input.sessionID, callID: input.callID },
+      at: input.at,
+      quantity: price.quantity,
+      unit: price.unit,
+      coverage: "recorded",
+      amount: price.amount,
+      currency: price.currency,
+    }
+  return {
+    id: input.id,
+    kind: "gpt-live",
+    provider: "OpenAI",
+    service: input.model,
+    source: price.source,
+    origin: { sessionID: input.sessionID, callID: input.callID },
+    at: input.at,
+    ...(price.quantity !== undefined ? { quantity: price.quantity } : {}),
+    ...(price.unit !== undefined ? { unit: price.unit } : {}),
+    coverage: "unknown",
+    currency: "USD",
+    reason: price.reason,
+  }
 }
 
 export const voiceHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-voice", (handlers) =>
@@ -80,43 +124,17 @@ export const voiceHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-voice",
           )
       },
       usageCharges: (input) => {
-        const price = input.pricing
-        const receipt =
-          price.coverage === "recorded"
-            ? ({
-                id: input.id,
-                kind: "gpt-live" as const,
-                provider: "OpenAI",
-                service: input.model,
-                source: price.source,
-                origin: { sessionID: input.sessionID, callID: input.callID },
-                at: input.at,
-                quantity: price.quantity,
-                unit: price.unit,
-                coverage: "recorded" as const,
-                amount: price.amount,
-                currency: price.currency,
-              } satisfies RayaGoal.Charge)
-            : ({
-                id: input.id,
-                kind: "gpt-live" as const,
-                provider: "OpenAI",
-                service: input.model,
-                source: price.source,
-                origin: { sessionID: input.sessionID, callID: input.callID },
-                at: input.at,
-                ...(price.quantity !== undefined ? { quantity: price.quantity } : {}),
-                ...(price.unit !== undefined ? { unit: price.unit } : {}),
-                coverage: "unknown" as const,
-                currency: "USD",
-                reason: price.reason,
-              } satisfies RayaGoal.Charge)
-        return goals.charged(input.sessionID, receipt).pipe(
+        return goals.charged(input.sessionID, receipt(input)).pipe(
           Effect.asVoid,
           Effect.catchTag("RayaGoal.NotFoundError", () => Effect.void),
           Effect.mapError((error) => new OpenAIVoice.VoiceError({ code: "conflict", message: error.message })),
         )
       },
+      usageSettlements: (input) =>
+        reservations.settle(input.sessionID, "USD", input.identity, receipt(input)).pipe(
+          Effect.asVoid,
+          Effect.mapError((error) => new OpenAIVoice.VoiceError({ code: "conflict", message: error.message })),
+        ),
     })
     yield* openai.reconcile().pipe(
       Effect.catch((error) => Effect.logError("Voice usage reconciliation did not start", { error })),

@@ -133,6 +133,15 @@ const fixture = (
     release: Effect.Effect<void>
   }>,
   completions?: (sessionID: SessionID, identity: string) => Effect.Effect<boolean>,
+  usageSettlements?: (input: {
+    sessionID: SessionID
+    id: string
+    callID: string
+    at: number
+    model: "gpt-realtime-2.1" | "gpt-live-transcribe"
+    pricing: OpenAIPricing
+    identity: string
+  }) => Effect.Effect<void, VoiceError>,
 ) =>
   Effect.gen(function* () {
     const storage = yield* Storage.Service
@@ -186,6 +195,7 @@ const fixture = (
       ...(usageCharges ? { usageCharges } : {}),
       ...(admissions ? { admissions } : {}),
       ...(completions ? { completions } : {}),
+      ...(usageSettlements ? { usageSettlements } : {}),
     }
     const voice = yield* make(deps)
     const start = { parentSessionID: session, providerCallID: crypto.randomUUID(), requestID: crypto.randomUUID() }
@@ -1182,6 +1192,88 @@ it.live(
           id: `openai-voice:${state.binding.id}:response:historical_response`,
           pricing: { coverage: "recorded", currency: "USD", quantity: 5, unit: "tokens" },
         })
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
+    }),
+  30_000,
+)
+
+it.live(
+  "retains exact response reservation settlement across a lost acknowledgement and backend restart",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const events: string[] = []
+        const settled: Array<{ id: string; identity: string }> = []
+        let fail = true
+        const admissions = (sessionID: SessionID, identity: string) =>
+          Effect.succeed({
+            amount: 0.6,
+            dispatch: Effect.sync(() => events.push(`dispatch:${sessionID}:${identity}`)).pipe(Effect.asVoid),
+            finish: Effect.sync(() => events.push(`finish:${sessionID}:${identity}`)).pipe(Effect.asVoid),
+            release: Effect.sync(() => events.push(`release:${sessionID}:${identity}`)).pipe(Effect.asVoid),
+          })
+        const settlements = (input: { id: string; identity: string }) =>
+          Effect.gen(function* () {
+            settled.push({ id: input.id, identity: input.identity })
+            if (!fail) return
+            fail = false
+            return yield* Effect.fail(new VoiceError({ code: "conflict", message: "Lost settlement acknowledgement." }))
+          })
+        const state = yield* fixture(root, undefined, undefined, admissions, undefined, settlements)
+        const reservationID = crypto.randomUUID()
+        yield* state.voice.reserve(
+          { parentSessionID: session, requestID: reservationID, model: "gpt-realtime-2.1" },
+          secret,
+          root,
+        )
+        const receipt = {
+          id: "response_reserved",
+          kind: "response" as const,
+          model: "gpt-realtime-2.1" as const,
+          status: "reported" as const,
+          tokens: {
+            input: 3,
+            output: 2,
+            total: 5,
+            cached: 0,
+            inputText: 3,
+            inputAudio: 0,
+            inputImage: 0,
+            cachedText: 0,
+            cachedAudio: 0,
+            cachedImage: 0,
+            outputText: 2,
+            outputAudio: 0,
+          },
+        }
+        const input = { generation: state.binding.generation, receipt, reservationID }
+        expect(Exit.isFailure(yield* state.voice.meter(state.binding.id, input, secret, root).pipe(Effect.exit))).toBe(
+          true,
+        )
+        const stored = yield* retained(state.binding.id)
+        expect(stored.usageReservations).toEqual({
+          [createHash("sha256").update(`response:${receipt.id}`).digest("hex")]: settled[0]!.identity,
+        })
+        expect(
+          Exit.isFailure(
+            yield* state.voice
+              .meter(state.binding.id, { ...input, reservationID: crypto.randomUUID() }, secret, root)
+              .pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        const restarted = yield* make({ ...state.deps, usageSettlements: settlements })
+        expect(yield* restarted.usage(state.binding.id, state.binding.generation, secret, root)).toEqual({
+          receipts: [receipt],
+        })
+        expect(settled).toHaveLength(2)
+        expect(settled[0]).toEqual(settled[1])
+        expect(events.filter((event) => event.startsWith("dispatch:"))).toHaveLength(2)
       }).pipe(
         Effect.provide([
           Storage.layerFromDir(path.join(root, "storage")),

@@ -47500,6 +47500,10 @@
                   },
                   "receipt": {
                     "$ref": "#/components/schemas/OpenAIVoiceUsage"
+                  },
+                  "reservationID": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9_-]{1,128}$"
                   }
                 },
                 "required": ["generation", "receipt"],
@@ -73413,9 +73417,27 @@
             "enum": ["reserved", "released"]
           },
           "amount": {
-            "type": "number",
-            "exclusiveMinimum": 0,
-            "maximum": 1000000
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
           },
           "currency": {
             "type": "string",

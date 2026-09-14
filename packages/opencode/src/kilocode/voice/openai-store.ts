@@ -17,6 +17,9 @@ const Payload = Schema.Struct({
   calls: Schema.Record(Schema.String, Schema.Struct({ input: OpenAICallInput, receipt: OpenAICall })),
   images: Schema.optional(Schema.Record(Schema.String, Schema.Struct({ receipt: OpenAIImage, data: Schema.String }))),
   usage: Schema.optional(Schema.Record(Schema.String, OpenAIUsage)),
+  usageReservations: Schema.optional(
+    Schema.Record(Schema.String, Schema.String.check(Schema.isPattern(/^voice:[a-f0-9]{64}$/))),
+  ),
   duration: Schema.optional(LiveDuration),
   liveCursor: Schema.optional(
     Schema.Number.check(
@@ -34,6 +37,7 @@ export type Stored = {
   calls: Record<string, { input: typeof OpenAICallInput.Type; receipt: typeof OpenAICall.Type }>
   images?: Record<string, { receipt: typeof OpenAIImage.Type; data: string }>
   usage?: Record<string, typeof OpenAIUsage.Type>
+  usageReservations?: Record<string, string>
   duration?: typeof LiveDuration.Type
   liveCursor?: number
 }

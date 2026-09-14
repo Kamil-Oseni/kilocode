@@ -276,6 +276,36 @@ describe("RayaGoal", () => {
       expect(yield* restarted.complete(child, "USD", token)).toBe(true)
       expect(yield* restarted.complete(child, "USD", token)).toBe(false)
       expect((yield* goals.get(root))?.charges).toEqual([])
+      const settled = `voice:${crypto.randomUUID()}`
+      const charged = yield* first.claim(child, "USD", settled)
+      yield* charged.dispatch
+      const receipt: RayaGoal.Charge = {
+        id: "openai-voice:response:settled",
+        kind: "gpt-live",
+        provider: "OpenAI",
+        service: "gpt-realtime-2.1",
+        origin: { sessionID: child, callID: "response_settled" },
+        at: Date.now(),
+        quantity: 20,
+        unit: "tokens",
+        coverage: "recorded",
+        amount: 0.2,
+        currency: "USD",
+      }
+      expect(yield* restarted.settle(child, "USD", settled, receipt)).toBe(true)
+      expect(yield* restarted.settle(child, "USD", settled, receipt)).toBe(true)
+      expect(
+        Exit.isFailure(
+          yield* restarted
+            .settle(child, "USD", `voice:${crypto.randomUUID()}`, { ...receipt, id: "missing-reservation" })
+            .pipe(Effect.exit),
+        ),
+      ).toBe(true)
+      expect(
+        Exit.isFailure(yield* restarted.settle(child, "USD", settled, { ...receipt, amount: 0.3 }).pipe(Effect.exit)),
+      ).toBe(true)
+      expect((yield* goals.get(root))?.charges).toEqual([receipt])
+      yield* charged.release
     }),
   )
 

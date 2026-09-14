@@ -27336,6 +27336,7 @@ export type KilocodeVoiceOpenaiMeterData = {
   body?: {
     generation: string
     receipt: OpenAiVoiceUsage
+    reservationID?: string
   }
   headers?: {
     "x-raya-voice-key"?: string

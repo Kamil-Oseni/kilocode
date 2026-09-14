@@ -21,11 +21,12 @@ type Receipt = {
     outputAudio?: number
   }
 }
+type Queued = Receipt & { reservationID?: string }
 
 /** Observed provider receipts, not an invoice, elapsed-time estimate or spend ceiling. */
 export class OpenAIUsage {
   private records = new Map<string, Receipt>()
-  private queue: Receipt[] = []
+  private queue: Queued[] = []
   private writing = false
   private pending = new Set<string>()
   private state: VoiceUsage = {
@@ -43,7 +44,7 @@ export class OpenAIUsage {
 
   constructor(
     private readonly signal: AbortSignal,
-    private readonly write: (receipt: Receipt) => Promise<Record<string, unknown>>,
+    private readonly write: (receipt: Receipt, reservationID?: string) => Promise<Record<string, unknown>>,
     private readonly notify: (state: VoiceUsage) => void,
   ) {
     signal.addEventListener(
@@ -57,7 +58,7 @@ export class OpenAIUsage {
     )
   }
 
-  receive(event: Record<string, unknown>) {
+  receive(event: Record<string, unknown>, reservationID?: string) {
     if (this.signal.aborted) return
     if (event.type === "response.created" || event.type === "input_audio_buffer.committed") {
       return this.track(event)
@@ -96,7 +97,7 @@ export class OpenAIUsage {
     }
     this.records.set(key, receipt)
     this.accumulate(receipt)
-    this.queue.push(receipt)
+    this.queue.push({ ...receipt, ...(reservationID ? { reservationID } : {}) })
     this.publish()
     void this.drain()
   }
@@ -140,8 +141,9 @@ export class OpenAIUsage {
     this.writing = true
     try {
       while (!this.signal.aborted && this.queue.length) {
-        const receipt = this.queue.shift()!
-        const result = await this.write(receipt).catch(() => undefined)
+        const queued = this.queue.shift()!
+        const { reservationID, ...receipt } = queued
+        const result = await this.write(receipt, reservationID).catch(() => undefined)
         if (result && matches(result, receipt)) {
           this.state.recorded++
           this.state.unrecorded--

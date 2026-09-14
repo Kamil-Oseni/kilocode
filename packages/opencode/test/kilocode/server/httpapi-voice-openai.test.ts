@@ -9,6 +9,7 @@ import { SessionID } from "@/session/schema"
 import path from "node:path"
 import { mkdir, writeFile, rm, access } from "node:fs/promises"
 import { Global } from "@opencode-ai/core/global"
+import { RayaGoal } from "@/kilocode/goal"
 
 test("the shipped OpenAI voice routes require both configured server auth and the binding capability", async () => {
   await using dir = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
@@ -52,6 +53,14 @@ test("the shipped OpenAI voice routes require both configured server auth and th
     const created = await request("POST", "/session", {})
     expect(created.status).toBe(200)
     const parent = Schema.decodeUnknownSync(Schema.Struct({ id: SessionID }))(await created.json())
+    expect(
+      (
+        await request("POST", `/session/${parent.id}/goal`, {
+          objective: "Account for every Realtime response",
+          budget: { chargeCosts: [{ currency: "USD", limit: 1, reservation: 0.6 }] },
+        })
+      ).status,
+    ).toBe(200)
     const input = { parentSessionID: parent.id, providerCallID: crypto.randomUUID(), requestID: crypto.randomUUID() }
     const base = "/kilocode/voice/openai/session"
     const preflight = "/kilocode/voice/openai/reservation"
@@ -70,6 +79,8 @@ test("the shipped OpenAI voice routes require both configured server auth and th
       requestID: input.requestID,
       model: "gpt-realtime-2.1",
       status: "reserved",
+      amount: 0.6,
+      currency: "USD",
     })
     expect((await request("POST", preflight, { ...reserve, model: "gpt-live-1" })).status).toBe(409)
     const started = await request("POST", base, input)
@@ -113,6 +124,14 @@ test("the shipped OpenAI voice routes require both configured server auth and th
     const messages = await request("GET", `/session/${parent.id}/message`)
     expect(messages.status).toBe(200)
     expect(await messages.json()).toEqual([])
+    const responseReserve = {
+      parentSessionID: parent.id,
+      requestID: "response_budget_1",
+      model: "gpt-realtime-2.1" as const,
+    }
+    expect((await request("POST", preflight, responseReserve)).status).toBe(200)
+    const rivalResponse = { ...responseReserve, requestID: "response_budget_rival" }
+    expect((await request("POST", preflight, rivalResponse)).status).toBe(409)
     const usage = {
       generation: binding.generation,
       receipt: {
@@ -120,20 +139,63 @@ test("the shipped OpenAI voice routes require both configured server auth and th
         kind: "response",
         model: "gpt-realtime-2.1",
         status: "reported",
-        tokens: { input: 4, output: 2, total: 6 },
+        tokens: {
+          input: 4,
+          output: 2,
+          total: 6,
+          cached: 0,
+          inputText: 4,
+          inputAudio: 0,
+          inputImage: 0,
+          cachedText: 0,
+          cachedAudio: 0,
+          cachedImage: 0,
+          outputText: 2,
+          outputAudio: 0,
+        },
       },
+      reservationID: responseReserve.requestID,
     }
     expect((await request("POST", `${route}/usage`, usage, key, "")).status).toBe(401)
     expect((await request("POST", `${route}/usage`, usage, "b".repeat(64))).status).toBe(401)
     expect((await request("POST", `${route}/usage`, { ...usage, generation: "stale" })).status).toBe(409)
     expect((await request("POST", `${route}/usage`, usage)).status).toBe(200)
     expect((await request("POST", `${route}/usage`, usage)).status).toBe(200)
+    expect((await request("POST", preflight, rivalResponse)).status).toBe(200)
+    expect((await request("POST", `${preflight}/release`, rivalResponse)).status).toBe(200)
+    expect(
+      (
+        await request("POST", `${route}/usage`, {
+          ...usage,
+          reservationID: "response_budget_changed",
+        })
+      ).status,
+    ).toBe(409)
     expect(
       (await request("GET", `${route}/usage?generation=${binding.generation}`, undefined, "b".repeat(64))).status,
     ).toBe(401)
     expect(await (await request("GET", `${route}/usage?generation=${binding.generation}`)).json()).toEqual({
       receipts: [usage.receipt],
     })
+    const goal = Schema.decodeUnknownSync(RayaGoal.State)(
+      await (await request("GET", `/session/${parent.id}/goal`)).json(),
+    )
+    expect(goal.charges).toEqual([
+      {
+        id: `openai-voice:${binding.id}:response:response_1`,
+        kind: "gpt-live",
+        provider: "OpenAI",
+        service: "gpt-realtime-2.1",
+        source: "openai-model-doc:2026-09-14",
+        origin: { sessionID: parent.id, callID: binding.id },
+        at: binding.createdAt,
+        quantity: 6,
+        unit: "tokens",
+        coverage: "recorded",
+        amount: 0.000064,
+        currency: "USD",
+      },
+    ])
     expect(
       (
         await request("POST", `${route}/usage`, {

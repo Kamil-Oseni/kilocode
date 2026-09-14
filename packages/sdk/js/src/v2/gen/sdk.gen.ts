@@ -11730,6 +11730,7 @@ export class Openai extends HeyApiClient {
       workspace?: string
       generation?: string
       receipt?: OpenAiVoiceUsage
+      reservationID?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -11744,6 +11745,7 @@ export class Openai extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "body", key: "generation" },
             { in: "body", key: "receipt" },
+            { in: "body", key: "reservationID" },
           ],
         },
       ],

@@ -42,6 +42,8 @@ type Claim = {
   capability: string
   abort: AbortController
   calls: Map<string, string>
+  responses: Map<string, Reservation>
+  settled: Set<string>
   queue: Promise<void>
   blocked: boolean
   cancelled: boolean
@@ -134,6 +136,8 @@ export class OpenAIBroker {
       capability: randomBytes(32).toString("hex"),
       abort: new AbortController(),
       calls: new Map(),
+      responses: new Map(),
+      settled: new Set(),
       images: new OpenAIImages(),
       cancellations: new Set(),
       queue: Promise.resolve(),
@@ -294,10 +298,10 @@ export class OpenAIBroker {
     claim.reservation = undefined
     claim.usage = new OpenAIUsage(
       claim.abort.signal,
-      (receipt) =>
+      (receipt, reservationID) =>
         this.backend(claim, `/session/${encodeURIComponent(claim.binding!.id)}/usage`, {
           method: "POST",
-          body: JSON.stringify({ generation: claim.binding!.generation, receipt }),
+          body: JSON.stringify({ generation: claim.binding!.generation, receipt, reservationID }),
         }),
       (state) => claim.config?.usage?.(state),
     )
@@ -357,8 +361,8 @@ export class OpenAIBroker {
                 turn_detection: {
                   type: "semantic_vad",
                   eagerness: "auto",
-                  interrupt_response: true,
-                  create_response: true,
+                  interrupt_response: false,
+                  create_response: false,
                 },
               },
             },
@@ -396,12 +400,83 @@ export class OpenAIBroker {
   }
 
   private send(claim: Claim, value: unknown) {
-    if (!this.current(claim) || claim.socket?.readyState !== WebSocket.OPEN) return
+    const event =
+      value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined
+    if (event?.type === "response.create") {
+      void this.respond(claim, event)
+      return
+    }
+    this.write(claim, value)
+  }
+
+  private write(claim: Claim, value: unknown) {
+    if (!this.current(claim) || claim.socket?.readyState !== WebSocket.OPEN) return false
     claim.socket.send(JSON.stringify(value))
+    return true
+  }
+
+  private async respond(claim: Claim, event: Record<string, unknown>) {
+    const id = event.event_id
+    if (!identifier(id) || claim.responses.has(id) || claim.responses.size >= 64) return this.block(claim)
+    const reservation = { parentSessionID: claim.input.sessionID, requestID: id, model }
+    claim.responses.set(id, reservation)
+    const admitted = await this.backend(claim, "/reservation", {
+      method: "POST",
+      body: JSON.stringify(reservation),
+    }).catch((error: unknown) => {
+      claim.responses.delete(id)
+      if (this.current(claim)) {
+        claim.speech.event({ type: "error", error: { event_id: id } })
+        claim.failed(
+          error instanceof BackendError && error.status === 409
+            ? "Voice reached its saved non-model cost limit. Increase or remove the USD limit before continuing."
+            : "Voice response admission could not be confirmed. Nothing was sent to OpenAI; review the goal before retrying.",
+        )
+      }
+      return undefined
+    })
+    if (!admitted) return
+    if (
+      admitted.requestID !== reservation.requestID ||
+      admitted.model !== reservation.model ||
+      admitted.status !== "reserved"
+    ) {
+      claim.responses.delete(id)
+      if (this.current(claim))
+        claim.failed("Voice response admission returned an invalid receipt. Nothing was sent to OpenAI.")
+      return
+    }
+    if (!this.current(claim) || claim.socket?.readyState !== WebSocket.OPEN) {
+      await this.backend(
+        claim,
+        "/reservation/release",
+        { method: "POST", body: JSON.stringify(reservation) },
+        true,
+      ).catch(() => undefined)
+      claim.responses.delete(id)
+      return
+    }
+    const response = record(event.response) ?? {}
+    const metadata = record(response.metadata) ?? {}
+    if (metadata.raya_reservation !== undefined && metadata.raya_reservation !== id) return this.block(claim)
+    const output = { ...event, response: { ...response, metadata: { ...metadata, raya_reservation: id } } }
+    try {
+      if (this.write(claim, output)) return
+      await this.backend(
+        claim,
+        "/reservation/release",
+        { method: "POST", body: JSON.stringify(reservation) },
+        true,
+      ).catch(() => undefined)
+      claim.responses.delete(id)
+    } catch {
+      if (this.current(claim))
+        claim.failed("Voice response delivery could not be confirmed. Review the goal before reconnecting.")
+    }
   }
 
   private event(claim: Claim, event: Record<string, unknown>) {
-    claim.usage?.receive(event)
+    if (!this.observed(claim, event)) return
     if (claim.images.receive(event)) return
     if (event.type === "error" && cancelled(event, claim.cancellations)) return
     const handled = claim.speech.event(event)
@@ -410,7 +485,35 @@ export class OpenAIBroker {
       claim.failed(
         "OpenAI could not complete a voice response. Your work remains in the conversation; review it before retrying.",
       )
+    if (event.type === "input_audio_buffer.speech_stopped")
+      this.send(claim, {
+        type: "response.create",
+        event_id: `raya_turn_${randomBytes(12).toString("hex")}`,
+        response: {},
+      })
     claim.speech.flush()
+  }
+
+  private observed(claim: Claim, event: Record<string, unknown>) {
+    const response = record(event.response)
+    const metadata = record(response?.metadata)
+    const reservationID = identifier(metadata?.raya_reservation) ? metadata.raya_reservation : undefined
+    if (["response.created", "response.done"].includes(String(event.type)) && identifier(response?.id)) {
+      if (!reservationID || (!claim.responses.has(reservationID) && !claim.settled.has(reservationID))) {
+        claim.usage?.receive(event)
+        claim.failed(
+          "OpenAI returned an unreserved voice response. Voice is closing; review the goal before reconnecting.",
+        )
+        void this.stop(claim.input.requestID)
+        return false
+      }
+    }
+    claim.usage?.receive(event, reservationID)
+    if (event.type === "response.done" && reservationID && claim.responses.delete(reservationID)) {
+      claim.settled.add(reservationID)
+      if (claim.settled.size > 512) claim.settled.delete(claim.settled.values().next().value!)
+    }
+    return true
   }
 
   private completed(claim: Claim, value: unknown) {
@@ -672,6 +775,10 @@ function object(value: string, maximum = limit): Record<string, unknown> | undef
   }
 }
 
+function record(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined
+}
+
 function configured(value: unknown) {
   if (!value || typeof value !== "object") return false
   const session = value as Record<string, unknown>
@@ -684,8 +791,8 @@ function configured(value: unknown) {
   const turn = input.turn_detection as Record<string, unknown>
   return (
     turn.type === "semantic_vad" &&
-    turn.create_response === true &&
-    turn.interrupt_response === true &&
+    turn.create_response === false &&
+    turn.interrupt_response === false &&
     Array.isArray(session.tools) &&
     session.tools.some((item) => item && typeof item === "object" && item.name === "raya_work")
   )

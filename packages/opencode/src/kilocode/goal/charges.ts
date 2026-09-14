@@ -208,6 +208,70 @@ export const make = Effect.fn("RayaGoalCharges.make")(function* (deps: Deps) {
     )
   })
 
+  const settle = Effect.fn("RayaGoalCharges.settle")(function* (
+    sessionID: SessionID,
+    currency: string,
+    identity: string,
+    charge: RayaGoal.Charge,
+  ) {
+    if (!/^[a-zA-Z0-9:_-]{1,256}$/.test(identity))
+      return yield* Effect.fail(new Error(`Goal ${currency} reservation identity is invalid.`))
+    if (charge.currency !== currency || charge.origin.sessionID !== sessionID)
+      return yield* Effect.fail(new Error(`Goal ${currency} reservation received an unrelated billing receipt.`))
+    const found = yield* locateAny(sessionID)
+    if (!found) return false
+    const owner: Owner = { id: found.id, createdAt: found.goal.createdAt }
+    const limited = found.goal.budget?.chargeCosts?.some((item) => item.currency === currency) ?? false
+    if (!limited) {
+      yield* goals.charged(owner.id, charge, owner.createdAt)
+      return true
+    }
+    const existing = found.goal.charges?.find((item) => item.id === charge.id)
+    if (existing) {
+      yield* goals.charged(owner.id, charge, owner.createdAt)
+      yield* change(
+        owner,
+        currency,
+        Effect.fnUntraced(function* (record) {
+          const item = record?.leases.find((entry) => entry.token === identity)
+          if (!record || !item) return
+          if (item.origin !== sessionID)
+            return yield* Effect.fail(new Error(`Goal ${currency} reservation identity belongs to another session.`))
+          yield* save(
+            owner,
+            currency,
+            record.leases.filter((entry) => entry.token !== identity),
+          )
+        }),
+      )
+      return true
+    }
+    const staged = yield* change(
+      owner,
+      currency,
+      Effect.fnUntraced(function* (record) {
+        const item = record?.leases.find((entry) => entry.token === identity)
+        if (!record || !item) return false
+        if (item.origin !== sessionID)
+          return yield* Effect.fail(new Error(`Goal ${currency} reservation identity belongs to another session.`))
+        if (item.state === "settling" && item.receipt && isDeepStrictEqual(item.receipt, charge)) return true
+        if (item.state !== "dispatched") return false
+        yield* save(
+          owner,
+          currency,
+          record.leases.map((entry) =>
+            entry.token === identity ? { ...entry, state: "settling" as const, receipt: charge } : entry,
+          ),
+        )
+        return true
+      }),
+    )
+    if (!staged) return yield* Effect.fail(new Error(`Goal ${currency} reservation is not dispatched.`))
+    yield* goals.charged(owner.id, charge, owner.createdAt)
+    yield* remove(owner, currency, identity)
+    return true
+  })
+
   const claim = Effect.fn("RayaGoalCharges.claim")(function* (
     sessionID: SessionID,
     currency: string,
@@ -380,5 +444,5 @@ export const make = Effect.fn("RayaGoalCharges.make")(function* (deps: Deps) {
     return { amount: cfg.reservation, dispatch, finish, release, uncertain, settle }
   })
 
-  return { claim, complete }
+  return { claim, complete, settle }
 })

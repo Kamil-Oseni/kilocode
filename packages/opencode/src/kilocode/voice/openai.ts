@@ -35,6 +35,14 @@ type Call = typeof OpenAICall.Type
 type Input = typeof OpenAICallInput.Type
 type Image = { receipt: typeof OpenAIImage.Type; data: string }
 type Usage = (typeof OpenAIUsageInput.Type)["receipt"]
+type UsageCharge = {
+  sessionID: SessionID
+  id: string
+  callID: string
+  at: number
+  model: "gpt-realtime-2.1" | "gpt-live-transcribe"
+  pricing: OpenAIPricing
+}
 type Stored = Store.Stored
 type Admission = {
   amount?: number
@@ -85,14 +93,8 @@ type Deps = {
     at: number
     seconds: number
   }) => Effect.Effect<void, VoiceError>
-  usageCharges?: (input: {
-    sessionID: SessionID
-    id: string
-    callID: string
-    at: number
-    model: "gpt-realtime-2.1" | "gpt-live-transcribe"
-    pricing: OpenAIPricing
-  }) => Effect.Effect<void, VoiceError>
+  usageCharges?: (input: UsageCharge) => Effect.Effect<void, VoiceError>
+  usageSettlements?: (input: UsageCharge & { identity: string }) => Effect.Effect<void, VoiceError>
   admissions?: (sessionID: SessionID, identity: string) => Effect.Effect<Admission, VoiceError>
   completions?: (sessionID: SessionID, identity: string) => Effect.Effect<boolean, VoiceError>
 }
@@ -115,12 +117,23 @@ const ledger = (stored: Stored) =>
     )
       return yield* refuse("conflict", "Retained provider usage is invalid.")
     const entries = Object.entries(stored.usage ?? {})
+    const reservations = stored.usageReservations
     if (
       entries.length > 512 ||
-      entries.some(([key, receipt]) => !valid(receipt) || key !== digest(`${receipt.kind}:${receipt.id}`))
+      entries.some(([key, receipt]) => !valid(receipt) || key !== digest(`${receipt.kind}:${receipt.id}`)) ||
+      (reservations !== undefined &&
+        (reservations === null ||
+          typeof reservations !== "object" ||
+          Array.isArray(reservations) ||
+          Object.entries(reservations).some(
+            ([key, identity]) =>
+              !entries.some(([entry]) => entry === key) ||
+              typeof identity !== "string" ||
+              !/^voice:[a-f0-9]{64}$/.test(identity),
+          )))
     )
       return yield* refuse("conflict", "Retained provider usage is invalid.")
-    return entries.map(([, receipt]) => receipt)
+    return entries.map(([key, receipt]) => ({ receipt, identity: reservations?.[key] }))
   })
 
 const decode = (mime: (typeof OpenAIImage.Type)["mime"], data: string) => {
@@ -236,17 +249,18 @@ export const make = (deps: Deps) =>
         .pipe(Effect.mapError((error) => new VoiceError({ code: error.code, message: error.message })))
     const read = (id: string) =>
       store.read(id).pipe(Effect.mapError((error) => new VoiceError({ code: error.code, message: error.message })))
-    const charge = (stored: Stored, receipt: Usage) =>
-      deps.usageCharges
-        ? deps.usageCharges({
-            sessionID: stored.binding.parentSessionID,
-            id: `openai-voice:${stored.binding.id}:${receipt.kind}:${receipt.id}`,
-            callID: stored.binding.id,
-            at: stored.binding.createdAt,
-            model: receipt.model,
-            pricing: pricing(receipt),
-          })
-        : Effect.void
+    const charge = (stored: Stored, receipt: Usage, identity?: string) => {
+      const input = {
+        sessionID: stored.binding.parentSessionID,
+        id: `openai-voice:${stored.binding.id}:${receipt.kind}:${receipt.id}`,
+        callID: stored.binding.id,
+        at: stored.binding.createdAt,
+        model: receipt.model,
+        pricing: pricing(receipt),
+      }
+      if (identity && deps.usageSettlements) return deps.usageSettlements({ ...input, identity })
+      return deps.usageCharges ? deps.usageCharges(input) : Effect.void
+    }
     const repairKey = ["raya", "voice", "usage-reconciliation", "v1"]
     const repairStore = {
       read: (parts: string[]) => deps.storage.read(["raya", "voice-reconciliation", ...parts]),
@@ -333,10 +347,14 @@ export const make = (deps: Deps) =>
               yield* repairSave(state)
               continue
             }
-            const published = yield* Effect.forEach(receipts.value, (receipt) => charge(parsed.value, receipt), {
-              concurrency: 1,
-              discard: true,
-            }).pipe(Effect.exit)
+            const published = yield* Effect.forEach(
+              receipts.value,
+              (entry) => charge(parsed.value, entry.receipt, entry.identity),
+              {
+                concurrency: 1,
+                discard: true,
+              },
+            ).pipe(Effect.exit)
             if (Exit.isFailure(published)) {
               state = {
                 ...state,
@@ -732,38 +750,72 @@ export const make = (deps: Deps) =>
         }).pipe(Effect.uninterruptible),
       )
     const meter = (id: string, input: typeof OpenAIUsageInput.Type, secret: string, directory: string) =>
-      locked(
-        id,
-        Effect.gen(function* () {
-          const stored = yield* load(id, secret, directory, input.generation)
-          yield* active(stored)
-          if (!valid(input.receipt)) return yield* refuse("invalid", "Invalid provider usage receipt.")
-          yield* ledger(stored)
-          const index = digest(`${input.receipt.kind}:${input.receipt.id}`)
-          const prior = stored.usage?.[index]
-          const retain = charge(stored, input.receipt)
-          if (prior) {
-            if (fingerprint(prior) !== fingerprint(input.receipt))
-              return yield* refuse("conflict", "Provider usage identity was reused with different counts.")
+      Effect.gen(function* () {
+        if (!Schema.is(OpenAIUsageInput)(input)) return yield* refuse("invalid", "Invalid provider usage receipt.")
+        const initial = yield* load(id, secret, directory, input.generation)
+        if (input.reservationID && (input.receipt.kind !== "response" || input.receipt.model !== "gpt-realtime-2.1"))
+          return yield* refuse("invalid", "Only a Realtime response can settle a response reservation.")
+        const reserve = input.reservationID
+          ? {
+              parentSessionID: initial.binding.parentSessionID,
+              requestID: input.reservationID,
+              model: "gpt-realtime-2.1" as const,
+            }
+          : undefined
+        const key = reserve ? digest(JSON.stringify([initial.binding.directory, reserve.requestID])) : undefined
+        const identity = reserve ? `voice:${reservation(reserve, secret, initial.binding.directory)}` : undefined
+        const work = locked(
+          id,
+          Effect.gen(function* () {
+            const stored = yield* load(id, secret, directory, input.generation)
+            yield* active(stored)
+            if (!valid(input.receipt)) return yield* refuse("invalid", "Invalid provider usage receipt.")
+            yield* ledger(stored)
+            const index = digest(`${input.receipt.kind}:${input.receipt.id}`)
+            const prior = stored.usage?.[index]
+            const saved = stored.usageReservations?.[index]
+            if (prior && saved !== identity && (saved !== undefined || identity !== undefined))
+              return yield* refuse("conflict", "Provider usage reservation identity changed.")
+            const entry = key ? reservations.get(key) : undefined
+            if (entry && identity !== `voice:${entry.fingerprint}`)
+              return yield* refuse("conflict", "Provider usage reservation does not match its preflight.")
+            const retain = charge(stored, input.receipt, identity)
+            if (prior) {
+              if (fingerprint(prior) !== fingerprint(input.receipt))
+                return yield* refuse("conflict", "Provider usage identity was reused with different counts.")
+              yield* retain
+              if (key) {
+                reservations.delete(key)
+                if (entry) yield* entry.lease.release
+              }
+              return prior
+            }
+            if (Object.keys(stored.usage ?? {}).length >= 512)
+              return yield* refuse("conflict", "Voice usage receipt limit reached.")
+            stored.usage = { ...stored.usage, [index]: input.receipt }
+            if (identity) stored.usageReservations = { ...stored.usageReservations, [index]: identity }
+            yield* save(stored)
             yield* retain
-            return prior
-          }
-          if (Object.keys(stored.usage ?? {}).length >= 512)
-            return yield* refuse("conflict", "Voice usage receipt limit reached.")
-          stored.usage = { ...stored.usage, [index]: input.receipt }
-          yield* save(stored)
-          yield* retain
-          return input.receipt
-        }).pipe(Effect.uninterruptible),
-      )
+            if (key) {
+              reservations.delete(key)
+              if (entry) yield* entry.lease.release
+            }
+            return input.receipt
+          }).pipe(Effect.uninterruptible),
+        )
+        return yield* key ? locked(`reservation:${key}`, work) : work
+      })
     const usage = (id: string, generation: string, secret: string, directory: string) =>
       locked(
         id,
         Effect.gen(function* () {
           const stored = yield* load(id, secret, directory, generation)
           const receipts = yield* ledger(stored)
-          yield* Effect.forEach(receipts, (receipt) => charge(stored, receipt), { concurrency: 1, discard: true })
-          return { receipts }
+          yield* Effect.forEach(receipts, (entry) => charge(stored, entry.receipt, entry.identity), {
+            concurrency: 1,
+            discard: true,
+          })
+          return { receipts: receipts.map((entry) => entry.receipt) }
         }),
       )
     const submit = (id: string, input: Input, secret: string, directory: string, cursor?: number) =>

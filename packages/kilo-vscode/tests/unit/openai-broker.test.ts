@@ -37,6 +37,7 @@ function fixture() {
     context: JSON.stringify({ source: "saved_task_context", messages: [{ role: "user", text: "Historical task" }] }),
     ready: [] as string[],
     errors: [] as string[],
+    attempts: [] as { path: string; body: Record<string, unknown> }[],
     requests: [] as {
       path: string
       method: string
@@ -195,6 +196,8 @@ function fixture() {
   })
   const request: typeof fetch = (value, init) => {
     const url = new URL(value instanceof Request ? value.url : value)
+    const body = typeof init?.body === "string" ? (JSON.parse(init.body) as Record<string, unknown>) : {}
+    state.attempts.push({ path: url.pathname, body })
     expect(["https://api.openai.com", server.url.origin]).toContain(url.origin)
     if (state.mode === "reservation-offline" && url.pathname.endsWith("/reservation"))
       return Promise.reject(new Error("backend offline"))
@@ -215,6 +218,22 @@ function fixture() {
     },
     80,
   )
+  const send = (value: unknown) => state.socket!.send(JSON.stringify(value))
+  const begin = async (id: string) => {
+    const count = state.events.filter((event) => event.type === "response.create").length
+    send({ type: "input_audio_buffer.speech_stopped" })
+    await until(() => state.events.filter((event) => event.type === "response.create").length > count)
+    const created = state.events.filter((event) => event.type === "response.create").at(-1)!
+    const metadata = (created.response as Record<string, unknown>).metadata
+    send({ type: "response.created", response: { id, metadata } })
+    return metadata
+  }
+  const complete = async (value: ReturnType<typeof completed>) => {
+    const metadata = await begin(value.response.id)
+    const event = { ...value, response: { ...value.response, metadata } }
+    send(event)
+    return event
+  }
   return {
     state,
     broker,
@@ -233,7 +252,9 @@ function fixture() {
         (value) => state.ready.push(value),
         (value) => state.errors.push(value),
       ),
-    send: (value: unknown) => state.socket!.send(JSON.stringify(value)),
+    send,
+    begin,
+    complete,
     close: async () => {
       await broker.dispose()
       await server.stop(true)
@@ -259,6 +280,14 @@ function completed(id = "call_1", request = "Inspect the workspace") {
       ],
     },
   }
+}
+
+function generated(state: { events: Record<string, unknown>[] }) {
+  return state.events.filter((event) => {
+    if (event.type !== "response.create" || !event.response || typeof event.response !== "object") return false
+    const metadata = (event.response as Record<string, unknown>).metadata
+    return !!metadata && typeof metadata === "object" && "raya_kind" in metadata
+  })
 }
 
 test("saved task context requires exact completed acknowledgement and cannot replay historical work", async () => {
@@ -353,18 +382,22 @@ test("slow admitted work backgrounds without replay and final speech waits for u
   try {
     f.state.mode = "pending"
     await f.start()
+    const turn = completed()
+    const turnMetadata = await f.begin(turn.response.id)
     f.send({ type: "input_audio_buffer.speech_started" })
-    f.send(completed())
+    f.send({ ...turn, response: { ...turn.response, metadata: turnMetadata } })
     await until(() => f.state.pending === "call_1")
     await Bun.sleep(5100)
-    expect(f.state.events.some((event) => event.type === "response.create")).toBe(false)
+    expect(generated(f.state)).toHaveLength(0)
     expect(f.state.requests.filter((request) => request.path.endsWith("/calls"))).toHaveLength(1)
     expect(f.state.requests.some((request) => request.path.endsWith("/cancel"))).toBe(false)
-    f.send({ type: "input_audio_buffer.speech_stopped" })
-    f.send({ type: "response.created", response: { id: "user_turn" } })
-    f.send({ type: "response.done", response: { id: "user_turn", status: "completed", output: [] } })
-    await until(() => f.state.events.some((event) => event.type === "response.create"))
-    const narration = f.state.events.find((event) => event.type === "response.create")!
+    const userMetadata = await f.begin("user_turn")
+    f.send({
+      type: "response.done",
+      response: { id: "user_turn", status: "completed", output: [], metadata: userMetadata },
+    })
+    await until(() => generated(f.state).length > 0)
+    const narration = generated(f.state)[0]!
     const response = narration.response as Record<string, unknown>
     expect(response).toMatchObject({ conversation: "none", tools: [], tool_choice: "none" })
     expect(response.instructions).toContain("the user can keep talking")
@@ -382,10 +415,10 @@ test("slow admitted work backgrounds without replay and final speech waits for u
         (event) => event.type === "conversation.item.create" && !String(event.event_id).startsWith("raya_context_"),
       ),
     )
-    expect(f.state.events.filter((event) => event.type === "response.create")).toHaveLength(1)
+    expect(generated(f.state)).toHaveLength(1)
     f.send({ type: "output_audio_buffer.stopped", response_id: "narration" })
-    await until(() => f.state.events.filter((event) => event.type === "response.create").length === 2)
-    expect(f.state.events.filter((event) => event.type === "response.create")[1].response).toMatchObject({
+    await until(() => generated(f.state).length === 2)
+    expect(generated(f.state)[1].response).toMatchObject({
       metadata: { raya_kind: "result" },
     })
     expect(f.state.requests.filter((request) => request.path.endsWith("/calls"))).toHaveLength(1)
@@ -401,7 +434,7 @@ test("result speech requires the matching provider output acknowledgement", asyn
   try {
     f.state.mode = "output-pending"
     await f.start()
-    f.send(completed())
+    await f.complete(completed())
     await until(() =>
       f.state.events.some(
         (event) => event.type === "conversation.item.create" && !String(event.event_id).startsWith("raya_context_"),
@@ -412,13 +445,13 @@ test("result speech requires the matching provider output acknowledgement", asyn
     )!
     const item = output.item as Record<string, unknown>
     expect(item.id).toBe(output.event_id)
-    expect(f.state.events.some((event) => event.type === "response.create")).toBe(false)
+    expect(generated(f.state)).toHaveLength(0)
     f.send({ type: "conversation.item.created", item: { ...item, id: "unrelated" } })
     f.send({ type: "conversation.item.created", item })
-    await until(() => f.state.events.some((event) => event.type === "response.create"))
+    await until(() => generated(f.state).length > 0)
     f.send({ type: "conversation.item.created", item })
     await Bun.sleep(20)
-    expect(f.state.events.filter((event) => event.type === "response.create")).toHaveLength(1)
+    expect(generated(f.state)).toHaveLength(1)
     expect(f.state.requests.filter((request) => request.path.endsWith("/calls"))).toHaveLength(1)
   } finally {
     await f.close()
@@ -430,11 +463,11 @@ test("rejected result delivery reports uncertainty without a continuation or wor
   try {
     f.state.mode = "output-rejected"
     await f.start()
-    f.send(completed())
+    await f.complete(completed())
     await until(() => f.state.errors.length > 0)
     expect(f.state.errors).toHaveLength(1)
     expect(f.state.errors[0]).toContain("could not receive a work result")
-    expect(f.state.events.some((event) => event.type === "response.create")).toBe(false)
+    expect(generated(f.state)).toHaveLength(0)
     expect(f.state.requests.filter((request) => request.path.endsWith("/calls"))).toHaveLength(1)
     expect(f.state.requests.some((request) => request.path.endsWith("/cancel"))).toBe(false)
   } finally {
@@ -450,23 +483,28 @@ test("OpenAI host keeps credentials isolated, dispatches only completed tool cal
     expect(f.state.events.find((event) => event.type === "session.update")?.session).toMatchObject({
       audio: {
         input: {
-          turn_detection: { type: "semantic_vad", eagerness: "auto", interrupt_response: true, create_response: true },
+          turn_detection: {
+            type: "semantic_vad",
+            eagerness: "auto",
+            interrupt_response: false,
+            create_response: false,
+          },
         },
       },
     })
     expect(f.state.form).toMatchObject({ model: OPENAI_VOICE_MODEL, tools: [], audio: { output: { voice: "marin" } } })
     const ignored = completed()
     ignored.response.status = "cancelled"
-    f.send(ignored)
+    await f.complete(ignored)
     f.send({
       type: "response.function_call_arguments.done",
       call_id: "call_1",
       name: "raya_work",
       arguments: '{"request":"Inspect"}',
     })
-    f.send(completed())
-    f.send(completed())
-    await until(() => f.state.events.some((event) => event.type === "response.create"))
+    const duplicate = await f.complete(completed())
+    f.send(duplicate)
+    await until(() => generated(f.state).length > 0)
     expect(f.state.requests.filter((request) => request.path.endsWith("/calls"))).toHaveLength(1)
     const output = f.state.events.filter(
       (event) => event.type === "conversation.item.create" && !String(event.event_id).startsWith("raya_context_"),
@@ -492,19 +530,19 @@ test("multiple work outputs wait for active response and coalesce their audio co
   const f = fixture()
   try {
     await f.start()
-    f.send({ type: "response.created", response: { id: "speaking" } })
-    f.send(completed("call_1"))
-    f.send(completed("call_2"))
+    const speaking = await f.begin("speaking")
+    await f.complete(completed("call_1"))
+    await f.complete(completed("call_2"))
     await until(
       () =>
         f.state.events.filter(
           (event) => event.type === "conversation.item.create" && !String(event.event_id).startsWith("raya_context_"),
         ).length === 2,
     )
-    expect(f.state.events.filter((event) => event.type === "response.create")).toHaveLength(0)
-    f.send({ type: "response.done", response: { id: "speaking", status: "completed", output: [] } })
-    await until(() => f.state.events.some((event) => event.type === "response.create"))
-    expect(f.state.events.filter((event) => event.type === "response.create")).toHaveLength(1)
+    expect(generated(f.state)).toHaveLength(0)
+    f.send({ type: "response.done", response: { id: "speaking", status: "completed", output: [], metadata: speaking } })
+    await until(() => generated(f.state).length > 0)
+    expect(generated(f.state)).toHaveLength(1)
   } finally {
     await f.close()
   }
@@ -517,8 +555,8 @@ test("one response with two work calls waits for each retained result before the
     await f.start()
     const response = completed("call_1")
     response.response.output.push(...completed("call_2").response.output)
-    f.send(response)
-    f.send(response)
+    const duplicate = await f.complete(response)
+    f.send(duplicate)
     await until(() => f.state.polls.includes("call_1"))
     expect(f.state.requests.filter((request) => request.path.endsWith("/calls"))).toHaveLength(1)
     expect(
@@ -554,7 +592,7 @@ test("ending voice fences queued work without cancelling the already-admitted pa
     await f.start()
     const response = completed("call_1")
     response.response.output.push(...completed("call_2").response.output)
-    f.send(response)
+    await f.complete(response)
     await until(() => f.state.polls.includes("call_1"))
     await f.broker.stop(input.requestID)
     f.state.released.add("call_1")
@@ -582,7 +620,7 @@ test("workspace changes and unrelated work receipts cannot publish or dispatch t
   try {
     f.state.mode = "receipt"
     await f.start()
-    f.send(completed())
+    await f.complete(completed())
     await until(() => f.state.errors.length > 0)
     expect(
       f.state.events.some(
@@ -659,6 +697,79 @@ for (const mode of ["reservation-rejected", "reservation-malformed", "reservatio
   })
 }
 
+for (const mode of ["reservation-rejected", "reservation-malformed", "reservation-offline", "reservation-timeout"]) {
+  test(`active voice ${mode} cannot create a provider response`, async () => {
+    const f = fixture()
+    try {
+      await f.start()
+      f.state.mode = mode
+      f.send({ type: "input_audio_buffer.speech_stopped" })
+      await until(() => f.state.errors.length > 0)
+      expect(f.state.events.some((event) => event.type === "response.create")).toBe(false)
+      expect(f.state.attempts.filter((attempt) => attempt.path.endsWith("/reservation"))).toHaveLength(2)
+      if (mode === "reservation-offline" || mode === "reservation-timeout")
+        expect(f.state.requests.filter((request) => request.path.endsWith("/reservation"))).toHaveLength(1)
+      else expect(f.state.requests.filter((request) => request.path.endsWith("/reservation"))).toHaveLength(2)
+      expect(f.state.requests.some((request) => request.path.endsWith("/usage"))).toBe(false)
+      expect(f.broker.active).toBe(true)
+      if (mode === "reservation-rejected") {
+        f.state.mode = "normal"
+        const metadata = await f.begin("response_after_budget_change")
+        f.send({
+          type: "response.done",
+          response: { id: "response_after_budget_change", status: "completed", output: [], metadata },
+        })
+        expect(f.state.events.filter((event) => event.type === "response.create")).toHaveLength(1)
+      }
+      if (mode !== "reservation-rejected") {
+        const requestID = f.state.attempts.filter((attempt) => attempt.path.endsWith("/reservation")).at(-1)!.body
+          .requestID
+        const event = completed("unadmitted")
+        f.send({ ...event, response: { ...event.response, metadata: { raya_reservation: requestID } } })
+        await until(() => !f.broker.active)
+        expect(f.state.requests.some((request) => request.path.endsWith("/calls"))).toBe(false)
+      }
+    } finally {
+      await f.close()
+    }
+  })
+}
+
+test("every provider response carries its admitted identity into durable usage", async () => {
+  const f = fixture()
+  try {
+    await f.start()
+    const event = await f.complete(completed())
+    await until(() => f.state.requests.some((request) => request.path.endsWith("/usage")))
+    const created = f.state.events.find((item) => item.type === "response.create")!
+    const reservationID = (created.response as Record<string, Record<string, unknown>>).metadata.raya_reservation
+    expect(reservationID).toBe(created.event_id)
+    expect(event.response.metadata).toMatchObject({ raya_reservation: reservationID })
+    expect(
+      f.state.requests.filter(
+        (request) => request.path.endsWith("/reservation") && request.body.requestID === reservationID,
+      ),
+    ).toHaveLength(1)
+    expect(f.state.requests.find((request) => request.path.endsWith("/usage"))!.body.reservationID).toBe(reservationID)
+  } finally {
+    await f.close()
+  }
+})
+
+test("an unreserved provider response closes voice without dispatching its tool call", async () => {
+  const f = fixture()
+  try {
+    await f.start()
+    f.send(completed())
+    await until(() => !f.broker.active)
+    expect(f.state.errors.some((error) => error.includes("unreserved voice response"))).toBe(true)
+    expect(f.state.requests.some((request) => request.path.endsWith("/calls"))).toBe(false)
+    expect(f.state.requests.some((request) => request.method === "DELETE")).toBe(true)
+  } finally {
+    await f.close()
+  }
+})
+
 test("stopping an in-flight configuration prevents a later call from starting", async () => {
   const f = fixture()
   try {
@@ -693,9 +804,9 @@ test("speech interruption targets the current output and preserves admitted work
   try {
     f.state.mode = "pending"
     await f.start()
-    f.send(completed())
+    await f.complete(completed())
     await until(() => f.state.pending === "call_1")
-    f.send({ type: "response.created", response: { id: "utterance" } })
+    const utterance = await f.begin("utterance")
     f.send({ type: "output_audio_buffer.started", response_id: "utterance" })
     f.broker.interrupt("other", "utterance", "unowned")
     await until(() => {
@@ -709,10 +820,13 @@ test("speech interruption targets the current output and preserves admitted work
       { type: "output_audio_buffer.clear", event_id: "interrupt_1_clear" },
     ])
     f.send({ type: "error", error: { code: "response_cancel_not_active", event_id: "interrupt_1" } })
-    f.send({ type: "response.done", response: { id: "utterance", status: "cancelled", output: [] } })
+    f.send({
+      type: "response.done",
+      response: { id: "utterance", status: "cancelled", output: [], metadata: utterance },
+    })
     f.send({ type: "output_audio_buffer.cleared", response_id: "utterance" })
     f.state.released.add("call_1")
-    await until(() => f.state.events.some((event) => event.type === "response.create"))
+    await until(() => generated(f.state).length > 0)
     expect(f.state.errors).toEqual([])
     expect(f.state.requests.some((request) => request.method === "DELETE")).toBe(false)
     expect(
@@ -752,7 +866,7 @@ test("image sharing waits for exact acknowledgement and only explicit work carri
       request: "Describe the selected image",
       images: ["picture_1"],
     })
-    f.send(call)
+    await f.complete(call)
     await until(() => f.state.requests.some((request) => request.path.endsWith("/calls")))
     expect(f.state.requests.find((request) => request.path.endsWith("/calls"))!.body.arguments).toEqual({
       request: "Describe the selected image",

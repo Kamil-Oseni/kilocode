@@ -214,6 +214,7 @@ function immediate(request: Request): request is Extract<
       | "stageFileTransaction"
       | "commitFileTransaction"
       | "rollbackFileTransaction"
+      | "recoverFileTransaction"
       | "cleanupFileTransaction"
   }
 > {
@@ -227,6 +228,7 @@ function immediate(request: Request): request is Extract<
     request.op === "stageFileTransaction" ||
     request.op === "commitFileTransaction" ||
     request.op === "rollbackFileTransaction" ||
+    request.op === "recoverFileTransaction" ||
     request.op === "cleanupFileTransaction"
   )
 }

@@ -3,6 +3,7 @@ import os from "node:os"
 import path from "node:path"
 import { Effect, Schema } from "effect"
 import { Storage } from "@/storage/storage"
+import { owner as identity, stopped } from "@/kilocode/task/owner"
 
 const hash = (value: string) => createHash("sha256").update(value).digest("hex")
 const Identity = Schema.Struct({ dev: Schema.String, ino: Schema.String })
@@ -32,6 +33,7 @@ export const Phase = Schema.Literals([
   "conflict",
 ])
 const Owner = Schema.Struct({ host: Schema.String, pid: Schema.Number })
+const Recovery = Schema.Struct({ id: Schema.String, owner: Schema.String })
 export const Outcome = Schema.Struct({
   version: Schema.Literal(1),
   id: Schema.String,
@@ -44,6 +46,7 @@ export const Outcome = Schema.Struct({
   cursor: Schema.Number,
   decision: Schema.optional(Schema.Literals(["commit", "rollback"])),
   owner: Owner,
+  recovery: Schema.optional(Recovery),
   at: Schema.Number,
   reason: Schema.optional(Schema.String),
 })
@@ -53,6 +56,14 @@ const Claim = Schema.Struct({
   invocation: Schema.String,
   target: Schema.String,
   owner: Schema.String,
+})
+const Permit = Schema.Struct({
+  version: Schema.Literal(1),
+  id: Schema.String,
+  transaction: Schema.String,
+  revision: Schema.Number,
+  owner: Owner,
+  secret: Schema.String,
 })
 
 export class Conflict extends Schema.TaggedErrorClass<Conflict>()("RayaMutationJournal.Conflict", {
@@ -91,8 +102,10 @@ const transitions: Record<typeof Phase.Type, ReadonlySet<typeof Phase.Type>> = {
 const lower = (value: string) => (process.platform === "win32" ? value.toLowerCase() : value)
 const journal = (id: string, revision: number) => ["raya", "file-transactions", hash(id), String(revision)]
 const ownership = (target: string) => ["raya", "file-transaction-targets", hash(lower(target))]
+const recovery = (id: string, prior: string) => ["raya", "file-transaction-recovery", hash(id), hash(prior)]
 const decode = Schema.decodeUnknownEffect(Outcome)
 const decodeClaim = Schema.decodeUnknownEffect(Claim)
+const decodePermit = Schema.decodeUnknownEffect(Permit)
 
 function valid(entries: ReadonlyArray<typeof Entry.Type>) {
   if (entries.length === 0 || entries.length > 256) return false
@@ -130,7 +143,7 @@ function valid(entries: ReadonlyArray<typeof Entry.Type>) {
 function same(previous: ReadonlyArray<typeof Entry.Type>, next: ReadonlyArray<typeof Entry.Type>) {
   if (previous.length !== next.length) return false
   return previous.every((entry, index) => {
-    const item = next[index]!
+    const item = next[index]
     if (
       entry.kind !== item.kind ||
       entry.target !== item.target ||
@@ -168,7 +181,7 @@ export function journals(storage: Store) {
 
   const get = (id: string) => read(id)
 
-  const release = Effect.fn("RayaMutationJournal.release")(function* (outcome: typeof Outcome.Type, owner: string) {
+  const release = Effect.fn("RayaMutationJournal.release")(function* (outcome: typeof Outcome.Type) {
     for (const entry of outcome.entries) {
       const key = ownership(entry.target)
       const claim = yield* storage.read<unknown>(key).pipe(
@@ -176,7 +189,7 @@ export function journals(storage: Store) {
         Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(undefined)),
       )
       if (!claim) continue
-      if (claim.id !== outcome.id || claim.owner !== owner)
+      if (claim.id !== outcome.id || claim.invocation !== outcome.invocation)
         return yield* new Conflict({ message: `Mutation target ownership changed for ${entry.target}.` })
       yield* storage.remove(key)
     }
@@ -229,7 +242,7 @@ export function journals(storage: Store) {
       }
       if (!(yield* storage.create(journal(input.invocation, 1), conflict)))
         return yield* new Conflict({ message: "Mutation ownership conflict could not be recorded." })
-      yield* release({ ...outcome, entries: acquired }, owner)
+      yield* release({ ...outcome, entries: acquired })
       return { owned: false as const, outcome: conflict }
     }
     const staging: typeof Outcome.Type = { ...outcome, phase: "staging", revision: 1, at: Date.now() }
@@ -242,12 +255,13 @@ export function journals(storage: Store) {
     const previous = yield* read(id)
     if (!previous) return yield* new Conflict({ message: "Mutation journal ownership changed." })
     const owner = hash(input.token)
+    const adopted = previous.recovery?.owner === owner
     for (const entry of previous.entries) {
       const claim = yield* storage.read<unknown>(ownership(entry.target)).pipe(
         Effect.flatMap(decodeClaim),
         Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(undefined)),
       )
-      if (!claim || claim.id !== previous.id || claim.owner !== owner)
+      if (!claim || claim.id !== previous.id || (!adopted && claim.owner !== owner))
         return yield* new Conflict({ message: "Mutation journal ownership changed." })
     }
     if (previous.revision !== input.revision || !transitions[previous.phase].has(input.phase))
@@ -283,9 +297,56 @@ export function journals(storage: Store) {
     }
     if (!(yield* storage.create(journal(id, outcome.revision), outcome)))
       return yield* new Conflict({ message: "Another caller already advanced this mutation." })
-    if (outcome.phase === "done") yield* release(outcome, hash(input.token))
+    if (outcome.phase === "done") yield* release(outcome)
     return outcome
   })
 
-  return { get, admit, advance }
+  const recover = Effect.fn("RayaMutationJournal.recover")(function* (
+    id: string,
+    authorize?: (outcome: typeof Outcome.Type) => Effect.Effect<boolean>,
+  ) {
+    const outcome = yield* read(id)
+    if (!outcome || outcome.phase === "done" || outcome.phase === "conflict") return { owned: false as const, outcome }
+    const allowed = authorize ? yield* authorize(outcome) : stopped(outcome.owner)
+    if (!allowed) return { owned: false as const, outcome }
+    let prior = outcome.recovery?.id ?? outcome.id
+    for (let depth = 0; depth < 64; depth++) {
+      const token = crypto.randomUUID()
+      const permit: typeof Permit.Type = {
+        version: 1,
+        id: crypto.randomUUID(),
+        transaction: outcome.id,
+        revision: outcome.revision,
+        owner: identity(),
+        secret: hash(token),
+      }
+      const key = recovery(id, prior)
+      if (!(yield* storage.create(key, permit))) {
+        const previous = yield* storage.read<unknown>(key).pipe(
+          Effect.flatMap(decodePermit),
+          Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(undefined)),
+        )
+        if (!previous || !stopped(previous.owner)) return { owned: false as const, outcome: yield* read(id) }
+        prior = previous.id
+        continue
+      }
+      const current = yield* read(id)
+      const still = current && JSON.stringify(current) === JSON.stringify(outcome)
+      const authorized = current && (authorize ? yield* authorize(current) : stopped(current.owner))
+      if (!current || !still || !authorized) return { owned: false as const, outcome: current }
+      const adopted: typeof Outcome.Type = {
+        ...current,
+        revision: current.revision + 1,
+        owner: permit.owner,
+        recovery: { id: permit.id, owner: permit.secret },
+        at: Date.now(),
+      }
+      if (!(yield* storage.create(journal(id, adopted.revision), adopted)))
+        return { owned: false as const, outcome: yield* read(id) }
+      return { owned: true as const, outcome: adopted, token }
+    }
+    return yield* new Conflict({ message: "Mutation recovery ownership exceeded its bounded ancestry." })
+  })
+
+  return { get, admit, advance, recover }
 }

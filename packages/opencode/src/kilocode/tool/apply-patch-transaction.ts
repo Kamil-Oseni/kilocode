@@ -1,13 +1,14 @@
 import { Cause, Effect, Exit } from "effect"
 import {
   finalizeTransaction,
+  inspectTransaction,
   prepareTransaction,
   publishTransaction,
   restoreTransaction,
   type TransactionEntry,
 } from "@kilocode/sandbox"
 import type { Storage } from "@/storage/storage"
-import { Conflict, journals } from "./mutation-journal"
+import { Conflict, journals, Outcome } from "./mutation-journal"
 
 export interface Item {
   readonly entry: TransactionEntry
@@ -52,8 +53,8 @@ export function transact(storage: Pick<Storage.Interface, "create" | "read" | "r
           if (item.entry.kind !== "remove") {
             if (!item.data)
               return yield* new Conflict({ message: `Mutation bytes are missing for ${item.entry.target}.` })
-            const artifact = yield* prepareTransaction(state.entries[index]!, item.data)
-            state.entries[index] = { ...state.entries[index]!, artifact }
+            const artifact = yield* prepareTransaction(state.entries[index], item.data)
+            state.entries[index] = { ...state.entries[index], artifact }
           }
           yield* advance("staging", index + 1)
         }
@@ -112,6 +113,76 @@ export function transact(storage: Pick<Storage.Interface, "create" | "read" | "r
         yield* advance("cleaning", index + 1)
       }
       return yield* advance("done", state.entries.length)
+    }),
+  )
+}
+
+export function recover(
+  storage: Pick<Storage.Interface, "create" | "read" | "remove">,
+  id: string,
+  authorize?: (outcome: typeof Outcome.Type) => Effect.Effect<boolean>,
+) {
+  return Effect.uninterruptible(
+    Effect.gen(function* () {
+      const journal = journals(storage)
+      const claimed = yield* journal.recover(id, authorize)
+      if (!claimed.owned) return claimed.outcome
+      const state = { outcome: claimed.outcome, entries: [...claimed.outcome.entries] }
+      const advance = (phase: Parameters<typeof journal.advance>[1]["phase"], cursor: number) =>
+        journal
+          .advance(id, {
+            token: claimed.token,
+            revision: state.outcome.revision,
+            phase,
+            cursor,
+            entries: state.entries,
+          })
+          .pipe(Effect.tap((outcome) => Effect.sync(() => (state.outcome = outcome))))
+      const work = Effect.gen(function* () {
+        if (state.outcome.phase === "staging") {
+          for (const [index, entry] of state.entries.entries()) {
+            if (entry.kind === "remove" || entry.artifact) continue
+            const artifact = yield* inspectTransaction(entry)
+            if (artifact) state.entries[index] = { ...entry, artifact }
+          }
+          yield* advance("staging", state.outcome.cursor)
+        }
+        const committed = state.outcome.decision === "commit" || ["committed", "cleaning"].includes(state.outcome.phase)
+        if (committed) {
+          if (state.outcome.phase === "committed") yield* advance("cleaning", 0)
+          for (const entry of state.entries) yield* finalizeTransaction(entry, true)
+          if (state.outcome.phase === "cleaning") yield* advance("cleaning", state.entries.length)
+          return yield* advance("done", state.entries.length)
+        }
+        if (state.outcome.phase === "cleaning" && state.outcome.decision === "rollback") {
+          for (const entry of state.entries) yield* finalizeTransaction(entry, false)
+          yield* advance("cleaning", state.entries.length)
+          return yield* advance("done", state.entries.length)
+        }
+        if (state.outcome.phase !== "rolling_back" && state.outcome.phase !== "rolled_back")
+          yield* advance("rolling_back", 0)
+        if (state.outcome.phase === "rolling_back") {
+          for (const entry of state.entries.toReversed()) yield* restoreTransaction(entry)
+          yield* advance("rolling_back", state.entries.length)
+          yield* advance("rolled_back", state.entries.length)
+        }
+        yield* advance("cleaning", 0)
+        for (const entry of state.entries) yield* finalizeTransaction(entry, false)
+        yield* advance("cleaning", state.entries.length)
+        return yield* advance("done", state.entries.length)
+      })
+      const result = yield* Effect.exit(work)
+      if (Exit.isSuccess(result)) return result.value
+      if (state.outcome.phase !== "conflict")
+        yield* journal.advance(id, {
+          token: claimed.token,
+          revision: state.outcome.revision,
+          phase: "conflict",
+          cursor: state.outcome.cursor,
+          entries: state.entries,
+          reason: Cause.pretty(result.cause),
+        })
+      return yield* Effect.failCause(result.cause)
     }),
   )
 }

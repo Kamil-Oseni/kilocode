@@ -79,6 +79,7 @@ export type Operation =
   | { readonly op: "stageFileTransaction"; readonly path: string; readonly entry: Entry; readonly data: string }
   | { readonly op: "commitFileTransaction"; readonly path: string; readonly entry: Entry }
   | { readonly op: "rollbackFileTransaction"; readonly path: string; readonly entry: Entry }
+  | { readonly op: "recoverFileTransaction"; readonly path: string; readonly entry: Entry }
   | {
       readonly op: "cleanupFileTransaction"
       readonly path: string
@@ -100,6 +101,7 @@ export type BatchOperation = Exclude<
       | "stageFileTransaction"
       | "commitFileTransaction"
       | "rollbackFileTransaction"
+      | "recoverFileTransaction"
       | "cleanupFileTransaction"
   }
 >
@@ -232,6 +234,7 @@ function isOperation(value: unknown): value is Operation {
       return path && isEntry(value.entry) && value.entry.target === value.path && typeof value.data === "string"
     case "commitFileTransaction":
     case "rollbackFileTransaction":
+    case "recoverFileTransaction":
       return path && isEntry(value.entry) && value.entry.target === value.path
     case "cleanupFileTransaction":
       return path && isEntry(value.entry) && value.entry.target === value.path && typeof value.committed === "boolean"
@@ -253,6 +256,7 @@ function isBatchOperation(value: unknown): value is BatchOperation {
     value.op !== "stageFileTransaction" &&
     value.op !== "commitFileTransaction" &&
     value.op !== "rollbackFileTransaction" &&
+    value.op !== "recoverFileTransaction" &&
     value.op !== "cleanupFileTransaction"
   )
 }

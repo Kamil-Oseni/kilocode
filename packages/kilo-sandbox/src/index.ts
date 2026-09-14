@@ -14,6 +14,7 @@ export {
   publishTransaction,
   restoreTransaction,
   finalizeTransaction,
+  inspectTransaction,
   validateFile,
   writeChecked,
   type FileIdentity,

@@ -121,6 +121,16 @@ export async function stage(entry: Entry, data: Uint8Array): Promise<Proof> {
   return { identity: state.identity, sha256: state.sha256 }
 }
 
+export async function recover(entry: Entry): Promise<Proof | undefined> {
+  paths(entry)
+  if (!entry.stage) return
+  const state = await inspect(entry.stage)
+  if (!state) return
+  if (!entry.result || state.sha256 !== entry.result.sha256 || (state.links !== 1n && state.links !== 2n))
+    throw error(entry, "Transaction stage cannot be adopted for recovery.")
+  return { identity: state.identity, sha256: state.sha256 }
+}
+
 async function create(entry: Entry) {
   requirePath(entry, entry.stage, "stage")
   requireProof(entry, entry.artifact, "stage")
@@ -226,9 +236,9 @@ async function restore(entry: Entry) {
 export async function rollback(entry: Entry) {
   paths(entry)
   if (entry.kind !== "create") return restore(entry)
-  requireProof(entry, entry.artifact, "stage")
   const target = await inspect(entry.target)
   if (!target) return
+  requireProof(entry, entry.artifact, "stage")
   if (!exact(target, entry.artifact))
     throw error(entry, "Rollback target contains newer user work; retained the transaction stage.")
   await unlink(entry.target)

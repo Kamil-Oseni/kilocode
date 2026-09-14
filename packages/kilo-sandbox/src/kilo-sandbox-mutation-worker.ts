@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { isRequest, type Failure, type Operation, type Request, type Response, type Time } from "./mutation-protocol"
 import { createAnchored, createChecked, removeChecked, replaceChecked, writeChecked } from "./checked-write"
-import { cleanup, commit, rollback, stage } from "./checked-transaction"
+import { cleanup, commit, recover, rollback, stage } from "./checked-transaction"
 
 function time(value: Time) {
   return value.type === "date" ? new Date(value.value) : value.value
@@ -130,6 +130,10 @@ async function mutate(request: Operation): Promise<string | undefined> {
     case "rollbackFileTransaction":
       await rollback(request.entry)
       return undefined
+    case "recoverFileTransaction": {
+      const proof = await recover(request.entry)
+      return proof ? JSON.stringify(proof) : undefined
+    }
     case "cleanupFileTransaction":
       await cleanup(request.entry, request.committed)
       return undefined

@@ -2,4 +2,4 @@
 "@kilocode/cli": patch
 ---
 
-Retain verified transaction stages and preimages until a durable file-mutation decision is recorded.
+Recover interrupted verified file transactions according to their durable commit or rollback decision.

@@ -14,6 +14,7 @@ import type { Identity } from "./checked-write"
 import {
   cleanup as cleanupTransaction,
   commit as commitTransaction,
+  recover as recoverTransaction,
   rollback as rollbackTransaction,
   stage as stageTransaction,
   type Entry,
@@ -193,6 +194,18 @@ export function restoreTransaction(entry: Entry) {
     yield* assertPath(entry.target, "rollbackFileTransaction")
     const run = yield* currentRunner
     return yield* run(profile, { op: "rollbackFileTransaction", path: entry.target, entry })
+  })
+}
+
+export function inspectTransaction(entry: Entry) {
+  return Effect.gen(function* () {
+    const profile = yield* current
+    if (!profile) return yield* Effect.tryPromise({ try: () => recoverTransaction(entry), catch: wrap })
+    yield* assertPath(entry.target, "recoverFileTransaction")
+    const run = yield* currentRunner
+    const value = yield* run(profile, { op: "recoverFileTransaction", path: entry.target, entry })
+    if (value === undefined) return undefined
+    return yield* Effect.try({ try: () => parse(value), catch: wrap })
   })
 }
 

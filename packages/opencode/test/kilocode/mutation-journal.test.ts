@@ -144,3 +144,65 @@ it.live("rejects a changed request digest and ambiguous transaction plans", () =
     ).toBe(true)
   }),
 )
+
+it.live("fences competing recovery owners and lets one adopted owner finish", () =>
+  Effect.gen(function* () {
+    const root = yield* tmpdirScoped()
+    const dir = path.join(root, "storage")
+    const input = plan(root, "recovery")
+    yield* instance(dir, (journal) => journal.admit(input))
+    const rows = yield* Effect.all(
+      Array.from({ length: 8 }, () =>
+        instance(dir, (journal) => journal.recover(input.invocation, () => Effect.succeed(true))),
+      ),
+      { concurrency: 8 },
+    )
+    expect(rows.filter((row) => row.owned)).toHaveLength(1)
+    const owned = rows.find((row) => row.owned)
+    if (!owned?.owned) return
+    const rolling = yield* instance(dir, (journal) =>
+      journal.advance(input.invocation, {
+        token: owned.token,
+        revision: owned.outcome.revision,
+        phase: "rolling_back",
+        cursor: 0,
+      }),
+    )
+    const rolled = yield* instance(dir, (journal) =>
+      journal.advance(input.invocation, {
+        token: owned.token,
+        revision: rolling.revision,
+        phase: "rolled_back",
+        cursor: input.entries.length,
+      }),
+    )
+    const cleaning = yield* instance(dir, (journal) =>
+      journal.advance(input.invocation, {
+        token: owned.token,
+        revision: rolled.revision,
+        phase: "cleaning",
+        cursor: 0,
+      }),
+    )
+    const cleaned = yield* instance(dir, (journal) =>
+      journal.advance(input.invocation, {
+        token: owned.token,
+        revision: cleaning.revision,
+        phase: "cleaning",
+        cursor: input.entries.length,
+      }),
+    )
+    const done = yield* instance(dir, (journal) =>
+      journal.advance(input.invocation, {
+        token: owned.token,
+        revision: cleaned.revision,
+        phase: "done",
+        cursor: input.entries.length,
+      }),
+    )
+    expect(done.decision).toBe("rollback")
+    expect(
+      (yield* instance(dir, (journal) => journal.recover(input.invocation, () => Effect.succeed(true)))).owned,
+    ).toBe(false)
+  }),
+)

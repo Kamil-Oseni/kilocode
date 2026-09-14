@@ -6,7 +6,7 @@ import path from "node:path"
 import { NodeFileSystem } from "@effect/platform-node"
 import { Effect, FileSystem, Layer, Scope, Stream } from "effect"
 import { run } from "../src/context"
-import { writeChecked } from "../src/checked"
+import { createFile, writeChecked } from "../src/checked"
 import { layer } from "../src/filesystem"
 import { batchMutations, currentRunner, withRunner, type Runner } from "../src/mutation"
 import type { Request } from "../src/mutation-protocol"
@@ -122,7 +122,7 @@ describe("sandbox FileSystem", () => {
     expect(requests[0]).toMatchObject({ op: "batch", operations: [{ op: "writeFileString" }] })
   })
 
-  test("flushes around checked writes so their result cannot be deferred", async () => {
+  test("flushes around checked and exclusive writes so their result cannot be deferred", async () => {
     await mkdir(allowed, { recursive: true })
     const file = path.join(allowed, "checked.txt")
     await writeFile(file, "approved")
@@ -144,6 +144,7 @@ describe("sandbox FileSystem", () => {
                 { dev: info.dev.toString(), ino: info.ino.toString() },
                 createHash("sha256").update("approved").digest("hex"),
               )
+              yield* createFile(path.join(allowed, "exclusive.txt"), Buffer.from("created"))
               yield* fs.writeFileString(path.join(allowed, "after.txt"), "after")
             }),
           ),
@@ -151,7 +152,7 @@ describe("sandbox FileSystem", () => {
       ),
     )
 
-    expect(requests.map((request) => request.op)).toEqual(["batch", "writeFileChecked", "batch"])
+    expect(requests.map((request) => request.op)).toEqual(["batch", "writeFileChecked", "writeFileExclusive", "batch"])
   })
 
   test("delegates runners retained after a batch closes", async () => {

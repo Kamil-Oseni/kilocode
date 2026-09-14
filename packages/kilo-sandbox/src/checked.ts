@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { stat } from "node:fs/promises"
 import { assertPath, current } from "./context"
-import { validateChecked as validate, writeChecked as write } from "./checked-write"
+import { createChecked as create, validateChecked as validate, writeChecked as write } from "./checked-write"
 import { currentRunner } from "./mutation"
 import type { Identity } from "./checked-write"
 
@@ -21,6 +21,25 @@ export const validateFile = (path: string, identity: Identity, sha256: string) =
     try: () => validate(path, identity, sha256),
     catch: wrap,
   })
+
+export function createFile(path: string, data: Uint8Array) {
+  return Effect.gen(function* () {
+    const profile = yield* current
+    if (!profile) {
+      return yield* Effect.tryPromise({
+        try: () => create(path, data),
+        catch: wrap,
+      })
+    }
+    yield* assertPath(path, "writeFileExclusive")
+    const run = yield* currentRunner
+    return yield* run(profile, {
+      op: "writeFileExclusive",
+      path,
+      data: Buffer.from(data).toString("base64"),
+    })
+  })
+}
 
 export function writeChecked(path: string, data: Uint8Array, identity: Identity, sha256: string) {
   return Effect.gen(function* () {

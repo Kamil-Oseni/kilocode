@@ -24,6 +24,25 @@ async function verify(file: FileHandle, path: string, identity: Identity, sha256
   if (createHash("sha256").update(current).digest("hex") !== sha256) throw stale(path)
 }
 
+async function write(file: FileHandle, path: string, data: Uint8Array) {
+  for (let offset = 0; offset < data.byteLength; ) {
+    const result = await file.write(data, offset, data.byteLength - offset, offset)
+    if (result.bytesWritten === 0)
+      throw Object.assign(new Error("Unable to finish checked file write."), { code: "EIO", path })
+    offset += result.bytesWritten
+  }
+  await file.sync()
+}
+
+export async function createChecked(path: string, data: Uint8Array) {
+  const file = await open(path, "wx")
+  try {
+    await write(file, path, data)
+  } finally {
+    await file.close()
+  }
+}
+
 export async function validateChecked(path: string, identity: Identity, sha256: string) {
   const file = await open(path, "r")
   try {
@@ -38,13 +57,7 @@ export async function writeChecked(path: string, data: Uint8Array, identity: Ide
   try {
     await verify(file, path, identity, sha256)
     await file.truncate(0)
-    for (let offset = 0; offset < data.byteLength; ) {
-      const result = await file.write(data, offset, data.byteLength - offset, offset)
-      if (result.bytesWritten === 0)
-        throw Object.assign(new Error("Unable to finish checked file write."), { code: "EIO", path })
-      offset += result.bytesWritten
-    }
-    await file.sync()
+    await write(file, path, data)
   } finally {
     await file.close()
   }

@@ -108,6 +108,38 @@ describe("filesystem mutation worker", () => {
     expect(await readFile(file, "utf8")).toBe("changed")
   })
 
+  test("creates a missing file exclusively", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "kilo-mutation-worker-"))
+    roots.push(root)
+    const file = path.join(root, "value.txt")
+    const request = {
+      op: "writeFileExclusive" as const,
+      path: file,
+      data: Buffer.from("created").toString("base64"),
+    }
+
+    expect(await worker(request)).toEqual({ ok: true })
+    expect(await readFile(file, "utf8")).toBe("created")
+  })
+
+  test("refuses an exclusive create when another writer already owns the pathname", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "kilo-mutation-worker-"))
+    roots.push(root)
+    const file = path.join(root, "value.txt")
+    await writeFile(file, "user content")
+    const response = await worker({
+      op: "writeFileExclusive",
+      path: file,
+      data: Buffer.from("agent content").toString("base64"),
+    })
+
+    expect(response.ok).toBe(false)
+    if (response.ok) return
+    expect(response.error.code).toBe("EEXIST")
+    expect(response.error.operation).toBe("writeFileExclusive")
+    expect(await readFile(file, "utf8")).toBe("user content")
+  })
+
   test("refuses a pathname replaced after approval without changing either file", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "kilo-mutation-worker-"))
     roots.push(root)
@@ -160,7 +192,7 @@ describe("filesystem mutation worker", () => {
     expect(await readFile(alias, "utf8")).toBe("approved")
   })
 
-  test("rejects malformed checked-write proofs and checked writes inside batches", () => {
+  test("rejects malformed checked writes and immediate writes inside batches", () => {
     const base = {
       op: "writeFileChecked",
       path: "value.txt",
@@ -173,5 +205,8 @@ describe("filesystem mutation worker", () => {
     expect(isRequest({ ...base, identity: { dev: "1.5", ino: "2" } })).toBe(false)
     expect(isRequest({ ...base, sha256: "not-a-hash" })).toBe(false)
     expect(isRequest({ op: "batch", operations: [base] })).toBe(false)
+    const exclusive = { op: "writeFileExclusive", path: "value.txt", data: "Y3JlYXRlZA==" }
+    expect(isRequest(exclusive)).toBe(true)
+    expect(isRequest({ op: "batch", operations: [exclusive] })).toBe(false)
   })
 })

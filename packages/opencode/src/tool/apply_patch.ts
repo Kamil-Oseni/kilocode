@@ -368,7 +368,7 @@ export const ApplyPatchTool = Tool.define(
                 change.sha256,
               )
             } else {
-              yield* EncodedIO.write(
+              yield* EncodedIO.exclusive(
                 afs,
                 targets.get(change.filePath)!,
                 Bom.join(change.newContent, change.bom),
@@ -405,7 +405,7 @@ export const ApplyPatchTool = Tool.define(
                   change.destinationSha256,
                 )
               } else {
-                yield* EncodedIO.write(afs, destination, Bom.join(change.newContent, change.bom), change.encoding)
+                yield* EncodedIO.exclusive(afs, destination, Bom.join(change.newContent, change.bom), change.encoding)
               }
               const source = targets.get(change.filePath)!
               yield* EncodedIO.validate(source, change.proof!, change.sha256!)

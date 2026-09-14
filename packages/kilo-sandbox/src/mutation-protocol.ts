@@ -50,10 +50,15 @@ export type Operation =
       readonly identity: Identity
       readonly sha256: string
     }
+  | {
+      readonly op: "writeFileExclusive"
+      readonly path: string
+      readonly data: string
+    }
 
 export type BatchOperation = Exclude<
   Operation,
-  { readonly op: "makeTempDirectory" | "makeTempFile" | "writeFileChecked" }
+  { readonly op: "makeTempDirectory" | "makeTempFile" | "writeFileChecked" | "writeFileExclusive" }
 >
 export type Request = Operation | { readonly op: "batch"; readonly operations: ReadonlyArray<BatchOperation> }
 
@@ -114,6 +119,7 @@ function isOperation(value: unknown): value is Operation {
       return path && isObject(value.atime) && isObject(value.mtime)
     case "writeFile":
     case "writeFileString":
+    case "writeFileExclusive":
       return path && typeof value.data === "string"
     case "writeFileChecked":
       return (
@@ -137,7 +143,8 @@ function isBatchOperation(value: unknown): value is BatchOperation {
     isOperation(value) &&
     value.op !== "makeTempDirectory" &&
     value.op !== "makeTempFile" &&
-    value.op !== "writeFileChecked"
+    value.op !== "writeFileChecked" &&
+    value.op !== "writeFileExclusive"
   )
 }
 

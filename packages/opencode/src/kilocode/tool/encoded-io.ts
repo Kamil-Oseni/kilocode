@@ -3,6 +3,7 @@ import { createHash } from "node:crypto"
 import { Effect } from "effect"
 import {
   batchMutations,
+  createFile,
   enabled,
   ensureDirectory,
   inspectFile,
@@ -32,6 +33,12 @@ export const identity = (path: string) => inspectFile(path).pipe(Effect.mapError
 
 export const validate = (path: string, proof: { readonly dev: string; readonly ino: string }, sha256: string) =>
   validateFile(path, proof, sha256).pipe(Effect.mapError(wrap))
+
+export const exclusive = (fs: FSUtil.Interface, path: string, text: string, encoding: string = Encoding.DEFAULT) =>
+  Effect.gen(function* () {
+    yield* ensureDirectory(fs, dirname(path))
+    yield* createFile(path, Encoding.encode(text, encoding))
+  }).pipe(Effect.mapError(wrap))
 
 export const write = (fs: FSUtil.Interface, path: string, text: string, encoding: string = Encoding.DEFAULT) =>
   Effect.gen(function* () {

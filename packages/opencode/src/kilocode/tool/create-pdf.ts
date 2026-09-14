@@ -1,6 +1,4 @@
-import { randomUUID } from "node:crypto"
 import path from "node:path"
-import { batchMutations, enabled, ensureDirectory } from "@kilocode/sandbox"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
@@ -14,6 +12,7 @@ import { assertExternalDirectoryEffect } from "@/tool/external-directory"
 import * as Tool from "@/tool/tool"
 import { parseImage } from "./office-image"
 import { parsePdfImage, type PdfImage } from "./pdf-image"
+import * as Output from "./reviewed-output"
 
 const Text = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(10_000))
 const Cell = Schema.String.check(Schema.isMaxLength(300))
@@ -747,7 +746,8 @@ export const CreatePdfTool = Tool.define(
           const target = yield* RayaPath.canonical(fs, filepath)
           assertMutablePath(target)
           yield* assertExternalDirectoryEffect(ctx, target)
-          const exists = yield* fs.existsSafe(filepath)
+          const review = yield* Output.review(fs, target)
+          const exists = review.exists
           yield* ctx.ask({
             permission: "edit",
             patterns: RayaPath.patterns(instance.worktree, [filepath, target]),
@@ -773,25 +773,10 @@ export const CreatePdfTool = Tool.define(
             catch: (cause) => new Error(`Raya couldn't create this PDF: ${String(cause)}`),
           })
           yield* RayaPath.check(fs, filepath, target)
-          const tmp = `${filepath}.raya-${randomUUID()}.tmp`
-          const save = Effect.gen(function* () {
-            if (!(yield* enabled)) {
-              yield* fs.writeWithDirs(tmp, result.bytes)
-              yield* fs.rename(tmp, filepath)
-              return
-            }
-            yield* batchMutations(
-              Effect.gen(function* () {
-                yield* ensureDirectory(fs, path.dirname(filepath))
-                yield* fs.writeFile(tmp, result.bytes)
-                yield* fs.rename(tmp, filepath)
-              }),
-            )
-          }).pipe(Effect.ensuring(fs.remove(tmp).pipe(Effect.ignore)))
-          yield* save
+          yield* Output.commit(target, result.bytes, review)
           yield* events.publish(FileSystem.Event.Edited, { file: filepath })
           yield* events.publish(Watcher.Event.Updated, { file: filepath, event: exists ? "change" : "add" })
-          const revision = yield* Artifact.capture(fs, filepath)
+          const revision = yield* Artifact.capture(fs, target)
           return {
             title: path.relative(instance.worktree, filepath),
             output: `Created ${path.basename(filepath)} with ${result.pages === 1 ? "1 page" : `${result.pages} pages`}.`,

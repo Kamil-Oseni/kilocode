@@ -1,8 +1,6 @@
 import path from "node:path"
-import { randomUUID } from "node:crypto"
 import { Effect, Schema } from "effect"
 import { utils, write, type CellObject, type WorkSheet } from "xlsx"
-import { batchMutations, enabled, ensureDirectory } from "@kilocode/sandbox"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
@@ -13,6 +11,7 @@ import { assertMutablePath } from "@/kilocode/agent-manager/protection"
 import * as Artifact from "@/kilocode/goal/artifact"
 import { RayaPath } from "@/kilocode/task/path-boundary"
 import * as Tool from "@/tool/tool"
+import * as Output from "./reviewed-output"
 
 const Scalar = Schema.Union([Schema.String.check(Schema.isMaxLength(32_767)), Schema.Finite, Schema.Boolean])
 const Kind = Schema.Literals(["number", "percent", "usd", "cad", "eur", "gbp", "jpy"])
@@ -239,7 +238,8 @@ export const CreateSpreadsheetTool = Tool.define(
           const target = yield* RayaPath.canonical(fs, filepath)
           assertMutablePath(target)
           yield* assertExternalDirectoryEffect(ctx, target)
-          const exists = yield* fs.existsSafe(filepath)
+          const review = yield* Output.review(fs, target)
+          const exists = review.exists
           yield* ctx.ask({
             permission: "edit",
             patterns: RayaPath.patterns(instance.worktree, [filepath, target]),
@@ -269,25 +269,10 @@ export const CreateSpreadsheetTool = Tool.define(
             catch: (cause) => new Error(`Raya couldn't create this workbook: ${String(cause)}`),
           })
           yield* RayaPath.check(fs, filepath, target)
-          const tmp = `${filepath}.raya-${randomUUID()}.tmp`
-          const save = Effect.gen(function* () {
-            if (!(yield* enabled)) {
-              yield* fs.writeWithDirs(tmp, bytes)
-              yield* fs.rename(tmp, filepath)
-              return
-            }
-            yield* batchMutations(
-              Effect.gen(function* () {
-                yield* ensureDirectory(fs, path.dirname(filepath))
-                yield* fs.writeFile(tmp, bytes)
-                yield* fs.rename(tmp, filepath)
-              }),
-            )
-          }).pipe(Effect.ensuring(fs.remove(tmp).pipe(Effect.ignore)))
-          yield* save
+          yield* Output.commit(target, bytes, review)
           yield* events.publish(FileSystem.Event.Edited, { file: filepath })
           yield* events.publish(Watcher.Event.Updated, { file: filepath, event: exists ? "change" : "add" })
-          const revision = yield* Artifact.capture(fs, filepath)
+          const revision = yield* Artifact.capture(fs, target)
           return {
             title: path.relative(instance.worktree, filepath),
             output: `Created ${names.length === 1 ? "1 sheet" : `${names.length} sheets`} in ${path.basename(filepath)}.`,

@@ -19,6 +19,7 @@ import type { Session } from "@/session/session"
 import * as Artifact from "@/kilocode/goal/artifact"
 import { assertMutablePath } from "@/kilocode/agent-manager/protection"
 import { RayaPath } from "@/kilocode/task/path-boundary"
+import * as Output from "./reviewed-output"
 
 const log = Log.create({ service: "tool.generate_image" })
 
@@ -410,6 +411,7 @@ export const generateImageTool = (goals?: GoalDeps) =>
               const target = yield* RayaPath.canonical(fs, absPath)
               assertMutablePath(target)
               yield* assertExternalDirectoryEffect(ctx, target)
+              const review = yield* Output.review(fs, target)
               yield* ctx.ask({
                 permission: "write",
                 patterns: RayaPath.patterns(instance.worktree, [absPath, target]),
@@ -419,8 +421,8 @@ export const generateImageTool = (goals?: GoalDeps) =>
 
               const buf = Buffer.from(parsed.base64, "base64")
               yield* RayaPath.check(fs, absPath, target)
-              yield* fs.writeWithDirs(absPath, buf)
-              const revision = yield* Artifact.capture(fs, absPath)
+              yield* Output.commit(target, buf, review)
+              const revision = yield* Artifact.capture(fs, target)
 
               return {
                 title: path.relative(instance.worktree, absPath),

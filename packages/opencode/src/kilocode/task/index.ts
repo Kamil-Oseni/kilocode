@@ -241,6 +241,16 @@ export namespace RayaTask {
   })
   export type Histories = typeof Histories.Type
 
+  const UsageReason = Schema.Literals([
+    "run",
+    "archive",
+    "organization",
+    "queue",
+    "delegation",
+    "inbox",
+    "memory",
+    "authority",
+  ])
   export const Create = Schema.Struct({
     name: Schema.String,
     role: Schema.optional(Schema.String),
@@ -722,6 +732,47 @@ export namespace RayaTask {
         },
         { items: [], failed: [] },
       )
+    })
+
+    const usage = Effect.fn("RayaTask.usage")(function* (id: string) {
+      const agent = yield* get(id)
+      const used: (typeof UsageReason.Type)[] = []
+      const unavailable: (typeof UsageReason.Type)[] = []
+      if (agent.provisioning !== undefined) used.push("authority")
+      const history = yield* runsFor(id).pipe(Effect.exit)
+      if (Exit.isFailure(history)) unavailable.push("run")
+      else if (history.value.length) used.push("run")
+      const note = yield* recall(id).pipe(Effect.exit)
+      if (Exit.isFailure(note)) unavailable.push("memory")
+      else if (note.value.length) used.push("memory")
+      const legacy = yield* archives().pipe(Effect.exit)
+      if (Exit.isFailure(legacy)) unavailable.push("archive")
+      else if (legacy.value.some((item) => item.definition.id === id)) used.push("archive")
+      if (!deps.database || !store) {
+        unavailable.push("archive", "organization", "queue", "delegation", "inbox")
+        return { used, unavailable }
+      }
+      const archived = yield* store.used(id).pipe(Effect.exit)
+      if (Exit.isFailure(archived)) unavailable.push("archive")
+      else if (archived.value && !used.includes("archive")) used.push("archive")
+      const { RayaTaskOrganization } = yield* Effect.promise(() => import("./organization"))
+      const organization = yield* RayaTaskOrganization.make(deps.database, { get }, deps.storage)
+        .used(id)
+        .pipe(Effect.exit)
+      if (Exit.isFailure(organization) || !organization.value.complete) unavailable.push("organization")
+      else if (organization.value.used) used.push("organization")
+      const queued = yield* RayaTaskQueue.make(deps.database).used(id).pipe(Effect.exit)
+      if (Exit.isFailure(queued)) unavailable.push("queue")
+      else if (queued.value) used.push("queue")
+      const { RayaTaskDelegation } = yield* Effect.promise(() => import("./delegation"))
+      const delegated = yield* RayaTaskDelegation.make(deps.database).used(id).pipe(Effect.exit)
+      if (Exit.isFailure(delegated)) unavailable.push("delegation")
+      else if (delegated.value) used.push("delegation")
+      const { RayaTaskInbox } = yield* Effect.promise(() => import("./inbox"))
+      const inbox = yield* RayaTaskInbox.make(deps.database).used(id).pipe(Effect.exit)
+      if (Exit.isFailure(inbox)) unavailable.push("inbox")
+      else if (inbox.value) used.push("inbox")
+      return { used, unavailable }
     })
 
     const writeRuns = Effect.fn("RayaTask.writeRuns")(function* (id: string, items: Run[]) {
@@ -1498,6 +1549,7 @@ export namespace RayaTask {
       get,
       runsFor,
       histories,
+      usage,
       recall,
       ready,
       eligible,

@@ -660,6 +660,16 @@ export namespace RayaTaskDelegation {
         .pipe(Effect.orDie)
       return rows.map(decode)
     })
+    const used = Effect.fn("RayaTaskDelegation.used")(function* (id: string) {
+      const row = yield* db
+        .select({ id: Delegation.id })
+        .from(Delegation)
+        .where(or(eq(Delegation.sender_id, id), eq(Delegation.recipient_id, id)))
+        .limit(1)
+        .get()
+        .pipe(Effect.orDie)
+      return Boolean(row)
+    })
     return {
       admit,
       take,
@@ -677,6 +687,7 @@ export namespace RayaTaskDelegation {
       bySession,
       byRun,
       held,
+      used,
     }
   }
 }

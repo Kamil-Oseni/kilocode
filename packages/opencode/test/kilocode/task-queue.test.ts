@@ -15,6 +15,7 @@ test("retirement persists across reopening without changing active, current or u
     Database.Service.use((database) =>
       Effect.gen(function* () {
         const queue = RayaTaskQueue.make(database)
+        expect(yield* queue.used("unused")).toBe(false)
         for (const agentID of ["routine", "another"]) {
           for (const version of [1, 2, 3]) {
             yield* queue.publish({
@@ -51,6 +52,7 @@ test("retirement persists across reopening without changing active, current or u
         expect(yield* queue.pending("routine", 3)).toHaveLength(3)
         expect(yield* queue.pending("another", 1)).toHaveLength(3)
         expect((yield* queue.cursor("routine", 1))?.through).toBe(3000)
+        expect(yield* queue.used("routine")).toBe(true)
         const current = (yield* queue.pending("routine", 2))[0]
         yield* queue.discard("routine")
         expect((yield* queue.get(ids[0]))?.state).toBe("starting")
@@ -60,6 +62,7 @@ test("retirement persists across reopening without changing active, current or u
         expect(yield* queue.pending("routine", 3)).toEqual([])
         expect((yield* queue.get(current.id))?.reason).toBe("Routine removed from the roster.")
         expect(yield* queue.pending("another", 1)).toHaveLength(3)
+        expect(yield* queue.used("routine")).toBe(true)
       }),
     ),
     filename,

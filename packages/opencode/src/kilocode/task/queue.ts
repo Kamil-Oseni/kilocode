@@ -211,6 +211,18 @@ export namespace RayaTaskQueue {
         .orderBy(asc(Occurrence.scheduled_at))
         .limit(256)
         .all()
+    const used = Effect.fn("RayaTaskQueue.used")(function* (agentID: string) {
+      const occurrence = yield* db
+        .select({ id: Occurrence.id })
+        .from(Occurrence)
+        .where(eq(Occurrence.agent_id, agentID))
+        .limit(1)
+        .get()
+      if (occurrence) return true
+      return Boolean(
+        yield* db.select({ id: Cursor.agent_id }).from(Cursor).where(eq(Cursor.agent_id, agentID)).limit(1).get(),
+      )
+    })
     const skip = (id: string, reason: string) =>
       db
         .update(Occurrence)
@@ -249,6 +261,7 @@ export namespace RayaTaskQueue {
       stale,
       get,
       active,
+      used,
       skip,
       retire,
       discard,

@@ -218,6 +218,7 @@ test("delegation admits once, refuses loops, and queues without duplicating a bu
       const inbox = RayaTaskInbox.make(yield* Database.Service)
       const chief = agent("chief", "generalist")
       const books = agent("books", "accountant")
+      expect(yield* store.used("unused")).toBe(false)
       const first = yield* store.admit(request("dlg_1", chief.id, books.id), chief, books)
       expect(first.created).toBe(true)
       expect(first.record.state).toBe("queued")
@@ -252,6 +253,8 @@ test("delegation admits once, refuses loops, and queues without duplicating a bu
       const done = yield* store.finish(taken!.id, "completed", books, "Travel receipts are missing.")
       expect(done.state).toBe("completed")
       expect(done.response).toBe("Travel receipts are missing.")
+      expect(yield* store.used(chief.id)).toBe(true)
+      expect(yield* store.used(books.id)).toBe(true)
       expect((yield* store.finish(taken!.id, "completed", books, "Travel receipts are missing.")).state).toBe(
         "completed",
       )

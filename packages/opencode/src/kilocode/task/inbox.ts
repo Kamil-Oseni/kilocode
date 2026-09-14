@@ -798,6 +798,31 @@ export namespace RayaTaskInbox {
         .pipe(Effect.orDie)
       return row ? decode(row) : undefined
     })
+    const used = Effect.fn("RayaTaskInbox.used")(function* (agentID: string) {
+      const message = yield* db
+        .select({ id: Message.id })
+        .from(Message)
+        .where(eq(Message.agent_id, agentID))
+        .limit(1)
+        .get()
+        .pipe(Effect.orDie)
+      if (message) return true
+      const attachment = yield* db
+        .select({ id: Attachment.id })
+        .from(Attachment)
+        .where(eq(Attachment.agent_id, agentID))
+        .limit(1)
+        .get()
+        .pipe(Effect.orDie)
+      if (attachment) return true
+      const conversation = yield* db
+        .select({ draft: Conversation.draft, attachments: Conversation.draft_attachments })
+        .from(Conversation)
+        .where(eq(Conversation.agent_id, agentID))
+        .get()
+        .pipe(Effect.orDie)
+      return Boolean(conversation?.draft || conversation?.attachments)
+    })
     const summaries = Effect.fn("RayaTaskInbox.summaries")(function* (
       agents: readonly RayaTask.Agent[],
       runs: ReadonlyMap<string, RayaTask.Run | undefined>,
@@ -823,6 +848,6 @@ export namespace RayaTaskInbox {
       }
       return items
     })
-    return { ensure, admit, publish, attach, delivery, delivered, content, pending, page, read, draft, summaries }
+    return { ensure, admit, publish, attach, delivery, delivered, content, pending, page, read, draft, summaries, used }
   }
 }

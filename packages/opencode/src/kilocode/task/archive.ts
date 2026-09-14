@@ -69,6 +69,7 @@ export function archive(database: Database.Interface) {
         .run()
     })
   const get = (id: string) => db.select().from(Archive).where(eq(Archive.id, id)).get()
+  const used = (id: string) => get(id).pipe(Effect.map(Boolean))
   const occupied = () => db.select({ id: Archive.id }).from(Archive).limit(1).get().pipe(Effect.map(Boolean))
   const page = (input: { cursor?: string; agentID?: string; excluded: readonly string[] }) =>
     Effect.gen(function* () {
@@ -105,5 +106,5 @@ export function archive(database: Database.Interface) {
         .all()
       return { items: rows.slice(0, 50), ...(rows.length > 50 ? { next: rows[49].id } : {}) }
     })
-  return { ready, migrate, put, get, page, occupied }
+  return { ready, migrate, put, get, used, page, occupied }
 }

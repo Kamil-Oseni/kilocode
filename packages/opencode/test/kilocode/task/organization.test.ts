@@ -4,8 +4,12 @@ import { Deferred, Effect, Exit, Fiber } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { RayaRoutineOrganizationRevisionTable as Revision } from "@opencode-ai/core/kilocode/routine.sql"
 import { RayaTask } from "@/kilocode/task"
+import { archive as indexed } from "@/kilocode/task/archive"
+import { RayaTaskDelegation } from "@/kilocode/task/delegation"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import { Conflict, RayaTaskOrganization } from "@/kilocode/task/organization"
+import { RayaTaskQueue } from "@/kilocode/task/queue"
+import { SessionID } from "@/session/schema"
 import { Storage } from "@/storage/storage"
 
 function memory() {
@@ -229,6 +233,100 @@ test("organization provisioning replays only the exact saved definition", async 
       expect(changed).toEqual(new Conflict({ message: "An organization already uses this ID with different details." }))
       expect(yield* restarted.get(id)).toEqual(created)
       expect((yield* restarted.list()).items.filter((item) => item.id === id)).toHaveLength(1)
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
+test("organization usage retains removed and archived membership history", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const tasks = RayaTask.make({ storage, database })
+      const organizations = RayaTaskOrganization.make(database, tasks, storage)
+      const owner = yield* tasks.create({ name: "Owner", objective: "Lead", schedule: { kind: "manual" } })
+      const former = yield* tasks.create({ name: "Former", objective: "Work", schedule: { kind: "manual" } })
+      expect(yield* organizations.used(former.id)).toEqual({ used: false, complete: true })
+      const organization = yield* organizations.create({
+        name: "History",
+        members: [
+          { agentID: owner.id, role: "Owner" },
+          { agentID: former.id, role: "Former" },
+        ],
+      })
+      yield* organizations.update(organization.id, {
+        expectedRevision: 1,
+        members: [{ agentID: owner.id, role: "Owner" }],
+      })
+      expect((yield* organizations.memberships(former.id)).items).toEqual([])
+      expect(yield* organizations.used(former.id)).toEqual({ used: true, complete: true })
+      yield* organizations.archive(organization.id, { expectedRevision: 2 })
+      expect(yield* organizations.used(owner.id)).toEqual({ used: true, complete: true })
+      yield* database.db
+        .update(Revision)
+        .set({ definition: "not-json" })
+        .where(eq(Revision.organization_id, organization.id))
+        .run()
+      expect(yield* organizations.used("unused")).toEqual({ used: false, complete: false })
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
+test("routine usage names every durable evidence domain without mutating it", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const tasks = RayaTask.make({ storage, database })
+      const worker = yield* tasks.create({
+        name: "Worker",
+        objective: "Work",
+        capabilities: ["organization:provision"],
+        schedule: { kind: "manual" },
+      })
+      const peer = yield* tasks.create({ name: "Peer", objective: "Help", schedule: { kind: "manual" } })
+      expect(yield* tasks.usage(worker.id)).toEqual({ used: [], unavailable: [] })
+
+      yield* tasks.remember(worker.id, "Retained work memory")
+      yield* storage.replace(
+        ["raya", "agent-runs", worker.id],
+        [
+          {
+            id: "run_usage",
+            agentID: worker.id,
+            at: 1,
+            sessionID: SessionID.make("ses_usage"),
+            status: "complete",
+          },
+        ],
+      )
+      yield* indexed(database).put({ id: worker.id, archived_at: 1, definition: JSON.stringify(worker) })
+      yield* RayaTaskOrganization.make(database, tasks, storage).create({
+        name: "Used worker",
+        members: [{ agentID: worker.id, role: "Owner" }],
+      })
+      yield* RayaTaskQueue.make(database).publish({
+        agentID: worker.id,
+        version: 1,
+        occurrences: [{ at: 1, observedAt: 2 }],
+      })
+      yield* RayaTaskDelegation.make(database).admit(
+        { source: "usage", senderID: worker.id, recipientID: peer.id, objective: "Help" },
+        worker,
+        peer,
+      )
+      yield* RayaTaskInbox.make(database).publish({
+        agentID: worker.id,
+        source: "usage",
+        kind: "system",
+        body: "History",
+      })
+      yield* tasks.authority(worker.id, { enabled: false, expected: true }, "user")
+
+      expect(yield* tasks.usage(worker.id)).toEqual({
+        used: ["authority", "run", "memory", "archive", "organization", "queue", "delegation", "inbox"],
+        unavailable: [],
+      })
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })

@@ -252,6 +252,8 @@ test("routine draft attachments persist, reorder, promote atomically, and expose
     Effect.gen(function* () {
       const database = yield* Database.Service
       const inbox = RayaTaskInbox.make(database)
+      yield* inbox.ensure("empty")
+      expect(yield* inbox.used("empty")).toBe(false)
       const first = {
         id: "c6022fea-f828-4d8e-8833-c59dfc46f61b",
         name: "ledger.txt",
@@ -267,6 +269,7 @@ test("routine draft attachments persist, reorder, promote atomically, and expose
         data: Buffer.from("notes").toString("base64"),
       }
       const saved = yield* inbox.draft("books", { draft: "Review these", attachments: [first, second] })
+      expect(yield* inbox.used("books")).toBe(true)
       expect(saved.attachments).toEqual([
         { id: first.id, name: first.name, mime: first.mime, size: first.size },
         { id: second.id, name: second.name, mime: second.mime, size: second.size },

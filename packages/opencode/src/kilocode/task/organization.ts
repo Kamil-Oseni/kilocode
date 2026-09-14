@@ -1,5 +1,5 @@
 import { and, asc, count, desc, eq, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm"
-import { Effect, Schema } from "effect"
+import { Effect, Exit, Schema } from "effect"
 import { isDeepStrictEqual } from "node:util"
 import type { Database } from "@opencode-ai/core/database/database"
 import {
@@ -609,6 +609,35 @@ export namespace RayaTaskOrganization {
       return (row?.count ?? 0) > 0
     })
 
+    const used = Effect.fn("RayaTaskOrganization.used")(function* (agentID: string) {
+      if (!Schema.is(AgentID)(agentID)) return yield* new Invalid({ message: "The worker ID is invalid." })
+      const current = yield* db
+        .select({ id: MemberRow.organization_id })
+        .from(MemberRow)
+        .where(eq(MemberRow.agent_id, agentID))
+        .limit(1)
+        .get()
+        .pipe(Effect.orDie)
+      if (current) return { used: true, complete: true }
+      const rows = yield* db
+        .select({ definition: RevisionRow.definition })
+        .from(RevisionRow)
+        .limit(1_025)
+        .all()
+        .pipe(Effect.orDie)
+      for (const row of rows.slice(0, 1_024)) {
+        const raw = yield* Effect.try({
+          try: () => JSON.parse(row.definition),
+          catch: () => new Error("The organization revision is not valid JSON."),
+        }).pipe(Effect.exit)
+        if (Exit.isFailure(raw)) return { used: false, complete: false }
+        const item = yield* Schema.decodeUnknownEffect(Organization)(raw.value).pipe(Effect.exit)
+        if (Exit.isFailure(item)) return { used: false, complete: false }
+        if (item.value.members.some((member) => member.agentID === agentID)) return { used: true, complete: true }
+      }
+      return { used: false, complete: rows.length <= 1_024 }
+    })
+
     const contains = Effect.fn("RayaTaskOrganization.contains")(function* (id: string, agents: readonly string[]) {
       if (agents.length < 1 || agents.length > MAX || new Set(agents).size !== agents.length) return false
       const row = yield* db
@@ -674,6 +703,7 @@ export namespace RayaTaskOrganization {
       update: (...args: Parameters<typeof update>) => mutate(storage, update(...args), "Organization"),
       archive: (...args: Parameters<typeof archive>) => mutate(storage, archive(...args), "Organization"),
       hasActive,
+      used,
       contains,
       shares,
       authorize,

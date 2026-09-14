@@ -92,6 +92,7 @@ export function transact(storage: Pick<Storage.Interface, "create" | "read" | "r
           yield* finalizeTransaction(entry, false)
           yield* advance("cleaning", index + 1)
         }
+        yield* advance("releasing", state.entries.length)
         yield* advance("done", state.entries.length)
         return yield* Effect.failCause(result.cause)
       }
@@ -112,6 +113,7 @@ export function transact(storage: Pick<Storage.Interface, "create" | "read" | "r
         }
         yield* advance("cleaning", index + 1)
       }
+      yield* advance("releasing", state.entries.length)
       return yield* advance("done", state.entries.length)
     }),
   )
@@ -139,6 +141,7 @@ export function recover(
           })
           .pipe(Effect.tap((outcome) => Effect.sync(() => (state.outcome = outcome))))
       const work = Effect.gen(function* () {
+        if (state.outcome.phase === "releasing") return yield* advance("done", state.entries.length)
         if (state.outcome.phase === "staging") {
           for (const [index, entry] of state.entries.entries()) {
             if (entry.kind === "remove" || entry.artifact) continue
@@ -152,11 +155,13 @@ export function recover(
           if (state.outcome.phase === "committed") yield* advance("cleaning", 0)
           for (const entry of state.entries) yield* finalizeTransaction(entry, true)
           if (state.outcome.phase === "cleaning") yield* advance("cleaning", state.entries.length)
+          yield* advance("releasing", state.entries.length)
           return yield* advance("done", state.entries.length)
         }
         if (state.outcome.phase === "cleaning" && state.outcome.decision === "rollback") {
           for (const entry of state.entries) yield* finalizeTransaction(entry, false)
           yield* advance("cleaning", state.entries.length)
+          yield* advance("releasing", state.entries.length)
           return yield* advance("done", state.entries.length)
         }
         if (state.outcome.phase !== "rolling_back" && state.outcome.phase !== "rolled_back")
@@ -169,6 +174,7 @@ export function recover(
         yield* advance("cleaning", 0)
         for (const entry of state.entries) yield* finalizeTransaction(entry, false)
         yield* advance("cleaning", state.entries.length)
+        yield* advance("releasing", state.entries.length)
         return yield* advance("done", state.entries.length)
       })
       const result = yield* Effect.exit(work)

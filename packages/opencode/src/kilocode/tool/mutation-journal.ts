@@ -29,6 +29,7 @@ export const Phase = Schema.Literals([
   "rolling_back",
   "rolled_back",
   "cleaning",
+  "releasing",
   "done",
   "conflict",
 ])
@@ -46,6 +47,7 @@ export const Outcome = Schema.Struct({
   cursor: Schema.Number,
   decision: Schema.optional(Schema.Literals(["commit", "rollback"])),
   owner: Owner,
+  authority: Schema.optional(Schema.String),
   recovery: Schema.optional(Recovery),
   at: Schema.Number,
   reason: Schema.optional(Schema.String),
@@ -94,7 +96,8 @@ const transitions: Record<typeof Phase.Type, ReadonlySet<typeof Phase.Type>> = {
   committed: new Set(["cleaning", "conflict"]),
   rolling_back: new Set(["rolling_back", "rolled_back", "conflict"]),
   rolled_back: new Set(["cleaning", "conflict"]),
-  cleaning: new Set(["cleaning", "done", "conflict"]),
+  cleaning: new Set(["cleaning", "releasing", "conflict"]),
+  releasing: new Set(["done", "conflict"]),
   done: new Set(),
   conflict: new Set(),
 }
@@ -181,7 +184,7 @@ export function journals(storage: Store) {
 
   const get = (id: string) => read(id)
 
-  const release = Effect.fn("RayaMutationJournal.release")(function* (outcome: typeof Outcome.Type) {
+  const release = Effect.fn("RayaMutationJournal.release")(function* (outcome: typeof Outcome.Type, strict = true) {
     for (const entry of outcome.entries) {
       const key = ownership(entry.target)
       const claim = yield* storage.read<unknown>(key).pipe(
@@ -189,8 +192,10 @@ export function journals(storage: Store) {
         Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(undefined)),
       )
       if (!claim) continue
-      if (claim.id !== outcome.id || claim.invocation !== outcome.invocation)
-        return yield* new Conflict({ message: `Mutation target ownership changed for ${entry.target}.` })
+      if (claim.id !== outcome.id || claim.invocation !== outcome.invocation) {
+        if (strict) return yield* new Conflict({ message: `Mutation target ownership changed for ${entry.target}.` })
+        continue
+      }
       yield* storage.remove(key)
     }
   })
@@ -212,6 +217,7 @@ export function journals(storage: Store) {
       revision: 0,
       cursor: 0,
       owner: { host: os.hostname(), pid: process.pid },
+      authority: owner,
       at: Date.now(),
     }
     if (!(yield* storage.create(journal(input.invocation, 0), outcome))) {
@@ -240,9 +246,9 @@ export function journals(storage: Store) {
         reason: `Another durable transaction owns ${entry.target}.`,
         at: Date.now(),
       }
+      yield* release({ ...outcome, entries: acquired })
       if (!(yield* storage.create(journal(input.invocation, 1), conflict)))
         return yield* new Conflict({ message: "Mutation ownership conflict could not be recorded." })
-      yield* release({ ...outcome, entries: acquired })
       return { owned: false as const, outcome: conflict }
     }
     const staging: typeof Outcome.Type = { ...outcome, phase: "staging", revision: 1, at: Date.now() }
@@ -255,14 +261,17 @@ export function journals(storage: Store) {
     const previous = yield* read(id)
     if (!previous) return yield* new Conflict({ message: "Mutation journal ownership changed." })
     const owner = hash(input.token)
-    const adopted = previous.recovery?.owner === owner
-    for (const entry of previous.entries) {
-      const claim = yield* storage.read<unknown>(ownership(entry.target)).pipe(
-        Effect.flatMap(decodeClaim),
-        Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(undefined)),
-      )
-      if (!claim || claim.id !== previous.id || (!adopted && claim.owner !== owner))
-        return yield* new Conflict({ message: "Mutation journal ownership changed." })
+    const authority = previous.authority ?? previous.recovery?.owner
+    if (authority && authority !== owner) return yield* new Conflict({ message: "Mutation journal authority changed." })
+    if (previous.phase !== "releasing") {
+      for (const entry of previous.entries) {
+        const claim = yield* storage.read<unknown>(ownership(entry.target)).pipe(
+          Effect.flatMap(decodeClaim),
+          Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(undefined)),
+        )
+        if (!claim || claim.id !== previous.id || (!authority && claim.owner !== owner))
+          return yield* new Conflict({ message: "Mutation journal ownership changed." })
+      }
     }
     if (previous.revision !== input.revision || !transitions[previous.phase].has(input.phase))
       return yield* new Conflict({ message: "Mutation journal phase or revision changed." })
@@ -277,7 +286,8 @@ export function journals(storage: Store) {
     if (!valid(entries) || !same(previous.entries, entries))
       return yield* new Conflict({ message: "Mutation journal entries changed after reservation." })
     if (
-      (["prepared", "committed", "rolled_back", "done"].includes(input.phase) && input.cursor !== entries.length) ||
+      (["prepared", "committed", "rolled_back", "releasing", "done"].includes(input.phase) &&
+        input.cursor !== entries.length) ||
       (input.phase === "prepared" && entries.some((entry) => entry.kind !== "remove" && !entry.artifact))
     )
       return yield* new Conflict({ message: "Mutation journal phase is incomplete." })
@@ -295,9 +305,10 @@ export function journals(storage: Store) {
       at: Date.now(),
       ...(input.reason ? { reason: input.reason } : {}),
     }
+    if (outcome.phase === "done") yield* release(previous, false)
     if (!(yield* storage.create(journal(id, outcome.revision), outcome)))
       return yield* new Conflict({ message: "Another caller already advanced this mutation." })
-    if (outcome.phase === "done") yield* release(outcome)
+    if (outcome.phase === "releasing") yield* release(outcome, false)
     return outcome
   })
 
@@ -326,7 +337,13 @@ export function journals(storage: Store) {
           Effect.flatMap(decodePermit),
           Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(undefined)),
         )
-        if (!previous || !stopped(previous.owner)) return { owned: false as const, outcome: yield* read(id) }
+        if (
+          !previous ||
+          previous.transaction !== outcome.id ||
+          previous.revision !== outcome.revision ||
+          !stopped(previous.owner)
+        )
+          return { owned: false as const, outcome: yield* read(id) }
         prior = previous.id
         continue
       }
@@ -334,10 +351,54 @@ export function journals(storage: Store) {
       const still = current && JSON.stringify(current) === JSON.stringify(outcome)
       const authorized = current && (authorize ? yield* authorize(current) : stopped(current.owner))
       if (!current || !still || !authorized) return { owned: false as const, outcome: current }
+      let blocked: string | undefined
+      if (current.phase !== "releasing") {
+        for (const entry of [...current.entries].toSorted((a, b) => lower(a.target).localeCompare(lower(b.target)))) {
+          const key = ownership(entry.target)
+          const existing = yield* storage.read<unknown>(key).pipe(
+            Effect.flatMap(decodeClaim),
+            Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(undefined)),
+          )
+          if (existing?.id === current.id && existing.invocation === current.invocation) continue
+          if (existing) {
+            blocked = entry.target
+            break
+          }
+          const claim: typeof Claim.Type = {
+            version: 1,
+            id: current.id,
+            invocation: current.invocation,
+            target: entry.target,
+            owner: permit.secret,
+          }
+          if (yield* storage.create(key, claim)) continue
+          const raced = yield* storage.read<unknown>(key).pipe(Effect.flatMap(decodeClaim))
+          if (raced.id === current.id && raced.invocation === current.invocation) continue
+          blocked = entry.target
+          break
+        }
+      }
+      if (blocked) {
+        yield* release(current, false)
+        const conflict: typeof Outcome.Type = {
+          ...current,
+          phase: "conflict",
+          revision: current.revision + 1,
+          owner: permit.owner,
+          authority: permit.secret,
+          recovery: { id: permit.id, owner: permit.secret },
+          at: Date.now(),
+          reason: `Another durable transaction owns ${blocked}.`,
+        }
+        if (!(yield* storage.create(journal(id, conflict.revision), conflict)))
+          return { owned: false as const, outcome: yield* read(id) }
+        return { owned: false as const, outcome: conflict }
+      }
       const adopted: typeof Outcome.Type = {
         ...current,
         revision: current.revision + 1,
         owner: permit.owner,
+        authority: permit.secret,
         recovery: { id: permit.id, owner: permit.secret },
         at: Date.now(),
       }

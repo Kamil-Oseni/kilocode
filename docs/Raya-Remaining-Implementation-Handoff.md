@@ -225,7 +225,7 @@ Do not market this as a provider-side hard cap. Reservations are process-owned a
 
 Evidence: goal-state 101 / 101 and 1,164 assertions; image suite 27 / 27 and 71 assertions; extension goal contracts 13 / 13 and 136 assertions; connected editor fixture passed. The 28-state light/dark production smoke matrix passed twice; its final run asserts the reservation control in both editing themes, and ChatGPT inspected both editing screenshots. Sequential extension-host/webview typechecks, cached ESLint, Prettier, Knip, low-memory SDK generation and all affected repository guards pass. No broad or parallel high-memory validation ran. ChatGPT installed snapshot `66db00a026` at 2026-09-13 15:18 America/Toronto. Its exact identity, artifact receipt and completed production checks are recorded above.
 
-Continue OVR-06 with another reservation-aware provider only when its billing contract exposes a stable receipt and known currency. If simultaneous independent backends must share a strict admission pool, replace the process-local reservation map with a durable leased protocol that survives crash recovery without silently forgetting provider requests. Other remaining OVR-06 work includes authoritative external deliverables and packaged lifecycle acceptance.
+Historical continuation note: product commit `cfcdfd0f0b` subsequently replaced the image-charge map with a durable leased protocol, and `e0b54ebbbd` did the same for concurrent-child slots. Continue OVR-06 with another provider only when its billing contract exposes a stable authoritative receipt and known currency. Other remaining work includes external deliverables and packaged lifecycle acceptance.
 
 ## ChatGPT 2026-09-13 14:35 America/Toronto - delegated image-charge repair
 
@@ -539,7 +539,7 @@ The following sections retain the full 39-item scope. Related findings and overh
 
 ### PR-05 — Make spending understandable and bounded where needed
 
-**Recorded status:** In progress. Provenance-aware model cost views are installed; exact-window/project usage summary copy and retry controls are implemented with focused tests. Cross-child budget reservations, overrides and full billing coverage remain open.
+**Recorded status:** In progress. Provenance-aware model cost views are installed; exact-window/project usage summary copy and retry controls are implemented with focused tests. Currency-specific non-model charges and concurrent-child admission use durable cross-backend leases. Budget overrides and full authoritative billing coverage remain open.
 
 **Implementation and verification:**
 

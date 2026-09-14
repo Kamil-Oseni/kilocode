@@ -335,6 +335,7 @@ function editError(message: {
   accept?: unknown
   criteria?: unknown
   budget?: unknown
+  budgetReason?: unknown
   status?: unknown
   expectedIntent?: unknown
   objective?: unknown
@@ -344,6 +345,13 @@ function editError(message: {
     return "Use 1-20 criteria with unique IDs, descriptions and verification instructions."
   if (message.budget !== undefined && !budget(message.budget))
     return "Use a valid active-time, recorded model-cost, recovery-attempt, or concurrent-child limit."
+  if (
+    message.budgetReason !== undefined &&
+    (typeof message.budgetReason !== "string" ||
+      !message.budgetReason.trim() ||
+      message.budgetReason.trim().length > 240)
+  )
+    return "Explain the limit change in 240 characters or fewer."
   if (message.status !== undefined && message.status !== "active" && message.status !== "paused")
     return "Choose pause or resume for the goal status."
   if (!identifier(message.expectedIntent) || typeof message.objective !== "string" || !message.objective.trim())
@@ -372,6 +380,7 @@ export async function editGoal(input: {
     status?: unknown
     criteria?: unknown
     budget?: unknown
+    budgetReason?: unknown
     accept?: unknown
   }
   post: (message: GoalEditedMessage) => void
@@ -391,6 +400,7 @@ export async function editGoal(input: {
     status?: "active" | "paused"
     criteria?: GoalState["criteria"]
     budget?: GoalBudget | null
+    budgetReason?: string
     accept?: true
   }
   if (!input.client) {
@@ -418,6 +428,7 @@ export async function editGoal(input: {
       status: edit.status,
       criteria: edit.criteria,
       budget: edit.budget ?? undefined,
+      budgetReason: edit.budgetReason?.trim(),
       clearBudget: edit.budget === null ? true : undefined,
       accept: edit.accept === true ? true : undefined,
     })

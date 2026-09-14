@@ -33,6 +33,15 @@ test("goal reports preserve exact references and mark legacy records instead of 
         concurrentChildren: 2,
         chargeCosts: [{ currency: "USD", limit: 4, reservation: 0.5 }],
       },
+      budgetOverrides: [
+        {
+          at: 2,
+          authority: "user-control",
+          reason: "Allow the reviewed final pass.",
+          previous: { modelCost: 1 },
+          next: { modelCost: 2 },
+        },
+      ],
       budgetHit: { kind: "recovery-attempts", limit: 3, observed: 3, at: 1 },
       charges: [
         {
@@ -191,6 +200,8 @@ test("goal reports preserve exact references and mark legacy records instead of 
   expect(saved).toContain("Goal-session recorded model-cost limit: $2.000000.")
   expect(saved).toContain("Consecutive automatic recovery-attempt limit: 3.")
   expect(saved).toContain("Concurrent delegated-child limit: 2.")
+  expect(saved).toContain("Authority: user through goal controls.")
+  expect(saved).toContain("Reason: Allow the reviewed final pass.")
   expect(saved).toContain("USD non-model charge limit: 4.000000; reserve 0.500000")
   expect(saved).toContain("A child slot is reserved before child-session creation")
   expect(saved).toContain("Reducing the limit does not cancel running children")

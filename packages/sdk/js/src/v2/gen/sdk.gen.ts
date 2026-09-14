@@ -8585,6 +8585,7 @@ export class Goal extends HeyApiClient {
           reservation: number
         }>
       }
+      budgetReason?: string
       clearBudget?: true
       expectedIntent?: string
     },
@@ -8603,6 +8604,7 @@ export class Goal extends HeyApiClient {
             { in: "body", key: "status" },
             { in: "body", key: "objective" },
             { in: "body", key: "budget" },
+            { in: "body", key: "budgetReason" },
             { in: "body", key: "clearBudget" },
             { in: "body", key: "expectedIntent" },
           ],

@@ -6,6 +6,7 @@ import { GoalDeliverables } from "./GoalDeliverables"
 import { GoalPlan } from "./GoalPlan"
 import { GoalReview } from "./GoalReview"
 import { GoalCharges } from "./GoalCharges"
+import { GoalBudgetOverrides } from "./GoalBudgetOverrides"
 
 export function GoalRevisions(props: { goal: Pick<GoalState, "createdAt" | "revisions">; sessionID?: string }) {
   return (
@@ -31,6 +32,7 @@ export function GoalRevisions(props: { goal: Pick<GoalState, "createdAt" | "revi
               <GoalReview review={item.review} historical />
               <GoalDeliverables items={item.deliverables} />
               <GoalCharges items={item.charges} historical />
+              <GoalBudgetOverrides items={item.budgetOverrides} />
               <GoalCriteria criteria={item.criteria} />
               <GoalPlan goal={item} />
               <GoalAudit

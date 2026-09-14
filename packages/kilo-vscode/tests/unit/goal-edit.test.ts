@@ -155,17 +155,29 @@ test("goal limit edits validate and require an exact saved acknowledgement", asy
     objective: "Goal",
     expectedIntent: "reviewed",
     budget: saved,
+    budgetReason: "Raise the reviewed ceiling for the next phase.",
   }
   const context = { client, message, post: (value: unknown) => messages.push(value) }
   await editGoal(context)
-  expect(await calls[0].json()).toMatchObject({ budget: saved, expectedIntent: "reviewed" })
+  expect(await calls[0].json()).toMatchObject({
+    budget: saved,
+    budgetReason: "Raise the reviewed ceiling for the next phase.",
+    expectedIntent: "reviewed",
+  })
   expect(messages.at(-1)).toMatchObject({ goal: { budget: saved } })
   returned = { ...saved, modelCost: 5 }
   await editGoal(context)
   expect(messages.at(-1)).toMatchObject({ error: expect.stringContaining("did not match") })
   returned = undefined
-  await editGoal({ ...context, message: { ...message, budget: null } })
-  expect(await calls[2].json()).toMatchObject({ clearBudget: true, expectedIntent: "reviewed" })
+  await editGoal({
+    ...context,
+    message: { ...message, budget: null, budgetReason: "Remove limits after reviewing the completed phase." },
+  })
+  expect(await calls[2].json()).toMatchObject({
+    clearBudget: true,
+    budgetReason: "Remove limits after reviewing the completed phase.",
+    expectedIntent: "reviewed",
+  })
   expect(messages.at(-1)).toMatchObject({ goal: expect.not.objectContaining({ budget: expect.anything() }) })
   for (const budget of [
     {},
@@ -193,6 +205,10 @@ test("goal limit edits validate and require an exact saved acknowledgement", asy
     await editGoal({ ...context, message: { ...message, budget } as GoalEditMessage })
   expect(calls).toHaveLength(3)
   expect(messages.at(-1)).toMatchObject({ error: expect.stringContaining("valid") })
+  for (const budgetReason of ["", " ", "x".repeat(241)])
+    await editGoal({ ...context, message: { ...message, budgetReason } })
+  expect(calls).toHaveLength(3)
+  expect(messages.at(-1)).toMatchObject({ error: expect.stringContaining("Explain") })
 })
 
 test("review acceptance sends current intent and requires an accepted completion", async () => {

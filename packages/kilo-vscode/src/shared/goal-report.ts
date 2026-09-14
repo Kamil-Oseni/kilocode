@@ -5,7 +5,10 @@ type Goal = Pick<
   "objective" | "status" | "createdAt" | "updatedAt" | "criteria" | "audit" | "auditAttempt" | "blockedReason"
 > &
   Partial<
-    Pick<GoalState, "usage" | "charges" | "activeMs" | "plan" | "revisions" | "review" | "budget" | "budgetHit">
+    Pick<
+      GoalState,
+      "usage" | "charges" | "activeMs" | "plan" | "revisions" | "review" | "budget" | "budgetOverrides" | "budgetHit"
+    >
   > &
   Partial<Pick<GoalState, "deliverables">>
 
@@ -45,6 +48,25 @@ function limits(goal: Pick<Goal, "budget" | "budgetHit">) {
   lines.push(
     "Enforcement pauses before another continuation after an observed time, cost or recovery limit. It does not recall a turn already running. Recovery attempts are consecutive and renew after successful work or a revised approach. A child slot is reserved before child-session creation and released when that live task finishes or is cancelled. Reducing the limit does not cancel running children. Raya may stop earlier when repeated work is unsafe. The model-cost limit has the recorded coverage stated below.",
   )
+  return lines
+}
+
+function overrides(goal: Pick<Goal, "budgetOverrides">) {
+  const lines = ["", "## Limit change history", ""]
+  if (!goal.budgetOverrides?.length) {
+    lines.push("No limit changes were recorded after this goal was created.")
+    return lines
+  }
+  for (const item of goal.budgetOverrides) {
+    lines.push(
+      `Changed: ${date(item.at)}`,
+      "Authority: user through goal controls.",
+      `Reason: ${item.reason}`,
+      `Previous limits: ${JSON.stringify(item.previous ?? null)}`,
+      `New limits: ${JSON.stringify(item.next ?? null)}`,
+      "",
+    )
+  }
   return lines
 }
 
@@ -361,7 +383,7 @@ export function report(goal: Goal, sessionID?: string) {
   if (sessionID) lines.push("", "Session:", quote(sessionID))
   if (goal.blockedReason) lines.push("", "## Blocker", "", quote(goal.blockedReason))
   lines.push(...planning(goal))
-  lines.push(...limits(goal))
+  lines.push(...limits(goal), ...overrides(goal))
   lines.push(...activity(goal))
   lines.push(...charges(goal))
   lines.push(...deliverables(goal))

@@ -155,6 +155,15 @@ export namespace RayaGoal {
   })
   export type Budget = typeof Budget.Type
 
+  export const BudgetOverride = Schema.Struct({
+    at: Schema.Number,
+    authority: Schema.Literal("user-control"),
+    reason: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(240)),
+    previous: Schema.optional(Budget),
+    next: Schema.optional(Budget),
+  })
+  export type BudgetOverride = typeof BudgetOverride.Type
+
   export const BudgetHit = Schema.Struct({
     kind: Schema.Literals(["active-time", "model-cost", "charge-cost", "recovery-attempts"]),
     limit: Schema.Finite,
@@ -232,6 +241,7 @@ export namespace RayaGoal {
     criteria: Schema.optional(Criteria),
     plan: Schema.optional(Planning.Plan),
     budget: Schema.optional(Budget),
+    budgetOverrides: Schema.optional(Schema.Array(BudgetOverride).check(Schema.isMaxLength(100))),
     budgetHit: Schema.optional(BudgetHit),
     usage: Schema.optional(Usage),
     charges: Schema.optional(Schema.Array(Charge).check(Schema.isMaxLength(512))),
@@ -253,6 +263,7 @@ export namespace RayaGoal {
     revisions: Schema.optional(Schema.Array(Revision)),
     plan: Schema.optional(Planning.Plan),
     budget: Schema.optional(Budget),
+    budgetOverrides: Schema.optional(Schema.Array(BudgetOverride).check(Schema.isMaxLength(100))),
     budgetHit: Schema.optional(BudgetHit),
     usage: Schema.optional(Usage),
     charges: Schema.optional(Schema.Array(Charge).check(Schema.isMaxLength(512))),
@@ -309,6 +320,7 @@ export namespace RayaGoal {
     usage: Usage,
     charges: Schema.optional(Schema.Array(Charge).check(Schema.isMaxLength(512))),
     budget: Schema.optional(Budget),
+    budgetOverrides: Schema.optional(Schema.Array(BudgetOverride).check(Schema.isMaxLength(100))),
     budgetHit: Schema.optional(BudgetHit),
     blockedReason: Schema.optional(Schema.String),
     deliverables: Schema.optional(Schema.Array(Deliverable)),
@@ -332,6 +344,7 @@ export namespace RayaGoal {
     status: Schema.optional(Schema.Literals(["active", "paused"])),
     objective: Schema.optional(Schema.String), // raya_change - steer the next goal turn without cancelling this one
     budget: Schema.optional(Budget),
+    budgetReason: Schema.optional(Schema.String.check(Schema.isMaxLength(240))),
     clearBudget: Schema.optional(Schema.Literal(true)),
     expectedIntent: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
   })
@@ -462,6 +475,7 @@ export namespace RayaGoal {
       criteria: state.criteria,
       plan: state.plan,
       budget: state.budget,
+      budgetOverrides: state.budgetOverrides,
       budgetHit: state.budgetHit,
       usage: state.usage,
       charges: state.charges,
@@ -686,6 +700,7 @@ export namespace RayaGoal {
                 review: existing.review,
                 plan: existing.plan,
                 budget: existing.budget,
+                budgetOverrides: existing.budgetOverrides,
                 budgetHit: existing.budgetHit,
                 usage: existing.usage,
                 charges: existing.charges,
@@ -821,6 +836,7 @@ export namespace RayaGoal {
         if (
           input.criteria !== undefined ||
           input.budget !== undefined ||
+          input.budgetReason !== undefined ||
           input.clearBudget !== undefined ||
           input.status !== undefined ||
           (input.objective !== undefined && clean(input.objective) !== prior.objective)
@@ -836,6 +852,7 @@ export namespace RayaGoal {
         input.objective === undefined &&
         input.criteria === undefined &&
         input.budget === undefined &&
+        input.budgetReason === undefined &&
         input.clearBudget === undefined
       ) {
         return yield* new AuditError({ message: "A goal edit requires an objective, criteria, budget or status." })
@@ -877,6 +894,10 @@ export namespace RayaGoal {
       if (issue) return yield* new AuditError({ message: issue })
       const revised = !isDeepStrictEqual(criteria, prior.criteria)
       const limited = !isDeepStrictEqual(budget, prior.budget)
+      const reason = clean(input.budgetReason ?? "")
+      if (limited && !reason) return yield* new AuditError({ message: "Explain why the saved limits are changing." })
+      if (!limited && input.budgetReason !== undefined)
+        return yield* new AuditError({ message: "A limit-change reason requires a changed budget." })
       const recovered = budget?.recoveryAttempts !== prior.budget?.recoveryAttempts
       const changed = objective !== prior.objective || revised || limited
       const status = input.status ?? (changed && prior.status === "blocked" ? "active" : prior.status)
@@ -894,6 +915,18 @@ export namespace RayaGoal {
         objective,
         criteria,
         budget,
+        budgetOverrides: limited
+          ? [
+              ...(prior.budgetOverrides ?? []),
+              {
+                at: now,
+                authority: "user-control" as const,
+                reason,
+                previous: prior.budget,
+                next: budget,
+              },
+            ].slice(-100)
+          : prior.budgetOverrides,
         plan: revised && prior.plan ? { ...prior.plan, review: true } : prior.plan,
         revisions: changed ? revisions(prior, now, "control") : prior.revisions,
         review: changed || status === "active" ? undefined : prior.review,

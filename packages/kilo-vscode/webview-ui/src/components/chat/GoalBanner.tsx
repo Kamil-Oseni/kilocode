@@ -15,6 +15,7 @@ import { GoalReport } from "./GoalReport"
 import { GoalPlan } from "./GoalPlan"
 import { GoalCriteriaEditor } from "./GoalCriteriaEditor"
 import { GoalDeliverables } from "./GoalDeliverables"
+import { GoalBudgetOverrides } from "./GoalBudgetOverrides"
 import { valid, equal } from "../../../../src/shared/goal-criteria"
 
 // raya_change start - self-redesign: presentational goal banner. Split from the
@@ -57,6 +58,7 @@ export interface GoalBannerProps {
     expectedIntent: string,
     criteria?: GoalState["criteria"],
     budget?: GoalBudget | null,
+    budgetReason?: string,
   ) => void
   onStop?: () => void
   onCancelStop?: () => void
@@ -155,6 +157,7 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
   const [children, setChildren] = createSignal("")
   const [charges, setCharges] = createSignal<Array<{ currency: string; limit: string; reservation: string }>>([])
   const [savedBudget, setSavedBudget] = createSignal<GoalBudget>()
+  const [budgetReason, setBudgetReason] = createSignal("")
   const required = () => (!criteria().length && saved() === undefined ? undefined : criteria())
   const revised = () => !equal(required(), saved())
   const active = () => (minutes().trim() ? Number(minutes()) * 60_000 : undefined)
@@ -205,7 +208,7 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
         item.reservation > item.limit,
     ) ||
     new Set(chargeCosts().map((item) => item.currency)).size !== chargeCosts().length
-  const invalid = () => (revised() && !valid(required())) || invalidBudget()
+  const invalid = () => (revised() && !valid(required())) || invalidBudget() || (limited() && !budgetReason().trim())
   const [now, setNow] = createSignal(Date.now())
   const runtime = () => {
     const goal = props.goal
@@ -249,6 +252,7 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
             ? { ...props.goal.budget, chargeCosts: props.goal.budget.chargeCosts?.map((item) => ({ ...item })) }
             : undefined,
         )
+        setBudgetReason("")
         setMinutes(field(props.goal.budget?.activeMs === undefined ? undefined : props.goal.budget.activeMs / 60_000))
         setCost(field(props.goal.budget?.modelCost))
         setAttempts(field(props.goal.budget?.recoveryAttempts))
@@ -289,6 +293,7 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
         basis(),
         revised() ? required() : undefined,
         limited() ? (budget() ?? null) : undefined,
+        limited() ? budgetReason().trim() : undefined,
       )
   }
 
@@ -410,6 +415,7 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                   <GoalPlan goal={viewing()!} />
                   <GoalReport goal={viewing()!} sessionID={props.sessionID} />
                   <GoalCharges items={viewing()!.charges} historical />
+                  <GoalBudgetOverrides items={viewing()!.budgetOverrides} />
                 </div>
               </Show>
               <Show when={props.expanded && !archive()}>
@@ -476,6 +482,7 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                   <GoalPlan goal={state()} />
                   <GoalReport goal={state()} sessionID={props.sessionID} />
                   <GoalCharges items={state().charges} />
+                  <GoalBudgetOverrides items={state().budgetOverrides} />
                   <details class="goal-banner__activity">
                     <summary>Activity counts</summary>
                     <p>
@@ -671,6 +678,18 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                           </Button>
                         </div>
                       </Show>
+                      <Show when={limited()}>
+                        <label class="goal-banner__limit-reason" for="goal-limit-reason">
+                          Why are these limits changing?
+                          <input
+                            id="goal-limit-reason"
+                            maxlength="240"
+                            value={budgetReason()}
+                            readOnly={props.saving}
+                            onInput={(event) => setBudgetReason(event.currentTarget.value)}
+                          />
+                        </label>
+                      </Show>
                       <p>
                         Leave a field blank for no saved limit. Recovery attempts are consecutive; successful work or a
                         revised approach renews them. A child slot is reserved before delegation and released when that
@@ -689,7 +708,8 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
                       <p role="status">
                         Use complete criteria, positive limits, no more than 1 year of active time, no more than
                         $1,000,000 of recorded model cost, 1 to 100 recovery attempts, 1 to 32 concurrent children, and
-                        complete unique currency limits whose reservation does not exceed the limit.
+                        complete unique currency limits whose reservation does not exceed the limit, and a reason for
+                        any limit change.
                       </p>
                     </Show>
                     <Show when={props.editError}>
@@ -826,6 +846,7 @@ export const GoalBanner: Component = () => {
     status?: "active" | "paused"
     criteria?: GoalState["criteria"]
     budget?: GoalBudget | null
+    budgetReason?: string
     accept?: true
   }>()
   const [failure, setFailure] = createSignal<string>()
@@ -968,11 +989,12 @@ export const GoalBanner: Component = () => {
     status?: "active" | "paused",
     accept?: true,
     budget?: GoalBudget | null,
+    budgetReason?: string,
   ) => {
     const sessionID = sid()
     if (!sessionID || busy() || (!status && !accept && failure())) return
     const requestID = crypto.randomUUID()
-    setPending({ requestID, objective, intent: expectedIntent, status, criteria, budget, accept })
+    setPending({ requestID, objective, intent: expectedIntent, status, criteria, budget, budgetReason, accept })
     if (accept) setNotice("Checking evidence and recording acceptance...")
     if (status) setNotice(status === "paused" ? "Pausing goal…" : "Resuming goal…")
     timer = setTimeout(() => {
@@ -997,6 +1019,7 @@ export const GoalBanner: Component = () => {
       status,
       criteria,
       budget,
+      budgetReason,
       accept,
     })
   }
@@ -1060,8 +1083,8 @@ export const GoalBanner: Component = () => {
         setFailure(undefined)
         revise(current.objective, current.intent ?? "unset", undefined, undefined, true)
       }}
-      onRevise={(objective, intent, criteria, budget) =>
-        revise(objective, intent, criteria, undefined, undefined, budget)
+      onRevise={(objective, intent, criteria, budget, budgetReason) =>
+        revise(objective, intent, criteria, undefined, undefined, budget, budgetReason)
       }
       onStop={stop}
       onCancelStop={() => {

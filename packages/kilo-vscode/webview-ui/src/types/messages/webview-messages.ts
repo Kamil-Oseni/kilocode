@@ -78,6 +78,7 @@ export interface GoalEditMessage {
   accept?: true
   criteria?: import("../../../../src/shared/goal").GoalState["criteria"]
   budget?: import("../../../../src/shared/goal").GoalBudget | null
+  budgetReason?: string
   type: "goalEdit"
   sessionID: string
   requestID: string

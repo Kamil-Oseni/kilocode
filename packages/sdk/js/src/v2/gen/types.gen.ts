@@ -20046,6 +20046,33 @@ export type KilocodeGoalGetResponses = {
           reservation: number
         }>
       }
+      budgetOverrides?: Array<{
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        authority: "user-control"
+        reason: string
+        previous?: {
+          activeMs?: number
+          modelCost?: number
+          recoveryAttempts?: number
+          concurrentChildren?: number
+          chargeCosts?: Array<{
+            currency: string
+            limit: number
+            reservation: number
+          }>
+        }
+        next?: {
+          activeMs?: number
+          modelCost?: number
+          recoveryAttempts?: number
+          concurrentChildren?: number
+          chargeCosts?: Array<{
+            currency: string
+            limit: number
+            reservation: number
+          }>
+        }
+      }>
       budgetHit?: {
         kind: "active-time" | "model-cost" | "charge-cost" | "recovery-attempts"
         limit: number
@@ -20171,6 +20198,33 @@ export type KilocodeGoalGetResponses = {
         reservation: number
       }>
     }
+    budgetOverrides?: Array<{
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      authority: "user-control"
+      reason: string
+      previous?: {
+        activeMs?: number
+        modelCost?: number
+        recoveryAttempts?: number
+        concurrentChildren?: number
+        chargeCosts?: Array<{
+          currency: string
+          limit: number
+          reservation: number
+        }>
+      }
+      next?: {
+        activeMs?: number
+        modelCost?: number
+        recoveryAttempts?: number
+        concurrentChildren?: number
+        chargeCosts?: Array<{
+          currency: string
+          limit: number
+          reservation: number
+        }>
+      }
+    }>
     budgetHit?: {
       kind: "active-time" | "model-cost" | "charge-cost" | "recovery-attempts"
       limit: number
@@ -20286,6 +20340,33 @@ export type KilocodeGoalGetResponses = {
             reservation: number
           }>
         }
+        budgetOverrides?: Array<{
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          authority: "user-control"
+          reason: string
+          previous?: {
+            activeMs?: number
+            modelCost?: number
+            recoveryAttempts?: number
+            concurrentChildren?: number
+            chargeCosts?: Array<{
+              currency: string
+              limit: number
+              reservation: number
+            }>
+          }
+          next?: {
+            activeMs?: number
+            modelCost?: number
+            recoveryAttempts?: number
+            concurrentChildren?: number
+            chargeCosts?: Array<{
+              currency: string
+              limit: number
+              reservation: number
+            }>
+          }
+        }>
         budgetHit?: {
           kind: "active-time" | "model-cost" | "charge-cost" | "recovery-attempts"
           limit: number
@@ -20367,6 +20448,33 @@ export type KilocodeGoalGetResponses = {
           reservation: number
         }>
       }
+      budgetOverrides?: Array<{
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        authority: "user-control"
+        reason: string
+        previous?: {
+          activeMs?: number
+          modelCost?: number
+          recoveryAttempts?: number
+          concurrentChildren?: number
+          chargeCosts?: Array<{
+            currency: string
+            limit: number
+            reservation: number
+          }>
+        }
+        next?: {
+          activeMs?: number
+          modelCost?: number
+          recoveryAttempts?: number
+          concurrentChildren?: number
+          chargeCosts?: Array<{
+            currency: string
+            limit: number
+            reservation: number
+          }>
+        }
+      }>
       budgetHit?: {
         kind: "active-time" | "model-cost" | "charge-cost" | "recovery-attempts"
         limit: number
@@ -20473,6 +20581,7 @@ export type KilocodeGoalUpdateData = {
         reservation: number
       }>
     }
+    budgetReason?: string
     clearBudget?: true
     expectedIntent?: string
   }
@@ -20564,6 +20673,33 @@ export type KilocodeGoalUpdateResponses = {
           reservation: number
         }>
       }
+      budgetOverrides?: Array<{
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        authority: "user-control"
+        reason: string
+        previous?: {
+          activeMs?: number
+          modelCost?: number
+          recoveryAttempts?: number
+          concurrentChildren?: number
+          chargeCosts?: Array<{
+            currency: string
+            limit: number
+            reservation: number
+          }>
+        }
+        next?: {
+          activeMs?: number
+          modelCost?: number
+          recoveryAttempts?: number
+          concurrentChildren?: number
+          chargeCosts?: Array<{
+            currency: string
+            limit: number
+            reservation: number
+          }>
+        }
+      }>
       budgetHit?: {
         kind: "active-time" | "model-cost" | "charge-cost" | "recovery-attempts"
         limit: number
@@ -20689,6 +20825,33 @@ export type KilocodeGoalUpdateResponses = {
         reservation: number
       }>
     }
+    budgetOverrides?: Array<{
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      authority: "user-control"
+      reason: string
+      previous?: {
+        activeMs?: number
+        modelCost?: number
+        recoveryAttempts?: number
+        concurrentChildren?: number
+        chargeCosts?: Array<{
+          currency: string
+          limit: number
+          reservation: number
+        }>
+      }
+      next?: {
+        activeMs?: number
+        modelCost?: number
+        recoveryAttempts?: number
+        concurrentChildren?: number
+        chargeCosts?: Array<{
+          currency: string
+          limit: number
+          reservation: number
+        }>
+      }
+    }>
     budgetHit?: {
       kind: "active-time" | "model-cost" | "charge-cost" | "recovery-attempts"
       limit: number
@@ -20804,6 +20967,33 @@ export type KilocodeGoalUpdateResponses = {
             reservation: number
           }>
         }
+        budgetOverrides?: Array<{
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          authority: "user-control"
+          reason: string
+          previous?: {
+            activeMs?: number
+            modelCost?: number
+            recoveryAttempts?: number
+            concurrentChildren?: number
+            chargeCosts?: Array<{
+              currency: string
+              limit: number
+              reservation: number
+            }>
+          }
+          next?: {
+            activeMs?: number
+            modelCost?: number
+            recoveryAttempts?: number
+            concurrentChildren?: number
+            chargeCosts?: Array<{
+              currency: string
+              limit: number
+              reservation: number
+            }>
+          }
+        }>
         budgetHit?: {
           kind: "active-time" | "model-cost" | "charge-cost" | "recovery-attempts"
           limit: number
@@ -20885,6 +21075,33 @@ export type KilocodeGoalUpdateResponses = {
           reservation: number
         }>
       }
+      budgetOverrides?: Array<{
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        authority: "user-control"
+        reason: string
+        previous?: {
+          activeMs?: number
+          modelCost?: number
+          recoveryAttempts?: number
+          concurrentChildren?: number
+          chargeCosts?: Array<{
+            currency: string
+            limit: number
+            reservation: number
+          }>
+        }
+        next?: {
+          activeMs?: number
+          modelCost?: number
+          recoveryAttempts?: number
+          concurrentChildren?: number
+          chargeCosts?: Array<{
+            currency: string
+            limit: number
+            reservation: number
+          }>
+        }
+      }>
       budgetHit?: {
         kind: "active-time" | "model-cost" | "charge-cost" | "recovery-attempts"
         limit: number
@@ -21064,6 +21281,33 @@ export type KilocodeGoalCreateResponses = {
           reservation: number
         }>
       }
+      budgetOverrides?: Array<{
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        authority: "user-control"
+        reason: string
+        previous?: {
+          activeMs?: number
+          modelCost?: number
+          recoveryAttempts?: number
+          concurrentChildren?: number
+          chargeCosts?: Array<{
+            currency: string
+            limit: number
+            reservation: number
+          }>
+        }
+        next?: {
+          activeMs?: number
+          modelCost?: number
+          recoveryAttempts?: number
+          concurrentChildren?: number
+          chargeCosts?: Array<{
+            currency: string
+            limit: number
+            reservation: number
+          }>
+        }
+      }>
       budgetHit?: {
         kind: "active-time" | "model-cost" | "charge-cost" | "recovery-attempts"
         limit: number
@@ -21189,6 +21433,33 @@ export type KilocodeGoalCreateResponses = {
         reservation: number
       }>
     }
+    budgetOverrides?: Array<{
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      authority: "user-control"
+      reason: string
+      previous?: {
+        activeMs?: number
+        modelCost?: number
+        recoveryAttempts?: number
+        concurrentChildren?: number
+        chargeCosts?: Array<{
+          currency: string
+          limit: number
+          reservation: number
+        }>
+      }
+      next?: {
+        activeMs?: number
+        modelCost?: number
+        recoveryAttempts?: number
+        concurrentChildren?: number
+        chargeCosts?: Array<{
+          currency: string
+          limit: number
+          reservation: number
+        }>
+      }
+    }>
     budgetHit?: {
       kind: "active-time" | "model-cost" | "charge-cost" | "recovery-attempts"
       limit: number
@@ -21304,6 +21575,33 @@ export type KilocodeGoalCreateResponses = {
             reservation: number
           }>
         }
+        budgetOverrides?: Array<{
+          at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          authority: "user-control"
+          reason: string
+          previous?: {
+            activeMs?: number
+            modelCost?: number
+            recoveryAttempts?: number
+            concurrentChildren?: number
+            chargeCosts?: Array<{
+              currency: string
+              limit: number
+              reservation: number
+            }>
+          }
+          next?: {
+            activeMs?: number
+            modelCost?: number
+            recoveryAttempts?: number
+            concurrentChildren?: number
+            chargeCosts?: Array<{
+              currency: string
+              limit: number
+              reservation: number
+            }>
+          }
+        }>
         budgetHit?: {
           kind: "active-time" | "model-cost" | "charge-cost" | "recovery-attempts"
           limit: number
@@ -21385,6 +21683,33 @@ export type KilocodeGoalCreateResponses = {
           reservation: number
         }>
       }
+      budgetOverrides?: Array<{
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        authority: "user-control"
+        reason: string
+        previous?: {
+          activeMs?: number
+          modelCost?: number
+          recoveryAttempts?: number
+          concurrentChildren?: number
+          chargeCosts?: Array<{
+            currency: string
+            limit: number
+            reservation: number
+          }>
+        }
+        next?: {
+          activeMs?: number
+          modelCost?: number
+          recoveryAttempts?: number
+          concurrentChildren?: number
+          chargeCosts?: Array<{
+            currency: string
+            limit: number
+            reservation: number
+          }>
+        }
+      }>
       budgetHit?: {
         kind: "active-time" | "model-cost" | "charge-cost" | "recovery-attempts"
         limit: number

@@ -896,6 +896,10 @@
   grid-column: 1 / -1;
 }
 
+.goal-banner__limit-reason {
+  grid-column: 1 / -1;
+}
+
 @media (max-width: 360px) {
   .goal-banner__limits {
     grid-template-columns: 1fr;

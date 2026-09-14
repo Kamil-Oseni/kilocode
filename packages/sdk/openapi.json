@@ -18117,6 +18117,153 @@
                             },
                             "additionalProperties": false
                           },
+                          "budgetOverrides": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "at": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["NaN"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["-Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity", "-Infinity", "NaN"]
+                                    }
+                                  ]
+                                },
+                                "authority": {
+                                  "type": "string",
+                                  "enum": ["user-control"]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 240
+                                },
+                                "previous": {
+                                  "type": "object",
+                                  "properties": {
+                                    "activeMs": {
+                                      "type": "integer",
+                                      "minimum": 1000,
+                                      "maximum": 31536000000
+                                    },
+                                    "modelCost": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    },
+                                    "recoveryAttempts": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 100
+                                    },
+                                    "concurrentChildren": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 32
+                                    },
+                                    "chargeCosts": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "currency": {
+                                            "type": "string",
+                                            "pattern": "^[A-Z]{3,8}$"
+                                          },
+                                          "limit": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          },
+                                          "reservation": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          }
+                                        },
+                                        "required": ["currency", "limit", "reservation"],
+                                        "additionalProperties": false
+                                      },
+                                      "minItems": 1,
+                                      "maxItems": 8
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                },
+                                "next": {
+                                  "type": "object",
+                                  "properties": {
+                                    "activeMs": {
+                                      "type": "integer",
+                                      "minimum": 1000,
+                                      "maximum": 31536000000
+                                    },
+                                    "modelCost": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    },
+                                    "recoveryAttempts": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 100
+                                    },
+                                    "concurrentChildren": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 32
+                                    },
+                                    "chargeCosts": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "currency": {
+                                            "type": "string",
+                                            "pattern": "^[A-Z]{3,8}$"
+                                          },
+                                          "limit": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          },
+                                          "reservation": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          }
+                                        },
+                                        "required": ["currency", "limit", "reservation"],
+                                        "additionalProperties": false
+                                      },
+                                      "minItems": 1,
+                                      "maxItems": 8
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": ["at", "authority", "reason"],
+                              "additionalProperties": false
+                            },
+                            "maxItems": 100
+                          },
                           "budgetHit": {
                             "type": "object",
                             "properties": {
@@ -18882,6 +19029,153 @@
                       },
                       "additionalProperties": false
                     },
+                    "budgetOverrides": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "at": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["NaN"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["-Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity", "-Infinity", "NaN"]
+                              }
+                            ]
+                          },
+                          "authority": {
+                            "type": "string",
+                            "enum": ["user-control"]
+                          },
+                          "reason": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 240
+                          },
+                          "previous": {
+                            "type": "object",
+                            "properties": {
+                              "activeMs": {
+                                "type": "integer",
+                                "minimum": 1000,
+                                "maximum": 31536000000
+                              },
+                              "modelCost": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "maximum": 1000000
+                              },
+                              "recoveryAttempts": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 100
+                              },
+                              "concurrentChildren": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 32
+                              },
+                              "chargeCosts": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "currency": {
+                                      "type": "string",
+                                      "pattern": "^[A-Z]{3,8}$"
+                                    },
+                                    "limit": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    },
+                                    "reservation": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": ["currency", "limit", "reservation"],
+                                  "additionalProperties": false
+                                },
+                                "minItems": 1,
+                                "maxItems": 8
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "next": {
+                            "type": "object",
+                            "properties": {
+                              "activeMs": {
+                                "type": "integer",
+                                "minimum": 1000,
+                                "maximum": 31536000000
+                              },
+                              "modelCost": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "maximum": 1000000
+                              },
+                              "recoveryAttempts": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 100
+                              },
+                              "concurrentChildren": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 32
+                              },
+                              "chargeCosts": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "currency": {
+                                      "type": "string",
+                                      "pattern": "^[A-Z]{3,8}$"
+                                    },
+                                    "limit": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    },
+                                    "reservation": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": ["currency", "limit", "reservation"],
+                                  "additionalProperties": false
+                                },
+                                "minItems": 1,
+                                "maxItems": 8
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": ["at", "authority", "reason"],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 100
+                    },
                     "budgetHit": {
                       "type": "object",
                       "properties": {
@@ -19587,6 +19881,153 @@
                                   },
                                   "additionalProperties": false
                                 },
+                                "budgetOverrides": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "at": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["NaN"]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["Infinity"]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["-Infinity"]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["Infinity", "-Infinity", "NaN"]
+                                          }
+                                        ]
+                                      },
+                                      "authority": {
+                                        "type": "string",
+                                        "enum": ["user-control"]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 240
+                                      },
+                                      "previous": {
+                                        "type": "object",
+                                        "properties": {
+                                          "activeMs": {
+                                            "type": "integer",
+                                            "minimum": 1000,
+                                            "maximum": 31536000000
+                                          },
+                                          "modelCost": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          },
+                                          "recoveryAttempts": {
+                                            "type": "integer",
+                                            "minimum": 1,
+                                            "maximum": 100
+                                          },
+                                          "concurrentChildren": {
+                                            "type": "integer",
+                                            "minimum": 1,
+                                            "maximum": 32
+                                          },
+                                          "chargeCosts": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "object",
+                                              "properties": {
+                                                "currency": {
+                                                  "type": "string",
+                                                  "pattern": "^[A-Z]{3,8}$"
+                                                },
+                                                "limit": {
+                                                  "type": "number",
+                                                  "exclusiveMinimum": 0,
+                                                  "maximum": 1000000
+                                                },
+                                                "reservation": {
+                                                  "type": "number",
+                                                  "exclusiveMinimum": 0,
+                                                  "maximum": 1000000
+                                                }
+                                              },
+                                              "required": ["currency", "limit", "reservation"],
+                                              "additionalProperties": false
+                                            },
+                                            "minItems": 1,
+                                            "maxItems": 8
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      "next": {
+                                        "type": "object",
+                                        "properties": {
+                                          "activeMs": {
+                                            "type": "integer",
+                                            "minimum": 1000,
+                                            "maximum": 31536000000
+                                          },
+                                          "modelCost": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          },
+                                          "recoveryAttempts": {
+                                            "type": "integer",
+                                            "minimum": 1,
+                                            "maximum": 100
+                                          },
+                                          "concurrentChildren": {
+                                            "type": "integer",
+                                            "minimum": 1,
+                                            "maximum": 32
+                                          },
+                                          "chargeCosts": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "object",
+                                              "properties": {
+                                                "currency": {
+                                                  "type": "string",
+                                                  "pattern": "^[A-Z]{3,8}$"
+                                                },
+                                                "limit": {
+                                                  "type": "number",
+                                                  "exclusiveMinimum": 0,
+                                                  "maximum": 1000000
+                                                },
+                                                "reservation": {
+                                                  "type": "number",
+                                                  "exclusiveMinimum": 0,
+                                                  "maximum": 1000000
+                                                }
+                                              },
+                                              "required": ["currency", "limit", "reservation"],
+                                              "additionalProperties": false
+                                            },
+                                            "minItems": 1,
+                                            "maxItems": 8
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "required": ["at", "authority", "reason"],
+                                    "additionalProperties": false
+                                  },
+                                  "maxItems": 100
+                                },
                                 "budgetHit": {
                                   "type": "object",
                                   "properties": {
@@ -20038,6 +20479,153 @@
                               }
                             },
                             "additionalProperties": false
+                          },
+                          "budgetOverrides": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "at": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["NaN"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["-Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity", "-Infinity", "NaN"]
+                                    }
+                                  ]
+                                },
+                                "authority": {
+                                  "type": "string",
+                                  "enum": ["user-control"]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 240
+                                },
+                                "previous": {
+                                  "type": "object",
+                                  "properties": {
+                                    "activeMs": {
+                                      "type": "integer",
+                                      "minimum": 1000,
+                                      "maximum": 31536000000
+                                    },
+                                    "modelCost": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    },
+                                    "recoveryAttempts": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 100
+                                    },
+                                    "concurrentChildren": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 32
+                                    },
+                                    "chargeCosts": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "currency": {
+                                            "type": "string",
+                                            "pattern": "^[A-Z]{3,8}$"
+                                          },
+                                          "limit": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          },
+                                          "reservation": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          }
+                                        },
+                                        "required": ["currency", "limit", "reservation"],
+                                        "additionalProperties": false
+                                      },
+                                      "minItems": 1,
+                                      "maxItems": 8
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                },
+                                "next": {
+                                  "type": "object",
+                                  "properties": {
+                                    "activeMs": {
+                                      "type": "integer",
+                                      "minimum": 1000,
+                                      "maximum": 31536000000
+                                    },
+                                    "modelCost": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    },
+                                    "recoveryAttempts": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 100
+                                    },
+                                    "concurrentChildren": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 32
+                                    },
+                                    "chargeCosts": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "currency": {
+                                            "type": "string",
+                                            "pattern": "^[A-Z]{3,8}$"
+                                          },
+                                          "limit": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          },
+                                          "reservation": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          }
+                                        },
+                                        "required": ["currency", "limit", "reservation"],
+                                        "additionalProperties": false
+                                      },
+                                      "minItems": 1,
+                                      "maxItems": 8
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": ["at", "authority", "reason"],
+                              "additionalProperties": false
+                            },
+                            "maxItems": 100
                           },
                           "budgetHit": {
                             "type": "object",
@@ -21001,6 +21589,153 @@
                             },
                             "additionalProperties": false
                           },
+                          "budgetOverrides": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "at": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["NaN"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["-Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity", "-Infinity", "NaN"]
+                                    }
+                                  ]
+                                },
+                                "authority": {
+                                  "type": "string",
+                                  "enum": ["user-control"]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 240
+                                },
+                                "previous": {
+                                  "type": "object",
+                                  "properties": {
+                                    "activeMs": {
+                                      "type": "integer",
+                                      "minimum": 1000,
+                                      "maximum": 31536000000
+                                    },
+                                    "modelCost": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    },
+                                    "recoveryAttempts": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 100
+                                    },
+                                    "concurrentChildren": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 32
+                                    },
+                                    "chargeCosts": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "currency": {
+                                            "type": "string",
+                                            "pattern": "^[A-Z]{3,8}$"
+                                          },
+                                          "limit": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          },
+                                          "reservation": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          }
+                                        },
+                                        "required": ["currency", "limit", "reservation"],
+                                        "additionalProperties": false
+                                      },
+                                      "minItems": 1,
+                                      "maxItems": 8
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                },
+                                "next": {
+                                  "type": "object",
+                                  "properties": {
+                                    "activeMs": {
+                                      "type": "integer",
+                                      "minimum": 1000,
+                                      "maximum": 31536000000
+                                    },
+                                    "modelCost": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    },
+                                    "recoveryAttempts": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 100
+                                    },
+                                    "concurrentChildren": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 32
+                                    },
+                                    "chargeCosts": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "currency": {
+                                            "type": "string",
+                                            "pattern": "^[A-Z]{3,8}$"
+                                          },
+                                          "limit": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          },
+                                          "reservation": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          }
+                                        },
+                                        "required": ["currency", "limit", "reservation"],
+                                        "additionalProperties": false
+                                      },
+                                      "minItems": 1,
+                                      "maxItems": 8
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": ["at", "authority", "reason"],
+                              "additionalProperties": false
+                            },
+                            "maxItems": 100
+                          },
                           "budgetHit": {
                             "type": "object",
                             "properties": {
@@ -21766,6 +22501,153 @@
                       },
                       "additionalProperties": false
                     },
+                    "budgetOverrides": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "at": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["NaN"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["-Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity", "-Infinity", "NaN"]
+                              }
+                            ]
+                          },
+                          "authority": {
+                            "type": "string",
+                            "enum": ["user-control"]
+                          },
+                          "reason": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 240
+                          },
+                          "previous": {
+                            "type": "object",
+                            "properties": {
+                              "activeMs": {
+                                "type": "integer",
+                                "minimum": 1000,
+                                "maximum": 31536000000
+                              },
+                              "modelCost": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "maximum": 1000000
+                              },
+                              "recoveryAttempts": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 100
+                              },
+                              "concurrentChildren": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 32
+                              },
+                              "chargeCosts": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "currency": {
+                                      "type": "string",
+                                      "pattern": "^[A-Z]{3,8}$"
+                                    },
+                                    "limit": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    },
+                                    "reservation": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": ["currency", "limit", "reservation"],
+                                  "additionalProperties": false
+                                },
+                                "minItems": 1,
+                                "maxItems": 8
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "next": {
+                            "type": "object",
+                            "properties": {
+                              "activeMs": {
+                                "type": "integer",
+                                "minimum": 1000,
+                                "maximum": 31536000000
+                              },
+                              "modelCost": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "maximum": 1000000
+                              },
+                              "recoveryAttempts": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 100
+                              },
+                              "concurrentChildren": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 32
+                              },
+                              "chargeCosts": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "currency": {
+                                      "type": "string",
+                                      "pattern": "^[A-Z]{3,8}$"
+                                    },
+                                    "limit": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    },
+                                    "reservation": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": ["currency", "limit", "reservation"],
+                                  "additionalProperties": false
+                                },
+                                "minItems": 1,
+                                "maxItems": 8
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": ["at", "authority", "reason"],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 100
+                    },
                     "budgetHit": {
                       "type": "object",
                       "properties": {
@@ -22471,6 +23353,153 @@
                                   },
                                   "additionalProperties": false
                                 },
+                                "budgetOverrides": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "at": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["NaN"]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["Infinity"]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["-Infinity"]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["Infinity", "-Infinity", "NaN"]
+                                          }
+                                        ]
+                                      },
+                                      "authority": {
+                                        "type": "string",
+                                        "enum": ["user-control"]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 240
+                                      },
+                                      "previous": {
+                                        "type": "object",
+                                        "properties": {
+                                          "activeMs": {
+                                            "type": "integer",
+                                            "minimum": 1000,
+                                            "maximum": 31536000000
+                                          },
+                                          "modelCost": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          },
+                                          "recoveryAttempts": {
+                                            "type": "integer",
+                                            "minimum": 1,
+                                            "maximum": 100
+                                          },
+                                          "concurrentChildren": {
+                                            "type": "integer",
+                                            "minimum": 1,
+                                            "maximum": 32
+                                          },
+                                          "chargeCosts": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "object",
+                                              "properties": {
+                                                "currency": {
+                                                  "type": "string",
+                                                  "pattern": "^[A-Z]{3,8}$"
+                                                },
+                                                "limit": {
+                                                  "type": "number",
+                                                  "exclusiveMinimum": 0,
+                                                  "maximum": 1000000
+                                                },
+                                                "reservation": {
+                                                  "type": "number",
+                                                  "exclusiveMinimum": 0,
+                                                  "maximum": 1000000
+                                                }
+                                              },
+                                              "required": ["currency", "limit", "reservation"],
+                                              "additionalProperties": false
+                                            },
+                                            "minItems": 1,
+                                            "maxItems": 8
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      "next": {
+                                        "type": "object",
+                                        "properties": {
+                                          "activeMs": {
+                                            "type": "integer",
+                                            "minimum": 1000,
+                                            "maximum": 31536000000
+                                          },
+                                          "modelCost": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          },
+                                          "recoveryAttempts": {
+                                            "type": "integer",
+                                            "minimum": 1,
+                                            "maximum": 100
+                                          },
+                                          "concurrentChildren": {
+                                            "type": "integer",
+                                            "minimum": 1,
+                                            "maximum": 32
+                                          },
+                                          "chargeCosts": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "object",
+                                              "properties": {
+                                                "currency": {
+                                                  "type": "string",
+                                                  "pattern": "^[A-Z]{3,8}$"
+                                                },
+                                                "limit": {
+                                                  "type": "number",
+                                                  "exclusiveMinimum": 0,
+                                                  "maximum": 1000000
+                                                },
+                                                "reservation": {
+                                                  "type": "number",
+                                                  "exclusiveMinimum": 0,
+                                                  "maximum": 1000000
+                                                }
+                                              },
+                                              "required": ["currency", "limit", "reservation"],
+                                              "additionalProperties": false
+                                            },
+                                            "minItems": 1,
+                                            "maxItems": 8
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "required": ["at", "authority", "reason"],
+                                    "additionalProperties": false
+                                  },
+                                  "maxItems": 100
+                                },
                                 "budgetHit": {
                                   "type": "object",
                                   "properties": {
@@ -22922,6 +23951,153 @@
                               }
                             },
                             "additionalProperties": false
+                          },
+                          "budgetOverrides": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "at": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["NaN"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["-Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity", "-Infinity", "NaN"]
+                                    }
+                                  ]
+                                },
+                                "authority": {
+                                  "type": "string",
+                                  "enum": ["user-control"]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 240
+                                },
+                                "previous": {
+                                  "type": "object",
+                                  "properties": {
+                                    "activeMs": {
+                                      "type": "integer",
+                                      "minimum": 1000,
+                                      "maximum": 31536000000
+                                    },
+                                    "modelCost": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    },
+                                    "recoveryAttempts": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 100
+                                    },
+                                    "concurrentChildren": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 32
+                                    },
+                                    "chargeCosts": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "currency": {
+                                            "type": "string",
+                                            "pattern": "^[A-Z]{3,8}$"
+                                          },
+                                          "limit": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          },
+                                          "reservation": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          }
+                                        },
+                                        "required": ["currency", "limit", "reservation"],
+                                        "additionalProperties": false
+                                      },
+                                      "minItems": 1,
+                                      "maxItems": 8
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                },
+                                "next": {
+                                  "type": "object",
+                                  "properties": {
+                                    "activeMs": {
+                                      "type": "integer",
+                                      "minimum": 1000,
+                                      "maximum": 31536000000
+                                    },
+                                    "modelCost": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    },
+                                    "recoveryAttempts": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 100
+                                    },
+                                    "concurrentChildren": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 32
+                                    },
+                                    "chargeCosts": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "currency": {
+                                            "type": "string",
+                                            "pattern": "^[A-Z]{3,8}$"
+                                          },
+                                          "limit": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          },
+                                          "reservation": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          }
+                                        },
+                                        "required": ["currency", "limit", "reservation"],
+                                        "additionalProperties": false
+                                      },
+                                      "minItems": 1,
+                                      "maxItems": 8
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": ["at", "authority", "reason"],
+                              "additionalProperties": false
+                            },
+                            "maxItems": 100
                           },
                           "budgetHit": {
                             "type": "object",
@@ -23803,6 +24979,153 @@
                             },
                             "additionalProperties": false
                           },
+                          "budgetOverrides": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "at": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["NaN"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["-Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity", "-Infinity", "NaN"]
+                                    }
+                                  ]
+                                },
+                                "authority": {
+                                  "type": "string",
+                                  "enum": ["user-control"]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 240
+                                },
+                                "previous": {
+                                  "type": "object",
+                                  "properties": {
+                                    "activeMs": {
+                                      "type": "integer",
+                                      "minimum": 1000,
+                                      "maximum": 31536000000
+                                    },
+                                    "modelCost": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    },
+                                    "recoveryAttempts": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 100
+                                    },
+                                    "concurrentChildren": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 32
+                                    },
+                                    "chargeCosts": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "currency": {
+                                            "type": "string",
+                                            "pattern": "^[A-Z]{3,8}$"
+                                          },
+                                          "limit": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          },
+                                          "reservation": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          }
+                                        },
+                                        "required": ["currency", "limit", "reservation"],
+                                        "additionalProperties": false
+                                      },
+                                      "minItems": 1,
+                                      "maxItems": 8
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                },
+                                "next": {
+                                  "type": "object",
+                                  "properties": {
+                                    "activeMs": {
+                                      "type": "integer",
+                                      "minimum": 1000,
+                                      "maximum": 31536000000
+                                    },
+                                    "modelCost": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    },
+                                    "recoveryAttempts": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 100
+                                    },
+                                    "concurrentChildren": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 32
+                                    },
+                                    "chargeCosts": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "currency": {
+                                            "type": "string",
+                                            "pattern": "^[A-Z]{3,8}$"
+                                          },
+                                          "limit": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          },
+                                          "reservation": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          }
+                                        },
+                                        "required": ["currency", "limit", "reservation"],
+                                        "additionalProperties": false
+                                      },
+                                      "minItems": 1,
+                                      "maxItems": 8
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": ["at", "authority", "reason"],
+                              "additionalProperties": false
+                            },
+                            "maxItems": 100
+                          },
                           "budgetHit": {
                             "type": "object",
                             "properties": {
@@ -24568,6 +25891,153 @@
                       },
                       "additionalProperties": false
                     },
+                    "budgetOverrides": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "at": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["NaN"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["-Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity", "-Infinity", "NaN"]
+                              }
+                            ]
+                          },
+                          "authority": {
+                            "type": "string",
+                            "enum": ["user-control"]
+                          },
+                          "reason": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 240
+                          },
+                          "previous": {
+                            "type": "object",
+                            "properties": {
+                              "activeMs": {
+                                "type": "integer",
+                                "minimum": 1000,
+                                "maximum": 31536000000
+                              },
+                              "modelCost": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "maximum": 1000000
+                              },
+                              "recoveryAttempts": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 100
+                              },
+                              "concurrentChildren": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 32
+                              },
+                              "chargeCosts": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "currency": {
+                                      "type": "string",
+                                      "pattern": "^[A-Z]{3,8}$"
+                                    },
+                                    "limit": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    },
+                                    "reservation": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": ["currency", "limit", "reservation"],
+                                  "additionalProperties": false
+                                },
+                                "minItems": 1,
+                                "maxItems": 8
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "next": {
+                            "type": "object",
+                            "properties": {
+                              "activeMs": {
+                                "type": "integer",
+                                "minimum": 1000,
+                                "maximum": 31536000000
+                              },
+                              "modelCost": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "maximum": 1000000
+                              },
+                              "recoveryAttempts": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 100
+                              },
+                              "concurrentChildren": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 32
+                              },
+                              "chargeCosts": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "currency": {
+                                      "type": "string",
+                                      "pattern": "^[A-Z]{3,8}$"
+                                    },
+                                    "limit": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    },
+                                    "reservation": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": ["currency", "limit", "reservation"],
+                                  "additionalProperties": false
+                                },
+                                "minItems": 1,
+                                "maxItems": 8
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": ["at", "authority", "reason"],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 100
+                    },
                     "budgetHit": {
                       "type": "object",
                       "properties": {
@@ -25273,6 +26743,153 @@
                                   },
                                   "additionalProperties": false
                                 },
+                                "budgetOverrides": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "at": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["NaN"]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["Infinity"]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["-Infinity"]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["Infinity", "-Infinity", "NaN"]
+                                          }
+                                        ]
+                                      },
+                                      "authority": {
+                                        "type": "string",
+                                        "enum": ["user-control"]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 240
+                                      },
+                                      "previous": {
+                                        "type": "object",
+                                        "properties": {
+                                          "activeMs": {
+                                            "type": "integer",
+                                            "minimum": 1000,
+                                            "maximum": 31536000000
+                                          },
+                                          "modelCost": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          },
+                                          "recoveryAttempts": {
+                                            "type": "integer",
+                                            "minimum": 1,
+                                            "maximum": 100
+                                          },
+                                          "concurrentChildren": {
+                                            "type": "integer",
+                                            "minimum": 1,
+                                            "maximum": 32
+                                          },
+                                          "chargeCosts": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "object",
+                                              "properties": {
+                                                "currency": {
+                                                  "type": "string",
+                                                  "pattern": "^[A-Z]{3,8}$"
+                                                },
+                                                "limit": {
+                                                  "type": "number",
+                                                  "exclusiveMinimum": 0,
+                                                  "maximum": 1000000
+                                                },
+                                                "reservation": {
+                                                  "type": "number",
+                                                  "exclusiveMinimum": 0,
+                                                  "maximum": 1000000
+                                                }
+                                              },
+                                              "required": ["currency", "limit", "reservation"],
+                                              "additionalProperties": false
+                                            },
+                                            "minItems": 1,
+                                            "maxItems": 8
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      "next": {
+                                        "type": "object",
+                                        "properties": {
+                                          "activeMs": {
+                                            "type": "integer",
+                                            "minimum": 1000,
+                                            "maximum": 31536000000
+                                          },
+                                          "modelCost": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          },
+                                          "recoveryAttempts": {
+                                            "type": "integer",
+                                            "minimum": 1,
+                                            "maximum": 100
+                                          },
+                                          "concurrentChildren": {
+                                            "type": "integer",
+                                            "minimum": 1,
+                                            "maximum": 32
+                                          },
+                                          "chargeCosts": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "object",
+                                              "properties": {
+                                                "currency": {
+                                                  "type": "string",
+                                                  "pattern": "^[A-Z]{3,8}$"
+                                                },
+                                                "limit": {
+                                                  "type": "number",
+                                                  "exclusiveMinimum": 0,
+                                                  "maximum": 1000000
+                                                },
+                                                "reservation": {
+                                                  "type": "number",
+                                                  "exclusiveMinimum": 0,
+                                                  "maximum": 1000000
+                                                }
+                                              },
+                                              "required": ["currency", "limit", "reservation"],
+                                              "additionalProperties": false
+                                            },
+                                            "minItems": 1,
+                                            "maxItems": 8
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "required": ["at", "authority", "reason"],
+                                    "additionalProperties": false
+                                  },
+                                  "maxItems": 100
+                                },
                                 "budgetHit": {
                                   "type": "object",
                                   "properties": {
@@ -25724,6 +27341,153 @@
                               }
                             },
                             "additionalProperties": false
+                          },
+                          "budgetOverrides": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "at": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["NaN"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["-Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity", "-Infinity", "NaN"]
+                                    }
+                                  ]
+                                },
+                                "authority": {
+                                  "type": "string",
+                                  "enum": ["user-control"]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 240
+                                },
+                                "previous": {
+                                  "type": "object",
+                                  "properties": {
+                                    "activeMs": {
+                                      "type": "integer",
+                                      "minimum": 1000,
+                                      "maximum": 31536000000
+                                    },
+                                    "modelCost": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    },
+                                    "recoveryAttempts": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 100
+                                    },
+                                    "concurrentChildren": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 32
+                                    },
+                                    "chargeCosts": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "currency": {
+                                            "type": "string",
+                                            "pattern": "^[A-Z]{3,8}$"
+                                          },
+                                          "limit": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          },
+                                          "reservation": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          }
+                                        },
+                                        "required": ["currency", "limit", "reservation"],
+                                        "additionalProperties": false
+                                      },
+                                      "minItems": 1,
+                                      "maxItems": 8
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                },
+                                "next": {
+                                  "type": "object",
+                                  "properties": {
+                                    "activeMs": {
+                                      "type": "integer",
+                                      "minimum": 1000,
+                                      "maximum": 31536000000
+                                    },
+                                    "modelCost": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    },
+                                    "recoveryAttempts": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 100
+                                    },
+                                    "concurrentChildren": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 32
+                                    },
+                                    "chargeCosts": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "currency": {
+                                            "type": "string",
+                                            "pattern": "^[A-Z]{3,8}$"
+                                          },
+                                          "limit": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          },
+                                          "reservation": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          }
+                                        },
+                                        "required": ["currency", "limit", "reservation"],
+                                        "additionalProperties": false
+                                      },
+                                      "minItems": 1,
+                                      "maxItems": 8
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": ["at", "authority", "reason"],
+                              "additionalProperties": false
+                            },
+                            "maxItems": 100
                           },
                           "budgetHit": {
                             "type": "object",
@@ -26331,6 +28095,10 @@
                       }
                     },
                     "additionalProperties": false
+                  },
+                  "budgetReason": {
+                    "type": "string",
+                    "maxLength": 240
                   },
                   "clearBudget": {
                     "type": "boolean",

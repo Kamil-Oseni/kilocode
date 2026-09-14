@@ -230,18 +230,40 @@ describe("goal HTTP API", () => {
       objective: "Persist through a client reload",
       expectedIntent: initial.intent,
       budget: { modelCost: 8, recoveryAttempts: 4 },
+      budgetReason: "Increase the reviewed ceiling for the remaining work.",
     })
     expect(limited.status).toBe(200)
     const changed = (await limited.json()) as { intent: string }
-    expect(changed).toMatchObject({ budget: { modelCost: 8, recoveryAttempts: 4 } })
+    expect(changed).toMatchObject({
+      budget: { modelCost: 8, recoveryAttempts: 4 },
+      budgetOverrides: [
+        {
+          authority: "user-control",
+          reason: "Increase the reviewed ceiling for the remaining work.",
+          previous: { activeMs: 1_800_000, modelCost: 5, recoveryAttempts: 2 },
+          next: { modelCost: 8, recoveryAttempts: 4 },
+        },
+      ],
+    })
 
     const clearedBudget = await request(reloaded, "PATCH", `/session/${session.id}/goal`, {
       objective: "Persist through a client reload",
       expectedIntent: changed.intent,
       clearBudget: true,
+      budgetReason: "Remove the limits after completing the bounded phase.",
     })
     expect(clearedBudget.status).toBe(200)
     expect(await clearedBudget.json()).toHaveProperty("budget", null)
+    expect(await (await request(reloaded, "GET", `/session/${session.id}/goal`)).json()).toMatchObject({
+      budgetOverrides: [
+        { reason: "Increase the reviewed ceiling for the remaining work." },
+        {
+          authority: "user-control",
+          reason: "Remove the limits after completing the bounded phase.",
+          previous: { modelCost: 8, recoveryAttempts: 4 },
+        },
+      ],
+    })
 
     const revised = await request(reloaded, "PATCH", `/session/${session.id}/goal`, {
       objective: "Apply steering on the next turn",

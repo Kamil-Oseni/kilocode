@@ -271,6 +271,7 @@ describe("RayaGoal", () => {
       if (Exit.isFailure(resumed)) expect(Cause.pretty(resumed.cause)).toContain("cannot be reconciled")
       const changed = yield* goals.edit(root, {
         budget: { activeMs: 60_000 },
+        budgetReason: "Replace the uncertain currency limit with a time boundary.",
         status: "active",
         expectedIntent: saved!.intent,
       })
@@ -3913,10 +3914,24 @@ describe("RayaGoal", () => {
       expect((yield* goals.update(sessionID, { status: "active" }).pipe(Effect.flip)).message).toContain(
         "model-cost limit",
       )
-      const changed = yield* goals.edit(sessionID, { budget: { modelCost: 3 }, expectedIntent: created.intent })
+      expect(
+        (yield* goals.edit(sessionID, { budget: { modelCost: 3 }, expectedIntent: created.intent }).pipe(Effect.flip))
+          .message,
+      ).toContain("Explain why")
+      const changed = yield* goals.edit(sessionID, {
+        budget: { modelCost: 3 },
+        budgetReason: "Continue after reviewing the recorded overage.",
+        expectedIntent: created.intent,
+      })
       expect(changed.state.status).toBe("paused")
       expect(changed.state.budgetHit).toBeUndefined()
       expect(changed.state.revisions?.at(-1)?.budget).toEqual({ modelCost: 1 })
+      expect(changed.state.budgetOverrides?.at(-1)).toMatchObject({
+        authority: "user-control",
+        reason: "Continue after reviewing the recorded overage.",
+        previous: { modelCost: 1 },
+        next: { modelCost: 3 },
+      })
       const resumed = yield* goals.edit(sessionID, {
         status: "active",
         objective: changed.state.objective,
@@ -3980,6 +3995,7 @@ describe("RayaGoal", () => {
       )
       const cost = yield* goals.edit(sessionID, {
         budget: { modelCost: 5, recoveryAttempts: 2 },
+        budgetReason: "Add a model-cost ceiling without renewing recovery.",
         expectedIntent: created.intent,
       })
       expect(cost.state.usage.retries).toBe(2)
@@ -3989,6 +4005,7 @@ describe("RayaGoal", () => {
       ).toContain("recovery-attempt limit")
       const raised = yield* goals.edit(sessionID, {
         budget: { modelCost: 5, recoveryAttempts: 3 },
+        budgetReason: "Allow one more recovery after reviewing the failures.",
         expectedIntent: cost.state.intent,
       })
       expect(raised.state.usage.retries).toBe(0)

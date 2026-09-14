@@ -9,6 +9,13 @@ export type GoalBudget = {
   chargeCosts?: GoalChargeLimit[]
 }
 type GoalChargeLimit = { currency: string; limit: number; reservation: number }
+export type GoalBudgetOverride = {
+  at: number
+  authority: "user-control"
+  reason: string
+  previous?: GoalBudget
+  next?: GoalBudget
+}
 export type GoalBudgetHit = {
   kind: "active-time" | "model-cost" | "charge-cost" | "recovery-attempts"
   limit: number
@@ -106,6 +113,7 @@ export interface GoalState {
     criteria?: GoalState["criteria"]
     plan?: GoalState["plan"]
     budget?: GoalBudget | null
+    budgetOverrides?: GoalBudgetOverride[]
     budgetHit?: GoalBudgetHit
     usage?: GoalState["usage"]
     charges?: GoalCharge[]
@@ -160,6 +168,7 @@ export interface GoalState {
   activeMs?: number // raya_change - accumulated running time excluding pauses
   activeAt?: number // raya_change - current active interval start
   budget?: GoalBudget | null
+  budgetOverrides?: GoalBudgetOverride[]
   budgetHit?: GoalBudgetHit
   usage: {
     turns: number
@@ -216,6 +225,7 @@ export interface GoalState {
     revisions?: GoalState["revisions"]
     plan?: GoalState["plan"]
     budget?: GoalBudget | null
+    budgetOverrides?: GoalBudgetOverride[]
     budgetHit?: GoalBudgetHit
     usage?: GoalState["usage"]
     charges?: GoalCharge[]

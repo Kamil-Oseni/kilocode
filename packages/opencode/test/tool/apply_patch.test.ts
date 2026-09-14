@@ -4,7 +4,7 @@ import { createHash } from "node:crypto" // kilocode_change
 import { tmpdir } from "os" // kilocode_change
 import * as fs from "fs/promises"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Cause, Effect, Exit, Layer } from "effect"
+import { Cause, Effect, Exit } from "effect" // kilocode_change
 import { ApplyPatchTool } from "../../src/tool/apply_patch"
 import { LSP } from "@/lsp/lsp"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -439,6 +439,68 @@ describe("tool.apply_patch freeform", () => {
       expect(yield* readText(first)).toBe("first before\n")
       expect(yield* readText(second)).toBe("newer user edit\n")
     }),
+  )
+
+  it.instance("rolls back every file and emits no success events when journal publication fails", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const first = path.join(test.directory, "rollback-first.txt")
+      const second = path.join(test.directory, "rollback-second.txt")
+      yield* writeText(first, "first before\n")
+      yield* writeText(second, "second before\n")
+      const storage = yield* Storage.Service
+      const events = yield* EventV2Bridge.Service
+      const state = { failed: false }
+      const emitted: string[] = []
+      const stalled: Storage.Interface = {
+        ...storage,
+        create: (key, content) => {
+          if (
+            !state.failed &&
+            content !== null &&
+            typeof content === "object" &&
+            "phase" in content &&
+            content.phase === "committing" &&
+            "cursor" in content &&
+            content.cursor === 1
+          ) {
+            state.failed = true
+            return Effect.die(new Error("injected journal publication failure"))
+          }
+          return storage.create(key, content)
+        },
+      }
+      const observed: typeof events = {
+        ...events,
+        publish: (definition, data, options) => {
+          emitted.push(definition.type)
+          return events.publish(definition, data, options)
+        },
+      }
+      const { ctx } = makeCtx()
+      const call = { ...ctx, callID: "rollback-adapter" }
+      const patchText =
+        "*** Begin Patch\n*** Update File: rollback-first.txt\n@@\n-first before\n+first after\n*** Update File: rollback-second.txt\n@@\n-second before\n+second after\n*** End Patch"
+
+      yield* expectFailure(
+        execute({ patchText }, call).pipe(
+          Effect.provideService(Storage.Service, stalled),
+          Effect.provideService(EventV2Bridge.Service, observed),
+        ),
+        "injected journal publication failure",
+      )
+
+      expect(state.failed).toBe(true)
+      expect(yield* readText(first)).toBe("first before\n")
+      expect(yield* readText(second)).toBe("second before\n")
+      expect(emitted).toHaveLength(0)
+      const invocation = JSON.stringify([ctx.sessionID, ctx.messageID, call.callID, test.directory])
+      const outcome = yield* journals(storage).get(invocation)
+      expect(outcome?.phase).toBe("done")
+      expect(outcome?.decision).toBe("rollback")
+      expect((yield* Effect.promise(() => fs.readdir(test.directory))).some((name) => name.startsWith(".raya-txn-"))).toBe(false)
+    }),
+    { git: true },
   )
 
   it.instance("preserves a file created at an add target while approval is pending", () =>

@@ -112,6 +112,10 @@ export const voiceHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-voice",
         )
       },
     })
+    yield* openai.reconcile().pipe(
+      Effect.catch((error) => Effect.logError("Voice usage reconciliation did not start", { error })),
+      Effect.forkScoped,
+    )
 
     return handlers
       .handle("voiceLiveCall", (ctx) =>

@@ -8,8 +8,9 @@ import type { Session } from "@/session/session"
 import type { SessionPrompt } from "@/session/prompt"
 import type { Database } from "@opencode-ai/core/database/database"
 import * as Store from "./openai-store"
-import type { Storage } from "@/storage/storage"
+import { Storage } from "@/storage/storage"
 import type * as TaskWorker from "@/kilocode/session/task-worker"
+import { mutate } from "@/kilocode/task/mutation"
 import {
   OpenAIBinding,
   OpenAICall,
@@ -39,6 +40,30 @@ type Reservation = {
   input: typeof OpenAIReserve.Type
   lease: Admission
 }
+const Count = Schema.Number.check(
+  Schema.isInt(),
+  Schema.isGreaterThanOrEqualTo(0),
+  Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER),
+)
+const Key = Schema.String.check(Schema.isMaxLength(128))
+const Reconciliation = Schema.Struct({
+  version: Schema.Literal(1),
+  cycle: Count,
+  high: Key,
+  after: Schema.optional(Key),
+  status: Schema.Literals(["running", "failed", "complete"]),
+  scanned: Count,
+  receipts: Count,
+  quarantined: Count,
+  updatedAt: Schema.Finite,
+  failure: Schema.optional(
+    Schema.Struct({
+      id: Key,
+      message: Schema.String.check(Schema.isMaxLength(240)),
+    }),
+  ),
+})
+type Reconciliation = typeof Reconciliation.Type
 type Deps = {
   database: Database.Interface
   storage: Storage.Interface
@@ -185,6 +210,129 @@ export const make = (deps: Deps) =>
             pricing: pricing(receipt),
           })
         : Effect.void
+    const repairKey = ["raya", "voice", "usage-reconciliation", "v1"]
+    const repairStore = {
+      read: (parts: string[]) => deps.storage.read(["raya", "voice-reconciliation", ...parts]),
+      create: (parts: string[], value: unknown) =>
+        deps.storage.create(["raya", "voice-reconciliation", ...parts], value),
+      replace: (parts: string[], value: unknown) =>
+        deps.storage.replace(["raya", "voice-reconciliation", ...parts], value),
+      remove: (parts: string[]) => deps.storage.remove(["raya", "voice-reconciliation", ...parts]),
+    }
+    const repairRead = () =>
+      deps.storage.read<unknown>(repairKey).pipe(
+        Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(undefined)),
+        Effect.orDie,
+        Effect.flatMap((raw) => {
+          if (raw === undefined) return Effect.succeed(undefined)
+          return Schema.decodeUnknownEffect(Reconciliation)(raw).pipe(
+            Effect.mapError(
+              () => new VoiceError({ code: "conflict", message: "Voice usage reconciliation state is invalid." }),
+            ),
+          )
+        }),
+      )
+    const repairSave = (state: Reconciliation) => deps.storage.replace(repairKey, state).pipe(Effect.orDie)
+    const quarantine = (id: string, reason: string) =>
+      deps.storage
+        .create(["raya", "voice", "usage-reconciliation", "quarantine", digest(id)], {
+          version: 1,
+          id,
+          reason,
+          at: Date.now(),
+        })
+        .pipe(Effect.orDie)
+    const reconcile = (limit = 8) => {
+      if (!Number.isInteger(limit) || limit < 1 || limit > 32)
+        return refuse("invalid", "Voice usage reconciliation limit must be between 1 and 32 bindings.")
+      return mutate(
+        repairStore,
+        Effect.gen(function* () {
+          const prior = yield* repairRead()
+          const reset = prior === undefined || prior.status === "complete"
+          const latest = reset ? yield* store.latest() : undefined
+          let state: Reconciliation = reset
+            ? {
+                version: 1,
+                cycle: Math.min((prior?.cycle ?? 0) + 1, Number.MAX_SAFE_INTEGER),
+                high: latest?.id ?? "",
+                status: "running",
+                scanned: 0,
+                receipts: 0,
+                quarantined: 0,
+                updatedAt: Date.now(),
+              }
+            : { ...prior, status: "running", failure: undefined, updatedAt: Date.now() }
+          if (!state.high) {
+            state = { ...state, status: "complete", updatedAt: Date.now() }
+            yield* repairSave(state)
+            return state
+          }
+          const rows = yield* store.page(state.after, state.high, limit)
+          for (const row of rows) {
+            const parsed = yield* store.inspect(row).pipe(Effect.exit)
+            if (Exit.isFailure(parsed)) {
+              yield* quarantine(row.id, "The retained voice binding is invalid.")
+              state = {
+                ...state,
+                after: row.id,
+                scanned: state.scanned + 1,
+                quarantined: state.quarantined + 1,
+                updatedAt: Date.now(),
+              }
+              yield* repairSave(state)
+              continue
+            }
+            const receipts = yield* ledger(parsed.value).pipe(Effect.exit)
+            if (Exit.isFailure(receipts)) {
+              yield* quarantine(row.id, "The retained voice usage ledger is invalid.")
+              state = {
+                ...state,
+                after: row.id,
+                scanned: state.scanned + 1,
+                quarantined: state.quarantined + 1,
+                updatedAt: Date.now(),
+              }
+              yield* repairSave(state)
+              continue
+            }
+            const published = yield* Effect.forEach(receipts.value, (receipt) => charge(parsed.value, receipt), {
+              concurrency: 1,
+              discard: true,
+            }).pipe(Effect.exit)
+            if (Exit.isFailure(published)) {
+              state = {
+                ...state,
+                status: "failed",
+                failure: {
+                  id: row.id,
+                  message: "A retained voice charge could not be published. The same binding will be retried.",
+                },
+                updatedAt: Date.now(),
+              }
+              yield* repairSave(state)
+              return state
+            }
+            state = {
+              ...state,
+              after: row.id,
+              scanned: state.scanned + 1,
+              receipts: state.receipts + receipts.value.length,
+              updatedAt: Date.now(),
+            }
+            yield* repairSave(state)
+          }
+          state = {
+            ...state,
+            status: rows.length < limit || state.after === state.high ? "complete" : "running",
+            updatedAt: Date.now(),
+          }
+          yield* repairSave(state)
+          return state
+        }),
+        "Voice usage reconciliation",
+      )
+    }
     const load = (id: string, secret: string, directory: string, generation?: string) =>
       Effect.gen(function* () {
         if (!Schema.is(VoiceKey)(secret)) return yield* refuse("unauthorized", "Invalid voice capability.")
@@ -722,5 +870,5 @@ export const make = (deps: Deps) =>
           return stored.binding
         }),
       )
-    return { reserve, release, start, stage, meter, usage, submit, delegate, duration, get, cancel, close }
+    return { reserve, release, start, stage, meter, usage, reconcile, submit, delegate, duration, get, cancel, close }
   })

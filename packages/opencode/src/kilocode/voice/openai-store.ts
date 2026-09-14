@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { and, eq } from "drizzle-orm"
+import { and, asc, desc, eq, gt, lte } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { RayaVoiceBindingTable as Table } from "@opencode-ai/core/kilocode/voice.sql"
 import { SessionTable } from "@opencode-ai/core/session/sql"
@@ -19,7 +19,11 @@ const Payload = Schema.Struct({
   usage: Schema.optional(Schema.Record(Schema.String, OpenAIUsage)),
   duration: Schema.optional(LiveDuration),
   liveCursor: Schema.optional(
-    Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER)),
+    Schema.Number.check(
+      Schema.isInt(),
+      Schema.isGreaterThanOrEqualTo(0),
+      Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER),
+    ),
   ),
 })
 export type Stored = {
@@ -48,6 +52,7 @@ const key = (id: string) => ["raya_openai_voice", id]
 export function make(database: Database.Interface, storage: Storage.Interface) {
   const db = database.db
   const row = (id: string) => db.select().from(Table).where(eq(Table.id, id)).get().pipe(Effect.orDie)
+  const latest = () => db.select({ id: Table.id }).from(Table).orderBy(desc(Table.id)).limit(1).get().pipe(Effect.orDie)
   const parent = (id: string) =>
     db
       .select({ id: SessionTable.id })
@@ -60,6 +65,17 @@ export function make(database: Database.Interface, storage: Storage.Interface) {
     Schema.is(Payload)(value) && value.binding.id === id && (!session || value.binding.parentSessionID === session)
       ? Effect.succeed(value)
       : conflict()
+  const inspect = (input: { id: string; sessionID: string; data: unknown }) =>
+    validate(input.data, input.id, input.sessionID)
+  const page = (after: string | undefined, high: string, limit: number) =>
+    db
+      .select({ id: Table.id, sessionID: Table.session_id, data: Table.data })
+      .from(Table)
+      .where(after ? and(gt(Table.id, after), lte(Table.id, high)) : lte(Table.id, high))
+      .orderBy(asc(Table.id))
+      .limit(limit)
+      .all()
+      .pipe(Effect.orDie)
   const read = (id: string) =>
     Effect.gen(function* () {
       const retained = yield* row(id)
@@ -124,5 +140,5 @@ export function make(database: Database.Interface, storage: Storage.Interface) {
       if (rows.length !== 1) return yield* missing()
       return undefined
     })
-  return { read, create, replace }
+  return { read, create, replace, latest, page, inspect }
 }

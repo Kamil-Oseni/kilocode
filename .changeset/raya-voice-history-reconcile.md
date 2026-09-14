@@ -3,4 +3,4 @@
 "raya": patch
 ---
 
-Reconcile retained OpenAI voice usage with goal costs when its authenticated usage history is inspected.
+Reconcile retained OpenAI voice usage with goal costs during bounded startup recovery and authenticated history inspection.

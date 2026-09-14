@@ -1188,6 +1188,193 @@ it.live(
 )
 
 it.live(
+  "bounded startup reconciliation resumes its cursor, quarantines malformed rows and retries stable charges",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const states = [yield* fixture(root), yield* fixture(root), yield* fixture(root)].toSorted((one, two) =>
+          one.binding.id.localeCompare(two.binding.id),
+        )
+        for (const state of states)
+          yield* state.voice.meter(
+            state.binding.id,
+            {
+              generation: state.binding.generation,
+              receipt: {
+                id: `usage_${state.binding.id}`,
+                kind: "response",
+                model: "gpt-realtime-2.1",
+                status: "reported",
+                tokens: {
+                  input: 2,
+                  output: 1,
+                  total: 3,
+                  cached: 0,
+                  inputText: 2,
+                  inputAudio: 0,
+                  inputImage: 0,
+                  cachedText: 0,
+                  cachedAudio: 0,
+                  cachedImage: 0,
+                  outputText: 1,
+                  outputAudio: 0,
+                },
+              },
+            },
+            secret,
+            root,
+          )
+        yield* states[0]!.voice.meter(
+          states[0]!.binding.id,
+          {
+            generation: states[0]!.binding.generation,
+            receipt: {
+              id: `missing_${states[0]!.binding.id}`,
+              kind: "response",
+              model: "gpt-realtime-2.1",
+              status: "missing",
+            },
+          },
+          secret,
+          root,
+        )
+        const { db } = yield* Database.Service
+        yield* db
+          .update(Table)
+          .set({ data: { invalid: true } })
+          .where(eq(Table.id, states[1]!.binding.id))
+          .run()
+          .pipe(Effect.orDie)
+
+        const seen: string[] = []
+        let attempts = 0
+        const publish = (input: { id: string }) =>
+          Effect.gen(function* () {
+            seen.push(input.id)
+            attempts++
+            if (attempts !== 2) return
+            return yield* Effect.fail(new VoiceError({ code: "conflict", message: "Injected historical failure." }))
+          })
+        const first = yield* make({ ...states[0]!.deps, usageCharges: publish })
+        expect(Exit.isFailure(yield* first.reconcile(0).pipe(Effect.exit))).toBe(true)
+        expect(seen).toEqual([])
+        expect(yield* first.reconcile(1)).toMatchObject({
+          cycle: 1,
+          status: "failed",
+          scanned: 0,
+          receipts: 0,
+          quarantined: 0,
+          failure: { id: states[0]!.binding.id },
+        })
+
+        const restarted = yield* make({ ...states[0]!.deps, usageCharges: publish })
+        expect(yield* restarted.reconcile(1)).toMatchObject({
+          cycle: 1,
+          status: "running",
+          after: states[0]!.binding.id,
+          scanned: 1,
+          receipts: 2,
+          quarantined: 0,
+        })
+        expect(yield* restarted.reconcile(1)).toMatchObject({
+          cycle: 1,
+          status: "running",
+          after: states[1]!.binding.id,
+          scanned: 2,
+          receipts: 2,
+          quarantined: 1,
+        })
+        expect(yield* restarted.reconcile(1)).toMatchObject({
+          cycle: 1,
+          status: "complete",
+          after: states[2]!.binding.id,
+          scanned: 3,
+          receipts: 3,
+          quarantined: 1,
+        })
+        expect(seen).toHaveLength(5)
+        expect(seen[0]).toBe(seen[2])
+        expect(seen[1]).toBe(seen[3])
+        expect(seen[4]).toContain(states[2]!.binding.id)
+
+        const storage = yield* Storage.Service
+        expect(
+          yield* storage.read([
+            "raya",
+            "voice",
+            "usage-reconciliation",
+            "quarantine",
+            createHash("sha256").update(states[1]!.binding.id).digest("hex"),
+          ]),
+        ).toMatchObject({ version: 1, id: states[1]!.binding.id, reason: "The retained voice binding is invalid." })
+        yield* storage.replace(["raya", "voice", "usage-reconciliation", "v1"], { invalid: true }).pipe(Effect.orDie)
+        expect(Exit.isFailure(yield* restarted.reconcile(1).pipe(Effect.exit))).toBe(true)
+        expect(seen).toHaveLength(5)
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
+    }),
+  30_000,
+)
+
+it.live(
+  "a completed reconciliation cycle includes later bindings on the next activation and tolerates parent deletion",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const seen: string[] = []
+        const publish = (input: { id: string }) => Effect.sync(() => seen.push(input.id)).pipe(Effect.asVoid)
+        const first = yield* fixture(root)
+        yield* first.voice.meter(
+          first.binding.id,
+          {
+            generation: first.binding.generation,
+            receipt: {
+              id: "before_cycle",
+              kind: "response",
+              model: "gpt-realtime-2.1",
+              status: "missing",
+            },
+          },
+          secret,
+          root,
+        )
+        const initial = yield* make({ ...first.deps, usageCharges: publish })
+        expect(yield* initial.reconcile(2)).toMatchObject({ cycle: 1, status: "complete", scanned: 1, receipts: 1 })
+
+        const later = yield* fixture(root)
+        yield* later.voice.meter(
+          later.binding.id,
+          {
+            generation: later.binding.generation,
+            receipt: { id: "after_cycle", kind: "response", model: "gpt-realtime-2.1", status: "missing" },
+          },
+          secret,
+          root,
+        )
+        const restarted = yield* make({ ...first.deps, usageCharges: publish })
+        expect(yield* restarted.reconcile(2)).toMatchObject({ cycle: 2, status: "complete", scanned: 2, receipts: 2 })
+        expect(seen.some((id) => id.endsWith(":response:after_cycle"))).toBe(true)
+
+        const { db } = yield* Database.Service
+        yield* db.delete(SessionTable).where(eq(SessionTable.id, session)).run().pipe(Effect.orDie)
+        expect(yield* restarted.reconcile(2)).toMatchObject({ cycle: 3, status: "complete", scanned: 0, receipts: 0 })
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
+    }),
+  30_000,
+)
+
+it.live(
   "migrates legacy receipts once, preserves old ownership, and prefers SQL over a leftover JSON copy",
   () =>
     Effect.gen(function* () {

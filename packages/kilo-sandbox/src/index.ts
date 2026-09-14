@@ -10,9 +10,15 @@ export {
   inspect as inspectFile,
   removeChecked,
   replaceChecked,
+  prepareTransaction,
+  publishTransaction,
+  restoreTransaction,
+  finalizeTransaction,
   validateFile,
   writeChecked,
   type FileIdentity,
+  type TransactionEntry,
+  type TransactionProof,
 } from "./checked"
 export { backendSupport, prepareCommand } from "./backend"
 export { isPublicAddress, normalizeDestinations, parseDestination } from "./destination"

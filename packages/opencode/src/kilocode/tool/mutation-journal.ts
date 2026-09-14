@@ -42,6 +42,7 @@ export const Outcome = Schema.Struct({
   phase: Phase,
   revision: Schema.Number,
   cursor: Schema.Number,
+  decision: Schema.optional(Schema.Literals(["commit", "rollback"])),
   owner: Owner,
   at: Schema.Number,
   reason: Schema.optional(Schema.String),
@@ -251,17 +252,32 @@ export function journals(storage: Store) {
     }
     if (previous.revision !== input.revision || !transitions[previous.phase].has(input.phase))
       return yield* new Conflict({ message: "Mutation journal phase or revision changed." })
-    if (!Number.isInteger(input.cursor) || input.cursor < previous.cursor || input.cursor > previous.entries.length)
+    const reset = input.phase !== previous.phase && ["committing", "rolling_back", "cleaning"].includes(input.phase)
+    if (
+      !Number.isInteger(input.cursor) ||
+      input.cursor < (reset ? 0 : previous.cursor) ||
+      input.cursor > previous.entries.length
+    )
       return yield* new Conflict({ message: "Mutation journal cursor is invalid." })
     const entries = input.entries ? [...input.entries] : previous.entries
     if (!valid(entries) || !same(previous.entries, entries))
       return yield* new Conflict({ message: "Mutation journal entries changed after reservation." })
+    if (
+      (["prepared", "committed", "rolled_back", "done"].includes(input.phase) && input.cursor !== entries.length) ||
+      (input.phase === "prepared" && entries.some((entry) => entry.kind !== "remove" && !entry.artifact))
+    )
+      return yield* new Conflict({ message: "Mutation journal phase is incomplete." })
     const outcome: typeof Outcome.Type = {
       ...previous,
       entries,
       phase: input.phase,
       revision: previous.revision + 1,
       cursor: input.cursor,
+      ...(input.phase === "committed"
+        ? { decision: "commit" as const }
+        : input.phase === "rolled_back"
+          ? { decision: "rollback" as const }
+          : {}),
       at: Date.now(),
       ...(input.reason ? { reason: input.reason } : {}),
     }

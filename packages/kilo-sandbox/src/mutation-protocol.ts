@@ -1,5 +1,6 @@
 import type { OpenFlag } from "effect/FileSystem"
 import type { Identity } from "./checked-write"
+import type { Entry } from "./checked-transaction"
 
 export interface Options {
   readonly flag?: OpenFlag | undefined
@@ -75,6 +76,15 @@ export type Operation =
       readonly identity: Identity
       readonly sha256: string
     }
+  | { readonly op: "stageFileTransaction"; readonly path: string; readonly entry: Entry; readonly data: string }
+  | { readonly op: "commitFileTransaction"; readonly path: string; readonly entry: Entry }
+  | { readonly op: "rollbackFileTransaction"; readonly path: string; readonly entry: Entry }
+  | {
+      readonly op: "cleanupFileTransaction"
+      readonly path: string
+      readonly entry: Entry
+      readonly committed: boolean
+    }
 
 export type BatchOperation = Exclude<
   Operation,
@@ -87,6 +97,10 @@ export type BatchOperation = Exclude<
       | "writeFileAnchored"
       | "removeFileChecked"
       | "replaceFileChecked"
+      | "stageFileTransaction"
+      | "commitFileTransaction"
+      | "rollbackFileTransaction"
+      | "cleanupFileTransaction"
   }
 >
 export type Request = Operation | { readonly op: "batch"; readonly operations: ReadonlyArray<BatchOperation> }
@@ -112,6 +126,45 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 function isFailure(value: unknown): value is Failure {
   return isObject(value) && typeof value.message === "string"
+}
+
+function isIdentity(value: unknown): value is Identity {
+  return (
+    isObject(value) &&
+    typeof value.dev === "string" &&
+    /^\d+$/.test(value.dev) &&
+    typeof value.ino === "string" &&
+    /^\d+$/.test(value.ino)
+  )
+}
+
+function isProof(value: unknown) {
+  return (
+    isObject(value) &&
+    isIdentity(value.identity) &&
+    typeof value.sha256 === "string" &&
+    /^[a-f0-9]{64}$/.test(value.sha256)
+  )
+}
+
+function isEntry(value: unknown): value is Entry {
+  if (!isObject(value) || !["create", "replace", "remove"].includes(String(value.kind))) return false
+  if (typeof value.target !== "string") return false
+  if (value.stage !== undefined && typeof value.stage !== "string") return false
+  if (value.hold !== undefined && typeof value.hold !== "string") return false
+  if (value.review !== undefined && !isProof(value.review)) return false
+  if (value.artifact !== undefined && !isProof(value.artifact)) return false
+  if (
+    value.result !== undefined &&
+    (!isObject(value.result) || typeof value.result.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(value.result.sha256))
+  )
+    return false
+  if (
+    value.anchor !== undefined &&
+    (!isObject(value.anchor) || typeof value.anchor.path !== "string" || !isIdentity(value.anchor.identity))
+  )
+    return false
+  return true
 }
 
 export function isResponse(value: unknown): value is Response {
@@ -175,6 +228,13 @@ function isOperation(value: unknown): value is Operation {
         typeof value.sha256 === "string" &&
         /^[a-f0-9]{64}$/.test(value.sha256)
       )
+    case "stageFileTransaction":
+      return path && isEntry(value.entry) && value.entry.target === value.path && typeof value.data === "string"
+    case "commitFileTransaction":
+    case "rollbackFileTransaction":
+      return path && isEntry(value.entry) && value.entry.target === value.path
+    case "cleanupFileTransaction":
+      return path && isEntry(value.entry) && value.entry.target === value.path && typeof value.committed === "boolean"
     default:
       return false
   }
@@ -189,7 +249,11 @@ function isBatchOperation(value: unknown): value is BatchOperation {
     value.op !== "writeFileExclusive" &&
     value.op !== "writeFileAnchored" &&
     value.op !== "removeFileChecked" &&
-    value.op !== "replaceFileChecked"
+    value.op !== "replaceFileChecked" &&
+    value.op !== "stageFileTransaction" &&
+    value.op !== "commitFileTransaction" &&
+    value.op !== "rollbackFileTransaction" &&
+    value.op !== "cleanupFileTransaction"
   )
 }
 

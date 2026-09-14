@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { isRequest, type Failure, type Operation, type Request, type Response, type Time } from "./mutation-protocol"
 import { createAnchored, createChecked, removeChecked, replaceChecked, writeChecked } from "./checked-write"
+import { cleanup, commit, rollback, stage } from "./checked-transaction"
 
 function time(value: Time) {
   return value.type === "date" ? new Date(value.value) : value.value
@@ -120,6 +121,17 @@ async function mutate(request: Operation): Promise<string | undefined> {
       return undefined
     case "replaceFileChecked":
       await replaceChecked(request.path, Buffer.from(request.data, "base64"), request.identity, request.sha256)
+      return undefined
+    case "stageFileTransaction":
+      return JSON.stringify(await stage(request.entry, Buffer.from(request.data, "base64")))
+    case "commitFileTransaction":
+      await commit(request.entry)
+      return undefined
+    case "rollbackFileTransaction":
+      await rollback(request.entry)
+      return undefined
+    case "cleanupFileTransaction":
+      await cleanup(request.entry, request.committed)
       return undefined
   }
   throw new TypeError("Unsupported filesystem mutation")

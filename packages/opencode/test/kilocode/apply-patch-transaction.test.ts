@@ -1,0 +1,119 @@
+import { createHash } from "node:crypto"
+import { link, readdir, readFile, stat, writeFile } from "node:fs/promises"
+import path from "node:path"
+import { expect } from "bun:test"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Effect, Exit } from "effect"
+import { Git } from "@/git"
+import { transact, type Item } from "@/kilocode/tool/apply-patch-transaction"
+import { journals } from "@/kilocode/tool/mutation-journal"
+import { Storage } from "@/storage/storage"
+import { tmpdirScoped } from "../fixture/fixture"
+import { testEffect } from "../lib/effect"
+
+const it = testEffect(LayerNode.compile(LayerNode.group([FSUtil.node, Git.node, CrossSpawnSpawner.node])))
+const hash = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex")
+
+function instance<A, E>(dir: string, run: (storage: Storage.Interface) => Effect.Effect<A, E>) {
+  return Effect.gen(function* () {
+    return yield* run(yield* Storage.Service)
+  }).pipe(Effect.provide(Storage.layerFromDir(dir)))
+}
+
+it.live("commits all postimages before cleanup and retains an idempotent receipt", () =>
+  Effect.gen(function* () {
+    const root = yield* tmpdirScoped()
+    const dir = path.join(root, "storage")
+    const target = path.join(root, "existing.txt")
+    const created = path.join(root, "created.txt")
+    yield* Effect.promise(() => writeFile(target, "before"))
+    const prior = yield* Effect.promise(() => stat(target, { bigint: true }))
+    const anchor = yield* Effect.promise(() => stat(root, { bigint: true }))
+    const items: Item[] = [
+      {
+        entry: {
+          kind: "replace",
+          target,
+          stage: path.join(root, ".raya-txn-complete-0.stage"),
+          hold: path.join(root, ".raya-txn-complete-0.hold"),
+          review: {
+            identity: { dev: prior.dev.toString(), ino: prior.ino.toString() },
+            sha256: hash("before"),
+          },
+          result: { sha256: hash("after") },
+        },
+        data: Buffer.from("after"),
+      },
+      {
+        entry: {
+          kind: "create",
+          target: created,
+          stage: path.join(root, ".raya-txn-complete-1.stage"),
+          anchor: { path: root, identity: { dev: anchor.dev.toString(), ino: anchor.ino.toString() } },
+          result: { sha256: hash("created") },
+        },
+        data: Buffer.from("created"),
+      },
+    ]
+    const input = { invocation: "complete", digest: hash("complete patch"), workspace: root, items }
+    const outcome = yield* instance(dir, (storage) => transact(storage, input))
+    expect(outcome.phase).toBe("done")
+    expect(outcome.decision).toBe("commit")
+    expect(yield* Effect.promise(() => readFile(target, "utf8"))).toBe("after")
+    expect(yield* Effect.promise(() => readFile(created, "utf8"))).toBe("created")
+    expect((yield* Effect.promise(() => readdir(root))).some((name) => name.startsWith(".raya-txn-"))).toBe(false)
+    expect((yield* instance(dir, (storage) => journals(storage).get(input.invocation)))?.phase).toBe("done")
+    expect(Exit.isFailure(yield* instance(dir, (storage) => transact(storage, input).pipe(Effect.exit)))).toBe(true)
+    expect(yield* Effect.promise(() => readFile(target, "utf8"))).toBe("after")
+  }),
+)
+
+it.live("rolls back earlier files when a later checked mutation fails", () =>
+  Effect.gen(function* () {
+    const root = yield* tmpdirScoped()
+    const dir = path.join(root, "storage")
+    const first = path.join(root, "first.txt")
+    const second = path.join(root, "second.txt")
+    const alias = path.join(root, "alias.txt")
+    yield* Effect.promise(() => Promise.all([writeFile(first, "first before"), writeFile(second, "second before")]))
+    const firstInfo = yield* Effect.promise(() => stat(first, { bigint: true }))
+    const secondInfo = yield* Effect.promise(() => stat(second, { bigint: true }))
+    const items: Item[] = [
+      {
+        entry: {
+          kind: "replace",
+          target: first,
+          stage: path.join(root, ".raya-txn-rollback-0.stage"),
+          hold: path.join(root, ".raya-txn-rollback-0.hold"),
+          review: {
+            identity: { dev: firstInfo.dev.toString(), ino: firstInfo.ino.toString() },
+            sha256: hash("first before"),
+          },
+          result: { sha256: hash("first after") },
+        },
+        data: Buffer.from("first after"),
+      },
+      {
+        entry: {
+          kind: "remove",
+          target: second,
+          hold: path.join(root, ".raya-txn-rollback-1.hold"),
+          review: {
+            identity: { dev: secondInfo.dev.toString(), ino: secondInfo.ino.toString() },
+            sha256: hash("second before"),
+          },
+        },
+      },
+    ]
+    yield* Effect.promise(() => link(second, alias))
+    const input = { invocation: "rollback", digest: hash("rollback patch"), workspace: root, items }
+    expect(Exit.isFailure(yield* instance(dir, (storage) => transact(storage, input).pipe(Effect.exit)))).toBe(true)
+    expect(yield* Effect.promise(() => readFile(first, "utf8"))).toBe("first before")
+    expect(yield* Effect.promise(() => readFile(second, "utf8"))).toBe("second before")
+    expect(yield* Effect.promise(() => readFile(alias, "utf8"))).toBe("second before")
+    expect((yield* instance(dir, (storage) => journals(storage).get(input.invocation)))?.decision).toBe("rollback")
+    expect((yield* Effect.promise(() => readdir(root))).some((name) => name.startsWith(".raya-txn-"))).toBe(false)
+  }),
+)

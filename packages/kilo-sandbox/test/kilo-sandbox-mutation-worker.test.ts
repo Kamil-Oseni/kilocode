@@ -5,6 +5,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { isRequest, isResponse, type Request } from "../src/mutation-protocol"
+import type { Entry, Proof } from "../src/checked-transaction"
 
 const roots: string[] = []
 
@@ -170,6 +171,44 @@ describe("filesystem mutation worker", () => {
     expect(await worker(await replacement(file, "changed"))).toEqual({ ok: true })
     expect(await readFile(file, "utf8")).toBe("changed")
     if (process.platform !== "win32") expect((await stat(file)).mode & 0o777).toBe(0o640)
+    expect(await holds(root)).toEqual([])
+  })
+
+  test("retains transaction sidecars through worker commit and removes them after rollback", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "kilo-mutation-worker-"))
+    roots.push(root)
+    const file = path.join(root, "value.txt")
+    const stage = path.join(root, ".raya-txn-worker.stage")
+    const hold = path.join(root, ".raya-txn-worker.hold")
+    await writeFile(file, "approved")
+    const info = await stat(file, { bigint: true })
+    let entry: Entry = {
+      kind: "replace",
+      target: file,
+      stage,
+      hold,
+      review: {
+        identity: { dev: info.dev.toString(), ino: info.ino.toString() },
+        sha256: hash("approved"),
+      },
+      result: { sha256: hash("changed") },
+    }
+    const prepared = await worker({
+      op: "stageFileTransaction",
+      path: file,
+      entry,
+      data: Buffer.from("changed").toString("base64"),
+    })
+    expect(prepared.ok).toBe(true)
+    if (!prepared.ok || !prepared.value) return
+    entry = { ...entry, artifact: JSON.parse(prepared.value) as Proof }
+
+    expect(await worker({ op: "commitFileTransaction", path: file, entry })).toEqual({ ok: true })
+    expect(await readFile(file, "utf8")).toBe("changed")
+    expect(await readFile(hold, "utf8")).toBe("approved")
+    expect(await worker({ op: "rollbackFileTransaction", path: file, entry })).toEqual({ ok: true })
+    expect(await worker({ op: "cleanupFileTransaction", path: file, entry, committed: false })).toEqual({ ok: true })
+    expect(await readFile(file, "utf8")).toBe("approved")
     expect(await holds(root)).toEqual([])
   })
 
@@ -419,5 +458,21 @@ describe("filesystem mutation worker", () => {
     expect(isRequest(replacement)).toBe(true)
     expect(isRequest({ ...replacement, data: 1 })).toBe(false)
     expect(isRequest({ op: "batch", operations: [replacement] })).toBe(false)
+    const transaction = {
+      op: "commitFileTransaction",
+      path: "value.txt",
+      entry: {
+        kind: "replace",
+        target: "value.txt",
+        stage: ".raya-txn-stage",
+        hold: ".raya-txn-hold",
+        review: { identity: base.identity, sha256: base.sha256 },
+        result: { sha256: base.sha256 },
+        artifact: { identity: base.identity, sha256: base.sha256 },
+      },
+    } as const
+    expect(isRequest(transaction)).toBe(true)
+    expect(isRequest({ ...transaction, path: "other.txt" })).toBe(false)
+    expect(isRequest({ op: "batch", operations: [transaction] })).toBe(false)
   })
 })

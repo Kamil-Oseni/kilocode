@@ -211,6 +211,10 @@ function immediate(request: Request): request is Extract<
       | "writeFileAnchored"
       | "removeFileChecked"
       | "replaceFileChecked"
+      | "stageFileTransaction"
+      | "commitFileTransaction"
+      | "rollbackFileTransaction"
+      | "cleanupFileTransaction"
   }
 > {
   return (
@@ -219,7 +223,11 @@ function immediate(request: Request): request is Extract<
     request.op === "writeFileExclusive" ||
     request.op === "writeFileAnchored" ||
     request.op === "removeFileChecked" ||
-    request.op === "replaceFileChecked"
+    request.op === "replaceFileChecked" ||
+    request.op === "stageFileTransaction" ||
+    request.op === "commitFileTransaction" ||
+    request.op === "rollbackFileTransaction" ||
+    request.op === "cleanupFileTransaction"
   )
 }
 

@@ -263,6 +263,27 @@ function matchesOrganization(item: typeof Organization.Type, patch: typeof Organ
   return true
 }
 
+function matchesCreation(item: typeof Organization.Type, input: typeof OrganizationCreate.Type) {
+  if (item.revision !== 1 || item.archived) return false
+  if (item.name !== input.name.trim() || item.purpose !== input.purpose?.trim()) return false
+  if (
+    !isDeepStrictEqual(
+      item.members,
+      input.members.map((member, position) => ({
+        agentID: member.agentID,
+        role: member.role.trim(),
+        position,
+        ...(member.supervisorID ? { supervisorID: member.supervisorID } : {}),
+      })),
+    )
+  )
+    return false
+  return isDeepStrictEqual(
+    item.delegations,
+    (input.delegations ?? []).map((edge, position) => ({ ...edge, position })),
+  )
+}
+
 function matchesWorker(agent: RayaTask.Agent, input: typeof RayaTask.Create.Type) {
   return (
     agent.name === input.name.trim() &&
@@ -479,10 +500,31 @@ export function routineManagementTools(input: {
           }),
           decode: Schema.decodeUnknownEffect(OrganizationPlan),
           recover: (plan) =>
-            organizations.get(plan.id).pipe(
-              Effect.map(organizationResult),
-              Effect.catchTag("RayaTaskOrganization.NotFound", () => Effect.succeed(undefined)),
-            ),
+            organizations
+              .get(plan.id)
+              .pipe(Effect.catchTag("RayaTaskOrganization.NotFound", () => Effect.succeed(undefined)))
+              .pipe(
+                Effect.flatMap((item) => {
+                  if (!item) return Effect.succeed(undefined)
+                  if (!matchesCreation(item, plan.create))
+                    return Effect.succeed({
+                      title: "Organization creation needs review",
+                      output:
+                        "The saved organization changed before Raya could confirm creation. Review its workers, reporting lines, delegation permissions, and schedules before making another change.",
+                      metadata: {
+                        requestStatus: "conflict",
+                        view: "routines",
+                        organizationID: item.id,
+                        organizationRevision: item.revision,
+                      },
+                    })
+                  return Effect.gen(function* () {
+                    for (const worker of plan.workers)
+                      if (worker.kind === "new") yield* tasks.activate(worker.create, worker.id)
+                    return organizationResult(item)
+                  })
+                }),
+              ),
           run: (plan) =>
             Effect.gen(function* () {
               yield* ctx.ask({ permission: "schedule_task", patterns, always: patterns, metadata: params })
@@ -491,9 +533,12 @@ export function routineManagementTools(input: {
                   yield* tasks.get(worker.id)
                   continue
                 }
-                yield* tasks.provision(worker.create, worker.id)
+                yield* tasks.stage(worker.create, worker.id)
               }
-              return organizationResult(yield* organizations.provision(plan.create, plan.id))
+              const item = yield* organizations.provision(plan.create, plan.id)
+              for (const worker of plan.workers)
+                if (worker.kind === "new") yield* tasks.activate(worker.create, worker.id)
+              return organizationResult(item)
             }),
         }).pipe(
           Effect.catch((err) =>
@@ -631,16 +676,17 @@ export function routineManagementTools(input: {
               const organization = yield* organizations.get(plan.organizationID)
               if (organization.revision === plan.expectedRevision) return undefined
               const member = organization.members.some((item) => item.agentID === plan.childID)
-              if (organization.revision === plan.expectedRevision + 1 && member) {
-                const agent = yield* tasks.get(plan.childID)
-                if (
-                  matchesWorker(agent, plan.create) &&
-                  matchesOrganization(organization, {
-                    expectedRevision: plan.expectedRevision,
-                    members: plan.members,
-                    delegations: plan.delegations,
-                  })
-                ) {
+              if (
+                organization.revision === plan.expectedRevision + 1 &&
+                member &&
+                matchesOrganization(organization, {
+                  expectedRevision: plan.expectedRevision,
+                  members: plan.members,
+                  delegations: plan.delegations,
+                })
+              ) {
+                const agent = yield* tasks.activate(plan.create, plan.childID)
+                if (matchesWorker(agent, plan.create)) {
                   yield* announce(organization, agent, plan)
                   return subordinateResult(organization, agent, plan.parentID)
                 }
@@ -666,18 +712,19 @@ export function routineManagementTools(input: {
                 metadata: params,
               })
               .pipe(
-                Effect.andThen(tasks.provision(plan.create, plan.childID)),
-                Effect.flatMap((agent) =>
-                  organizations
-                    .update(plan.organizationID, {
-                      expectedRevision: plan.expectedRevision,
-                      members: plan.members,
-                      delegations: plan.delegations,
-                    })
-                    .pipe(
-                      Effect.tap((organization) => announce(organization, agent, plan)),
-                      Effect.map((organization) => subordinateResult(organization, agent, plan.parentID)),
-                    ),
+                Effect.andThen(tasks.stage(plan.create, plan.childID)),
+                Effect.andThen(
+                  organizations.update(plan.organizationID, {
+                    expectedRevision: plan.expectedRevision,
+                    members: plan.members,
+                    delegations: plan.delegations,
+                  }),
+                ),
+                Effect.flatMap((organization) =>
+                  tasks.activate(plan.create, plan.childID).pipe(
+                    Effect.tap((active) => announce(organization, active, plan)),
+                    Effect.map((active) => subordinateResult(organization, active, plan.parentID)),
+                  ),
                 ),
               ),
         }).pipe(

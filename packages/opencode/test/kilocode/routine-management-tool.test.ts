@@ -112,7 +112,9 @@ it.live(
         const create = yield* (yield* broken.create).init()
         const first = yield* create.execute(params, context("create-company")).pipe(Effect.exit)
         expect(Exit.isFailure(first)).toBe(true)
-        expect(yield* RayaTask.make({ storage, database }).list()).toHaveLength(1)
+        const staged = yield* RayaTask.make({ storage, database }).list()
+        expect(staged).toHaveLength(1)
+        expect(staged[0]?.enabled).toBe(false)
         expect(
           (yield* RayaTaskOrganization.make(database, RayaTask.make({ storage, database }), storage).list()).items,
         ).toHaveLength(0)
@@ -129,6 +131,7 @@ it.live(
           storage,
         ).list()
         expect(agents).toHaveLength(2)
+        expect(agents.map((item) => item.enabled)).toEqual([true, true])
         expect(agents.map((item) => item.tools)).toEqual([
           ["inspect_team", "delegate_work"],
           ["read", "browser_*"],
@@ -178,6 +181,183 @@ it.live(
         expect(
           (yield* RayaTaskOrganization.make(database, RayaTask.make({ storage, database }), storage).list()).items,
         ).toHaveLength(2)
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            Storage.layerFromDir(path.join(directory, "storage")),
+            Database.layerFromPath(path.join(directory, "queue.sqlite")),
+          ),
+        ),
+      ),
+    ),
+  30_000,
+)
+
+it.live(
+  "new organization workers remain paused until the graph is durable and recover activation",
+  () =>
+    provideTmpdirInstance((directory) =>
+      Effect.gen(function* () {
+        const storage = yield* Storage.Service
+        const database = yield* Database.Service
+        const failed = { saves: 0 }
+        const unreliable = {
+          ...storage,
+          replace: (key: string[], value: unknown) =>
+            key[0] === "raya" && key[1] === "agent" && ++failed.saves === 3
+              ? Effect.sync(() => {
+                  throw new Error("simulated crash before worker activation")
+                })
+              : storage.replace(key, value),
+        }
+        const params = {
+          name: "Friday Operations",
+          purpose: "Coordinate the weekly close.",
+          workers: [
+            {
+              kind: "new" as const,
+              key: "chief",
+              name: "Chief",
+              role: "CEO",
+              objective: "Coordinate the close",
+              output: output("Close"),
+              capabilities: [],
+              access: "brief" as const,
+              tools: ["inspect_team", "delegate_work"],
+              when: "only when I ask",
+              delegatesTo: ["books"],
+            },
+            {
+              kind: "new" as const,
+              key: "books",
+              name: "Books",
+              role: "Accountant",
+              objective: "Review the books",
+              output: output("Books"),
+              capabilities: ["accounting"],
+              access: "brief" as const,
+              tools: ["read"],
+              cron: "0 17 * * 5",
+              timezone: "America/Toronto",
+              supervisorKey: "chief",
+            },
+          ],
+        }
+        const broken = yield* (yield* routineManagementTools({ database, storage: unreliable, sessions }).create).init()
+        expect(Exit.isFailure(yield* broken.execute(params, context("activate-company")).pipe(Effect.exit))).toBe(true)
+
+        const tasks = RayaTask.make({ storage, database })
+        const staged = yield* tasks.list()
+        expect(staged).toHaveLength(2)
+        expect(staged.every((item) => !item.enabled)).toBe(true)
+        expect((yield* tasks.preview(Date.now())).every((item) => item.nextRun === undefined)).toBe(true)
+        expect((yield* RayaTaskOrganization.make(database, tasks, storage).list()).items).toHaveLength(1)
+
+        const retry = yield* (yield* routineManagementTools({ database, storage, sessions }).create).init()
+        const chief = staged.find((item) => item.name === "Chief")
+        if (!chief) throw new Error("staged chief was not found")
+        yield* tasks.update(chief.id, { objective: "Changed while activation was interrupted" })
+        const refused = yield* retry.execute(params, context("activate-company"))
+        expect(refused).toMatchObject({
+          title: "Organization creation needs review",
+          metadata: { requestStatus: "unresolved" },
+        })
+        expect(refused.output).toContain("changed before activation")
+        expect((yield* tasks.list()).every((item) => !item.enabled)).toBe(true)
+        yield* tasks.update(chief.id, { objective: "Coordinate the close" })
+
+        const recovered = yield* retry.execute(params, {
+          ...context("activate-company"),
+          ask: () => Effect.die("activation recovery must not request permission again"),
+        })
+        expect(recovered).toMatchObject({ title: "Organization created", metadata: { requestStatus: "complete" } })
+        const active = yield* tasks.list()
+        expect(active).toHaveLength(2)
+        expect(active.every((item) => item.enabled)).toBe(true)
+        expect((yield* tasks.preview(Date.now())).find((item) => item.name === "Books")?.nextRun).toBeNumber()
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            Storage.layerFromDir(path.join(directory, "storage")),
+            Database.layerFromPath(path.join(directory, "queue.sqlite")),
+          ),
+        ),
+      ),
+    ),
+  30_000,
+)
+
+it.live(
+  "main-chat organization recovery refuses a company changed after a lost result",
+  () =>
+    provideTmpdirInstance((directory) =>
+      Effect.gen(function* () {
+        const storage = yield* Storage.Service
+        const database = yield* Database.Service
+        const failed = { value: false }
+        const unreliable = {
+          ...storage,
+          replace: (key: string[], value: unknown) =>
+            key[0] === "raya" &&
+            key[1] === "agent-workflows" &&
+            !failed.value &&
+            value !== null &&
+            typeof value === "object" &&
+            "result" in value
+              ? Effect.sync(() => {
+                  failed.value = true
+                  throw new Error("simulated crash after organization creation")
+                })
+              : storage.replace(key, value),
+        }
+        const params = {
+          name: "Operations",
+          purpose: "Run the company.",
+          workers: [
+            {
+              kind: "new" as const,
+              key: "chief",
+              name: "Chief",
+              role: "CEO",
+              objective: "Run operations",
+              output: output("Operations"),
+              capabilities: [],
+              access: "brief" as const,
+              tools: ["inspect_team"],
+              when: "only when I ask",
+            },
+          ],
+        }
+        const broken = yield* (yield* routineManagementTools({ database, storage: unreliable, sessions }).create).init()
+        expect(Exit.isFailure(yield* broken.execute(params, context("changed-company")).pipe(Effect.exit))).toBe(true)
+
+        const tasks = RayaTask.make({ storage, database })
+        const organizations = RayaTaskOrganization.make(database, tasks, storage)
+        const company = (yield* organizations.list()).items[0]
+        if (!company) throw new Error("created company was not found")
+        const changed = yield* organizations.update(company.id, {
+          expectedRevision: company.revision,
+          purpose: "Changed after creation.",
+        })
+        expect(changed.revision).toBe(2)
+
+        const retry = yield* (yield* routineManagementTools({ database, storage, sessions }).create).init()
+        const result = yield* retry.execute(params, {
+          ...context("changed-company"),
+          ask: () => Effect.die("recovery must not request permission again"),
+        })
+        expect(result).toMatchObject({
+          title: "Organization creation needs review",
+          metadata: {
+            requestStatus: "conflict",
+            view: "routines",
+            organizationID: company.id,
+            organizationRevision: 2,
+          },
+        })
+        expect(result.output).toContain("changed before Raya could confirm creation")
+        expect((yield* tasks.list()).filter((item) => item.name === "Chief")).toHaveLength(1)
+        expect((yield* organizations.list()).items).toEqual([changed])
       }).pipe(
         Effect.provide(
           Layer.mergeAll(

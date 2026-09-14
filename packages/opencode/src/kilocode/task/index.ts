@@ -782,28 +782,60 @@ export namespace RayaTask {
       return agent
     })
 
+    const equivalent = Effect.fn("RayaTask.equivalent")(function* (existing: Agent, input: Create, id: string) {
+      const agent = yield* draft(input, id)
+      const expected = {
+        ...agent,
+        createdAt: existing.createdAt,
+        updatedAt: existing.updatedAt,
+        scheduleUpdatedAt: existing.scheduleUpdatedAt,
+      }
+      const saved = yield* Schema.decodeUnknownEffect(Agent)(JSON.parse(JSON.stringify(expected))).pipe(Effect.orDie)
+      return isDeepStrictEqual(existing, saved)
+    })
+
     const create = Effect.fn("RayaTask.create")(function* (input: Create, id = crypto.randomUUID(), replay = false) {
       const items = yield* list()
       const existing = items.find((item) => item.id === id)
       if (existing) {
-        if (replay) {
-          const agent = yield* draft(input, id)
-          const expected = {
-            ...agent,
-            createdAt: existing.createdAt,
-            updatedAt: existing.updatedAt,
-            scheduleUpdatedAt: existing.scheduleUpdatedAt,
-          }
-          const saved = yield* Schema.decodeUnknownEffect(Agent)(JSON.parse(JSON.stringify(expected))).pipe(
-            Effect.orDie,
-          )
-          if (isDeepStrictEqual(existing, saved)) return existing
-        }
+        if (replay && (yield* equivalent(existing, input, id))) return existing
         return yield* new GuardError({ kind: "conflict", message: "A routine already uses this ID." })
       }
       const agent = yield* draft(input, id)
       yield* save([...items, agent])
       return agent
+    })
+
+    const stage = Effect.fn("RayaTask.stage")(function* (input: Create, id: string) {
+      yield* draft(input, id)
+      const paused = { ...input, enabled: false }
+      const items = yield* list()
+      const existing = items.find((item) => item.id === id)
+      if (existing) {
+        if ((yield* equivalent(existing, paused, id)) || (yield* equivalent(existing, input, id))) return existing
+        return yield* new GuardError({ kind: "conflict", message: "A routine already uses this ID." })
+      }
+      const agent = yield* draft(paused, id)
+      yield* save([...items, agent])
+      return agent
+    })
+
+    const activate = Effect.fn("RayaTask.activate")(function* (input: Create, id: string) {
+      const items = yield* list()
+      const index = items.findIndex((item) => item.id === id)
+      if (index < 0) return yield* new NotFoundError({ message: "Agent not found" })
+      const existing = items[index]
+      if (yield* equivalent(existing, input, id)) return existing
+      if (!(input.enabled ?? true) || !(yield* equivalent(existing, { ...input, enabled: false }, id)))
+        return yield* new GuardError({
+          kind: "conflict",
+          message: "This provisioned routine changed before activation.",
+        })
+      const next: Agent = { ...existing, enabled: true, updatedAt: Date.now() }
+      const copy = [...items]
+      copy[index] = next
+      yield* save(copy)
+      return next
     })
 
     const update = Effect.fn("RayaTask.update")(function* (
@@ -1234,6 +1266,8 @@ export namespace RayaTask {
       check: (input: Create) => draft(input, crypto.randomUUID()).pipe(Effect.asVoid),
       create: (input: Create) => mutate(deps.storage, create(input)),
       provision: (input: Create, id: string) => mutate(deps.storage, create(input, id, true)),
+      stage: (input: Create, id: string) => mutate(deps.storage, stage(input, id)),
+      activate: (input: Create, id: string) => mutate(deps.storage, activate(input, id)),
       update: (...args: Parameters<typeof update>) => mutate(deps.storage, update(...args)),
       authority: (...args: Parameters<typeof authority>) => mutate(deps.storage, authority(...args)),
       remove: (id: string) => mutate(deps.storage, removeOwned(id)),

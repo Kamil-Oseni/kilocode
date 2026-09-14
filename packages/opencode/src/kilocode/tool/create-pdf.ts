@@ -25,6 +25,11 @@ const Image = Schema.Struct({
     Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(7)),
   ).annotate({ description: "Optional display width in inches, from 1 to 7." }),
 })
+const Link = Schema.Struct({
+  type: Schema.Literal("link"),
+  text: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(300)),
+  url: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(2_048)),
+})
 const Block = Schema.Union([
   Schema.Struct({ type: Schema.Literal("paragraph"), text: Text }),
   Schema.Struct({
@@ -48,6 +53,7 @@ const Block = Schema.Union([
     header: Schema.optional(Schema.Boolean),
   }),
   Image,
+  Link,
 ])
 const Parameters = Schema.Struct({
   filePath: Schema.String.annotate({ description: "Destination path ending in .pdf." }),
@@ -112,6 +118,22 @@ function encode(value: string) {
     .toUpperCase()
 }
 
+function utf8(value: string) {
+  return [...new TextEncoder().encode(value)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("")
+    .toUpperCase()
+}
+
+function address(value: string) {
+  if (value !== value.trim() || !URL.canParse(value)) throw new Error("PDF links require a valid http or https URL.")
+  const url = new URL(value)
+  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password)
+    throw new Error("PDF links require a credential-free http or https URL.")
+  if (url.href.length > 2_048) throw new Error("A normalized PDF link exceeds 2,048 characters.")
+  return url.href
+}
+
 function wrap(value: string, size: number, indent = 0, width = 504 - indent) {
   const limit = Math.max(1, Math.floor(width / (size * 0.52)))
   const lines: string[] = []
@@ -142,6 +164,9 @@ type Row =
   | { text: string; size: number; font: "F1" | "F2"; indent?: number; before?: number; after?: number }
   | { cells: readonly string[]; header: boolean; before?: number; after?: number }
   | { image: Loaded; before?: number; after?: number }
+  | { link: { text: string; url: string }; before?: number; after?: number }
+
+type Mark = { readonly x: number; readonly y: number; readonly width: number; readonly url: string }
 
 type Loaded = PdfImage & {
   readonly index: number
@@ -190,6 +215,10 @@ function pdf(input: typeof Parameters.Type, images: readonly Loaded[]) {
       rows.push({ image, before: 8, after: 9 })
       continue
     }
+    if (block.type === "link") {
+      rows.push({ link: { text: block.text, url: address(block.url) }, before: 3, after: 9 })
+      continue
+    }
     for (const [index, item] of block.items.entries())
       rows.push({
         text: `${block.type === "numbered" ? `${index + 1}.` : "•"} ${item.trim()}`,
@@ -202,6 +231,7 @@ function pdf(input: typeof Parameters.Type, images: readonly Loaded[]) {
   }
 
   const pages: string[][] = [[]]
+  const marks: Mark[][] = [[]]
   const accent = input.accent ?? "45557A"
   const rgb = [0, 2, 4].map((index) => (Number.parseInt(accent.slice(index, index + 2), 16) / 255).toFixed(3))
   let y = 720
@@ -218,6 +248,7 @@ function pdf(input: typeof Parameters.Type, images: readonly Loaded[]) {
       const total = height + caption.length * 13.5
       if (y - total < 72) {
         pages.push([])
+        marks.push([])
         y = 720
       }
       const x = 54 + (504 - width) / 2
@@ -235,12 +266,36 @@ function pdf(input: typeof Parameters.Type, images: readonly Loaded[]) {
       y -= row.after ?? 0
       continue
     }
+    if ("link" in row) {
+      const lines = wrap(row.link.text.trim(), 11)
+      for (const line of lines) {
+        const height = 14.85
+        if (y - height < 72) {
+          pages.push([])
+          marks.push([])
+          y = 720
+        }
+        if (line) {
+          const width = Math.min(504, line.length * 11 * 0.52)
+          pages
+            .at(-1)!
+            .push(
+              `BT /F2 11 Tf ${rgb.join(" ")} rg 54 ${y.toFixed(2)} Td <${encode(line)}> Tj ET ${rgb.join(" ")} rg 54 ${(y - 2).toFixed(2)} ${width.toFixed(2)} 0.5 re f`,
+            )
+          marks.at(-1)!.push({ x: 54, y: y - 3, width, url: row.link.url })
+        }
+        y -= height
+      }
+      y -= row.after ?? 0
+      continue
+    }
     if ("cells" in row) {
       const width = 504 / row.cells.length
       const cells = row.cells.map((cell) => wrap(cell.trim(), 9, 0, width - 12))
       const height = Math.max(1, ...cells.map((lines) => lines.length)) * 12.15 + 10
       if (y - height < 72) {
         pages.push([])
+        marks.push([])
         y = 720
       }
       const page = pages.at(-1)!
@@ -265,6 +320,7 @@ function pdf(input: typeof Parameters.Type, images: readonly Loaded[]) {
       const height = row.size * 1.35
       if (y - height < 72) {
         pages.push([])
+        marks.push([])
         y = 720
       }
       if (line) {
@@ -313,13 +369,19 @@ function pdf(input: typeof Parameters.Type, images: readonly Loaded[]) {
     ? ` /XObject << ${images.map((image) => `/Im${image.index + 1} ${refs.get(image.index)} 0 R`).join(" ")} >>`
     : ""
   const kids: number[] = []
-  for (const page of pages) {
+  for (const [index, page] of pages.entries()) {
     const stream = page.join("\n")
     const content = objects.push(
       `<< /Length ${new TextEncoder().encode(stream).length} >>\nstream\n${stream}\nendstream`,
     )
+    const annotations = marks[index]!.map((mark) =>
+      objects.push(
+        `<< /Type /Annot /Subtype /Link /Rect [${mark.x.toFixed(2)} ${mark.y.toFixed(2)} ${(mark.x + mark.width).toFixed(2)} ${(mark.y + 15).toFixed(2)}] /Border [0 0 0] /A << /S /URI /URI <${utf8(mark.url)}> >> >>`,
+      ),
+    )
+    const annots = annotations.length ? ` /Annots [${annotations.map((id) => `${id} 0 R`).join(" ")}]` : ""
     const id = objects.push(
-      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >>${xobjects} >> /Contents ${content} 0 R >>`,
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >>${xobjects} >> /Contents ${content} 0 R${annots} >>`,
     )
     kids.push(id)
   }
@@ -357,7 +419,7 @@ export const CreatePdfTool = Tool.define(
     const events = yield* EventV2Bridge.Service
     return {
       description:
-        "Create a real paginated PDF from a title and structured headings, paragraphs, lists, rectangular tables or local PNG/JPEG images. Images require alt text, read permission, valid headers and dimensions; PNG files must use 8-bit channels without interlacing. Images are limited to 10 files, 8 MiB each, 24 MiB combined and 20 megapixels combined. Tables support up to 8 columns and 100 rows each, with an optional first-row header. The writer supports printable WinAnsi text, creates at most 200 pages and returns a verified local artifact receipt. It creates a new PDF or replaces the whole destination after approval. It does not fetch network images, import or edit an existing PDF, embed custom fonts, create forms, add links, produce a fully tagged accessible PDF, or guarantee archival conformance.",
+        "Create a real paginated PDF from a title and structured headings, paragraphs, lists, rectangular tables, local PNG/JPEG images or credential-free http/https links. Images require alt text, read permission, valid headers and dimensions; PNG files must use 8-bit channels without interlacing. Images are limited to 10 files, 8 MiB each, 24 MiB combined and 20 megapixels combined. Tables support up to 8 columns and 100 rows each, with an optional first-row header. Links become visible text with native PDF annotations. The writer supports printable WinAnsi text, creates at most 200 pages and returns a verified local artifact receipt. It creates a new PDF or replaces the whole destination after approval. It does not fetch network images, open links while creating the file, import or edit an existing PDF, embed custom fonts, create forms, produce a fully tagged accessible PDF, or guarantee archival conformance.",
       parameters: Parameters,
       execute: (params: typeof Parameters.Type, ctx: Tool.Context) =>
         Effect.gen(function* () {
@@ -401,8 +463,10 @@ export const CreatePdfTool = Tool.define(
           }
           if (cells > 2_000) throw new Error("PDF tables are limited to 2,000 cells per document.")
           const sources = params.blocks.flatMap((block, index) => (block.type === "image" ? [{ block, index }] : []))
+          const links = params.blocks.filter((block) => block.type === "link")
+          for (const link of links) address(link.url)
           if (sources.length > 10) throw new Error("A PDF can contain at most 10 images.")
-          const characters = values.reduce((sum, value) => sum + value.length, 0)
+          const characters = [...values, ...links.map((link) => link.url)].reduce((sum, value) => sum + value.length, 0)
           if (characters > 100_000) throw new Error("This PDF exceeds the 100,000-character limit.")
           for (const value of values) encode(value)
           if (!params.title) encode(path.basename(params.filePath))
@@ -479,6 +543,7 @@ export const CreatePdfTool = Tool.define(
               tables: tables.length,
               cells,
               images: images.length,
+              links: links.length,
             },
           })
           const result = yield* Effect.try({
@@ -516,6 +581,7 @@ export const CreatePdfTool = Tool.define(
               images: images.length,
               imageBytes: bytes,
               imagePixels: pixels,
+              links: links.length,
               pages: result.pages,
               characters,
               rayaRevision: revision,

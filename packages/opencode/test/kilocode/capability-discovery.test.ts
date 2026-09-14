@@ -520,6 +520,7 @@ it.instance(
               caption: "Current status",
               width: 1,
             },
+            { type: "link", text: "Open the verified report", url: "https://example.com/reports/q3?source=raya" },
             { type: "bullets", items: ["Customer retention improved", "Two risks need review"] },
             { type: "numbered", items: Array.from({ length: 90 }, (_, index) => `Follow-up action ${index + 1}`) },
           ],
@@ -530,11 +531,12 @@ it.instance(
       expect(created.metadata).toMatchObject({
         filepath: target,
         exists: false,
-        blocks: 6,
+        blocks: 7,
         tables: 1,
         cells: 6,
         images: 1,
         imagePixels: 1,
+        links: 1,
         rayaRevision: { version: 1, status: "captured", path: target },
       })
       expect(Number(created.metadata.imageBytes)).toBeGreaterThan(0)
@@ -556,6 +558,12 @@ it.instance(
       expect(source).toContain("/FlateDecode")
       expect(source).toContain("/Figure << /Alt <517561727465726C7920737461747573206D61726B6572>")
       expect(source).toContain("/Im4 Do")
+      expect(source).toContain("/Subtype /Link")
+      expect(source).toContain("/Annots [")
+      expect(source).toContain("<4F70656E20746865207665726966696564207265706F7274>".toUpperCase())
+      expect(source).toContain(
+        "/URI <68747470733A2F2F6578616D706C652E636F6D2F7265706F7274732F71333F736F757263653D72617961>".toUpperCase(),
+      )
       const start = Number(source.match(/startxref\n(\d+)/)?.[1])
       expect(source.slice(start)).toStartWith("xref\n")
       const offsets = [...source.matchAll(/(\d{10}) 00000 n \n/g)].map((match) => Number(match[1]))
@@ -600,6 +608,14 @@ it.instance(
             filePath: image,
             alt: `Image ${index + 1}`,
           })),
+        },
+        {
+          filePath: path.join(instance.directory, "unsafe-link.pdf"),
+          blocks: [{ type: "link", text: "Run this", url: "javascript:alert(1)" }],
+        },
+        {
+          filePath: path.join(instance.directory, "credential-link.pdf"),
+          blocks: [{ type: "link", text: "Private", url: "https://user:secret@example.com/" }],
         },
       ]) {
         expect(Exit.isFailure(yield* defs.pdf.execute(input, ctx).pipe(Effect.exit))).toBe(true)

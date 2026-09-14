@@ -7,6 +7,7 @@ import { homedir, tmpdir } from "node:os"
 import { rmSync, mkdirSync, existsSync } from "node:fs"
 import { load, identity, digest } from "../../opencode/src/kilocode/self-heal/build-input"
 import { PackageVault } from "../src/services/package-vault"
+import { prune } from "./snapshot-retention"
 
 const mode = process.argv[2] ?? "install"
 const shouldInstall = mode === "install"
@@ -151,7 +152,7 @@ if (shouldInstall) {
             "globalStorage",
             "eden.raya",
           ))
-  await new PackageVault(join(storage, "package-vault")).retain(vsixPath, {
+  const saved = await new PackageVault(join(storage, "package-vault")).retain(vsixPath, {
     name: "raya",
     publisher: "eden",
     version: snapshotVersion,
@@ -160,6 +161,24 @@ if (shouldInstall) {
   console.log(`\n🚀 Installing to ${cli}...`)
   await $`${cli} --force --install-extension ${vsixPath}`
 
+  const extensions =
+    process.env.VSCODE_EXTENSIONS?.trim() || join(homedir(), isInsiders ? ".vscode-insiders" : ".vscode", "extensions")
+  const active = await (async () => {
+    if (process.platform !== "win32") return []
+    const script =
+      "Get-Process -Name kilo -ErrorAction SilentlyContinue | ForEach-Object { if ($_.Path) { Split-Path (Split-Path $_.Path -Parent) -Parent } }"
+    const proc = Bun.spawn(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script], {
+      stdout: "pipe",
+      stderr: "ignore",
+      windowsHide: true,
+    })
+    const output = await new Response(proc.stdout).text()
+    return (await proc.exited) === 0 ? output.split(/\r?\n/).filter(Boolean) : []
+  })()
+  const removed = await prune({ stage: outDir, extensions, version: snapshotVersion, active })
+
   console.log(`\n✅ Successfully installed snapshot extension!`)
   console.log(`   Version: ${snapshotVersion}`)
+  console.log(`   Retained rollback package: ${saved.package}`)
+  console.log(`   Removed old snapshots: ${removed.packages} package(s), ${removed.extensions} extension(s)`)
 }

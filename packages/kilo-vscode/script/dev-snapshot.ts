@@ -152,12 +152,15 @@ if (shouldInstall) {
             "globalStorage",
             "eden.raya",
           ))
-  const saved = await new PackageVault(join(storage, "package-vault")).retain(vsixPath, {
+  const vault = new PackageVault(join(storage, "package-vault"))
+  const before = await vault.pruneSnapshots()
+  const saved = await vault.retain(vsixPath, {
     name: "raya",
     publisher: "eden",
     version: snapshotVersion,
     target: packageTarget,
   })
+  const after = await vault.pruneSnapshots({ keep: [saved.artifact.digest] })
   console.log(`\n🚀 Installing to ${cli}...`)
   await $`${cli} --force --install-extension ${vsixPath}`
 
@@ -180,5 +183,7 @@ if (shouldInstall) {
   console.log(`\n✅ Successfully installed snapshot extension!`)
   console.log(`   Version: ${snapshotVersion}`)
   console.log(`   Retained rollback package: ${saved.package}`)
-  console.log(`   Removed old snapshots: ${removed.packages} package(s), ${removed.extensions} extension(s)`)
+  console.log(
+    `   Removed old snapshots: ${before.packages + after.packages} vault package(s), ${removed.packages} staged package(s), ${removed.extensions} extension(s)`,
+  )
 }

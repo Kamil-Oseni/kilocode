@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { constants } from "node:fs"
 import { copyFile, mkdir, open, readFile, rename, rm } from "node:fs/promises"
-import { join } from "node:path"
+import { basename, isAbsolute, join, relative, resolve } from "node:path"
 import { Flock } from "@opencode-ai/core/util/flock"
 import { z } from "zod"
 import { checksum, inspect, verify, type PackageIdentity } from "./update-vsix"
@@ -64,6 +64,38 @@ export class PackageVault {
       await file.close()
     }
     await rename(tmp, this.file)
+  }
+
+  pruneSnapshots(input?: { keep?: readonly string[]; retained?: number }) {
+    return this.lock(async () => {
+      const saved = await this.read()
+      const snapshots = saved.packages
+        .filter((value) => value.version.includes("-snapshot+"))
+        .sort((a, b) => b.retainedAt - a.retainedAt)
+      const keep = new Set(snapshots.slice(0, input?.retained ?? 2).map((value) => value.artifact.digest))
+      if (saved.active) keep.add(saved.active)
+      for (const digest of input?.keep ?? []) keep.add(digest)
+      const stale = snapshots.filter((value) => !keep.has(value.artifact.digest))
+      if (!stale.length) return { packages: 0, bytes: 0 }
+      const root = resolve(this.root)
+      for (const value of stale) {
+        const path = resolve(value.package)
+        const nested = relative(root, path)
+        const expected = `raya.${value.artifact.digest}.vsix`
+        if (!nested || nested.startsWith("..") || isAbsolute(nested) || basename(path) !== expected)
+          throw new Error(`Refusing to remove a snapshot package outside ${root}.`)
+      }
+      const digests = new Set(stale.map((value) => value.artifact.digest))
+      await this.write({
+        ...saved,
+        packages: saved.packages.filter((value) => !digests.has(value.artifact.digest)),
+      })
+      await Promise.all(stale.map((value) => rm(value.package, { force: true })))
+      return {
+        packages: stale.length,
+        bytes: stale.reduce((total, value) => total + value.artifact.size, 0),
+      }
+    })
   }
 
   retain(source: string, identity: PackageIdentity) {

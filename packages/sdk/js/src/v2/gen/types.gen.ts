@@ -5776,6 +5776,7 @@ export type RayaGoalDeliverable =
         | "create_document"
         | "create_spreadsheet"
         | "create_presentation"
+        | "create_pdf"
         | "generate_image"
       evidence: {
         messageID?: string

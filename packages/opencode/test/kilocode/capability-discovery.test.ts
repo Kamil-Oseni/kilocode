@@ -28,6 +28,7 @@ import { DiscoverCapabilitiesTool } from "@/kilocode/tool/discover-capabilities"
 import { CreateSpreadsheetTool } from "@/kilocode/tool/create-spreadsheet"
 import { CreateDocumentTool } from "@/kilocode/tool/create-document"
 import { CreatePresentationTool } from "@/kilocode/tool/create-presentation"
+import { CreatePdfTool } from "@/kilocode/tool/create-pdf"
 import { builtin } from "@/kilocode/sandbox/network"
 import { RayaChief } from "@/kilocode/chief"
 import { ProviderTest } from "../fake/provider"
@@ -89,6 +90,7 @@ const definitions = Effect.gen(function* () {
     spreadsheet: CreateSpreadsheetTool.pipe(Effect.flatMap(Tool.init)),
     document: CreateDocumentTool.pipe(Effect.flatMap(Tool.init)),
     presentation: CreatePresentationTool.pipe(Effect.flatMap(Tool.init)),
+    pdf: CreatePdfTool.pipe(Effect.flatMap(Tool.init)),
   })
 })
 
@@ -459,6 +461,90 @@ it.instance(
         ),
       ).toBe(true)
       expect(yield* Effect.promise(() => Bun.file(invalid).exists())).toBe(false)
+    }),
+  60_000,
+)
+
+it.instance(
+  "creates a bounded paginated PDF with approval and a verified artifact receipt",
+  () =>
+    Effect.gen(function* () {
+      const instance = yield* TestInstance
+      const defs = yield* definitions
+      const bound = bind([defs.pdf, defs.discover])
+      yield* prepare(bound.tools)
+      const target = path.join(instance.directory, "review-pack.pdf")
+      const approvals: string[] = []
+      const ctx = {
+        ...bound.ctx,
+        ask: (request: Parameters<Tool.Context["ask"]>[0]) =>
+          Effect.sync(() => {
+            approvals.push(request.permission)
+          }),
+      }
+      expect(CapabilityCatalog.inspect(bound.ctx, { query: "create PDF" }).capabilities[0]).toMatchObject({
+        id: "documents.create-pdf",
+        status: "available",
+        tools: ["create_pdf"],
+      })
+      const created = yield* defs.pdf.execute(
+        {
+          filePath: target,
+          title: "Quarterly review",
+          author: "Raya",
+          blocks: [
+            { type: "heading", level: 1, text: "What changed" },
+            { type: "paragraph", text: "Revenue increased 17% while operating costs remained within plan." },
+            { type: "bullets", items: ["Customer retention improved", "Two risks need review"] },
+            { type: "numbered", items: Array.from({ length: 90 }, (_, index) => `Follow-up action ${index + 1}`) },
+          ],
+        },
+        ctx,
+      )
+      expect(created.output).toMatch(/^Created review-pack\.pdf with \d+ pages\.$/)
+      expect(created.metadata).toMatchObject({
+        filepath: target,
+        exists: false,
+        blocks: 4,
+        rayaRevision: { version: 1, status: "captured", path: target },
+      })
+      expect(Number(created.metadata.pages)).toBeGreaterThan(1)
+      expect(approvals).toEqual(["edit"])
+      const bytes = new Uint8Array(yield* Effect.promise(() => Bun.file(target).arrayBuffer()))
+      const source = new TextDecoder().decode(bytes)
+      expect(source).toStartWith("%PDF-1.7")
+      expect(source).toContain("/Type /Catalog")
+      expect(source).toContain(`/Count ${created.metadata.pages}`)
+      expect(source).toContain("xref\n0 ")
+      expect(source).toContain("startxref")
+      expect(source).toEndWith("%%EOF\n")
+      expect(source).toContain("<517561727465726C7920726576696577>".toUpperCase())
+      const start = Number(source.match(/startxref\n(\d+)/)?.[1])
+      expect(source.slice(start)).toStartWith("xref\n")
+      const offsets = [...source.matchAll(/(\d{10}) 00000 n \n/g)].map((match) => Number(match[1]))
+      expect(offsets.length).toBeGreaterThan(4)
+      for (const [index, offset] of offsets.entries()) expect(source.slice(offset)).toStartWith(`${index + 1} 0 obj\n`)
+
+      const before = bytes.slice()
+      const denied = yield* defs.pdf
+        .execute(
+          { filePath: target, blocks: [{ type: "paragraph", text: "Must not replace" }] },
+          { ...ctx, ask: () => Effect.die(new Error("Denied by fixture approval boundary")) },
+        )
+        .pipe(Effect.exit)
+      expect(Exit.isFailure(denied)).toBe(true)
+      expect(new Uint8Array(yield* Effect.promise(() => Bun.file(target).arrayBuffer()))).toEqual(before)
+      for (const input of [
+        { filePath: path.join(instance.directory, "wrong.docx"), blocks: [{ type: "paragraph", text: "No" }] },
+        { filePath: path.join(instance.directory, "blank.pdf"), blocks: [{ type: "paragraph", text: "   " }] },
+        {
+          filePath: path.join(instance.directory, "unicode.pdf"),
+          blocks: [{ type: "paragraph", text: "Unsupported 😀" }],
+        },
+      ]) {
+        expect(Exit.isFailure(yield* defs.pdf.execute(input, ctx).pipe(Effect.exit))).toBe(true)
+        expect(yield* Effect.promise(() => Bun.file(input.filePath).exists())).toBe(false)
+      }
     }),
   60_000,
 )

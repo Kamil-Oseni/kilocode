@@ -50,6 +50,7 @@ type GoalDeliverable =
         | "create_document"
         | "create_spreadsheet"
         | "create_presentation"
+        | "create_pdf"
         | "generate_image"
       evidence: GoalEvidence
     }

@@ -53,6 +53,7 @@ export namespace RayaGoal {
     "create_document",
     "create_spreadsheet",
     "create_presentation",
+    "create_pdf",
     "generate_image",
   ])
   type FileTool = typeof FileTool.Type

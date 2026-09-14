@@ -1110,7 +1110,13 @@ describe("RayaGoal", () => {
       const storage = yield* Storage.Service
       const fs = yield* FSUtil.Service
       const directory = yield* tmpdirScoped()
-      for (const tool of ["create_document", "create_spreadsheet", "create_presentation", "generate_image"] as const) {
+      for (const tool of [
+        "create_document",
+        "create_spreadsheet",
+        "create_presentation",
+        "create_pdf",
+        "generate_image",
+      ] as const) {
         const sessionID = SessionID.make(`ses_office_deliverable_${crypto.randomUUID()}`)
         const rows: MessageV2.WithParts[] = []
         const goals = setup(storage, () => rows)

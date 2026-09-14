@@ -1,5 +1,13 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-14 19:06 America/Toronto - Linked schedule settlement recovers after run commit
+
+**Status: product commit `48a0b512f3` is verified and pushed to `origin/main`; it is intentionally not installed alone.** Replaying settlement for an already terminal run now repeats the idempotent schedule reconciliation before report and delegation processing. If run history committed but the linked occurrence update failed, the next settlement closes that exact occurrence instead of leaving permanent active ownership that blocks later runs.
+
+The adverse regression creates a real SQLite trigger that aborts the occurrence state update. The first settlement fails after run history becomes complete while the queue remains linked. After the trigger is removed, replay moves the same claim/session occurrence to complete, clears the active queue and retains exactly one worker report. The full scheduler suite passes **29 / 412**. Scoped one-thread Oxlint has zero errors and only existing wider-file warnings; annotation, Effect Promise-facade, Markdown-table and diff guards pass. No broad/high-memory checker ran and no Bun or tsgo process remained.
+
+EN-02/OVR-05 remain **In progress**. Role-memory append still lacks a per-run idempotency identity, and the remaining report/delegation/next-queue failure orderings plus representative company execution remain open. Installed source remains `17ff50e907`.
+
 ## ChatGPT 2026-09-14 19:01 America/Toronto - Missing delegation replies recover through exact replay
 
 **Status: product commit `557f4169a1` is verified and pushed to `origin/main`; it is intentionally not installed alone.** A terminal delegation replay now republishes its deterministic DM reply before returning the saved result. This closes the crash/failure window where the terminal database update succeeded but inbox publication failed: retry converges to one reply because inbox identity is stable and an existing exact message is treated idempotently. A conflicting terminal result still fails and cannot publish replacement content.

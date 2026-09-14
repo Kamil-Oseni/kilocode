@@ -1,5 +1,13 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-14 19:06 America/Toronto - EN-02 linked occurrence settlement replay
+
+Product commit `48a0b512f3` is verified and pushed. In the `settle` branch that finds an already terminal run, preserve `schedule.settle(done)` for complete or blocked states before `retain(done)` and `close(done)`. The live transition path already used that order. Without the replay call, a crash or database failure after run transition but before occurrence settlement leaves the occurrence linked forever even though run history is terminal.
+
+Preserve `settlement replay closes a linked occurrence after its first queue update failed`. Its SQLite trigger aborts only an update that sets `raya_routine_occurrence.state` to `complete`. The first call must fail with terminal run history and a linked queue row. After dropping the trigger, replay must complete the exact row, return no active occurrence and leave one deterministic `report:<runID>` message. The complete scheduler suite passes 29 / 412; scoped one-thread lint and affected guards pass.
+
+Next implement idempotent role-memory learning before injecting more settlement failures. `tasks.append(item.id, summary)` currently appends an unkeyed string after run transition. A failure after transition loses learning on replay, while moving it before transition can duplicate learning. Store learning and its run identity atomically in the same durable memory record, retain legacy string decoding, cap both text and source identities, and add a source-aware method used by `settle`. Exact run replay must neither lose nor duplicate the summary; two distinct runs with identical summaries must remain independently attributable. Then continue failures around report publication, delegation close and queued-next start. EN-02/OVR-05 remain **In progress**; installed source remains `17ff50e907`.
+
 ## ChatGPT 2026-09-14 19:01 America/Toronto - EN-02 delegation reply publication recovery
 
 Product commit `557f4169a1` is verified and pushed. `RayaTaskDelegation.finish` routes every matching terminal path through `reply(record, recipient)`: the first successful compare-and-set, an exact already-terminal replay, and an exact concurrent-winner replay. Preserve this. Returning an exact terminal record before publication strands a missing worker DM reply if the prior attempt committed the row and failed during inbox insertion. `RayaTaskInbox.publish` already uses deterministic agent/source identity, so replay produces one message and safely absorbs an exact conflict.

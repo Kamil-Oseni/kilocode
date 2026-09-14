@@ -994,6 +994,7 @@ export namespace RayaTask {
       let pending = 0
       const totals = new Map<string, number>()
       const groups = new Map<string, Array<{ value: typeof StageV2.Type; agent: Agent }>>()
+      const opaque = new Set<string>()
       for (const key of keys.slice(0, 1_024)) {
         if (key.length !== 3 || key[0] !== "raya" || key[1] !== "agent-stage") {
           issues.push(`Unreadable staged-worker key: ${key.join("/")}`)
@@ -1001,16 +1002,18 @@ export namespace RayaTask {
         }
         const raw = yield* deps.storage.read<unknown>(key).pipe(Effect.exit)
         if (Exit.isFailure(raw)) {
+          if (key[2]) opaque.add(key[2])
           issues.push(`Could not read staged worker ${key[2]}.`)
           continue
         }
         const decoded = yield* Schema.decodeUnknownEffect(Stage)(raw.value).pipe(Effect.exit)
         if (Exit.isFailure(decoded) || decoded.value.agentID !== key[2]) {
+          if (key[2]) opaque.add(key[2])
           issues.push(`Staged worker ${key[2]} has an unreadable receipt.`)
           continue
         }
         const value = decoded.value
-        if (value.version === 2) totals.set(value.organizationID, (totals.get(value.organizationID) ?? 0) + 1)
+        totals.set(value.organizationID, (totals.get(value.organizationID) ?? 0) + 1)
         if (!stopped(value.owner)) {
           pending++
           continue
@@ -1059,7 +1062,8 @@ export namespace RayaTask {
         issues.push(`Staged worker ${value.agentID} remains disabled or changed and requires review.`)
       }
       for (const [organizationID, group] of groups) {
-        if (group.length !== totals.get(organizationID)) {
+        const obscured = group[0]?.value.organization.members.some((item) => opaque.has(item.agentID)) ?? true
+        if (group.length !== totals.get(organizationID) || obscured) {
           issues.push(`Staged organization ${organizationID} has incomplete or live worker receipts.`)
           continue
         }

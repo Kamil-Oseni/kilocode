@@ -312,7 +312,12 @@ export namespace RayaTaskRunner {
         id: string,
         trigger?: Trigger,
         note?: string,
-        opts?: { follow?: boolean; view?: Pick<RayaTask.Agent, "role" | "access" | "tools">; defer?: boolean },
+        opts?: {
+          follow?: boolean
+          view?: Pick<RayaTask.Agent, "role" | "access" | "tools">
+          defer?: boolean
+          guard?: Effect.Effect<void, RayaTask.GuardError>
+        },
       ) =>
         tasks.enforce(id).pipe(
           Effect.andThen(recoverable(id)),
@@ -320,7 +325,7 @@ export namespace RayaTaskRunner {
             claim(
               input.storage,
               id,
-              check(id, trigger, opts?.follow ?? !!note),
+              check(id, trigger, opts?.follow ?? !!note).pipe(Effect.tap(() => opts?.guard ?? Effect.void)),
               (selected, owner) =>
                 Effect.gen(function* () {
                   const item = selected.item
@@ -512,6 +517,15 @@ export namespace RayaTaskRunner {
       const run = yield* fire(recipient.id, undefined, note, {
         follow: false,
         view: ceiling(sender, recipient),
+        guard: Effect.gen(function* () {
+          if (!(yield* errands.authorize(taken)))
+            return yield* new RayaTask.GuardError({
+              message: "The organization no longer authorizes this delegation.",
+            })
+          if (taken.deadline !== undefined && taken.deadline <= Date.now())
+            return yield* new RayaTask.GuardError({ message: LATE })
+          return yield* Effect.void
+        }),
       }).pipe(
         Effect.catch((err) =>
           Effect.gen(function* () {

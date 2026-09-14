@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { Effect, Exit } from "effect"
+import { Deferred, Effect, Exit, Fiber } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { Storage } from "@/storage/storage"
@@ -234,6 +234,90 @@ test("queued organization work cannot start under a later company revision", asy
       expect(stopped.reason).toBe("The organization no longer authorizes this delegation.")
       expect(starts).toEqual(["start"])
       expect((yield* runner.tasks.runsFor(books.id)).filter((run) => run.status === "running")).toEqual([])
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
+test("organization authority is rechecked after the worker startup claim is acquired", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const base = memory()
+      const entered = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const storage = {
+        ...base,
+        create: (key: string[], value: unknown) => {
+          if (key[1] !== "agent-claims") return base.create(key, value)
+          return base.create(key, value).pipe(
+            Effect.tap((created) =>
+              created
+                ? Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release)))
+                : Effect.void,
+            ),
+          )
+        },
+      }
+      const starts: string[] = []
+      const runner = RayaTaskRunner.make({
+        database,
+        storage,
+        sessions: {
+          create: () =>
+            Effect.sync(() => {
+              starts.push("start")
+              return session("ses_claimed_organization")
+            }),
+          get: () => Effect.die("unused"),
+          messages: () => Effect.succeed([]),
+          children: () => Effect.succeed([]),
+        },
+      })
+      const chief = yield* runner.tasks.create({
+        name: "Chief",
+        objective: "Assign work",
+        access: "brief",
+        schedule: { kind: "manual" },
+      })
+      const books = yield* runner.tasks.create({
+        name: "Books",
+        role: "accountant",
+        objective: "Review accounts",
+        capabilities: ["accounting"],
+        access: "brief",
+        schedule: { kind: "manual" },
+      })
+      const organizations = RayaTaskOrganization.make(database, runner.tasks, storage)
+      const organization = yield* organizations.create({
+        name: "Company",
+        members: [
+          { agentID: chief.id, role: "Chief" },
+          { agentID: books.id, role: "Books" },
+        ],
+        delegations: [{ senderID: chief.id, recipientID: books.id }],
+      })
+      const pending = yield* runner
+        .delegate({
+          source: "dlg_claimed_organization",
+          senderID: chief.id,
+          recipientID: books.id,
+          organizationID: organization.id,
+          organizationRevision: organization.revision,
+          objective: "Review this company close.",
+        })
+        .pipe(Effect.forkChild)
+      yield* Deferred.await(entered)
+      yield* organizations.update(organization.id, { expectedRevision: 1, name: "Changed during admission" })
+      yield* Deferred.succeed(release, undefined)
+
+      expect(Exit.isFailure(yield* Fiber.await(pending))).toBe(true)
+      const stopped = (yield* RayaTaskDelegation.make(database).lookup("dlg_claimed_organization"))!
+      expect(stopped.state).toBe("failed")
+      expect(stopped.reason).toBe("The organization no longer authorizes this delegation.")
+      expect(starts).toEqual([])
+      expect(yield* RayaTaskSnapshot.make({ storage }).find(stopped.childRunID ?? "missing")).toBeUndefined()
+      expect((yield* runner.tasks.runsFor(books.id)).filter((run) => run.status === "running")).toEqual([])
+      expect(yield* storage.list(["raya", "agent-claims"])).toEqual([])
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })

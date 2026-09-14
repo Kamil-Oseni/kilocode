@@ -24,6 +24,7 @@ import { WriteTool } from "@/tool/write"
 import { Truncate } from "@/tool/truncate"
 import { CapabilityCatalog } from "@/kilocode/capability/catalog"
 import { DiscoverCapabilitiesTool } from "@/kilocode/tool/discover-capabilities"
+import { CreateSpreadsheetTool } from "@/kilocode/tool/create-spreadsheet"
 import { builtin } from "@/kilocode/sandbox/network"
 import { RayaChief } from "@/kilocode/chief"
 import { ProviderTest } from "../fake/provider"
@@ -82,6 +83,7 @@ const definitions = Effect.gen(function* () {
     read: ReadTool.pipe(Effect.flatMap(Tool.init)),
     write: WriteTool.pipe(Effect.flatMap(Tool.init)),
     discover: DiscoverCapabilitiesTool.pipe(Effect.flatMap(Tool.init)),
+    spreadsheet: CreateSpreadsheetTool.pipe(Effect.flatMap(Tool.init)),
   })
 })
 
@@ -259,6 +261,97 @@ it.instance(
         .pipe(Effect.exit)
       expect(Exit.isFailure(failure)).toBe(true)
       expect(yield* Effect.promise(() => Bun.file(denied).exists())).toBe(false)
+    }),
+  60_000,
+)
+
+it.instance(
+  "creates a readable multi-sheet XLSX with a verified artifact receipt",
+  () =>
+    Effect.gen(function* () {
+      const instance = yield* TestInstance
+      const defs = yield* definitions
+      const bound = bind([defs.read, defs.spreadsheet, defs.discover])
+      yield* prepare(bound.tools)
+      const target = path.join(instance.directory, "quarterly-report.xlsx")
+      const approvals: string[] = []
+      const ctx = {
+        ...bound.ctx,
+        ask: (request: Parameters<Tool.Context["ask"]>[0]) =>
+          Effect.sync(() => {
+            approvals.push(request.permission)
+          }),
+      }
+      const discovery = CapabilityCatalog.inspect(bound.ctx, { query: "create Excel" })
+      expect(discovery.capabilities[0]).toMatchObject({
+        id: "spreadsheets.create",
+        status: "available",
+        tools: ["create_spreadsheet"],
+      })
+      const created = yield* defs.spreadsheet.execute(
+        {
+          filePath: target,
+          sheets: [
+            {
+              name: "Summary",
+              rows: [
+                ["Region", "Revenue", "Approved"],
+                ["North", 1250.5, true],
+                ["South", 980, false],
+              ],
+            },
+            { name: "Notes", header: false, rows: [["Values are final."], [null, "Reviewed"]] },
+          ],
+        },
+        ctx,
+      )
+      expect(created.output).toBe("Created 2 sheets in quarterly-report.xlsx.")
+      expect(created.metadata).toMatchObject({
+        filepath: target,
+        exists: false,
+        sheets: ["Summary", "Notes"],
+        cells: 12,
+        rayaRevision: { version: 1, status: "captured", path: target },
+      })
+      const read = yield* defs.read.execute({ filePath: target }, ctx)
+      expect(read.output).toContain("--- Sheet: Summary ---")
+      expect(read.output).toContain("North\t1250.5\tTRUE")
+      expect(read.output).toContain("--- Sheet: Notes ---")
+      expect(read.output).toContain("Values are final.")
+      expect(approvals).toEqual(["edit", "read"])
+
+      const before = yield* Effect.promise(() => Bun.file(target).arrayBuffer())
+      const denied = yield* defs.spreadsheet
+        .execute(
+          { filePath: target, sheets: [{ name: "Replacement", rows: [["must not replace"]] }] },
+          { ...ctx, ask: () => Effect.die(new Error("Denied by fixture approval boundary")) },
+        )
+        .pipe(Effect.exit)
+      expect(Exit.isFailure(denied)).toBe(true)
+      expect(yield* Effect.promise(() => Bun.file(target).arrayBuffer())).toEqual(before)
+      const replaced = yield* defs.spreadsheet.execute(
+        { filePath: target, sheets: [{ name: "Replacement", rows: [["Current"], [42]] }] },
+        ctx,
+      )
+      expect(replaced.metadata).toMatchObject({ filepath: target, exists: true, sheets: ["Replacement"], cells: 2 })
+      const reread = yield* defs.read.execute({ filePath: target }, ctx)
+      expect(reread.output).toContain("--- Sheet: Replacement ---")
+      expect(reread.output).toContain("2: Current\n3: 42")
+      expect(reread.output).not.toContain("--- Sheet: Summary ---")
+      for (const input of [
+        { filePath: path.join(instance.directory, "wrong.csv"), sheets: [{ name: "Data", rows: [[1]] }] },
+        {
+          filePath: path.join(instance.directory, "duplicate.xlsx"),
+          sheets: [
+            { name: "Data", rows: [[1]] },
+            { name: "data", rows: [[2]] },
+          ],
+        },
+        { filePath: path.join(instance.directory, "invalid.xlsx"), sheets: [{ name: "Sales/2026", rows: [[1]] }] },
+      ]) {
+        expect(Exit.isFailure(yield* defs.spreadsheet.execute(input, ctx).pipe(Effect.exit))).toBe(true)
+        expect(yield* Effect.promise(() => Bun.file(input.filePath).exists())).toBe(false)
+      }
     }),
   60_000,
 )

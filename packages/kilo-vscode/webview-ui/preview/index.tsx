@@ -146,6 +146,29 @@ const usage: ProjectUsage = {
       tokens: { input: 394_500, output: 50_800, reasoning: 10_200, cache: { read: 510_000, write: 40_000 } },
     },
   ],
+  charges: {
+    goals: 4,
+    unreadable: 1,
+    conflicts: 1,
+    items: [
+      {
+        currency: "USD",
+        provider: "Kilo",
+        service: "Provider zero",
+        source: "provider.receipt",
+        amount: 0,
+        recorded: 1,
+        unknown: 0,
+      },
+      {
+        provider: "Kilo",
+        service: "Interrupted search",
+        source: "provider-response-without-receipt",
+        recorded: 0,
+        unknown: 1,
+      },
+    ],
+  },
 }
 
 // Mock goal props. The words are fixture copy for the preview, not product copy.

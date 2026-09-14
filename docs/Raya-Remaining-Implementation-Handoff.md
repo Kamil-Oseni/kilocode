@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-13):** ChatGPT reviewed and repaired Grok's work, delivered the product checkpoints detailed below, completed the automated OVR-09 self-heal publication/cleanup boundary, fixed local snapshot retention after clearing the accumulated artifacts and added native XLSX and DOCX creation. Latest pushed product commit: `becaa285e3`; latest installed snapshot source: `f92ca44782`. The installed vault marks that version active and its backend is running. Remaining: the unfinished audit requirements, slide generation and richer artifact editing, further authoritative tool/external goal accounting and external deliverable associations, possible durable cross-backend reservation coordination, full live rebuild-survival acceptance, paid GPT-Live/device acoustic acceptance, packaged VS Code microphone consent, EN-10 authenticated container acceptance, representative Routine company execution through real integrations, and the retained browser self-heal attempt inspection/original-failure workflow. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-13):** ChatGPT reviewed and repaired Grok's work, delivered the product checkpoints detailed below, completed the automated OVR-09 self-heal publication/cleanup boundary, fixed local snapshot retention after clearing the accumulated artifacts and added native XLSX, DOCX and PPTX creation plus PPTX extraction. Latest pushed product commit: `f6703a8632`; latest installed snapshot source: `f92ca44782`. The installed vault marks that version active and its backend is running. Remaining: the unfinished audit requirements, richer artifact editing, further authoritative tool/external goal accounting and external deliverable associations, possible durable cross-backend reservation coordination, full live rebuild-survival acceptance, paid GPT-Live/device acoustic acceptance, packaged VS Code microphone consent, EN-10 authenticated container acceptance, representative Routine company execution through real integrations, and the retained browser self-heal attempt inspection/original-failure workflow. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -9,6 +9,14 @@
 Updated 2026-09-13. This is a continuation guide, not a completion certificate.
 
 **Latest installed product:** `eden.raya@7.4.23-snapshot+f92ca44782.kamil-oseni.1789345490928` is installed and active in at least one VS Code window. Its package-vault artifact is `raya.a1fda15e2d6ec67a40f4e039dc2a3aa7ed51a315b1a50522806daa3cf2c39dbe.vsix`; the staged duplicate was intentionally removed during disk cleanup. Product commit `8b7300ce7c` changes the local snapshot installer itself and therefore needs no separate extension activation: the next successful `snapshot:install` invokes it.
+
+## ChatGPT 2026-09-13 21:19 America/Toronto - native PPTX creation and extraction checkpoint
+
+Product commit `f6703a8632` is on `origin/main`. `create_presentation` writes a full widescreen PowerPoint package from a bounded semantic schema. Every slide has a title and may have a subtitle, body and bullet or numbered points. The package includes the required presentation, master, layout, theme, relationship, content-type and property parts, and each slide is explicitly related to the blank layout. The default visual system uses Raya's `45557A` accent sparingly, one cool-neutral family, Instrument Serif for titles and Outfit for body copy. The optional accent accepts exactly six hexadecimal digits. The fonts are not embedded, and fallback rendering may differ when they are unavailable.
+
+`read-pptx.ts` adds production extraction for the generated deck and other PPTX files. It caps input at 64 MiB, extracted slide XML at 8 MiB and slide count at 500, then returns numbered, slide-labelled text. It does not claim notes, image, chart, animation or layout extraction. The end-to-end test verifies the actual ZIP graph, reads escaped text and ordered content through `ReadTool`, checks edit/read approval and artifact identity, proves denied overwrite byte preservation, and reads an approved replacement. The combined capability suite passes 7 / 7 with 96 assertions; scoped formatting, lint and architecture guards pass.
+
+The next step is the already authorized low-memory snapshot. Run only `$env:RAYA_LOW_MEMORY='1'; bun run snapshot:install` from `packages/kilo-vscode`, one process at a time. Confirm the new retention phase reports removed staged packages/extension snapshots, `%TEMP%\raya-vscode-snapshots` returns to zero, currently running snapshot directories are preserved, the newest installed directory exists and the package vault retains its verified copy. Record the exact version, hashes, sizes, file count, vault state and free-space result in both ledgers.
 
 ## ChatGPT 2026-09-13 21:08 America/Toronto - native DOCX creation checkpoint
 
@@ -799,7 +807,7 @@ The following sections retain the full 39-item scope. Related findings and overh
 
 ### OVR-08 — Broad work tools with discoverable capabilities
 
-**Recorded status:** In progress. Bounded final-turn capability discovery and real permissioned XLSX/DOCX writers are delivered. Both formats round-trip through Raya's production readers and return versioned artifact receipts. Slide generation, richer editing, connected domain packs and broader work evaluations remain open.
+**Recorded status:** In progress. Bounded final-turn capability discovery and real permissioned XLSX/DOCX/PPTX writers are delivered. All three formats round-trip through Raya's production readers and return versioned artifact receipts; PPTX extraction is explicitly bounded. Richer editing, connected domain packs and broader work evaluations remain open.
 
 **Implementation and verification:**
 

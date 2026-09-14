@@ -104,6 +104,19 @@ const entries: Entry[] = [
     limits: ["Does not create or edit a Word document or verify page layout, embedded artwork or rendering fidelity."],
   },
   {
+    id: "documents.create",
+    name: "Create a Word document",
+    tools: ["create_document"],
+    inputs: ["structured text", "DOCX"],
+    description: "Create a local Word document with a title, headings, paragraphs and lists.",
+    result: "Local DOCX file and artifact receipt",
+    permission: "edit",
+    limits: [
+      "Creates a new document or replaces the whole destination after approval.",
+      "Does not import templates, add images or tables, track changes or guarantee identical pagination.",
+    ],
+  },
+  {
     id: "repository.inspect",
     name: "Inspect a local repository",
     tools: ["bash"],

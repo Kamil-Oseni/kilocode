@@ -25,6 +25,7 @@ import { Truncate } from "@/tool/truncate"
 import { CapabilityCatalog } from "@/kilocode/capability/catalog"
 import { DiscoverCapabilitiesTool } from "@/kilocode/tool/discover-capabilities"
 import { CreateSpreadsheetTool } from "@/kilocode/tool/create-spreadsheet"
+import { CreateDocumentTool } from "@/kilocode/tool/create-document"
 import { builtin } from "@/kilocode/sandbox/network"
 import { RayaChief } from "@/kilocode/chief"
 import { ProviderTest } from "../fake/provider"
@@ -84,6 +85,7 @@ const definitions = Effect.gen(function* () {
     write: WriteTool.pipe(Effect.flatMap(Tool.init)),
     discover: DiscoverCapabilitiesTool.pipe(Effect.flatMap(Tool.init)),
     spreadsheet: CreateSpreadsheetTool.pipe(Effect.flatMap(Tool.init)),
+    document: CreateDocumentTool.pipe(Effect.flatMap(Tool.init)),
   })
 })
 
@@ -261,6 +263,95 @@ it.instance(
         .pipe(Effect.exit)
       expect(Exit.isFailure(failure)).toBe(true)
       expect(yield* Effect.promise(() => Bun.file(denied).exists())).toBe(false)
+    }),
+  60_000,
+)
+
+it.instance(
+  "creates a readable structured DOCX with approval and a verified artifact receipt",
+  () =>
+    Effect.gen(function* () {
+      const instance = yield* TestInstance
+      const defs = yield* definitions
+      const bound = bind([defs.read, defs.document, defs.discover])
+      yield* prepare(bound.tools)
+      const target = path.join(instance.directory, "project-brief.docx")
+      const approvals: string[] = []
+      const ctx = {
+        ...bound.ctx,
+        ask: (request: Parameters<Tool.Context["ask"]>[0]) =>
+          Effect.sync(() => {
+            approvals.push(request.permission)
+          }),
+      }
+      expect(CapabilityCatalog.inspect(bound.ctx, { query: "create Word document" }).capabilities[0]).toMatchObject({
+        id: "documents.create",
+        status: "available",
+        tools: ["create_document"],
+      })
+      const created = yield* defs.document.execute(
+        {
+          filePath: target,
+          title: "Project North Star",
+          author: "Raya",
+          blocks: [
+            { type: "heading", level: 1, text: "Purpose" },
+            { type: "paragraph", text: "Build a clear, durable product plan & preserve decisions." },
+            { type: "heading", level: 2, text: "Priorities" },
+            { type: "bullets", items: ["Ship the core workflow", "Measure the outcome"] },
+            { type: "numbered", items: ["Review", "Approve"] },
+          ],
+        },
+        ctx,
+      )
+      expect(created.output).toBe("Created project-brief.docx with 5 blocks.")
+      expect(created.metadata).toMatchObject({
+        filepath: target,
+        exists: false,
+        blocks: 5,
+        rayaRevision: { version: 1, status: "captured", path: target },
+      })
+      const read = yield* defs.read.execute({ filePath: target }, ctx)
+      for (const value of [
+        "Project North Star",
+        "Purpose",
+        "Build a clear, durable product plan & preserve decisions.",
+        "Ship the core workflow",
+        "Measure the outcome",
+        "Review",
+        "Approve",
+      ])
+        expect(read.output).toContain(value)
+      expect(approvals).toEqual(["edit", "read"])
+
+      const before = yield* Effect.promise(() => Bun.file(target).arrayBuffer())
+      const denied = yield* defs.document
+        .execute(
+          { filePath: target, blocks: [{ type: "paragraph", text: "must not replace" }] },
+          { ...ctx, ask: () => Effect.die(new Error("Denied by fixture approval boundary")) },
+        )
+        .pipe(Effect.exit)
+      expect(Exit.isFailure(denied)).toBe(true)
+      expect(yield* Effect.promise(() => Bun.file(target).arrayBuffer())).toEqual(before)
+      const replaced = yield* defs.document.execute(
+        { filePath: target, title: "Revised brief", blocks: [{ type: "paragraph", text: "Approved replacement" }] },
+        ctx,
+      )
+      expect(replaced.metadata).toMatchObject({ filepath: target, exists: true, blocks: 1 })
+      const reread = yield* defs.read.execute({ filePath: target }, ctx)
+      expect(reread.output).toContain("Revised brief")
+      expect(reread.output).toContain("Approved replacement")
+      expect(reread.output).not.toContain("Project North Star")
+      for (const input of [
+        { filePath: path.join(instance.directory, "wrong.txt"), blocks: [{ type: "paragraph" as const, text: "No" }] },
+        {
+          filePath: path.join(instance.directory, "blank.docx"),
+          blocks: [{ type: "paragraph" as const, text: "   " }],
+        },
+      ]) {
+        expect(Exit.isFailure(yield* defs.document.execute(input, ctx).pipe(Effect.exit))).toBe(true)
+        expect(yield* Effect.promise(() => Bun.file(input.filePath).exists())).toBe(false)
+      }
     }),
   60_000,
 )

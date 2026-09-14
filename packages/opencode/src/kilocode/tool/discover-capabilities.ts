@@ -13,7 +13,7 @@ export const DiscoverCapabilitiesTool = Tool.define(
   "discover_capabilities",
   Effect.succeed({
     description:
-      "Discover known local file, text-artifact, document extraction, spreadsheet creation/extraction, repository and chart capabilities exposed in this model turn. Use when capability or output-format support is unclear. Reports exact limitations; does not execute tools, grant permissions, connect accounts or list every business-service integration.",
+      "Discover known local file, text-artifact, document creation/extraction, spreadsheet creation/extraction, repository and chart capabilities exposed in this model turn. Use when capability or output-format support is unclear. Reports exact limitations; does not execute tools, grant permissions, connect accounts or list every business-service integration.",
     parameters: Parameters,
     execute: (query: typeof Parameters.Type, ctx: Tool.Context) =>
       Effect.sync(() => {

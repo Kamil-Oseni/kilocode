@@ -42,6 +42,7 @@ import { CanvasTools } from "./canvas-host" // raya_change - Milestone E canvas 
 import { Canvas } from "@/kilocode/canvas/service" // raya_change - Milestone E canvas bridge
 import { DiscoverCapabilitiesTool } from "./discover-capabilities"
 import { CreateSpreadsheetTool } from "./create-spreadsheet"
+import { CreateDocumentTool } from "./create-document"
 
 const log = Log.create({ service: "kilocode-tool-registry" })
 type Deps = { agent: Agent.Interface; truncate: Truncate.Interface; indexing?: boolean }
@@ -115,6 +116,7 @@ export namespace KiloToolRegistry {
       const ask = yield* AskOptionsTool // raya_change - Milestone C selectable options
       const discover = yield* DiscoverCapabilitiesTool
       const spreadsheet = yield* CreateSpreadsheetTool
+      const document = yield* CreateDocumentTool
       // raya_change start - Milestone F browser tools
       const browserTools = browser
         ? yield* Effect.all(BrowserTools).pipe(Effect.provideService(Browser.Service, browser))
@@ -164,6 +166,7 @@ export namespace KiloToolRegistry {
           ask,
           discover,
           spreadsheet,
+          document,
           browser: browserTools, // raya_change - Milestone F browser tools
           canvas: canvasTools, // raya_change - Milestone E canvas tools
           ...goal,
@@ -197,6 +200,7 @@ export namespace KiloToolRegistry {
         ask,
         discover,
         spreadsheet,
+        document,
         browser: browserTools, // raya_change - Milestone F browser tools
         canvas: canvasTools, // raya_change - Milestone E canvas tools
         ...goal,
@@ -251,6 +255,7 @@ export namespace KiloToolRegistry {
       updateOrganization?: Tool.Info
       discover?: Tool.Info
       spreadsheet?: Tool.Info
+      document?: Tool.Info
     },
     deps: Deps,
     loaders: Loaders = {},
@@ -272,6 +277,7 @@ export namespace KiloToolRegistry {
       const ask = tools.ask ? yield* Tool.init(tools.ask) : undefined // raya_change - Milestone C
       const discover = tools.discover ? yield* Tool.init(tools.discover) : undefined
       const spreadsheet = tools.spreadsheet ? yield* Tool.init(tools.spreadsheet) : undefined
+      const document = tools.document ? yield* Tool.init(tools.document) : undefined
       const healRefine = tools.healRefine ? yield* Tool.init(tools.healRefine) : undefined // raya_change - hybrid self-heal
       const healVerify = tools.healVerify ? yield* Tool.init(tools.healVerify) : undefined
       const browser = tools.browser ? yield* Effect.all(tools.browser.map(Tool.init)) : [] // raya_change - Milestone F
@@ -319,6 +325,7 @@ export namespace KiloToolRegistry {
         ask,
         discover,
         spreadsheet,
+        document,
         browser, // raya_change - Milestone F
         canvas, // raya_change - Milestone E
         scheduleTask,
@@ -425,6 +432,7 @@ export namespace KiloToolRegistry {
       updateOrganization?: Tool.Def
       discover?: Tool.Def
       spreadsheet?: Tool.Def
+      document?: Tool.Def
     },
     cfg: { experimental?: { image_generation?: boolean; native_notebook_tools?: boolean } },
   ): Tool.Def[] {
@@ -456,6 +464,7 @@ export namespace KiloToolRegistry {
       ...(tools.ask ? [tools.ask] : []), // raya_change - Milestone C
       ...(tools.discover ? [tools.discover] : []),
       ...(tools.spreadsheet ? [tools.spreadsheet] : []),
+      ...(tools.document ? [tools.document] : []),
       ...(Flag.KILO_CLIENT === "vscode" ? (tools.browser ?? []) : []), // raya_change - Milestone F
       ...(Flag.KILO_CLIENT === "vscode" ? (tools.canvas ?? []) : []), // raya_change - Milestone E
       ...(tools.scheduleTask ? [tools.scheduleTask] : []),

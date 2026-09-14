@@ -5,7 +5,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { jsonSchema, tool, type Tool as AITool } from "ai"
 import { utils, write as workbook } from "xlsx"
-import { Uint8ArrayReader, ZipReader } from "@zip.js/zip.js"
+import { TextWriter, Uint8ArrayReader, ZipReader } from "@zip.js/zip.js"
 import path from "node:path"
 import { Agent } from "@/agent/agent"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -303,17 +303,42 @@ it.instance(
             { type: "heading", level: 2, text: "Priorities" },
             { type: "bullets", items: ["Ship the core workflow", "Measure the outcome"] },
             { type: "numbered", items: ["Review", "Approve"] },
+            {
+              type: "table",
+              rows: [
+                ["Owner", "Decision"],
+                ["Design", "Approve the flow"],
+                ["Engineering", "Verify the build"],
+                ["Notes", ""],
+              ],
+            },
           ],
         },
         ctx,
       )
-      expect(created.output).toBe("Created project-brief.docx with 5 blocks.")
+      expect(created.output).toBe("Created project-brief.docx with 6 blocks.")
       expect(created.metadata).toMatchObject({
         filepath: target,
         exists: false,
-        blocks: 5,
+        blocks: 6,
+        cells: 8,
         rayaRevision: { version: 1, status: "captured", path: target },
       })
+      const bytes = new Uint8Array(yield* Effect.promise(() => Bun.file(target).arrayBuffer()))
+      const archive = new ZipReader(new Uint8ArrayReader(bytes))
+      const entries = yield* Effect.promise(() => archive.getEntries())
+      const entry = entries.find((item) => item.filename === "word/document.xml")
+      const styles = entries.find((item) => item.filename === "word/styles.xml")
+      expect(entry?.getData).toBeDefined()
+      expect(styles?.getData).toBeDefined()
+      const xml = yield* Effect.promise(() => entry!.getData!(new TextWriter()))
+      const css = yield* Effect.promise(() => styles!.getData!(new TextWriter()))
+      yield* Effect.promise(() => archive.close())
+      expect(xml).toContain("<w:tbl>")
+      expect(xml).toContain("<w:tblHeader/>")
+      expect(xml).toContain('w:fill="E8EBF0"')
+      expect(css).toContain('w:ascii="Instrument Serif"')
+      expect(css).toContain('w:ascii="Outfit"')
       const read = yield* defs.read.execute({ filePath: target }, ctx)
       for (const value of [
         "Project North Star",
@@ -323,6 +348,12 @@ it.instance(
         "Measure the outcome",
         "Review",
         "Approve",
+        "Owner",
+        "Decision",
+        "Design",
+        "Approve the flow",
+        "Engineering",
+        "Verify the build",
       ])
         expect(read.output).toContain(value)
       expect(approvals).toEqual(["edit", "read"])
@@ -351,10 +382,38 @@ it.instance(
           filePath: path.join(instance.directory, "blank.docx"),
           blocks: [{ type: "paragraph" as const, text: "   " }],
         },
+        {
+          filePath: path.join(instance.directory, "ragged.docx"),
+          blocks: [
+            {
+              type: "table" as const,
+              rows: [["A", "B"], ["C"]],
+            },
+          ],
+        },
       ]) {
         expect(Exit.isFailure(yield* defs.document.execute(input, ctx).pipe(Effect.exit))).toBe(true)
         expect(yield* Effect.promise(() => Bun.file(input.filePath).exists())).toBe(false)
       }
+      const oversized = path.join(instance.directory, "oversized.docx")
+      const rows = Array.from({ length: 100 }, () => Array.from({ length: 20 }, () => "Bounded"))
+      expect(
+        Exit.isFailure(
+          yield* defs.document
+            .execute(
+              {
+                filePath: oversized,
+                blocks: [
+                  { type: "table", rows },
+                  { type: "table", rows: [["One cell over the total limit"]] },
+                ],
+              },
+              ctx,
+            )
+            .pipe(Effect.exit),
+        ),
+      ).toBe(true)
+      expect(yield* Effect.promise(() => Bun.file(oversized).exists())).toBe(false)
     }),
   60_000,
 )

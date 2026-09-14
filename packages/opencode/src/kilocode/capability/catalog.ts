@@ -107,13 +107,14 @@ const entries: Entry[] = [
     id: "documents.create",
     name: "Create a Word document",
     tools: ["create_document"],
-    inputs: ["structured text", "DOCX"],
-    description: "Create a local Word document with a title, headings, paragraphs and lists.",
+    inputs: ["structured text", "tables", "DOCX"],
+    description: "Create a local Word document with a title, headings, paragraphs, lists and tables.",
     result: "Local DOCX file and artifact receipt",
     permission: "edit",
     limits: [
       "Creates a new document or replaces the whole destination after approval.",
-      "Does not import templates, add images or tables, track changes or guarantee identical pagination.",
+      "Tables are rectangular, limited to 100 rows, 20 columns and 2,000 cells across the document.",
+      "Does not import templates, add images, track changes or guarantee identical pagination.",
     ],
   },
   {

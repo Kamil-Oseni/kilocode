@@ -418,7 +418,7 @@ export class OpenAIBroker {
   private async respond(claim: Claim, event: Record<string, unknown>) {
     const id = event.event_id
     if (!identifier(id) || claim.responses.has(id) || claim.responses.size >= 64) return this.block(claim)
-    const reservation = { parentSessionID: claim.input.sessionID, requestID: id, model }
+    const reservation = { parentSessionID: claim.input.sessionID, requestID: id, model } satisfies Reservation
     claim.responses.set(id, reservation)
     const admitted = await this.backend(claim, "/reservation", {
       method: "POST",

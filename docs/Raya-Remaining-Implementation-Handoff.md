@@ -1,5 +1,29 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-14 19:33 America/Toronto - EN-02 accepted delegation startup recovery
+
+Product commit `ff53513f4b` is verified and pushed. Preserve the ownership chain introduced here: `RayaTaskDelegation.take` must assign `child_run_id` in the same conditional queued-to-accepted update; `startErrand` must use that value as the startup claim/run ID; and both the claim and session `rayaRoutine` metadata must carry the exact delegation ID. Do not replace the reserved ID during attach. The accepted-row lookup intentionally ignores legacy rows without a reserved ID so uncertain old work remains reviewable rather than being repeated.
+
+`RayaTaskRunner.revive` now handles the three interruption positions separately:
+
+- Before a claim exists, it takes the already accepted row and starts it with the reserved run ID.
+- When a stopped claim exists and exactly one persisted session matches agent ID, run ID and delegation ID, `reconcile` validates the session metadata, goal, retained task and row ownership; it attaches that session, restores the one run and removes the claim through the existing immutable recovery permit.
+- When run history exists but delegation attachment did not commit, `startErrand` validates the exact saved session metadata and replays `attach`; no session or model work is repeated.
+
+A claimed record with zero matching sessions may be removed only when the stopped owner and exact accepted delegation/run association authorize recovery; the following restart reuses the same reserved ID. More than one matching session, malformed/mismatched metadata, another recipient, a conflicting run/session or a legacy accepted row without `child_run_id` must fail closed. Keep the catch rule that any retained startup claim prevents the delegation from being rewritten as failed: the claim represents uncertain side effects.
+
+Preserve these regressions in `task/delegation-runner.test.ts`: restart after acceptance creates one session/run; an injected delegation-attachment update failure reattaches the already saved run with no second session; and a stopped claim plus one real SQLite session but no history restores and attaches exactly once. Direct delegation tests use the run ID returned by `take`, proving callers cannot substitute another run. Evidence is 23 tests / 399 assertions across the combined delegation suites and 30 / 420 in the scheduler suite. Scoped lint and affected guards pass. The package-wide typecheck still has the pre-existing Effect typing backlog; it ran under a 2 GB heap cap, and a filtered follow-up showed no new diagnostic on this slice's changed lines.
+
+Continue EN-02 at terminal settlement ordering. Add deterministic failure injection for:
+
+1. run history becomes terminal but `retain` cannot publish the worker report;
+2. the report commits but `RayaTaskDelegation.finish` cannot persist or publish the reply;
+3. delegation finish commits but taking/starting the recipient's next queued request fails;
+4. restart/replayed settlement after each boundary.
+
+Require one deterministic `report:<runID>`, one terminal delegation reply, unchanged cancellation ownership, and exactly one next run/session. Reuse persisted run/delegation identities and the accepted-start recovery added here; do not add a broad accepted-to-queued reset. Then execute a representative organization chain through real browser, hosting and outreach boundaries with explicit authorization and saved evidence. EN-02/OVR-05 remain **In progress**; installed source remains `17ff50e907`.
+
+
 ## ChatGPT 2026-09-14 19:18 America/Toronto - EN-02 delegation start-card replay
 
 Product commit `6d63daf299` is verified and pushed. `RayaTaskDelegation.attach` now routes both a newly linked row and an exact existing child-run/session replay through the idempotent `begin(record)` publisher. Preserve the early conflict checks: another run or session must still fail. The exact replay exists only to finish publication after the durable link already won.

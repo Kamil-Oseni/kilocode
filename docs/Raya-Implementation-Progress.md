@@ -1,5 +1,16 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-14 19:33 America/Toronto - Accepted delegation startups recover without duplicate work
+
+**Status: product commit `ff53513f4b` is verified and pushed to `origin/main`; it is intentionally not installed alone.** Accepting a queued delegation now reserves its child run ID in the same SQLite compare-and-set that changes the row to `accepted`. The runner carries that identity through the per-worker startup claim and the session's `rayaRoutine` metadata, together with the delegation ID. Restart can therefore resume the same accepted request instead of leaving it stranded or inventing a replacement run.
+
+Recovery distinguishes three durable states. An accepted row with no startup claim or session restarts under its reserved run ID. A stopped claim with exactly one matching agent/run/delegation session repairs the session link, restores one run-history record and attaches the delegation. A saved run whose final attachment failed is validated against the exact session metadata and reattached. Missing legacy identity, mismatched metadata, foreign rows and ambiguous session matches remain held for review. Startup errors no longer mark an accepted delegation failed while any claim evidence remains.
+
+Failure-oriented evidence covers interruption after acceptance but before claim creation, after session creation but before history, and after history but before delegation attachment. Every case reopens with one reserved run ID, one session, one run and one running delegation. The combined delegation suites pass **23 / 399**; the complete scheduler regression remains **30 / 420**. Scoped one-thread lint reports zero errors and only existing wider-file warnings; formatting, whitespace, shared-file annotation and Effect Promise-facade guards pass. A 2 GB-capped package typecheck completed and exposed the repository's existing broad Effect typing backlog; a filtered rerun found no new compiler diagnostic at the lines changed by this slice. No Bun or tsgo process remains.
+
+EN-02/OVR-05 remain **In progress**. Next inject failures between terminal run transition, report publication, delegation finish and release of the next queued worker request. Replay must converge to one report/reply and start the next accepted assignment once. Representative company execution through real browser/hosting/outreach integrations is still required. Installed source remains `17ff50e907`.
+
+
 ## ChatGPT 2026-09-14 19:18 America/Toronto - Missing delegation start cards recover through replay
 
 **Status: product commit `6d63daf299` is verified and pushed to `origin/main`; it is intentionally not installed alone.** An exact delegation attachment replay now republishes its deterministic `start:` DM card before returning the already linked run/session. If attachment committed but inbox insertion failed, retry restores one start card without creating another run or changing the saved link.

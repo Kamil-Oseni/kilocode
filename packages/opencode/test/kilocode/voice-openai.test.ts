@@ -18,7 +18,7 @@ import { Storage } from "@/storage/storage"
 import { Runner } from "@/effect/runner"
 import { observe } from "@/kilocode/effect/observation"
 import * as Workers from "@/kilocode/session/task-worker"
-import { make } from "@/kilocode/voice/openai"
+import { make, VoiceError } from "@/kilocode/voice/openai"
 import type { OpenAIPricing } from "@/kilocode/voice/openai-usage"
 import type { OpenAICall, OpenAICallInput } from "@/kilocode/voice/openai-protocol"
 import type { SessionPrompt } from "@/session/prompt"
@@ -122,7 +122,7 @@ const fixture = (
     at: number
     model: "gpt-realtime-2.1" | "gpt-live-transcribe"
     pricing: OpenAIPricing
-  }) => Effect.Effect<void>,
+  }) => Effect.Effect<void, VoiceError>,
   admissions?: (
     sessionID: SessionID,
     identity: string,
@@ -1096,6 +1096,87 @@ it.live(
           pricing: { coverage: "unknown" },
         })
         expect("amount" in charges[2]!.pricing).toBe(false)
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
+    }),
+  30_000,
+)
+
+it.live(
+  "authenticated usage inspection reconciles historical charges and retries a failed publication",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const state = yield* fixture(root)
+        const receipt = {
+          id: "historical_response",
+          kind: "response" as const,
+          model: "gpt-realtime-2.1" as const,
+          status: "reported" as const,
+          tokens: {
+            input: 3,
+            output: 2,
+            total: 5,
+            cached: 0,
+            inputText: 3,
+            inputAudio: 0,
+            inputImage: 0,
+            cachedText: 0,
+            cachedAudio: 0,
+            cachedImage: 0,
+            outputText: 2,
+            outputAudio: 0,
+          },
+        }
+        yield* state.voice.meter(state.binding.id, { generation: state.binding.generation, receipt }, secret, root)
+
+        const seen: Array<{ id: string; pricing: OpenAIPricing }> = []
+        let fail = true
+        const restarted = yield* make({
+          ...state.deps,
+          usageCharges: (input) =>
+            Effect.gen(function* () {
+              seen.push({ id: input.id, pricing: input.pricing })
+              if (!fail) return
+              fail = false
+              return yield* Effect.fail(new VoiceError({ code: "conflict", message: "Injected publication failure." }))
+            }),
+        })
+
+        expect(
+          Exit.isFailure(
+            yield* restarted.usage(state.binding.id, state.binding.generation, "b".repeat(64), root).pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        expect(
+          Exit.isFailure(yield* restarted.usage(state.binding.id, "stale-generation", secret, root).pipe(Effect.exit)),
+        ).toBe(true)
+        expect(seen).toEqual([])
+
+        expect(
+          Exit.isFailure(
+            yield* restarted.usage(state.binding.id, state.binding.generation, secret, root).pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        expect(seen).toHaveLength(1)
+        expect(yield* restarted.usage(state.binding.id, state.binding.generation, secret, root)).toEqual({
+          receipts: [receipt],
+        })
+        expect(yield* restarted.usage(state.binding.id, state.binding.generation, secret, root)).toEqual({
+          receipts: [receipt],
+        })
+        expect(seen).toHaveLength(3)
+        expect(seen[0]).toEqual(seen[1])
+        expect(seen[1]).toEqual(seen[2])
+        expect(seen[2]).toMatchObject({
+          id: `openai-voice:${state.binding.id}:response:historical_response`,
+          pricing: { coverage: "recorded", currency: "USD", quantity: 5, unit: "tokens" },
+        })
       }).pipe(
         Effect.provide([
           Storage.layerFromDir(path.join(root, "storage")),

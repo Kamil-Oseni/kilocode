@@ -27,6 +27,7 @@ type Binding = typeof OpenAIBinding.Type
 type Call = typeof OpenAICall.Type
 type Input = typeof OpenAICallInput.Type
 type Image = { receipt: typeof OpenAIImage.Type; data: string }
+type Usage = (typeof OpenAIUsageInput.Type)["receipt"]
 type Stored = Store.Stored
 type Admission = {
   dispatch: Effect.Effect<void, VoiceError>
@@ -173,6 +174,17 @@ export const make = (deps: Deps) =>
         .pipe(Effect.mapError((error) => new VoiceError({ code: error.code, message: error.message })))
     const read = (id: string) =>
       store.read(id).pipe(Effect.mapError((error) => new VoiceError({ code: error.code, message: error.message })))
+    const charge = (stored: Stored, receipt: Usage) =>
+      deps.usageCharges
+        ? deps.usageCharges({
+            sessionID: stored.binding.parentSessionID,
+            id: `openai-voice:${stored.binding.id}:${receipt.kind}:${receipt.id}`,
+            callID: stored.binding.id,
+            at: stored.binding.createdAt,
+            model: receipt.model,
+            pricing: pricing(receipt),
+          })
+        : Effect.void
     const load = (id: string, secret: string, directory: string, generation?: string) =>
       Effect.gen(function* () {
         if (!Schema.is(VoiceKey)(secret)) return yield* refuse("unauthorized", "Invalid voice capability.")
@@ -536,16 +548,7 @@ export const make = (deps: Deps) =>
           yield* ledger(stored)
           const index = digest(`${input.receipt.kind}:${input.receipt.id}`)
           const prior = stored.usage?.[index]
-          const retain = deps.usageCharges
-            ? deps.usageCharges({
-                sessionID: stored.binding.parentSessionID,
-                id: `openai-voice:${stored.binding.id}:${input.receipt.kind}:${input.receipt.id}`,
-                callID: stored.binding.id,
-                at: stored.binding.createdAt,
-                model: input.receipt.model,
-                pricing: pricing(input.receipt),
-              })
-            : Effect.void
+          const retain = charge(stored, input.receipt)
           if (prior) {
             if (fingerprint(prior) !== fingerprint(input.receipt))
               return yield* refuse("conflict", "Provider usage identity was reused with different counts.")
@@ -566,6 +569,7 @@ export const make = (deps: Deps) =>
         Effect.gen(function* () {
           const stored = yield* load(id, secret, directory, generation)
           const receipts = yield* ledger(stored)
+          yield* Effect.forEach(receipts, (receipt) => charge(stored, receipt), { concurrency: 1, discard: true })
           return { receipts }
         }),
       )

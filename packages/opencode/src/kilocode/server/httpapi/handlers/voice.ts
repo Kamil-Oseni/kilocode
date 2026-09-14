@@ -54,6 +54,44 @@ export const voiceHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-voice",
             Effect.catchTag("RayaGoal.NotFoundError", () => Effect.void),
             Effect.mapError((error) => new OpenAIVoice.VoiceError({ code: "conflict", message: error.message })),
           ),
+      usageCharges: (input) => {
+        const price = input.pricing
+        const receipt =
+          price.coverage === "recorded"
+            ? ({
+                id: input.id,
+                kind: "gpt-live" as const,
+                provider: "OpenAI",
+                service: input.model,
+                source: price.source,
+                origin: { sessionID: input.sessionID, callID: input.callID },
+                at: input.at,
+                quantity: price.quantity,
+                unit: price.unit,
+                coverage: "recorded" as const,
+                amount: price.amount,
+                currency: price.currency,
+              } satisfies RayaGoal.Charge)
+            : ({
+                id: input.id,
+                kind: "gpt-live" as const,
+                provider: "OpenAI",
+                service: input.model,
+                source: price.source,
+                origin: { sessionID: input.sessionID, callID: input.callID },
+                at: input.at,
+                ...(price.quantity !== undefined ? { quantity: price.quantity } : {}),
+                ...(price.unit !== undefined ? { unit: price.unit } : {}),
+                coverage: "unknown" as const,
+                currency: "USD",
+                reason: price.reason,
+              } satisfies RayaGoal.Charge)
+        return goals.charged(input.sessionID, receipt).pipe(
+          Effect.asVoid,
+          Effect.catchTag("RayaGoal.NotFoundError", () => Effect.void),
+          Effect.mapError((error) => new OpenAIVoice.VoiceError({ code: "conflict", message: error.message })),
+        )
+      },
     })
 
     return handlers

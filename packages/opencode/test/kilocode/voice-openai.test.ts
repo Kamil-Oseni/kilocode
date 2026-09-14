@@ -19,6 +19,7 @@ import { Runner } from "@/effect/runner"
 import { observe } from "@/kilocode/effect/observation"
 import * as Workers from "@/kilocode/session/task-worker"
 import { make } from "@/kilocode/voice/openai"
+import type { OpenAIPricing } from "@/kilocode/voice/openai-usage"
 import type { OpenAICall, OpenAICallInput } from "@/kilocode/voice/openai-protocol"
 import type { SessionPrompt } from "@/session/prompt"
 import { MessageV2 } from "@/session/message-v2"
@@ -111,7 +112,18 @@ const replace = (value: Store.Stored) =>
     yield* db.update(Table).set({ data: value }).where(eq(Table.id, value.binding.id)).run().pipe(Effect.orDie)
   })
 
-const fixture = (root: string, work: SessionPrompt.Interface["prompt"] = (input) => Effect.succeed(answer(input))) =>
+const fixture = (
+  root: string,
+  work: SessionPrompt.Interface["prompt"] = (input) => Effect.succeed(answer(input)),
+  usageCharges?: (input: {
+    sessionID: SessionID
+    id: string
+    callID: string
+    at: number
+    model: "gpt-realtime-2.1" | "gpt-live-transcribe"
+    pricing: OpenAIPricing
+  }) => Effect.Effect<void>,
+) =>
   Effect.gen(function* () {
     const storage = yield* Storage.Service
     const database = yield* Database.Service
@@ -161,6 +173,7 @@ const fixture = (root: string, work: SessionPrompt.Interface["prompt"] = (input)
             }).pipe(Effect.orDie, Effect.ensuring(workers.release)),
           ),
       },
+      ...(usageCharges ? { usageCharges } : {}),
     }
     const voice = yield* make(deps)
     const start = { parentSessionID: session, providerCallID: crypto.randomUUID(), requestID: crypto.randomUUID() }
@@ -872,6 +885,82 @@ it.live(
           ),
         ).toBe(true)
         expect((yield* retained(state.binding.id)).usage).toEqual(corrupted.usage)
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
+    }),
+  30_000,
+)
+
+it.live(
+  "voice usage publishes stable priced and unknown goal charges and reconciles identical retries",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const charges: Array<{
+          id: string
+          model: string
+          pricing: OpenAIPricing
+        }> = []
+        const state = yield* fixture(root, undefined, (input) =>
+          Effect.sync(() => charges.push({ id: input.id, model: input.model, pricing: input.pricing })).pipe(
+            Effect.asVoid,
+          ),
+        )
+        const receipt = {
+          id: "response_priced",
+          kind: "response" as const,
+          model: "gpt-realtime-2.1" as const,
+          status: "reported" as const,
+          tokens: {
+            input: 100,
+            output: 20,
+            total: 120,
+            cached: 10,
+            inputText: 40,
+            inputAudio: 50,
+            inputImage: 10,
+            cachedText: 4,
+            cachedAudio: 5,
+            cachedImage: 1,
+            outputText: 8,
+            outputAudio: 12,
+          },
+        }
+        const input = { generation: state.binding.generation, receipt }
+        yield* state.voice.meter(state.binding.id, input, secret, root)
+        yield* state.voice.meter(state.binding.id, input, secret, root)
+        yield* state.voice.meter(
+          state.binding.id,
+          {
+            generation: state.binding.generation,
+            receipt: {
+              id: "response_missing",
+              kind: "response",
+              model: "gpt-realtime-2.1",
+              status: "missing",
+            },
+          },
+          secret,
+          root,
+        )
+
+        expect(charges).toHaveLength(3)
+        expect(charges[0]).toEqual(charges[1])
+        expect(charges[0]).toMatchObject({
+          id: `openai-voice:${state.binding.id}:response:response_priced`,
+          model: "gpt-realtime-2.1",
+          pricing: { coverage: "recorded", currency: "USD", quantity: 120, unit: "tokens" },
+        })
+        expect(charges[2]).toMatchObject({
+          id: `openai-voice:${state.binding.id}:response:response_missing`,
+          pricing: { coverage: "unknown" },
+        })
+        expect("amount" in charges[2]!.pricing).toBe(false)
       }).pipe(
         Effect.provide([
           Storage.layerFromDir(path.join(root, "storage")),

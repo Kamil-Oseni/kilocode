@@ -1,4 +1,4 @@
-import { OpenAIUsageInput, valid, fingerprint } from "./openai-usage"
+import { OpenAIUsageInput, valid, fingerprint, pricing, type OpenAIPricing } from "./openai-usage"
 import { LiveCall, LiveMeter, prompt as livePrompt, valid as liveValid } from "./live-protocol"
 import fs from "node:fs/promises"
 import { createHash, timingSafeEqual } from "node:crypto"
@@ -38,6 +38,14 @@ type Deps = {
     callID: string
     at: number
     seconds: number
+  }) => Effect.Effect<void, VoiceError>
+  usageCharges?: (input: {
+    sessionID: SessionID
+    id: string
+    callID: string
+    at: number
+    model: "gpt-realtime-2.1" | "gpt-live-transcribe"
+    pricing: OpenAIPricing
   }) => Effect.Effect<void, VoiceError>
 }
 
@@ -405,15 +413,27 @@ export const make = (deps: Deps) =>
           yield* ledger(stored)
           const index = digest(`${input.receipt.kind}:${input.receipt.id}`)
           const prior = stored.usage?.[index]
+          const retain = deps.usageCharges
+            ? deps.usageCharges({
+                sessionID: stored.binding.parentSessionID,
+                id: `openai-voice:${stored.binding.id}:${input.receipt.kind}:${input.receipt.id}`,
+                callID: stored.binding.id,
+                at: stored.binding.createdAt,
+                model: input.receipt.model,
+                pricing: pricing(input.receipt),
+              })
+            : Effect.void
           if (prior) {
             if (fingerprint(prior) !== fingerprint(input.receipt))
               return yield* refuse("conflict", "Provider usage identity was reused with different counts.")
+            yield* retain
             return prior
           }
           if (Object.keys(stored.usage ?? {}).length >= 512)
             return yield* refuse("conflict", "Voice usage receipt limit reached.")
           stored.usage = { ...stored.usage, [index]: input.receipt }
           yield* save(stored)
+          yield* retain
           return input.receipt
         }).pipe(Effect.uninterruptible),
       )

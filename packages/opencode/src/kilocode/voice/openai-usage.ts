@@ -66,3 +66,103 @@ export function fingerprint(receipt: typeof OpenAIUsage.Type) {
     Object.entries(receipt.tokens ?? {}).sort(([left], [right]) => left.localeCompare(right)),
   ])
 }
+
+const rates = {
+  model: "gpt-realtime-2.1",
+  version: "openai-model-doc:2026-09-14",
+  currency: "USD",
+  per: 1_000_000,
+  input: { text: 4, audio: 32, image: 5 },
+  cached: { text: 0.4, audio: 0.4, image: 0.5 },
+  output: { text: 24, audio: 64 },
+} as const
+
+export type OpenAIPricing =
+  | {
+      coverage: "recorded"
+      amount: number
+      currency: "USD"
+      quantity: number
+      unit: "tokens" | "seconds"
+      source: string
+    }
+  | {
+      coverage: "unknown"
+      quantity?: number
+      unit?: "tokens" | "seconds"
+      source: string
+      reason: string
+    }
+
+/** Versioned estimate from the exact provider receipt. It is unknown unless every priced modality is attributable. */
+export function pricing(receipt: typeof OpenAIUsage.Type): OpenAIPricing {
+  if (!valid(receipt))
+    return {
+      coverage: "unknown",
+      source: rates.version,
+      reason: "The provider voice usage receipt is invalid.",
+    }
+  if (receipt.status !== "reported")
+    return {
+      coverage: "unknown",
+      source: rates.version,
+      reason: "The provider did not report valid usage for this voice operation.",
+    }
+  if (receipt.kind === "transcription") {
+    if (receipt.seconds === undefined)
+      return {
+        coverage: "unknown",
+        source: rates.version,
+        reason: "GPT Live Transcribe did not report its billed audio duration.",
+      }
+    return {
+      coverage: "recorded",
+      amount: (receipt.seconds / 60) * 0.017,
+      currency: rates.currency,
+      quantity: receipt.seconds,
+      unit: "seconds",
+      source: "openai-model-doc:gpt-live-transcribe:2026-09-14",
+    }
+  }
+  const tokens = receipt.tokens
+  if (
+    !tokens ||
+    tokens.inputText === undefined ||
+    tokens.inputAudio === undefined ||
+    tokens.inputImage === undefined ||
+    tokens.outputText === undefined ||
+    tokens.outputAudio === undefined ||
+    tokens.cached === undefined ||
+    tokens.cachedText === undefined ||
+    tokens.cachedAudio === undefined ||
+    tokens.cachedImage === undefined ||
+    tokens.inputText + tokens.inputAudio + tokens.inputImage !== tokens.input ||
+    tokens.outputText + tokens.outputAudio !== tokens.output ||
+    tokens.cachedText + tokens.cachedAudio + tokens.cachedImage !== tokens.cached
+  )
+    return {
+      coverage: "unknown",
+      quantity: tokens?.total,
+      unit: tokens ? "tokens" : undefined,
+      source: rates.version,
+      reason: "The provider usage receipt does not fully attribute text, audio, image, cached, and output tokens.",
+    }
+  const amount =
+    ((tokens.inputText - tokens.cachedText) * rates.input.text +
+      (tokens.inputAudio - tokens.cachedAudio) * rates.input.audio +
+      (tokens.inputImage - tokens.cachedImage) * rates.input.image +
+      tokens.cachedText * rates.cached.text +
+      tokens.cachedAudio * rates.cached.audio +
+      tokens.cachedImage * rates.cached.image +
+      tokens.outputText * rates.output.text +
+      tokens.outputAudio * rates.output.audio) /
+    rates.per
+  return {
+    coverage: "recorded",
+    amount,
+    currency: rates.currency,
+    quantity: tokens.total,
+    unit: "tokens",
+    source: rates.version,
+  }
+}

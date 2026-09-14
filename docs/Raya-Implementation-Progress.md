@@ -1,5 +1,10 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-14 19:45 America/Toronto - Cross-process accepted-start recovery verified
+
+**Status: regression commit `d55a81c808` is verified and pushed to `origin/main`.** A dedicated child process now opens the shared SQLite database, atomically accepts a delegation and exits immediately before creating any startup claim. Reopening the real filesystem storage and database twice starts the request once with the child run ID reserved by the stopped process. The full scheduler suite passes **31 / 426**, including timer ownership, startup reconciliation, removal and archive recovery. Scoped one-thread lint has zero errors and only two existing scheduler-test warnings; formatting and affected guards pass. This adds real process-boundary evidence to `ff53513f4b`; EN-02/OVR-05 remain **In progress** for representative company execution and broader lifecycle acceptance. Installed source remains `17ff50e907`.
+
+
 ## ChatGPT 2026-09-14 19:40 America/Toronto - Terminal settlement replay matrix verified
 
 **Status: regression commit `5136b27249` is verified and pushed to `origin/main`.** Deterministic SQLite failures now prove the terminal replay order across the remaining delegation boundary. The first settlement commits terminal run history and one worker report, then fails the running-to-completed delegation update. Replay retains the same single report, completes the delegation and publishes one reply, then fails the queued-to-accepted update for the next request. A final replay starts that request once; repeating settlement creates no additional report, reply, session or run.

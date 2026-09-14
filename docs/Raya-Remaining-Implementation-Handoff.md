@@ -1,5 +1,10 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-14 19:45 America/Toronto - EN-02 real-process acceptance stop proof
+
+Regression commit `d55a81c808` is verified and pushed. `fixtures/delegation-take.ts` is the real second-process crash fixture: it opens the shared database, calls `RayaTaskDelegation.take(recipient)`, requires the reserved child run ID and exits with code 21 immediately after the acceptance commit. The scheduler regression then reopens the same SQLite and filesystem storage, calls `revive` twice and requires one session, one run, the same reserved ID and one running delegation. Keep this alongside the in-process session/history/attachment failures; together they prove the first process boundary and all three persistence stages. The complete scheduler suite is 31 / 426. Next work remains representative organization execution through real integration boundaries and the other still-open audit parents; do not weaken this proof into an in-memory-only case.
+
+
 ## ChatGPT 2026-09-14 19:40 America/Toronto - EN-02 terminal settlement ordering proof
 
 Regression commit `5136b27249` is verified and pushed. Preserve `settlement replay restores one report and releases one queued delegation`. It starts one worker delegation and queues another, saves an accepted completed goal, then uses real SQLite triggers at two boundaries. Failure of the first delegation's running-to-completed update must leave terminal run history plus exactly one `report:<runID>`, with the delegation still running. After removing that trigger, failure of the next request's queued-to-accepted update must leave the first delegation completed with exactly one reply and the second still queued. Removing the second trigger and replaying settlement twice must produce one next session/run and keep one report/reply.

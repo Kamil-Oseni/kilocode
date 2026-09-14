@@ -703,10 +703,10 @@ it.instance(
             {
               name: "Summary",
               rows: [
-                ["Region", "Revenue", "Approved"],
-                ["North", 1250.5, true],
-                ["South", 980, false],
-                ["Total", { formula: "SUM(B2:B3)", value: 2230.5 }, null],
+                ["Region", "Revenue", "Margin", "Approved"],
+                ["North", { number: 1250.5, format: "usd" }, { number: 0.175, format: "percent", decimals: 1 }, true],
+                ["South", { number: 980, format: "cad", decimals: 0 }, { number: 0.2, format: "percent" }, false],
+                ["Total", { formula: "SUM(B2:B3)", value: 2230.5, format: "usd" }, null, null],
               ],
             },
             {
@@ -723,18 +723,30 @@ it.instance(
         filepath: target,
         exists: false,
         sheets: ["Summary", "Notes"],
-        cells: 17,
+        cells: 21,
         formulas: 1,
         dates: 1,
+        formats: 5,
         rayaRevision: { version: 1, status: "captured", path: target },
       })
-      const book = parseWorkbook(yield* Effect.promise(() => Bun.file(target).arrayBuffer()), { type: "array" })
-      expect(book.Sheets.Summary?.B4).toMatchObject({ f: "SUM(B2:B3)", v: 2230.5, t: "n" })
+      const book = parseWorkbook(yield* Effect.promise(() => Bun.file(target).arrayBuffer()), {
+        type: "array",
+        cellNF: true,
+      })
+      expect(book.Sheets.Summary?.B4).toMatchObject({
+        f: "SUM(B2:B3)",
+        v: 2230.5,
+        t: "n",
+        z: "[$$-409]#,##0.00",
+      })
+      expect(book.Sheets.Summary?.B2).toMatchObject({ v: 1250.5, t: "n", z: "[$$-409]#,##0.00" })
+      expect(book.Sheets.Summary?.C2).toMatchObject({ v: 0.175, t: "n", z: "0.0%", w: "17.5%" })
+      expect(book.Sheets.Summary?.B3).toMatchObject({ v: 980, t: "n", z: "[$$-1009]#,##0" })
       expect(book.Sheets.Notes?.B3).toMatchObject({ v: 46_278, t: "n", w: "2026-09-13" })
       const read = yield* defs.read.execute({ filePath: target }, ctx)
       expect(read.output).toContain("--- Sheet: Summary ---")
-      expect(read.output).toContain("North\t1250.5\tTRUE")
-      expect(read.output).toContain("Total\t2230.5")
+      expect(read.output).toContain("North\t$1,250.50\t17.5%\tTRUE")
+      expect(read.output).toContain("Total\t$2,230.50")
       expect(read.output).toContain("--- Sheet: Notes ---")
       expect(read.output).toContain("Values are final.")
       expect(read.output).toContain("As of\t2026-09-13")
@@ -779,6 +791,14 @@ it.instance(
         {
           filePath: path.join(instance.directory, "invalid-date.xlsx"),
           sheets: [{ name: "Data", rows: [[{ date: "2026-02-29" }]] }],
+        },
+        {
+          filePath: path.join(instance.directory, "invalid-format.xlsx"),
+          sheets: [{ name: "Data", rows: [[{ number: 42, format: "usd", decimals: 5 }]] }],
+        },
+        {
+          filePath: path.join(instance.directory, "text-format.xlsx"),
+          sheets: [{ name: "Data", rows: [[{ formula: "IF(TRUE,1,0)", value: "one", format: "number" }]] }],
         },
       ]) {
         expect(Exit.isFailure(yield* defs.spreadsheet.execute(input, ctx).pipe(Effect.exit))).toBe(true)

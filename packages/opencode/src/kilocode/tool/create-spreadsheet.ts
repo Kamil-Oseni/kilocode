@@ -14,19 +14,35 @@ import * as Artifact from "@/kilocode/goal/artifact"
 import * as Tool from "@/tool/tool"
 
 const Scalar = Schema.Union([Schema.String.check(Schema.isMaxLength(32_767)), Schema.Finite, Schema.Boolean])
+const Kind = Schema.Literals(["number", "percent", "usd", "cad", "eur", "gbp", "jpy"])
+const Decimals = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 4 }))
 const Formula = Schema.Struct({
   formula: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(8_192)).annotate({
     description:
       "A same-sheet Excel formula without a leading equals sign. Supports arithmetic, comparisons, cell/range references and the documented safe functions.",
   }),
   value: Scalar.annotate({ description: "Required cached display value; Excel recalculates the formula when opened." }),
+  format: Schema.optional(Kind).annotate({
+    description: "Optional native number, percent or currency format for a numeric cached value.",
+  }),
+  decimals: Schema.optional(Decimals).annotate({ description: "Optional decimal places from 0 through 4." }),
 })
 const DateCell = Schema.Struct({
   date: Schema.String.check(Schema.isMinLength(10), Schema.isMaxLength(10)).annotate({
     description: "A calendar date from 1900-01-01 through 9999-12-31 in exact YYYY-MM-DD form.",
   }),
 })
-const Cell = Schema.Union([Scalar, Schema.Null, Formula, DateCell])
+const Formatted = Schema.Struct({
+  number: Schema.Finite.annotate({ description: "The numeric value stored in Excel." }),
+  format: Kind.annotate({
+    description:
+      "A native Excel number format. Percent values use decimal form, so 0.125 displays as 12.50%. Currency formats show an explicit currency symbol and locale.",
+  }),
+  decimals: Schema.optional(Decimals).annotate({
+    description: "Optional decimal places from 0 through 4. Defaults to 2, except JPY defaults to 0.",
+  }),
+})
+const Cell = Schema.Union([Scalar, Schema.Null, Formula, DateCell, Formatted])
 const Sheet = Schema.Struct({
   name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(31)),
   rows: Schema.Array(Schema.Array(Cell).check(Schema.isMaxLength(200))).check(Schema.isMaxLength(50_000)),
@@ -38,6 +54,7 @@ const Parameters = Schema.Struct({
 })
 
 type Value = typeof Cell.Type
+type Style = { format: typeof Kind.Type; decimals?: number }
 
 const functions = new Set([
   "ABS",
@@ -95,20 +112,40 @@ function date(value: string) {
   return time / 86_400_000 + 25_569 - (time < Date.UTC(1900, 2, 1) ? 1 : 0)
 }
 
+function format(value: Style) {
+  const decimals = value.decimals ?? (value.format === "jpy" ? 0 : 2)
+  if (!Number.isInteger(decimals) || decimals < 0 || decimals > 4)
+    throw new Error("Spreadsheet number formats support 0 through 4 decimal places.")
+  const fraction = decimals ? `.${"0".repeat(decimals)}` : ""
+  if (value.format === "number") return `#,##0${fraction}`
+  if (value.format === "percent") return `0${fraction}%`
+  const currencies = {
+    usd: "[$$-409]",
+    cad: "[$$-1009]",
+    eur: "[$€-x-euro2]",
+    gbp: "[$£-809]",
+    jpy: "[$¥-411]",
+  } as const
+  return `${currencies[value.format]}#,##0${fraction}`
+}
+
 function scalar(value: Value) {
   if (typeof value !== "object" || value === null) return value
   if ("formula" in value) return value.value
+  if ("number" in value) return value.number
   return value.date
 }
 
 function cell(value: Value): string | number | boolean | null | CellObject {
   if (typeof value !== "object" || value === null) return value
   if ("date" in value) return { t: "n", v: date(value.date), z: "yyyy-mm-dd" }
+  if ("number" in value) return { t: "n", v: value.number, z: format(value) }
   const cached = value.value
   return {
     f: formula(value.formula),
     v: cached,
     t: typeof cached === "number" ? "n" : typeof cached === "boolean" ? "b" : "s",
+    ...(value.format ? { z: format({ format: value.format, decimals: value.decimals }) } : {}),
   }
 }
 
@@ -129,7 +166,7 @@ export const CreateSpreadsheetTool = Tool.define(
     const events = yield* EventV2Bridge.Service
     return {
       description:
-        "Create a real Excel .xlsx workbook from structured values, timezone-safe YYYY-MM-DD calendar dates and safe same-sheet formulas. Formula objects require formula without a leading = plus a cached string, number or boolean value. Supported functions are SUM, AVERAGE, MIN, MAX, COUNT, COUNTA, ROUND, ROUNDUP, ROUNDDOWN, ABS, IF, AND, OR and NOT; formulas cannot use external links, named ranges or string literals. Supports up to 10 named sheets, 50,000 rows per sheet, 200 columns per row and 200,000 cells total. Returns a verified local artifact receipt. Raya does not calculate formulas; Excel recalculates them when opened. It does not run macros, import templates or preserve an existing workbook.",
+        "Create a real Excel .xlsx workbook from structured values, timezone-safe YYYY-MM-DD calendar dates, native number/currency/percentage formats and safe same-sheet formulas. Formatted number objects accept number, format (number, percent, usd, cad, eur, gbp or jpy), and optional decimals from 0 through 4; percent values use decimal form. Formula objects require formula without a leading = plus a cached string, number or boolean value and can apply the same formats to numeric results. Supported functions are SUM, AVERAGE, MIN, MAX, COUNT, COUNTA, ROUND, ROUNDUP, ROUNDDOWN, ABS, IF, AND, OR and NOT; formulas cannot use external links, named ranges or string literals. Supports up to 10 named sheets, 50,000 rows per sheet, 200 columns per row and 200,000 cells total. Returns a verified local artifact receipt. Raya does not calculate formulas; Excel recalculates them when opened. It does not run macros, import templates or preserve an existing workbook.",
       parameters: Parameters,
       execute: (params: typeof Parameters.Type, ctx: Tool.Context) =>
         Effect.gen(function* () {
@@ -166,12 +203,36 @@ export const CreateSpreadsheetTool = Tool.define(
               ),
             0,
           )
+          const formats = params.sheets.reduce(
+            (sum, sheet) =>
+              sum +
+              sheet.rows.reduce(
+                (count, row) =>
+                  count +
+                  row.filter(
+                    (value) =>
+                      typeof value === "object" &&
+                      value !== null &&
+                      ("number" in value || ("formula" in value && value.format !== undefined)),
+                  ).length,
+                0,
+              ),
+            0,
+          )
           for (const sheet of params.sheets)
             for (const row of sheet.rows)
               for (const value of row) {
                 if (typeof value !== "object" || value === null) continue
-                if ("formula" in value) formula(value.formula)
+                if ("formula" in value) {
+                  formula(value.formula)
+                  if (value.format && typeof value.value !== "number")
+                    throw new Error("Only formulas with numeric cached values can use a number format.")
+                  if (value.format) format({ format: value.format, decimals: value.decimals })
+                  if (!value.format && value.decimals !== undefined)
+                    throw new Error("Formula decimal places require a number format.")
+                }
                 if ("date" in value) date(value.date)
+                if ("number" in value) format(value)
               }
           assertMutablePath(filepath)
           yield* assertExternalDirectoryEffect(ctx, filepath)
@@ -186,6 +247,7 @@ export const CreateSpreadsheetTool = Tool.define(
               format: "xlsx",
               formulas,
               dates,
+              formats,
               sheets: names.map((name, index) => ({ name, rows: params.sheets[index]!.rows.length })),
             },
           })
@@ -225,7 +287,7 @@ export const CreateSpreadsheetTool = Tool.define(
           return {
             title: path.relative(instance.worktree, filepath),
             output: `Created ${names.length === 1 ? "1 sheet" : `${names.length} sheets`} in ${path.basename(filepath)}.`,
-            metadata: { filepath, exists, sheets: names, cells, formulas, dates, rayaRevision: revision },
+            metadata: { filepath, exists, sheets: names, cells, formulas, dates, formats, rayaRevision: revision },
           }
         }).pipe(Effect.orDie),
     }

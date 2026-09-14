@@ -84,7 +84,7 @@ const entries: Entry[] = [
     id: "spreadsheets.create",
     name: "Create an Excel workbook",
     tools: ["create_spreadsheet"],
-    inputs: ["structured cell values", "calendar dates", "safe same-sheet formulas", "XLSX"],
+    inputs: ["structured cell values", "calendar dates", "native number formats", "safe same-sheet formulas", "XLSX"],
     description:
       "Create a local Excel workbook with one or more named sheets, typed values and safe formulas, then return its verified file receipt.",
     result: "Local XLSX file and artifact receipt",

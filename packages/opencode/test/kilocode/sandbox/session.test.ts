@@ -1,4 +1,5 @@
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { createHash } from "node:crypto"
 import fs from "node:fs/promises"
 import path from "node:path"
 import { $ } from "bun"
@@ -21,6 +22,7 @@ import * as SandboxPolicy from "@/kilocode/sandbox/policy"
 import { SandboxStore } from "@/kilocode/sandbox/store"
 import { ReviewGate } from "@/kilocode/session/review-gate"
 import { SessionRetention } from "@/kilocode/session/retention"
+import { records, seal } from "@/kilocode/tool/apply-patch-receipt"
 import type { SessionID } from "@/session/schema"
 import { Session } from "@/session/session"
 import { SessionStatus } from "@/session/status"
@@ -52,6 +54,7 @@ const it = testEffect(
     testInstanceStoreLayer,
     AppNodeBuilder.build(Notebook.node),
     AppNodeBuilder.build(SessionStatus.node),
+    AppNodeBuilder.build(Storage.node),
   ),
 )
 
@@ -205,6 +208,28 @@ describe("sandbox session cleanup", () => {
       yield* session.remove(info.id)
       expect(yield* Effect.promise(() => SandboxStore.read(dir, info.id))).toBeUndefined()
       expect(yield* Effect.promise(() => SandboxStore.read(worktree, info.id))).toBeUndefined()
+    }),
+  )
+
+  it.live("removes retained Apply Patch intent when deleting its session", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const storage = yield* Storage.Service
+      const dir = yield* tmpdirScoped({ git: true })
+      const info = yield* provideInstance(dir)(sessions.create({ title: "patch-retention-cleanup" }))
+      const draft = {
+        version: 1 as const,
+        invocation: JSON.stringify([info.id, "msg_test", "call_test", dir]),
+        request: createHash("sha256").update("request").digest("hex"),
+        workspace: dir,
+        diff: "test",
+        files: [],
+        changes: [],
+      }
+      yield* records(storage).prepare(info.id, { ...draft, digest: seal(draft) })
+      expect(yield* records(storage).getIntent(draft.invocation)).toBeDefined()
+      yield* sessions.remove(info.id)
+      expect(yield* records(storage).getIntent(draft.invocation)).toBeUndefined()
     }),
   )
 })

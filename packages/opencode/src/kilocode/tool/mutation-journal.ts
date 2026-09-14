@@ -479,5 +479,42 @@ export function journals(storage: Store) {
     return { outcomes, issues, truncated: keys.length > 1_024 }
   })
 
-  return { get, admit, advance, recover, pending }
+  const removable = Effect.fn("RayaMutationJournal.removable")(function* (id: string) {
+    const outcome = yield* read(id)
+    if (outcome && outcome.phase !== "done")
+      return yield* new Conflict({ message: `Apply Patch cleanup refused retained ${outcome.phase} work.` })
+    const history = yield* storage.list(["raya", "file-transactions", hash(id)])
+    if (history.length > 2_049)
+      return yield* new Conflict({ message: "Mutation journal cleanup exceeded its revision bound." })
+    const permits = yield* storage.list(["raya", "file-transaction-recovery", hash(id)])
+    if (permits.length > 64)
+      return yield* new Conflict({ message: "Mutation recovery cleanup exceeded its ancestry bound." })
+    const root = ["raya", "file-transactions", hash(id)]
+    if (
+      history.some(
+        (key) =>
+          key.length !== 4 ||
+          key.slice(0, 3).join("/") !== root.join("/") ||
+          !/^\d+$/.test(key[3]) ||
+          Number(key[3]) > 2_048,
+      )
+    )
+      return yield* new Conflict({ message: "Mutation journal cleanup found a malformed revision key." })
+    const ancestry = ["raya", "file-transaction-recovery", hash(id)]
+    if (
+      permits.some(
+        (key) => key.length !== 4 || key.slice(0, 3).join("/") !== ancestry.join("/") || !/^[a-f0-9]{64}$/.test(key[3]),
+      )
+    )
+      return yield* new Conflict({ message: "Mutation recovery cleanup found a malformed permit key." })
+    return { outcome, history, permits }
+  })
+
+  const erase = Effect.fn("RayaMutationJournal.erase")(function* (id: string) {
+    const plan = yield* removable(id)
+    for (const key of [...plan.history, ...plan.permits]) yield* storage.remove(key)
+    if (plan.outcome) yield* storage.remove(active(plan.outcome.id))
+  })
+
+  return { get, admit, advance, recover, pending, removable, erase }
 }

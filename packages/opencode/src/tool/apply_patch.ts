@@ -468,9 +468,7 @@ export const ApplyPatchTool = Tool.define(
       }) => {
         const index = items.length
         const stem = path.join(path.dirname(input.target), `.raya-txn-${seed}-${index}`)
-        const result = input.data
-          ? { sha256: createHash("sha256").update(input.data).digest("hex") }
-          : undefined
+        const result = input.data ? { sha256: createHash("sha256").update(input.data).digest("hex") } : undefined
         items.push({
           entry: {
             kind: input.kind,
@@ -534,7 +532,7 @@ export const ApplyPatchTool = Tool.define(
           movePath: change.movePath,
         })),
       } as const
-      const intent = yield* replay.prepare({ ...proposed, digest: seal(proposed) })
+      const intent = yield* replay.prepare(ctx.sessionID, { ...proposed, digest: seal(proposed) })
       yield* transact(storage, { invocation, digest: intent.digest, workspace: instance.worktree, items })
       return yield* finish(intent)
       // kilocode_change end

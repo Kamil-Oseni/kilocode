@@ -4,6 +4,7 @@ import type { Storage } from "@/storage/storage"
 import { SessionID } from "@/session/schema"
 import { owner, stopped } from "./owner"
 import { starting } from "./claim"
+import { read as readClaim } from "./storage-read"
 
 const Owner = Schema.Struct({ host: Schema.String, pid: Schema.Number })
 const Record = Schema.Struct({
@@ -24,7 +25,7 @@ const hash = (id: string) => createHash("sha256").update(id).digest("hex")
 
 /** Read-only projection; a retained claim never authorizes another startup. */
 export const inspect = Effect.fn("RayaTaskClaim.inspect")(function* (storage: Store, id: string) {
-  const raw = yield* storage.read(["raya", "agent-claims", hash(id)]).pipe(
+  const raw = yield* readClaim(storage, ["raya", "agent-claims", hash(id)]).pipe(
     Effect.catchTag("NotFoundError", () => Effect.succeed(undefined)),
     Effect.catchCause((cause) =>
       Cause.hasInterrupts(cause) ? Effect.failCause(cause).pipe(Effect.orDie) : Effect.succeed(null),
@@ -51,7 +52,7 @@ export function recover<E, R, F = never, S = never>(
   authorize?: (record: typeof Record.Type) => Effect.Effect<boolean>,
 ) {
   const read = (key: string[]) =>
-    storage.read(key).pipe(
+    readClaim(storage, key).pipe(
       Effect.catchTag("NotFoundError", () => Effect.succeed(undefined)),
       Effect.orDie,
     )

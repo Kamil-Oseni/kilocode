@@ -4,6 +4,7 @@ import type { Storage } from "@/storage/storage"
 import type { SessionID } from "@/session/schema"
 import { RayaTask } from "."
 import { owner as identity, stopped } from "./owner"
+import { read } from "./storage-read"
 
 type Store = Pick<Storage.Interface, "create" | "replace" | "remove"> & {
   read: (key: string[]) => ReturnType<Storage.Interface["read"]>
@@ -36,7 +37,7 @@ export function claim<A, E, R, B, F, S>(
       }
       const acquired = yield* storage.create(key, record).pipe(Effect.orDie)
       if (!acquired) {
-        const previous = yield* storage.read(key).pipe(
+        const previous = yield* read(storage, key).pipe(
           Effect.catchTag("NotFoundError", () => Effect.succeed(undefined)),
           Effect.orDie,
         )

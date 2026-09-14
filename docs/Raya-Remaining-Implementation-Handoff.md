@@ -4551,3 +4551,30 @@ Implement replay-safe cleanup next:
 7. Add real interruption tests after claim publication, after roster removal and after stage-receipt removal. Add independent blockers for every positive/unavailable usage reason, changed worker, newly created organization, live owner and changed receipt. Preserve each item and surface an issue.
 
 Installed source remains `1a02f8aea4`. The next low-memory snapshot should batch `2701c802a5`, `d3dd5ed3f9`, `61436630d6`, `5139915332`, `7f0f202261`, `276733d071` and `f75af2dcbf` after cleanup interruption recovery is complete.
+
+## ChatGPT 2026-09-14 18:20 America/Toronto - Replay-safe abandoned-stage cleanup delivered
+
+Product commit `762b2bb8a9` is pushed to `origin/main` and completes the cleanup boundary that `f75af2dcbf` prepared. Startup cleanup applies only to a stopped version-two receipt whose target organization does not exist. It binds a `cleanup` per-worker claim to SHA-256 of the complete decoded receipt and repeats every authorization check after acquiring that claim. The actual mutation publishes the normal removal marker, removes the exact worker from the roster, acknowledges the cleanup claim and removes the stage receipt last. It does not call `retain()` and therefore does not create an indexed Routine archive entry.
+
+The claim/receipt sequence is intentional and supersedes step 6 in the preceding entry:
+
+1. Keep the immutable stage receipt present.
+2. Create a cleanup claim containing the receipt digest.
+3. Re-read and compare the complete stage receipt; recheck that the company is absent, the worker is byte-exact and `usage` has no positive or unavailable reasons.
+4. Publish the removal marker, then save the roster without only that worker.
+5. Acknowledge/remove the cleanup claim through the existing claim success path.
+6. Remove the stage receipt last.
+
+If interruption occurs in step 4, the retained claim and stage receipt authorize only an exact cleanup recovery. If step 5 finishes and step 6 does not, the receipt still lets startup prove the already-absent never-used worker and remove stale metadata. Clearing the claim after the receipt would create a bad crash window in which the undiscoverable claim survives its receipt; do not restore that earlier ordering.
+
+Preserve these tests and semantics:
+
+- `routine-management-tool.test.ts`: 10 / 150. It covers cleanup of the two partial workers from a failed company request, claim-acknowledgement interruption and restart convergence, no manufactured archive, and an eight-worker blocker matrix.
+- The blocker matrix independently retains workers for run, indexed archive, organization membership, occurrence queue, delegation, inbox, memory and unreadable run-history evidence. Every receipt stays present and `recovered` stays zero.
+- `task-claim.test.ts` plus organization/queue/delegation/inbox suites: 32 / 331. Cleanup extended the claim record schema without weakening ordinary start/removal recovery.
+- `task-scheduler.test.ts`: 28 / 406. Existing user removal, archive, removal-marker replay and queue retirement remain green.
+- Bootstrap regression: 1 / 3. Scoped one-thread lint and all local guards pass with no new warning or high-memory run.
+
+Do not broaden cleanup to version-one receipts, live owners, existing target organizations, changed definitions or incomplete evidence. Do not replace the receipt digest with agent ID alone. Do not route abandoned cleanup through ordinary user removal, which intentionally archives the worker.
+
+Next run the authorized low-memory installer from `packages/kilo-vscode` only: `$env:RAYA_LOW_MEMORY='1'; bun run snapshot:install`. This snapshot should include product commits `2701c802a5`, `d3dd5ed3f9`, `61436630d6`, `5139915332`, `7f0f202261`, `276733d071`, `f75af2dcbf` and `762b2bb8a9`. Record exact version, source/docs commit, retained VSIX and CLI hashes/sizes, cleanup result, free disk and active vault pointer. Continue EN-02/OVR-05 afterward with execution fencing and representative organization execution rather than more staging cleanup.

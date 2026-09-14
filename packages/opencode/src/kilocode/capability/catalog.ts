@@ -150,14 +150,15 @@ const entries: Entry[] = [
     id: "documents.create-pdf",
     name: "Create a PDF",
     tools: ["create_pdf"],
-    inputs: ["structured text", "headings", "lists", "tables", "PDF"],
-    description: "Create a local paginated PDF with a title, headings, paragraphs, lists and rectangular tables.",
+    inputs: ["structured text", "headings", "lists", "tables", "local PNG/JPEG images", "PDF"],
+    description: "Create a local paginated PDF with text, rectangular tables and permission-reviewed images.",
     result: "Local PDF file and artifact receipt",
     permission: "edit",
     limits: [
       "Creates a new PDF or replaces the whole destination after approval.",
       "Supports printable WinAnsi text, tables with up to 8 columns and 100 rows, and at most 200 pages.",
-      "Does not import or edit existing PDFs, embed images or custom fonts, create forms, or guarantee archival conformance.",
+      "Images require alt text; PNG files use 8-bit non-interlaced channels; limits are 10 local files, 8 MiB each, 24 MiB and 20 megapixels combined.",
+      "Does not fetch network images, import or edit existing PDFs, embed custom fonts, create forms, produce a fully tagged accessible PDF, or guarantee archival conformance.",
     ],
   },
   {

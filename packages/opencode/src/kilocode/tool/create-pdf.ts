@@ -11,9 +11,20 @@ import { assertMutablePath } from "@/kilocode/agent-manager/protection"
 import * as Artifact from "@/kilocode/goal/artifact"
 import { assertExternalDirectoryEffect } from "@/tool/external-directory"
 import * as Tool from "@/tool/tool"
+import { parseImage } from "./office-image"
+import { parsePdfImage, type PdfImage } from "./pdf-image"
 
 const Text = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(10_000))
 const Cell = Schema.String.check(Schema.isMaxLength(300))
+const Image = Schema.Struct({
+  type: Schema.Literal("image"),
+  filePath: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(4_096)),
+  alt: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(500)),
+  caption: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(500))),
+  width: Schema.optional(
+    Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(7)),
+  ).annotate({ description: "Optional display width in inches, from 1 to 7." }),
+})
 const Block = Schema.Union([
   Schema.Struct({ type: Schema.Literal("paragraph"), text: Text }),
   Schema.Struct({
@@ -36,6 +47,7 @@ const Block = Schema.Union([
     ),
     header: Schema.optional(Schema.Boolean),
   }),
+  Image,
 ])
 const Parameters = Schema.Struct({
   filePath: Schema.String.annotate({ description: "Destination path ending in .pdf." }),
@@ -129,11 +141,30 @@ function wrap(value: string, size: number, indent = 0, width = 504 - indent) {
 type Row =
   | { text: string; size: number; font: "F1" | "F2"; indent?: number; before?: number; after?: number }
   | { cells: readonly string[]; header: boolean; before?: number; after?: number }
+  | { image: Loaded; before?: number; after?: number }
 
-function pdf(input: typeof Parameters.Type) {
+type Loaded = PdfImage & {
+  readonly index: number
+  readonly alt: string
+  readonly caption?: string
+  readonly display?: number
+}
+
+function merge(parts: readonly Uint8Array[]) {
+  const output = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0))
+  let offset = 0
+  for (const part of parts) {
+    output.set(part, offset)
+    offset += part.length
+  }
+  return output
+}
+
+function pdf(input: typeof Parameters.Type, images: readonly Loaded[]) {
+  const loaded = new Map(images.map((image) => [image.index, image]))
   const rows: Row[] = []
   if (input.title) rows.push({ text: input.title.trim(), size: 28, font: "F1", after: 18 })
-  for (const block of input.blocks) {
+  for (const [index, block] of input.blocks.entries()) {
     if (block.type === "heading") {
       const size = block.level === 1 ? 22 : block.level === 2 ? 18 : 15
       rows.push({ text: block.text.trim(), size, font: "F1", before: block.level === 1 ? 14 : 10, after: 6 })
@@ -153,6 +184,12 @@ function pdf(input: typeof Parameters.Type) {
         })
       continue
     }
+    if (block.type === "image") {
+      const image = loaded.get(index)
+      if (!image) throw new Error(`PDF image ${index + 1} was not loaded.`)
+      rows.push({ image, before: 8, after: 9 })
+      continue
+    }
     for (const [index, item] of block.items.entries())
       rows.push({
         text: `${block.type === "numbered" ? `${index + 1}.` : "•"} ${item.trim()}`,
@@ -170,6 +207,34 @@ function pdf(input: typeof Parameters.Type) {
   let y = 720
   for (const [index, row] of rows.entries()) {
     y -= row.before ?? 0
+    if ("image" in row) {
+      const requested = (row.image.display ?? Math.min(7, Math.max(1, row.image.width / 96))) * 72
+      const natural = (requested * row.image.height) / row.image.width
+      const caption = row.image.caption ? wrap(row.image.caption.trim(), 10) : []
+      const available = Math.max(72, 648 - caption.length * 13.5 - 4)
+      const scale = Math.min(1, 504 / requested, available / natural)
+      const width = requested * scale
+      const height = natural * scale
+      const total = height + caption.length * 13.5
+      if (y - total < 72) {
+        pages.push([])
+        y = 720
+      }
+      const x = 54 + (504 - width) / 2
+      const bottom = y - height
+      pages
+        .at(-1)!
+        .push(
+          `/Figure << /Alt <${encode(row.image.alt.trim())}> >> BDC q ${width.toFixed(2)} 0 0 ${height.toFixed(2)} ${x.toFixed(2)} ${bottom.toFixed(2)} cm /Im${row.image.index + 1} Do Q EMC`,
+        )
+      y = bottom - 4
+      for (const line of caption) {
+        if (line) pages.at(-1)!.push(`BT /F2 10 Tf 0.349 0.384 0.451 rg 54 ${y.toFixed(2)} Td <${encode(line)}> Tj ET`)
+        y -= 13.5
+      }
+      y -= row.after ?? 0
+      continue
+    }
     if ("cells" in row) {
       const width = 504 / row.cells.length
       const cells = row.cells.map((cell) => wrap(cell.trim(), 9, 0, width - 12))
@@ -217,7 +282,8 @@ function pdf(input: typeof Parameters.Type) {
   for (const [index, page] of pages.entries())
     page.push(`BT /F2 9 Tf 0.451 0.486 0.549 rg 540 36 Td <${encode(String(index + 1))}> Tj ET`)
 
-  const objects: string[] = [
+  const encoder = new TextEncoder()
+  const objects: (string | Uint8Array)[] = [
     "",
     "",
     "<< /Type /Font /Subtype /Type1 /BaseFont /Times-Bold >>",
@@ -226,6 +292,26 @@ function pdf(input: typeof Parameters.Type) {
   const info = objects.push(
     `<< /Title <${encode(input.title?.trim() ?? path.basename(input.filePath))}> /Author <${encode(input.author?.trim() ?? "Raya")}> /Producer <${encode("Raya")}> >>`,
   )
+  const refs = new Map<number, number>()
+  for (const image of images) {
+    const mask = image.alpha
+      ? objects.push(
+          merge([
+            encoder.encode(
+              `<< /Type /XObject /Subtype /Image /Width ${image.width} /Height ${image.height} /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode /Length ${image.alpha.length} >>\nstream\n`,
+            ),
+            image.alpha,
+            encoder.encode("\nendstream"),
+          ]),
+        )
+      : undefined
+    const dict = `<< /Type /XObject /Subtype /Image /Width ${image.width} /Height ${image.height} /ColorSpace /${image.color} /BitsPerComponent 8 /Filter /${image.filter} /Length ${image.bytes.length}${mask ? ` /SMask ${mask} 0 R` : ""} >>\nstream\n`
+    const id = objects.push(merge([encoder.encode(dict), image.bytes, encoder.encode("\nendstream")]))
+    refs.set(image.index, id)
+  }
+  const xobjects = images.length
+    ? ` /XObject << ${images.map((image) => `/Im${image.index + 1} ${refs.get(image.index)} 0 R`).join(" ")} >>`
+    : ""
   const kids: number[] = []
   for (const page of pages) {
     const stream = page.join("\n")
@@ -233,20 +319,23 @@ function pdf(input: typeof Parameters.Type) {
       `<< /Length ${new TextEncoder().encode(stream).length} >>\nstream\n${stream}\nendstream`,
     )
     const id = objects.push(
-      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${content} 0 R >>`,
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >>${xobjects} >> /Contents ${content} 0 R >>`,
     )
     kids.push(id)
   }
   objects[0] = "<< /Type /Catalog /Pages 2 0 R >>"
   objects[1] = `<< /Type /Pages /Count ${kids.length} /Kids [${kids.map((id) => `${id} 0 R`).join(" ")}] >>`
 
-  const encoder = new TextEncoder()
   const parts: Uint8Array[] = [encoder.encode("%PDF-1.7\n%Raya\n")]
   const offsets = [0]
   let length = parts[0]!.length
   for (const [index, object] of objects.entries()) {
     offsets.push(length)
-    const bytes = encoder.encode(`${index + 1} 0 obj\n${object}\nendobj\n`)
+    const bytes = merge([
+      encoder.encode(`${index + 1} 0 obj\n`),
+      typeof object === "string" ? encoder.encode(object) : object,
+      encoder.encode("\nendobj\n"),
+    ])
     parts.push(bytes)
     length += bytes.length
   }
@@ -258,13 +347,7 @@ function pdf(input: typeof Parameters.Type) {
     `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R /Info ${info} 0 R >>\nstartxref\n${xref}\n%%EOF\n`,
   ].join("")
   parts.push(encoder.encode(table))
-  const output = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0))
-  let offset = 0
-  for (const part of parts) {
-    output.set(part, offset)
-    offset += part.length
-  }
-  return { bytes: output, pages: pages.length }
+  return { bytes: merge(parts), pages: pages.length }
 }
 
 export const CreatePdfTool = Tool.define(
@@ -274,7 +357,7 @@ export const CreatePdfTool = Tool.define(
     const events = yield* EventV2Bridge.Service
     return {
       description:
-        "Create a real paginated PDF from a title and structured headings, paragraphs, lists or rectangular tables. Tables support up to 8 columns and 100 rows each, with an optional first-row header. The writer supports printable WinAnsi text, creates at most 200 pages and returns a verified local artifact receipt. It creates a new PDF or replaces the whole destination after approval. It does not import or edit an existing PDF, embed images or custom fonts, create forms, add links, or guarantee archival conformance.",
+        "Create a real paginated PDF from a title and structured headings, paragraphs, lists, rectangular tables or local PNG/JPEG images. Images require alt text, read permission, valid headers and dimensions; PNG files must use 8-bit channels without interlacing. Images are limited to 10 files, 8 MiB each, 24 MiB combined and 20 megapixels combined. Tables support up to 8 columns and 100 rows each, with an optional first-row header. The writer supports printable WinAnsi text, creates at most 200 pages and returns a verified local artifact receipt. It creates a new PDF or replaces the whole destination after approval. It does not fetch network images, import or edit an existing PDF, embed custom fonts, create forms, add links, produce a fully tagged accessible PDF, or guarantee archival conformance.",
       parameters: Parameters,
       execute: (params: typeof Parameters.Type, ctx: Tool.Context) =>
         Effect.gen(function* () {
@@ -284,14 +367,26 @@ export const CreatePdfTool = Tool.define(
             : path.join(instance.directory, params.filePath)
           if (path.extname(filepath).toLowerCase() !== ".pdf") throw new Error("Choose a destination ending in .pdf.")
           const text = params.blocks.flatMap((block) =>
-            block.type === "table" ? block.rows.flat() : "items" in block ? block.items : [block.text],
+            block.type === "table"
+              ? block.rows.flat()
+              : block.type === "image"
+                ? [block.alt, block.caption].filter((value): value is string => value !== undefined)
+                : "items" in block
+                  ? block.items
+                  : [block.text],
           )
           const values = [params.title, params.author, ...text].filter((value): value is string => value !== undefined)
           const required = [
             params.title,
             params.author,
             ...params.blocks.flatMap((block) =>
-              block.type === "table" ? [] : "items" in block ? block.items : [block.text],
+              block.type === "table"
+                ? []
+                : block.type === "image"
+                  ? [block.alt, block.caption].filter((value): value is string => value !== undefined)
+                  : "items" in block
+                    ? block.items
+                    : [block.text],
             ),
           ].filter((value): value is string => value !== undefined)
           if (required.some((value) => !value.trim())) throw new Error("PDF text can't be blank.")
@@ -305,10 +400,69 @@ export const CreatePdfTool = Tool.define(
             cells += table.rows.length * columns
           }
           if (cells > 2_000) throw new Error("PDF tables are limited to 2,000 cells per document.")
+          const sources = params.blocks.flatMap((block, index) => (block.type === "image" ? [{ block, index }] : []))
+          if (sources.length > 10) throw new Error("A PDF can contain at most 10 images.")
           const characters = values.reduce((sum, value) => sum + value.length, 0)
           if (characters > 100_000) throw new Error("This PDF exceeds the 100,000-character limit.")
           for (const value of values) encode(value)
           if (!params.title) encode(path.basename(params.filePath))
+          const files: { source: (typeof sources)[number]; requested: string; target: string; ext: string }[] = []
+          for (const source of sources) {
+            const requested = path.isAbsolute(source.block.filePath)
+              ? source.block.filePath
+              : path.resolve(instance.directory, source.block.filePath)
+            const ext = path.extname(requested).toLowerCase()
+            if (![".png", ".jpg", ".jpeg"].includes(ext)) throw new Error("PDF images must end in .png, .jpg or .jpeg.")
+            const info = yield* fs.stat(requested)
+            if (info.type !== "File") throw new Error(`PDF image is not a file: ${path.basename(requested)}`)
+            if (info.size > 8 * 1024 * 1024) throw new Error("Each PDF image must be 8 MiB or smaller.")
+            const resolved = yield* fs.realPath(requested)
+            const target = process.platform === "win32" ? FSUtil.normalizePath(resolved) : resolved
+            yield* assertExternalDirectoryEffect(ctx, target)
+            files.push({ source, requested, target, ext })
+          }
+          if (files.length)
+            yield* ctx.ask({
+              permission: "read",
+              patterns: [
+                ...new Set(
+                  files.flatMap((file) =>
+                    [file.requested, file.target].map((item) => path.relative(instance.worktree, item)),
+                  ),
+                ),
+              ],
+              always: ["*"],
+              metadata: { files: files.map((file) => file.target), format: "image", purpose: "pdf" },
+            })
+          const images: Loaded[] = []
+          let bytes = 0
+          let pixels = 0
+          for (const file of files) {
+            const current = yield* fs.realPath(file.requested)
+            const canonical = process.platform === "win32" ? FSUtil.normalizePath(current) : current
+            if (canonical !== file.target) throw new Error("The PDF image changed after read approval. Try again.")
+            const data = yield* fs.readFile(file.target)
+            if (data.length > 8 * 1024 * 1024) throw new Error("Each PDF image must be 8 MiB or smaller.")
+            bytes += data.length
+            if (bytes > 24 * 1024 * 1024) throw new Error("PDF images exceed the 24 MiB combined limit.")
+            const dimensions = yield* Effect.try({
+              try: () => parseImage(data, file.ext),
+              catch: (cause) => new Error(`Raya couldn't read ${path.basename(file.requested)}: ${String(cause)}`),
+            })
+            pixels += dimensions.width * dimensions.height
+            if (pixels > 20_000_000) throw new Error("PDF images exceed the 20-megapixel combined limit.")
+            const image = yield* Effect.try({
+              try: () => parsePdfImage(data, file.ext),
+              catch: (cause) => new Error(`Raya couldn't read ${path.basename(file.requested)}: ${String(cause)}`),
+            })
+            images.push({
+              ...image,
+              index: file.source.index,
+              alt: file.source.block.alt,
+              caption: file.source.block.caption,
+              display: file.source.block.width,
+            })
+          }
           assertMutablePath(filepath)
           yield* assertExternalDirectoryEffect(ctx, filepath)
           const exists = yield* fs.existsSafe(filepath)
@@ -324,10 +478,11 @@ export const CreatePdfTool = Tool.define(
               blocks: params.blocks.length,
               tables: tables.length,
               cells,
+              images: images.length,
             },
           })
           const result = yield* Effect.try({
-            try: () => pdf(params),
+            try: () => pdf(params, images),
             catch: (cause) => new Error(`Raya couldn't create this PDF: ${String(cause)}`),
           })
           const tmp = `${filepath}.raya-${randomUUID()}.tmp`
@@ -358,6 +513,9 @@ export const CreatePdfTool = Tool.define(
               blocks: params.blocks.length,
               tables: tables.length,
               cells,
+              images: images.length,
+              imageBytes: bytes,
+              imagePixels: pixels,
               pages: result.pages,
               characters,
               rayaRevision: revision,

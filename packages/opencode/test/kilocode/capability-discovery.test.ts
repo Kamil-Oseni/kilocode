@@ -474,6 +474,16 @@ it.instance(
       const bound = bind([defs.pdf, defs.discover])
       yield* prepare(bound.tools)
       const target = path.join(instance.directory, "review-pack.pdf")
+      const image = path.join(instance.directory, "status.png")
+      yield* Effect.promise(() =>
+        Bun.write(
+          image,
+          Buffer.from(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAANSURBVBhXY3ANrWoAAAOMAZVXSuBOAAAAAElFTkSuQmCC",
+            "base64",
+          ),
+        ),
+      )
       const approvals: string[] = []
       const ctx = {
         ...bound.ctx,
@@ -503,6 +513,13 @@ it.instance(
                 ["Risks", "2 open"],
               ],
             },
+            {
+              type: "image",
+              filePath: image,
+              alt: "Quarterly status marker",
+              caption: "Current status",
+              width: 1,
+            },
             { type: "bullets", items: ["Customer retention improved", "Two risks need review"] },
             { type: "numbered", items: Array.from({ length: 90 }, (_, index) => `Follow-up action ${index + 1}`) },
           ],
@@ -513,13 +530,16 @@ it.instance(
       expect(created.metadata).toMatchObject({
         filepath: target,
         exists: false,
-        blocks: 5,
+        blocks: 6,
         tables: 1,
         cells: 6,
+        images: 1,
+        imagePixels: 1,
         rayaRevision: { version: 1, status: "captured", path: target },
       })
+      expect(Number(created.metadata.imageBytes)).toBeGreaterThan(0)
       expect(Number(created.metadata.pages)).toBeGreaterThan(1)
-      expect(approvals).toEqual(["edit"])
+      expect(approvals).toEqual(["read", "edit"])
       const bytes = new Uint8Array(yield* Effect.promise(() => Bun.file(target).arrayBuffer()))
       const source = new TextDecoder().decode(bytes)
       expect(source).toStartWith("%PDF-1.7")
@@ -531,6 +551,11 @@ it.instance(
       expect(source).toContain("<517561727465726C7920726576696577>".toUpperCase())
       expect(source).toContain("<4D6574726963>")
       expect(source).toContain(" re S")
+      expect(source).toContain("/Subtype /Image")
+      expect(source).toContain("/SMask ")
+      expect(source).toContain("/FlateDecode")
+      expect(source).toContain("/Figure << /Alt <517561727465726C7920737461747573206D61726B6572>")
+      expect(source).toContain("/Im4 Do")
       const start = Number(source.match(/startxref\n(\d+)/)?.[1])
       expect(source.slice(start)).toStartWith("xref\n")
       const offsets = [...source.matchAll(/(\d{10}) 00000 n \n/g)].map((match) => Number(match[1]))
@@ -568,11 +593,32 @@ it.instance(
             rows: [["1", "2", "3", "4", "5", "6", "7", "8"]],
           })),
         },
+        {
+          filePath: path.join(instance.directory, "too-many-images.pdf"),
+          blocks: Array.from({ length: 11 }, (_, index) => ({
+            type: "image" as const,
+            filePath: image,
+            alt: `Image ${index + 1}`,
+          })),
+        },
       ]) {
         expect(Exit.isFailure(yield* defs.pdf.execute(input, ctx).pipe(Effect.exit))).toBe(true)
         expect(yield* Effect.promise(() => Bun.file(input.filePath).exists())).toBe(false)
       }
-      expect(approvals).toEqual(["edit"])
+      expect(approvals).toEqual(["read", "edit"])
+
+      const corrupt = path.join(instance.directory, "corrupt.png")
+      const invalid = path.join(instance.directory, "invalid-image.pdf")
+      yield* Effect.promise(() => Bun.write(corrupt, "not a png"))
+      expect(
+        Exit.isFailure(
+          yield* defs.pdf
+            .execute({ filePath: invalid, blocks: [{ type: "image", filePath: corrupt, alt: "Corrupt image" }] }, ctx)
+            .pipe(Effect.exit),
+        ),
+      ).toBe(true)
+      expect(yield* Effect.promise(() => Bun.file(invalid).exists())).toBe(false)
+      expect(approvals).toEqual(["read", "edit", "read"])
     }),
   60_000,
 )

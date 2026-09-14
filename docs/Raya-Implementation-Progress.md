@@ -1,5 +1,13 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-14 18:57 America/Toronto - Terminal delegation ownership and late-result fencing
+
+**Status: product commit `a61ad81327` is verified and pushed to `origin/main`; it is intentionally not installed alone.** Delegation result writes now compare and set against the exact state read before mutation. Completion, failure, timeout, needs-input and cancellation can no longer both read a live row and overwrite one another by updating only its ID. The first terminal disposition remains durable; an exact replay returns that result, while a conflicting late disposition receives `RayaTaskDelegation.Conflict` and publishes no replacement reply.
+
+Evidence includes 32 concurrent completion/cancellation attempts through two independently built database connections, with every successful response agreeing with the one saved terminal state. A deterministic runner race pauses settlement after it sees a completed goal, cancels the delegation, starts a new assignment on the released worker and then resumes the stale settlement. The old request remains cancelled with no response, its run remains error, the new request remains running and the stale completion summary is absent from delegation replies. The combined service/runner suites pass **18 / 366**. Scoped one-thread Oxlint reports zero errors and only older wider-file warnings; annotation, Effect Promise-facade, Markdown-table and diff guards pass. No broad/high-memory checker ran and no Bun or tsgo process remained.
+
+EN-02 and OVR-05 remain **In progress**. Result ownership is now fenced at the run and delegation stores, while full multi-store crash recovery, parent-credit timing and representative company execution through real integrations remain open. Installed source remains `17ff50e907`; retain this backend work for a later coherent low-memory snapshot.
+
 ## ChatGPT 2026-09-14 18:47 America/Toronto - Organization authority linearized inside owned startup
 
 **Status: product commit `0508dd1593` is verified and pushed to `origin/main`; it is intentionally not installed alone.** Delegated startup now repeats organization authority and deadline checks inside the worker's durable startup claim, in its read-only verification phase. This is the admission point: a company edit before that check denies the saved request; an edit after admission affects future requests and does not retroactively rewrite admitted in-flight work. The original preflight remains for an immediate persisted failure response, while the owned recheck closes the race during claim acquisition.

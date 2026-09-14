@@ -2,6 +2,14 @@
 
 Source of scope: [Comprehensive audit](Raya-Comprehensive-Audit.md). All sections and all ten overhauls remain in scope. Work proceeds in dependency order, with broader validation batched at checkpoints. A completed subtask does not mean the overall overhaul is complete.
 
+## ChatGPT 2026-09-13 22:43 America/Toronto - Office capability batch installed
+
+**Status: installed from source commit `6db117d0d5`; pushed.** The authorized single-process low-memory workflow regenerated the SDK, rebuilt and smoke-tested the Windows x64 CLI, passed sequential extension-host and webview typechecks, cached ESLint and production bundling, then packaged and installed `eden.raya@7.4.23-snapshot+6db117d0d5.kamil-oseni.1789353604821`. This snapshot contains native PowerPoint images, safe native Excel formulas, timezone-safe Excel calendar dates and the preceding bounded snapshot-vault fix.
+
+The verified vault artifact is `raya.85f77680fcdbf4a075b7e902025c7f310aba27d35ba38385502e6b8cc85303e8.vsix`, 518,689,571 bytes, SHA-256 `85F77680FCDBF4A075B7E902025C7F310ABA27D35BA38385502E6B8CC85303E8`; package output reports 431 files. The installed 230,059,520-byte `bin/kilo.exe` hashes to `EC3A769A5712004F152B60838ACB53DA25071E9E740D20ECD83822F4CA1D6E41`, exactly matching the vault receipt. The installed directory timestamp is 2026-09-13 22:42:41 -04:00 and its manifest exposes the exact version.
+
+Retention removed one stale vault package, one staged VSIX and one stale extracted extension. Staging contains zero files; the vault remains bounded at three packages totaling 1.449 GiB; no Bun process remains; and C has 89.817 GiB free after the new extracted extension and package were retained. The vault's active pointer remains `846c527c1b` because the open VS Code host has not reloaded. Installation is proven; activation and installed-session exposure for `6db117d0d5` remain intentionally unclaimed until reload.
+
 ## ChatGPT 2026-09-13 22:38 America/Toronto - timezone-safe native Excel dates delivered
 
 **Status: delivered in product commit `6112a4cacf`; pushed.** OVR-08 `create_spreadsheet` now accepts a typed date cell as `{ date: "YYYY-MM-DD" }`. Raya validates the exact ten-character form and a real Gregorian calendar day from 1900-01-01 through 9999-12-31, converts it directly to the correct Excel 1900-system serial with the pre-March-1900 leap-bug adjustment, and writes a native numeric date cell using `yyyy-mm-dd`. This avoids the host-timezone shift that occurs when local JavaScript `Date` values are serialized; Toronto and other negative-offset environments no longer move a date to the preceding day.

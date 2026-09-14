@@ -350,3 +350,47 @@ for (const checkpoint of [
       }),
     30_000,
   )
+
+for (const [decision, checkpoint] of [
+  ["rollback", "rollback-rolling-0"],
+  ["rollback", "rollback-restore-1"],
+  ["rollback", "rollback-rolling-1"],
+  ["rollback", "rollback-restore-2"],
+  ["rollback", "rollback-rolling-2"],
+  ["rollback", "rollback-rolled"],
+  ["rollback", "rollback-cleaning-0"],
+  ["rollback", "rollback-cleanup-1"],
+  ["rollback", "rollback-cleaning-1"],
+  ["rollback", "rollback-cleanup-2"],
+  ["rollback", "rollback-cleaning-2"],
+  ["rollback", "rollback-releasing"],
+  ["commit", "commit-cleaning-0"],
+  ["commit", "commit-cleanup-1"],
+  ["commit", "commit-cleaning-1"],
+  ["commit", "commit-cleanup-2"],
+  ["commit", "commit-cleaning-2"],
+  ["commit", "commit-releasing"],
+] as const)
+  it.live(
+    `recovers a killed mixed ${decision} from ${checkpoint}`,
+    () =>
+      Effect.gen(function* () {
+        const root = yield* tmpdirScoped()
+        const dir = path.join(root, "storage")
+        const source = path.join(root, "source.txt")
+        const moved = path.join(root, "moved.txt")
+        yield* Effect.promise(() => writeFile(source, "source before"))
+        yield* Effect.promise(() => kill("matrix-crash", [dir, root, `mixed:${decision}:${checkpoint}`]))
+        const outcome = yield* Effect.promise(() =>
+          child("matrix-recover", [dir, root, `mixed:${decision}:${checkpoint}`]),
+        )
+        expect(outcome.phase).toBe("done")
+        expect(outcome.decision).toBe(decision)
+        expect(yield* Effect.promise(() => Bun.file(source).exists())).toBe(decision === "rollback")
+        expect(yield* Effect.promise(() => Bun.file(moved).exists())).toBe(decision === "commit")
+        const target = decision === "commit" ? moved : source
+        expect(yield* Effect.promise(() => readFile(target, "utf8"))).toBe("source before")
+        expect((yield* Effect.promise(() => readdir(root))).some((name) => name.startsWith(".raya-txn-"))).toBe(false)
+      }),
+    30_000,
+  )

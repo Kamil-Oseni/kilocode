@@ -5,7 +5,13 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Effect } from "effect"
-import { prepareTransaction, publishTransaction, type TransactionEntry } from "@kilocode/sandbox"
+import {
+  finalizeTransaction,
+  prepareTransaction,
+  publishTransaction,
+  restoreTransaction,
+  type TransactionEntry,
+} from "@kilocode/sandbox"
 import { Git } from "../../../src/git"
 import { recover } from "../../../src/kilocode/tool/apply-patch-transaction"
 import { journals } from "../../../src/kilocode/tool/mutation-journal"
@@ -312,7 +318,7 @@ const run = Effect.gen(function* () {
       yield* pause(`committing-${index + 1}`)
     }
     if (choice === "commit") {
-      yield* journal.advance(id, {
+      const committed = yield* journal.advance(id, {
         token: admitted.token,
         revision: published.revision,
         phase: "committed",
@@ -320,6 +326,94 @@ const run = Effect.gen(function* () {
         entries: staged,
       })
       yield* pause("committed")
+      if (checkpoint?.startsWith("commit-")) {
+        let cleaning = yield* journal.advance(id, {
+          token: admitted.token,
+          revision: committed.revision,
+          phase: "cleaning",
+          cursor: 0,
+          entries: staged,
+        })
+        yield* pause("commit-cleaning-0")
+        for (const [index, entry] of staged.entries()) {
+          yield* finalizeTransaction(entry, true)
+          yield* pause(`commit-cleanup-${index + 1}`)
+          cleaning = yield* journal.advance(id, {
+            token: admitted.token,
+            revision: cleaning.revision,
+            phase: "cleaning",
+            cursor: index + 1,
+            entries: staged,
+          })
+          yield* pause(`commit-cleaning-${index + 1}`)
+        }
+        yield* journal.advance(id, {
+          token: admitted.token,
+          revision: cleaning.revision,
+          phase: "releasing",
+          cursor: staged.length,
+          entries: staged,
+        })
+        yield* pause("commit-releasing")
+      }
+    }
+    if (choice === "rollback" && checkpoint?.startsWith("rollback-")) {
+      let rolling = yield* journal.advance(id, {
+        token: admitted.token,
+        revision: published.revision,
+        phase: "rolling_back",
+        cursor: 0,
+        entries: staged,
+      })
+      yield* pause("rollback-rolling-0")
+      for (const [index, entry] of staged.toReversed().entries()) {
+        yield* restoreTransaction(entry)
+        yield* pause(`rollback-restore-${index + 1}`)
+        rolling = yield* journal.advance(id, {
+          token: admitted.token,
+          revision: rolling.revision,
+          phase: "rolling_back",
+          cursor: index + 1,
+          entries: staged,
+        })
+        yield* pause(`rollback-rolling-${index + 1}`)
+      }
+      const rolled = yield* journal.advance(id, {
+        token: admitted.token,
+        revision: rolling.revision,
+        phase: "rolled_back",
+        cursor: staged.length,
+        entries: staged,
+      })
+      yield* pause("rollback-rolled")
+      let cleaning = yield* journal.advance(id, {
+        token: admitted.token,
+        revision: rolled.revision,
+        phase: "cleaning",
+        cursor: 0,
+        entries: staged,
+      })
+      yield* pause("rollback-cleaning-0")
+      for (const [index, entry] of staged.entries()) {
+        yield* finalizeTransaction(entry, false)
+        yield* pause(`rollback-cleanup-${index + 1}`)
+        cleaning = yield* journal.advance(id, {
+          token: admitted.token,
+          revision: cleaning.revision,
+          phase: "cleaning",
+          cursor: index + 1,
+          entries: staged,
+        })
+        yield* pause(`rollback-cleaning-${index + 1}`)
+      }
+      yield* journal.advance(id, {
+        token: admitted.token,
+        revision: cleaning.revision,
+        phase: "releasing",
+        cursor: staged.length,
+        entries: staged,
+      })
+      yield* pause("rollback-releasing")
     }
     if (checkpoint) throw new Error(`Matrix checkpoint was not reached: ${checkpoint}`)
     process.stdout.write("READY\n")

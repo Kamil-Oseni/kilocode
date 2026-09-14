@@ -1,5 +1,13 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-14 19:18 America/Toronto - EN-02 delegation start-card replay
+
+Product commit `6d63daf299` is verified and pushed. `RayaTaskDelegation.attach` now routes both a newly linked row and an exact existing child-run/session replay through the idempotent `begin(record)` publisher. Preserve the early conflict checks: another run or session must still fail. The exact replay exists only to finish publication after the durable link already won.
+
+The adverse test uses a SQLite trigger to abort `raya_routine_message` inserts with `source LIKE 'start:%'`. Require the first attach to fail while the delegation remains running with its intended child run/session and no start card. After dropping the trigger, two exact attaches must produce one start card. Combined service/runner evidence is 20 / 382; scoped lint and affected guards pass.
+
+Next address the accepted-start ownership gap. `take(recipientID)` changes a queued row to accepted before `fire` creates its durable per-worker claim. A process death in that gap leaves a row normal `take` will never select. Do not merely treat all accepted rows as queued: a later crash may have created a session or run before `attach`, and replay could duplicate work or falsely fail a live result. Bind delegation ID into the startup claim and session metadata, reconcile zero-or-one matching session by exact agent/run/delegation identity, attach a recovered run idempotently, and only retry an accepted row when durable claim/session/history evidence proves no work began. Add kill points before claim, after session creation, after run history and after attachment publication. EN-02/OVR-05 remain **In progress**; installed source remains `17ff50e907`.
+
 ## ChatGPT 2026-09-14 19:14 America/Toronto - EN-02 source-aware role memory
 
 Product commit `958b5b81da` is verified and pushed. Routine memory at `raya/agent-memory/<agentID>` now accepts a legacy string or version 2 `{ version, text, sources }`. `sources` contains at most 51 lowercase SHA-256 run-ID digests: the terminal histories retained by `writeRuns` plus its possible schedule anchor. `remember` changes visible text while preserving sources; ordinary `append` preserves sources; `learn(agentID, runID, text)` filters sources against currently retained run history and atomically adds text plus the new digest only when absent. Keep these fields in one storage record; splitting the source ledger from text recreates a crash window.

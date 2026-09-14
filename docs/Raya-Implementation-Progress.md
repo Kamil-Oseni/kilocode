@@ -1,5 +1,13 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-14 19:18 America/Toronto - Missing delegation start cards recover through replay
+
+**Status: product commit `6d63daf299` is verified and pushed to `origin/main`; it is intentionally not installed alone.** An exact delegation attachment replay now republishes its deterministic `start:` DM card before returning the already linked run/session. If attachment committed but inbox insertion failed, retry restores one start card without creating another run or changing the saved link.
+
+The regression aborts only `start:%` message insertion with a real SQLite trigger. The first attach fails after the delegation becomes running with its exact child run and session. After trigger removal, two identical attaches retain that identity and produce exactly one start card. Combined delegation coverage passes **20 / 382**. Scoped one-thread lint has zero errors and only existing warnings; affected guards pass. No broad/high-memory checker ran and no Bun or tsgo process remained.
+
+EN-02/OVR-05 remain **In progress**. A crash after queue `take` changes a row to accepted but before worker startup ownership is durably associated remains the next high-risk boundary. Installed source remains `17ff50e907`.
+
 ## ChatGPT 2026-09-14 19:14 America/Toronto - Role learning recovers exactly once per run
 
 **Status: product commit `958b5b81da` is verified and pushed to `origin/main`; it is intentionally not installed alone.** Routine role memory now stores visible text and the SHA-256 identities of learned retained runs in one atomic version-2 record. Plain legacy strings remain readable and migrate on the next memory write. Settlement uses the terminal run ID when learning; replay after a failed first memory write adds the summary once, while later replay sees the same source and does nothing. Distinct runs with identical summaries remain independently attributable. Manual memory edits preserve learned identities, so stale settlement cannot restore text the person replaced.

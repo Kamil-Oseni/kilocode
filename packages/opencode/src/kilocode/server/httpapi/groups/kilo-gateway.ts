@@ -197,8 +197,8 @@ export const EditResponse = Schema.Struct({
 })
 
 export const AudioTranscriptionsBody = Schema.Struct({
-  requestID: Schema.optional(Schema.String.pipe(Schema.minLength(1), Schema.maxLength(256))),
-  sessionID: Schema.optional(Schema.String.pipe(Schema.minLength(1), Schema.maxLength(256))),
+  requestID: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
+  sessionID: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
   model: Schema.String,
   input_audio: Schema.Struct({
     data: Schema.String,
@@ -355,7 +355,7 @@ export const KiloGatewayApi = HttpApi.make("kilo")
           query: WorkspaceRoutingQuery,
           payload: AudioTranscriptionsBody,
           success: described(TranscriptionResponse, "Transcription response"),
-          error: [HttpApiError.BadRequest, HttpApiError.Unauthorized],
+          error: [HttpApiError.BadRequest, HttpApiError.Unauthorized, HttpApiError.Conflict],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "kilo.audio.transcriptions",

@@ -7186,6 +7186,8 @@ export class Audio extends HeyApiClient {
     parameters?: {
       directory?: string
       workspace?: string
+      requestID?: string
+      sessionID?: string
       model?: string
       input_audio?: {
         data: string
@@ -7204,6 +7206,8 @@ export class Audio extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "body", key: "requestID" },
+            { in: "body", key: "sessionID" },
             { in: "body", key: "model" },
             { in: "body", key: "input_audio" },
             { in: "body", key: "language" },

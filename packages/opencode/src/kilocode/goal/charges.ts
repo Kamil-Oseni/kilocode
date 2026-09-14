@@ -22,7 +22,7 @@ type Owner = {
 
 const Lease = Schema.Struct({
   token: Schema.String,
-  amount: Schema.Finite.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(1_000_000)),
+  amount: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(1_000_000)),
   origin: SessionID,
   claimedAt: Schema.Finite,
   expiresAt: Schema.Finite,
@@ -310,8 +310,9 @@ export const make = Effect.fn("RayaGoalCharges.make")(function* (deps: Deps) {
       currency,
       reason: reason.trim().slice(0, 240) || "The provider completed the billed operation without a stable receipt.",
     })
+    if (identity && current.charges?.some((item) => item.id === `goal-reservation:${token}`))
+      return yield* Effect.fail(new Error(`Goal ${currency} reservation identity was already settled.`))
     const cfg = current.budget?.chargeCosts?.find((item) => item.currency === currency)
-    if (!cfg) return { ...noop, uncertain: (reason: string) => direct(unknown(reason)), settle: direct }
 
     const admitted = yield* change(
       owner,
@@ -320,20 +321,34 @@ export const make = Effect.fn("RayaGoalCharges.make")(function* (deps: Deps) {
         const goal = yield* goals.get(owner.id)
         if (!goal || goal.createdAt !== owner.createdAt || goal.status !== "active")
           return { kind: "inactive" as const }
-        const limit = goal.budget?.chargeCosts?.find((item) => item.currency === currency)
-        if (!limit) return { kind: "unlimited" as const }
         const prior = record?.leases.find((item) => item.token === token)
         if (prior) {
           if (prior.origin !== sessionID) return { kind: "identity" as const }
+          return { kind: "admitted" as const }
+        }
+        const active = record?.leases ?? []
+        if (active.length >= 64) return { kind: "capacity" as const }
+        const limit = goal.budget?.chargeCosts?.find((item) => item.currency === currency)
+        if (!limit) {
+          const at = now()
+          yield* save(owner, currency, [
+            ...active,
+            {
+              token,
+              amount: 0,
+              origin: sessionID,
+              claimedAt: at,
+              expiresAt: at + ttl,
+              state: "reserved",
+            },
+          ])
           return { kind: "admitted" as const }
         }
         const items = goal.charges?.filter((item) => item.currency === currency) ?? []
         const spent = items.reduce((sum, item) => sum + (item.coverage === "recorded" ? item.amount : 0), 0)
         if (items.some((item) => item.coverage === "unknown")) return { kind: "unknown" as const, spent }
         if (spent + limit.reservation > limit.limit) return { kind: "limit" as const, spent, limit }
-        const active = record?.leases ?? []
         const reserved = active.reduce((sum, item) => sum + item.amount, 0)
-        if (active.length >= 64) return { kind: "capacity" as const }
         if (spent + reserved + limit.reservation > limit.limit) return { kind: "capacity" as const }
         const at = now()
         yield* save(owner, currency, [
@@ -350,8 +365,6 @@ export const make = Effect.fn("RayaGoalCharges.make")(function* (deps: Deps) {
         return { kind: "admitted" as const }
       }),
     )
-    if (admitted.kind === "unlimited")
-      return { ...noop, uncertain: (reason: string) => direct(unknown(reason)), settle: direct }
     if (admitted.kind === "inactive")
       return yield* Effect.fail(new Error(`Goal ${currency} charge reservation cannot start because the goal changed.`))
     if (admitted.kind === "identity")
@@ -441,7 +454,7 @@ export const make = Effect.fn("RayaGoalCharges.make")(function* (deps: Deps) {
       ),
       Effect.asVoid,
     )
-    return { amount: cfg.reservation, dispatch, finish, release, uncertain, settle }
+    return { amount: cfg?.reservation, dispatch, finish, release, uncertain, settle }
   })
 
   return { claim, complete, settle }

@@ -14313,6 +14313,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_Conflict"
+                }
+              }
+            }
           }
         },
         "description": "Proxy an audio transcription request to the Kilo Gateway",
@@ -14323,6 +14333,16 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "requestID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
                   "model": {
                     "type": "string"
                   },
@@ -15867,7 +15887,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Project model token and cost history",
+            "description": "Project model and non-model usage history",
             "content": {
               "application/json": {
                 "schema": {
@@ -16058,11 +16078,64 @@
                         "required": ["providerID", "modelID", "steps", "cost", "tokens"],
                         "additionalProperties": false
                       }
+                    },
+                    "charges": {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "currency": {
+                                "type": "string"
+                              },
+                              "provider": {
+                                "type": "string"
+                              },
+                              "service": {
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "string"
+                              },
+                              "amount": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "recorded": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "unknown": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "required": ["source", "recorded", "unknown"],
+                            "additionalProperties": false
+                          }
+                        },
+                        "goals": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "unreadable": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "conflicts": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      },
+                      "required": ["items", "goals", "unreadable", "conflicts"],
+                      "additionalProperties": false
                     }
                   },
-                  "required": ["range", "until", "timezone", "sessions", "totals", "models"],
+                  "required": ["range", "until", "timezone", "sessions", "totals", "models", "charges"],
                   "additionalProperties": false,
-                  "description": "Project model token and cost history"
+                  "description": "Project model and non-model usage history"
                 }
               }
             }
@@ -69848,6 +69921,17 @@
         "required": ["_tag"],
         "additionalProperties": false
       },
+      "effect_HttpApiError_Conflict": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["Conflict"]
+          }
+        },
+        "required": ["_tag"],
+        "additionalProperties": false
+      },
       "effect_HttpApiError_ServiceUnavailable": {
         "type": "object",
         "properties": {
@@ -72932,17 +73016,6 @@
             "additionalProperties": false
           }
         ]
-      },
-      "effect_HttpApiError_Conflict": {
-        "type": "object",
-        "properties": {
-          "_tag": {
-            "type": "string",
-            "enum": ["Conflict"]
-          }
-        },
-        "required": ["_tag"],
-        "additionalProperties": false
       },
       "AnacondaDesktopStatus": {
         "anyOf": [

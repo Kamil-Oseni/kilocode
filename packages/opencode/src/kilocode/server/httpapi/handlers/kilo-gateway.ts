@@ -50,6 +50,8 @@ import { InstanceHttpApi } from "@/server/routes/instance/httpapi/api"
 import { MessageTable, PartTable } from "@opencode-ai/core/session/sql"
 import { Session } from "@/session/session"
 import { Storage } from "@/storage/storage"
+import * as GoalCharges from "@/kilocode/goal/charges"
+import * as DictationBilling from "@/kilocode/tool/dictation-billing"
 import { AudioTranscriptionsBody, ClawStatus, CloudSessionImportError, EditBody, FimBody } from "../groups/kilo-gateway"
 import { baseKey } from "../../../session-portability/cumulative-diff"
 import { extractSessionDiffs, restoreSessionDiffs } from "../../../session-portability/session-diff-restore"
@@ -73,6 +75,8 @@ export const kiloGatewayHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilo",
     const events = yield* EventV2Bridge.Service
     const database = yield* Database.Service
     const storage = yield* Storage.Service
+    const sessions = yield* Session.Service
+    const charges = yield* GoalCharges.make({ storage, sessions })
 
     const profile = Effect.fn("KiloGatewayHttpApi.profile")(function* () {
       const info = yield* auth.get("kilo").pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
@@ -300,26 +304,41 @@ export const kiloGatewayHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilo",
       if (!info.auth) return yield* Effect.fail(new HttpApiError.Unauthorized({}))
       if (!info.token) return yield* Effect.fail(new HttpApiError.Unauthorized({}))
 
+      const id = DictationBilling.identify(ctx.payload.sessionID, ctx.payload.requestID)
+      if (!id.ok) return jsonError("Transcription request and session identities must be supplied together.", 400)
+      const admitted =
+        ctx.payload.sessionID && id.value
+          ? yield* charges.claim(ctx.payload.sessionID, "USD", id.value).pipe(Effect.result)
+          : undefined
+      if (admitted && Result.isFailure(admitted))
+        return jsonError(
+          admitted.failure instanceof Error ? admitted.failure.message : "Transcription charge admission failed.",
+          409,
+        )
+      const lease = admitted && Result.isSuccess(admitted) ? admitted.success : undefined
+
       const request = yield* HttpServerRequest.HttpServerRequest
-      const response = yield* Effect.tryPromise({
-        try: () =>
-          fetch(`${KILO_API_BASE}/api/gateway/v1/audio/transcriptions`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${info.token}`,
-              ...buildKiloHeaders(undefined, { kilocodeOrganizationId: info.organizationId }),
-              [HEADER_FEATURE]: "vscode-extension",
-            },
-            signal: request.source instanceof Request ? request.source.signal : undefined,
-            body: JSON.stringify(ctx.payload),
-          }),
-        catch: () => new HttpApiError.BadRequest({}),
-      })
-      const text = yield* Effect.promise(() => response.text())
-      return HttpServerResponse.raw(text, {
-        status: response.status,
-        contentType: response.headers.get("Content-Type") ?? "application/json",
+      const result = yield* DictationBilling.run(
+        lease,
+        Effect.tryPromise({
+          try: () =>
+            fetch(`${KILO_API_BASE}/api/gateway/v1/audio/transcriptions`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${info.token}`,
+                ...buildKiloHeaders(undefined, { kilocodeOrganizationId: info.organizationId }),
+                [HEADER_FEATURE]: "vscode-extension",
+              },
+              signal: request.source instanceof Request ? request.source.signal : undefined,
+              body: JSON.stringify(DictationBilling.payload(ctx.payload)),
+            }),
+          catch: () => new Error("Kilo transcription request failed."),
+        }),
+      ).pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+      return HttpServerResponse.raw(result.text, {
+        status: result.response.status,
+        contentType: result.response.headers.get("Content-Type") ?? "application/json",
       })
     })
 

@@ -419,6 +419,56 @@ describe("RayaGoal", () => {
     }),
   )
 
+  it.live("recovers uncapped dispatched charges and refuses the same paid operation twice", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const root = SessionID.make(`ses_uncapped_recovery_${crypto.randomUUID()}`)
+      const sessions = {
+        messages: () => Effect.succeed([]),
+        children: () => Effect.succeed([]),
+        get: () => Effect.succeed({ id: root } as Session.Info),
+      }
+      const goals = RayaGoal.make({ storage, sessions })
+      yield* Effect.addFinalizer(() => goals.clear(root))
+      const created = yield* goals.create(root, "Recover uncapped provider work")
+      const time = { at: created.createdAt + 1 }
+      const token = `dictation:${crypto.randomUUID()}`
+      const claims = yield* GoalCharges.make({
+        storage,
+        sessions,
+        clock: () => time.at,
+        ttl: 100,
+        heartbeat: 100_000,
+      })
+      const lease = yield* claims.claim(root, "USD", token)
+      yield* Effect.addFinalizer(() => lease.release)
+      expect(lease.amount).toBeUndefined()
+      yield* lease.dispatch
+      time.at += 101
+
+      const restarted = yield* GoalCharges.make({
+        storage,
+        sessions,
+        clock: () => time.at,
+        ttl: 100,
+        heartbeat: 100_000,
+      })
+      const duplicate = yield* restarted.claim(root, "USD", token).pipe(Effect.exit)
+      expect(Exit.isFailure(duplicate)).toBe(true)
+      if (Exit.isFailure(duplicate)) expect(Cause.pretty(duplicate.cause)).toContain("already settled")
+      const saved = yield* goals.get(root)
+      expect(saved?.status).toBe("active")
+      expect(saved?.charges).toContainEqual(
+        expect.objectContaining({
+          id: `goal-reservation:${token}`,
+          source: "durable-reservation-expired",
+          coverage: "unknown",
+          currency: "USD",
+        }),
+      )
+    }),
+  )
+
   it.live("releases an explicitly rejected billed request for another backend", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service
@@ -460,12 +510,16 @@ describe("RayaGoal", () => {
       yield* Effect.addFinalizer(() => goals.clear(root))
       yield* goals.create(root, "Keep the complete provider ledger")
       const claims = yield* GoalCharges.make({ storage, sessions })
-      const lease = yield* claims.claim(root, "USD")
+      const token = `dictation:${crypto.randomUUID()}`
+      const lease = yield* claims.claim(root, "USD", token)
       yield* lease.dispatch
       yield* lease.uncertain("The provider omitted its billing ID.")
       yield* lease.release
+      const duplicate = yield* claims.claim(root, "USD", token).pipe(Effect.exit)
       const saved = yield* goals.get(root)
       expect(saved?.status).toBe("active")
+      expect(Exit.isFailure(duplicate)).toBe(true)
+      if (Exit.isFailure(duplicate)) expect(Cause.pretty(duplicate.cause)).toContain("already settled")
       expect(saved?.charges).toContainEqual(
         expect.objectContaining({
           source: "provider-response-without-receipt",

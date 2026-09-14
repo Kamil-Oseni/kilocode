@@ -4946,6 +4946,10 @@ export type EffectHttpApiErrorUnauthorized = {
   _tag: "Unauthorized"
 }
 
+export type EffectHttpApiErrorConflict = {
+  _tag: "Conflict"
+}
+
 export type EffectHttpApiErrorServiceUnavailable = {
   _tag: "ServiceUnavailable"
 }
@@ -5831,10 +5835,6 @@ export type RayaGoalDeliverable =
         }
       }
     }
-
-export type EffectHttpApiErrorConflict = {
-  _tag: "Conflict"
-}
 
 export type AnacondaDesktopStatus =
   | {
@@ -18614,6 +18614,8 @@ export type KiloEditResponse = KiloEditResponses[keyof KiloEditResponses]
 
 export type KiloAudioTranscriptionsData = {
   body?: {
+    requestID?: string
+    sessionID?: string
     model: string
     input_audio: {
       data: string
@@ -18636,6 +18638,10 @@ export type KiloAudioTranscriptionsErrors = {
    * BadRequest | InvalidRequestError
    */
   400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
 }
 
 export type KiloAudioTranscriptionsError = KiloAudioTranscriptionsErrors[keyof KiloAudioTranscriptionsErrors]

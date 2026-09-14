@@ -44,6 +44,12 @@ const Check = Schema.Struct({
   checked: Schema.optional(Schema.Boolean),
   required: Schema.optional(Schema.Boolean),
 })
+const Signature = Schema.Struct({
+  type: Schema.Literal("signature_field"),
+  name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(64), Schema.isPattern(/^[A-Za-z0-9_.-]+$/)),
+  label: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)),
+  required: Schema.optional(Schema.Boolean),
+})
 const Block = Schema.Union([
   Schema.Struct({ type: Schema.Literal("paragraph"), text: Text }),
   Schema.Struct({
@@ -70,6 +76,7 @@ const Block = Schema.Union([
   Link,
   Field,
   Check,
+  Signature,
 ])
 const Parameters = Schema.Struct({
   filePath: Schema.String.annotate({ description: "Destination path ending in .pdf." }),
@@ -183,6 +190,7 @@ type Row =
   | { link: { text: string; url: string }; before?: number; after?: number }
   | { field: { name: string; label: string; value?: string; required?: boolean }; before?: number; after?: number }
   | { check: { name: string; label: string; checked?: boolean; required?: boolean }; before?: number; after?: number }
+  | { signature: { name: string; label: string; required?: boolean }; before?: number; after?: number }
 
 type Mark =
   | { readonly kind: "link"; readonly x: number; readonly y: number; readonly width: number; readonly url: string }
@@ -194,6 +202,15 @@ type Mark =
       readonly name: string
       readonly label: string
       readonly value?: string
+      readonly required?: boolean
+    }
+  | {
+      readonly kind: "signature"
+      readonly x: number
+      readonly y: number
+      readonly width: number
+      readonly name: string
+      readonly label: string
       readonly required?: boolean
     }
   | {
@@ -263,6 +280,10 @@ function pdf(input: typeof Parameters.Type, images: readonly Loaded[]) {
     }
     if (block.type === "checkbox") {
       rows.push({ check: block, before: 5, after: 10 })
+      continue
+    }
+    if (block.type === "signature_field") {
+      rows.push({ signature: block, before: 5, after: 12 })
       continue
     }
     for (const [index, item] of block.items.entries())
@@ -397,6 +418,33 @@ function pdf(input: typeof Parameters.Type, images: readonly Loaded[]) {
       y -= height + (row.after ?? 0)
       continue
     }
+    if ("signature" in row) {
+      const lines = wrap(row.signature.label.trim(), 10)
+      const height = (lines.length - 1) * 13.5 + 42
+      if (y - height < 72) {
+        pages.push([])
+        marks.push([])
+        y = 720
+      }
+      for (const [index, line] of lines.entries())
+        pages
+          .at(-1)!
+          .push(`BT /F2 10 Tf 0.090 0.102 0.129 rg 54 ${(y - index * 13.5).toFixed(2)} Td <${encode(line)}> Tj ET`)
+      y -= height
+      pages.at(-1)!.push(`0.710 0.733 0.776 RG 0.75 w 54 ${y.toFixed(2)} 504 36 re S`)
+      pages.at(-1)!.push(`0.710 0.733 0.776 RG 0.5 w 66 ${(y + 10).toFixed(2)} m 366 ${(y + 10).toFixed(2)} l S`)
+      marks.at(-1)!.push({
+        kind: "signature",
+        x: 54,
+        y,
+        width: 504,
+        name: row.signature.name,
+        label: row.signature.label.trim(),
+        required: row.signature.required,
+      })
+      y -= row.after ?? 0
+      continue
+    }
     if ("cells" in row) {
       const width = 504 / row.cells.length
       const cells = row.cells.map((cell) => wrap(cell.trim(), 9, 0, width - 12))
@@ -504,6 +552,18 @@ function pdf(input: typeof Parameters.Type, images: readonly Loaded[]) {
         fields.push(id)
         return id
       }
+      if (mark.kind === "signature") {
+        const stream =
+          "q 1 1 1 rg 0 0 504 36 re f 0.710 0.733 0.776 RG 0.75 w 0.5 0.5 503 35 re S 0.5 w 12 10 m 312 10 l S Q"
+        const appearance = objects.push(
+          `<< /Type /XObject /Subtype /Form /BBox [0 0 504 36] /Resources << >> /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+        )
+        const id = objects.push(
+          `<< /Type /Annot /Subtype /Widget /FT /Sig /T <${encode(mark.name)}> /TU <${encode(mark.label)}> /Rect [${mark.x.toFixed(2)} ${mark.y.toFixed(2)} ${(mark.x + mark.width).toFixed(2)} ${(mark.y + 36).toFixed(2)}] /F 4 /Ff ${mark.required ? 2 : 0} /AP << /N ${appearance} 0 R >> /BS << /W 0.75 /S /S >> >>`,
+        )
+        fields.push(id)
+        return id
+      }
       const value = mark.value === undefined ? "" : ` /V <${encode(mark.value)}> /DV <${encode(mark.value)}>`
       const id = objects.push(
         `<< /Type /Annot /Subtype /Widget /FT /Tx /T <${encode(mark.name)}> /TU <${encode(mark.label)}> /Rect [${mark.x.toFixed(2)} ${mark.y.toFixed(2)} ${(mark.x + mark.width).toFixed(2)} ${(mark.y + 24).toFixed(2)}] /F 4 /Ff ${mark.required ? 2 : 0}${value} /DA (/F2 11 Tf 0.090 0.102 0.129 rg) /BS << /W 0.75 /S /S >> >>`,
@@ -517,9 +577,10 @@ function pdf(input: typeof Parameters.Type, images: readonly Loaded[]) {
     )
     kids.push(id)
   }
+  const signatures = marks.some((page) => page.some((mark) => mark.kind === "signature"))
   const form = fields.length
     ? objects.push(
-        `<< /Fields [${fields.map((id) => `${id} 0 R`).join(" ")}] /NeedAppearances true /DR << /Font << /F2 4 0 R >> >> /DA (/F2 11 Tf 0.090 0.102 0.129 rg) >>`,
+        `<< /Fields [${fields.map((id) => `${id} 0 R`).join(" ")}]${signatures ? " /SigFlags 1" : ""} /NeedAppearances true /DR << /Font << /F2 4 0 R >> >> /DA (/F2 11 Tf 0.090 0.102 0.129 rg) >>`,
       )
     : undefined
   objects[0] = `<< /Type /Catalog /Pages 2 0 R${form ? ` /AcroForm ${form} 0 R` : ""} >>`
@@ -556,7 +617,7 @@ export const CreatePdfTool = Tool.define(
     const events = yield* EventV2Bridge.Service
     return {
       description:
-        "Create a real paginated PDF from a title and structured headings, paragraphs, lists, rectangular tables, local PNG/JPEG images, credential-free http/https links, single-line text fields or checkboxes. Images require alt text, read permission, valid headers and dimensions; PNG files must use 8-bit channels without interlacing. Images are limited to 10 files, 8 MiB each, 24 MiB combined and 20 megapixels combined. Tables support up to 8 columns and 100 rows each, with an optional first-row header. Links become visible text with native PDF annotations. Up to 50 uniquely named form fields retain visible labels and tooltips; text fields support an optional default, and checkboxes support an optional checked state. Either field can be required. The writer supports printable WinAnsi text, creates at most 200 pages and returns a verified local artifact receipt. It creates a new PDF or replaces the whole destination after approval. It does not fetch network images, open links while creating the file, import or edit an existing PDF, embed custom fonts, create signature fields, produce a fully tagged accessible PDF, or guarantee archival conformance.",
+        "Create a real paginated PDF from a title and structured headings, paragraphs, lists, rectangular tables, local PNG/JPEG images, credential-free http/https links, single-line text fields, checkboxes or empty signature fields. Images require alt text, read permission, valid headers and dimensions; PNG files must use 8-bit channels without interlacing. Images are limited to 10 files, 8 MiB each, 24 MiB combined and 20 megapixels combined. Tables support up to 8 columns and 100 rows each, with an optional first-row header. Links become visible text with native PDF annotations. Up to 50 uniquely named form fields retain visible labels and tooltips; text fields support an optional default, checkboxes support an optional checked state, and signature fields provide a place for a person to sign in a compatible viewer. Any field can be required. The writer supports printable WinAnsi text, creates at most 200 pages and returns a verified local artifact receipt. It creates a new PDF or replaces the whole destination after approval. It does not fetch network images, open links while creating the file, import or edit an existing PDF, embed custom fonts, cryptographically sign or certify documents, produce a fully tagged accessible PDF, or guarantee archival conformance.",
       parameters: Parameters,
       execute: (params: typeof Parameters.Type, ctx: Tool.Context) =>
         Effect.gen(function* () {
@@ -574,9 +635,11 @@ export const CreatePdfTool = Tool.define(
                   ? [block.name, block.label, block.value].filter((value): value is string => value !== undefined)
                   : block.type === "checkbox"
                     ? [block.name, block.label]
-                    : "items" in block
-                      ? block.items
-                      : [block.text],
+                    : block.type === "signature_field"
+                      ? [block.name, block.label]
+                      : "items" in block
+                        ? block.items
+                        : [block.text],
           )
           const values = [params.title, params.author, ...text].filter((value): value is string => value !== undefined)
           const required = [
@@ -587,7 +650,7 @@ export const CreatePdfTool = Tool.define(
                 ? []
                 : block.type === "image"
                   ? [block.alt, block.caption].filter((value): value is string => value !== undefined)
-                  : block.type === "text_field" || block.type === "checkbox"
+                  : block.type === "text_field" || block.type === "checkbox" || block.type === "signature_field"
                     ? [block.name, block.label]
                     : "items" in block
                       ? block.items
@@ -607,9 +670,12 @@ export const CreatePdfTool = Tool.define(
           if (cells > 2_000) throw new Error("PDF tables are limited to 2,000 cells per document.")
           const sources = params.blocks.flatMap((block, index) => (block.type === "image" ? [{ block, index }] : []))
           const links = params.blocks.filter((block) => block.type === "link")
-          const fields = params.blocks.filter((block) => block.type === "text_field" || block.type === "checkbox")
+          const fields = params.blocks.filter(
+            (block) => block.type === "text_field" || block.type === "checkbox" || block.type === "signature_field",
+          )
           const texts = params.blocks.filter((block) => block.type === "text_field")
           const checks = params.blocks.filter((block) => block.type === "checkbox")
+          const signatures = params.blocks.filter((block) => block.type === "signature_field")
           for (const link of links) address(link.url)
           if (fields.length > 50) throw new Error("A PDF can contain at most 50 form fields.")
           if (new Set(fields.map((field) => field.name.toLowerCase())).size !== fields.length)
@@ -696,6 +762,7 @@ export const CreatePdfTool = Tool.define(
               fields: fields.length,
               textFields: texts.length,
               checkboxes: checks.length,
+              signatures: signatures.length,
             },
           })
           const result = yield* Effect.try({
@@ -737,6 +804,7 @@ export const CreatePdfTool = Tool.define(
               fields: fields.length,
               textFields: texts.length,
               checkboxes: checks.length,
+              signatures: signatures.length,
               pages: result.pages,
               characters,
               rayaRevision: revision,

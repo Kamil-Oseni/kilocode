@@ -525,6 +525,7 @@ it.instance(
             { type: "text_field", name: "notes", label: "Review notes", value: "" },
             { type: "checkbox", name: "approved", label: "Approved for publication", checked: true, required: true },
             { type: "checkbox", name: "follow_up", label: "Follow-up required" },
+            { type: "signature_field", name: "approver_signature", label: "Approver signature", required: true },
             { type: "bullets", items: ["Customer retention improved", "Two risks need review"] },
             { type: "numbered", items: Array.from({ length: 90 }, (_, index) => `Follow-up action ${index + 1}`) },
           ],
@@ -535,15 +536,16 @@ it.instance(
       expect(created.metadata).toMatchObject({
         filepath: target,
         exists: false,
-        blocks: 11,
+        blocks: 12,
         tables: 1,
         cells: 6,
         images: 1,
         imagePixels: 1,
         links: 1,
-        fields: 4,
+        fields: 5,
         textFields: 2,
         checkboxes: 2,
+        signatures: 1,
         rayaRevision: { version: 1, status: "captured", path: target },
       })
       expect(Number(created.metadata.imageBytes)).toBeGreaterThan(0)
@@ -585,6 +587,13 @@ it.instance(
       expect(source).toContain("/V /Off /DV /Off /AS /Off")
       expect(source).toContain("/AP << /N << /Off ")
       expect(source).toContain("/Subtype /Form /BBox [0 0 18 18]")
+      expect(source).toContain("/SigFlags 1")
+      const signature = source.match(/<< \/Type \/Annot \/Subtype \/Widget \/FT \/Sig [^\r\n]+/)?.[0]
+      expect(signature).toBeDefined()
+      expect(signature).toContain("/T <617070726F7665725F7369676E6174757265>".toUpperCase())
+      expect(signature).toContain("/TU <417070726F766572207369676E6174757265>".toUpperCase())
+      expect(signature).toContain("/AP << /N ")
+      expect(signature).not.toContain("/V ")
       const start = Number(source.match(/startxref\n(\d+)/)?.[1])
       expect(source.slice(start)).toStartWith("xref\n")
       const offsets = [...source.matchAll(/(\d{10}) 00000 n \n/g)].map((match) => Number(match[1]))

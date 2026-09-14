@@ -64,7 +64,7 @@ export async function routeInputToolMessage(message: Msg, ctx: Ctx): Promise<boo
       return true
     }
     handleSpeechToTextStart(
-      { requestId: message.requestId, model: message.model, language: message.language },
+      { requestId: message.requestId, sessionID: message.sessionID, model: message.model, language: message.language },
       ctx.post,
     )
     return true
@@ -76,7 +76,12 @@ export async function routeInputToolMessage(message: Msg, ctx: Ctx): Promise<boo
       await ctx.speech.captureStop({ requestId: message.requestId, language: message.language }, ctx.post)
       return true
     }
-    handleSpeechToTextStop(ctx.connection, { requestId: message.requestId }, ctx.dir, ctx.post)
+    handleSpeechToTextStop(
+      ctx.connection,
+      { requestId: message.requestId, sessionID: message.sessionID },
+      ctx.dir,
+      ctx.post,
+    )
     return true
   }
 

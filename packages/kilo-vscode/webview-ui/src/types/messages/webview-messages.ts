@@ -799,6 +799,7 @@ export interface SpeechToTextPrewarmMessage {
 export interface SpeechToTextStartMessage {
   type: "speechToTextStart"
   requestId: string
+  sessionID?: string // raya_change - pin dictation attribution at capture start
   model: string
   language?: string
   handsFree?: boolean // raya_change - Milestone H extension-host VAD fallback
@@ -809,6 +810,7 @@ export interface SpeechToTextStartMessage {
 export interface SpeechToTextStopMessage {
   type: "speechToTextStop"
   requestId: string
+  sessionID?: string // raya_change - retain the capture origin across session switches
 }
 
 // raya_change - Milestone H marks the next backend turn for extension-host TTS
@@ -819,12 +821,14 @@ export interface SpeechVoiceTurnMessage {
 export interface SpeechToTextCancelMessage {
   type: "speechToTextCancel"
   requestId: string
+  sessionID?: string // raya_change - retain the capture origin across session switches
 }
 
 // raya_change start - Milestone H configured speech and voice-mode channel
 export interface SpeechToTextSubmitMessage {
   type: "speechToTextSubmit"
   requestId: string
+  sessionID?: string // raya_change - pin hosted transcription accounting origin
   model?: string
   language?: string
   format: string

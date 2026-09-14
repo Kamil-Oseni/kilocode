@@ -197,6 +197,8 @@ export const EditResponse = Schema.Struct({
 })
 
 export const AudioTranscriptionsBody = Schema.Struct({
+  requestID: Schema.optional(Schema.String.pipe(Schema.minLength(1), Schema.maxLength(256))),
+  sessionID: Schema.optional(Schema.String.pipe(Schema.minLength(1), Schema.maxLength(256))),
   model: Schema.String,
   input_audio: Schema.Struct({
     data: Schema.String,

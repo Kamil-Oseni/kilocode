@@ -7,6 +7,8 @@ const PROMPT =
   "Transcribe exactly what is spoken. Do not paraphrase, summarize, infer intent, or rewrite for clarity. Preserve the speaker's original wording as closely as possible, including incomplete phrases and unusual wording when audible."
 
 type Req = {
+  requestID?: string
+  sessionID?: string
   model?: string
   data: string
   format: string
@@ -55,6 +57,8 @@ export async function transcribeSpeech(
       },
       body: JSON.stringify({
         model: input.model || model.id,
+        ...(input.requestID ? { requestID: input.requestID } : {}),
+        ...(input.sessionID ? { sessionID: input.sessionID } : {}),
         input_audio: {
           data: input.data,
           format: input.format,

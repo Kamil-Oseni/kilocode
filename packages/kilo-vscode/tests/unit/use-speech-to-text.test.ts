@@ -21,7 +21,7 @@ mock.module("@kilocode/kilo-ui/toast", () => ({
 
 const { useSpeechToText } = await import("../../webview-ui/src/components/speech-to-text/useSpeechToText")
 
-function setup() {
+function setup(session: () => string | undefined = () => undefined) {
   const sent: WebviewMessage[] = []
   let handler: ((message: ExtensionMessage) => void) | undefined
   let logins = 0
@@ -41,6 +41,7 @@ function setup() {
       },
       { goToLogin: () => logins++ },
       { t: (key) => key },
+      session,
     ),
   }))
 
@@ -49,6 +50,21 @@ function setup() {
 }
 
 describe("useSpeechToText", () => {
+  it("pins the session selected when recording starts", () => {
+    let session = "ses_origin"
+    const ctx = setup(() => session)
+    ctx.speech.start({ model: "openai/gpt-4o-mini-transcribe", insert: () => undefined })
+    const start = ctx.sent[0]
+    if (start?.type !== "speechToTextStart") throw new Error("speech start message missing")
+    expect(start.sessionID).toBe("ses_origin")
+
+    session = "ses_other"
+    ctx.fire({ type: "speechToTextStarted", requestId: start.requestId })
+    ctx.speech.stop()
+    expect(ctx.sent[1]).toEqual({ type: "speechToTextStop", requestId: start.requestId, sessionID: "ses_origin" })
+    ctx.dispose()
+  })
+
   it("waits for microphone readiness before reporting recording", () => {
     const ctx = setup()
 

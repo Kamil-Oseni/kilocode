@@ -117,7 +117,7 @@ export const FullScreenDiffView: Component<FullScreenDiffViewProps> = (props) =>
   const server = useServer()
   const provider = useProvider()
   const { config } = useConfig()
-  const speech = useSpeechToText(vscode, server, { t })
+  const speech = useSpeechToText(vscode, server, { t }, () => undefined)
   const speechModels = useSpeechToTextModels()
   const canUseSpeech = () => canUseSpeechToText(config(), provider.authStates())
   const speechModel = () => selectedSpeechToTextModel(config(), speechModels.models())

@@ -48,13 +48,19 @@ export type SpeechToText = {
   clear: () => void
 }
 
-export function useSpeechToText(vscode: VSCode, server: Server, lang: Lang): SpeechToText {
+export function useSpeechToText(
+  vscode: VSCode,
+  server: Server,
+  lang: Lang,
+  session: Accessor<string | undefined>,
+): SpeechToText {
   const [state, setState] = createSignal<SpeechState>("idle")
   const [error, setError] = createSignal<string | undefined>()
   const active = () => state() === "starting" || state() === "recording" || state() === "transcribing"
   const prefix = globalThis.crypto?.randomUUID?.() ?? `stt-${Math.random().toString(36).slice(2)}`
 
   let request = ""
+  let sessionID: string | undefined
   let counter = 0
   let insert: InsertTranscript | undefined
   let done: (() => void) | undefined
@@ -134,6 +140,7 @@ export function useSpeechToText(vscode: VSCode, server: Server, lang: Lang): Spe
 
     counter++
     request = `${prefix}-${counter}`
+    sessionID = session()
     setState("starting")
     // raya_change start - capture in the webview so hands-free VAD and barge-in see the live microphone
     if (typeof navigator.mediaDevices?.getUserMedia === "function" && typeof MediaRecorder !== "undefined") {
@@ -173,6 +180,7 @@ export function useSpeechToText(vscode: VSCode, server: Server, lang: Lang): Spe
     vscode.postMessage({
       type: "speechToTextStart",
       requestId: request,
+      ...(sessionID ? { sessionID } : {}),
       model: opts.model,
       language: langCode(),
       handsFree: opts.handsFree,
@@ -203,6 +211,7 @@ export function useSpeechToText(vscode: VSCode, server: Server, lang: Lang): Spe
           vscode.postMessage({
             type: "speechToTextSubmit",
             requestId: id,
+            ...(sessionID ? { sessionID } : {}),
             model,
             language: langCode(),
             format: audio.format,
@@ -213,12 +222,13 @@ export function useSpeechToText(vscode: VSCode, server: Server, lang: Lang): Spe
       return
     }
     // raya_change end
-    vscode.postMessage({ type: "speechToTextStop", requestId: request })
+    vscode.postMessage({ type: "speechToTextStop", requestId: request, ...(sessionID ? { sessionID } : {}) })
   }
 
   function cancel() {
     if (local) capture.cancel() // raya_change - Milestone H
-    if (!local && request && active()) vscode.postMessage({ type: "speechToTextCancel", requestId: request })
+    if (!local && request && active())
+      vscode.postMessage({ type: "speechToTextCancel", requestId: request, ...(sessionID ? { sessionID } : {}) })
     cleanup()
     setState("idle")
     setError(undefined)
@@ -253,6 +263,7 @@ export function useSpeechToText(vscode: VSCode, server: Server, lang: Lang): Spe
 
   function cleanup() {
     request = ""
+    sessionID = undefined
     insert = undefined
     done = undefined
     ready = undefined

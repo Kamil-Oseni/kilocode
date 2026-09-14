@@ -5,6 +5,7 @@ import type { KiloConnectionService } from "../services/cli-backend/connection-s
 
 type Msg = {
   requestId: string
+  sessionID?: string
   model?: string
   language?: string
 }
@@ -53,7 +54,14 @@ export function handleSpeechToTextStop(connection: KiloConnectionService, messag
   void ready
     .then((started) => {
       if (!started) return undefined
-      return stopSpeechCapture(message.requestId).then((audio) => transcribeSpeech(connection, audio, dir, ctrl.signal))
+      return stopSpeechCapture(message.requestId).then((audio) =>
+        transcribeSpeech(
+          connection,
+          { ...audio, requestID: message.requestId, sessionID: message.sessionID },
+          dir,
+          ctrl.signal,
+        ),
+      )
     })
     .then((result) => {
       aborts.delete(message.requestId)

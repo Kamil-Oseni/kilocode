@@ -419,7 +419,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
 
   const ghost = useGhostText(vscode, text, () => server.isConnected())
-  const speech = useSpeechToText(vscode, server, language)
+  const speech = useSpeechToText(vscode, server, language, () => {
+    const id = session.currentSessionID()
+    return id?.startsWith("cloud:") ? undefined : id
+  })
   const speechModels = useSpeechToTextModels()
 
   const replaceReviewComments = (next: ReviewCommentEntry[]) => {
@@ -1181,7 +1184,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const voiceActive = () => voice.status() !== "off"
   const voiceLabel = () => {
     if (!voiceActive())
-      return ["openai-realtime", "openai-live"].includes(voice.settings().voiceEngine) ? "Start voice" : "Start hands-free voice"
+      return ["openai-realtime", "openai-live"].includes(voice.settings().voiceEngine)
+        ? "Start voice"
+        : "Start hands-free voice"
     const transcript = voice.transcript()?.text.trim()
     return transcript ? `End voice — ${transcript}` : `End voice — ${voice.status()}`
   }
@@ -1787,7 +1792,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           <Show
             when={
               (["openai-realtime", "openai-live"].includes(voice.settings().voiceEngine) || canUseSpeech()) &&
-              !(["openai-realtime", "openai-live"].includes(voice.settings().voiceEngine) && (voiceActive() || voice.recovery()))
+              !(
+                ["openai-realtime", "openai-live"].includes(voice.settings().voiceEngine) &&
+                (voiceActive() || voice.recovery())
+              )
             }
           >
             {/* raya_change - Milestone H keeps dictation on the mic and hands-free

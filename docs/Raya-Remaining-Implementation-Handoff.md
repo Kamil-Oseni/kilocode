@@ -4366,3 +4366,19 @@ Exact receipt:
 - Cleanup/state: one old extension, staged package and vault package removed; C: free 97,234,104,320 bytes; zero Bun/tsgo processes.
 
 Do not claim active-host acceptance before reload. The installed package contains credential product commit `dbb70f8a08` and routine contention product commit `6e80421812`. Continue deterministic work without waiting for reload; retain native SecretStorage/live revoked-token and installed contention checks as later controlled acceptance.
+
+## ChatGPT 2026-09-14 16:22 America/Toronto - Removal recovery checkpoint and continuation instructions
+
+Product commit `b83a561993` is pushed to `origin/main`. It gives routine removal its own durable claim identity and exact retry behavior. `RayaTask.remove` first inspects the existing claim. It may recover only when `operation === "remove"` and the owner is either a stopped process or the same host/PID with no active in-memory start. Recovery reruns archive/receipt/roster mutation when the routine remains present; if the roster is already absent, it treats the retained claim as post-side-effect acknowledgement loss and returns success. It never clears ordinary uncertain startup claims, live foreign claims, malformed claims or legacy untyped claims.
+
+Verification evidence to preserve:
+
+- `bun test ./test/kilocode/task-claim.test.ts` from `packages/opencode`: 9 pass / 60 assertions.
+- `bun test ./test/kilocode/task-scheduler.test.ts` from `packages/opencode`: 28 pass / 406 assertions.
+- Focused removal selection: 3 pass / 28 assertions, covering roster-save failure, acknowledgement failure after completed side effects, stopped removal-owner recovery and refusal to consume a stopped startup claim.
+- One-thread scoped Oxlint: zero errors and 12 older warnings outside the new lines.
+- OpenCode annotations, Effect Promise-facade, Markdown-table and `git diff --check`: pass.
+
+Do not weaken these adverse assertions. `happy-dom` remains only a DOM runtime name and has no bearing on the required failure coverage. When extending this area, add real interruption, malformed-state, foreign-owner and partial-side-effect cases first; correct fixtures or production behavior when they fail.
+
+Continue using the agreed ordering: choose the remaining requirement with the lowest implementation effort and least human verification, then address its highest-risk blocking failure boundary before its ordinary success flow. Keep EN-02 and OVR-05 marked **In progress** until execution fencing, multi-store transaction boundaries and representative organization execution are complete. A pre-`b83a561993` untyped removal claim is intentionally unrecoverable because it cannot be distinguished safely from startup. The installed snapshot remains source `70febf3958`; include `b83a561993` in the next coherent low-memory installation batch rather than installing this single backend checkpoint alone.

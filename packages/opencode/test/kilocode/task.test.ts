@@ -1650,6 +1650,24 @@ describe("RayaTask store", () => {
     expect(Permission.evaluate("edit", "../secret/ledger.ts", RayaTask.rules(open)).action).toBe("allow")
   })
 
+  test("confines writes to the saved folder inside a larger worktree", () => {
+    const root = path.resolve("C:/repo")
+    const dir = path.join(root, "reports")
+    const rules = RayaTask.rules({ role: "accountant", access: "full", dir }, root)
+
+    expect(Permission.evaluate("edit", "reports/friday.xlsx", rules).action).toBe("allow")
+    expect(Permission.evaluate("write", "reports/archive/2026.xlsx", rules).action).toBe("allow")
+    expect(Permission.evaluate("apply_patch", "reports/summary.md", rules).action).toBe("allow")
+    expect(Permission.evaluate("edit", "payroll/private.xlsx", rules).action).toBe("deny")
+    expect(Permission.evaluate("write", "README.md", rules).action).toBe("deny")
+    expect(Permission.evaluate("apply_patch", "reports-old/summary.md", rules).action).toBe("deny")
+    expect(Permission.evaluate("read", "payroll/private.xlsx", rules).action).toBe("allow")
+
+    const project = RayaTask.rules({ role: "coder", access: "full", dir: root }, root)
+    expect(Permission.evaluate("edit", "src/index.ts", project).action).toBe("allow")
+    expect(Permission.evaluate("edit", "../private/secret.txt", project).action).toBe("deny")
+  })
+
   test("briefer sessions deny file edits unless access is full", () => {
     expect(RayaTask.brief({ role: "briefer" })).toBe(true)
     expect(RayaTask.brief({ role: "inbox" })).toBe(false)

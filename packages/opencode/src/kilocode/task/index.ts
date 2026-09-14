@@ -1,5 +1,6 @@
 import { Effect, Exit, Schema } from "effect"
 import { isDeepStrictEqual } from "node:util"
+import path from "node:path"
 import { Storage } from "@/storage/storage"
 import { SessionID } from "@/session/schema"
 import { Criteria } from "@/kilocode/goal/criteria"
@@ -327,8 +328,32 @@ export namespace RayaTask {
     return agent.role.toLowerCase() === "briefer"
   }
 
-  function confine(dir: string | undefined, rules: ReturnType<typeof Permission.fromConfig>) {
+  function confine(
+    dir: string | undefined,
+    worktree: string | undefined,
+    rules: ReturnType<typeof Permission.fromConfig>,
+  ) {
     if (!dir?.trim()) return rules
+    if (worktree?.trim()) {
+      const relative = path.relative(worktree, dir).replaceAll("\\", "/")
+      if (!relative)
+        return [
+          ...rules,
+          { permission: "edit", pattern: "../**", action: "deny" as const },
+          { permission: "write", pattern: "../**", action: "deny" as const },
+          { permission: "apply_patch", pattern: "../**", action: "deny" as const },
+        ]
+      const pattern = `${relative}/**`
+      return [
+        ...rules,
+        { permission: "edit", pattern: "*", action: "deny" as const },
+        { permission: "write", pattern: "*", action: "deny" as const },
+        { permission: "apply_patch", pattern: "*", action: "deny" as const },
+        { permission: "edit", pattern, action: "allow" as const },
+        { permission: "write", pattern, action: "allow" as const },
+        { permission: "apply_patch", pattern, action: "allow" as const },
+      ]
+    }
     return [
       ...rules,
       { permission: "edit", pattern: "../**", action: "deny" as const },
@@ -339,6 +364,7 @@ export namespace RayaTask {
 
   export function rules(
     agent: Pick<Agent, "role" | "access" | "tools" | "dir"> & Partial<Pick<Agent, "capabilities">>,
+    worktree?: string,
   ) {
     if (brief(agent)) {
       const cfg: Record<string, "allow" | "deny"> = { "*": "deny", question: "allow" }
@@ -372,9 +398,13 @@ export namespace RayaTask {
       for (const tool of agent.tools) cfg[tool] = "allow"
       if (agent.capabilities?.some((item) => item.toLowerCase() === "organization:provision"))
         cfg.create_subordinate = "allow"
-      return confine(agent.dir, Permission.fromConfig(cfg))
+      return confine(agent.dir, worktree, Permission.fromConfig(cfg))
     }
-    return confine(agent.dir, Permission.fromConfig({ "*": "allow", edit: "allow", write: "allow", bash: "allow" }))
+    return confine(
+      agent.dir,
+      worktree,
+      Permission.fromConfig({ "*": "allow", edit: "allow", write: "allow", bash: "allow" }),
+    )
   }
 
   export function listen(agent: Agent, source: string, filter?: string) {

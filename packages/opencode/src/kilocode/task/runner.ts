@@ -329,26 +329,29 @@ export namespace RayaTaskRunner {
                   })
                   const created = yield* open(
                     item.dir,
-                    input.sessions.create({
-                      title: item.name,
-                      agent: specialist(item),
-                      metadata: {
-                        rayaRoutine: {
-                          version: selected.trigger.kind === "timer" ? 2 : 1,
-                          agentID: item.id,
-                          runID: owner.id,
-                          scheduleVersion: item.scheduleVersion ?? 1,
-                          trigger: selected.trigger,
+                    Effect.gen(function* () {
+                      const worktree = item.dir ? (yield* InstanceState.context).worktree : undefined
+                      return yield* input.sessions.create({
+                        title: item.name,
+                        agent: specialist(item),
+                        metadata: {
+                          rayaRoutine: {
+                            version: selected.trigger.kind === "timer" ? 2 : 1,
+                            agentID: item.id,
+                            runID: owner.id,
+                            scheduleVersion: item.scheduleVersion ?? 1,
+                            trigger: selected.trigger,
+                          },
                         },
-                      },
-                      model:
-                        item.mode || !item.model
-                          ? undefined
-                          : {
-                              providerID: ProviderV2.ID.make(item.model.providerID),
-                              id: ModelV2.ID.make(item.model.id),
-                            },
-                      permission: RayaTask.rules(opts?.view ?? item),
+                        model:
+                          item.mode || !item.model
+                            ? undefined
+                            : {
+                                providerID: ProviderV2.ID.make(item.model.providerID),
+                                id: ModelV2.ID.make(item.model.id),
+                              },
+                        permission: RayaTask.rules({ ...item, ...opts?.view }, worktree),
+                      })
                     }),
                   )
                   yield* owner.link(created.id)

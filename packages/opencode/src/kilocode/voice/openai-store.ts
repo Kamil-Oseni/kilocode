@@ -14,6 +14,7 @@ const Payload = Schema.Struct({
   owner: VoiceID,
   hash: VoiceKey,
   requestID: VoiceID,
+  transcriptionRequestID: Schema.optional(VoiceID),
   calls: Schema.Record(Schema.String, Schema.Struct({ input: OpenAICallInput, receipt: OpenAICall })),
   images: Schema.optional(Schema.Record(Schema.String, Schema.Struct({ receipt: OpenAIImage, data: Schema.String }))),
   usage: Schema.optional(Schema.Record(Schema.String, OpenAIUsage)),
@@ -34,6 +35,7 @@ export type Stored = {
   owner: string
   hash: string
   requestID: string
+  transcriptionRequestID?: string
   calls: Record<string, { input: typeof OpenAICallInput.Type; receipt: typeof OpenAICall.Type }>
   images?: Record<string, { receipt: typeof OpenAIImage.Type; data: string }>
   usage?: Record<string, typeof OpenAIUsage.Type>

@@ -6,7 +6,7 @@ export const VoiceKey = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/))
 export const OpenAIReserve = Schema.Struct({
   parentSessionID: SessionID,
   requestID: VoiceID,
-  model: Schema.Literals(["gpt-realtime-2.1", "gpt-live-1"]),
+  model: Schema.Literals(["gpt-realtime-2.1", "gpt-live-1", "gpt-live-transcribe"]),
 }).annotate({ identifier: "OpenAIVoiceReserve" })
 export const OpenAIReservation = Schema.Struct({
   requestID: VoiceID,
@@ -22,6 +22,7 @@ export const OpenAIStart = Schema.Struct({
   parentSessionID: SessionID,
   providerCallID: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256), Schema.isPattern(/^\S+$/)),
   requestID: VoiceID,
+  transcriptionRequestID: Schema.optional(VoiceID),
   model: Schema.optional(Schema.Literals(["gpt-realtime-2.1", "gpt-live-1"])),
 }).annotate({ identifier: "OpenAIVoiceStart" })
 export const OpenAIBinding = Schema.Struct({

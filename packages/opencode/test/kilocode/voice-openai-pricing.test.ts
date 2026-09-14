@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { pricing } from "@/kilocode/voice/openai-usage"
+import { pricing, transcriptionAllowance } from "@/kilocode/voice/openai-usage"
 
 describe("OpenAI voice pricing", () => {
   test("prices a complete multimodal GPT Realtime receipt with cached tokens separated", () => {
@@ -45,12 +45,18 @@ describe("OpenAI voice pricing", () => {
       }),
     ).toEqual({
       coverage: "recorded",
-      amount: 0.025500000000000002,
+      amount: 0.0255,
       currency: "USD",
       quantity: 90,
       unit: "seconds",
       source: "openai-model-doc:gpt-live-transcribe:2026-09-14",
     })
+  })
+
+  test("derives a stable whole-second transcription allowance from the same rate", () => {
+    expect(transcriptionAllowance(0.6)).toBe(2117)
+    expect(transcriptionAllowance((0.017 / 60) * 6)).toBe(6)
+    expect(transcriptionAllowance(100)).toBe(86_400)
   })
 
   test("does not price missing, invalid, or incomplete modality reports as zero", () => {

@@ -4,6 +4,7 @@ import type { ServerWebSocket } from "bun"
 import WebSocket from "ws"
 import { OpenAIBroker } from "../../src/speech/openai-broker"
 import { OPENAI_VOICE_MODEL } from "../../src/shared/speech"
+import type { VoiceUsage } from "../../src/shared/voice-usage"
 
 const sdp = "v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n"
 const input = { requestID: "request_1", sessionID: "session_1", sdp }
@@ -15,14 +16,30 @@ function admission(
   body: Record<string, unknown>,
   binding: Record<string, unknown>,
 ) {
+  if (
+    path.endsWith("/reservation/release") &&
+    body.model === "gpt-live-transcribe" &&
+    ["transcription-offline", "transcription-timeout", "transcription-rejected"].includes(mode)
+  )
+    return new Response("reservation not found", { status: 409 })
   if (path.endsWith("/reservation/release"))
     return Response.json({ requestID: body.requestID, model: body.model, status: "released" })
   if (path.endsWith("/reservation")) {
-    if (mode === "reservation-rejected") return new Response("budget refused", { status: 409 })
+    if (mode === "reservation-rejected" || (mode === "transcription-rejected" && body.model === "gpt-live-transcribe"))
+      return new Response("budget refused", { status: 409 })
+    const malformed =
+      mode === "reservation-malformed" || (mode === "transcription-malformed" && body.model === "gpt-live-transcribe")
     return Response.json({
-      requestID: mode === "reservation-malformed" ? "other" : body.requestID,
+      requestID: malformed ? "other" : body.requestID,
       model: body.model,
       status: "reserved",
+      ...(body.model === "gpt-live-transcribe"
+        ? {
+            amount: 0.6,
+            currency: "USD",
+            maximumSeconds: mode === "transcription-short" ? 15 : mode === "transcription-deadline" ? 16 : 2117,
+          }
+        : {}),
     })
   }
   if (method === "DELETE") return Response.json({ ...binding, status: "closed" })
@@ -56,6 +73,7 @@ function fixture() {
     conflicts: 0,
     form: undefined as Record<string, unknown> | undefined,
     order: [] as string[],
+    usage: undefined as VoiceUsage | undefined,
   }
   const binding = {
     id: "binding_1",
@@ -199,9 +217,16 @@ function fixture() {
     const body = typeof init?.body === "string" ? (JSON.parse(init.body) as Record<string, unknown>) : {}
     state.attempts.push({ path: url.pathname, body })
     expect(["https://api.openai.com", server.url.origin]).toContain(url.origin)
-    if (state.mode === "reservation-offline" && url.pathname.endsWith("/reservation"))
+    const transcription = body.model === "gpt-live-transcribe"
+    if (
+      (state.mode === "reservation-offline" || (state.mode === "transcription-offline" && transcription)) &&
+      url.pathname.endsWith("/reservation")
+    )
       return Promise.reject(new Error("backend offline"))
-    if (state.mode === "reservation-timeout" && url.pathname.endsWith("/reservation"))
+    if (
+      (state.mode === "reservation-timeout" || (state.mode === "transcription-timeout" && transcription)) &&
+      url.pathname.endsWith("/reservation")
+    )
       return new Promise<Response>((_, reject) => {
         init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true })
       })
@@ -216,6 +241,7 @@ function fixture() {
       state.control = socket
       return socket
     },
+    80,
     80,
   )
   const send = (value: unknown) => state.socket!.send(JSON.stringify(value))
@@ -248,6 +274,7 @@ function fixture() {
           directory: "C:/project",
           current: () => state.current,
           context: state.context,
+          usage: (value) => (state.usage = value),
         }),
         (value) => state.ready.push(value),
         (value) => state.errors.push(value),
@@ -340,7 +367,7 @@ for (const mode of ["rejected", "mismatched", "cancelled", "disconnected", "time
           type: "conversation.item.done",
           item: { ...item, content: [{ type: "input_text", text: "wrong context" }] },
         })
-      if (mode === "cancelled") await f.broker.stop(input.requestID)
+      if (mode === "cancelled") expect(await f.broker.stop(input.requestID)).toBeUndefined()
       if (mode === "disconnected") f.state.control!.terminate()
       await start
       expect(f.state.ready).toEqual([])
@@ -515,7 +542,7 @@ test("OpenAI host keeps credentials isolated, dispatches only completed tool cal
     expect(JSON.stringify(output)).toContain("Verified result")
     await f.broker.stop("other_request")
     expect(f.broker.active).toBe(true)
-    await f.broker.stop(input.requestID)
+    expect(await f.broker.stop(input.requestID)).toBeUndefined()
     expect(f.broker.active).toBe(false)
     expect(f.state.requests.filter((request) => request.path.endsWith("/hangup"))).toHaveLength(1)
     expect(f.state.requests.filter((request) => request.method === "DELETE")).toHaveLength(1)
@@ -594,7 +621,7 @@ test("ending voice fences queued work without cancelling the already-admitted pa
     response.response.output.push(...completed("call_2").response.output)
     await f.complete(response)
     await until(() => f.state.polls.includes("call_1"))
-    await f.broker.stop(input.requestID)
+    expect(await f.broker.stop(input.requestID)).toBeUndefined()
     f.state.released.add("call_1")
     await Bun.sleep(0)
     expect(f.broker.active).toBe(false)
@@ -669,6 +696,7 @@ for (const mode of ["location", "binding", "cleanup", "rejected"]) {
         expect(f.state.order.at(-1)).toBe("/kilocode/voice/openai/reservation/release")
         expect(f.state.requests.some((request) => request.path.endsWith("/session"))).toBe(false)
       }
+      if (mode === "cleanup") expect(f.state.requests.some((request) => request.method === "DELETE")).toBe(false)
       const count = f.state.requests.length
       if (mode !== "rejected") {
         await f.start()
@@ -680,6 +708,38 @@ for (const mode of ["location", "binding", "cleanup", "rejected"]) {
     }
   })
 }
+
+test("the transcription allowance deadline closes the provider before it can exceed the saved hold", async () => {
+  const f = fixture()
+  try {
+    f.state.mode = "transcription-deadline"
+    await f.start()
+    expect(f.broker.active).toBe(true)
+    await until(() => !f.broker.active)
+    expect(f.state.errors).toEqual([
+      "Voice reached its saved transcription allowance and is closing. Review the conversation before reconnecting.",
+    ])
+    expect(f.state.order).toContain("provider")
+    expect(f.state.requests.filter((request) => request.path.endsWith("/hangup"))).toHaveLength(1)
+    expect(f.state.requests.filter((request) => request.method === "DELETE")).toHaveLength(1)
+  } finally {
+    await f.close()
+  }
+})
+
+test("an unresolved provider receipt prevents backend closure and exact transcription settlement", async () => {
+  const f = fixture()
+  try {
+    await f.start()
+    f.send({ type: "input_audio_buffer.committed", item_id: "speech_unresolved" })
+    await until(() => f.state.usage?.pending === 1)
+    expect(await f.broker.stop(input.requestID)).toContain("usage settlement remains unconfirmed")
+    expect(f.broker.active).toBe(true)
+    expect(f.state.requests.some((request) => request.method === "DELETE")).toBe(false)
+  } finally {
+    await f.close()
+  }
+})
 
 for (const mode of ["reservation-rejected", "reservation-malformed", "reservation-offline", "reservation-timeout"]) {
   test(`voice ${mode} never reaches the paid provider boundary`, async () => {
@@ -697,6 +757,35 @@ for (const mode of ["reservation-rejected", "reservation-malformed", "reservatio
   })
 }
 
+for (const mode of [
+  "transcription-rejected",
+  "transcription-malformed",
+  "transcription-offline",
+  "transcription-timeout",
+  "transcription-short",
+]) {
+  test(`voice ${mode} cannot cross the paid provider boundary`, async () => {
+    const f = fixture()
+    try {
+      f.state.mode = mode
+      await f.start()
+      const reserves = f.state.attempts.filter((attempt) => attempt.path.endsWith("/reservation"))
+      const releases = f.state.requests.filter((request) => request.path.endsWith("/reservation/release"))
+      expect(reserves.map((attempt) => attempt.body.model)).toEqual([OPENAI_VOICE_MODEL, "gpt-live-transcribe"])
+      expect(f.state.order).not.toContain("provider")
+      expect(f.state.ready).toEqual([])
+      expect(releases.some((request) => request.body.model === OPENAI_VOICE_MODEL)).toBe(true)
+      expect(releases.some((request) => request.body.model === "gpt-live-transcribe")).toBe(
+        mode !== "transcription-rejected",
+      )
+      expect(f.broker.active).toBe(mode !== "transcription-rejected")
+      if (mode !== "transcription-rejected") expect(f.state.errors.at(-1)).toContain("unconfirmed")
+    } finally {
+      await f.close()
+    }
+  })
+}
+
 for (const mode of ["reservation-rejected", "reservation-malformed", "reservation-offline", "reservation-timeout"]) {
   test(`active voice ${mode} cannot create a provider response`, async () => {
     const f = fixture()
@@ -706,10 +795,10 @@ for (const mode of ["reservation-rejected", "reservation-malformed", "reservatio
       f.send({ type: "input_audio_buffer.speech_stopped" })
       await until(() => f.state.errors.length > 0)
       expect(f.state.events.some((event) => event.type === "response.create")).toBe(false)
-      expect(f.state.attempts.filter((attempt) => attempt.path.endsWith("/reservation"))).toHaveLength(2)
+      expect(f.state.attempts.filter((attempt) => attempt.path.endsWith("/reservation"))).toHaveLength(3)
       if (mode === "reservation-offline" || mode === "reservation-timeout")
-        expect(f.state.requests.filter((request) => request.path.endsWith("/reservation"))).toHaveLength(1)
-      else expect(f.state.requests.filter((request) => request.path.endsWith("/reservation"))).toHaveLength(2)
+        expect(f.state.requests.filter((request) => request.path.endsWith("/reservation"))).toHaveLength(2)
+      else expect(f.state.requests.filter((request) => request.path.endsWith("/reservation"))).toHaveLength(3)
       expect(f.state.requests.some((request) => request.path.endsWith("/usage"))).toBe(false)
       expect(f.broker.active).toBe(true)
       if (mode === "reservation-rejected") {
@@ -751,6 +840,31 @@ test("every provider response carries its admitted identity into durable usage",
       ),
     ).toHaveLength(1)
     expect(f.state.requests.find((request) => request.path.endsWith("/usage"))!.body.reservationID).toBe(reservationID)
+  } finally {
+    await f.close()
+  }
+})
+
+test("transcription admission precedes the provider and is bound with a deterministic identity", async () => {
+  const f = fixture()
+  try {
+    await f.start()
+    const reserves = f.state.requests.filter((request) => request.path.endsWith("/reservation"))
+    const session = f.state.requests.find((request) => request.method === "POST" && request.path.endsWith("/session"))!
+    const requestID = `raya_transcription_${createHash("sha256")
+      .update(`${input.sessionID}:${input.requestID}`)
+      .digest("hex")
+      .slice(0, 48)}`
+    expect(reserves.map((request) => request.body)).toEqual([
+      { parentSessionID: input.sessionID, requestID: input.requestID, model: OPENAI_VOICE_MODEL },
+      { parentSessionID: input.sessionID, requestID, model: "gpt-live-transcribe" },
+    ])
+    expect(f.state.order.slice(0, 3)).toEqual([
+      "/kilocode/voice/openai/reservation",
+      "/kilocode/voice/openai/reservation",
+      "provider",
+    ])
+    expect(session.body.transcriptionRequestID).toBe(requestID)
   } finally {
     await f.close()
   }

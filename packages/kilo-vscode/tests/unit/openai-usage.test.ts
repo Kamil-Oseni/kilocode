@@ -211,3 +211,32 @@ test("duration-based transcription preserves provider seconds without inventing 
   ])
   abort.abort()
 })
+
+test("settlement waits for durable writes and refuses missing provider receipts or aborts", async () => {
+  const abort = new AbortController()
+  const pending = Promise.withResolvers<Record<string, unknown>>()
+  let receipt: Record<string, unknown> | undefined
+  const meter = new OpenAIUsage(
+    abort.signal,
+    async (value) => {
+      receipt = value
+      return pending.promise
+    },
+    () => undefined,
+  )
+  meter.receive({ type: "response.created", response: { id: "response_1" } })
+  meter.receive(report())
+  expect(await meter.settle(20)).toBe(false)
+  pending.resolve(receipt!)
+  expect(await meter.settle(200)).toBe(true)
+
+  const unresolved = new OpenAIUsage(
+    abort.signal,
+    async (value) => value,
+    () => undefined,
+  )
+  unresolved.receive({ type: "input_audio_buffer.committed", item_id: "speech_1" })
+  expect(await unresolved.settle(20)).toBe(false)
+  abort.abort()
+  expect(await unresolved.settle(20)).toBe(false)
+})

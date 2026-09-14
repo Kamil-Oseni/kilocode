@@ -1285,6 +1285,142 @@ it.live(
 )
 
 it.live(
+  "reconciles one bound transcription aggregate after a lost close acknowledgement and backend restart",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const events: string[] = []
+        const settled: Array<{ id: string; identity: string; pricing: OpenAIPricing }> = []
+        let fail = true
+        const admissions = (sessionID: SessionID, identity: string) =>
+          Effect.succeed({
+            amount: 0.6,
+            dispatch: Effect.sync(() => events.push(`dispatch:${sessionID}:${identity}`)).pipe(Effect.asVoid),
+            finish: Effect.sync(() => events.push(`finish:${sessionID}:${identity}`)).pipe(Effect.asVoid),
+            release: Effect.sync(() => events.push(`release:${sessionID}:${identity}`)).pipe(Effect.asVoid),
+          })
+        const settlements = (input: { id: string; identity: string; pricing: OpenAIPricing }) =>
+          Effect.gen(function* () {
+            settled.push({ id: input.id, identity: input.identity, pricing: input.pricing })
+            if (!fail) return
+            fail = false
+            yield* Effect.fail(new VoiceError({ code: "conflict", message: "Lost aggregate acknowledgement." }))
+          })
+        const state = yield* fixture(root, undefined, undefined, admissions, undefined, settlements)
+        const requestID = "transcription_guarded_start"
+        const transcriptionRequestID = "transcription_guarded_total"
+        yield* state.voice.reserve({ parentSessionID: session, requestID, model: "gpt-realtime-2.1" }, secret, root)
+        yield* state.voice.reserve(
+          { parentSessionID: session, requestID: transcriptionRequestID, model: "gpt-live-transcribe" },
+          secret,
+          root,
+        )
+        const binding = yield* state.voice.start(
+          { parentSessionID: session, providerCallID: crypto.randomUUID(), requestID, transcriptionRequestID },
+          secret,
+          root,
+        )
+        for (const [id, seconds] of [
+          ["speech_first", 2.75],
+          ["speech_second", 3.25],
+        ] as const)
+          yield* state.voice.meter(
+            binding.id,
+            {
+              generation: binding.generation,
+              receipt: {
+                id,
+                kind: "transcription",
+                model: "gpt-live-transcribe",
+                status: "reported",
+                seconds,
+              },
+            },
+            secret,
+            root,
+          )
+        expect(
+          Exit.isFailure(yield* state.voice.close(binding.id, binding.generation, secret, root).pipe(Effect.exit)),
+        ).toBe(true)
+        expect((yield* retained(binding.id)).binding.status).toBe("closed")
+        const restarted = yield* make({ ...state.deps, admissions, usageSettlements: settlements })
+        expect((yield* restarted.reconcile(32)).status).toBe("complete")
+        expect(settled).toHaveLength(2)
+        expect(settled[0]).toEqual(settled[1])
+        expect(settled[1]).toMatchObject({
+          id: `openai-voice:${binding.id}:transcription-total`,
+          pricing: {
+            coverage: "recorded",
+            amount: 0.0017,
+            currency: "USD",
+            quantity: 6,
+            unit: "seconds",
+            source: "openai-model-doc:gpt-live-transcribe:2026-09-14",
+          },
+        })
+        const unknownRequestID = "transcription_unknown_start"
+        const unknownTranscriptionRequestID = "transcription_unknown_total"
+        yield* restarted.reserve(
+          { parentSessionID: session, requestID: unknownRequestID, model: "gpt-realtime-2.1" },
+          secret,
+          root,
+        )
+        yield* restarted.reserve(
+          {
+            parentSessionID: session,
+            requestID: unknownTranscriptionRequestID,
+            model: "gpt-live-transcribe",
+          },
+          secret,
+          root,
+        )
+        const unknown = yield* restarted.start(
+          {
+            parentSessionID: session,
+            providerCallID: crypto.randomUUID(),
+            requestID: unknownRequestID,
+            transcriptionRequestID: unknownTranscriptionRequestID,
+          },
+          secret,
+          root,
+        )
+        yield* restarted.meter(
+          unknown.id,
+          {
+            generation: unknown.generation,
+            receipt: {
+              id: "speech_missing",
+              kind: "transcription",
+              model: "gpt-live-transcribe",
+              status: "missing",
+            },
+          },
+          secret,
+          root,
+        )
+        yield* restarted.close(unknown.id, unknown.generation, secret, root)
+        expect(settled).toHaveLength(3)
+        expect(settled[2]).toMatchObject({
+          id: `openai-voice:${unknown.id}:transcription-total`,
+          pricing: {
+            coverage: "unknown",
+            source: "openai-model-doc:gpt-live-transcribe:2026-09-14",
+          },
+        })
+        expect("amount" in settled[2].pricing).toBe(false)
+        expect(events.filter((event) => event.startsWith("dispatch:"))).toHaveLength(5)
+      }).pipe(
+        Effect.provide([
+          Storage.layerFromDir(path.join(root, "storage")),
+          Database.layerFromPath(path.join(root, "voice.sqlite")),
+        ]),
+      )
+    }),
+  30_000,
+)
+
+it.live(
   "bounded startup reconciliation resumes its cursor, quarantines malformed rows and retries stable charges",
   () =>
     Effect.gen(function* () {

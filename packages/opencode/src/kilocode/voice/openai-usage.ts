@@ -80,6 +80,11 @@ const rates = {
   cached: { text: 0.4, audio: 0.4, image: 0.5 },
   output: { text: 24, audio: 64 },
 } as const
+const transcribe = {
+  currency: "USD",
+  perMinute: 0.017,
+  source: "openai-model-doc:gpt-live-transcribe:2026-09-14",
+} as const
 
 export type OpenAIPricing =
   | {
@@ -100,32 +105,33 @@ export type OpenAIPricing =
 
 /** Versioned estimate from the exact provider receipt. It is unknown unless every priced modality is attributable. */
 export function pricing(receipt: typeof OpenAIUsage.Type): OpenAIPricing {
+  const source = receipt.kind === "transcription" ? transcribe.source : rates.version
   if (!valid(receipt))
     return {
       coverage: "unknown",
-      source: rates.version,
+      source,
       reason: "The provider voice usage receipt is invalid.",
     }
   if (receipt.status !== "reported")
     return {
       coverage: "unknown",
-      source: rates.version,
+      source,
       reason: "The provider did not report valid usage for this voice operation.",
     }
   if (receipt.kind === "transcription") {
     if (receipt.seconds === undefined)
       return {
         coverage: "unknown",
-        source: rates.version,
+        source,
         reason: "GPT Live Transcribe did not report its billed audio duration.",
       }
     return {
       coverage: "recorded",
-      amount: (receipt.seconds / 60) * 0.017,
-      currency: rates.currency,
+      amount: Number(((receipt.seconds / 60) * transcribe.perMinute).toFixed(12)),
+      currency: transcribe.currency,
       quantity: receipt.seconds,
       unit: "seconds",
-      source: "openai-model-doc:gpt-live-transcribe:2026-09-14",
+      source: transcribe.source,
     }
   }
   const tokens = receipt.tokens
@@ -169,4 +175,9 @@ export function pricing(receipt: typeof OpenAIUsage.Type): OpenAIPricing {
     unit: "tokens",
     source: rates.version,
   }
+}
+
+/** Maximum whole billed transcription seconds covered by one configured reservation. */
+export function transcriptionAllowance(amount: number) {
+  return Math.min(86_400, Math.floor(Number((amount / (transcribe.perMinute / 60)).toFixed(9))))
 }

@@ -102,6 +102,15 @@ export class OpenAIUsage {
     void this.drain()
   }
 
+  async settle(timeout: number) {
+    const end = Date.now() + timeout
+    while (!this.signal.aborted && (this.writing || this.queue.length > 0 || this.pending.size > 0)) {
+      if (Date.now() >= end) return false
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+    return !this.signal.aborted && !this.writing && this.queue.length === 0 && this.pending.size === 0
+  }
+
   private track(event: Record<string, unknown>) {
     const response = event.type === "response.created"
     const value = response ? object(event.response)?.id : event.item_id

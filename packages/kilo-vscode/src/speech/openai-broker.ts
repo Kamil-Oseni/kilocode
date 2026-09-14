@@ -32,7 +32,7 @@ type Binding = {
 type Reservation = {
   parentSessionID: string
   requestID: string
-  model: typeof model
+  model: typeof model | "gpt-live-transcribe"
 }
 
 type Input = { requestID: string; sessionID: string; sdp: string }
@@ -46,8 +46,11 @@ type Claim = {
   settled: Set<string>
   queue: Promise<void>
   blocked: boolean
+  ending: boolean
+  ready: boolean
   cancelled: boolean
   uncertain: boolean
+  paid: boolean
   speech: OpenAISpeech
   usage?: OpenAIUsage
   images: OpenAIImages
@@ -56,8 +59,10 @@ type Claim = {
   remote?: string
   binding?: Binding
   reservation?: Reservation
+  transcription?: Reservation
   socket?: WebSocket
   timer?: ReturnType<typeof setInterval>
+  limit?: ReturnType<typeof setTimeout>
   closing?: Promise<string | undefined>
   opening: Promise<void>
   failed: (error: string) => void
@@ -111,6 +116,7 @@ export class OpenAIBroker {
     private readonly request: typeof fetch = fetch,
     private readonly connect = (url: string, options: WebSocket.ClientOptions) => new WebSocket(url, options),
     private readonly reservationTimeout = 30_000,
+    private readonly settlementTimeout = 5000,
   ) {}
 
   get active() {
@@ -142,8 +148,11 @@ export class OpenAIBroker {
       cancellations: new Set(),
       queue: Promise.resolve(),
       blocked: false,
+      ending: false,
+      ready: false,
       cancelled: false,
       uncertain: false,
+      paid: false,
       speech: new OpenAISpeech(
         (event) => this.send(claim, event),
         () => this.current(claim) && !claim.blocked,
@@ -206,8 +215,11 @@ export class OpenAIBroker {
   async stop(requestID?: string) {
     const claim = this.claim
     if (!claim || (requestID && claim.input.requestID !== requestID)) return
-    claim.cancelled = true
-    claim.abort.abort()
+    claim.ending = true
+    if (!claim.ready) {
+      claim.cancelled = true
+      claim.abort.abort()
+    }
     await claim.opening
     return this.close(claim)
   }
@@ -248,6 +260,7 @@ export class OpenAIBroker {
       requestID: claim.input.requestID,
       model,
     }
+    claim.reservation = reservation
     claim.uncertain = true
     const admitted = await this.backend(claim, "/reservation", {
       method: "POST",
@@ -263,9 +276,44 @@ export class OpenAIBroker {
       admitted.status !== "reserved"
     )
       throw new Error("Raya voice reservation was not confirmed")
-    claim.reservation = reservation
     claim.uncertain = false
     this.assert(claim)
+    const transcription = {
+      parentSessionID: claim.input.sessionID,
+      requestID: `raya_transcription_${createHash("sha256")
+        .update(`${claim.input.sessionID}:${claim.input.requestID}`)
+        .digest("hex")
+        .slice(0, 48)}`,
+      model: "gpt-live-transcribe",
+    } as const
+    claim.transcription = transcription
+    claim.uncertain = true
+    const admittedTranscription = await this.backend(claim, "/reservation", {
+      method: "POST",
+      body: JSON.stringify(transcription),
+    }).catch((error: unknown) => {
+      if (error instanceof BackendError && error.status >= 400 && error.status < 500 && error.status !== 408) {
+        claim.uncertain = false
+        if (error.status === 409) claim.transcription = undefined
+      }
+      throw error
+    })
+    if (!transcriptionAdmission(admittedTranscription, transcription.requestID))
+      throw new Error("Raya transcription reservation was not confirmed")
+    claim.uncertain = false
+    claim.limit = setTimeout(
+      () => {
+        if (!this.current(claim)) return
+        claim.failed(
+          "Voice reached its saved transcription allowance and is closing. Review the conversation before reconnecting.",
+        )
+        void this.stop(claim.input.requestID).then((error) => error && claim.failed(error))
+      },
+      (admittedTranscription.maximumSeconds - 15) * 1000,
+    )
+    claim.limit.unref()
+    this.assert(claim)
+    claim.paid = true
     claim.uncertain = true
     const response = await this.request(endpoint, {
       method: "POST",
@@ -292,10 +340,12 @@ export class OpenAIBroker {
         parentSessionID: claim.input.sessionID,
         providerCallID: claim.remote,
         requestID: claim.input.requestID,
+        transcriptionRequestID: transcription.requestID,
       }),
     })
     claim.binding = admission(binding, claim)
     claim.reservation = undefined
+    claim.transcription = undefined
     claim.usage = new OpenAIUsage(
       claim.abort.signal,
       (receipt, reservationID) =>
@@ -311,6 +361,7 @@ export class OpenAIBroker {
     this.assert(claim)
     claim.timer = setInterval(() => this.validate(claim), 1000)
     claim.timer.unref()
+    claim.ready = true
     ready(answer)
   }
 
@@ -388,6 +439,7 @@ export class OpenAIBroker {
         }
       })
       const failure = () => {
+        if (claim.ending) return
         if (!ready) finish(new Error("OpenAI voice control disconnected during setup."))
         if (ready && this.claim === claim && !claim.cancelled) {
           claim.failed("OpenAI voice control disconnected. End voice and review ongoing work before reconnecting.")
@@ -400,6 +452,7 @@ export class OpenAIBroker {
   }
 
   private send(claim: Claim, value: unknown) {
+    if (claim.ending) return
     const event =
       value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined
     if (event?.type === "response.create") {
@@ -415,7 +468,12 @@ export class OpenAIBroker {
     return true
   }
 
+  private connected(claim: Claim) {
+    return !claim.ending && this.current(claim) && claim.socket?.readyState === WebSocket.OPEN
+  }
+
   private async respond(claim: Claim, event: Record<string, unknown>) {
+    if (claim.ending) return
     const id = event.event_id
     if (!identifier(id) || claim.responses.has(id) || claim.responses.size >= 64) return this.block(claim)
     const reservation = { parentSessionID: claim.input.sessionID, requestID: id, model } satisfies Reservation
@@ -446,7 +504,7 @@ export class OpenAIBroker {
         claim.failed("Voice response admission returned an invalid receipt. Nothing was sent to OpenAI.")
       return
     }
-    if (!this.current(claim) || claim.socket?.readyState !== WebSocket.OPEN) {
+    if (!this.connected(claim)) {
       await this.backend(
         claim,
         "/reservation/release",
@@ -477,6 +535,7 @@ export class OpenAIBroker {
 
   private event(claim: Claim, event: Record<string, unknown>) {
     if (!this.observed(claim, event)) return
+    if (claim.ending) return
     if (claim.images.receive(event)) return
     if (event.type === "error" && cancelled(event, claim.cancellations)) return
     const handled = claim.speech.event(event)
@@ -541,7 +600,7 @@ export class OpenAIBroker {
   }
 
   private queue(claim: Claim, event: Record<string, unknown>) {
-    if (claim.blocked || !this.validate(claim)) return
+    if (claim.blocked || claim.ending || !this.validate(claim)) return
     if (!identifier(event.call_id) || typeof event.arguments !== "string" || event.arguments.length > 16_000) return
     const id = event.call_id
     const digest = createHash("sha256").update(event.arguments).digest("hex")
@@ -681,14 +740,23 @@ export class OpenAIBroker {
   }
 
   private async cleanup(claim: Claim): Promise<string | undefined> {
-    claim.cancelled = true
+    claim.ending = true
     claim.speech.close()
     clearInterval(claim.timer)
+    clearTimeout(claim.limit)
+    const hangup =
+      claim.remote && claim.config
+        ? await this.hangup(claim).then(
+            () => true,
+            () => false,
+          )
+        : true
+    const usage = claim.ready && hangup && claim.binding ? await claim.usage?.settle(this.settlementTimeout) : undefined
+    claim.cancelled = true
     claim.abort.abort()
     claim.socket?.terminate()
     const results = await Promise.allSettled([
-      ...(claim.remote && claim.config ? [this.hangup(claim)] : []),
-      ...(claim.binding
+      ...(claim.binding && hangup && usage !== false
         ? [
             this.backend(claim, `/session/${encodeURIComponent(claim.binding.id)}`, { method: "DELETE" }, true).then(
               (binding) => {
@@ -702,27 +770,36 @@ export class OpenAIBroker {
             ),
           ]
         : []),
-      ...(claim.reservation && !claim.uncertain
-        ? [
-            this.backend(
-              claim,
-              "/reservation/release",
-              { method: "POST", body: JSON.stringify(claim.reservation) },
-              true,
-            ).then((receipt) => {
-              if (
-                receipt.requestID !== claim.reservation!.requestID ||
-                receipt.model !== claim.reservation!.model ||
-                receipt.status !== "released"
-              )
-                throw new Error("Raya voice reservation release remains unconfirmed")
-              claim.reservation = undefined
-            }),
-          ]
+      ...(!claim.paid || !claim.uncertain
+        ? [claim.reservation, claim.transcription]
+            .filter((reservation) => reservation !== undefined)
+            .map((reservation) =>
+              this.backend(
+                claim,
+                "/reservation/release",
+                { method: "POST", body: JSON.stringify(reservation) },
+                true,
+              ).then((receipt) => {
+                if (
+                  receipt.requestID !== reservation.requestID ||
+                  receipt.model !== reservation.model ||
+                  receipt.status !== "released"
+                )
+                  throw new Error("Raya voice reservation release remains unconfirmed")
+                if (claim.reservation === reservation) claim.reservation = undefined
+                if (claim.transcription === reservation) claim.transcription = undefined
+              }),
+            )
         : []),
     ])
-    if (claim.uncertain || results.some((result) => result.status === "rejected"))
-      return "Voice admission or cleanup remains unconfirmed. Restart Raya before reconnecting; review ongoing work in the conversation."
+    if (!hangup)
+      return "OpenAI call release remains unconfirmed. Restart Raya before reconnecting; review ongoing work in the conversation."
+    if (usage === false)
+      return "Voice usage settlement remains unconfirmed. Restart Raya before reconnecting; review ongoing work in the conversation."
+    if (claim.uncertain)
+      return "Voice admission remains unconfirmed. Restart Raya before reconnecting; review ongoing work in the conversation."
+    if (results.some((result) => result.status === "rejected"))
+      return "Voice cleanup remains unconfirmed. Restart Raya before reconnecting; review ongoing work in the conversation."
     if (this.claim === claim) this.claim = undefined
   }
 
@@ -740,6 +817,25 @@ export class OpenAIBroker {
 
 function identifier(value: unknown): value is string {
   return typeof value === "string" && /^[a-zA-Z0-9_-]{1,128}$/.test(value)
+}
+
+function transcriptionAdmission(
+  value: Record<string, unknown>,
+  requestID: string,
+): value is Record<string, unknown> & { amount: number; maximumSeconds: number } {
+  return (
+    value.requestID === requestID &&
+    value.model === "gpt-live-transcribe" &&
+    value.status === "reserved" &&
+    value.currency === "USD" &&
+    typeof value.amount === "number" &&
+    Number.isFinite(value.amount) &&
+    value.amount > 0 &&
+    typeof value.maximumSeconds === "number" &&
+    Number.isInteger(value.maximumSeconds) &&
+    value.maximumSeconds > 15 &&
+    value.maximumSeconds <= 86_400
+  )
 }
 
 function sdp(value: string) {

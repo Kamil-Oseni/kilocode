@@ -73395,7 +73395,7 @@
           },
           "model": {
             "type": "string",
-            "enum": ["gpt-realtime-2.1", "gpt-live-1"]
+            "enum": ["gpt-realtime-2.1", "gpt-live-1", "gpt-live-transcribe"]
           }
         },
         "required": ["parentSessionID", "requestID", "model"],
@@ -73410,7 +73410,7 @@
           },
           "model": {
             "type": "string",
-            "enum": ["gpt-realtime-2.1", "gpt-live-1"]
+            "enum": ["gpt-realtime-2.1", "gpt-live-1", "gpt-live-transcribe"]
           },
           "status": {
             "type": "string",
@@ -73466,6 +73466,10 @@
             "pattern": "^\\S+$"
           },
           "requestID": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+          },
+          "transcriptionRequestID": {
             "type": "string",
             "pattern": "^[a-zA-Z0-9_-]{1,128}$"
           },

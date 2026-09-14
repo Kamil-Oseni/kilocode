@@ -104,6 +104,22 @@ test("the shipped OpenAI voice routes require both configured server auth and th
         })
       ).status,
     ).toBe(409)
+    const transcription = {
+      parentSessionID: parent.id,
+      requestID: "transcription_budget_1",
+      model: "gpt-live-transcribe" as const,
+    }
+    const transcriptionReserved = await request("POST", preflight, transcription)
+    expect(transcriptionReserved.status).toBe(200)
+    expect(Schema.decodeUnknownSync(OpenAIReservation)(await transcriptionReserved.json())).toEqual({
+      requestID: transcription.requestID,
+      model: transcription.model,
+      status: "reserved",
+      amount: 0.6,
+      currency: "USD",
+      maximumSeconds: 2117,
+    })
+    expect((await request("POST", `${preflight}/release`, transcription)).status).toBe(200)
     const route = `${base}/${binding.id}`
     const image = {
       generation: binding.generation,
@@ -243,6 +259,100 @@ test("the shipped OpenAI voice routes require both configured server auth and th
       ).status,
     ).toBe(200)
     const separate = Schema.decodeUnknownSync(OpenAIBinding)(await (await request("POST", base, separateInput)).json())
+    const guardedParent = Schema.decodeUnknownSync(Schema.Struct({ id: SessionID }))(
+      await (await request("POST", "/session", {})).json(),
+    )
+    expect(
+      (
+        await request("POST", `/session/${guardedParent.id}/goal`, {
+          objective: "Bound Realtime transcription",
+          budget: { chargeCosts: [{ currency: "USD", limit: 1.2, reservation: 0.6 }] },
+        })
+      ).status,
+    ).toBe(200)
+    const guardedInput = {
+      parentSessionID: guardedParent.id,
+      providerCallID: crypto.randomUUID(),
+      requestID: "guarded_realtime_start",
+      transcriptionRequestID: "guarded_transcription",
+    }
+    const guardedReserve = {
+      parentSessionID: guardedParent.id,
+      requestID: guardedInput.requestID,
+      model: "gpt-realtime-2.1",
+    }
+    const transcriptionReserve = {
+      parentSessionID: guardedParent.id,
+      requestID: guardedInput.transcriptionRequestID,
+      model: "gpt-live-transcribe",
+    }
+    expect((await request("POST", preflight, guardedReserve)).status).toBe(200)
+    expect((await request("POST", preflight, transcriptionReserve)).status).toBe(200)
+    const guarded = Schema.decodeUnknownSync(OpenAIBinding)(await (await request("POST", base, guardedInput)).json())
+    expect(guarded.parentSessionID).toBe(guardedParent.id)
+    expect((await request("POST", `${preflight}/release`, transcriptionReserve)).status).toBe(409)
+    expect((await request("POST", base, { ...guardedInput, transcriptionRequestID: "changed" })).status).toBe(409)
+    const guardedRoute = `${base}/${guarded.id}`
+    const firstTranscription = {
+      generation: guarded.generation,
+      receipt: {
+        id: "transcription_first",
+        kind: "transcription",
+        model: "gpt-live-transcribe",
+        status: "reported",
+        seconds: 2.75,
+      },
+    }
+    const secondTranscription = {
+      generation: guarded.generation,
+      receipt: { ...firstTranscription.receipt, id: "transcription_second", seconds: 3.25 },
+    }
+    expect((await request("POST", `${guardedRoute}/usage`, firstTranscription)).status).toBe(200)
+    expect((await request("POST", `${guardedRoute}/usage`, firstTranscription)).status).toBe(200)
+    expect(
+      (
+        await request("POST", `${guardedRoute}/usage`, {
+          ...firstTranscription,
+          receipt: { ...firstTranscription.receipt, seconds: 2.5 },
+        })
+      ).status,
+    ).toBe(409)
+    expect((await request("POST", `${guardedRoute}/usage`, secondTranscription)).status).toBe(200)
+    expect(
+      Schema.decodeUnknownSync(RayaGoal.State)(await (await request("GET", `/session/${guardedParent.id}/goal`)).json())
+        .charges,
+    ).toEqual([])
+    const guardedResponse = { ...guardedReserve, requestID: "guarded_response" }
+    expect((await request("POST", preflight, guardedResponse)).status).toBe(200)
+    expect((await request("POST", preflight, { ...guardedResponse, requestID: "guarded_response_rival" })).status).toBe(
+      409,
+    )
+    expect((await request("POST", `${preflight}/release`, guardedResponse)).status).toBe(200)
+    expect((await request("DELETE", `${base}/${guarded.id}?generation=${guarded.generation}`)).status).toBe(200)
+    expect((await request("POST", `${preflight}/release`, transcriptionReserve)).status).toBe(409)
+    const guardedGoal = Schema.decodeUnknownSync(RayaGoal.State)(
+      await (await request("GET", `/session/${guardedParent.id}/goal`)).json(),
+    )
+    expect(guardedGoal.charges).toEqual([
+      {
+        id: `openai-voice:${guarded.id}:transcription-total`,
+        kind: "gpt-live",
+        provider: "OpenAI",
+        service: "gpt-live-transcribe",
+        source: "openai-model-doc:gpt-live-transcribe:2026-09-14",
+        origin: { sessionID: guardedParent.id, callID: guarded.id },
+        at: guarded.createdAt,
+        quantity: 6,
+        unit: "seconds",
+        coverage: "recorded",
+        amount: 0.0017,
+        currency: "USD",
+      },
+    ])
+    const transcriptionRival = { ...transcriptionReserve, requestID: "guarded_transcription_rival" }
+    expect((await request("POST", preflight, transcriptionRival)).status).toBe(200)
+    expect((await request("POST", `${preflight}/release`, transcriptionRival)).status).toBe(200)
+    expect((await request("DELETE", `/session/${guardedParent.id}`)).status).toBe(200)
     const activeInput = {
       ...input,
       providerCallID: crypto.randomUUID(),

@@ -5953,12 +5953,12 @@ export type OpenAiVoiceCall = {
 export type OpenAiVoiceReserve = {
   parentSessionID: string
   requestID: string
-  model: "gpt-realtime-2.1" | "gpt-live-1"
+  model: "gpt-realtime-2.1" | "gpt-live-1" | "gpt-live-transcribe"
 }
 
 export type OpenAiVoiceReservation = {
   requestID: string
-  model: "gpt-realtime-2.1" | "gpt-live-1"
+  model: "gpt-realtime-2.1" | "gpt-live-1" | "gpt-live-transcribe"
   status: "reserved" | "released"
   amount?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
   currency?: "USD"
@@ -5969,6 +5969,7 @@ export type OpenAiVoiceStart = {
   parentSessionID: string
   providerCallID: string
   requestID: string
+  transcriptionRequestID?: string
   model?: "gpt-realtime-2.1" | "gpt-live-1"
 }
 

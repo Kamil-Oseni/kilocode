@@ -14,6 +14,8 @@ const books = {
   enabled: true,
   access: "brief",
   tools: ["read", "glob", "grep", "list", "mcp_accounting"],
+  dir: "C:\\Workspace\\Reports",
+  paths: undefined as { version: 1; grants: Array<{ path: string; access: "read" | "write" }> } | undefined,
 }
 
 const legal = {
@@ -93,6 +95,7 @@ const transcript = Array.from({ length: 1_000 }, (_, index) => ({
 }))
 let stopped = false
 let serviceAttempts = 0
+let accessAttempts = 0
 let assignment:
   | {
       source: string
@@ -255,24 +258,51 @@ const services = (message: Extract<WebviewMessage, { type: "routineAuthorityServ
   return true
 }
 
-const preview = (message: WebviewMessage) => {
-  if (message.type === "routineAuthorityServices") return services(message)
-  if (message.type === "routineAccessUpdate") {
-    books.access = message.access
-    books.tools = message.tools
+const accessReview = (message: WebviewMessage) => {
+  if (message.type === "requestFolderPicker") {
+    setTimeout(
+      () => emit({ type: "folderPickerResult", requestId: message.requestId, path: "C:\\Workspace\\Records" }),
+      0,
+    )
+    return true
+  }
+  if (message.type !== "routineAccessUpdate") return false
+  accessAttempts++
+  if (scene === "access-stale" && accessAttempts === 1) {
+    books.paths = { version: 1, grants: [{ path: "C:/Workspace/Shared", access: "read" }] }
     setTimeout(
       () =>
         emit({
           type: "routineAccessUpdated",
           requestID: message.requestID,
           agentID: message.agentID,
-          access: message.access,
-          tools: message.tools,
+          error: "This routine's folder access changed. Reload it before reviewing access again.",
         }),
       0,
     )
     return true
   }
+  books.access = message.access
+  books.tools = message.tools
+  books.paths = message.paths
+  setTimeout(
+    () =>
+      emit({
+        type: "routineAccessUpdated",
+        requestID: message.requestID,
+        agentID: message.agentID,
+        access: message.access,
+        tools: message.tools,
+        paths: message.paths,
+      }),
+    0,
+  )
+  return true
+}
+
+const preview = (message: WebviewMessage) => {
+  if (message.type === "routineAuthorityServices") return services(message)
+  if (accessReview(message)) return true
   if (message.type === "routineInboxAttachmentPreview") {
     const sound = message.attachmentID === "123e4567-e89b-42d3-a456-426614174002"
     emit({

@@ -121,6 +121,16 @@ export namespace RayaTask {
     changedAt: Timestamp,
   })
   export const Authority = Schema.Struct({ enabled: Schema.Boolean, expected: Schema.Boolean })
+  export const PathGrant = Schema.Struct({
+    path: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(4096)),
+    access: Schema.Literals(["read", "write"]),
+  })
+  export type PathGrant = typeof PathGrant.Type
+  export const PathAccess = Schema.Struct({
+    version: Schema.Literal(1),
+    grants: Schema.Array(PathGrant).check(Schema.isMaxLength(16)),
+  })
+  export type PathAccess = typeof PathAccess.Type
 
   export const Agent = Schema.Struct({
     id: Schema.String,
@@ -141,6 +151,7 @@ export namespace RayaTask {
     model: Schema.optional(Schema.Struct({ providerID: Schema.String, id: Schema.String })),
     mode: Schema.optional(Schema.String),
     dir: Schema.optional(Schema.String),
+    paths: Schema.optional(PathAccess),
     access: Schema.optional(Schema.Literals(["full", "brief"])),
     tools: Schema.optional(Schema.Array(Schema.String)),
     createdAt: Schema.Number,
@@ -241,6 +252,7 @@ export namespace RayaTask {
     model: Schema.optional(Schema.Struct({ providerID: Schema.String, id: Schema.String })),
     mode: Schema.optional(Schema.String),
     dir: Schema.optional(Schema.String),
+    paths: Schema.optional(PathAccess),
     access: Schema.optional(Schema.Literals(["full", "brief"])),
     tools: Schema.optional(Schema.Array(Schema.String)),
   })
@@ -328,12 +340,103 @@ export namespace RayaTask {
     return agent.role.toLowerCase() === "briefer"
   }
 
+  function contains(parent: string, child: string) {
+    const relative = path.relative(parent, child)
+    return !relative || (!relative.startsWith("..") && !path.isAbsolute(relative))
+  }
+
+  const scope = Effect.fn("RayaTask.paths")(function* (value?: PathAccess, dir?: string) {
+    if (!value || value.grants.length === 0) return undefined
+    const unique = new Map<string, PathGrant>()
+    for (const item of value.grants) {
+      const raw = item.path.trim()
+      if (!path.isAbsolute(raw))
+        return yield* new GuardError({
+          kind: "access",
+          field: "paths",
+          message: "Choose absolute folders for Routine file access.",
+        })
+      const root = path.resolve(raw)
+      const key = process.platform === "win32" ? root.toLowerCase() : root
+      const prior = unique.get(key)
+      unique.set(key, { path: root, access: prior?.access === "write" ? "write" : item.access })
+    }
+    const grants: PathGrant[] = []
+    for (const item of [...unique.values()].sort(
+      (a, b) => a.path.length - b.path.length || a.path.localeCompare(b.path),
+    )) {
+      const parent = grants.find((grant) => contains(grant.path, item.path))
+      if (parent?.access === "write" || parent?.access === item.access) continue
+      grants.push(item)
+    }
+    return {
+      version: 1 as const,
+      grants: dir ? grants.filter((item) => !contains(path.resolve(dir), item.path)) : grants,
+    }
+  })
+
+  function scoped(permission: string, roots: string[], worktree: string) {
+    const rules: ReturnType<typeof Permission.fromConfig> = [{ permission, pattern: "*", action: "deny" }]
+    for (const root of roots) {
+      const relative = path.relative(worktree, root).replaceAll("\\", "/")
+      if (!relative) {
+        rules.push({ permission, pattern: "*", action: "allow" })
+        rules.push({ permission, pattern: "../**", action: "deny" })
+        continue
+      }
+      rules.push({ permission, pattern: relative, action: "allow" })
+      rules.push({ permission, pattern: `${relative}/**`, action: "allow" })
+    }
+    return rules
+  }
+
+  function external(roots: string[]) {
+    const rules: ReturnType<typeof Permission.fromConfig> = [
+      { permission: "external_directory", pattern: "*", action: "deny" },
+    ]
+    for (const root of roots) {
+      const normalized = path.resolve(root).replaceAll("\\", "/")
+      rules.push({ permission: "external_directory", pattern: normalized, action: "allow" })
+      rules.push({ permission: "external_directory", pattern: `${normalized}/**`, action: "allow" })
+    }
+    return rules
+  }
+
+  function restrict(
+    dir: string | undefined,
+    paths: PathAccess | undefined,
+    worktree: string | undefined,
+    rules: ReturnType<typeof Permission.fromConfig>,
+  ) {
+    if (!dir?.trim() || !paths || !worktree?.trim()) return rules
+    const read = [dir, ...paths.grants.map((item) => item.path)]
+    return [
+      ...rules,
+      ...scoped("read", read, worktree),
+      ...external(read),
+      { permission: "bash", pattern: "*", action: "deny" as const },
+      { permission: "background_process", pattern: "*", action: "deny" as const },
+      { permission: "interactive_terminal", pattern: "*", action: "deny" as const },
+      { permission: "lsp", pattern: "*", action: "deny" as const },
+    ]
+  }
+
   function confine(
     dir: string | undefined,
+    paths: PathAccess | undefined,
     worktree: string | undefined,
     rules: ReturnType<typeof Permission.fromConfig>,
   ) {
     if (!dir?.trim()) return rules
+    if (paths && worktree?.trim()) {
+      const write = [dir, ...paths.grants.filter((item) => item.access === "write").map((item) => item.path)]
+      return [
+        ...restrict(dir, paths, worktree, rules),
+        ...scoped("edit", write, worktree),
+        ...scoped("write", write, worktree),
+        ...scoped("apply_patch", write, worktree),
+      ]
+    }
     if (worktree?.trim()) {
       const relative = path.relative(worktree, dir).replaceAll("\\", "/")
       if (!relative)
@@ -363,7 +466,7 @@ export namespace RayaTask {
   }
 
   export function rules(
-    agent: Pick<Agent, "role" | "access" | "tools" | "dir"> & Partial<Pick<Agent, "capabilities">>,
+    agent: Pick<Agent, "role" | "access" | "tools" | "dir" | "paths"> & Partial<Pick<Agent, "capabilities">>,
     worktree?: string,
   ) {
     if (brief(agent)) {
@@ -391,17 +494,18 @@ export namespace RayaTask {
       }
       if (agent.capabilities?.some((item) => item.toLowerCase() === "organization:provision"))
         cfg.create_subordinate = "allow"
-      return Permission.fromConfig(cfg)
+      return restrict(agent.dir, agent.paths, worktree, Permission.fromConfig(cfg))
     }
     if (agent.tools !== undefined) {
       const cfg: Record<string, "allow" | "deny"> = { "*": "deny", question: "allow" }
       for (const tool of agent.tools) cfg[tool] = "allow"
       if (agent.capabilities?.some((item) => item.toLowerCase() === "organization:provision"))
         cfg.create_subordinate = "allow"
-      return confine(agent.dir, worktree, Permission.fromConfig(cfg))
+      return confine(agent.dir, agent.paths, worktree, Permission.fromConfig(cfg))
     }
     return confine(
       agent.dir,
+      agent.paths,
       worktree,
       Permission.fromConfig({ "*": "allow", edit: "allow", write: "allow", bash: "allow" }),
     )
@@ -642,6 +746,14 @@ export namespace RayaTask {
         })
       }
       const now = Date.now()
+      const dir = input.dir?.trim() || undefined
+      const accessPaths = yield* scope(input.paths, dir)
+      if (accessPaths && !dir)
+        return yield* new GuardError({
+          kind: "access",
+          field: "paths",
+          message: "Choose a primary write folder before adding other folders.",
+        })
       const agent: Agent = {
         id,
         name: input.name.trim(),
@@ -658,7 +770,8 @@ export namespace RayaTask {
         plan: input.plan,
         model: input.model,
         mode: input.mode?.trim() || undefined,
-        dir: input.dir?.trim() || undefined,
+        dir,
+        paths: accessPaths,
         access: input.access ?? "brief",
         tools: input.tools,
         createdAt: now,
@@ -688,6 +801,7 @@ export namespace RayaTask {
         expectedScheduleVersion?: number
         expectedAccess?: "brief" | "full" | "unset"
         expectedTools?: readonly string[] | "unset"
+        expectedPaths?: PathAccess | "unset"
         expectedOutput?: Output | "unset"
         expectedProvisioning?: boolean
         provisioning?: typeof Provisioning.Type
@@ -722,6 +836,12 @@ export namespace RayaTask {
           field: "tools",
           message: "This routine's tool access changed. Reload it before reviewing access again.",
         })
+      if (patch.expectedPaths !== undefined && !isDeepStrictEqual(patch.expectedPaths, prior.paths ?? "unset"))
+        return yield* new GuardError({
+          kind: "conflict",
+          field: "paths",
+          message: "This routine's folder access changed. Reload it before reviewing access again.",
+        })
       if (patch.expectedScheduleVersion !== undefined && patch.expectedScheduleVersion !== (prior.scheduleVersion ?? 1))
         return yield* new GuardError({
           kind: "conflict",
@@ -734,8 +854,16 @@ export namespace RayaTask {
           field: "schedule",
           message: "This routine's schedule changed. Reload it and preview your changes again.",
         })
+      const dir = patch.dir?.trim() || prior.dir
       const schedule = patch.schedule ? yield* scheduled(patch.schedule) : prior.schedule
       const contract = patch.output === undefined ? prior.output : yield* output(patch.output)
+      const accessPaths = patch.paths === undefined ? prior.paths : yield* scope(patch.paths, dir)
+      if (accessPaths && !dir)
+        return yield* new GuardError({
+          kind: "access",
+          field: "paths",
+          message: "Choose a primary write folder before adding other folders.",
+        })
       const changed = !isDeepStrictEqual(schedule, prior.schedule)
       const version = (prior.scheduleVersion ?? 1) + (changed ? 1 : 0)
       if (!Number.isSafeInteger(version))
@@ -758,7 +886,8 @@ export namespace RayaTask {
         plan: patch.plan === undefined ? prior.plan : patch.plan.trim() || undefined,
         model: patch.model ?? prior.model,
         mode: patch.mode === undefined ? prior.mode : slot(patch.mode),
-        dir: patch.dir?.trim() || prior.dir,
+        dir,
+        paths: accessPaths,
         access: patch.access ?? prior.access,
         tools: patch.tools ?? prior.tools,
         note:

@@ -129,6 +129,37 @@
   margin-top: var(--raya-space-6);
 }
 
+.routines-path-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(7.5rem, auto) auto;
+  align-items: center;
+  gap: var(--raya-space-6);
+  padding: var(--raya-space-6) 0;
+  border-top: 1px solid var(--border-weak, var(--vscode-widget-border));
+}
+
+.routines-path-row > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.routines-path-row select {
+  width: auto;
+}
+
+@media (max-width: 420px) {
+  .routines-path-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .routines-path-row select {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+}
+
 .routines-review-actions {
   display: flex;
   flex-wrap: wrap;

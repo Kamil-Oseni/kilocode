@@ -31,6 +31,7 @@ import { OutputReview } from "./OutputReview"
 import { Inbox, status, type Anchor, type Box } from "./Inbox"
 import { OrganizationActivity } from "./OrganizationActivity"
 import { Output } from "../../../../src/shared/routine-output"
+import type { RoutinePaths } from "../../../../src/shared/routine-paths"
 
 type Schedule =
   | { kind: "once"; at: number }
@@ -60,6 +61,7 @@ type Agent = {
   access?: "full" | "brief"
   tools?: string[]
   dir?: string
+  paths?: RoutinePaths
   mode?: string
   plan?: string
 }

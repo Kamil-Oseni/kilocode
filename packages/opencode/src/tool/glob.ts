@@ -57,6 +57,12 @@ export const GlobTool = Tool.define(
           // kilocode_change start
           const base = absolute?.dir ?? params.path ?? ins.directory
           const search = path.isAbsolute(base) ? base : path.resolve(ins.directory, base)
+          yield* ctx.ask({
+            permission: "read",
+            patterns: [path.relative(ins.worktree, search)],
+            always: ["*"],
+            metadata: { filepath: search },
+          }) // kilocode_change - let Routine path grants confine directory discovery inside a Git worktree
           // kilocode_change end
           const info = yield* fs.stat(search).pipe(Effect.catch(() => Effect.succeed(undefined)))
           if (info?.type === "File") {

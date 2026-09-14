@@ -166,8 +166,10 @@ export interface RoutineAccessUpdateMessage {
   agentID: string
   access: "brief" | "full"
   tools: string[]
+  paths: import("../../../../src/shared/routine-paths").RoutinePaths
   expectedAccess: "brief" | "full" | "unset"
   expectedTools: string[] | "unset"
+  expectedPaths: import("../../../../src/shared/routine-paths").RoutinePaths | "unset"
 }
 
 export interface RoutineAuthorityServicesRequestMessage {

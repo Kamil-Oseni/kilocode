@@ -253,6 +253,7 @@ export interface RoutineAccessUpdatedMessage {
   agentID: string
   access?: "brief" | "full"
   tools?: string[]
+  paths?: import("../../../../src/shared/routine-paths").RoutinePaths
   error?: string
   recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
 }

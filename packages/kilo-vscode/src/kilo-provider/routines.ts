@@ -6,6 +6,7 @@ import { isDeepStrictEqual } from "node:util"
 import { getErrorMessage } from "../kilo-provider-utils"
 import { Edit, Proposal, Schedule } from "../shared/routine-schedule"
 import { Output } from "../shared/routine-output"
+import { normalizeRoutinePaths, RoutinePaths } from "../shared/routine-paths"
 import { recovery } from "../shared/routine-error"
 import { bundle, MAX_ROUTINE_FILE_BYTES, MAX_ROUTINE_FILES, type RoutineUpload } from "./routine-files"
 import { organization } from "./routine-refresh"
@@ -293,6 +294,38 @@ function reviewTools(value: unknown) {
   const items = value.map((item) => String(item).trim())
   if (new Set(items).size !== items.length) return
   return items
+}
+
+function reviewPaths(value: unknown) {
+  const result = RoutinePaths.safeParse(value)
+  if (!result.success) return
+  return normalizeRoutinePaths(result.data)
+}
+
+function reviewInput(msg: Msg) {
+  const selected = reviewTools(msg.tools)
+  const expected = msg.expectedTools === "unset" ? ("unset" as const) : reviewTools(msg.expectedTools)
+  const paths = reviewPaths(msg.paths)
+  const expectedPaths = msg.expectedPaths === "unset" ? ("unset" as const) : reviewPaths(msg.expectedPaths)
+  const requestID = typeof msg.requestID === "string" && msg.requestID.length <= 128 ? msg.requestID : undefined
+  const agentID = typeof msg.agentID === "string" && msg.agentID.length <= 256 ? msg.agentID : undefined
+  const access: "brief" | "full" | undefined = msg.access === "brief" || msg.access === "full" ? msg.access : undefined
+  const prior: "unset" | "brief" | "full" | undefined =
+    msg.expectedAccess === "unset" || msg.expectedAccess === "brief" || msg.expectedAccess === "full"
+      ? msg.expectedAccess
+      : undefined
+  if (!requestID || !agentID || !access || !prior || !selected || !expected || !paths || !expectedPaths)
+    throw new Error("Reload the routine before reviewing access.")
+  return {
+    requestID,
+    agentID,
+    access,
+    expectedAccess: prior,
+    selected,
+    expected,
+    paths,
+    expectedPaths,
+  }
 }
 
 function capabilities(msg: Msg) {
@@ -791,44 +824,37 @@ async function update(ctx: Ctx) {
 
 async function review(ctx: Ctx) {
   const msg = ctx.message
-  const selected = reviewTools(msg.tools)
-  const expected = msg.expectedTools === "unset" ? "unset" : reviewTools(msg.expectedTools)
-  if (
-    typeof msg.requestID !== "string" ||
-    !msg.requestID ||
-    msg.requestID.length > 128 ||
-    typeof msg.agentID !== "string" ||
-    !msg.agentID ||
-    msg.agentID.length > 256 ||
-    (msg.access !== "brief" && msg.access !== "full") ||
-    (msg.expectedAccess !== "unset" && msg.expectedAccess !== "brief" && msg.expectedAccess !== "full") ||
-    selected === undefined ||
-    expected === undefined
-  )
-    throw new Error("Reload the routine before reviewing access.")
+  const input = reviewInput(msg)
   const result = await ctx.kilo.update(
     {
       directory: ctx.dir,
-      agentID: msg.agentID,
-      access: msg.access,
-      tools: selected,
-      expectedAccess: msg.expectedAccess,
-      expectedTools: expected,
+      agentID: input.agentID,
+      access: input.access,
+      tools: input.selected,
+      paths: input.paths,
+      expectedAccess: input.expectedAccess,
+      expectedTools: input.expected,
+      expectedPaths: input.expectedPaths,
     },
     { throwOnError: true },
   )
   if (
-    result.data?.id !== msg.agentID ||
-    result.data.access !== msg.access ||
-    !isDeepStrictEqual(result.data.tools, selected)
+    result.data?.id !== input.agentID ||
+    result.data.access !== input.access ||
+    !isDeepStrictEqual(result.data.tools, input.selected) ||
+    !isDeepStrictEqual(
+      result.data.paths ? normalizeRoutinePaths(result.data.paths) : undefined,
+      input.paths.grants.length ? input.paths : undefined,
+    )
   )
     throw new Error("The saved access could not be confirmed. Reload the routine before trying again.")
   ctx.post({
     type: "routineAccessUpdated",
-    requestID: msg.requestID,
-    agentID: msg.agentID,
+    requestID: input.requestID,
+    agentID: input.agentID,
     access: result.data.access,
     tools: result.data.tools,
+    paths: result.data.paths ? normalizeRoutinePaths(result.data.paths) : undefined,
   })
 }
 

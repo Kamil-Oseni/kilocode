@@ -56,6 +56,14 @@ export const GrepTool = Tool.define(
           const requested = path.isAbsolute(params.path ?? ins.directory)
             ? (params.path ?? ins.directory)
             : path.join(ins.directory, params.path ?? ".")
+          // kilocode_change start - let Routine path grants confine content search inside a Git worktree
+          yield* ctx.ask({
+            permission: "read",
+            patterns: [path.relative(ins.worktree, requested)],
+            always: ["*"],
+            metadata: { filepath: requested },
+          })
+          // kilocode_change end
           const requestedInfo = yield* fs.stat(requested).pipe(Effect.catch(() => Effect.succeed(undefined)))
           yield* assertExternalDirectoryEffect(ctx, requested, {
             bypass: false,

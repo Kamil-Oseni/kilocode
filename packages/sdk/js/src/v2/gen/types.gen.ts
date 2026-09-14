@@ -22253,6 +22253,13 @@ export type KilocodeRoutineListResponses = {
     }
     mode?: string
     dir?: string
+    paths?: {
+      version: 1
+      grants: Array<{
+        path: string
+        access: "read" | "write"
+      }>
+    }
     access?: "full" | "brief"
     tools?: Array<string>
     createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -22312,6 +22319,13 @@ export type KilocodeRoutineCreateData = {
     }
     mode?: string
     dir?: string
+    paths?: {
+      version: 1
+      grants: Array<{
+        path: string
+        access: "read" | "write"
+      }>
+    }
     access?: "full" | "brief"
     tools?: Array<string>
   }
@@ -22388,6 +22402,13 @@ export type KilocodeRoutineCreateResponses = {
     }
     mode?: string
     dir?: string
+    paths?: {
+      version: 1
+      grants: Array<{
+        path: string
+        access: "read" | "write"
+      }>
+    }
     access?: "full" | "brief"
     tools?: Array<string>
     createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -22521,6 +22542,13 @@ export type KilocodeRoutineArchiveResponses = {
         }
         mode?: string
         dir?: string
+        paths?: {
+          version: 1
+          grants: Array<{
+            path: string
+            access: "read" | "write"
+          }>
+        }
         access?: "full" | "brief"
         tools?: Array<string>
         createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -22628,6 +22656,15 @@ export type KilocodeRoutineUpdateData = {
         }
     expectedAccess?: "brief" | "full" | "unset"
     expectedTools?: Array<string> | "unset"
+    expectedPaths?:
+      | {
+          version: 1
+          grants: Array<{
+            path: string
+            access: "read" | "write"
+          }>
+        }
+      | "unset"
     expectedOutput?:
       | {
           destination: "conversation"
@@ -22649,6 +22686,13 @@ export type KilocodeRoutineUpdateData = {
     }
     mode?: string
     dir?: string
+    paths?: {
+      version: 1
+      grants: Array<{
+        path: string
+        access: "read" | "write"
+      }>
+    }
     access?: "full" | "brief"
     tools?: Array<string>
     note?: string
@@ -22732,6 +22776,13 @@ export type KilocodeRoutineUpdateResponses = {
     }
     mode?: string
     dir?: string
+    paths?: {
+      version: 1
+      grants: Array<{
+        path: string
+        access: "read" | "write"
+      }>
+    }
     access?: "full" | "brief"
     tools?: Array<string>
     createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -22832,6 +22883,13 @@ export type KilocodeRoutineAuthorityResponses = {
     }
     mode?: string
     dir?: string
+    paths?: {
+      version: 1
+      grants: Array<{
+        path: string
+        access: "read" | "write"
+      }>
+    }
     access?: "full" | "brief"
     tools?: Array<string>
     createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -23207,6 +23265,13 @@ export type KilocodeRoutineSnapshotResponses = {
       }
       mode?: string
       dir?: string
+      paths?: {
+        version: 1
+        grants: Array<{
+          path: string
+          access: "read" | "write"
+        }>
+      }
       access?: "full" | "brief"
       tools?: Array<string>
       createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"

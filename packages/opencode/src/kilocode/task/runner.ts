@@ -236,8 +236,21 @@ export namespace RayaTaskRunner {
           "Report evidence for each criterion by its ID. In the update_goal completion audit, include exactly one requirement per saved criterion, set criterionID to its ID and preserve its description as the requirement text. Do not claim completion when a required criterion is unmet or unverified. If verification requires a person's judgment, request that review. This output contract does not grant permission to send external messages or modify files.",
         )
       }
-      if (item.dir?.trim()) {
+      if (item.dir?.trim() && !item.paths) {
         chunks.push(`Write new files only in ${item.dir.trim()}. You may read from anywhere else.`)
+      }
+      if (item.paths) {
+        const roots = item.paths.grants.map(
+          (grant) => `- ${grant.access === "write" ? "Read and write" : "Read only"}: ${grant.path}`,
+        )
+        chunks.push(
+          [
+            `Your primary write folder is ${item.dir}.`,
+            "Additional folder access:",
+            ...roots,
+            "Command tools and workspace-wide code navigation are unavailable while additional folder limits are active. Use file tools so these boundaries can be enforced.",
+          ].join("\n"),
+        )
       }
       if (memory) chunks.push(`Role memory (do not mix with other roles):\n${memory}`)
       if (!item.plan) return chunks.join("\n\n")

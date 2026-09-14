@@ -1668,6 +1668,112 @@ describe("RayaTask store", () => {
     expect(Permission.evaluate("edit", "../private/secret.txt", project).action).toBe("deny")
   })
 
+  test("persists canonical folder grants and rejects stale or relative access changes", async () => {
+    const storage = memory()
+    const tasks = RayaTask.make({ storage })
+    const root = path.resolve("C:/repo")
+    const read = path.join(root, "records")
+    const write = path.join(root, "exports")
+    const agent = await Effect.runPromise(
+      tasks.create({
+        name: "Books",
+        role: "accountant",
+        objective: "Review accounts",
+        schedule: { kind: "manual" },
+        capabilities: ["money"],
+        dir: path.join(root, "reports"),
+        paths: {
+          version: 1,
+          grants: [
+            { path: path.join(root, "reports", "drafts"), access: "read" },
+            { path: read, access: "read" },
+            { path: path.join(read, "2026"), access: "read" },
+            { path: write, access: "read" },
+            { path: write, access: "write" },
+          ],
+        },
+      }),
+    )
+    expect(agent.paths).toEqual({
+      version: 1,
+      grants: [
+        { path: write, access: "write" },
+        { path: read, access: "read" },
+      ].sort((a, b) => a.path.length - b.path.length || a.path.localeCompare(b.path)),
+    })
+    expect((await Effect.runPromise(RayaTask.make({ storage }).get(agent.id))).paths).toEqual(agent.paths)
+
+    expect(
+      await Effect.runPromise(
+        tasks
+          .update(agent.id, {
+            paths: { version: 1, grants: [{ path: path.join(root, "new"), access: "write" }] },
+            expectedPaths: "unset",
+          })
+          .pipe(Effect.flip),
+      ),
+    ).toMatchObject({ _tag: "RayaTask.GuardError", kind: "conflict", field: "paths" })
+    expect(
+      await Effect.runPromise(
+        tasks
+          .update(agent.id, {
+            paths: { version: 1, grants: [{ path: "../private", access: "read" }] },
+            expectedPaths: agent.paths,
+          })
+          .pipe(Effect.flip),
+      ),
+    ).toMatchObject({ _tag: "RayaTask.GuardError", kind: "access", field: "paths" })
+    expect((await Effect.runPromise(tasks.get(agent.id))).paths).toEqual(agent.paths)
+  })
+
+  test("enforces readable and writable folder grants without command escape", () => {
+    const root = path.resolve("C:/repo")
+    const dir = path.join(root, "reports")
+    const read = path.join(root, "records")
+    const write = path.resolve(root, "..", "deliveries")
+    const rules = RayaTask.rules(
+      {
+        role: "accountant",
+        access: "full",
+        dir,
+        paths: {
+          version: 1,
+          grants: [
+            { path: read, access: "read" },
+            { path: write, access: "write" },
+          ],
+        },
+      },
+      root,
+    )
+
+    expect(Permission.evaluate("read", "records/ledger.xlsx", rules).action).toBe("allow")
+    expect(Permission.evaluate("edit", "records/ledger.xlsx", rules).action).toBe("deny")
+    expect(
+      Permission.evaluate("read", path.relative(root, write).replaceAll("\\", "/") + "/site.txt", rules).action,
+    ).toBe("allow")
+    expect(
+      Permission.evaluate("edit", path.relative(root, write).replaceAll("\\", "/") + "/site.txt", rules).action,
+    ).toBe("allow")
+    expect(Permission.evaluate("read", "private/secret.txt", rules).action).toBe("deny")
+    expect(Permission.evaluate("edit", "private/secret.txt", rules).action).toBe("deny")
+    expect(Permission.evaluate("external_directory", write.replaceAll("\\", "/") + "/*", rules).action).toBe("allow")
+    expect(
+      Permission.evaluate("external_directory", path.resolve(root, "..", "private").replaceAll("\\", "/") + "/*", rules)
+        .action,
+    ).toBe("deny")
+    for (const tool of ["bash", "background_process", "interactive_terminal", "lsp"])
+      expect(Permission.evaluate(tool, "*", rules).action).toBe("deny")
+
+    const brief = RayaTask.rules(
+      { role: "briefer", dir, paths: { version: 1, grants: [{ path: read, access: "read" }] } },
+      root,
+    )
+    expect(Permission.evaluate("read", "records/ledger.xlsx", brief).action).toBe("allow")
+    expect(Permission.evaluate("read", "private/secret.txt", brief).action).toBe("deny")
+    expect(Permission.evaluate("edit", "reports/summary.md", brief).action).toBe("deny")
+  })
+
   test("briefer sessions deny file edits unless access is full", () => {
     expect(RayaTask.brief({ role: "briefer" })).toBe(true)
     expect(RayaTask.brief({ role: "inbox" })).toBe(false)

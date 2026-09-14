@@ -29887,6 +29887,37 @@
                       "dir": {
                         "type": "string"
                       },
+                      "paths": {
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "type": "number",
+                            "enum": [1]
+                          },
+                          "grants": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "path": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 4096
+                                },
+                                "access": {
+                                  "type": "string",
+                                  "enum": ["read", "write"]
+                                }
+                              },
+                              "required": ["path", "access"],
+                              "additionalProperties": false
+                            },
+                            "maxItems": 16
+                          }
+                        },
+                        "required": ["version", "grants"],
+                        "additionalProperties": false
+                      },
                       "access": {
                         "type": "string",
                         "enum": ["full", "brief"]
@@ -30285,6 +30316,37 @@
                     "dir": {
                       "type": "string"
                     },
+                    "paths": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [1]
+                        },
+                        "grants": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "path": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 4096
+                              },
+                              "access": {
+                                "type": "string",
+                                "enum": ["read", "write"]
+                              }
+                            },
+                            "required": ["path", "access"],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 16
+                        }
+                      },
+                      "required": ["version", "grants"],
+                      "additionalProperties": false
+                    },
                     "access": {
                       "type": "string",
                       "enum": ["full", "brief"]
@@ -30601,6 +30663,37 @@
                   },
                   "dir": {
                     "type": "string"
+                  },
+                  "paths": {
+                    "type": "object",
+                    "properties": {
+                      "version": {
+                        "type": "number",
+                        "enum": [1]
+                      },
+                      "grants": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "path": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 4096
+                            },
+                            "access": {
+                              "type": "string",
+                              "enum": ["read", "write"]
+                            }
+                          },
+                          "required": ["path", "access"],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 16
+                      }
+                    },
+                    "required": ["version", "grants"],
+                    "additionalProperties": false
                   },
                   "access": {
                     "type": "string",
@@ -31008,6 +31101,37 @@
                               },
                               "dir": {
                                 "type": "string"
+                              },
+                              "paths": {
+                                "type": "object",
+                                "properties": {
+                                  "version": {
+                                    "type": "number",
+                                    "enum": [1]
+                                  },
+                                  "grants": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "path": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 4096
+                                        },
+                                        "access": {
+                                          "type": "string",
+                                          "enum": ["read", "write"]
+                                        }
+                                      },
+                                      "required": ["path", "access"],
+                                      "additionalProperties": false
+                                    },
+                                    "maxItems": 16
+                                  }
+                                },
+                                "required": ["version", "grants"],
+                                "additionalProperties": false
                               },
                               "access": {
                                 "type": "string",
@@ -31435,6 +31559,37 @@
                     "dir": {
                       "type": "string"
                     },
+                    "paths": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [1]
+                        },
+                        "grants": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "path": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 4096
+                              },
+                              "access": {
+                                "type": "string",
+                                "enum": ["read", "write"]
+                              }
+                            },
+                            "required": ["path", "access"],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 16
+                        }
+                      },
+                      "required": ["version", "grants"],
+                      "additionalProperties": false
+                    },
                     "access": {
                       "type": "string",
                       "enum": ["full", "brief"]
@@ -31835,6 +31990,45 @@
                       }
                     ]
                   },
+                  "expectedPaths": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "type": "number",
+                            "enum": [1]
+                          },
+                          "grants": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "path": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 4096
+                                },
+                                "access": {
+                                  "type": "string",
+                                  "enum": ["read", "write"]
+                                }
+                              },
+                              "required": ["path", "access"],
+                              "additionalProperties": false
+                            },
+                            "maxItems": 16
+                          }
+                        },
+                        "required": ["version", "grants"],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["unset"]
+                      }
+                    ]
+                  },
                   "expectedOutput": {
                     "anyOf": [
                       {
@@ -31917,6 +32111,37 @@
                   },
                   "dir": {
                     "type": "string"
+                  },
+                  "paths": {
+                    "type": "object",
+                    "properties": {
+                      "version": {
+                        "type": "number",
+                        "enum": [1]
+                      },
+                      "grants": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "path": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 4096
+                            },
+                            "access": {
+                              "type": "string",
+                              "enum": ["read", "write"]
+                            }
+                          },
+                          "required": ["path", "access"],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 16
+                      }
+                    },
+                    "required": ["version", "grants"],
+                    "additionalProperties": false
                   },
                   "access": {
                     "type": "string",
@@ -32289,6 +32514,37 @@
                     },
                     "dir": {
                       "type": "string"
+                    },
+                    "paths": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [1]
+                        },
+                        "grants": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "path": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 4096
+                              },
+                              "access": {
+                                "type": "string",
+                                "enum": ["read", "write"]
+                              }
+                            },
+                            "required": ["path", "access"],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 16
+                        }
+                      },
+                      "required": ["version", "grants"],
+                      "additionalProperties": false
                     },
                     "access": {
                       "type": "string",
@@ -33944,6 +34200,37 @@
                         },
                         "dir": {
                           "type": "string"
+                        },
+                        "paths": {
+                          "type": "object",
+                          "properties": {
+                            "version": {
+                              "type": "number",
+                              "enum": [1]
+                            },
+                            "grants": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "path": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 4096
+                                  },
+                                  "access": {
+                                    "type": "string",
+                                    "enum": ["read", "write"]
+                                  }
+                                },
+                                "required": ["path", "access"],
+                                "additionalProperties": false
+                              },
+                              "maxItems": 16
+                            }
+                          },
+                          "required": ["version", "grants"],
+                          "additionalProperties": false
                         },
                         "access": {
                           "type": "string",

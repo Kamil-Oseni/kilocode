@@ -142,6 +142,7 @@ export const TaskUpdatePayload = Schema.Struct({
   expectedSchedule: Schema.optional(RayaTask.Schedule),
   expectedAccess: Schema.optional(Schema.Literals(["brief", "full", "unset"])),
   expectedTools: Schema.optional(Schema.Union([Schema.Array(Schema.String), Schema.Literal("unset")])),
+  expectedPaths: Schema.optional(Schema.Union([RayaTask.PathAccess, Schema.Literal("unset")])),
   expectedOutput: Schema.optional(Schema.Union([RayaTask.Output, Schema.Literal("unset")])),
   expectedScheduleVersion: Schema.optional(
     Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER)),
@@ -152,6 +153,7 @@ export const TaskUpdatePayload = Schema.Struct({
   model: Schema.optional(Schema.Struct({ providerID: Schema.String, id: Schema.String })),
   mode: Schema.optional(Schema.String),
   dir: Schema.optional(Schema.String),
+  paths: Schema.optional(RayaTask.PathAccess),
   access: Schema.optional(Schema.Literals(["full", "brief"])),
   tools: Schema.optional(Schema.Array(Schema.String)),
   note: Schema.optional(Schema.String),

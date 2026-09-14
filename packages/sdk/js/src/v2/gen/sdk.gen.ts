@@ -9857,6 +9857,13 @@ export class Routine extends HeyApiClient {
       }
       mode?: string
       dir?: string
+      paths?: {
+        version: 1
+        grants: Array<{
+          path: string
+          access: "read" | "write"
+        }>
+      }
       access?: "full" | "brief"
       tools?: Array<string>
     },
@@ -9882,6 +9889,7 @@ export class Routine extends HeyApiClient {
             { in: "body", key: "model" },
             { in: "body", key: "mode" },
             { in: "body", key: "dir" },
+            { in: "body", key: "paths" },
             { in: "body", key: "access" },
             { in: "body", key: "tools" },
           ],
@@ -10074,6 +10082,15 @@ export class Routine extends HeyApiClient {
           }
       expectedAccess?: "brief" | "full" | "unset"
       expectedTools?: Array<string> | "unset"
+      expectedPaths?:
+        | {
+            version: 1
+            grants: Array<{
+              path: string
+              access: "read" | "write"
+            }>
+          }
+        | "unset"
       expectedOutput?:
         | {
             destination: "conversation"
@@ -10095,6 +10112,13 @@ export class Routine extends HeyApiClient {
       }
       mode?: string
       dir?: string
+      paths?: {
+        version: 1
+        grants: Array<{
+          path: string
+          access: "read" | "write"
+        }>
+      }
       access?: "full" | "brief"
       tools?: Array<string>
       note?: string
@@ -10119,6 +10143,7 @@ export class Routine extends HeyApiClient {
             { in: "body", key: "expectedSchedule" },
             { in: "body", key: "expectedAccess" },
             { in: "body", key: "expectedTools" },
+            { in: "body", key: "expectedPaths" },
             { in: "body", key: "expectedOutput" },
             { in: "body", key: "expectedScheduleVersion" },
             { in: "body", key: "avatar" },
@@ -10127,6 +10152,7 @@ export class Routine extends HeyApiClient {
             { in: "body", key: "model" },
             { in: "body", key: "mode" },
             { in: "body", key: "dir" },
+            { in: "body", key: "paths" },
             { in: "body", key: "access" },
             { in: "body", key: "tools" },
             { in: "body", key: "note" },

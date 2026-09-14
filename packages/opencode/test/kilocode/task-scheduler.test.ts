@@ -18,6 +18,7 @@ import { claim } from "@/kilocode/task/claim"
 import { inspect } from "@/kilocode/task/recovery"
 import { RayaTaskQueue } from "@/kilocode/task/queue"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
+import { RayaTaskDelegation } from "@/kilocode/task/delegation"
 import { scheduler } from "@/kilocode/task/scheduler"
 import { removals } from "@/kilocode/task/removal"
 import { archive as indexed } from "@/kilocode/task/archive"
@@ -1501,6 +1502,89 @@ it.live(
           expect((yield* tasks.page()).items.map((item) => item.definition.id)).toEqual([id])
         }).pipe(Effect.provide(state(directory)))
       }
+    }),
+  30_000,
+)
+
+it.live(
+  "a delegation accepted by a stopped process resumes with its reserved run identity",
+  () =>
+    Effect.gen(function* () {
+      const directory = yield* tmpdirScoped()
+      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+      yield* Effect.gen(function* () {
+        const storage = yield* Storage.Service
+        const database = yield* Database.Service
+        const tasks = RayaTask.make({ storage, database })
+        const chief = yield* tasks.create({
+          name: "Chief",
+          objective: "Assign work",
+          access: "brief",
+          schedule: { kind: "manual" },
+        })
+        const books = yield* tasks.create({
+          name: "Books",
+          objective: "Review accounts",
+          access: "brief",
+          schedule: { kind: "manual" },
+        })
+        const store = RayaTaskDelegation.make(database)
+        const admitted = yield* store.admit(
+          {
+            source: "dlg_process_stop",
+            senderID: chief.id,
+            recipientID: books.id,
+            objective: "Review the close.",
+          },
+          chief,
+          books,
+        )
+        const fixture = fileURLToPath(new URL("./fixtures/delegation-take.ts", import.meta.url))
+        const code = yield* spawner.exitCode(
+          ChildProcess.make(process.execPath, [fixture, path.join(directory, "queue.sqlite"), books.id], {
+            stdin: "ignore",
+            detached: false,
+          }),
+        )
+        expect(Number(code)).toBe(21)
+        const accepted = yield* store.get(admitted.record.id)
+        expect(accepted).toMatchObject({ state: "accepted" })
+        expect(accepted.childRunID).toBeString()
+        const opened: string[] = []
+        const runner = RayaTaskRunner.make({
+          database,
+          storage,
+          sessions: {
+            create: () =>
+              Effect.sync(() => {
+                opened.push("ses_process_stop")
+                return {
+                  id: SessionID.make("ses_process_stop"),
+                  slug: "routine",
+                  projectID: ProjectV2.ID.make("project"),
+                  directory,
+                  title: "Books",
+                  version: "test",
+                  time: { created: Date.now(), updated: Date.now() },
+                }
+              }),
+            get: () => Effect.die("unused"),
+            messages: () => Effect.succeed([]),
+            children: () => Effect.succeed([]),
+          },
+        })
+
+        yield* runner.revive()
+        yield* runner.revive()
+
+        expect(yield* store.get(admitted.record.id)).toMatchObject({
+          state: "running",
+          childRunID: accepted.childRunID,
+          sessionID: SessionID.make("ses_process_stop"),
+        })
+        expect(opened).toEqual(["ses_process_stop"])
+        expect((yield* tasks.runsFor(books.id)).filter((run) => run.id === accepted.childRunID)).toHaveLength(1)
+      }).pipe(Effect.provide(state(directory)))
     }),
   30_000,
 )

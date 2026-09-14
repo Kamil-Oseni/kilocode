@@ -1,5 +1,12 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-14 19:55 America/Toronto - Waiting delegations retain and resume ownership
+
+**Status: product commit `475fa4402c` is verified and pushed to `origin/main`; it is intentionally not installed alone.** A delegated worker waiting for user input now survives backend restart as the recipient's sole pending owner, so later queued requests cannot start. When the user replies, Raya steers the same saved run and conditionally changes the exact attached delegation from `needs_input` back to `running`. Replayed replies accept the already-running identity; another run/session or a terminal state fails with a conflict instead of rewriting ownership.
+
+The lifecycle regression starts one delegation, queues a second, parks and settles the first as waiting, reopens twice, replies to the same worker, and finally stops it. It proves no replacement session while waiting or resuming, the original run becomes running, the DM state leaves `needs_input`, and explicit stop starts the queued assignment exactly once. Combined delegation coverage passes **25 / 433**. Scoped one-thread lint reports zero errors and only existing wider-file warnings; formatting, changeset assembly, whitespace, annotation and Effect Promise-facade guards pass. EN-02/OVR-05 remain **In progress** for stale active-worker generation races, representative organization execution and broader lifecycle acceptance. Installed source remains `17ff50e907`.
+
+
 ## ChatGPT 2026-09-14 19:51 America/Toronto - Real-process session and history interruption proof
 
 **Status: regression commit `fe617a63e3` is verified and pushed to `origin/main`.** A second real child-process fixture now follows the production delegation ownership chain: it accepts the queued row, creates the startup snapshot and exact session metadata, links the durable claim, saves the goal, and exits either before or after run-history publication. Restart against the same filesystem storage and SQLite database repairs both cases without calling session creation, retains one reserved run/session, attaches the delegation and removes the stopped claim. Repeating restart remains idempotent.

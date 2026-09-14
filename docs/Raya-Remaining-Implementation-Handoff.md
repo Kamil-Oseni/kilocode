@@ -1,5 +1,12 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-14 19:55 America/Toronto - EN-02 waiting-user ownership and resume
+
+Product commit `475fa4402c` is verified and pushed. `RayaTaskDelegation.resume(id, runID, sessionID)` conditionally changes only an exact `needs_input` attachment to `running`, accepts an exact running replay and rejects mismatched or terminal ownership. `RayaTaskRunner.ask` invokes it only after steering the same pending run; this ordering avoids presenting a delegation as running when goal steering failed. If the later delegation transition fails, another reply can safely replay steering and the exact transition.
+
+Preserve `waiting for the user survives restart and holds the next delegation`. It requires a blocked `waiting on you` run and `needs_input` delegation to remain the worker's sole pending owner across two reopen passes. A reply must reuse the original run/session, return the delegation to running and keep the second request queued. Explicit stop must cancel the original, mark its run non-pending and start the queued request once. Evidence is 25 delegation tests / 433 assertions. A patch changeset is included. Next EN-02 work is stale active-worker generation fencing during concurrent stop/archive/delete, then representative organization execution through real integration boundaries. Installed source remains `17ff50e907`.
+
+
 ## ChatGPT 2026-09-14 19:51 America/Toronto - EN-02 process-stage session/history proof
 
 Regression commit `fe617a63e3` is verified and pushed. Preserve `fixtures/delegation-start.ts` and its two scheduler cases. The fixture runs in a separate Bun process over the shared real storage/database, reserves the delegation run ID, creates the startup snapshot and SQLite session with exact agent/run/delegation metadata, links the claim, saves the active goal, and exits with code 21 either before or after `tasks.record`. The parent invokes `revive` twice and requires zero replacement session creations, one exact running history row, the same attached delegation identity and no remaining startup claim.

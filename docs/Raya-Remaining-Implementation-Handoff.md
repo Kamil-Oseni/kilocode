@@ -4578,3 +4578,19 @@ Preserve these tests and semantics:
 Do not broaden cleanup to version-one receipts, live owners, existing target organizations, changed definitions or incomplete evidence. Do not replace the receipt digest with agent ID alone. Do not route abandoned cleanup through ordinary user removal, which intentionally archives the worker.
 
 Next run the authorized low-memory installer from `packages/kilo-vscode` only: `$env:RAYA_LOW_MEMORY='1'; bun run snapshot:install`. This snapshot should include product commits `2701c802a5`, `d3dd5ed3f9`, `61436630d6`, `5139915332`, `7f0f202261`, `276733d071`, `f75af2dcbf` and `762b2bb8a9`. Record exact version, source/docs commit, retained VSIX and CLI hashes/sizes, cleanup result, free disk and active vault pointer. Continue EN-02/OVR-05 afterward with execution fencing and representative organization execution rather than more staging cleanup.
+
+## ChatGPT 2026-09-14 18:25 America/Toronto - Staging lifecycle package installed
+
+The authorized low-memory workflow completed from `packages/kilo-vscode` and installed `eden.raya@7.4.23-snapshot+17ff50e907.kamil-oseni.1789424534886`. SDK regeneration, source CLI/Kilo Console build, CLI version/model/sandbox-worker smoke tests, sequential extension and webview typechecks, cached extension lint, production bundling, 431-file VSIX packaging and VS Code installation all passed. The generated SDK left no repository diff.
+
+Exact evidence:
+
+- Source/docs commit: `17ff50e907f66cb4f852c13eccb17c4c8fcb9b33`, equal locally and on `origin/main` before this installation note.
+- Retained VSIX: `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.6a01d16c5c719ddf5cb59ed01eadf37e3dfa94065a6c10c1308088c5e9687cec.vsix`; 519,316,958 bytes; SHA-256 `6A01D16C5C719DDF5CB59ED01EADF37E3DFA94065A6C10C1308088C5E9687CEC`.
+- Installed directory: `C:\Users\User\.vscode\extensions\eden.raya-7.4.23-snapshot+17ff50e907.kamil-oseni.1789424534886`.
+- Installed CLI: 230,628,352 bytes; SHA-256 `9D84559CB9F305FE08941114B9351511DF228242318FA476674FC8AE27A8E236`.
+- Independent filesystem values match the vault manifest exactly. Cleanup removed one staged package and one old installed extension, and removed zero vault packages because the three-package rollback allowance was not exceeded. C: has 94,070,599,680 bytes free. No Bun or tsgo process remains.
+
+The active pointer remains `69aff4b80dfdb67185b60348dd805ea99e6faa7ea03d4d1cbb9096e753f2963d`; the open VS Code extension host has not reloaded through the newer snapshots. Require `6a01d16c5c719ddf5cb59ed01eadf37e3dfa94065a6c10c1308088c5e9687cec` after reload before active-host acceptance. Do not infer activation from successful installation or matching hashes.
+
+This installed package includes the full deterministic company provisioning, staged worker identity, bounded startup scan, exact group activation, historical-use proof and replay-safe abandoned cleanup sequence through product commit `762b2bb8a9`. Continue EN-02/OVR-05 with execution fencing, multi-store transaction review and representative organization execution. Do not spend another roughly 519 MB installation until the next coherent implementation batch.

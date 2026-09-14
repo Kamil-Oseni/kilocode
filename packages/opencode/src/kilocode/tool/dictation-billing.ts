@@ -47,7 +47,9 @@ export const run = Effect.fn("DictationBilling.run")(function* (
     if (lease) yield* lease.dispatch
     const response = yield* send
     const text = yield* Effect.promise(() => response.text())
-    if (!response.ok && lease) yield* lease.finish
+    const refused =
+      response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 499
+    if (refused && lease) yield* lease.finish
     if (response.ok && lease)
       yield* lease.uncertain("Kilo Gateway completed the transcription without an authoritative monetary receipt.")
     return { response, text }

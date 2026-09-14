@@ -67,6 +67,17 @@ describe("hosted dictation billing", () => {
     expect(events).toEqual(["dispatch", "finish", "release"])
   })
 
+  test("retains uncertainty for server failures and timeout responses", async () => {
+    for (const status of [408, 499, 500, 503]) {
+      const events: string[] = []
+      const result = await Effect.runPromise(
+        Billing.run(lease(events), Effect.succeed(new Response("lost", { status }))),
+      )
+      expect(result.response.status).toBe(status)
+      expect(events).toEqual(["dispatch", "release"])
+    }
+  })
+
   test("retains dispatched uncertainty when transport acknowledgement is lost", async () => {
     const events: string[] = []
     await expect(

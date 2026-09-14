@@ -1,5 +1,13 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-14 04:48 America/Toronto - Routine search identity boundary delivered
+
+Product commit `63a6bf8e66` (`fix(cli): retain routine search identity`) is on `origin/main` and is not installed yet. Glob and Grep now capture the canonical approved target's device/inode identity and give Core's validator to ripgrep. A target replaced at the same pathname during enumeration fails instead of letting the replacement disclose filenames or matching content. This extends the earlier static junction and approval-window checks through the actual search execution.
+
+The focused boundary suite passes 6 tests / 28 assertions, including a real directory replacement after identity capture. The actual Glob/Grep regressions pass 8 / 14 with 2 Windows skips. Prettier, one-thread Oxlint with zero errors, annotations, the Effect-facade guard and diff checks pass. Two old `split` warnings remain in Glob; no broad/high-memory check ran.
+
+Do not generalize this proof to mutation tools. Their last canonical pathname check and subsequent write still lack one kernel-held identity, so handle-safe commit and hard-link policy remain next filesystem work. Command/OS sandboxing, live escalation receipts, trusted-plugin enforcement, browser/delegation dispatch and installed representative Routine acceptance also remain open. Installed source remains `8c4ac51fba`; batch this small source checkpoint into a later low-memory snapshot.
+
 ## ChatGPT 2026-09-14 04:41 America/Toronto - Routine path-hardening snapshot installed
 
 Source `8c4ac51fba` is installed as `eden.raya@7.4.23-snapshot+8c4ac51fba.kamil-oseni.1789375066473`; it contains filesystem-alias product commit `97eee22dd0`. Retained VSIX: `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.083140e431619a7103267a6e7034bfc1d7bcc19b25a29a20750acc4cf5efb1ab.vsix`; 518,892,062 bytes; SHA-256 `083140E431619A7103267A6E7034BFC1D7BCC19B25A29A20750ACC4CF5EFB1AB`. Installed directory: `C:\Users\User\.vscode\extensions\eden.raya-7.4.23-snapshot+8c4ac51fba.kamil-oseni.1789375066473`; timestamp 2026-09-14 04:40:28 -04:00. Embedded Windows CLI: 230,240,768 bytes; SHA-256 `EB43DD52EA4E68EAEB3FD91DE0AF8DC18875F46E4B38E536387C00CB1C2171B5`, exactly matching `packages.json`.

@@ -1,5 +1,13 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-14 18:47 America/Toronto - Organization authority linearized inside owned startup
+
+**Status: product commit `0508dd1593` is verified and pushed to `origin/main`; it is intentionally not installed alone.** Delegated startup now repeats organization authority and deadline checks inside the worker's durable startup claim, in its read-only verification phase. This is the admission point: a company edit before that check denies the saved request; an edit after admission affects future requests and does not retroactively rewrite admitted in-flight work. The original preflight remains for an immediate persisted failure response, while the owned recheck closes the race during claim acquisition.
+
+The adverse test writes the worker claim, pauses its storage call before the runner can continue, changes the company from revision 1 to revision 2, and then releases startup. Raya creates no session, run or startup snapshot; it marks the delegation failed with the exact authority reason and removes the deterministic-denial claim rather than misclassifying it as an uncertain session attempt. The Routine delegation runner passes **9 / 78** and the combined delegation suites previously pass **16 / 164**. The complete scheduler regression passes **28 / 406** after the final guard placement. Scoped one-thread Oxlint reports zero errors, zero new warnings and 16 older wider-file warnings. Annotation, Effect Promise-facade, Markdown-table and diff guards pass; no broad/high-memory checker ran and no Bun or tsgo process remained.
+
+EN-02 and OVR-05 remain **In progress** for cancellation ownership, superseded/late result rejection, full multi-store recovery and representative company execution through real integrations. Installed source remains `17ff50e907`, with active-host digest still older until reload.
+
 ## ChatGPT 2026-09-14 18:36 America/Toronto - Queued organization execution fenced
 
 **Status: product commit `4044e6ba08` is verified and pushed to `origin/main`; it is intentionally not installed as a standalone snapshot.** Organization-scoped delegation now carries its admitted `organizationRevision` into the start-time policy check. A request queued under revision 1 cannot begin after the company changes to revision 2, even when the same workers and route still exist: Raya marks the durable request failed with `The organization no longer authorizes this delegation.`, creates no replacement session and leaves no running recipient run.

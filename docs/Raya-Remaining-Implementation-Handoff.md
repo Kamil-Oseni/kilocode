@@ -1,12 +1,20 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-14 05:25 America/Toronto - Formatter target isolation delivered
+
+Product commit `61f2465c43` is on `origin/main` and is not installed yet. Write and Edit now ask the formatter service whether the reviewed extension has a matching enabled formatter, prepare proposed bytes in a scoped `raya-format-*` temporary file with that extension, run the formatter against the temporary `$FILE`, decode its result, clean staging, and commit only through the checked destination handle. Project-cwd formatter configuration and sequential formatter ordering remain intact; backend credentials remain excluded.
+
+Do not call this success-only coverage. Write is 21/47 and proves a distinct temporary formatter pathname, cleanup, replacement-target preservation after a formatter actually ran, and unchanged reviewed bytes when the formatter deletes staging. Edit is 34/77 and proves its own staged path, cleanup and deleted-stage refusal, plus the previous replacement/concurrent edit/hard-link cases. Format and its sandbox service boundary are 12 pass with 4 platform skips / 23 assertions; encoding is 48/90. All relevant guards pass. A malicious trusted formatter can still derive another pathname itself; this change removes the destination supplied through `$FILE` and does not replace command confinement.
+
+Continue with Apply Patch as a staged multi-file transaction. Its updates, creates, deletes and moves must validate all reviewed preconditions before the first destination mutation, stage formatted outputs privately, and have explicit rollback/crash semantics. Then handle artifact/image replacement and safe parent-directory creation. Installed source remains `8c4ac51fba`; include `ac434889d4`, `384a481693` and `61f2465c43` in the next sequential low-memory snapshot batch.
+
 ## ChatGPT 2026-09-14 05:12 America/Toronto - Checked existing-file Edit delivered
 
 Product commit `384a481693` is on `origin/main` and is not installed yet. Existing-file Edit now captures the canonical target's native identity and exact encoded-byte hash before approval and commits through the same validating handle used by Write. Canonical aliases share the edit semaphore. Creation through Edit writes the reviewed canonical path; formatter BOM synchronization uses a newly validated handle.
 
 Adverse evidence is mandatory: the complete Edit file passes 32/71, including same-path replacement, same-inode user modification and hard-link refusal. Every refusal preserves all original and replacement bytes. The existing serialized concurrent-edit, BOM/encoding, line-ending, ambiguous-match, invalid-input, event and creation cases remain green. Junction/path regression is 6/28. Product commit `ac434889d4` provides the worker primitive and Write integration; `384a481693` extends it to Edit.
 
-Continue with formatter isolation first, then staged Apply Patch validation/commit, artifact and image replacement, safe parent-directory creation, deletes and moves. Do not describe PR-04 as complete until those paths, command/OS confinement, escalation receipts, trusted-plugin enforcement and installed representative Routine work have evidence. Installed source remains `8c4ac51fba`; batch these small checkpoints into a later sequential low-memory install.
+Formatter isolation is completed in `61f2465c43`. Continue with staged Apply Patch validation/commit, artifact and image replacement, safe parent-directory creation, deletes and moves. Do not describe PR-04 as complete until those paths, command/OS confinement, escalation receipts, trusted-plugin enforcement and installed representative Routine work have evidence. Installed source remains `8c4ac51fba`; batch these small checkpoints into a later sequential low-memory install.
 
 ## ChatGPT 2026-09-14 05:03 America/Toronto - Checked existing-file writes implemented for Write
 
@@ -18,13 +26,13 @@ Next implementation steps, in order:
 
 1. Keep `bun run script/check-opencode-annotations.ts --worktree`, the Promise-facade guard and `git diff --check` green as the boundary expands. They pass at this checkpoint.
 2. Review the new low-level write loop for partial-write and close-error reporting, then keep the focused sandbox and Write/path suites green. Do not weaken the hard-link refusal or accept rounded JavaScript inode numbers; Windows file IDs can exceed the safe integer range, which is why the protocol uses decimal strings and native bigint stats.
-3. Move formatter execution onto a temporary reviewed copy with the original extension and project working directory. Read the formatter result, then commit those bytes to the approved canonical file through the checked handle. Until this exists, document the external formatter pathname race explicitly and do not claim complete Write confinement.
+3. **Completed in `61f2465c43`:** formatter execution uses a scoped temporary copy with the original extension and project working directory, and Write/Edit commit its decoded output through the approved checked handle.
 4. **Completed in `384a481693`:** existing-file Edit uses the same pre-approval hash/identity and post-approval checked handle, with real replacement, concurrent-user-edit and hard-link no-mutation tests. Encoding and BOM behavior remain green.
 5. Design multi-file Apply Patch as a staged transaction. Validate every existing input before the first mutation, prepare outputs in private temporary files, fail without changing any destination when validation fails, and define rollback/crash behavior for moves and deletes. Do not pretend a sequence of pathname checks is atomic.
 6. Route existing artifact/image replacement through a checked or atomic reviewed commit boundary. Keep their current no-output-on-denial tests and add stale identity/content and hard-link cases. Treat new-file parent replacement as a separate open problem requiring a parent-directory handle or platform-specific safe-create primitive.
 7. Product commit `ac434889d4` and its patch changeset are on `origin/main`. Batch it into the next authorized low-memory snapshot after another bounded checkpoint. Installed source is still `8c4ac51fba`; reload and installed-host acceptance remain separate evidence.
 
-Known limitations that must stay visible: existing Write and Edit targets are protected by the new handle today; new-file parent creation, formatter invocation, Apply Patch, deletes, moves and other output tools remain pathname based; truncation plus descriptor writes are not crash-atomic; this does not establish command confinement, trusted-plugin policy or a complete operating-system sandbox.
+Known limitations that must stay visible: existing Write and Edit targets are protected by the new handle and ordinary `$FILE` formatters are staged today; new-file parent creation, Apply Patch, deletes, moves and other output tools remain pathname based; truncation plus descriptor writes are not crash-atomic; a trusted formatter can compute other paths itself; this does not establish command confinement, trusted-plugin policy or a complete operating-system sandbox.
 
 ## ChatGPT 2026-09-14 04:48 America/Toronto - Routine search identity boundary delivered
 

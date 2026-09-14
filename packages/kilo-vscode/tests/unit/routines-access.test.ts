@@ -81,3 +81,35 @@ test("access review sends only a conditional update and correlates confirmation 
     error: "The saved access could not be confirmed. Reload the routine before trying again.",
   })
 })
+
+test("access review lists exact tools for each connected service", async () => {
+  const calls: Request[] = []
+  const messages: unknown[] = []
+  const client = createKiloClient({
+    baseUrl: "http://localhost:4096",
+    fetch: async (input, init) => {
+      const request = new Request(input, init)
+      calls.push(request)
+      return Response.json({
+        services: [{ name: "github", tools: ["github_create_issue", "github_read_issue"] }],
+        truncated: false,
+      })
+    },
+  })
+  await handleRoutineMessage({
+    client,
+    directory: "workspace",
+    post: (msg) => messages.push(msg),
+    message: { type: "routineAuthorityServices", requestID: "catalog" },
+  })
+  expect(calls).toHaveLength(1)
+  expect(calls[0].method).toBe("GET")
+  expect(new URL(calls[0].url).pathname).toBe("/kilocode/agent-authority/services")
+  expect(new URL(calls[0].url).searchParams.get("directory")).toBe("workspace")
+  expect(messages[0]).toEqual({
+    type: "routineAuthorityServices",
+    requestID: "catalog",
+    services: [{ name: "github", tools: ["github_create_issue", "github_read_issue"] }],
+    truncated: false,
+  })
+})

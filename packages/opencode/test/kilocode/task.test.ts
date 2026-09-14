@@ -11,6 +11,7 @@ import { Storage } from "@/storage/storage"
 import { Permission } from "@/permission"
 import { SessionID } from "@/session/schema"
 import { RayaTask } from "@/kilocode/task"
+import { RayaTaskAuthority } from "@/kilocode/task/authority"
 import { RayaTaskDelegation } from "@/kilocode/task/delegation"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
@@ -1684,6 +1685,26 @@ describe("RayaTask store", () => {
     expect([...Permission.disabled(tools, Permission.merge(Permission.fromConfig({ "*": "allow" }), denied))]).toEqual(
       tools.filter((tool) => tool !== "read"),
     )
+  })
+
+  test("grants only the exact tools selected from a connected service", () => {
+    const catalog = RayaTaskAuthority.catalog({
+      github_create_issue: { clientName: "github" },
+      github_read_issue: { clientName: "github" },
+      slack_send_message: { clientName: "slack" },
+    })
+    expect(catalog).toEqual({
+      services: [
+        { name: "github", tools: ["github_create_issue", "github_read_issue"] },
+        { name: "slack", tools: ["slack_send_message"] },
+      ],
+      truncated: false,
+    })
+    const rules = RayaTask.rules({ role: "generalist", access: "full", tools: catalog.services[0]!.tools })
+    expect(Permission.evaluate("github_create_issue", "*", rules).action).toBe("allow")
+    expect(Permission.evaluate("github_read_issue", "*", rules).action).toBe("allow")
+    expect(Permission.evaluate("slack_send_message", "*", rules).action).toBe("deny")
+    expect(Permission.evaluate("mcp_*", "*", rules).action).toBe("deny")
   })
 })
 

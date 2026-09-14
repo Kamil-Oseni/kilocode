@@ -208,6 +208,18 @@ const calendar = (message: WebviewMessage) => {
 }
 
 const preview = (message: WebviewMessage) => {
+  if (message.type === "routineAuthorityServices") {
+    emit({
+      type: "routineAuthorityServices",
+      requestID: message.requestID,
+      services: [
+        { name: "GitHub", tools: ["github_create_issue", "github_read_issue"] },
+        { name: "Slack", tools: ["slack_send_message"] },
+      ],
+      truncated: false,
+    })
+    return true
+  }
   if (message.type === "routineAccessUpdate") {
     books.access = message.access
     books.tools = message.tools

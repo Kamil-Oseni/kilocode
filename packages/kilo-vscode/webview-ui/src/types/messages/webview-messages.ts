@@ -170,6 +170,11 @@ export interface RoutineAccessUpdateMessage {
   expectedTools: string[] | "unset"
 }
 
+export interface RoutineAuthorityServicesRequestMessage {
+  type: "routineAuthorityServices"
+  requestID: string
+}
+
 export interface RoutineRunMessage {
   type: "routineRun"
   agentID: string
@@ -1956,6 +1961,7 @@ export type WebviewMessage =
   | RoutineCreateMessage
   | RoutineUpdateMessage
   | RoutineAccessUpdateMessage
+  | RoutineAuthorityServicesRequestMessage
   | RoutineOutputUpdateMessage
   | RoutineRunMessage
   | RoutineRunsMessage

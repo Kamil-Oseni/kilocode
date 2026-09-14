@@ -120,6 +120,7 @@ async function reschedule(ctx: Ctx) {
 const replies: Record<string, string> = {
   routineOutputUpdate: "routineOutputUpdated",
   routineAccessUpdate: "routineAccessUpdated",
+  routineAuthorityServices: "routineAuthorityServices",
   routineArchive: "routineArchive",
   routineSnapshot: "routineSnapshot",
   routineRecoveryClose: "routineRecoveryClosed",
@@ -236,6 +237,7 @@ const messages = new Set([
   "routineList",
   "routineOutputUpdate",
   "routineAccessUpdate",
+  "routineAuthorityServices",
   "routineForecast",
   "routineScheduleUpdate",
   "routineCreate",
@@ -830,6 +832,36 @@ async function review(ctx: Ctx) {
   })
 }
 
+async function services(ctx: Ctx) {
+  const msg = ctx.message
+  if (typeof msg.requestID !== "string" || !msg.requestID || msg.requestID.length > 128)
+    throw new Error("Reload the routine before reviewing connected services.")
+  const result = await ctx.kilo.authorityServices({ directory: ctx.dir }, { throwOnError: true })
+  const data = result.data
+  if (
+    !data ||
+    typeof data.truncated !== "boolean" ||
+    !Array.isArray(data.services) ||
+    data.services.length > 64 ||
+    data.services.some(
+      (item) =>
+        !item ||
+        typeof item.name !== "string" ||
+        !item.name.trim() ||
+        item.name.length > 128 ||
+        !Array.isArray(item.tools) ||
+        item.tools.length < 1 ||
+        item.tools.length > 512 ||
+        item.tools.some((tool) => typeof tool !== "string" || !tool.trim() || tool.length > 256) ||
+        new Set(item.tools).size !== item.tools.length,
+    ) ||
+    new Set(data.services.map((item) => item.name)).size !== data.services.length ||
+    new Set(data.services.flatMap((item) => item.tools)).size !== data.services.flatMap((item) => item.tools).length
+  )
+    throw new Error("The connected service list could not be verified. Reload the routine.")
+  ctx.post({ type: "routineAuthorityServices", requestID: msg.requestID, ...data })
+}
+
 async function output(ctx: Ctx) {
   const msg = ctx.message
   if ([msg.requestID, msg.agentID].some((id) => typeof id !== "string" || !id || id.length > 256))
@@ -972,6 +1004,7 @@ async function archive(ctx: Ctx) {
 const routes: Record<string, (ctx: Ctx) => Promise<void>> = {
   routineOutputUpdate: output,
   routineAccessUpdate: review,
+  routineAuthorityServices: services,
   routineArchive: archive,
   routineSnapshot: snapshot,
   routineRecoveryClose: resolve,

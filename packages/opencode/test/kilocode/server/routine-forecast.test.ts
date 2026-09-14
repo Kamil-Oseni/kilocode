@@ -5,6 +5,7 @@ import { RayaRoutineArchiveTable, RayaRoutineArchiveImportTable } from "@opencod
 import { RayaTaskQueue } from "@/kilocode/task/queue"
 import { Server } from "@/server/server"
 import { RayaTask } from "@/kilocode/task"
+import { RayaTaskAuthority } from "@/kilocode/task/authority"
 import { Template } from "@/kilocode/task/templates"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
 import { createHash } from "node:crypto"
@@ -17,6 +18,16 @@ import { disposeAllInstances, tmpdir } from "../../fixture/fixture"
 afterEach(async () => {
   await disposeAllInstances()
   await resetDatabase()
+})
+
+test("routine authority service catalog is available through the HTTP boundary", async () => {
+  await using directory = await tmpdir({ git: true })
+  const response = await Server.Default().app.request("/kilocode/agent-authority/services", {
+    headers: { "x-kilo-directory": directory.path },
+  })
+  expect(response.status).toBe(200)
+  const catalog = Schema.decodeUnknownSync(Schema.toCodecJson(RayaTaskAuthority.Catalog))(await response.json())
+  expect(catalog.services.every((service) => service.name.length > 0 && service.tools.length > 0)).toBe(true)
 })
 
 test("routine capability errors identify the missing decision without saving a routine", async () => {

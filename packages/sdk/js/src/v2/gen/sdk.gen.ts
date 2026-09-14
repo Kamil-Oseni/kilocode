@@ -261,6 +261,8 @@ import type {
   KilocodeRoutineArchiveResponses,
   KilocodeRoutineAuthorityErrors,
   KilocodeRoutineAuthorityResponses,
+  KilocodeRoutineAuthorityServicesErrors,
+  KilocodeRoutineAuthorityServicesResponses,
   KilocodeRoutineCreateErrors,
   KilocodeRoutineCreateResponses,
   KilocodeRoutineDelegateCancelErrors,
@@ -9899,6 +9901,40 @@ export class Routine extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * List connected service tools for routine access
+   *
+   * List the exact currently connected MCP tool keys grouped by service so a routine can save a narrow service grant.
+   */
+  public authorityServices<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      KilocodeRoutineAuthorityServicesResponses,
+      KilocodeRoutineAuthorityServicesErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/agent-authority/services",
+      ...options,
+      ...params,
     })
   }
 

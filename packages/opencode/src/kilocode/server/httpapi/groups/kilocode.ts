@@ -30,6 +30,7 @@ import { SessionID } from "@/session/schema"
 import { CommandFiles } from "@/kilocode/command-files"
 import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal API contracts
 import { RayaTask } from "@/kilocode/task"
+import { RayaTaskAuthority } from "@/kilocode/task/authority"
 import {
   AttachmentContent as InboxAttachmentContent,
   Draft as InboxDraft,
@@ -209,6 +210,7 @@ export const KilocodePaths = {
   agentForecast: `${root}/agent-forecast`,
   agentItem: `${root}/agent/:agentID`,
   agentAuthority: `${root}/agent/:agentID/provisioning`,
+  agentAuthorityServices: `${root}/agent-authority/services`,
   agentRun: `${root}/agent/:agentID/run`,
   agentRecovery: `${root}/agent/:agentID/runs/:runID/recovery`,
   agentRuns: `${root}/agent/:agentID/runs`,
@@ -704,6 +706,17 @@ export const KilocodeApi = HttpApi.make("kilocode")
             identifier: "kilocode.routine.list",
             summary: "List assigned agents",
             description: "List persistent role-based agents and their standing jobs.",
+          }),
+        ),
+        HttpApiEndpoint.get("agentAuthorityServices", KilocodePaths.agentAuthorityServices, {
+          query: WorkspaceRoutingQuery,
+          success: described(RayaTaskAuthority.Catalog, "Connected routine service tools"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.authorityServices",
+            summary: "List connected service tools for routine access",
+            description:
+              "List the exact currently connected MCP tool keys grouped by service so a routine can save a narrow service grant.",
           }),
         ),
         HttpApiEndpoint.get("agentArchive", KilocodePaths.agentArchive, {

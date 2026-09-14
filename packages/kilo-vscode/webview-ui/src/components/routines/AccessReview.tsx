@@ -23,7 +23,6 @@ const groups = [
   { name: "Commands", tools: ["bash", "background_process", "interactive_terminal"] },
   { name: "Browser and web", tools: ["browser_*", "websearch", "webfetch"] },
   { name: "Delegation", tools: ["inspect_team", "task", "delegate_work"] },
-  { name: "Connected services", tools: ["mcp_*"] },
 ] as const
 const known = new Set<string>(groups.flatMap((group) => [...group.tools]))
 type Profile = "" | "brief" | "selected" | "full"
@@ -44,12 +43,29 @@ export function AccessReview(props: {
   const [choice, setChoice] = createSignal<Profile>("")
   const [selected, setSelected] = createSignal([...initial])
   const [request, setRequest] = createSignal("")
+  const [catalog, setCatalog] = createSignal<Array<{ name: string; tools: string[] }>>([])
+  const [catalogRequest, setCatalogRequest] = createSignal("")
+  const [catalogError, setCatalogError] = createSignal("")
+  const [truncated, setTruncated] = createSignal(false)
   const [error, setError] = createSignal("")
   const [saved, setSaved] = createSignal(false)
-  const extras = createMemo(() => selected().filter((tool) => !known.has(tool)))
+  const covered = createMemo(
+    () =>
+      new Set(
+        catalog()
+          .filter((service) => service.tools.every((tool) => selected().includes(tool)))
+          .flatMap((service) => service.tools),
+      ),
+  )
+  const extras = createMemo(() => selected().filter((tool) => !known.has(tool) && !covered().has(tool)))
   let root: HTMLElement | undefined
   let timer: ReturnType<typeof setTimeout> | undefined
-  onMount(() => root?.focus())
+  onMount(() => {
+    root?.focus()
+    const requestID = crypto.randomUUID()
+    setCatalogRequest(requestID)
+    vscode.postMessage({ type: "routineAuthorityServices", requestID })
+  })
   const tools = () => {
     if (choice() === "brief") return reads
     if (choice() === "full") return ["*"]
@@ -62,6 +78,16 @@ export function AccessReview(props: {
       return [...prior, ...items.filter((item) => !prior.includes(item))]
     })
   const unsub = vscode.onMessage((msg) => {
+    if (msg.type === "routineAuthorityServices" && msg.requestID === catalogRequest()) {
+      setCatalogRequest("")
+      if (msg.error) {
+        setCatalogError([msg.error, msg.recovery?.next].filter(Boolean).join(" "))
+        return
+      }
+      setCatalog(msg.services ?? [])
+      setTruncated(msg.truncated === true)
+      return
+    }
     if (
       msg.type !== "routineAccessUpdated" ||
       msg.agentID !== props.item.id ||
@@ -148,6 +174,28 @@ export function AccessReview(props: {
               </Checkbox>
             )}
           </For>
+          <p class="routines-hint">Connected services</p>
+          <For each={catalog()}>
+            {(service) => (
+              <Checkbox checked={checked(service.tools)} onChange={(on) => toggle(service.tools, on)}>
+                {service.name} ({service.tools.length} tool{service.tools.length === 1 ? "" : "s"})
+              </Checkbox>
+            )}
+          </For>
+          <Show when={catalogRequest()}>
+            <p class="routines-hint">Checking connected services.</p>
+          </Show>
+          <Show when={!catalogRequest() && catalog().length === 0 && !catalogError()}>
+            <p class="routines-hint">No connected services are available.</p>
+          </Show>
+          <Show when={catalogError()}>
+            <p role="alert" class="routines-error">
+              {catalogError()}
+            </p>
+          </Show>
+          <Show when={truncated()}>
+            <p class="routines-hint">Some connected tools aren't shown. Only the tools listed here can be saved.</p>
+          </Show>
           <For each={extras()}>
             {(tool) => (
               <Checkbox checked onChange={(on) => toggle([tool], on)}>

@@ -22404,6 +22404,42 @@ export type KilocodeRoutineCreateResponses = {
 
 export type KilocodeRoutineCreateResponse = KilocodeRoutineCreateResponses[keyof KilocodeRoutineCreateResponses]
 
+export type KilocodeRoutineAuthorityServicesData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/agent-authority/services"
+}
+
+export type KilocodeRoutineAuthorityServicesErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type KilocodeRoutineAuthorityServicesError =
+  KilocodeRoutineAuthorityServicesErrors[keyof KilocodeRoutineAuthorityServicesErrors]
+
+export type KilocodeRoutineAuthorityServicesResponses = {
+  /**
+   * Connected routine service tools
+   */
+  200: {
+    services: Array<{
+      name: string
+      tools: Array<string>
+    }>
+    truncated: boolean
+  }
+}
+
+export type KilocodeRoutineAuthorityServicesResponse =
+  KilocodeRoutineAuthorityServicesResponses[keyof KilocodeRoutineAuthorityServicesResponses]
+
 export type KilocodeRoutineArchiveData = {
   body?: never
   path?: never

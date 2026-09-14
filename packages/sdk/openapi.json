@@ -30627,6 +30627,94 @@
         ]
       }
     },
+    "/kilocode/agent-authority/services": {
+      "get": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.routine.authorityServices",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Connected routine service tools",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "services": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "pattern": "\\S",
+                            "maxLength": 128
+                          },
+                          "tools": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "pattern": "\\S",
+                              "maxLength": 256
+                            },
+                            "minItems": 1,
+                            "maxItems": 512
+                          }
+                        },
+                        "required": ["name", "tools"],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 64
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["services", "truncated"],
+                  "additionalProperties": false,
+                  "description": "Connected routine service tools"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "List the exact currently connected MCP tool keys grouped by service so a routine can save a narrow service grant.",
+        "summary": "List connected service tools for routine access",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.routine.authorityServices({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/kilocode/agent-archive": {
       "get": {
         "tags": ["kilocode"],

@@ -34,6 +34,8 @@ import { Snapshot } from "@/snapshot" // raya_change - durable goal workspace ch
 import { Storage } from "@/storage/storage" // raya_change - Milestone A durable goal storage
 import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal operations
 import { RayaTask } from "@/kilocode/task"
+import { RayaTaskAuthority } from "@/kilocode/task/authority"
+import { MCP } from "@/mcp"
 import { RayaTaskInbox, type Draft as InboxDraft, type Upload as InboxUpload } from "@/kilocode/task/inbox"
 import { RayaTaskInfo, type Identity as TaskIdentity } from "@/kilocode/task/info"
 import { RayaTaskDelegation, type Request as DelegationRequest } from "@/kilocode/task/delegation"
@@ -100,6 +102,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     const locations = yield* LocationServiceMap.Service
     const sessions = yield* Session.Service // raya_change - Milestone A goal state and evidence
     const storage = yield* Storage.Service // raya_change - Milestone A durable goal storage
+    const mcp = yield* MCP.Service
     const goals = RayaGoal.make({ storage, sessions }) // raya_change - Milestone A goal operations
     const database = yield* Database.Service
     const runner = RayaTaskRunner.make({
@@ -546,6 +549,9 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     })
     const agentList = Effect.fn("KilocodeHttpApi.agentList")(function* () {
       return yield* runner.preview(Date.now())
+    })
+    const agentAuthorityServices = Effect.fn("KilocodeHttpApi.agentAuthorityServices")(function* () {
+      return RayaTaskAuthority.catalog(yield* mcp.tools())
     })
     const agentCreate = Effect.fn("KilocodeHttpApi.agentCreate")(function* (ctx: {
       payload: typeof TaskCreatePayload.Type
@@ -1069,6 +1075,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .handle("checkpointRemove", checkpointRemove)
         .handle("agentForecast", agentForecast)
         .handle("agentList", agentList)
+        .handle("agentAuthorityServices", agentAuthorityServices)
         .handle("agentArchive", (ctx) =>
           runner.tasks
             .page(ctx.query)

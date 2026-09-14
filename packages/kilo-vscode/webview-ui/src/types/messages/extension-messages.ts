@@ -257,6 +257,15 @@ export interface RoutineAccessUpdatedMessage {
   recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
 }
 
+export interface RoutineAuthorityServicesMessage {
+  type: "routineAuthorityServices"
+  requestID: string
+  services?: Array<{ name: string; tools: string[] }>
+  truncated?: boolean
+  error?: string
+  recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
+}
+
 export interface RoutineSnapshotMessage {
   type: "routineSnapshot"
   requestID: string
@@ -1895,6 +1904,7 @@ export type ExtensionMessage =
   | RoutineSnapshotMessage
   | RoutineRecoveryClosedMessage
   | RoutineAccessUpdatedMessage
+  | RoutineAuthorityServicesMessage
   | RoutineOutputUpdatedMessage
   | RoutineArchiveMessage
   | RoutineStartedMessage

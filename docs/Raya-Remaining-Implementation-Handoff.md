@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **CURRENT STATUS (2026-09-13):** ChatGPT reviewed and repaired Grok's work, delivered the product checkpoints detailed below, completed the automated OVR-09 self-heal publication/cleanup boundary, fixed local snapshot retention after clearing the accumulated artifacts and added native XLSX creation. Latest pushed product commit: `5a80d1d2e9`; latest installed snapshot source: `f92ca44782`. The installed vault marks that version active and its backend is running. Remaining: the unfinished audit requirements, richer document/spreadsheet/slide workflows, further authoritative tool/external goal accounting and external deliverable associations, possible durable cross-backend reservation coordination, full live rebuild-survival acceptance, paid GPT-Live/device acoustic acceptance, packaged VS Code microphone consent, EN-10 authenticated container acceptance, representative Routine company execution through real integrations, and the retained browser self-heal attempt inspection/original-failure workflow. Codex-derived work stays deferred.
+> **CURRENT STATUS (2026-09-13):** ChatGPT reviewed and repaired Grok's work, delivered the product checkpoints detailed below, completed the automated OVR-09 self-heal publication/cleanup boundary, fixed local snapshot retention after clearing the accumulated artifacts and added native XLSX and DOCX creation. Latest pushed product commit: `becaa285e3`; latest installed snapshot source: `f92ca44782`. The installed vault marks that version active and its backend is running. Remaining: the unfinished audit requirements, slide generation and richer artifact editing, further authoritative tool/external goal accounting and external deliverable associations, possible durable cross-backend reservation coordination, full live rebuild-survival acceptance, paid GPT-Live/device acoustic acceptance, packaged VS Code microphone consent, EN-10 authenticated container acceptance, representative Routine company execution through real integrations, and the retained browser self-heal attempt inspection/original-failure workflow. Codex-derived work stays deferred.
 
 > **CURRENT ROUTINES REQUIREMENT:** Implement the agent-DM inbox, in-place reports/follow-ups and tracked worker-to-worker delegation specified in [Routines direction](#routines-direction-agent-dm-inbox-and-company-delegation). This expands current OVR-05 acceptance; it is not deferred Codex work.
 
@@ -9,6 +9,14 @@
 Updated 2026-09-13. This is a continuation guide, not a completion certificate.
 
 **Latest installed product:** `eden.raya@7.4.23-snapshot+f92ca44782.kamil-oseni.1789345490928` is installed and active in at least one VS Code window. Its package-vault artifact is `raya.a1fda15e2d6ec67a40f4e039dc2a3aa7ed51a315b1a50522806daa3cf2c39dbe.vsix`; the staged duplicate was intentionally removed during disk cleanup. Product commit `8b7300ce7c` changes the local snapshot installer itself and therefore needs no separate extension activation: the next successful `snapshot:install` invokes it.
+
+## ChatGPT 2026-09-13 21:08 America/Toronto - native DOCX creation checkpoint
+
+Product commit `becaa285e3` is on `origin/main`. `create_document` accepts a bounded ordered block model for a title, author, level 1–3 headings, paragraphs, bullets and numbered lists, then creates a complete WordprocessingML `.docx` through the repository's existing ZIP dependency. It owns its styles and numbering parts, XML-escapes user content, uses page margins and readable type sizes, asks for `edit` before producing bytes, writes through a same-directory temporary file, emits file events and captures the standard versioned artifact receipt.
+
+The real test reads the generated file through the production Mammoth extraction path. It verifies the title, headings, paragraph, escaped ampersand, bullet items, numbered items, approval sequence and receipt. A denied replacement preserves the exact bytes; an approved replacement is readable and removes the prior content. Non-DOCX and whitespace-only attempts leave no file. The capability suite passes 6 / 6 with 76 assertions, and the scoped formatting/lint/architecture checks pass. The explicit limits are part of the user contract: no template import, images, tables, tracked changes, partial preservation or identical pagination promise.
+
+Implement slide generation next only with the same standard: a bounded semantic slide schema, a real `.pptx` package, edit approval, atomic replacement, artifact receipt and production-reader or package-level round trip. Then run one low-memory snapshot for XLSX, DOCX, slides and installer pruning together. Verify afterward that `%TEMP%\raya-vscode-snapshots` is empty, installed snapshots remain bounded and the vault still contains the rollback chain.
 
 ## ChatGPT 2026-09-13 20:58 America/Toronto - native XLSX creation checkpoint
 
@@ -791,7 +799,7 @@ The following sections retain the full 39-item scope. Related findings and overh
 
 ### OVR-08 — Broad work tools with discoverable capabilities
 
-**Recorded status:** In progress. Added bounded local-work discovery from known builtin identities after final turn filtering; no authority expansion. Actual permission filtering and XLSX-to-Markdown artifact workflow pass four tests/35 assertions. Connected domain packs, deferred schemas, rich artifact generation/export and broader work evaluations remain open.
+**Recorded status:** In progress. Bounded final-turn capability discovery and real permissioned XLSX/DOCX writers are delivered. Both formats round-trip through Raya's production readers and return versioned artifact receipts. Slide generation, richer editing, connected domain packs and broader work evaluations remain open.
 
 **Implementation and verification:**
 

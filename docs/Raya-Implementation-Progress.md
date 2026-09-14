@@ -4872,6 +4872,8 @@ The official [Realtime conversation guide](https://developers.openai.com/api/doc
 
 ## ChatGPT 2026-09-14 08:00 America/Toronto - GPT-Live continuous session reservation guard
 
+Product commit `a846b9a8d7` is on `origin/main`.
+
 The GPT-Live reservation now remains held for the billable provider session instead of being finalized as soon as the durable binding is created. The authenticated reservation acknowledgement exposes its USD amount and a server-computed whole-second allowance derived from the same versioned $0.05-per-minute rate used for final charges. The extension validates the amount, USD currency and allowance as one atomic contract before contacting OpenAI. Missing, partial, non-finite, non-positive or out-of-range pricing data fails closed. A reservation whose allowance cannot cover the cleanup margin is released without contacting the paid provider.
 
 For an admitted session, Raya starts a conservative local deadline before provider creation and closes the call 15 seconds before the reserved allowance is exhausted, leaving time for hangup and final duration delivery. Cleanup clears the deadline. A direct release request is now refused while a Live binding owns the reservation; this closes an adverse path found during review that could otherwise free goal capacity while the paid call remained active. Closing before the final duration stops the in-memory heartbeat but preserves the durable dispatched lease. A late immutable duration publishes the stable recorded charge and finalizes that exact lease. If no duration arrives, the existing expiry/recovery path records uncertainty rather than assuming zero cost.

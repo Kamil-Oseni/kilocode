@@ -1,5 +1,13 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-14 05:12 America/Toronto - Checked existing-file Edit delivered
+
+Product commit `384a481693` is on `origin/main` and is not installed yet. Existing-file Edit now captures the canonical target's native identity and exact encoded-byte hash before approval and commits through the same validating handle used by Write. Canonical aliases share the edit semaphore. Creation through Edit writes the reviewed canonical path; formatter BOM synchronization uses a newly validated handle.
+
+Adverse evidence is mandatory: the complete Edit file passes 32/71, including same-path replacement, same-inode user modification and hard-link refusal. Every refusal preserves all original and replacement bytes. The existing serialized concurrent-edit, BOM/encoding, line-ending, ambiguous-match, invalid-input, event and creation cases remain green. Junction/path regression is 6/28. Product commit `ac434889d4` provides the worker primitive and Write integration; `384a481693` extends it to Edit.
+
+Continue with formatter isolation first, then staged Apply Patch validation/commit, artifact and image replacement, safe parent-directory creation, deletes and moves. Do not describe PR-04 as complete until those paths, command/OS confinement, escalation receipts, trusted-plugin enforcement and installed representative Routine work have evidence. Installed source remains `8c4ac51fba`; batch these small checkpoints into a later sequential low-memory install.
+
 ## ChatGPT 2026-09-14 05:03 America/Toronto - Checked existing-file writes implemented for Write
 
 **Delivered in product commit `ac434889d4`; pushed, not yet installed:** PR-04 now contains a reusable `@kilocode/sandbox` checked-write operation and applies it to existing files changed by the production Write tool. Approval evidence consists of a native 64-bit device/inode identity encoded as decimal strings plus the exact pre-approval SHA-256. The confined worker opens the canonical destination once, validates identity, rejects `nlink !== 1`, reads and hashes the current bytes from that handle, and writes only through that same validated handle. Checked requests are forbidden inside serialized batches and force pending batches to flush, so a stale/refused result cannot arrive after the tool has continued. Active sandbox profiles route the request through the confined mutation worker; the no-profile path shares the same handle implementation.
@@ -11,12 +19,12 @@ Next implementation steps, in order:
 1. Keep `bun run script/check-opencode-annotations.ts --worktree`, the Promise-facade guard and `git diff --check` green as the boundary expands. They pass at this checkpoint.
 2. Review the new low-level write loop for partial-write and close-error reporting, then keep the focused sandbox and Write/path suites green. Do not weaken the hard-link refusal or accept rounded JavaScript inode numbers; Windows file IDs can exceed the safe integer range, which is why the protocol uses decimal strings and native bigint stats.
 3. Move formatter execution onto a temporary reviewed copy with the original extension and project working directory. Read the formatter result, then commit those bytes to the approved canonical file through the checked handle. Until this exists, document the external formatter pathname race explicitly and do not claim complete Write confinement.
-4. Apply the same pre-approval hash/identity and post-approval checked handle to existing-file Edit. Add real tests for replacement, concurrent user edit, hard link and no mutation on every refusal. Preserve encoding and BOM behavior.
+4. **Completed in `384a481693`:** existing-file Edit uses the same pre-approval hash/identity and post-approval checked handle, with real replacement, concurrent-user-edit and hard-link no-mutation tests. Encoding and BOM behavior remain green.
 5. Design multi-file Apply Patch as a staged transaction. Validate every existing input before the first mutation, prepare outputs in private temporary files, fail without changing any destination when validation fails, and define rollback/crash behavior for moves and deletes. Do not pretend a sequence of pathname checks is atomic.
 6. Route existing artifact/image replacement through a checked or atomic reviewed commit boundary. Keep their current no-output-on-denial tests and add stale identity/content and hard-link cases. Treat new-file parent replacement as a separate open problem requiring a parent-directory handle or platform-specific safe-create primitive.
 7. Product commit `ac434889d4` and its patch changeset are on `origin/main`. Batch it into the next authorized low-memory snapshot after another bounded checkpoint. Installed source is still `8c4ac51fba`; reload and installed-host acceptance remain separate evidence.
 
-Known limitations that must stay visible: only existing Write targets are protected by the new handle today; new-file parent creation, formatter invocation, Edit, Apply Patch, deletes, moves and other output tools remain pathname based; truncation plus descriptor writes are not crash-atomic; this does not establish command confinement, trusted-plugin policy or a complete operating-system sandbox.
+Known limitations that must stay visible: existing Write and Edit targets are protected by the new handle today; new-file parent creation, formatter invocation, Apply Patch, deletes, moves and other output tools remain pathname based; truncation plus descriptor writes are not crash-atomic; this does not establish command confinement, trusted-plugin policy or a complete operating-system sandbox.
 
 ## ChatGPT 2026-09-14 04:48 America/Toronto - Routine search identity boundary delivered
 

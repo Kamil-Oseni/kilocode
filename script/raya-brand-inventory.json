@@ -19,12 +19,12 @@
     },
     "internal-migration": {
       "count": 26562,
-      "digest": "27c32fb18eccb3d2d4b725e64a3811b2742ce71b49f9cdb93fe6229aa9eb6c82",
+      "digest": "4023d884e0ba139e184b87c998706bd151ea66abbed614451127de33b5dfbf62",
       "reason": "Internal source identity that can migrate after public and stored compatibility contracts stabilize."
     }
   },
   "total": {
     "count": 69200,
-    "digest": "adcc687b1b8e112f7e5a9d27db50cff35c095ae80f7e043d78a73a53972decd4"
+    "digest": "fd74a27cb45ebfc4d9b6cec23cefab93e960a3b161c35284347fe176b52473c8"
   }
 }

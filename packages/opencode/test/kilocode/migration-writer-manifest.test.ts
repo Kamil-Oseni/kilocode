@@ -14,6 +14,7 @@ describe("profile writer manifest", () => {
       "profile.credentials.auth",
       "profile.credentials.mcp",
       "profile.data.tool-output",
+      "profile.state.plugin-meta",
       "profile.state.sandbox-policy",
       "profile.state.sandbox-preference",
       "profile.storage.json",

@@ -328,10 +328,10 @@ export namespace ProfileWriterManifest {
         id: "profile.state.plugin-meta",
         roots: ["state"],
         sources: ["packages/opencode/src/plugin/meta.ts"],
-        methods: ["save", "update"],
+        methods: ["touch", "touchMany", "setTheme"],
         lifecycle: "Pin plugin-meta.json for each complete read-modify-write.",
         copyPolicy: "copy-after-drain",
-        coverage: unintegrated,
+        coverage: "integrated",
       }),
       writer({
         id: "profile.state.sandbox-policy",

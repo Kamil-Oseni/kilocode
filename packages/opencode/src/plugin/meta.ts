@@ -5,6 +5,8 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
 import { Filesystem } from "@/util/filesystem"
 import { Flock } from "@opencode-ai/core/util/flock"
+import { Effect } from "effect" // kilocode_change - profile migration admission
+import { ProfileWriterLive } from "@/kilocode/migration/writer-live" // kilocode_change - profile migration admission
 
 import { parsePluginSpecifier, pluginSource } from "./shared"
 
@@ -139,46 +141,73 @@ function next(prev: Entry | undefined, core: Core, now: number): { state: State;
   }
 }
 
-export async function touchMany(items: Touch[]): Promise<Array<{ state: State; entry: Entry }>> {
+// kilocode_change start - admit every plugin metadata mutation before selecting the active profile
+export async function touchMany(
+  items: Touch[],
+  admission: ProfileWriterLive.Admission = ProfileWriterLive.pluginMeta,
+): Promise<Array<{ state: State; entry: Entry }>> {
   if (!items.length) return []
-  const file = storePath()
-  const rows = await Promise.all(items.map((item) => row(item)))
 
-  return Flock.withLock(lock(file), async () => {
-    const store = await read(file)
-    const now = Date.now()
-    const out: Array<{ state: State; entry: Entry }> = []
-    for (const item of rows) {
-      const hit = next(store[item.id], item.core, now)
-      store[item.id] = hit.entry
-      out.push(hit)
-    }
-    await Filesystem.writeJson(file, store)
-    return out
-  })
+  return Effect.runPromise(
+    admission.run(
+      Effect.promise(async () => {
+        const file = storePath()
+        const rows = await Promise.all(items.map((item) => row(item)))
+        return Flock.withLock(lock(file), async () => {
+          const store = await read(file)
+          const now = Date.now()
+          const out: Array<{ state: State; entry: Entry }> = []
+          for (const item of rows) {
+            const hit = next(store[item.id], item.core, now)
+            store[item.id] = hit.entry
+            out.push(hit)
+          }
+          await Filesystem.writeJson(file, store)
+          return out
+        })
+      }),
+    ),
+  )
 }
 
-export async function touch(spec: string, target: string, id: string): Promise<{ state: State; entry: Entry }> {
-  return touchMany([{ spec, target, id }]).then((item) => {
+export async function touch(
+  spec: string,
+  target: string,
+  id: string,
+  admission: ProfileWriterLive.Admission = ProfileWriterLive.pluginMeta,
+): Promise<{ state: State; entry: Entry }> {
+  return touchMany([{ spec, target, id }], admission).then((item) => {
     const hit = item[0]
     if (hit) return hit
     throw new Error("Failed to touch plugin metadata.")
   })
 }
 
-export async function setTheme(id: string, name: string, theme: Theme): Promise<void> {
-  const file = storePath()
-  await Flock.withLock(lock(file), async () => {
-    const store = await read(file)
-    const entry = store[id]
-    if (!entry) return
-    entry.themes = {
-      ...entry.themes,
-      [name]: theme,
-    }
-    await Filesystem.writeJson(file, store)
-  })
+export async function setTheme(
+  id: string,
+  name: string,
+  theme: Theme,
+  admission: ProfileWriterLive.Admission = ProfileWriterLive.pluginMeta,
+): Promise<void> {
+  await Effect.runPromise(
+    admission.run(
+      Effect.promise(async () => {
+        const file = storePath()
+        await Flock.withLock(lock(file), async () => {
+          const store = await read(file)
+          const entry = store[id]
+          if (!entry) return
+          entry.themes = {
+            ...entry.themes,
+            [name]: theme,
+          }
+          await Filesystem.writeJson(file, store)
+        })
+      }),
+    ),
+  )
 }
+// kilocode_change end
 
 export async function list(): Promise<Store> {
   const file = storePath()

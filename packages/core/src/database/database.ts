@@ -5,10 +5,9 @@ import { layer as sqliteLayer } from "#sqlite"
 import { Context, Effect, Layer } from "effect"
 import { Global } from "../global"
 import { Flag } from "../flag/flag"
-import { isAbsolute, join } from "path"
-import { existsSync } from "fs" // kilocode_change
 import { DbPreflight } from "../kilocode/db-preflight" // kilocode_change
 import { ensure as compat } from "../kilocode/database-compat" // kilocode_change
+import { resolve } from "../kilocode/database-path" // kilocode_change
 import { DatabaseMigration } from "./migration"
 import { InstallationChannel } from "../installation/version"
 import { makeGlobalNode } from "../effect/app-node"
@@ -48,22 +47,13 @@ export function layerFromPath(filename: string) {
 }
 
 export function path() {
-  if (Flag.KILO_DB) {
-    if (Flag.KILO_DB === ":memory:" || isAbsolute(Flag.KILO_DB)) return Flag.KILO_DB
-    return join(Global.Path.data, Flag.KILO_DB)
-  }
-  if (
-    ["latest", "beta", "prod"].includes(InstallationChannel) ||
-    process.env.KILO_DISABLE_CHANNEL_DB === "1" ||
-    process.env.KILO_DISABLE_CHANNEL_DB === "true"
-  )
-    return join(Global.Path.data, "kilo.db")
-  // kilocode_change start - kilo-branded dev-channel db name, falling back to a pre-existing opencode-named db
-  const safe = InstallationChannel.replace(/[^a-zA-Z0-9._-]/g, "-")
-  const next = join(Global.Path.data, `kilo-${safe}.db`)
-  const prev = join(Global.Path.data, `opencode-${safe}.db`)
-  if (!existsSync(next) && existsSync(prev)) return prev
-  return next
+  // kilocode_change start - both database clients use one late-bound legacy path resolver before any profile cutover
+  return resolve({
+    data: Global.Path.data,
+    channel: InstallationChannel,
+    disabled: process.env.KILO_DISABLE_CHANNEL_DB === "1" || process.env.KILO_DISABLE_CHANNEL_DB === "true",
+    override: Flag.KILO_DB,
+  })
   // kilocode_change end
 }
 

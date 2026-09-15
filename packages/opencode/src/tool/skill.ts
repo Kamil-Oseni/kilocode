@@ -70,6 +70,7 @@ export const SkillTool = Tool.define(
               metadata: {
                 name: info.name,
                 dir: Skill.BUILTIN_LOCATION,
+                provenance: info.provenance, // kilocode_change - durable selected-source receipt
               },
             }
           }
@@ -106,6 +107,7 @@ export const SkillTool = Tool.define(
             metadata: {
               name: info.name,
               dir,
+              provenance: info.provenance, // kilocode_change - durable selected-source receipt
             },
           }
         }).pipe(Effect.orDie),

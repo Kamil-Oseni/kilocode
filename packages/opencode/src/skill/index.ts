@@ -21,6 +21,7 @@ import { isRecord } from "@/util/record"
 import { Flag } from "@opencode-ai/core/flag/flag" // kilocode_change
 import { escapeHtml } from "@/util/html"
 import { trustedInProject } from "../kilocode/skill/trust" // kilocode_change
+import { resolve, skillVersion, type Kind, type Receipt, type Source } from "../kilocode/skills/resolution" // kilocode_change
 
 const CLAUDE_EXTERNAL_DIR = ".claude"
 const AGENTS_EXTERNAL_DIR = ".agents"
@@ -40,6 +41,10 @@ export const Info = Schema.Struct({
 })
 export type Info = Schema.Schema.Type<typeof Info>
 
+// kilocode_change start - internal resolution receipt; public Skill.Info stays compatible
+export type ResolvedInfo = Info & { provenance: Receipt }
+// kilocode_change end
+
 const Issue = Schema.StructWithRest(
   Schema.Struct({
     message: Schema.String,
@@ -55,6 +60,13 @@ function isSkillFrontmatter(data: unknown): data is { name: string; description?
     (data.description === undefined || typeof data.description === "string")
   )
 }
+
+// kilocode_change start - invalid optional versions never reject an otherwise valid skill
+function metadataVersion(data: unknown): string | undefined {
+  if (!isRecord(data) || !isRecord(data.metadata)) return undefined
+  return skillVersion(data.metadata.version)
+}
+// kilocode_change end
 
 export class InvalidError extends Schema.TaggedErrorClass<InvalidError>()("SkillInvalidError", {
   path: Schema.String,
@@ -78,7 +90,7 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Ski
 }
 
 type State = {
-  skills: Record<string, Info>
+  skills: Record<string, ResolvedInfo> // kilocode_change
   dirs: Set<string>
 }
 
@@ -88,6 +100,8 @@ type Match = {
   trusted: boolean
   root?: string
   sourceRoot?: string
+  source: Source
+  order: number
 }
 
 type DiscoveryState = {
@@ -98,6 +112,7 @@ type DiscoveryState = {
 type ScanState = {
   matches: Map<string, Match>
   dirs: Set<string>
+  order: number
 }
 // kilocode_change end
 
@@ -154,6 +169,15 @@ const add = Effect.fnUntraced(function* (state: State, match: Match, events: Eve
     location: match.path, // kilocode_change
     content: md.content,
     trusted: match.trusted, // kilocode_change
+    // kilocode_change start - fingerprint exact source before shell placeholders render
+    provenance: resolve({
+      source: match.source,
+      content: md.content,
+      order: match.order,
+      version: metadataVersion(md.data),
+      previous: state.skills[md.data.name]?.provenance,
+    }),
+    // kilocode_change end
   }
 })
 
@@ -161,7 +185,16 @@ const scan = Effect.fnUntraced(function* (
   state: ScanState,
   root: string,
   pattern: string,
-  opts?: { dot?: boolean; scope?: string; trusted?: boolean; root?: string; sourceRoot?: string; projectRoot?: string }, // kilocode_change
+  opts?: {
+    dot?: boolean
+    scope?: string
+    trusted?: boolean
+    root?: string
+    sourceRoot?: string
+    projectRoot?: string
+    kind?: Kind
+    locator?: string
+  }, // kilocode_change
 ) {
   const matches = yield* Effect.tryPromise({
     try: () =>
@@ -182,15 +215,22 @@ const scan = Effect.fnUntraced(function* (
     }),
   )
 
-  for (const match of matches) {
+  // kilocode_change - filesystem enumeration cannot decide duplicate-name precedence
+  for (const match of matches.toSorted((a, b) => path.normalize(a).localeCompare(path.normalize(b)))) {
     // kilocode_change start - a trusted match whose realpath resolves inside the project (e.g. a
     // symlink from ~/.agents/skills into the repo) must not mint trust for project-controlled content
     const trusted = (opts?.trusted ?? false) && !trustedInProject(match, opts?.projectRoot)
+    const locator =
+      opts?.kind === "url" && opts.locator
+        ? `${opts.locator}#${path.relative(root, match).replaceAll("\\", "/")}`
+        : match
     state.matches.set(match, {
       path: match,
       trusted,
       root: trusted ? opts?.root : (opts?.root ?? opts?.projectRoot),
       sourceRoot: trusted ? opts?.sourceRoot : (opts?.sourceRoot ?? opts?.projectRoot),
+      source: { kind: opts?.kind ?? "project", locator, trusted },
+      order: state.order++,
     })
     // kilocode_change end
     state.dirs.add(path.dirname(match))
@@ -207,7 +247,7 @@ const discoverSkills = Effect.fnUntraced(function* (
   directory: string,
   worktree: string,
 ) {
-  const state: ScanState = { matches: new Map(), dirs: new Set() } // kilocode_change
+  const state: ScanState = { matches: new Map(), dirs: new Set(), order: 0 } // kilocode_change
   const projectRoot = worktree === "/" ? directory : worktree // kilocode_change - project substitution boundary
 
   const externalDirs: string[] = []
@@ -218,7 +258,14 @@ const discoverSkills = Effect.fnUntraced(function* (
     for (const dir of externalDirs) {
       const root = path.join(global.home, dir)
       if (!(yield* fsys.isDir(root))) continue
-      yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global", trusted: true, projectRoot }) // kilocode_change
+      yield* scan(state, root, EXTERNAL_SKILL_PATTERN, {
+        dot: true,
+        scope: "global",
+        trusted: true,
+        projectRoot,
+        kind: "global",
+        locator: root,
+      }) // kilocode_change
     }
 
     // kilocode_change start
@@ -237,6 +284,8 @@ const discoverSkills = Effect.fnUntraced(function* (
         scope: "project",
         root: projectRoot,
         sourceRoot: scope,
+        kind: "project",
+        locator: root,
       })
       // kilocode_change end
     }
@@ -256,6 +305,8 @@ const discoverSkills = Effect.fnUntraced(function* (
       root: trusted ? undefined : projectRoot,
       sourceRoot: trusted ? undefined : sourceRoot,
       projectRoot,
+      kind: local ? "project" : "config",
+      locator: dir,
     })
     // kilocode_change end
   }
@@ -276,6 +327,8 @@ const discoverSkills = Effect.fnUntraced(function* (
       trusted,
       root: trusted ? undefined : (origin?.root ?? projectRoot),
       projectRoot,
+      kind: "path",
+      locator: item,
     })
     // kilocode_change end
   }
@@ -283,12 +336,12 @@ const discoverSkills = Effect.fnUntraced(function* (
   for (const url of cfg.skills?.urls ?? []) {
     const pulledDirs = yield* discovery.pull(url)
     for (const dir of pulledDirs) {
-      yield* scan(state, dir, SKILL_PATTERN, { root: dir }) // kilocode_change - downloaded markdown is untrusted
+      yield* scan(state, dir, SKILL_PATTERN, { root: dir, kind: "url", locator: url }) // kilocode_change - downloaded markdown is untrusted
     }
   }
 
   return {
-    matches: Array.from(state.matches.values()), // kilocode_change
+    matches: Array.from(state.matches.values()).toSorted((a, b) => a.order - b.order), // kilocode_change
     dirs: Array.from(state.dirs),
   }
 })
@@ -299,13 +352,19 @@ const loadSkills = Effect.fnUntraced(function* (
   events: EventV2Bridge.Service["Service"],
 ) {
   // kilocode_change start - seed built-in skills before discovery so user skills can override
-  for (const skill of BUILTIN_SKILLS) {
+  for (const [order, skill] of BUILTIN_SKILLS.entries()) {
     state.skills[skill.name] = {
       name: skill.name,
       description: skill.description,
       location: BUILTIN_LOCATION,
       content: skill.content,
       trusted: true, // kilocode_change - builtin skills ship in the binary
+      provenance: resolve({
+        source: { kind: "builtin", locator: skill.source ?? skill.name, trusted: true },
+        content: skill.content,
+        order: order - BUILTIN_SKILLS.length,
+        version: skill.version,
+      }),
     }
   }
   // kilocode_change end

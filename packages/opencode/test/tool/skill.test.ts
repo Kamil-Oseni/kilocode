@@ -2,10 +2,9 @@ import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
-import { Cause, Effect, Exit, Layer } from "effect"
-import { afterEach, describe, expect } from "bun:test"
+import { Cause, Effect, Exit } from "effect" // kilocode_change
+import { afterEach, describe, expect, setDefaultTimeout } from "bun:test" // kilocode_change
 import path from "path"
-import type { Permission } from "../../src/permission"
 import type { Tool } from "@/tool/tool"
 import { SkillTool } from "../../src/tool/skill"
 import { ToolRegistry } from "@/tool/registry"
@@ -29,6 +28,7 @@ afterEach(async () => {
 })
 
 const it = testEffect(LayerNode.compile(LayerNode.group([ToolRegistry.node, CrossSpawnSpawner.node, Ripgrep.node])))
+setDefaultTimeout(10_000) // kilocode_change - constrained Windows service startup can exceed Bun's default
 
 // kilocode_change - skip on windows: address windows ci failures #9496
 const unix = process.platform !== "win32" ? it.instance : it.instance.skip
@@ -180,6 +180,9 @@ Use this skill.
           const result = yield* tool.execute({ name: "kilo-config" }, ctx)
 
           expect(result.metadata.dir).toBe("builtin")
+          expect(result.metadata.provenance.source.kind).toBe("builtin")
+          expect(result.metadata.provenance.sha256).toHaveLength(64)
+          expect(result.metadata.provenance.resolution.result).toBe("selected")
           expect(result.output).toContain("Finding a named command")
           expect(result.output).toContain("~/.config/kilo/")
           expect(result.output).toContain("~/.kilocode/")

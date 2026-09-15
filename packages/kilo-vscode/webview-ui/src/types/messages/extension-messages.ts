@@ -1895,6 +1895,7 @@ export interface AgentManagerFocusContextRequestedMessage {
 }
 
 export type PersonalTodoItem = import("@kilocode/sdk/v2/client").RayaPersonalTodoListResponse[number]
+export type PersonalTodoProposalView = import("@kilocode/sdk/v2/client").RayaPersonalTodoGetProposalResponse
 export type FocusTimerItem = import("@kilocode/sdk/v2/client").RayaFocusTimerGetResponse
 export type AdminResultMessage = import("../../../../src/shared/admin").AdminResult
 
@@ -1915,6 +1916,25 @@ export interface PersonalTodoResultMessage {
   }
 }
 
+export type PersonalTodoProposalResultMessage = {
+  type: "personalTodoProposalResult"
+  requestID: string
+  operation: "list" | "get" | "apply" | "reject"
+  proposalID?: string
+} & (
+  | { kind: "listed"; items: PersonalTodoProposalView[] }
+  | { kind: "loaded" | "applied" | "rejected"; item: PersonalTodoProposalView }
+  | { kind: "offline" | "error"; message: string }
+  | {
+      kind: "stale"
+      message: string
+      todoID: string
+      expected: number
+      actual?: number
+    }
+  | { kind: "conflict" | "uncertain"; message: string; item?: PersonalTodoProposalView }
+)
+
 export interface FocusTimerResultMessage {
   type: "focusTimerResult"
   requestID: string
@@ -1933,6 +1953,7 @@ export type ExtensionMessage =
   | { type: "speechLiveStarted"; requestId: string }
   | AdminResultMessage
   | PersonalTodoResultMessage
+  | PersonalTodoProposalResultMessage
   | FocusTimerResultMessage
   | { type: "speechLiveMicReady"; requestId: string }
   | { type: "speechLiveMicChunk"; requestId: string; data: string }

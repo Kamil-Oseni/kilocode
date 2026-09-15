@@ -1995,6 +1995,24 @@ export interface PersonalTodoDeleteMessage {
   revision: number
 }
 
+export interface PersonalTodoProposalListMessage {
+  type: "personalTodoProposalList"
+  requestID: string
+}
+
+export interface PersonalTodoProposalGetMessage {
+  type: "personalTodoProposalGet"
+  requestID: string
+  proposalID: string
+}
+
+export interface PersonalTodoProposalMutationMessage {
+  type: "personalTodoProposalApply" | "personalTodoProposalReject"
+  requestID: string
+  proposalID: string
+  digest: string
+}
+
 export interface FocusTimerGetMessage {
   type: "focusTimerGet"
   requestID: string
@@ -2021,6 +2039,9 @@ export type WebviewMessage =
   | PersonalTodoCreateMessage
   | PersonalTodoUpdateMessage
   | PersonalTodoDeleteMessage
+  | PersonalTodoProposalListMessage
+  | PersonalTodoProposalGetMessage
+  | PersonalTodoProposalMutationMessage
   | FocusTimerGetMessage
   | FocusTimerStartMessage
   | FocusTimerActionMessage

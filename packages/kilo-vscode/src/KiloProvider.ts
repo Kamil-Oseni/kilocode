@@ -120,6 +120,7 @@ import * as McpOAuth from "./kilo-provider/mcp-oauth"
 import { retryable, backoff, MAX_RETRIES } from "./util/retry"
 import { hasGit } from "./kilo-provider/git-status"
 import { handlePersonalTodoMessage } from "./kilo-provider/personal-todos"
+import { handlePersonalTodoProposalMessage } from "./kilo-provider/personal-todo-proposals"
 import { handleFocusTimerMessage } from "./kilo-provider/focus-timer"
 import { handleAdminMessage } from "./kilo-provider/admin"
 // legacy-migration start
@@ -1666,6 +1667,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       post: (reply: unknown) => this.postMessage(reply),
     }
     if (await handlePersonalTodoMessage(input)) return true
+    if (await handlePersonalTodoProposalMessage(input)) return true
     if (await handleFocusTimerMessage(input)) return true
     return handleAdminMessage(input)
   }

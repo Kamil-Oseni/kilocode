@@ -3,7 +3,9 @@ import { Effect, Option } from "effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 
 export namespace RayaPath {
-  const find = Effect.fn("RayaPath.find")(function* (fs: FSUtil.Interface, file: string, tail = "") {
+  const find: (fs: FSUtil.Interface, file: string, tail?: string) => Effect.Effect<string> = Effect.fn(
+    "RayaPath.find",
+  )(function* (fs: FSUtil.Interface, file: string, tail = "") {
     const found = yield* fs.realPath(file).pipe(Effect.option)
     if (Option.isSome(found)) return path.join(found.value, tail)
     const parent = path.dirname(file)

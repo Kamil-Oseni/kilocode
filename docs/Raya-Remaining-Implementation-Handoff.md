@@ -1,6 +1,12 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: active.** Continue implementation from local product source `132116ee2c`; installed product source is `0d545aa678`; do not pause it. `origin/main` is still `d894fc0eb9` because the normal pre-push hook reaches existing cross-package `@opencode-ai/tui` type failures. The 16 future additions are canonical `FUT-*` rows in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+> **Goal status: active.** Continue implementation from local product source `132116ee2c`; installed snapshot source is `7b3796f2bf`; do not pause it. `origin/main` is still `d894fc0eb9` because the normal pre-push hook reaches existing cross-package `@opencode-ai/tui` type failures. The 16 future additions are canonical `FUT-*` rows in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+
+## ChatGPT 2026-09-15 01:14 America/Toronto - Current branding snapshot installed
+
+Snapshot `7.4.23-snapshot+7b3796f2bf.kamil-oseni.1789449026595` is installed and contains every local product change through `132116ee2c`: Raya Marketplace, Raya · Next Edit, the Raya ACP fallback, Raya Messenger and ID-based Raya Gateway projection. The low-memory workflow passed SDK regeneration, CLI rebuild and smoke checks, sequential extension/webview typechecks, ESLint, production bundling, VSIX packaging and installation.
+
+Rollback package: `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.005b041a5d0c5b4db345b77a9914a5dcedfb4f46e7ef9167e11045f0ca99602e.vsix`, 519,449,978 bytes, SHA-256 `005b041a5d0c5b4db345b77a9914a5dcedfb4f46e7ef9167e11045f0ca99602e`. Installed CLI: 230,706,176 bytes, SHA-256 `55757b8a8a40e1939d9d1637fde3c545ce9ecb0dfa6f54e5ae5e2bd35b2613c`. The installer removed one older vault package, one staged package and one old extension. Drive C has 133,195,321,344 bytes free, and no Bun/Turbo/tsgo process remains. Reload VS Code before installed-host acceptance.
 
 ## ChatGPT 2026-09-15 01:07 America/Toronto - Raya Gateway display projection complete
 

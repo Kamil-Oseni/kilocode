@@ -225,7 +225,7 @@ export const webSearchTool = (goals?: GoalDeps) =>
                   numResults: params.numResults,
                 },
                 token,
-                claim: Effect.succeed(lease),
+                claim: Effect.succeed({ ...lease, release: lease.release.pipe(Effect.orDie) }),
                 sessionID: ctx.sessionID,
                 messageID: ctx.messageID,
                 callID: ctx.callID,

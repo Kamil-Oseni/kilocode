@@ -77,6 +77,8 @@ export const voiceHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-voice",
     const database = yield* Database.Service
     const goals = RayaGoal.make({ sessions, storage })
     const reservations = yield* GoalCharges.make({ sessions, storage })
+    const admit = (effect: Effect.Effect<void, Error>) =>
+      effect.pipe(Effect.mapError((error) => new OpenAIVoice.VoiceError({ code: "conflict", message: error.message })))
     const openai = yield* OpenAIVoice.make({
       sessions,
       prompts,
@@ -87,12 +89,8 @@ export const voiceHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-voice",
         reservations.claim(sessionID, "USD", identity).pipe(
           Effect.map((lease) => ({
             amount: lease.amount,
-            dispatch: lease.dispatch.pipe(
-              Effect.mapError((error) => new OpenAIVoice.VoiceError({ code: "conflict", message: error.message })),
-            ),
-            finish: lease.finish.pipe(
-              Effect.mapError((error) => new OpenAIVoice.VoiceError({ code: "conflict", message: error.message })),
-            ),
+            dispatch: admit(lease.dispatch),
+            finish: admit(lease.finish),
             release: lease.release.pipe(Effect.orDie),
           })),
           Effect.mapError((error) => new OpenAIVoice.VoiceError({ code: "conflict", message: error.message })),

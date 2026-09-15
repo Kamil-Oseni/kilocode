@@ -16,18 +16,20 @@ export namespace SandboxStore {
     version: number
   }
 
-  export const root = path.join(realpathSync.native(path.dirname(Global.Path.state)), "kilo-sandbox-policy")
+  export function root() {
+    return path.join(realpathSync.native(path.dirname(Global.Path.state)), "kilo-sandbox-policy")
+  }
 
   function hash(value: string) {
     return createHash("sha256").update(value).digest("hex")
   }
 
-  function dir(sessionID: SessionID) {
-    return path.join(root, hash(sessionID))
+  function dir(sessionID: SessionID, base = root()) {
+    return path.join(base, hash(sessionID))
   }
 
-  function file(directory: string, sessionID: SessionID) {
-    return path.join(dir(sessionID), hash(directory) + ".json")
+  function file(directory: string, sessionID: SessionID, base = root()) {
+    return path.join(dir(sessionID, base), hash(directory) + ".json")
   }
 
   function valid(value: unknown) {
@@ -68,8 +70,9 @@ export namespace SandboxStore {
   }
 
   export async function write(directory: string, sessionID: SessionID, snapshot: Snapshot) {
-    const folder = dir(sessionID)
-    const target = file(directory, sessionID)
+    const base = root()
+    const folder = dir(sessionID, base)
+    const target = file(directory, sessionID, base)
     const temp = path.join(folder, `.${randomUUID()}.tmp`)
     await fs.mkdir(folder, { recursive: true, mode: 0o700 })
     await fs.writeFile(temp, JSON.stringify(snapshot), { encoding: "utf8", flag: "wx", mode: 0o600 })
@@ -80,14 +83,15 @@ export namespace SandboxStore {
   }
 
   export async function remove(directory: string, sessionID: SessionID) {
-    await fs.rm(file(directory, sessionID), { force: true })
-    await fs.rmdir(dir(sessionID)).catch((err: NodeJS.ErrnoException) => {
+    const base = root()
+    await fs.rm(file(directory, sessionID, base), { force: true })
+    await fs.rmdir(dir(sessionID, base)).catch((err: NodeJS.ErrnoException) => {
       if (err.code === "ENOENT" || err.code === "ENOTEMPTY") return
       throw err
     })
   }
 
   export async function dispose(sessionID: SessionID) {
-    await fs.rm(dir(sessionID), { recursive: true, force: true })
+    await fs.rm(dir(sessionID, root()), { recursive: true, force: true })
   }
 }

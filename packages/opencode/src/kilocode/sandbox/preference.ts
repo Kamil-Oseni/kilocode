@@ -5,10 +5,12 @@ import path from "node:path"
 import { Global } from "@opencode-ai/core/global"
 
 export namespace SandboxPreference {
-  export const root = path.join(realpathSync.native(path.dirname(Global.Path.state)), "kilo-sandbox-preference")
+  export function root() {
+    return path.join(realpathSync.native(path.dirname(Global.Path.state)), "kilo-sandbox-preference")
+  }
 
-  function file(directory: string) {
-    return path.join(root, createHash("sha256").update(directory).digest("hex") + ".json")
+  function file(directory: string, base = root()) {
+    return path.join(base, createHash("sha256").update(directory).digest("hex") + ".json")
   }
 
   export async function read(directory: string): Promise<boolean | undefined> {
@@ -23,9 +25,10 @@ export namespace SandboxPreference {
   }
 
   export async function write(directory: string, enabled: boolean) {
-    const target = file(directory)
-    const temp = path.join(root, `.${randomUUID()}.tmp`)
-    await fs.mkdir(root, { recursive: true, mode: 0o700 })
+    const base = root()
+    const target = file(directory, base)
+    const temp = path.join(base, `.${randomUUID()}.tmp`)
+    await fs.mkdir(base, { recursive: true, mode: 0o700 })
     await fs.writeFile(temp, JSON.stringify(enabled), { encoding: "utf8", flag: "wx", mode: 0o600 })
     await fs.rename(temp, target).catch(async (err) => {
       await fs.rm(temp, { force: true })

@@ -251,7 +251,7 @@ export function profile(
   return {
     filesystem: {
       allowWrite: writable,
-      denyWrite: [root(SandboxStore.root), root(SandboxPreference.root), root(Global.Path.config)],
+      denyWrite: [root(SandboxStore.root()), root(SandboxPreference.root()), root(Global.Path.config)],
       denyNames: [".git"],
       temporaryDirectory: Global.Path.tmp,
     },

@@ -118,7 +118,7 @@ posix("canonicalizes a symlinked policy state root", async () => {
   const link = path.join(root, "state")
   await fs.mkdir(target)
   await fs.symlink(target, link)
-  const script = 'import { SandboxStore } from "@/kilocode/sandbox/store"; console.log(SandboxStore.root)'
+  const script = 'import { SandboxStore } from "@/kilocode/sandbox/store"; console.log(SandboxStore.root())'
 
   try {
     const result = Bun.spawnSync([process.execPath, "-e", script], {

@@ -6,6 +6,16 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-15 17:51 America/Toronto - Preserve late-bound sandbox persistence and its remaining cache boundary
+
+`SandboxPreference.root()` and `SandboxStore.root()` preserve the exact legacy calculation: canonicalize the parent of `Global.Path.state`, then append `kilo-sandbox-preference` or `kilo-sandbox-policy`. Do not rename those directories in this slice. Their parent must already exist because canonicalization intentionally fails closed. Every multi-step write/remove operation must bind one `base` before its first await and reuse it for all derived folders, temporary files, targets and cleanup. Otherwise a generation change could split an atomic replacement or remove a directory from the wrong profile.
+
+The focused real-filesystem test proves two imported modules follow two temporary state parents without cross-reading, and that a root switch while `remove()` is awaiting cannot delete the second generation's canary. The broader policy/state group passes 36 tests / 73 assertions with three platform skips when run with `--timeout 30000`; the backend-restart child process exceeds Bun's five-second default on this machine. Bounded CLI typecheck passes.
+
+The path inventory now has 205 consumers, zero module captures and digest `4bd0af27a253229bf66216f4b7ed7ae9e8873354d31bb972af30de46130a83e3`. Keep its policy `inventory-only-no-cutover-evidence`. Zero eager captures does not authorize a hot root switch: `SandboxPolicy` caches snapshots by directory and session without storage generation, and other services still lack coordinated writer quiescence. Before live cutover, bind that cache to the selected generation or clear/reload it under a global barrier, then implement the writer registry, verified copy, restart/crash recovery and rollback gates already listed in the `profile-roots` ledger entry.
+
+The refreshed repository inventory is 69,102 total: public 1,693; compatibility 35,171; provenance 5,686; internal 26,552. Keep the ledger baseline at count 35,171 and digest `443fdbb71a6a80b299343e6a6bf065c0c46833a38ae74d3cf2cdc320f74af1cd` until the next reviewed refresh.
+
 ## ChatGPT 2026-09-15 17:41 America/Toronto - Preserve late-bound managed tool output
 
 `packages/opencode/src/tool/truncation-dir.ts` now exposes `truncationDir()` rather than a captured string. `Truncate.dir()` and `Truncate.glob()` are callable accessors; do not restore string-valued `DIR` or `GLOB` exports because ESM strings cannot follow a live root change. Cleanup must bind `const dir = truncationDir()` once before listing and removing entries. Write must bind once before ensuring the directory, writing the generated file and returning its logical path. This prevents a generation change from splitting one operation.
@@ -15,6 +25,8 @@ Every internal consumer now calls `Truncate.glob()` while constructing permissio
 Core agent tests pass 8 tests / 19 assertions. CLI truncation and agent tests pass 68 tests / 218 assertions. Core and bounded CLI typechecks pass. The reviewed inventory remains 205 consumers and now has only two module captures, with digest `65ce546aef362aae935eb62fa4ff496fa8c825920514a96e03c668ae56985df6`. Continue with the paired sandbox preference/policy roots as one higher-risk slice; inspect their persistence, process lifetime and consumer contracts before editing either.
 
 The refreshed repository inventory is 69,097 total: public 1,693; compatibility 35,166; provenance 5,686; internal 26,552. Keep the compatibility ledger at count 35,166 and digest `83b435e235d9d6baf055f66400b19c03807221621de683b6d48034d66bce84a5` until another reviewed refresh changes it.
+
+This slice was pushed in `cbb7ae5dcc`; its normal protected hook passed all 29 JavaScript/TypeScript packages plus JetBrains.
 
 ## ChatGPT 2026-09-15 17:29 America/Toronto - Preserve late-bound plugin and model-state paths
 

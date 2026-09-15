@@ -192,16 +192,16 @@ describe("sandbox policy", () => {
     const policy = profile(ctx)
     const [storeWrite, prefWrite] = await Effect.runPromise(
       Effect.all([
-        runSandbox(policy, assertWrite(SandboxStore.root)).pipe(Effect.exit),
-        runSandbox(policy, assertWrite(SandboxPreference.root)).pipe(Effect.exit),
+        runSandbox(policy, assertWrite(SandboxStore.root())).pipe(Effect.exit),
+        runSandbox(policy, assertWrite(SandboxPreference.root())).pipe(Effect.exit),
       ]),
     )
 
     expect(new Set(roots(ctx))).toEqual(expected(dirs.a))
     expect(policy.filesystem.temporaryDirectory).toBe(Global.Path.tmp)
     expect(policy.filesystem.denyWrite).toEqual([
-      { path: SandboxStore.root, kind: "subtree" },
-      { path: SandboxPreference.root, kind: "subtree" },
+      { path: SandboxStore.root(), kind: "subtree" },
+      { path: SandboxPreference.root(), kind: "subtree" },
       { path: Global.Path.config, kind: "subtree" },
     ])
     expect(policy.environment.deny).toEqual([

@@ -6,15 +6,27 @@
 >
 > Kilo-to-Raya migration is active through lossless compatibility-first slices; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-15 17:51 America/Toronto - Sandbox persistence no longer freezes its startup root
+
+**Status: implemented and verified locally; commit and push remain, installation is batched.** Sandbox preference and per-session policy storage now resolve their canonical root from the selected state profile after module startup. The physical compatibility names remain exactly `kilo-sandbox-preference` and `kilo-sandbox-policy`. Reads resolve one target. Preference writes bind one base for directory/temp/target work. Policy writes and removals bind one base across every await, and disposal resolves one target. The sandbox enforcement profile calls both root accessors when it is constructed, keeping those sensitive directories denied inside the sandbox.
+
+The new real-filesystem test creates two isolated state parents, switches between them after both modules are imported, and proves preference and policy values remain separated by generation. It also starts a removal against the first generation, switches roots before awaiting completion, and proves the first generation is removed while an identically named canary directory in the second survives. The complete focused group passes **36 tests / 73 assertions**, with three expected platform skips; bounded CLI typecheck passes. The backend-restart case requires the suite's 30-second timeout on this machine and passes in about 5.3 seconds.
+
+The exact inventory still contains **205 reviewed consumers** but now reports **zero module-scope captures**, with digest `4bd0af27a253229bf66216f4b7ed7ae9e8873354d31bb972af30de46130a83e3`. This closes the eight-item eager-capture list; it does not make Version 1 ready for cutover. `SandboxPolicy` still caches snapshots by project directory and session rather than storage generation, and the cross-service writer registry, quiescence barrier, verified copy, restart recovery and rollback workflow remain unimplemented. Therefore profile-root selection is safe before the first sandbox policy operation, while changing roots during an active session remains forbidden.
+
+The refreshed repository inventory is **69,102** total: public 1,693; compatibility 35,171; provenance 5,686; internal 26,552. The Version 1 ledger is pinned to compatibility digest `443fdbb71a6a80b299343e6a6bf065c0c46833a38ae74d3cf2cdc320f74af1cd` and remains fail closed.
+
 ## ChatGPT 2026-09-15 17:41 America/Toronto - Managed tool output follows the active profile
 
-**Status: implemented and verified locally; commit and push remain, installation is batched.** The truncation service no longer exports or consumes startup snapshots of the `tool-output` directory. Its directory and glob accessors resolve the active data root on demand; cleanup binds one directory for its entire scan, and write binds one directory for ensure/write/result construction. Agent permission builders now resolve the same glob while building or rebuilding their state, including Core defaults and CLI plan, explore, orchestrator and configured-agent rules.
+**Status: implemented, verified and pushed in `cbb7ae5dcc`; installation is batched.** The truncation service no longer exports or consumes startup snapshots of the `tool-output` directory. Its directory and glob accessors resolve the active data root on demand; cleanup binds one directory for its entire scan, and write binds one directory for ensure/write/result construction. Agent permission builders now resolve the same glob while building or rebuilding their state, including Core defaults and CLI plan, explore, orchestrator and configured-agent rules.
 
 Two focused late-binding tests cover both sides of the contract. The Core test imports the agent plugin before changing the data root, then proves the generated build-agent permission allows the new root's managed-output glob. The CLI test constructs the real truncation service before switching roots, records its requested ensure/write paths while redirecting physical I/O into a disposable directory, and proves the returned logical path and saved bytes both correspond to the new root. Existing agent and truncation behavior remains intact. Combined evidence is **76 tests / 237 assertions**, and Core plus bounded one-checker CLI typechecks pass.
 
 The exact path inventory remains at **205 consumers** while module captures fall from four to **two**, with digest `65ce546aef362aae935eb62fa4ff496fa8c825920514a96e03c668ae56985df6`. Only the paired sandbox preference and policy roots remain eager. No stored output was moved, copied, renamed or deleted, and the physical `tool-output` name remains unchanged.
 
 The refreshed repository inventory is **69,097** total: public 1,693; compatibility 35,166; provenance 5,686; internal 26,552. The Version 1 ledger is pinned to compatibility digest `83b435e235d9d6baf055f66400b19c03807221621de683b6d48034d66bce84a5` and still forbids cutover.
+
+The normal protected push passed all 29 JavaScript/TypeScript packages plus JetBrains and advanced `origin/main` to `cbb7ae5dcc`.
 
 ## ChatGPT 2026-09-15 17:29 America/Toronto - Plugin configuration and model preferences follow the active profile
 

@@ -5,7 +5,7 @@
   "policy": "inventory-only-no-cutover-evidence",
   "total": {
     "count": 205,
-    "digest": "65ce546aef362aae935eb62fa4ff496fa8c825920514a96e03c668ae56985df6"
+    "digest": "4bd0af27a253229bf66216f4b7ed7ae9e8873354d31bb972af30de46130a83e3"
   },
   "members": {
     "bin": {
@@ -45,7 +45,7 @@
     },
     "state": {
       "count": 18,
-      "module": 2,
+      "module": 0,
       "writes": 0
     },
     "tmp": {
@@ -369,24 +369,7 @@
       "count": 1
     }
   ],
-  "moduleCaptures": [
-    {
-      "file": "packages/opencode/src/kilocode/sandbox/preference.ts",
-      "member": "state",
-      "phase": "module",
-      "access": "read",
-      "context": "export const root = path.join(realpathSync.native(path.dirname(Global.Path.state)), \"kilo-sandbox-preference\")",
-      "ordinal": 1
-    },
-    {
-      "file": "packages/opencode/src/kilocode/sandbox/store.ts",
-      "member": "state",
-      "phase": "module",
-      "access": "read",
-      "context": "export const root = path.join(realpathSync.native(path.dirname(Global.Path.state)), \"kilo-sandbox-policy\")",
-      "ordinal": 1
-    }
-  ],
+  "moduleCaptures": [],
   "consumers": [
     {
       "file": "packages/core/src/database/database.ts",
@@ -1265,7 +1248,7 @@
       "member": "config",
       "phase": "runtime",
       "access": "read",
-      "context": "denyWrite: [root(SandboxStore.root), root(SandboxPreference.root), root(Global.Path.config)],",
+      "context": "denyWrite: [root(SandboxStore.root()), root(SandboxPreference.root()), root(Global.Path.config)],",
       "ordinal": 1
     },
     {
@@ -1351,17 +1334,17 @@
     {
       "file": "packages/opencode/src/kilocode/sandbox/preference.ts",
       "member": "state",
-      "phase": "module",
+      "phase": "runtime",
       "access": "read",
-      "context": "export const root = path.join(realpathSync.native(path.dirname(Global.Path.state)), \"kilo-sandbox-preference\")",
+      "context": "return path.join(realpathSync.native(path.dirname(Global.Path.state)), \"kilo-sandbox-preference\")",
       "ordinal": 1
     },
     {
       "file": "packages/opencode/src/kilocode/sandbox/store.ts",
       "member": "state",
-      "phase": "module",
+      "phase": "runtime",
       "access": "read",
-      "context": "export const root = path.join(realpathSync.native(path.dirname(Global.Path.state)), \"kilo-sandbox-policy\")",
+      "context": "return path.join(realpathSync.native(path.dirname(Global.Path.state)), \"kilo-sandbox-policy\")",
       "ordinal": 1
     },
     {

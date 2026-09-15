@@ -60,6 +60,7 @@ export function check(
     "GIT_BASH_PATH",
     "MODELS_PATH",
     "BIN_PATH",
+    "TUI_CONFIG",
   ].map((name) => [`RAYA_${name}`, `KILO_${name}`, "raya-wins-legacy-write"])
   if (JSON.stringify(env) !== JSON.stringify(expected))
     throw new Error("Environment aliases or precedence differ from the compatibility ledger.")

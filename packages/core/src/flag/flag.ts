@@ -168,9 +168,14 @@ export const Flag = {
   get KILO_EXPERIMENTAL_REFERENCES() {
     return enabledByExperimental("KILO_EXPERIMENTAL_REFERENCES")
   },
+  // kilocode_change start - Raya input alias with mutable compatibility access
   get KILO_TUI_CONFIG() {
-    return process.env["KILO_TUI_CONFIG"]
+    return EnvAlias.read("RAYA_TUI_CONFIG", "KILO_TUI_CONFIG")
   },
+  set KILO_TUI_CONFIG(value: string | undefined) {
+    EnvAlias.write("RAYA_TUI_CONFIG", "KILO_TUI_CONFIG", value)
+  },
+  // kilocode_change end
   // kilocode_change start - Raya input alias with mutable compatibility access
   get KILO_CONFIG_DIR() {
     return EnvAlias.read("RAYA_CONFIG_DIR", "KILO_CONFIG_DIR")

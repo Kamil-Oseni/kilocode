@@ -114,6 +114,25 @@ describe("Raya environment aliases", () => {
     ])
   })
 
+  test("aliases the TUI configuration path through mutable Kilo access", () => {
+    const child = Bun.spawnSync({
+      cmd: [
+        process.execPath,
+        "-e",
+        'import { Flag } from "./src/flag/flag.ts"; const initial = Flag.KILO_TUI_CONFIG; Flag.KILO_TUI_CONFIG = "written.json"; console.log(JSON.stringify([initial, process.env.RAYA_TUI_CONFIG, process.env.KILO_TUI_CONFIG]))',
+      ],
+      cwd: `${import.meta.dir}/../..`,
+      env: {
+        ...process.env,
+        RAYA_TUI_CONFIG: "raya.json",
+        KILO_TUI_CONFIG: "legacy.json",
+      },
+    })
+
+    expect(child.exitCode).toBe(0)
+    expect(JSON.parse(child.stdout.toString())).toEqual(["raya.json", "written.json", "written.json"])
+  })
+
   for (const item of [
     {
       name: "legacy inputs",

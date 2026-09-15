@@ -6,13 +6,23 @@
 >
 > Kilo-to-Raya migration is active through lossless compatibility-first slices; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-15 16:37 America/Toronto - Raya can select an independent TUI configuration file
+
+**Status: implemented and verified locally; commit and push remain, installation is batched.** `RAYA_TUI_CONFIG` now takes precedence over the unchanged `KILO_TUI_CONFIG` fallback through the shared redacted alias resolver. The existing `Flag.KILO_TUI_CONFIG` property remains the compatibility API and is now writable: setting it synchronizes both environment names, while clearing it removes both. This adds a Raya-facing input without changing TUI file parsing, project/global precedence, trust boundaries, filenames or storage.
+
+Real config loading proves three boundaries: a project `tui.json` still outranks the environment override, a Kilo-only override still loads its file, and conflicting Raya/Kilo override paths load the Raya file. Those cases pass **3 tests / 6 assertions**. The reusable alias suite passes **13 tests / 23 assertions**, the migration-ledger suite passes **3 tests / 18 assertions**, and the cross-repository checker passes **3 tests / 6 assertions**. Core and bounded one-checker CLI typechecks pass.
+
+The compatibility ledger now declares nine ordered environment pairs and remains Version 1 with every entry `cutoverReady: false`. The refreshed inventory classifies **69,013** references: **1,693** potential public defects, **35,139** compatibility identities, **5,686** provenance references and **26,495** internal migration references. No file was moved, copied, renamed or deleted.
+
 ## ChatGPT 2026-09-15 16:23 America/Toronto - The Raya npm command has its own binary override
 
-**Status: implemented and verified locally; commit and push remain, installation is batched.** The shared npm launcher now resolves `RAYA_BIN_PATH` before the unchanged `KILO_BIN_PATH` fallback. Invoking `raya`, `kilo` or `kilocode` still reaches the same wrapper and packaged physical binary, so existing installations and automation remain compatible. The launcher failure heading now identifies the Raya CLI while continuing to print the exact `@kilocode/cli-*` compatibility package names a user can install.
+**Status: implemented, verified and pushed in `74a1c56da2`; installation is batched.** The shared npm launcher now resolves `RAYA_BIN_PATH` before the unchanged `KILO_BIN_PATH` fallback. Invoking `raya`, `kilo` or `kilocode` still reaches the same wrapper and packaged physical binary, so existing installations and automation remain compatible. The launcher failure heading now identifies the Raya CLI while continuing to print the exact `@kilocode/cli-*` compatibility package names a user can install.
 
 A real child-process test creates two executable scripts, supplies both override names and proves the wrapper launches the Raya target; a second invocation removes the Raya input and proves the Kilo fallback launches. The selected wrapper cases pass **2 tests / 8 assertions**. The migration-ledger suite passes **3 tests / 17 assertions**, including the exact new `environment:bin_path` identity, and the bounded one-checker CLI typecheck passes. The compatibility checker now expects eight ordered environment pairs. No executable, npm package, command alias or stored path was renamed or removed.
 
 The reviewed inventory now classifies **68,989** references: **1,693** potential public defects, **35,122** compatibility identities, **5,686** provenance references and **26,488** internal migration references.
+
+The normal protected push passed all 29 JavaScript/TypeScript packages plus JetBrains and advanced `origin/main` to `74a1c56da2`. The installed product remains source `18e8e12f51`; this small compatibility slice stays queued for the next coherent low-memory snapshot.
 
 ## ChatGPT 2026-09-15 16:04 America/Toronto - Raya aliases now cover operator path overrides
 

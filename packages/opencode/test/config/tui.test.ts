@@ -24,6 +24,7 @@ const globalConfigFiles = ["kilo.json", "kilo.jsonc", "tui.json", "tui.jsonc"].m
 const cleanState = Effect.gen(function* () {
   const fs = yield* FSUtil.Service
   delete process.env.KILO_CONFIG
+  delete process.env.RAYA_TUI_CONFIG // kilocode_change
   delete process.env.KILO_TUI_CONFIG
   yield* Effect.forEach(globalConfigFiles, (file) => fs.remove(file, { force: true }).pipe(Effect.ignore), {
     discard: true,
@@ -668,6 +669,35 @@ it.instance("KILO_TUI_CONFIG provides settings when no project config exists", (
     }),
   ),
 )
+
+// kilocode_change start - additive Raya environment input with Kilo fallback
+it.instance("RAYA_TUI_CONFIG takes precedence over KILO_TUI_CONFIG", () =>
+  withCleanState(
+    Effect.gen(function* () {
+      const fs = yield* FSUtil.Service
+      const test = yield* TestInstance
+      const raya = path.join(test.directory, "raya-tui.json")
+      const legacy = path.join(test.directory, "kilo-tui.json")
+      yield* fs.writeJson(raya, { theme: "raya", diff_style: "stacked" })
+      yield* fs.writeJson(legacy, { theme: "legacy", diff_style: "auto" })
+
+      yield* withEnv(
+        "KILO_TUI_CONFIG",
+        legacy,
+        withEnv(
+          "RAYA_TUI_CONFIG",
+          raya,
+          Effect.gen(function* () {
+            const config = yield* getTuiConfig(test.directory)
+            expect(config.theme).toBe("raya")
+            expect(config.diff_style).toBe("stacked")
+          }),
+        ),
+      )
+    }),
+  ),
+)
+// kilocode_change end
 
 it.instance("does not derive tui path from KILO_CONFIG", () =>
   withCleanState(

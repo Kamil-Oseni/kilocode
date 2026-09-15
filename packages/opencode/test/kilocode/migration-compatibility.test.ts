@@ -49,6 +49,12 @@ describe("Raya migration compatibility ledger", () => {
       legacy: "KILO_BIN_PATH",
       policy: "raya-wins-legacy-write",
     })
+    expect(environment?.identities).toContainEqual({
+      kind: "environment:tui_config",
+      raya: "RAYA_TUI_CONFIG",
+      legacy: "KILO_TUI_CONFIG",
+      policy: "raya-wins-legacy-write",
+    })
     const database = snapshot.entries.find((item) => item.id === "database-files")
     expect(database?.identities.map((item) => item.legacy)).toEqual([
       "kilo.db",

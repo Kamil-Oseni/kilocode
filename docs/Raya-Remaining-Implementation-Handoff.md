@@ -6,6 +6,14 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-15 16:37 America/Toronto - Preserve the Raya TUI configuration override
+
+`packages/core/src/flag/flag.ts` now resolves `RAYA_TUI_CONFIG ?? KILO_TUI_CONFIG` through `EnvAlias`. Preserve the existing `Flag.KILO_TUI_CONFIG` getter because current TUI consumers depend on it; its setter intentionally writes or clears both names. Do not change project/global precedence, substitution trust, TUI schema, filenames or storage as part of this alias.
+
+The focused real-file cases prove that project `tui.json` remains strongest, Kilo-only configuration remains compatible, and a conflicting Raya path wins. They pass 3 tests / 6 assertions. The reusable alias suite passes 13 / 23, the ledger suite passes 3 / 18, the cross-repository checker passes 3 / 6, and Core plus bounded CLI typechecks pass. The ledger/checker now contain nine ordered environment pairs and remain fail closed.
+
+The refreshed inventory is 69,013 total: public 1,693; compatibility 35,139; provenance 5,686; internal 26,495. Commit and push this slice, then continue batching aliases into a later low-memory snapshot.
+
 ## ChatGPT 2026-09-15 16:23 America/Toronto - Preserve the Raya npm binary override
 
 `packages/opencode/bin/kilo` now resolves `RAYA_BIN_PATH ?? KILO_BIN_PATH`. Preserve that exact precedence and keep all three npm commands mapped to this same wrapper. The physical artifact and platform-package grammar remain Kilo compatibility identities. The missing-binary message may say Raya CLI, but it must keep printing the real `@kilocode/cli-*` package names until those packages receive a separate published compatibility migration.
@@ -13,6 +21,8 @@
 The real wrapper test uses distinct executable scripts and passes the selected cases at 2 tests / 8 assertions: both names launch the Raya path, while a legacy-only environment launches the Kilo path. It has a 15-second case timeout because starting two nested Windows Bun/wrapper processes takes about seven seconds on this machine. Do not replace it with a string-only assertion. The ledger suite passes 3 / 17 and the full bounded CLI typecheck passes. The environment ledger/checker now contains `BIN_PATH` after the seven earlier pairs, and the physical-executable entry no longer treats the override as legacy-only.
 
 The reviewed inventory is 68,989 total: public 1,693; compatibility 35,122; provenance 5,686; internal 26,488.
+
+This binary-override slice is pushed in `74a1c56da2`. Its normal hook passed all 29 JavaScript/TypeScript packages plus JetBrains. The installed product remains source `18e8e12f51`; installation is intentionally batched.
 
 ## ChatGPT 2026-09-15 16:04 America/Toronto - Preserve the new operator path aliases
 

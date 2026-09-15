@@ -10,7 +10,7 @@
 
 `packages/core/src/flag/flag.ts` now resolves `RAYA_GIT_BASH_PATH` over `KILO_GIT_BASH_PATH` and `RAYA_MODELS_PATH` over `KILO_MODELS_PATH` through `EnvAlias`. Preserve the legacy `Flag.KILO_*` property names because current callers and tests use them. Each remains mutable: setters write both environment names and clearing deletes both. Do not turn this compatibility slice into a catalog move, Git Bash discovery change or legacy-variable removal.
 
-The focused suite passes 12 tests / 21 assertions and Core typecheck passes. The new child case proves conflicting Raya values win and later legacy-property writes synchronize both names. The fail-closed migration ledger/checker must list these pairs after `DB`, retain `raya-wins-legacy-write`, bind the reviewed inventory below and keep Version 1 `cutoverReady: false`. Commit and push this small slice normally; batch it into a later snapshot instead of immediately rebuilding another roughly 520 MB package.
+The focused suite passes 12 tests / 21 assertions and Core typecheck passes. The new child case proves conflicting Raya values win and later legacy-property writes synchronize both names. The fail-closed migration ledger/checker lists these pairs after `DB`, retains `raya-wins-legacy-write`, binds the reviewed inventory below and keeps Version 1 `cutoverReady: false`. Commit `f25fe17b29` is on `origin/main`; its normal hook passed all 29 JavaScript/TypeScript packages plus JetBrains. Batch it into a later snapshot instead of immediately rebuilding another roughly 520 MB package.
 
 The reviewed inventory is 68,972 total: public 1,693; compatibility 35,108; provenance 5,686; internal 26,485.
 

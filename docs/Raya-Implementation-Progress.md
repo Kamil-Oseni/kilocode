@@ -8,11 +8,13 @@
 
 ## ChatGPT 2026-09-15 16:04 America/Toronto - Raya aliases now cover operator path overrides
 
-**Status: implemented and verified locally; commit and push remain, installation is batched.** `RAYA_GIT_BASH_PATH` and `RAYA_MODELS_PATH` now take precedence over their exact `KILO_*` fallbacks through the same value-free conflict recorder used by the existing configuration, authentication and database aliases. The legacy `Flag.KILO_GIT_BASH_PATH` and `Flag.KILO_MODELS_PATH` properties remain the runtime contract and remain writable; a write updates both names and clearing removes both. Existing Kilo-only environments therefore behave unchanged, while new Raya deployments can stop introducing those two Kilo names.
+**Status: implemented, verified and pushed in `f25fe17b29`; installation is batched.** `RAYA_GIT_BASH_PATH` and `RAYA_MODELS_PATH` now take precedence over their exact `KILO_*` fallbacks through the same value-free conflict recorder used by the existing configuration, authentication and database aliases. The legacy `Flag.KILO_GIT_BASH_PATH` and `Flag.KILO_MODELS_PATH` properties remain the runtime contract and remain writable; a write updates both names and clearing removes both. Existing Kilo-only environments therefore behave unchanged, while new Raya deployments can stop introducing those two Kilo names.
 
 The real child-process test proves Raya precedence under conflicting values and proves that mutable legacy access writes the same effective value through both names. The complete focused alias suite passes **12 tests / 21 assertions**, and Core typecheck passes. The compatibility ledger and repository checker now declare seven exact Raya/Kilo environment pairs rather than five; the ledger remains Version 1 and every entry still reports `cutoverReady: false`. This slice reads aliases only. It does not move a catalog, alter Git Bash discovery semantics, change storage, remove variables or touch the editor distribution.
 
 The reviewed inventory now classifies **68,972** references: **1,693** potential public defects, **35,108** compatibility identities, **5,686** provenance references and **26,485** internal migration references.
+
+The normal protected push passed all 29 JavaScript/TypeScript packages plus JetBrains and advanced `origin/main` to `f25fe17b29`. The installed product remains source `18e8e12f51`; this small alias slice is intentionally queued for the next coherent low-memory snapshot rather than triggering another immediate 520 MB package build.
 
 ## ChatGPT 2026-09-15 15:58 America/Toronto - Vault repair and delegation recovery pushed, reconciled and installed
 

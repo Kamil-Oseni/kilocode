@@ -1894,8 +1894,28 @@ export interface AgentManagerFocusContextRequestedMessage {
   type: "agentManager.focusContextRequested"
 }
 
+export type PersonalTodoItem = import("@kilocode/sdk/v2/client").RayaPersonalTodoListResponse[number]
+
+export interface PersonalTodoResultMessage {
+  type: "personalTodoResult"
+  requestID: string
+  operation: "list" | "create" | "update" | "delete"
+  items?: PersonalTodoItem[]
+  item?: PersonalTodoItem
+  todoID?: string
+  removed?: true
+  error?: {
+    kind: "offline" | "stale" | "error"
+    message: string
+    expected?: number
+    actual?: number
+    latest?: PersonalTodoItem
+  }
+}
+
 export type ExtensionMessage =
   | { type: "speechLiveStarted"; requestId: string }
+  | PersonalTodoResultMessage
   | { type: "speechLiveMicReady"; requestId: string }
   | { type: "speechLiveMicChunk"; requestId: string; data: string }
   | { type: "speechLiveMicError"; requestId: string; error: string }

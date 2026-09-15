@@ -1959,8 +1959,38 @@ export interface DismissAgentMigrationBannerMessage {
   type: "dismissAgentMigrationBanner"
 }
 
+export interface PersonalTodoListMessage {
+  type: "personalTodoList"
+  requestID: string
+}
+
+export interface PersonalTodoCreateMessage {
+  type: "personalTodoCreate"
+  requestID: string
+  title: string
+}
+
+export interface PersonalTodoUpdateMessage {
+  type: "personalTodoUpdate"
+  requestID: string
+  todoID: string
+  revision: number
+  done: boolean
+}
+
+export interface PersonalTodoDeleteMessage {
+  type: "personalTodoDelete"
+  requestID: string
+  todoID: string
+  revision: number
+}
+
 export type WebviewMessage =
   | { type: "speechLiveControl"; requestId: string; eventID: string; action: "mute" | "unmute" | "stop_speaking" }
+  | PersonalTodoListMessage
+  | PersonalTodoCreateMessage
+  | PersonalTodoUpdateMessage
+  | PersonalTodoDeleteMessage
   | DocumentRequestMessage
   | DocumentOpenFileMessage
   | DocumentCloseMessage

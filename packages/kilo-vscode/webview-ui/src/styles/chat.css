@@ -137,3 +137,168 @@
 [data-slot="voice-transcript"][data-partial="true"] .prompt-realtime-voice__text {
   font-style: italic;
 }
+
+/* Personal todo */
+[data-component="personal-todo"] {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+  padding: var(--raya-space-16);
+  gap: var(--raya-space-16);
+  font-family: var(--raya-font-body);
+}
+
+[data-slot="personal-todo-header"] {
+  display: flex;
+  align-items: center;
+  gap: var(--raya-space-10);
+}
+
+[data-slot="personal-todo-header"] h1,
+[data-slot="personal-todo-header"] p {
+  margin: 0;
+}
+
+[data-slot="personal-todo-header"] h1 {
+  font-family: var(--raya-font-display);
+  font-size: 26px;
+  font-weight: 400;
+  line-height: var(--raya-leading-tight);
+}
+
+[data-slot="personal-todo-header"] p {
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-size: var(--font-size-small);
+}
+
+[data-slot="personal-todo-compose"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--raya-space-8);
+}
+
+[data-slot="personal-todo-notice"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--raya-space-8);
+  padding: var(--raya-space-10) var(--raya-space-12);
+  border: var(--raya-hairline) solid var(--border-weak-base, var(--vscode-panel-border));
+  border-radius: var(--raya-radius-md);
+  background: var(--surface-raised-base, var(--vscode-editorWidget-background));
+  color: var(--text-base, var(--vscode-foreground));
+}
+
+[data-slot="personal-todo-notice"][data-kind="stale"] {
+  border-color: var(--raya-primary);
+}
+
+[data-slot="personal-todo-loading"] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--raya-space-8);
+  min-height: 120px;
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+}
+
+[data-slot="personal-todo-empty"] {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  min-height: 180px;
+  padding: var(--raya-space-24);
+  text-align: center;
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+}
+
+[data-slot="personal-todo-empty"] > span {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--raya-radius-full);
+  background: var(--raya-primary-soft);
+  color: var(--raya-primary);
+}
+
+[data-slot="personal-todo-empty"] h2,
+[data-slot="personal-todo-empty"] p {
+  margin: var(--raya-space-8) 0 0;
+}
+
+[data-slot="personal-todo-empty"] h2 {
+  color: var(--text-base, var(--vscode-foreground));
+  font-family: var(--raya-font-display);
+  font-size: 20px;
+  font-weight: 400;
+}
+
+[data-slot="personal-todo-list"] {
+  display: grid;
+  gap: var(--raya-space-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+[data-slot="personal-todo-item"] {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--raya-space-10);
+  min-height: 42px;
+  padding: var(--raya-space-8) var(--raya-space-10);
+  border: var(--raya-hairline) solid var(--border-weak-base, var(--vscode-panel-border));
+  border-radius: var(--raya-radius-md);
+  background: var(--surface-raised-base, var(--vscode-editorWidget-background));
+}
+
+[data-slot="personal-todo-item"] > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+[data-slot="personal-todo-item"][data-done="true"] > span {
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  text-decoration: line-through;
+}
+
+[data-slot="personal-todo-confirm"] {
+  display: flex;
+  align-items: center;
+  gap: var(--raya-space-4);
+}
+
+@media (max-width: 360px) {
+  [data-component="personal-todo"] {
+    padding: var(--raya-space-12);
+  }
+
+  [data-slot="personal-todo-compose"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  [data-slot="personal-todo-compose"] [data-component="button"] {
+    width: 100%;
+  }
+
+  [data-slot="personal-todo-notice"] {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  [data-slot="personal-todo-item"] {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  [data-slot="personal-todo-item"] > [data-component="icon-button"],
+  [data-slot="personal-todo-confirm"] {
+    grid-column: 2;
+    justify-self: end;
+  }
+}

@@ -117,11 +117,13 @@ type ScanState = {
 // kilocode_change end
 
 export interface Interface {
-  readonly get: (name: string) => Effect.Effect<Info | undefined>
-  readonly require: (name: string) => Effect.Effect<Info, NotFoundError>
-  readonly all: () => Effect.Effect<Info[]>
+  // kilocode_change start - internal consumers retain the selected-source receipt
+  readonly get: (name: string) => Effect.Effect<ResolvedInfo | undefined>
+  readonly require: (name: string) => Effect.Effect<ResolvedInfo, NotFoundError>
+  readonly all: () => Effect.Effect<ResolvedInfo[]>
+  // kilocode_change end
   readonly dirs: () => Effect.Effect<string[]>
-  readonly available: (agent?: Agent.Info) => Effect.Effect<Info[]>
+  readonly available: (agent?: Agent.Info) => Effect.Effect<ResolvedInfo[]> // kilocode_change
 }
 
 // kilocode_change start

@@ -431,10 +431,6 @@ export namespace PersonalTodo {
             ...(refs === undefined ? {} : { links: refs }),
           }
         : { version: 1, ...base, ...fields }
-      if (alert !== undefined) {
-        item.reminderAt = alert
-        item.reminderRevision = 1
-      }
       if (yield* deps.storage.create(key(id), item).pipe(Effect.orDie)) return project(item)
       return yield* new ConflictError({ id, message: "A personal todo with this ID already exists." })
     })
@@ -739,13 +735,16 @@ export namespace PersonalTodo {
             state.actual = prior.revision
             return
           }
-          const index =
-            prior.version === 2 ? (prior.subtasks?.findIndex((task) => task.id === input.subtaskID) ?? -1) : -1
+          if (prior.version !== 2) {
+            state.missing = true
+            return
+          }
+          const index = prior.subtasks?.findIndex((task) => task.id === input.subtaskID) ?? -1
           if (index < 0) {
             state.missing = true
             return
           }
-          const task = prior.version === 2 ? prior.subtasks?.[index] : undefined
+          const task = prior.subtasks?.[index]
           if (!task) {
             state.missing = true
             return
@@ -868,13 +867,8 @@ export namespace PersonalTodo {
         id: input.proposalID,
         digest: input.digest,
       }).pipe(Effect.orDie)
-      const postimage = yield* Schema.decodeUnknownEffect(Info)(input.postimage).pipe(Effect.orDie)
-      if (
-        postimage.version !== 2 ||
-        !coherent(postimage) ||
-        postimage.id !== input.todoID ||
-        postimage.revision !== input.baseRevision + 1
-      )
+      const postimage = yield* Schema.decodeUnknownEffect(V2Info)(input.postimage).pipe(Effect.orDie)
+      if (!coherent(postimage) || postimage.id !== input.todoID || postimage.revision !== input.baseRevision + 1)
         return yield* new InputError({ field: "revision", message: "The Todo proposal postimage is invalid." })
       const marked = (item: { proposalApply?: ProposalApply }) =>
         item.proposalApply?.id === marker.id && item.proposalApply.digest === marker.digest

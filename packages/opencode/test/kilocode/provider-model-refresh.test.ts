@@ -46,7 +46,7 @@ const refreshed: Record<string, ModelsDev.Provider> = {
 }
 
 it.instance(
-  "connected providers use refreshed models without instance disposal",
+  "connected providers refresh from the preferred Raya catalog URL without instance disposal",
   Effect.gen(function* () {
     const server = yield* Effect.acquireRelease(
       Effect.sync(() =>
@@ -63,7 +63,8 @@ it.instance(
     const source = `http://127.0.0.1:${server.port}`
     const file = path.join(Global.Path.cache, `models-${Hash.fast(source)}.json`)
     const flags = {
-      source: Flag.KILO_MODELS_URL,
+      raya: process.env.RAYA_MODELS_URL,
+      legacy: process.env.KILO_MODELS_URL,
       path: Flag.KILO_MODELS_PATH,
       disabled: Flag.KILO_DISABLE_MODELS_FETCH,
       key: process.env.ACME_API_KEY,
@@ -71,7 +72,8 @@ it.instance(
 
     yield* Effect.acquireUseRelease(
       Effect.promise(async () => {
-        Flag.KILO_MODELS_URL = source
+        process.env.RAYA_MODELS_URL = source
+        process.env.KILO_MODELS_URL = "http://127.0.0.1:1"
         Flag.KILO_MODELS_PATH = undefined
         Flag.KILO_DISABLE_MODELS_FETCH = true
         process.env.ACME_API_KEY = "test-key"
@@ -95,7 +97,10 @@ it.instance(
         }).pipe(Effect.provide(Layer.merge(AppNodeBuilder.build(ModelsDev.node), AppNodeBuilder.build(Provider.node)))),
       () =>
         Effect.promise(async () => {
-          Flag.KILO_MODELS_URL = flags.source
+          if (flags.raya === undefined) delete process.env.RAYA_MODELS_URL
+          else process.env.RAYA_MODELS_URL = flags.raya
+          if (flags.legacy === undefined) delete process.env.KILO_MODELS_URL
+          else process.env.KILO_MODELS_URL = flags.legacy
           Flag.KILO_MODELS_PATH = flags.path
           Flag.KILO_DISABLE_MODELS_FETCH = flags.disabled
           if (flags.key === undefined) delete process.env.ACME_API_KEY
@@ -105,4 +110,5 @@ it.instance(
     )
   }),
   { config: { disabled_providers: ["kilo", "apertis"] } },
+  20_000,
 )

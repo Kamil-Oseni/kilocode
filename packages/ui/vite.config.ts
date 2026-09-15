@@ -47,7 +47,7 @@ function providerIconsPlugin() {
 }
 
 async function fetchProviderIcons() {
-  const url = process.env.KILO_MODELS_URL || "https://models.dev" // kilocode_change
+  const url = process.env.RAYA_MODELS_URL ?? process.env.KILO_MODELS_URL ?? "https://models.dev" // kilocode_change
   const providers = await fetch(`${url}/api.json`)
     .then((res) => res.json())
     .then((json) => Object.keys(json))

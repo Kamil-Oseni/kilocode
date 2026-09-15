@@ -122,7 +122,14 @@ export const Flag = {
 
   KILO_ENABLE_PARALLEL: truthy("KILO_ENABLE_PARALLEL") || truthy("KILO_EXPERIMENTAL_PARALLEL"), // kilocode_change
 
-  KILO_MODELS_URL: process.env["KILO_MODELS_URL"],
+  // kilocode_change start - Raya input alias with mutable compatibility access
+  get KILO_MODELS_URL() {
+    return EnvAlias.read("RAYA_MODELS_URL", "KILO_MODELS_URL")
+  },
+  set KILO_MODELS_URL(value: string | undefined) {
+    EnvAlias.write("RAYA_MODELS_URL", "KILO_MODELS_URL", value)
+  },
+  // kilocode_change end
 
   // kilocode_change start - Raya input alias with mutable compatibility access
   get KILO_MODELS_PATH() {

@@ -133,6 +133,29 @@ describe("Raya environment aliases", () => {
     expect(JSON.parse(child.stdout.toString())).toEqual(["raya.json", "written.json", "written.json"])
   })
 
+  test("aliases the model catalog URL through mutable Kilo access", () => {
+    const child = Bun.spawnSync({
+      cmd: [
+        process.execPath,
+        "-e",
+        'import { Flag } from "./src/flag/flag.ts"; const initial = Flag.KILO_MODELS_URL; Flag.KILO_MODELS_URL = "https://written.test"; console.log(JSON.stringify([initial, process.env.RAYA_MODELS_URL, process.env.KILO_MODELS_URL]))',
+      ],
+      cwd: `${import.meta.dir}/../..`,
+      env: {
+        ...process.env,
+        RAYA_MODELS_URL: "https://raya.test",
+        KILO_MODELS_URL: "https://legacy.test",
+      },
+    })
+
+    expect(child.exitCode).toBe(0)
+    expect(JSON.parse(child.stdout.toString())).toEqual([
+      "https://raya.test",
+      "https://written.test",
+      "https://written.test",
+    ])
+  })
+
   for (const item of [
     {
       name: "legacy inputs",

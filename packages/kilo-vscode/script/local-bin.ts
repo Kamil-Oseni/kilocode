@@ -123,6 +123,7 @@ async function cliSourceHash() {
         "KILO_BUMP",
         "KILO_BWRAP_CACHE",
         "KILO_CHANNEL",
+        "RAYA_MODELS_URL",
         "KILO_MODELS_URL",
         "KILO_PRE_RELEASE",
         "KILO_RELEASE",

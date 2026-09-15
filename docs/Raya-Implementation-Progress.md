@@ -6,13 +6,25 @@
 >
 > Kilo-to-Raya migration is active through lossless compatibility-first slices; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-15 16:52 America/Toronto - Every model-catalog reader now accepts the Raya URL
+
+**Status: implemented and verified locally; commit and push remain, installation is batched.** `RAYA_MODELS_URL` now takes precedence over the unchanged `KILO_MODELS_URL` fallback in the shared runtime flag, UI provider-icon build, generated catalog script and extension CLI-cache fingerprint. CLI smoke tests clear both names so a developer override cannot contaminate packaged-binary validation. The existing mutable `Flag.KILO_MODELS_URL` API remains available and writes both names.
+
+The real provider refresh test points the Raya input at a live local catalog and the Kilo input at an unreachable address, then proves the active provider gains the refreshed model without service disposal. It passes **1 test / 3 assertions**. The reusable alias suite passes **14 tests / 25 assertions**. Core, UI, bounded one-checker CLI, extension-host and webview typechecks pass. The test now has a 20-second outer timeout because this machine's real service startup can exceed Bun's five-second default; the product fetch timeout and behavior are unchanged.
+
+This is another reversible input migration. It does not rename the model service, change the default `https://models.dev` source, modify cache-file grammar, fetch during packaging, move state or remove any legacy variable.
+
+The refreshed inventory classifies **69,035** references: **1,693** potential public defects, **35,155** compatibility identities, **5,686** provenance references and **26,501** internal migration references. The compatibility ledger now declares ten ordered environment pairs and remains fail closed.
+
 ## ChatGPT 2026-09-15 16:37 America/Toronto - Raya can select an independent TUI configuration file
 
-**Status: implemented and verified locally; commit and push remain, installation is batched.** `RAYA_TUI_CONFIG` now takes precedence over the unchanged `KILO_TUI_CONFIG` fallback through the shared redacted alias resolver. The existing `Flag.KILO_TUI_CONFIG` property remains the compatibility API and is now writable: setting it synchronizes both environment names, while clearing it removes both. This adds a Raya-facing input without changing TUI file parsing, project/global precedence, trust boundaries, filenames or storage.
+**Status: implemented, verified and pushed in `b72525361e`; installation is batched.** `RAYA_TUI_CONFIG` now takes precedence over the unchanged `KILO_TUI_CONFIG` fallback through the shared redacted alias resolver. The existing `Flag.KILO_TUI_CONFIG` property remains the compatibility API and is now writable: setting it synchronizes both environment names, while clearing it removes both. This adds a Raya-facing input without changing TUI file parsing, project/global precedence, trust boundaries, filenames or storage.
 
 Real config loading proves three boundaries: a project `tui.json` still outranks the environment override, a Kilo-only override still loads its file, and conflicting Raya/Kilo override paths load the Raya file. Those cases pass **3 tests / 6 assertions**. The reusable alias suite passes **13 tests / 23 assertions**, the migration-ledger suite passes **3 tests / 18 assertions**, and the cross-repository checker passes **3 tests / 6 assertions**. Core and bounded one-checker CLI typechecks pass.
 
 The compatibility ledger now declares nine ordered environment pairs and remains Version 1 with every entry `cutoverReady: false`. The refreshed inventory classifies **69,013** references: **1,693** potential public defects, **35,139** compatibility identities, **5,686** provenance references and **26,495** internal migration references. No file was moved, copied, renamed or deleted.
+
+The normal protected push passed all 29 JavaScript/TypeScript packages plus JetBrains and advanced `origin/main` to `b72525361e`. The installed product remains source `18e8e12f51`; this alias is queued with the earlier binary override for the next coherent low-memory snapshot.
 
 ## ChatGPT 2026-09-15 16:23 America/Toronto - The Raya npm command has its own binary override
 

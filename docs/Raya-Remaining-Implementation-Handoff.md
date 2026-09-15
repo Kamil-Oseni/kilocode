@@ -6,11 +6,21 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-15 16:52 America/Toronto - Preserve all model-catalog URL readers
+
+The runtime flag, UI provider-icon build and generated catalog script now resolve `RAYA_MODELS_URL ?? KILO_MODELS_URL ?? "https://models.dev"`. Preserve this precedence across all three readers. `Flag.KILO_MODELS_URL` remains the mutable compatibility API and its setter synchronizes both names. `packages/opencode/script/build.ts` clears both variables for isolated smoke validation, while `packages/kilo-vscode/script/local-bin.ts` fingerprints both so changing either invalidates the cached CLI build.
+
+The real provider test makes the Kilo URL unreachable and serves the refreshed catalog only at the Raya URL; its successful model refresh proves the runtime does not silently fall back. It passes 1 test / 3 assertions. The reusable alias suite passes 14 / 25. Core, UI, bounded CLI, extension-host and webview typechecks pass. Keep the test's 20-second outer timeout because real service startup crossed Bun's five-second default on this machine. Do not change the product's own fetch timeout or default URL as part of this compatibility slice.
+
+Commit and push this slice after refreshing the compatibility inventory and extending the fail-closed ledger/checker to ten ordered environment pairs. Installation remains batched with the binary and TUI aliases.
+
+The refreshed inventory is 69,035 total: public 1,693; compatibility 35,155; provenance 5,686; internal 26,501.
+
 ## ChatGPT 2026-09-15 16:37 America/Toronto - Preserve the Raya TUI configuration override
 
 `packages/core/src/flag/flag.ts` now resolves `RAYA_TUI_CONFIG ?? KILO_TUI_CONFIG` through `EnvAlias`. Preserve the existing `Flag.KILO_TUI_CONFIG` getter because current TUI consumers depend on it; its setter intentionally writes or clears both names. Do not change project/global precedence, substitution trust, TUI schema, filenames or storage as part of this alias.
 
-The focused real-file cases prove that project `tui.json` remains strongest, Kilo-only configuration remains compatible, and a conflicting Raya path wins. They pass 3 tests / 6 assertions. The reusable alias suite passes 13 / 23, the ledger suite passes 3 / 18, the cross-repository checker passes 3 / 6, and Core plus bounded CLI typechecks pass. The ledger/checker now contain nine ordered environment pairs and remain fail closed.
+The focused real-file cases prove that project `tui.json` remains strongest, Kilo-only configuration remains compatible, and a conflicting Raya path wins. They pass 3 tests / 6 assertions. The reusable alias suite passes 13 / 23, the ledger suite passes 3 / 18, the cross-repository checker passes 3 / 6, and Core plus bounded CLI typechecks pass. The ledger/checker now contain nine ordered environment pairs and remain fail closed. Commit `b72525361e` is on `origin/main`; its normal hook passed all 29 JavaScript/TypeScript packages plus JetBrains.
 
 The refreshed inventory is 69,013 total: public 1,693; compatibility 35,139; provenance 5,686; internal 26,495. Commit and push this slice, then continue batching aliases into a later low-memory snapshot.
 

@@ -1,6 +1,34 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: active.** Continue implementation from local and installed product source `0d545aa678`; do not pause it. `origin/main` is still `d894fc0eb9` because the normal pre-push hook reaches existing cross-package `@opencode-ai/tui` type failures. The 16 future additions are canonical `FUT-*` rows in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+> **Goal status: active.** Continue implementation from local source `8d54ddff1e`; installed product source is `0d545aa678`; do not pause it. `origin/main` is still `d894fc0eb9` because the normal pre-push hook reaches existing cross-package `@opencode-ai/tui` type failures. The 16 future additions are canonical `FUT-*` rows in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+
+## ChatGPT 2026-09-15 00:42 America/Toronto - Checked brand inventory delivered; public migration is next
+
+Repository guard commit `8d54ddff1e` implements the inventory-only slice of `FUT-BRAND-01`. Preserve `script/check-raya-brand-inventory.ts` and `script/raya-brand-inventory.json` as the migration ratchet. The checker obtains tracked paths through NUL-delimited `git ls-files`, skips missing and NUL-containing files, normalizes slashes and line whitespace, then records every case-insensitive `kilo`, `kilocode` or `kilo-code` occurrence by file, token, normalized context and one category. It deliberately excludes itself and its manifest to avoid a recursive baseline.
+
+The four categories and their current counts are:
+
+| Category | Count | Migration meaning |
+|---|---:|---|
+| `user-visible-defect` | 1,719 | Potential rendered names in extension manifests, localized catalogs and webview sources; inspect the consumer before removal. |
+| `compatibility-key` | 34,591 | Package/provider/model IDs, commands, events, API paths, stored keys, filesystem names, environment names or similar identities that require dual-read migration. |
+| `upstream-provenance` | 5,685 | Legal attribution, fork documentation, translation process and upstream merge material that may need to remain. |
+| `internal-migration` | 26,507 | Internal source identity to migrate only after public and compatibility contracts stabilize. |
+
+Each category and the 68,502-reference total have an expected count and SHA-256 digest. The digest contains normalized file/token/context records rather than line numbers. Any addition, deletion, context change or category change fails even if a category count happens to remain equal. Missing, extra/stale and unsupported manifest categories also fail. `--update` rewrites the baseline and must be used only after reviewing the changed references; never make CI auto-update it. `--self-test` covers zero-match, overlap, stale category, count drift and same-count context drift.
+
+The root `check:brand-inventory` script and existing forbidden-string workflow run this guard without adding a workflow. Verification passes the self-test, live baseline, existing forbidden-string scan across 10,821 files, the 30-workflow allowlist, Prettier, `git diff --check`, and focused one-thread Oxlint with zero warnings/errors. There is no runtime/package change, so installed source remains `0d545aa678` and no snapshot is needed for this commit.
+
+Continue `FUT-BRAND-01` through small public-string commits. Start with confirmed rendered candidates: `MarketplacePanelProvider.ts` panel titles, the Next Edit output-channel label, KiloClaw command/titles, the hard-coded provider label in `ProvidersTab.tsx`, and the ACP error in `packages/opencode/src/acp/service.ts`. For every batch:
+
+1. trace whether the occurrence is actually rendered or is a compatibility identifier;
+2. change display copy only, retaining command/view/storage/protocol identities;
+3. run the closest component/command test and narrow/wide browser case when UI is affected;
+4. run `bun run script/check-raya-brand-inventory.ts --update`, inspect the count/category delta, then run the live guard again;
+5. document exactly which identities remain compatible and why;
+6. do not rename `@kilocode/*`, `kilo` provider IDs, `kilo-auto/free`, `/kilocode`, `kilocode.*`, `kilo.events.v1`, VS Code state keys, `.kilo`/`.kilocode`, `kilo.db`, `KILO_*`, SecretStorage keys, old settings or legacy aliases without a versioned migration and rollback contract.
+
+After one or two small public batches, proceed to the versioned universal design-skill foundation, then the read-only System Health registry. Keep installed-host `FUT-AGENT-02` checks open and run them after a real reload; do not block deterministic local implementation on them.
 
 ## ChatGPT 2026-09-15 00:21 America/Toronto - Delegated-agent acceptance checkpoint and exact continuation
 

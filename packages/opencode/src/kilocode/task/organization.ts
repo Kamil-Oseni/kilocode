@@ -8,7 +8,6 @@ import {
   RayaRoutineOrganizationRevisionTable as RevisionRow,
   RayaRoutineOrganizationTable as OrganizationRow,
 } from "@opencode-ai/core/kilocode/routine.sql"
-import type { RayaTask } from "."
 import type { Storage } from "@/storage/storage"
 import { mutate } from "./mutation"
 
@@ -208,7 +207,9 @@ function decoded(
   }
 }
 
-type Workers = Pick<ReturnType<typeof RayaTask.make>, "get">
+type Workers = {
+  get(id: string): Effect.Effect<unknown, { readonly _tag: "RayaTask.NotFoundError" }>
+}
 type Store = Pick<Storage.Interface, "read" | "create" | "replace" | "remove">
 
 export namespace RayaTaskOrganization {

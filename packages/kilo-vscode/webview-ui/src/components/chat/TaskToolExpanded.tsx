@@ -32,8 +32,8 @@ const TaskToolRenderer: Component<ToolProps> = (props) => {
 
   // raya_change start - Milestone D show the Chief-selected specialist in the nested thread
   const taskMetadata = () => {
-    const part = props.partMetadata as { selectedAgent?: string; selection?: string } | undefined
-    const state = props.metadata as { selectedAgent?: string; selection?: string } | undefined
+    const part = props.partMetadata as { selectedAgent?: string; selection?: string; displayName?: string } | undefined
+    const state = props.metadata as { selectedAgent?: string; selection?: string; displayName?: string } | undefined
     return taskAgent(props.input, part, state)
   }
   const selectedAgent = () => taskMetadata().agent
@@ -75,7 +75,7 @@ const TaskToolRenderer: Component<ToolProps> = (props) => {
     if (synced) session.unsyncSession(synced)
   })
 
-  const title = createMemo(() => i18n.t("ui.tool.agent", { type: selectedAgent() })) // raya_change
+  const title = createMemo(() => taskMetadata().displayName ?? i18n.t("ui.tool.agent", { type: selectedAgent() })) // raya_change
 
   const description = createMemo(() => {
     return taskMetadata().description // raya_change - distinguish automatic Chief routing from explicit overrides

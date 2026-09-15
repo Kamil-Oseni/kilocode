@@ -29,6 +29,7 @@ import * as GoalChildren from "@/kilocode/goal/children" // kilocode_change - ra
 import { Storage } from "@/storage/storage" // kilocode_change - raya_change: durable goal child limit
 import { ModelV2 } from "@opencode-ai/core/model" // raya_change - Milestone B preserved target model
 import { ProviderV2 } from "@opencode-ai/core/provider" // raya_change - Milestone B preserved target model
+import { TaskName } from "@/kilocode/tool/task-name" // kilocode_change - raya_change: durable subagent display identity
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID, messageID?: MessageID): Effect.Effect<void> // kilocode_change
@@ -55,7 +56,9 @@ const BACKGROUND_UPDATED = [
 ].join("\n")
 
 const BaseParameterFields = {
-  description: Schema.String.annotate({ description: "A short (3-5 words) description of the task" }),
+  description: Schema.String.annotate({
+    description: "A short (3-7 words), outcome-specific display name for the delegated task",
+  }),
   // raya_change start - Milestone D defaults delegation to Chief auto-selection
   prompt: Schema.optional(Schema.String).annotate({ description: "Legacy task objective; prefer brief.objective" }),
   subagent_type: Schema.optional(Schema.String).annotate({
@@ -313,17 +316,42 @@ export const TaskTool = Tool.define(
       const lease = children ? yield* children.claim(ctx.sessionID) : { release: Effect.void }
       // kilocode_change end // raya_change end
       // kilocode_change start - create a child session with inherited Kilo restrictions
-      const nextSession =
-        session ??
-        (yield* sessions
-          .create({
-            parentID: ctx.sessionID,
-            title: params.description + ` (@${next.name} subagent)`,
-            agent: next.name,
-            platform, // kilocode_change
-            permission: childPermission, // kilocode_change - persist inherited Kilo ceilings and upstream child denies
-          })
-          .pipe(Effect.tapError(() => lease.release)))
+      // raya_change start - allocate a durable, collision-safe identity only for a new child
+      const selection = explicit ? "explicit" : "auto"
+      const created = yield* TaskName.gate
+        .withLock(ctx.sessionID)(
+          Effect.gen(function* () {
+            if (session) {
+              const identity = TaskName.read(session.metadata?.[TaskName.key])
+              return { session, displayName: identity?.displayName ?? session.title }
+            }
+            const siblings = yield* sessions.children(ctx.sessionID)
+            const identity = TaskName.allocate({
+              description: params.description,
+              objective: params.brief?.objective,
+              prompt: params.prompt,
+              specialist: next.name,
+              selection,
+              parentSessionID: ctx.sessionID,
+              parentMessageID: ctx.messageID,
+              callID: ctx.callID,
+              siblings,
+            })
+            const child = yield* sessions.create({
+              parentID: ctx.sessionID,
+              title: identity.displayName,
+              agent: next.name,
+              metadata: { [TaskName.key]: identity },
+              platform,
+              permission: childPermission,
+            })
+            return { session: child, displayName: identity.displayName }
+          }),
+        )
+        .pipe(Effect.tapError(() => lease.release))
+      const nextSession = created.session
+      const displayName = created.displayName
+      // raya_change end
       // kilocode_change end
       // kilocode_change start - persist a task-specific ceiling consumed by SessionPrompt.runLoop
       yield* sessions
@@ -374,6 +402,7 @@ export const TaskTool = Tool.define(
         sessionId: SessionID
         childMessageID?: MessageID // kilocode_change - older results lack verifiable input lineage
         selectedAgent?: string
+        displayName?: string // raya_change - durable identity for compact child monitors
         selection?: "auto" | "explicit"
         stepCap?: number
         model: typeof model
@@ -385,7 +414,8 @@ export const TaskTool = Tool.define(
         sessionId: nextSession.id,
         childMessageID: message, // kilocode_change
         selectedAgent: next.name, // raya_change - expose Chief routing to parent and nested UI
-        selection: explicit ? "explicit" : "auto", // raya_change
+        displayName, // raya_change
+        selection, // raya_change
         stepCap: limit, // raya_change
         model,
         provenance: selected.provenance, // kilocode_change - retain the selection source for this invocation
@@ -395,7 +425,7 @@ export const TaskTool = Tool.define(
 
       yield* ctx
         .metadata({
-          title: params.description,
+          title: displayName,
           metadata,
         })
         .pipe(Effect.tapError(() => lease.release))
@@ -453,8 +483,8 @@ export const TaskTool = Tool.define(
                   state,
                   summary:
                     state === "completed"
-                      ? `Background task completed: ${params.description}`
-                      : `Background task failed: ${params.description}`,
+                      ? `Background task completed: ${displayName}`
+                      : `Background task failed: ${displayName}`,
                   text,
                 }),
               },
@@ -518,7 +548,7 @@ export const TaskTool = Tool.define(
           .pipe(Effect.tapError(() => lease.release))
       ) {
         return {
-          title: params.description,
+          title: displayName,
           metadata: {
             ...metadata,
             background: true,
@@ -541,11 +571,11 @@ export const TaskTool = Tool.define(
           origin, // kilocode_change
           id: nextSession.id,
           type: id,
-          title: params.description,
+          title: displayName,
           metadata,
           onPromote: Effect.all([
             ctx.metadata({
-              title: params.description,
+              title: displayName,
               metadata: { ...metadata, background: true, jobId: nextSession.id },
             }),
             notify(nextSession.id),
@@ -560,7 +590,7 @@ export const TaskTool = Tool.define(
 
       function backgroundResult() {
         return {
-          title: params.description,
+          title: displayName,
           metadata: {
             ...metadata,
             background: true,
@@ -604,7 +634,7 @@ export const TaskTool = Tool.define(
             if (result?.status === "error") return yield* Effect.fail(new Error(result.error ?? "Task failed"))
             if (result?.status === "cancelled") return yield* Effect.fail(new Error("Task cancelled"))
             return {
-              title: params.description,
+              title: displayName,
               metadata,
               output: renderOutput({ sessionID: nextSession.id, state: "completed", text: result?.output ?? "" }),
             }

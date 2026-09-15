@@ -22,12 +22,16 @@ interface TaskOptions {
   /** Put the metadata on the part instead of the tool state. */
   onPart?: boolean
   status?: "pending" | "running" | "completed"
+  displayName?: string
+  selectedAgent?: string
 }
 
 function taskPart(opts: TaskOptions = {}): ToolPart {
   const metadata: Record<string, unknown> = {}
   if (opts.child !== undefined) metadata.sessionId = opts.child
   if (opts.background !== undefined) metadata.background = opts.background
+  if (opts.displayName !== undefined) metadata.displayName = opts.displayName
+  if (opts.selectedAgent !== undefined) metadata.selectedAgent = opts.selectedAgent
   const input = {
     description: opts.description ?? "Research meaning of life",
     subagent_type: opts.agent ?? "general",
@@ -68,6 +72,23 @@ describe("backgroundAgents", () => {
     const tools = [taskPart({ child: "ses_child", background: true, onPart: true })]
 
     expect(backgroundAgents(tools, { ses_child: busy }).map((a) => a.id)).toEqual(["ses_child"])
+  })
+
+  it("prefers the durable display identity and actual routed specialist", () => {
+    const tools = [
+      taskPart({
+        child: "ses_child",
+        background: true,
+        description: "Old description",
+        agent: "auto",
+        displayName: "Map API routes · Explore",
+        selectedAgent: "explore",
+      }),
+    ]
+
+    expect(backgroundAgents(tools, { ses_child: busy })).toMatchObject([
+      { description: "Map API routes · Explore", agent: "explore" },
+    ])
   })
 
   it("ignores foreground subagents", () => {
@@ -232,6 +253,29 @@ describe("backgroundAgents", () => {
 
     expect(rows[0]?.question?.id).toBe("question")
     expect(rows[1]?.permission?.id).toBe("permission")
+  })
+
+  it("prefers durable identity fields from the backend registry", () => {
+    const jobs: BackgroundJobInfo[] = [
+      {
+        id: "job",
+        type: "task",
+        title: "Legacy title",
+        status: "running",
+        started_at: 1,
+        metadata: {
+          parentSessionId: "parent",
+          sessionId: "child",
+          background: true,
+          displayName: "Map API routes · Explore",
+          selectedAgent: "explore",
+        },
+      },
+    ]
+
+    expect(backgroundJobAgents(jobs, "parent")).toMatchObject([
+      { description: "Map API routes · Explore", agent: "explore" },
+    ])
   })
 
   it("keeps attention state on a running row for collapsed summaries", () => {

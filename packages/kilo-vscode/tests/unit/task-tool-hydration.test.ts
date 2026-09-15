@@ -49,8 +49,15 @@ describe("completed task hydration", () => {
   it("labels the live nested thread with the Chief-selected specialist", () => {
     expect(taskAgent({ description: "Inspect API routes" }, { selectedAgent: "explore", selection: "auto" })).toEqual({
       agent: "explore",
-      description: "Auto → explore · Inspect API routes",
+      displayName: undefined,
+      description: "Inspect API routes",
     })
+    expect(
+      taskAgent(
+        { description: "Inspect API routes" },
+        { selectedAgent: "explore", selection: "auto", displayName: "Map API routes · Explore" },
+      ),
+    ).toEqual({ agent: "explore", displayName: "Map API routes · Explore", description: "Auto chose explore" })
     expect(taskResult("<task_result>\nSynthesized route map\n</task_result>", undefined)).toBe("Synthesized route map")
     expect(
       taskResult(

@@ -72,8 +72,8 @@ export function backgroundAgents(tools: ToolPart[], status: Record<string, Sessi
     if (!working(status[id])) continue
     agents.push({
       id,
-      description: text(part.state.input?.description),
-      agent: text(part.state.input?.subagent_type),
+      description: text(meta(part, "displayName")) ?? text(part.state.input?.description),
+      agent: text(meta(part, "selectedAgent")) ?? text(part.state.input?.subagent_type),
       status: "running",
       startedAt: 0,
       jobID: id,
@@ -98,7 +98,8 @@ export function backgroundJobAgents(
       const id = typeof job.metadata?.sessionId === "string" ? job.metadata.sessionId : job.id
       return {
         id,
-        description: job.title,
+        description: text(job.metadata?.displayName) ?? job.title,
+        agent: text(job.metadata?.selectedAgent),
         status: job.status,
         error: job.error,
         startedAt: job.started_at,

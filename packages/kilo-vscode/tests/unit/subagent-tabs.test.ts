@@ -137,7 +137,7 @@ describe("Agent Manager subagent tabs", () => {
           output: "",
           title: "",
         },
-        metadata: { sessionId: "child-1" },
+        metadata: { sessionId: "child-1", displayName: "Map API routes · Explore" },
       },
       {
         id: "task-2",
@@ -149,7 +149,7 @@ describe("Agent Manager subagent tabs", () => {
     ])
 
     expect(tabs).toEqual([
-      { id: "child-1", title: "Inspect files" },
+      { id: "child-1", title: "Map API routes · Explore" },
       { id: "child-2", title: "general" },
     ])
   })

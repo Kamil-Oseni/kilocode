@@ -41,6 +41,9 @@ export interface BackgroundJobInfo {
     parentSessionId?: string
     sessionId?: string
     background?: boolean
+    displayName?: string
+    selectedAgent?: string
+    selection?: "auto" | "explicit"
   }
 }
 import type { QuestionRequest, SuggestionRequest, TodoItem } from "./questions"

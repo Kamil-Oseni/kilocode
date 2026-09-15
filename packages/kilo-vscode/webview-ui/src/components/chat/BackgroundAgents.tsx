@@ -127,7 +127,7 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
   const openAgent = (agent: BackgroundAgent) =>
     openSubagent({
       sessionID: agent.id,
-      title: agent.description,
+      title: label(agent),
       parentSessionID: session.currentSessionID(),
       worktree: !!worktree,
       post: vscode.postMessage,
@@ -240,6 +240,7 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
                     <span data-slot="task-header-agent-label" dir="auto">
                       {label(agent)}
                     </span>
+                    <Show when={agent.agent}>{(name) => <span data-slot="task-header-agent-role">{name()}</span>}</Show>
                     <span data-slot="task-header-agent-status-label">{status(agent)}</span>
                     <Show when={agent.permission || agent.question}>
                       <span data-slot="task-header-agent-attention-label">

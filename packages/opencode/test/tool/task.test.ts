@@ -287,9 +287,22 @@ describe("tool.task", () => {
       const child = yield* sessions.get(result.metadata.sessionId)
       expect(child.parentID).toBe(chat.id)
       expect(child.agent).toBe("explore")
+      // kilocode_change start - raya_change: durable task identity
+      expect(child.title).toBe("Map API routes · Explore")
+      expect(child.metadata?.["raya.task.identity"]).toMatchObject({
+        version: 1,
+        displayName: "Map API routes · Explore",
+        baseName: "Map API routes · Explore",
+        ordinal: 1,
+        specialist: "explore",
+        selection: "auto",
+        provenance: { source: "description", parentSessionID: chat.id, parentMessageID: assistant.id },
+      })
+      // kilocode_change end
       expect(child.metadata?.["raya.task.stepCap"]).toBe(4)
       expect(result.metadata).toMatchObject({
         selectedAgent: "explore",
+        displayName: "Map API routes · Explore", // kilocode_change - raya_change
         selection: "auto",
         stepCap: 4,
       })
@@ -553,6 +566,12 @@ describe("tool.task", () => {
       gate.resolve()
       const results = yield* Fiber.join(fiber)
       expect(new Set(results.map((item) => item.metadata.sessionId)).size).toBe(2)
+      // kilocode_change start - raya_change: each routed child exposes its saved identity
+      expect(results.map((item) => item.metadata.displayName)).toEqual([
+        "Find route files · Explore",
+        "Implement helper · General",
+      ])
+      // kilocode_change end
       expect(results.map((item) => item.metadata.selectedAgent)).toEqual(["explore", "general"])
       expect(results.map((item) => item.output)).toEqual([
         expect.stringContaining("summary:explore"),
@@ -594,7 +613,9 @@ describe("tool.task", () => {
       const kids = yield* sessions.children(chat.id)
       expect(kids).toHaveLength(1)
       expect(kids[0]?.id).toBe(child.id)
+      expect(kids[0]?.title).toBe("Existing child") // kilocode_change - raya_change: resume preserves identity
       expect(result.metadata.sessionId).toBe(child.id)
+      expect(result.metadata.displayName).toBe("Existing child") // kilocode_change - raya_change
       expect(result.output).toContain(`<task id="${child.id}" state="completed">`)
       expect(seen?.sessionID).toBe(child.id)
       expect(seen?.variant).toBe("xhigh")

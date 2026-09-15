@@ -15,17 +15,19 @@ export function taskResult(output: string | undefined, id: string | undefined) {
 // raya_change start - Milestone D nested thread identity for automatic Chief routing
 export function taskAgent(
   input: { subagent_type?: unknown; description?: unknown },
-  part?: { selectedAgent?: string; selection?: string },
-  state?: { selectedAgent?: string; selection?: string },
+  part?: { selectedAgent?: string; selection?: string; displayName?: string },
+  state?: { selectedAgent?: string; selection?: string; displayName?: string },
 ) {
   const selected = part?.selectedAgent ?? state?.selectedAgent
   const requested = typeof input.subagent_type === "string" ? input.subagent_type : undefined
   const agent = selected ?? requested ?? "auto"
   const selection = part?.selection ?? state?.selection
   const description = typeof input.description === "string" ? input.description : undefined
+  const displayName = part?.displayName ?? state?.displayName
   return {
     agent,
-    description: selection === "auto" ? `Auto → ${agent}${description ? ` · ${description}` : ""}` : description,
+    displayName,
+    description: displayName ? (selection === "auto" ? `Auto chose ${agent}` : `Agent ${agent}`) : description,
   }
 }
 // raya_change end

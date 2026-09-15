@@ -132,7 +132,16 @@ export function availableSubagents(parts: ToolPart[]): SubagentTab[] {
     const input = part.state.input
     const description = input.description
     const type = input.subagent_type
-    const title = typeof description === "string" ? description : typeof type === "string" ? type : "Sub-agent"
+    const metadata = part.metadata ?? (part.state as { metadata?: Record<string, unknown> }).metadata
+    const display = metadata?.displayName
+    const title =
+      typeof display === "string" && display.trim()
+        ? display
+        : typeof description === "string"
+          ? description
+          : typeof type === "string"
+            ? type
+            : "Sub-agent"
     return [{ id: child, title }]
   })
 }

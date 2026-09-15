@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test"
 import {
+  backgroundAgentActivity,
+  backgroundAgentDuration,
+  backgroundAgentElapsed,
   backgroundAgents,
   backgroundJobAgents,
   foregroundAgent,
@@ -53,6 +56,37 @@ const busy: SessionStatusInfo = { type: "busy" }
 const idle: SessionStatusInfo = { type: "idle" }
 
 describe("backgroundAgents", () => {
+  it("projects only a child's current pending or running tool", () => {
+    const done = {
+      id: "done",
+      type: "tool",
+      tool: "read",
+      state: { status: "completed", input: {}, output: "", title: "Read" },
+    } as ToolPart
+    const active = {
+      id: "active",
+      type: "tool",
+      tool: "bash",
+      state: { status: "running", input: { description: "Build" } },
+    } as ToolPart
+    const queued = { id: "queued", type: "tool", tool: "write", state: { status: "pending", input: {} } } as ToolPart
+
+    expect(backgroundAgentActivity([done, active, queued])?.id).toBe("queued")
+    expect(backgroundAgentActivity([done])).toBeUndefined()
+  })
+
+  it("formats elapsed time from authoritative job timestamps", () => {
+    const running = { id: "child", status: "running", startedAt: 1_000, jobID: "job" } as const
+    const done = { ...running, status: "completed" as const, completedAt: 66_999 }
+
+    expect(backgroundAgentElapsed(running, 62_999)).toBe(61)
+    expect(backgroundAgentElapsed(done, 999_999)).toBe(65)
+    expect(backgroundAgentElapsed({ ...running, startedAt: 0 }, 62_999)).toBeUndefined()
+    expect(backgroundAgentDuration(5)).toBe("5s")
+    expect(backgroundAgentDuration(65)).toBe("1m 5s")
+    expect(backgroundAgentDuration(7_381)).toBe("2h 3m")
+  })
+
   it("lists a running background agent from tool state metadata", () => {
     const tools = [taskPart({ child: "ses_child", background: true, description: "Audit deps", agent: "explore" })]
 
@@ -222,9 +256,9 @@ describe("backgroundAgents", () => {
 
     expect(backgroundJobAgents(jobs, "parent")).toMatchObject([
       { id: "child_1", status: "running" },
-      { id: "child_2", status: "completed" },
-      { id: "child_3", status: "cancelled" },
-      { id: "child_4", status: "error", error: "failed" },
+      { id: "child_2", status: "completed", completedAt: 3 },
+      { id: "child_3", status: "cancelled", completedAt: 5 },
+      { id: "child_4", status: "error", error: "failed", completedAt: 7 },
     ])
   })
 

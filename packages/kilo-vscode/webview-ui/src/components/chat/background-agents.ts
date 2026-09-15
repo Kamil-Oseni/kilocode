@@ -32,9 +32,31 @@ export interface BackgroundAgent {
   status: BackgroundAgentStatus
   error?: string
   startedAt: number
+  completedAt?: number
   jobID: string
   permission?: PermissionRequest
   question?: QuestionRequest
+}
+
+export function backgroundAgentActivity(tools: ToolPart[]): ToolPart | undefined {
+  return tools.findLast((part) => part.state.status === "pending" || part.state.status === "running")
+}
+
+export function backgroundAgentElapsed(agent: BackgroundAgent, now: number): number | undefined {
+  if (!Number.isFinite(agent.startedAt) || agent.startedAt <= 0) return undefined
+  const end = agent.completedAt ?? (agent.status === "running" ? now : undefined)
+  if (end === undefined || !Number.isFinite(end) || end < agent.startedAt) return undefined
+  return Math.floor((end - agent.startedAt) / 1_000)
+}
+
+export function backgroundAgentDuration(seconds: number): string {
+  const value = Math.max(0, Math.floor(seconds))
+  if (value < 60) return `${value}s`
+  const minutes = Math.floor(value / 60)
+  const remainder = value % 60
+  if (minutes < 60) return `${minutes}m ${remainder}s`
+  const hours = Math.floor(minutes / 60)
+  return `${hours}h ${minutes % 60}m`
 }
 
 export function showBackgroundAgent(agent: BackgroundAgent, hidden: ReadonlySet<string>): boolean {
@@ -103,6 +125,7 @@ export function backgroundJobAgents(
         status: job.status,
         error: job.error,
         startedAt: job.started_at,
+        completedAt: job.completed_at,
         jobID: job.id,
         permission: permissions.find((item) => item.sessionID === id),
         question: questions.find((item) => item.sessionID === id),

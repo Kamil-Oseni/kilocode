@@ -1,6 +1,14 @@
 # Raya implementation progress
 
-> **Goal status: ACTIVE — implementation is continuing.** Current local product source is `845a2685e3`; installed snapshot source remains `539a967263`. Any older pause wording later in this chronological record describes a superseded handoff or a product state, not the current implementation goal. `origin/main` remains at `d894fc0eb9` because the normal pre-push hook is blocked by existing cross-package `@opencode-ai/tui` type failures. The 16 added future requirements are literal `FUT-*` rows directly after `OVR-10` in the single canonical [Findings and overhauls](#findings-and-overhauls) table. They extend the existing implementation and do not pause or replace it.
+> **Goal status: ACTIVE — implementation is continuing.** Current local product source is `845a2685e3`; installed snapshot source is `d22177be2d`. Any older pause wording later in this chronological record describes a superseded handoff or a product state, not the current implementation goal. `origin/main` remains at `d894fc0eb9` because the normal pre-push hook is blocked by existing cross-package `@opencode-ai/tui` type failures. The 16 added future requirements are literal `FUT-*` rows directly after `OVR-10` in the single canonical [Findings and overhauls](#findings-and-overhauls) table. They extend the existing implementation and do not pause or replace it.
+
+## ChatGPT 2026-09-15 05:20 America/Toronto - Reminder checkpoint installed
+
+The authorized sequential low-memory workflow installed `eden.raya@7.4.23-snapshot+d22177be2d.kamil-oseni.1789463784443`, containing the complete native Personal Todo reminder checkpoint. SDK preparation, a fresh Windows CLI build and its version/model/sandbox-worker smoke checks, sequential extension and webview typechecks, cached ESLint, the production bundle, VSIX packaging and installation passed.
+
+Retained package: `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.c448ec64fcf797550d75fdf2a6203deb5633b42d97f592f3cbeb5cc3ba156b62.vsix`; **519,766,864 bytes**; SHA-256 `c448ec64fcf797550d75fdf2a6203deb5633b42d97f592f3cbeb5cc3ba156b62`. Installed directory: `C:\Users\User\.vscode\extensions\eden.raya-7.4.23-snapshot+d22177be2d.kamil-oseni.1789463784443`. Installed CLI: **230,902,784 bytes**; SHA-256 `cd3837cccf1e4d5c927985abc1a0fb2a246a4b50233d5c917d5ea6909add37ad`, matching the vault receipt. Staging contains zero files; the vault and installed extension sets each retain three snapshots; no Bun or tsgo process remains; C: has **132,018,286,592 bytes free**.
+
+The open host's vault pointer still names digest `011e278a43f74a5600735ac775a8fbf1ab0a10f70617fd4148f69e20e41b57be`. Reload VS Code and require `c448ec64fcf797550d75fdf2a6203deb5633b42d97f592f3cbeb5cc3ba156b62` before treating a native reminder observation as installed-host acceptance. Implementation continues independently with reviewed AI Todo proposals and embedded subtasks.
 
 ## ChatGPT 2026-09-15 05:10 America/Toronto - Personal Todo reminders delivered end to end
 

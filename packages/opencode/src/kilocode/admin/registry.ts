@@ -96,14 +96,18 @@ export namespace RayaAdmin {
   }
 
   export function sessions(
-    signal: { storage: "readable" | "unreadable"; stream: "connecting" | "connected" | "disconnected" | "error" },
+    signal: {
+      storage: "readable" | "unreadable" | "unknown"
+      stream: "connecting" | "connected" | "disconnected" | "error"
+    },
     at: number,
   ): Row {
-    if (signal.storage === "unreadable") return row("sessions", "degraded", "storage-unreadable", at)
-    if (signal.stream === "connected") return row("sessions", "healthy", "ready", at)
     if (signal.stream === "connecting") return row("sessions", "unknown", "connecting", at)
     if (signal.stream === "disconnected") return row("sessions", "offline", "disconnected", at)
-    return row("sessions", "degraded", "stream-error", at)
+    if (signal.stream === "error") return row("sessions", "degraded", "stream-error", at)
+    if (signal.storage === "unreadable") return row("sessions", "degraded", "storage-unreadable", at)
+    if (signal.storage === "unknown") return unknown("sessions", at, "not-checked")
+    return row("sessions", "healthy", "ready", at)
   }
 
   export function routines(
@@ -155,6 +159,10 @@ export namespace RayaAdmin {
     if (failed) return row("voice", "degraded", "voice-failed", at, metrics)
     if (incomplete) return row("voice", "degraded", "voice-incomplete", at, metrics)
     return row("voice", "healthy", "ready", at, metrics)
+  }
+
+  export function unavailable(id: Subsystem, at: number, reason: "disconnected" | "not-checked" = "not-checked") {
+    return row(id, "unknown", reason, at)
   }
 
   function bounded(metrics: Metrics): Metrics {

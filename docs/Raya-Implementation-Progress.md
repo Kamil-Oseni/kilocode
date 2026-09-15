@@ -6,6 +6,16 @@
 >
 > Kilo-to-Raya migration is active through lossless compatibility-first slices; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-15 18:06 America/Toronto - Sandbox policy caches are profile-generation aware
+
+**Status: implemented and verified locally; commit and push remain, installation is batched.** `SandboxPolicy` now keys every cached snapshot and synchronization revision by the canonical sandbox policy root in addition to project directory and session. Selecting a different profile between policy operations therefore causes a storage read for that generation instead of returning a snapshot cached under the previous root. Cache identifiers are bound before matching persistence writes and removals, so the in-memory record corresponds to the operation's selected generation.
+
+The real-filesystem generation test now primes the policy cache under the first root, switches to the second root and proves `peek` returns no stale first-generation state. After distinct second-generation persistence, repeated switches prove each root returns its own cached value. The existing removal canary still proves a root change across an await does not remove the other generation. The complete sandbox policy/state group passes **36 tests / 77 assertions** with three expected platform skips; bounded CLI typecheck passes.
+
+This closes the sandbox cache blocker recorded in the preceding checkpoint. It still does not authorize mutating profile roots during an active policy operation: a cross-service writer registry and quiescence barrier must stop new work and drain current operations before any live cutover. Version 1 remains fail closed.
+
+The reviewed repository inventory is **69,116** total: public 1,693; compatibility 35,185; provenance 5,686; internal 26,552. The ledger is pinned to compatibility digest `0fc667bd88455b7ad9adfb28b8d518b1e3eab36cdbd53fa94bbc8a25f9242d54`.
+
 ## ChatGPT 2026-09-15 18:02 America/Toronto - Accumulated migration slices are installed
 
 **Status: built, packaged and installed.** The authorized low-memory snapshot workflow completed from repository source `66631de1db` after the global-path inventory, credential, plugin/model preference, truncation and sandbox late-binding checkpoints. Production SDK generation, the single Windows CLI build, CLI/version/model/sandbox-worker smoke checks, sequential extension host and webview typechecks, lint, production bundle, VSIX packaging and VS Code installation all passed.
@@ -18,7 +28,7 @@ The installed extension is `7.4.23-snapshot+66631de1db.kamil-oseni.1789509508005
 
 The new real-filesystem test creates two isolated state parents, switches between them after both modules are imported, and proves preference and policy values remain separated by generation. It also starts a removal against the first generation, switches roots before awaiting completion, and proves the first generation is removed while an identically named canary directory in the second survives. The complete focused group passes **36 tests / 73 assertions**, with three expected platform skips; bounded CLI typecheck passes. The backend-restart case requires the suite's 30-second timeout on this machine and passes in about 5.3 seconds.
 
-The exact inventory still contains **205 reviewed consumers** but now reports **zero module-scope captures**, with digest `4bd0af27a253229bf66216f4b7ed7ae9e8873354d31bb972af30de46130a83e3`. This closes the eight-item eager-capture list; it does not make Version 1 ready for cutover. `SandboxPolicy` still caches snapshots by project directory and session rather than storage generation, and the cross-service writer registry, quiescence barrier, verified copy, restart recovery and rollback workflow remain unimplemented. Therefore profile-root selection is safe before the first sandbox policy operation, while changing roots during an active session remains forbidden.
+The exact inventory still contains **205 reviewed consumers** but now reports **zero module-scope captures**, with digest `4bd0af27a253229bf66216f4b7ed7ae9e8873354d31bb972af30de46130a83e3`. This closes the eight-item eager-capture list; it does not make Version 1 ready for cutover. At this checkpoint `SandboxPolicy` still cached snapshots by project directory and session rather than storage generation; the newer 18:06 slice closes that cache-specific gap. The cross-service writer registry, quiescence barrier, verified copy, restart recovery and rollback workflow remain unimplemented.
 
 The post-commit repository inventory is **69,114** total: public 1,693; compatibility 35,183; provenance 5,686; internal 26,552. The Version 1 ledger is pinned to compatibility digest `08c420c68747e661d2ba8c0edce0fabe702a6daef883eea47385cf2d64dc8a81` and remains fail closed. This refresh was performed after the new tracked test and changeset entered Git, so they are included in the baseline.
 

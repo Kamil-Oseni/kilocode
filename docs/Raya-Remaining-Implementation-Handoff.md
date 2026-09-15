@@ -6,6 +6,16 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-15 18:06 America/Toronto - Preserve profile-generation sandbox cache keys
+
+`SandboxPolicy.key()` must include `SandboxStore.root()` before directory and session ID. Do not reduce it to directory/session again: two profile generations can contain different authority for the same project and session. Compute cache identifiers before the corresponding persistence write or removal so a later root read cannot associate the completed operation with another generation. Session semaphores remain shared across generations, which safely serializes same-session mutations without merging their cached values.
+
+The focused test primes generation A's policy cache, proves generation B does not see it, persists a different B snapshot, and then proves alternating roots returns the correct cached value for each. Combined policy/state evidence is 36 tests / 77 assertions with three platform skips under `--timeout 30000`; bounded CLI typecheck passes.
+
+This removes the cache-specific reason that root selection had to precede the first policy read. A live cutover is still forbidden without global writer admission and quiescence: root mutation must occur only after in-flight operations across every registered persistence service have drained. Do not infer cutover readiness from zero path captures or generation-aware sandbox caching.
+
+The reviewed repository inventory is 69,116 total: public 1,693; compatibility 35,185; provenance 5,686; internal 26,552. Keep the ledger baseline at count 35,185 and digest `0fc667bd88455b7ad9adfb28b8d518b1e3eab36cdbd53fa94bbc8a25f9242d54` until the next reviewed refresh.
+
 ## ChatGPT 2026-09-15 18:02 America/Toronto - Installed checkpoint and rollback package
 
 The low-memory snapshot workflow installed `7.4.23-snapshot+66631de1db.kamil-oseni.1789509508005` from source `66631de1db`. It passed production SDK generation, the one-platform CLI build and smoke checks, sequential extension validation, production bundling, packaging and installation. The rollback VSIX is retained at `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.453d4b7cad27c1084c5a2ed630257a6692d13c911ac772828d689d9f5f5550c3.vsix`.
@@ -18,7 +28,7 @@ Do not force-reload the user's open VS Code host. Its active pointer remains `6b
 
 The focused real-filesystem test proves two imported modules follow two temporary state parents without cross-reading, and that a root switch while `remove()` is awaiting cannot delete the second generation's canary. The broader policy/state group passes 36 tests / 73 assertions with three platform skips when run with `--timeout 30000`; the backend-restart child process exceeds Bun's five-second default on this machine. Bounded CLI typecheck passes.
 
-The path inventory now has 205 consumers, zero module captures and digest `4bd0af27a253229bf66216f4b7ed7ae9e8873354d31bb972af30de46130a83e3`. Keep its policy `inventory-only-no-cutover-evidence`. Zero eager captures does not authorize a hot root switch: `SandboxPolicy` caches snapshots by directory and session without storage generation, and other services still lack coordinated writer quiescence. Before live cutover, bind that cache to the selected generation or clear/reload it under a global barrier, then implement the writer registry, verified copy, restart/crash recovery and rollback gates already listed in the `profile-roots` ledger entry.
+The path inventory now has 205 consumers, zero module captures and digest `4bd0af27a253229bf66216f4b7ed7ae9e8873354d31bb972af30de46130a83e3`. Keep its policy `inventory-only-no-cutover-evidence`. Zero eager captures does not authorize a hot root switch. At this checkpoint the sandbox cache was not generation-keyed; the newer 18:06 slice fixes that specific issue. Other services still lack coordinated writer quiescence, verified copy, restart/crash recovery and rollback gates required by the `profile-roots` ledger entry.
 
 The post-commit repository inventory is 69,114 total: public 1,693; compatibility 35,183; provenance 5,686; internal 26,552. Keep the ledger baseline at count 35,183 and digest `08c420c68747e661d2ba8c0edce0fabe702a6daef883eea47385cf2d64dc8a81` until the next reviewed refresh. This baseline includes the newly tracked sandbox test and changeset; refresh only after newly added files have entered Git or explicitly include untracked sources.
 

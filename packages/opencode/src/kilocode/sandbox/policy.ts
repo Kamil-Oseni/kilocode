@@ -35,7 +35,7 @@ GlobalBus.on("event", (event) => {
 })
 
 function key(directory: string, sessionID: SessionID) {
-  return directory + "\0" + sessionID
+  return SandboxStore.root() + "\0" + directory + "\0" + sessionID
 }
 
 function limits(fallback: ReturnType<typeof SandboxConfig.resolve>) {
@@ -308,8 +308,8 @@ const snapshot = Effect.fn("SandboxPolicy.snapshot")(function* (sessionID: Sessi
       // inherit the last /sandbox choice. The config default applies when neither is present.
       const version = revision
       const next = yield* resolveInitial(directory, sessionID)
-      yield* Effect.promise(() => SandboxStore.write(directory, sessionID, next))
       const id = key(directory, sessionID)
+      yield* Effect.promise(() => SandboxStore.write(directory, sessionID, next))
       snapshots.set(id, next)
       synced.set(id, version)
       return { directory, state: next }
@@ -423,8 +423,8 @@ function change<E, R, F = never, Q = never, P = never, S = never>(
           Effect.gen(function* () {
             yield* typeof guard === "function" ? guard(enabling, targets) : guard
             const next: Snapshot = { ...base, enabled: enabling, version: status.version + 1 }
-            yield* Effect.promise(() => SandboxStore.write(directory, sessionID, next))
             const id = key(directory, sessionID)
+            yield* Effect.promise(() => SandboxStore.write(directory, sessionID, next))
             snapshots.set(id, next)
             synced.set(id, version)
             if (enabling) {
@@ -515,8 +515,8 @@ const inheritSnapshot = Effect.fn("SandboxPolicy.inheritSnapshot")(function* (
     child.writablePaths.join("\0") === next.writablePaths.join("\0")
   )
     return
-  yield* Effect.promise(() => SandboxStore.write(directory, sessionID, next))
   const id = key(directory, sessionID)
+  yield* Effect.promise(() => SandboxStore.write(directory, sessionID, next))
   snapshots.set(id, next)
   synced.set(id, version)
   yield* Effect.sync(() => changed(sessionID, directory, next))
@@ -570,8 +570,8 @@ export function retire<A, E, R>(
         sessionID,
         Effect.gen(function* () {
           const result = yield* effect
-          yield* Effect.promise(() => SandboxStore.remove(directory, sessionID))
           const id = key(directory, sessionID)
+          yield* Effect.promise(() => SandboxStore.remove(directory, sessionID))
           snapshots.delete(id)
           synced.delete(id)
           return result

@@ -3,9 +3,11 @@ import { expect, test } from "bun:test"
 import fs from "node:fs/promises"
 import path from "node:path"
 import { SandboxPreference } from "@/kilocode/sandbox/preference"
+import * as SandboxPolicy from "@/kilocode/sandbox/policy"
 import { SandboxStore } from "@/kilocode/sandbox/store"
 import { SessionID } from "@/session/schema"
 import { tmpdir } from "../../fixture/fixture"
+import { Effect } from "effect"
 
 test("sandbox state operations follow the active profile generation", async () => {
   await using tmp = await tmpdir()
@@ -27,20 +29,28 @@ test("sandbox state operations follow the active profile generation", async () =
     Global.Path.state = path.join(first, "kilo")
     await SandboxPreference.write(directory, true)
     await SandboxStore.write(directory, id, enabled)
+    expect(await Effect.runPromise(SandboxPolicy.peek(directory, id))).toEqual(enabled)
 
     Global.Path.state = path.join(second, "kilo")
     expect(await SandboxPreference.read(directory)).toBeUndefined()
     expect(await SandboxStore.read(directory, id)).toBeUndefined()
+    expect(await Effect.runPromise(SandboxPolicy.peek(directory, id))).toBeUndefined()
     await SandboxPreference.write(directory, false)
     await SandboxStore.write(directory, id, { ...enabled, enabled: false, version: 2 })
 
     Global.Path.state = path.join(first, "kilo")
     expect(await SandboxPreference.read(directory)).toBe(true)
     expect(await SandboxStore.read(directory, id)).toEqual(enabled)
+    expect(await Effect.runPromise(SandboxPolicy.peek(directory, id))).toEqual(enabled)
 
     Global.Path.state = path.join(second, "kilo")
     expect(await SandboxPreference.read(directory)).toBe(false)
     expect(await SandboxStore.read(directory, id)).toEqual({ ...enabled, enabled: false, version: 2 })
+    expect(await Effect.runPromise(SandboxPolicy.peek(directory, id))).toEqual({
+      ...enabled,
+      enabled: false,
+      version: 2,
+    })
 
     const removeID = SessionID.make("ses_sandbox_path_remove")
     Global.Path.state = path.join(first, "kilo")

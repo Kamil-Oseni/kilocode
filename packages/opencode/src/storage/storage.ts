@@ -296,7 +296,9 @@ const make = (root?: string) =>
               Effect.gen(function* () {
                 const content = yield* wrap(target, fs.readJson(target))
                 fn(content as T)
-                yield* writeJson(target, content)
+                // kilocode_change start - publish updates atomically so failed replacements retain prior JSON
+                yield* publish(fs, target, content, true).pipe(Effect.asVoid)
+                // kilocode_change end
                 return content
               }),
             ),
@@ -325,8 +327,12 @@ const make = (root?: string) =>
 
       return Service.of({
         // kilocode_change start - keep receipt publication separate from legacy JSON write behavior
-        create: (key, content) => withResolved(key, (target, rw) => TxReentrantLock.withWriteLock(rw, publish(fs, target, content))),
-        replace: (key, content) => withResolved(key, (target, rw) => TxReentrantLock.withWriteLock(rw, publish(fs, target, content, true).pipe(Effect.asVoid))),
+        create: (key, content) =>
+          withResolved(key, (target, rw) => TxReentrantLock.withWriteLock(rw, publish(fs, target, content))),
+        replace: (key, content) =>
+          withResolved(key, (target, rw) =>
+            TxReentrantLock.withWriteLock(rw, publish(fs, target, content, true).pipe(Effect.asVoid)),
+          ),
         // kilocode_change end
         remove,
         read,

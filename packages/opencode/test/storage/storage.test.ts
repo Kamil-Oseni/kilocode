@@ -118,6 +118,77 @@ describe("Storage", () => {
     }),
   )
 
+  // kilocode_change start - verify atomic Storage.update publication on the real filesystem
+  it.live("publishes complete JSON bytes during updates", () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      const storage = path.join(root, "storage")
+      const key = ["atomic", "complete"]
+      const target = path.join(storage, ...key) + ".json"
+
+      yield* Effect.gen(function* () {
+        const svc = yield* Storage.Service
+        const payload = "x".repeat(1_000_000)
+        yield* svc.write(key, { revision: 0, payload })
+
+        for (let revision = 1; revision <= 10; revision++) {
+          const expected = revision % 2 === 0 ? payload : `${payload}y`
+          yield* svc.update<{ revision: number; payload: string }>(key, (draft) => {
+            draft.revision = revision
+            draft.payload = expected
+          })
+          expect(JSON.parse(yield* Effect.promise(() => Bun.file(target).text()))).toEqual({
+            revision,
+            payload: expected,
+          })
+        }
+      }).pipe(Effect.provide(injectedStorage(root)))
+    }),
+  )
+
+  it.live("preserves prior JSON when update publication fails before rename", () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      const key = ["atomic", "failure"]
+
+      yield* Effect.gen(function* () {
+        const svc = yield* Storage.Service
+        const prior = { revision: 1, value: "retained" }
+        yield* svc.write(key, prior)
+
+        const exit = yield* svc
+          .update<Record<string, unknown>>(key, (draft) => {
+            draft.revision = 2
+            draft.self = draft
+          })
+          .pipe(Effect.exit)
+
+        expect(Exit.isFailure(exit)).toBe(true)
+        expect(yield* svc.read(key)).toEqual(prior)
+      }).pipe(Effect.provide(injectedStorage(root)))
+    }),
+  )
+
+  it.live("returns and persists the callback result after a normal update", () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      const key = ["atomic", "compatible"]
+
+      yield* Effect.gen(function* () {
+        const svc = yield* Storage.Service
+        yield* svc.write(key, { revision: 4, nested: { enabled: false } })
+        const result = yield* svc.update<{ revision: number; nested: { enabled: boolean } }>(key, (draft) => {
+          draft.revision++
+          draft.nested.enabled = true
+        })
+
+        expect(result).toEqual({ revision: 5, nested: { enabled: true } })
+        expect(yield* svc.read(key)).toEqual(result)
+      }).pipe(Effect.provide(injectedStorage(root)))
+    }),
+  )
+  // kilocode_change end
+
   it.live("concurrent reads do not block each other", () =>
     Effect.gen(function* () {
       const { root, svc } = yield* scope()

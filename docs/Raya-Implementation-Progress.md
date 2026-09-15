@@ -1,5 +1,13 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-14 20:41 America/Toronto - Restart completes claimed Routine follow-up binding
+
+**Status: product commit `7a34f27f53` is verified and pushed to `origin/main`; packaging remains.** A replacement Routine run now records the exact inbox message source and prior session in its durable per-worker startup claim. If the backend stops after the replacement session and run history exist but before the inbox move finishes, restart validates the claim, session metadata, active goal, worker, exact pending run, immutable trigger and unowned user message before moving that message to the saved session. If the move committed before the stop, the same recovery accepts only the exact target state and removes the stale claim without creating or moving anything again.
+
+Any malformed identity, terminal or conflicting run, missing goal, different session, timer trigger, delivery ID or delivered timestamp fails closed and leaves the claim as evidence. The stopped-owner regression uses an actual exited child-process identity with independent recovery entry through `runner.revive`; the database and storage adapters remain in-process, so a real child writing the claim and exiting precisely before/after the move is still required for full process-bound proof. Inbox/follow-up/claim coverage passes **22 / 192** and targeted scheduler recovery passes **9 / 169**. Scoped one-thread lint has zero errors and only existing wider-file warnings; whitespace, annotation and Effect Promise-facade guards pass.
+
+EN-02/OVR-05 remain **In progress**. Next add the real filesystem/SQLite child interruption at both sides of the inbox move and a user-facing review disposition for a delivery identity that makes reassignment ambiguous. Installed source remains `17ff50e907` until the coherent low-memory package completes.
+
 ## ChatGPT 2026-09-14 20:25 America/Toronto - Terminal-session follow-ups recover safely
 
 **Status: product commit `b19a5586cb` is verified and pushed to `origin/main`; packaging remains.** A Routine inbox message attached just as its selected run becomes terminal no longer remains permanently stranded. The post-send resume path first proves that the requested session still owns an exact pending run. When it does not, bounded Routine reconciliation finds only user messages that have a session but no dispatch identity and no delivered timestamp. It moves that message to one newly durable run with an exact old-session database compare-and-set.

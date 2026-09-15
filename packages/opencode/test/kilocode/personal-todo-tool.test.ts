@@ -7,6 +7,7 @@ import { Effect, Exit, Layer, Schema } from "effect"
 import { Agent } from "@/agent/agent"
 import { Git } from "@/git"
 import { PersonalTodo } from "@/kilocode/personal-todo"
+import { PersonalTodoProposal } from "@/kilocode/personal-todo/proposal"
 import { personalTodoTool } from "@/kilocode/tool/personal-todo"
 import { KiloToolRegistry } from "@/kilocode/tool/registry"
 import * as Permission from "@/permission"
@@ -31,6 +32,7 @@ const it = testEffect(
 const agent = (name: string, mode: "primary" | "subagent") =>
   Schema.decodeUnknownSync(Agent.Info)({ name, mode, options: {}, permission: [] })
 const ItemResult = Schema.Struct({ status: Schema.String, item: PersonalTodo.Info })
+const ProposalResult = Schema.Struct({ status: Schema.String, proposal: PersonalTodoProposal.Info })
 
 function context(asks: Parameters<Tool.Context["ask"]>[0][], callID?: string): Tool.Context {
   return {
@@ -264,6 +266,145 @@ it.live(
           status: "complete",
           items: [{ title: "Keep exactly one", revision: 1 }],
         })
+      }).pipe(Effect.provide(Storage.layerFromDir(path.join(directory, "storage")))),
+    ),
+  30_000,
+)
+
+it.live(
+  "stamps, reviews, and applies proposals without accepting model-generated identities",
+  () =>
+    provideTmpdirInstance((directory) =>
+      Effect.gen(function* () {
+        const storage = yield* Storage.Service
+        const tool = yield* Tool.init(yield* personalTodoTool({ storage }))
+        const asks: Parameters<Tool.Context["ask"]>[0][] = []
+        const ctx = context(asks, "proposal-call")
+        const params = {
+          action: "propose" as const,
+          target: { kind: "new" as const },
+          changes: {
+            title: "Plan the move",
+            priority: "high" as const,
+            subtasks: [
+              { kind: "new" as const, title: "Choose an area" },
+              { kind: "new" as const, title: "Book viewings" },
+            ],
+          },
+        }
+
+        const proposed = yield* tool.execute(params, ctx)
+        const body = Schema.decodeUnknownSync(ProposalResult)(JSON.parse(proposed.output))
+        expect(proposed.metadata).toMatchObject({
+          action: "propose",
+          status: "complete",
+          proposalID: body.proposal.id,
+          digest: body.proposal.digest,
+          view: "personal-todo-proposal",
+        })
+        expect(body.proposal.source).toEqual({
+          sessionID: ctx.sessionID,
+          messageID: ctx.messageID,
+          callID: ctx.callID,
+        })
+        expect(body.proposal.id).toMatch(/^proposal_/)
+        expect(body.proposal.target.todoID).toMatch(/^todo_/)
+        expect(body.proposal.changes.subtasks.map((item) => item.id)).toEqual([
+          expect.stringMatching(/^subtodo_/),
+          expect.stringMatching(/^subtodo_/),
+        ])
+        expect(yield* PersonalTodo.make({ storage }).list()).toEqual([])
+        expect(asks).toEqual([])
+
+        expect(yield* tool.execute(params, ctx)).toEqual(proposed)
+        const changed = yield* tool.execute({ ...params, changes: { ...params.changes, title: "Different plan" } }, ctx)
+        expect(changed.metadata).toMatchObject({
+          action: "propose",
+          status: "conflict",
+          view: "personal-todo-proposal",
+        })
+        expect(yield* PersonalTodo.make({ storage }).list()).toEqual([])
+
+        const applied = yield* tool.execute(
+          { action: "apply_proposal", proposalID: body.proposal.id, digest: body.proposal.digest },
+          ctx,
+        )
+        expect(applied.metadata).toMatchObject({
+          action: "apply_proposal",
+          status: "complete",
+          proposalID: body.proposal.id,
+          digest: body.proposal.digest,
+          view: "personal-todo-proposal",
+        })
+        expect(JSON.parse(applied.output)).toMatchObject({
+          status: "complete",
+          item: { id: body.proposal.target.todoID, title: "Plan the move", revision: 1 },
+        })
+        expect(asks.map((request) => request.permission)).toEqual(["personal_todo"])
+        expect(asks[0]?.patterns).toEqual(["apply_proposal"])
+
+        const replay = yield* tool.execute(
+          { action: "apply_proposal", proposalID: body.proposal.id, digest: body.proposal.digest },
+          ctx,
+        )
+        expect(replay).toEqual(applied)
+        expect((yield* PersonalTodo.make({ storage }).get(body.proposal.target.todoID))?.revision).toBe(1)
+
+        const digest = yield* tool.execute(
+          { action: "apply_proposal", proposalID: body.proposal.id, digest: "0".repeat(64) },
+          ctx,
+        )
+        expect(digest.metadata).toMatchObject({
+          action: "apply_proposal",
+          status: "conflict",
+          view: "personal-todo-proposal",
+        })
+      }).pipe(Effect.provide(Storage.layerFromDir(path.join(directory, "storage")))),
+    ),
+  30_000,
+)
+
+it.live(
+  "returns a structured stale conflict when an existing proposal base changes before apply",
+  () =>
+    provideTmpdirInstance((directory) =>
+      Effect.gen(function* () {
+        const storage = yield* Storage.Service
+        const todos = PersonalTodo.make({ storage })
+        const item = yield* todos.create({ title: "Original" })
+        const tool = yield* Tool.init(yield* personalTodoTool({ storage }))
+        const asks: Parameters<Tool.Context["ask"]>[0][] = []
+        const ctx = context(asks, "existing-proposal")
+        const proposed = yield* tool.execute(
+          {
+            action: "propose",
+            target: { kind: "existing", id: item.id, revision: item.revision },
+            changes: { title: "Proposed" },
+          },
+          ctx,
+        )
+        const body = Schema.decodeUnknownSync(ProposalResult)(JSON.parse(proposed.output))
+        yield* todos.update(item.id, { revision: item.revision, title: "Manual edit" })
+
+        const stale = yield* tool.execute(
+          { action: "apply_proposal", proposalID: body.proposal.id, digest: body.proposal.digest },
+          ctx,
+        )
+        expect(stale.metadata).toMatchObject({
+          action: "apply_proposal",
+          status: "conflict",
+          id: item.id,
+          expectedRevision: 1,
+          actualRevision: 2,
+          view: "personal-todo-proposal",
+        })
+        expect(JSON.parse(stale.output)).toMatchObject({
+          status: "conflict",
+          expectedRevision: 1,
+          actualRevision: 2,
+        })
+        expect(yield* todos.get(item.id)).toMatchObject({ title: "Manual edit", revision: 2 })
+        expect(asks.map((request) => request.patterns)).toEqual([["apply_proposal"]])
       }).pipe(Effect.provide(Storage.layerFromDir(path.join(directory, "storage")))),
     ),
   30_000,

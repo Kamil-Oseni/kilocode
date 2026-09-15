@@ -45,6 +45,7 @@ import { CreateSpreadsheetTool } from "./create-spreadsheet"
 import { CreateDocumentTool } from "./create-document"
 import { CreatePresentationTool } from "./create-presentation"
 import { CreatePdfTool } from "./create-pdf"
+import { personalTodoTool } from "./personal-todo"
 
 const log = Log.create({ service: "kilocode-tool-registry" })
 type Deps = { agent: Agent.Interface; truncate: Truncate.Interface; indexing?: boolean }
@@ -152,6 +153,7 @@ export namespace KiloToolRegistry {
             }
           })
         : undefined
+      const personalTodo = goalDeps ? yield* personalTodoTool(goalDeps) : undefined
       // raya_change end
       if (!notebook)
         return {
@@ -184,6 +186,7 @@ export namespace KiloToolRegistry {
           delegateWork: routines?.delegateWork,
           updateRoutine: routines?.updateRoutine,
           updateOrganization: routines?.updateOrganization,
+          personalTodo,
         }
       const tools = yield* Effect.all({
         notebookRead: NotebookReadTool,
@@ -220,6 +223,7 @@ export namespace KiloToolRegistry {
         delegateWork: routines?.delegateWork,
         updateRoutine: routines?.updateRoutine,
         updateOrganization: routines?.updateOrganization,
+        personalTodo,
         ...tools,
       }
     })
@@ -261,6 +265,7 @@ export namespace KiloToolRegistry {
       delegateWork?: Tool.Info
       updateRoutine?: Tool.Info
       updateOrganization?: Tool.Info
+      personalTodo?: Tool.Info
       discover?: Tool.Info
       spreadsheet?: Tool.Info
       document?: Tool.Info
@@ -302,6 +307,7 @@ export namespace KiloToolRegistry {
       const delegateWork = tools.delegateWork ? yield* Tool.init(tools.delegateWork) : undefined
       const updateRoutine = tools.updateRoutine ? yield* Tool.init(tools.updateRoutine) : undefined
       const updateOrganization = tools.updateOrganization ? yield* Tool.init(tools.updateOrganization) : undefined
+      const personalTodo = tools.personalTodo ? yield* Tool.init(tools.personalTodo) : undefined
       const terminal = tools.terminal ? yield* Tool.init(tools.terminal) : undefined
       const notebooks =
         tools.notebookRead && tools.notebookEdit && tools.notebookExecute
@@ -350,6 +356,7 @@ export namespace KiloToolRegistry {
         delegateWork,
         updateRoutine,
         updateOrganization,
+        personalTodo,
       }
     })
   }
@@ -444,6 +451,7 @@ export namespace KiloToolRegistry {
       delegateWork?: Tool.Def
       updateRoutine?: Tool.Def
       updateOrganization?: Tool.Def
+      personalTodo?: Tool.Def
       discover?: Tool.Def
       spreadsheet?: Tool.Def
       document?: Tool.Def
@@ -493,6 +501,7 @@ export namespace KiloToolRegistry {
       ...(tools.delegateWork ? [tools.delegateWork] : []),
       ...(tools.updateRoutine ? [tools.updateRoutine] : []),
       ...(tools.updateOrganization ? [tools.updateOrganization] : []),
+      ...(tools.personalTodo ? [tools.personalTodo] : []),
       tools.notify,
       tools.send,
     ]

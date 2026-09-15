@@ -11,6 +11,21 @@ const Result = Schema.Struct({
 const Record = Schema.Struct({ version: Schema.Literal(1), signature: Schema.String, result: Schema.optional(Result) })
 const hash = (value: string) => createHash("sha256").update(value).digest("hex")
 
+type Review = {
+  title: string
+  changed: string
+  pending: string
+  metadata?: Record<string, unknown>
+}
+
+const routine: Review = {
+  title: "Routine request needs review",
+  changed:
+    "This tool call previously used different instructions. Review the earlier attempt in Routines before creating another routine.",
+  pending:
+    "The earlier attempt is still running or its result could not be confirmed. Review Routines before retrying; do not create a replacement routine.",
+}
+
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical)
   if (value && typeof value === "object")
@@ -28,6 +43,7 @@ export function request(
   ctx: Pick<Tool.Context, "sessionID" | "messageID" | "callID">,
   params: object,
   operation: Effect.Effect<Tool.ExecuteResult>,
+  copy: Review = routine,
 ) {
   if (!ctx.callID) return operation
   const key = ["raya", "agent-requests", hash(JSON.stringify([ctx.sessionID, ctx.messageID, ctx.callID]))]
@@ -39,12 +55,9 @@ export function request(
         const saved = yield* Schema.decodeUnknownEffect(Record)(raw).pipe(Effect.orElseSucceed(() => undefined))
         if (saved?.signature === signature && saved.result) return saved.result
         return {
-          title: "Routine request needs review",
-          output:
-            saved && saved.signature !== signature
-              ? "This tool call previously used different instructions. Review the earlier attempt in Routines before creating another routine."
-              : "The earlier attempt is still running or its result could not be confirmed. Review Routines before retrying; do not create a replacement routine.",
-          metadata: { requestStatus: "unresolved" },
+          title: copy.title,
+          output: saved && saved.signature !== signature ? copy.changed : copy.pending,
+          metadata: { ...copy.metadata, requestStatus: "unresolved" },
         }
       }
       const result = yield* restore(operation)

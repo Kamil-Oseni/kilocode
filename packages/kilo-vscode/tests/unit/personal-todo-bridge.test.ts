@@ -55,7 +55,15 @@ describe("personal todo extension bridge", () => {
     await handlePersonalTodoMessage({
       client: api,
       directory: "C:/work",
-      message: { type: "personalTodoUpdate", requestID: "3", todoID: item.id, revision: 3, done: true },
+      message: {
+        type: "personalTodoUpdate",
+        requestID: "3",
+        todoID: item.id,
+        revision: 3,
+        title: "Review quarterly accounts",
+        detail: null,
+        dueAt: 1_800_000,
+      },
       post,
     })
     await handlePersonalTodoMessage({
@@ -68,7 +76,18 @@ describe("personal todo extension bridge", () => {
     expect(calls).toEqual([
       ["list", { directory: "C:/work" }],
       ["create", { directory: "C:/work", title: "Review accounts" }],
-      ["update", { directory: "C:/work", todoID: item.id, revision: 3, done: true }],
+      [
+        "update",
+        {
+          directory: "C:/work",
+          todoID: item.id,
+          revision: 3,
+          title: "Review quarterly accounts",
+          detail: null,
+          done: undefined,
+          dueAt: 1_800_000,
+        },
+      ],
       ["delete", { directory: "C:/work", todoID: item.id, revision: "4" }],
     ])
     expect(messages).toHaveLength(4)
@@ -128,5 +147,33 @@ describe("personal todo extension bridge", () => {
         error: { kind: "offline", message: "Raya is offline. Your changes are still here." },
       },
     ])
+  })
+
+  it("rejects empty and invalid update payloads before calling the backend", async () => {
+    const calls: unknown[] = []
+    const api = client({
+      update: async (input: unknown) => {
+        calls.push(input)
+        return { data: item, response: { status: 200 } }
+      },
+    })
+    const messages: unknown[] = []
+    for (const [requestID, fields] of [
+      ["empty", {}],
+      ["title", { title: " " }],
+      ["detail", { detail: "x".repeat(10_001) }],
+      ["due", { dueAt: Number.NaN }],
+    ] as const)
+      await handlePersonalTodoMessage({
+        client: api,
+        directory: "C:/work",
+        message: { type: "personalTodoUpdate", requestID, todoID: item.id, revision: 3, ...fields },
+        post: (message) => messages.push(message),
+      })
+
+    expect(calls).toEqual([])
+    expect(messages).toHaveLength(4)
+    for (const message of messages)
+      expect(message).toMatchObject({ error: { kind: "error", message: "This todo request was incomplete." } })
   })
 })

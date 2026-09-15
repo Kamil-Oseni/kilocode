@@ -10,9 +10,11 @@ import type { ExtensionMessage, FocusTimerItem, PersonalTodoItem } from "../../t
 
 type Intent =
   | { operation: "create"; title: string }
-  | { operation: "update"; todoID: string; done: boolean }
+  | { operation: "update"; todoID: string; changes: Changes }
   | { operation: "delete"; todoID: string }
 
+type Changes = { title?: string; detail?: string | null; done?: boolean; dueAt?: number | null }
+type Edit = { todoID: string; title: string; detail: string; due: string }
 type Notice = { kind: "offline" | "stale" | "error"; message: string }
 type TimerIntent =
   | { operation: "start"; durationMs: number; todoID?: string }
@@ -28,6 +30,16 @@ const durations = [
 const order = (items: PersonalTodoItem[]) =>
   [...items].sort((a, b) => Number(a.done) - Number(b.done) || b.updatedAt - a.updatedAt || a.id.localeCompare(b.id))
 
+const local = (value?: number) => {
+  if (value === undefined) return ""
+  const date = new Date(value)
+  const offset = date.getTimezoneOffset() * 60_000
+  return new Date(value - offset).toISOString().slice(0, 16)
+}
+
+const due = (value: number) =>
+  new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value))
+
 export const TodoView: Component<{ onBack: () => void }> = (props) => {
   const vscode = useVSCode()
   const [items, setItems] = createSignal<PersonalTodoItem[]>([])
@@ -35,6 +47,8 @@ export const TodoView: Component<{ onBack: () => void }> = (props) => {
   const [loading, setLoading] = createSignal(true)
   const [notice, setNotice] = createSignal<Notice>()
   const [confirming, setConfirming] = createSignal<string>()
+  const [editing, setEditing] = createSignal<Edit>()
+  const [editError, setEditError] = createSignal<string>()
   const [recovery, setRecovery] = createSignal<Intent>()
   const [pending, setPending] = createSignal<Record<string, true>>({})
   const [timer, setTimer] = createSignal<FocusTimerItem>()
@@ -69,7 +83,7 @@ export const TodoView: Component<{ onBack: () => void }> = (props) => {
         requestID,
         todoID: item.id,
         revision: item.revision,
-        done: intent.done,
+        ...intent.changes,
       })
     if (intent.operation === "delete" && item)
       vscode.postMessage({ type: "personalTodoDelete", requestID, todoID: item.id, revision: item.revision })
@@ -141,6 +155,13 @@ export const TodoView: Component<{ onBack: () => void }> = (props) => {
     if (message.item) replace(message.item)
     if (message.removed && message.todoID) setItems((rows) => rows.filter((row) => row.id !== message.todoID))
     if (intent.operation === "create") setDraft("")
+    if (
+      intent.operation === "update" &&
+      (intent.changes.title !== undefined || intent.changes.detail !== undefined || intent.changes.dueAt !== undefined)
+    ) {
+      setEditing()
+      setEditError()
+    }
     if (intent.operation === "delete") setConfirming()
   }
 
@@ -163,6 +184,58 @@ export const TodoView: Component<{ onBack: () => void }> = (props) => {
   })
 
   const remaining = createMemo(() => items().filter((item) => !item.done).length)
+  const begin = (item: PersonalTodoItem) => {
+    setConfirming()
+    setEditError()
+    setEditing({ todoID: item.id, title: item.title, detail: item.detail ?? "", due: local(item.dueAt) })
+  }
+  const change = (next: Partial<Edit>) => {
+    const current = editing()
+    if (!current) return
+    const edit = { ...current, ...next }
+    setEditing(edit)
+    const intent = recovery()
+    if (intent?.operation !== "update" || intent.todoID !== edit.todoID || intent.changes.done !== undefined) return
+    const stamp = edit.due ? new Date(edit.due).getTime() : null
+    setRecovery({
+      operation: "update",
+      todoID: edit.todoID,
+      changes: {
+        title: edit.title.trim(),
+        detail: edit.detail || null,
+        dueAt: Number.isFinite(stamp) ? stamp : null,
+      },
+    })
+  }
+  const cancel = () => {
+    const current = editing()
+    const intent = recovery()
+    if (
+      current &&
+      intent?.operation === "update" &&
+      intent.todoID === current.todoID &&
+      intent.changes.done === undefined
+    ) {
+      setRecovery()
+      setNotice()
+    }
+    setEditing()
+    setEditError()
+  }
+  const save = () => {
+    const edit = editing()
+    if (!edit) return
+    const title = edit.title.trim()
+    if (!title) return setEditError("Add a title before saving.")
+    const stamp = edit.due ? new Date(edit.due).getTime() : null
+    if (stamp !== null && !Number.isFinite(stamp)) return setEditError("Use a valid due date and time.")
+    setEditError()
+    send({
+      operation: "update",
+      todoID: edit.todoID,
+      changes: { title, detail: edit.detail || null, dueAt: stamp },
+    })
+  }
   const retry = () => {
     const intent = recovery()
     if (!intent) return send({ operation: "list" })
@@ -386,37 +459,132 @@ export const TodoView: Component<{ onBack: () => void }> = (props) => {
                   hideLabel
                   checked={item.done}
                   disabled={pending()[item.id] === true}
-                  onChange={(done) => send({ operation: "update", todoID: item.id, done })}
+                  onChange={(done) => send({ operation: "update", todoID: item.id, changes: { done } })}
                 >
                   {item.done ? `Reopen ${item.title}` : `Complete ${item.title}`}
                 </Checkbox>
-                <span>{item.title}</span>
                 <Show
-                  when={confirming() === item.id}
+                  when={editing()?.todoID === item.id ? editing() : undefined}
                   fallback={
-                    <IconButton
-                      icon="trash"
-                      variant="ghost"
-                      size="small"
-                      aria-label={`Delete ${item.title}`}
-                      disabled={pending()[item.id] === true}
-                      onClick={() => setConfirming(item.id)}
-                    />
+                    <>
+                      <div data-slot="personal-todo-content">
+                        <span>{item.title}</span>
+                        <Show when={item.detail}>
+                          <p>{item.detail}</p>
+                        </Show>
+                        <Show when={item.dueAt}>
+                          {(stamp) => (
+                            <time
+                              dateTime={new Date(stamp()).toISOString()}
+                              data-overdue={!item.done && stamp() < Date.now()}
+                            >
+                              Due {due(stamp())}
+                            </time>
+                          )}
+                        </Show>
+                      </div>
+                      <Show
+                        when={confirming() === item.id}
+                        fallback={
+                          <div data-slot="personal-todo-actions">
+                            <IconButton
+                              icon="edit"
+                              variant="ghost"
+                              size="small"
+                              aria-label={`Edit ${item.title}`}
+                              disabled={pending()[item.id] === true}
+                              onClick={() => begin(item)}
+                            />
+                            <IconButton
+                              icon="trash"
+                              variant="ghost"
+                              size="small"
+                              aria-label={`Delete ${item.title}`}
+                              disabled={pending()[item.id] === true}
+                              onClick={() => setConfirming(item.id)}
+                            />
+                          </div>
+                        }
+                      >
+                        <div
+                          data-slot="personal-todo-confirm"
+                          role="group"
+                          aria-label={`Confirm deleting ${item.title}`}
+                        >
+                          <Button variant="ghost" size="small" onClick={() => setConfirming()}>
+                            Cancel
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="small"
+                            disabled={pending()[item.id] === true}
+                            onClick={() => send({ operation: "delete", todoID: item.id })}
+                          >
+                            Delete
+                          </Button>
+                        </div>
+                      </Show>
+                    </>
                   }
                 >
-                  <div data-slot="personal-todo-confirm" role="group" aria-label={`Confirm deleting ${item.title}`}>
-                    <Button variant="ghost" size="small" onClick={() => setConfirming()}>
-                      Cancel
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      size="small"
-                      disabled={pending()[item.id] === true}
-                      onClick={() => send({ operation: "delete", todoID: item.id })}
+                  {(edit) => (
+                    <form
+                      data-slot="personal-todo-edit"
+                      aria-label={`Edit ${item.title}`}
+                      onSubmit={(event) => {
+                        event.preventDefault()
+                        save()
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Escape" || pending()[item.id]) return
+                        event.preventDefault()
+                        cancel()
+                      }}
                     >
-                      Delete
-                    </Button>
-                  </div>
+                      <TextField
+                        label="Title"
+                        value={edit().title}
+                        onChange={(title) => change({ title })}
+                        maxLength={500}
+                        required
+                        autofocus
+                        disabled={pending()[item.id] === true}
+                        error={editError()}
+                      />
+                      <TextField
+                        label="Details"
+                        value={edit().detail}
+                        onChange={(detail) => change({ detail })}
+                        maxLength={10_000}
+                        multiline
+                        rows={3}
+                        placeholder="Add context or the next step"
+                        disabled={pending()[item.id] === true}
+                      />
+                      <TextField
+                        label="Due date and time"
+                        type="datetime-local"
+                        value={edit().due}
+                        onChange={(value) => change({ due: value })}
+                        disabled={pending()[item.id] === true}
+                      />
+                      <div data-slot="personal-todo-edit-actions">
+                        <span>Escape cancels</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="small"
+                          disabled={pending()[item.id]}
+                          onClick={cancel}
+                        >
+                          Cancel
+                        </Button>
+                        <Button type="submit" size="small" disabled={pending()[item.id] || !edit().title.trim()}>
+                          Save
+                        </Button>
+                      </div>
+                    </form>
+                  )}
                 </Show>
               </li>
             )}

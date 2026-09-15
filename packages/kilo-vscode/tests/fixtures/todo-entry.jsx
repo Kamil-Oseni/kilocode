@@ -13,15 +13,19 @@ const holdTimer = params.get("holdTimer") === "true"
 const messages = []
 let offline = state === "offline"
 let stale = state === "stale"
+let editOffline = state === "edit-offline"
+let editError = state === "edit-error"
 let timerOffline = timerState === "offline"
 let timerStale = timerState === "stale"
-let items =
+const initialItems =
   state === "empty" || state === "loading" || state === "offline"
     ? []
     : [
         {
           id: "todo-open",
           title: "Review the launch checklist",
+          detail: "Confirm owners, rollout order, and rollback signals.",
+          dueAt: new Date("2030-04-05T14:30:00").getTime(),
           done: false,
           revision: 1,
           createdAt: 10,
@@ -29,6 +33,11 @@ let items =
         },
         { id: "todo-done", title: "Confirm the release owner", done: true, revision: 1, createdAt: 5, updatedAt: 20 },
       ]
+let items = JSON.parse(localStorage.getItem("raya-todo-fixture-items") ?? "null") ?? initialItems
+const saveItems = (next) => {
+  items = next
+  localStorage.setItem("raya-todo-fixture-items", JSON.stringify(next))
+}
 const clock = Date.now()
 const initialTimer = {
   version: 1,
@@ -147,17 +156,37 @@ window.acquireVsCodeApi = () => ({
         createdAt: 40 + items.length,
         updatedAt: 40 + items.length,
       }
-      items = [...items, item]
+      saveItems([...items, item])
       emit({ type: "personalTodoResult", requestID: message.requestID, operation: "create", item })
       return
     }
     if (message.type === "personalTodoUpdate") {
       const current = items.find((item) => item.id === message.todoID)
       if (!current) return
+      if (editOffline) {
+        editOffline = false
+        emit({
+          type: "personalTodoResult",
+          requestID: message.requestID,
+          operation: "update",
+          error: { kind: "offline", message: "Raya is offline. Your edit is still here." },
+        })
+        return
+      }
+      if (editError) {
+        editError = false
+        emit({
+          type: "personalTodoResult",
+          requestID: message.requestID,
+          operation: "update",
+          error: { kind: "error", message: "Raya could not save this edit." },
+        })
+        return
+      }
       if (stale) {
         stale = false
         const latest = { ...current, revision: 2, updatedAt: 50 }
-        items = items.map((item) => (item.id === latest.id ? latest : item))
+        saveItems(items.map((item) => (item.id === latest.id ? latest : item)))
         emit({
           type: "personalTodoResult",
           requestID: message.requestID,
@@ -172,13 +201,21 @@ window.acquireVsCodeApi = () => ({
         })
         return
       }
-      const item = { ...current, done: message.done, revision: current.revision + 1, updatedAt: 60 }
-      items = items.map((row) => (row.id === item.id ? item : row))
+      const item = {
+        ...current,
+        ...(message.title === undefined ? {} : { title: message.title }),
+        ...(message.detail === undefined ? {} : { detail: message.detail ?? undefined }),
+        ...(message.done === undefined ? {} : { done: message.done }),
+        ...(message.dueAt === undefined ? {} : { dueAt: message.dueAt ?? undefined }),
+        revision: current.revision + 1,
+        updatedAt: 60,
+      }
+      saveItems(items.map((row) => (row.id === item.id ? item : row)))
       emit({ type: "personalTodoResult", requestID: message.requestID, operation: "update", item })
       return
     }
     if (message.type === "personalTodoDelete") {
-      items = items.filter((item) => item.id !== message.todoID)
+      saveItems(items.filter((item) => item.id !== message.todoID))
       emit({
         type: "personalTodoResult",
         requestID: message.requestID,

@@ -3,7 +3,16 @@ import type { KiloClient, PersonalTodoStaleRevisionError } from "@kilocode/sdk/v
 type Message =
   | { type: "personalTodoList"; requestID: string }
   | { type: "personalTodoCreate"; requestID: string; title: string }
-  | { type: "personalTodoUpdate"; requestID: string; todoID: string; revision: number; done: boolean }
+  | {
+      type: "personalTodoUpdate"
+      requestID: string
+      todoID: string
+      revision: number
+      title?: string
+      detail?: string | null
+      done?: boolean
+      dueAt?: number | null
+    }
   | { type: "personalTodoDelete"; requestID: string; todoID: string; revision: number }
 
 type Post = (message: unknown) => void
@@ -40,17 +49,47 @@ function operation(type: Message["type"]): "list" | "create" | "update" | "delet
   return "delete"
 }
 
+function update(message: Extract<Message, { type: "personalTodoUpdate" }>) {
+  const changed =
+    message.title !== undefined ||
+    message.detail !== undefined ||
+    message.done !== undefined ||
+    message.dueAt !== undefined
+  if (!changed) return false
+  if (
+    message.title !== undefined &&
+    (typeof message.title !== "string" || !message.title.trim() || message.title.length > 500)
+  )
+    return false
+  if (
+    message.detail !== undefined &&
+    message.detail !== null &&
+    (typeof message.detail !== "string" || message.detail.length > 10_000)
+  )
+    return false
+  if (message.done !== undefined && typeof message.done !== "boolean") return false
+  return (
+    message.dueAt === undefined ||
+    message.dueAt === null ||
+    (typeof message.dueAt === "number" && Number.isFinite(message.dueAt) && Math.abs(message.dueAt) <= 8.64e15)
+  )
+}
+
 function valid(message: Message) {
   if (typeof message.requestID !== "string" || !message.requestID) return false
   if (message.type === "personalTodoList") return true
   if (message.type === "personalTodoCreate") return typeof message.title === "string" && Boolean(message.title.trim())
-  return (
-    typeof message.todoID === "string" &&
-    Boolean(message.todoID) &&
-    Number.isSafeInteger(message.revision) &&
-    message.revision > 0 &&
-    (message.type === "personalTodoDelete" || typeof message.done === "boolean")
+  if (
+    !(
+      typeof message.todoID === "string" &&
+      Boolean(message.todoID) &&
+      Number.isSafeInteger(message.revision) &&
+      message.revision > 0
+    )
   )
+    return false
+  if (message.type === "personalTodoDelete") return true
+  return update(message)
 }
 
 async function failed(input: {
@@ -149,12 +188,19 @@ export async function handlePersonalTodoMessage(input: {
       return true
     }
     if (msg.type === "personalTodoUpdate") {
-      const result = await input.client.raya.personalTodo.update({
+      const params = {
         directory: input.directory,
         todoID: msg.todoID,
         revision: msg.revision,
+        title: msg.title,
+        detail: msg.detail,
         done: msg.done,
-      })
+        dueAt: msg.dueAt,
+      }
+      // The generated SDK currently drops nullable request fields even though the endpoint schema accepts them.
+      const result = await input.client.raya.personalTodo.update(
+        params as unknown as Parameters<typeof input.client.raya.personalTodo.update>[0],
+      )
       if (result.data) {
         input.post({ type: "personalTodoResult", requestID: msg.requestID, operation: "update", item: result.data })
         return true

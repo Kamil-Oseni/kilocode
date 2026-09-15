@@ -1980,7 +1980,10 @@ export interface PersonalTodoUpdateMessage {
   requestID: string
   todoID: string
   revision: number
-  done: boolean
+  title?: string
+  detail?: string | null
+  done?: boolean
+  dueAt?: number | null
 }
 
 export interface PersonalTodoDeleteMessage {

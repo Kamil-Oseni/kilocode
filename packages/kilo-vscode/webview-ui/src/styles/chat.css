@@ -500,20 +500,65 @@
   background: var(--surface-raised-base, var(--vscode-editorWidget-background));
 }
 
-[data-slot="personal-todo-item"] > span {
+[data-slot="personal-todo-content"] {
+  display: grid;
   min-width: 0;
+  gap: var(--raya-space-4);
+}
+
+[data-slot="personal-todo-content"] > span,
+[data-slot="personal-todo-content"] > p {
+  min-width: 0;
+  margin: 0;
   overflow-wrap: anywhere;
 }
 
-[data-slot="personal-todo-item"][data-done="true"] > span {
+[data-slot="personal-todo-content"] > p,
+[data-slot="personal-todo-content"] > time {
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-size: var(--font-size-small);
+  white-space: pre-wrap;
+}
+
+[data-slot="personal-todo-content"] > time[data-overdue="true"] {
+  color: var(--vscode-errorForeground);
+}
+
+[data-slot="personal-todo-item"][data-done="true"] [data-slot="personal-todo-content"] > span {
   color: var(--text-weak, var(--vscode-descriptionForeground));
   text-decoration: line-through;
 }
 
+[data-slot="personal-todo-actions"],
 [data-slot="personal-todo-confirm"] {
   display: flex;
   align-items: center;
   gap: var(--raya-space-4);
+}
+
+[data-slot="personal-todo-edit"] {
+  display: grid;
+  grid-column: 2 / -1;
+  min-width: 0;
+  gap: var(--raya-space-10);
+  padding: var(--raya-space-4) 0;
+}
+
+[data-slot="personal-todo-edit"] [data-component="input"] {
+  min-width: 0;
+}
+
+[data-slot="personal-todo-edit-actions"] {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--raya-space-6);
+}
+
+[data-slot="personal-todo-edit-actions"] > span {
+  margin-right: auto;
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-size: var(--font-size-small);
 }
 
 @media (forced-colors: active) {
@@ -570,8 +615,17 @@
   }
 
   [data-slot="personal-todo-item"] > [data-component="icon-button"],
+  [data-slot="personal-todo-actions"],
   [data-slot="personal-todo-confirm"] {
     grid-column: 2;
     justify-self: end;
+  }
+
+  [data-slot="personal-todo-edit-actions"] {
+    flex-wrap: wrap;
+  }
+
+  [data-slot="personal-todo-edit-actions"] > span {
+    flex-basis: 100%;
   }
 }

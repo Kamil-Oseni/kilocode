@@ -21,7 +21,14 @@ for (const theme of ["light", "dark", "contrast"])
       await expect(page.getByRole("heading", { name: "Todo" })).toBeVisible()
       await expect(page.getByRole("list", { name: "Personal todos" })).toBeVisible()
       await expect(page.getByText("1 open", { exact: true })).toBeVisible()
+      await expect(
+        page.getByText("Confirm owners, rollout order, and rollback signals.", { exact: true }),
+      ).toBeVisible()
+      await expect(page.getByText(/^Due /)).toBeVisible()
       if (theme === "contrast") await page.emulateMedia({ forcedColors: "none" })
+      await audit(page)
+      await page.getByRole("button", { name: "Edit Review the launch checklist" }).click()
+      await expect(page.getByRole("form", { name: "Edit Review the launch checklist" })).toBeVisible()
       await audit(page)
       if (theme === "contrast") await page.emulateMedia({ forcedColors: "active" })
       await page.screenshot({ path: info.outputPath("todo.png"), fullPage: true })
@@ -94,6 +101,120 @@ test("recovers an exact stale completion intent without losing the draft", async
     { todoID: "todo-open", revision: 2, done: true },
   ])
   await audit(page)
+})
+
+test("edits title, details, and due date from the keyboard and reloads the saved result", async ({ page }) => {
+  await page.goto("/")
+  const edit = page.getByRole("button", { name: "Edit Review the launch checklist" })
+  await edit.focus()
+  await page.keyboard.press("Enter")
+  const form = page.getByRole("form", { name: "Edit Review the launch checklist" })
+  await form.getByLabel("Title").fill("Review the release plan")
+  await form.getByLabel("Details").fill("Check ownership, rollout, and rollback.")
+  await form.getByLabel("Due date and time").fill("2031-06-07T09:45")
+  await form.getByRole("button", { name: "Save" }).focus()
+  await page.keyboard.press("Enter")
+  await expect(
+    page.getByRole("list", { name: "Personal todos" }).getByText("Review the release plan", { exact: true }),
+  ).toBeVisible()
+  await expect(page.getByText("Check ownership, rollout, and rollback.", { exact: true })).toBeVisible()
+  const sent = async () => JSON.parse((await page.locator("[data-messages]").textContent()) ?? "[]")
+  expect((await sent()).filter((message) => message.type === "personalTodoUpdate")).toMatchObject([
+    {
+      todoID: "todo-open",
+      revision: 1,
+      title: "Review the release plan",
+      detail: "Check ownership, rollout, and rollback.",
+      dueAt: new Date("2031-06-07T09:45").getTime(),
+    },
+  ])
+  await page.reload()
+  await expect(
+    page.getByRole("list", { name: "Personal todos" }).getByText("Review the release plan", { exact: true }),
+  ).toBeVisible()
+  await expect(page.getByText("Check ownership, rollout, and rollback.", { exact: true })).toBeVisible()
+  await audit(page)
+})
+
+test("cancels an edit with Escape without sending or losing the saved item", async ({ page }) => {
+  await page.goto("/")
+  await page.getByRole("button", { name: "Edit Review the launch checklist" }).click()
+  const form = page.getByRole("form", { name: "Edit Review the launch checklist" })
+  await form.getByLabel("Title").fill("Unsaved title")
+  await form.getByLabel("Details").fill("Unsaved details")
+  await form.getByLabel("Details").press("Escape")
+  await expect(form).toHaveCount(0)
+  await expect(
+    page.getByRole("list", { name: "Personal todos" }).getByText("Review the launch checklist", { exact: true }),
+  ).toBeVisible()
+  const sent = JSON.parse((await page.locator("[data-messages]").textContent()) ?? "[]")
+  expect(sent.filter((message) => message.type === "personalTodoUpdate")).toEqual([])
+})
+
+for (const state of ["edit-offline", "edit-error"] as const) {
+  test(`retains the complete ${state} edit until an explicit retry`, async ({ page }) => {
+    await page.goto(`/?state=${state}`)
+    await page.getByRole("button", { name: "Edit Review the launch checklist" }).click()
+    const form = page.getByRole("form", { name: "Edit Review the launch checklist" })
+    await form.getByLabel("Title").fill("Retained edit")
+    await form.getByLabel("Details").fill("This exact detail stays visible.")
+    await form.getByLabel("Due date and time").fill("2032-08-09T11:15")
+    await form.getByRole("button", { name: "Save" }).click()
+    await expect(page.getByRole("alert")).toContainText(state === "edit-offline" ? "still here" : "could not save")
+    await expect(form.getByLabel("Title")).toHaveValue("Retained edit")
+    await expect(form.getByLabel("Details")).toHaveValue("This exact detail stays visible.")
+    await expect(form.getByLabel("Due date and time")).toHaveValue("2032-08-09T11:15")
+    await page.getByRole("button", { name: "Try again" }).click()
+    await expect(
+      page.getByRole("list", { name: "Personal todos" }).getByText("Retained edit", { exact: true }),
+    ).toBeVisible()
+    await expect(page.getByText("This exact detail stays visible.", { exact: true })).toBeVisible()
+    await audit(page)
+  })
+}
+
+test("keeps an exact stale edit visible and retries against the adopted revision after review", async ({ page }) => {
+  await page.goto("/?state=stale")
+  await page.getByRole("button", { name: "Edit Review the launch checklist" }).click()
+  const form = page.getByRole("form", { name: "Edit Review the launch checklist" })
+  await form.getByLabel("Title").fill("Reviewed stale edit")
+  await form.getByLabel("Details").fill("Preserve this context through reconciliation.")
+  await form.getByLabel("Due date and time").fill("2033-10-11T13:20")
+  await form.getByRole("button", { name: "Save" }).click()
+  await expect(page.getByRole("alert")).toContainText("Saved version 2 replaced version 1.")
+  await expect(form.getByLabel("Title")).toHaveValue("Reviewed stale edit")
+  await expect(form.getByLabel("Details")).toHaveValue("Preserve this context through reconciliation.")
+  const sent = async () => JSON.parse((await page.locator("[data-messages]").textContent()) ?? "[]")
+  expect((await sent()).filter((message) => message.type === "personalTodoUpdate")).toMatchObject([
+    { todoID: "todo-open", revision: 1, title: "Reviewed stale edit" },
+  ])
+  await page.getByRole("button", { name: "Review and retry" }).click()
+  await expect(
+    page.getByRole("list", { name: "Personal todos" }).getByText("Reviewed stale edit", { exact: true }),
+  ).toBeVisible()
+  expect((await sent()).filter((message) => message.type === "personalTodoUpdate")).toMatchObject([
+    { todoID: "todo-open", revision: 1, title: "Reviewed stale edit" },
+    { todoID: "todo-open", revision: 2, title: "Reviewed stale edit" },
+  ])
+  await page.reload()
+  await expect(
+    page.getByRole("list", { name: "Personal todos" }).getByText("Reviewed stale edit", { exact: true }),
+  ).toBeVisible()
+  await expect(page.getByText("Preserve this context through reconciliation.", { exact: true })).toBeVisible()
+  await audit(page)
+})
+
+test("clears optional detail and due date explicitly", async ({ page }) => {
+  await page.goto("/")
+  await page.getByRole("button", { name: "Edit Review the launch checklist" }).click()
+  const form = page.getByRole("form", { name: "Edit Review the launch checklist" })
+  await form.getByLabel("Details").fill("")
+  await form.getByLabel("Due date and time").fill("")
+  await form.getByRole("button", { name: "Save" }).click()
+  await expect(page.getByText("Confirm owners, rollout order, and rollback signals.", { exact: true })).toHaveCount(0)
+  await expect(page.getByText(/^Due /)).toHaveCount(0)
+  const sent = JSON.parse((await page.locator("[data-messages]").textContent()) ?? "[]")
+  expect(sent.filter((message) => message.type === "personalTodoUpdate")).toMatchObject([{ detail: null, dueAt: null }])
 })
 
 for (const state of ["idle", "running", "paused", "completed"] as const) {

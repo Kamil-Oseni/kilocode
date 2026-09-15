@@ -190,7 +190,7 @@ export const CreateDocumentTool = Tool.define(
             params.author,
             ...params.blocks.flatMap((block) => {
               if (block.type === "table") return []
-              if (block.type === "image") return [block.alt, block.caption]
+              if (block.type === "image") return block.caption ? [block.alt, block.caption] : [block.alt]
               if ("items" in block) return block.items
               return [block.text]
             }),

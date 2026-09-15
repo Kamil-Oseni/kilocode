@@ -261,6 +261,14 @@ type Meta = {
 
 type GoalDeps = { storage: Storage.Interface; sessions: Session.Interface }
 
+type Lease = {
+  readonly dispatch: Effect.Effect<void, Error>
+  readonly finish: Effect.Effect<void, Error>
+  readonly release: Effect.Effect<void>
+  readonly uncertain: (reason: string) => Effect.Effect<void, Error>
+  readonly settle: (charge: RayaGoal.Charge) => Effect.Effect<void, Error>
+}
+
 export const generateImageTool = (goals?: GoalDeps) =>
   Tool.define(
     "generate_image",
@@ -314,8 +322,16 @@ export const generateImageTool = (goals?: GoalDeps) =>
             const cfg = yield* configSvc.get()
             const model = params.model ?? cfg.experimental?.image_generation_model ?? DEFAULT_MODEL
             const req = buildRequest(resolved, params.prompt, model, inputImage)
-            const lease = charges
-              ? yield* charges.claim(ctx.sessionID, "USD")
+            const lease: Lease = charges
+              ? yield* charges.claim(ctx.sessionID, "USD").pipe(
+                  Effect.map((value) => ({
+                    dispatch: value.dispatch,
+                    finish: value.finish,
+                    release: value.release.pipe(Effect.orDie),
+                    uncertain: value.uncertain,
+                    settle: value.settle,
+                  })),
+                )
               : {
                   dispatch: Effect.void,
                   finish: Effect.void,
@@ -444,7 +460,7 @@ export const generateImageTool = (goals?: GoalDeps) =>
                 ],
               }
             }).pipe(Effect.ensuring(lease.release))
-          }).pipe(Effect.orDie),
+          }).pipe(Effect.scoped, Effect.orDie),
       }
     }),
   )

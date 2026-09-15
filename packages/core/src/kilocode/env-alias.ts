@@ -9,6 +9,17 @@ export namespace EnvAlias {
     return next !== undefined ? next : legacy
   }
 
+  /** Update both names so mutable legacy flag accessors keep one effective value. */
+  export function write(raya: string, kilo: string, value: string | undefined, env: NodeJS.ProcessEnv = process.env) {
+    if (value !== undefined) {
+      env[raya] = value
+      env[kilo] = value
+      return
+    }
+    delete env[raya]
+    delete env[kilo]
+  }
+
   /** Return and clear value-free conflict labels for logging after startup logging is ready. */
   export function conflicts() {
     const result = [...found].sort()

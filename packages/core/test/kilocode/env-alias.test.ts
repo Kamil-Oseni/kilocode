@@ -40,6 +40,52 @@ describe("Raya environment aliases", () => {
     expect(EnvAlias.conflicts()).toEqual([])
   })
 
+  test("writes one effective value through both names", () => {
+    const env: NodeJS.ProcessEnv = {
+      RAYA_CONFIG: "raya.json",
+      KILO_CONFIG: "legacy.json",
+    }
+
+    EnvAlias.write("RAYA_CONFIG", "KILO_CONFIG", "override.json", env)
+    expect(env).toEqual({
+      RAYA_CONFIG: "override.json",
+      KILO_CONFIG: "override.json",
+    })
+    expect(EnvAlias.read("RAYA_CONFIG", "KILO_CONFIG", env)).toBe("override.json")
+
+    EnvAlias.write("RAYA_CONFIG", "KILO_CONFIG", undefined, env)
+    expect(env).toEqual({})
+    expect(EnvAlias.read("RAYA_CONFIG", "KILO_CONFIG", env)).toBeUndefined()
+  })
+
+  test("keeps mutable legacy Flag properties writable", () => {
+    const child = Bun.spawnSync({
+      cmd: [
+        process.execPath,
+        "-e",
+        'import { Flag } from "./src/flag/flag.ts"; Flag.KILO_CONFIG = "override.json"; Flag.KILO_DB = "override.db"; console.log(JSON.stringify([Flag.KILO_CONFIG, process.env.RAYA_CONFIG, process.env.KILO_CONFIG, Flag.KILO_DB, process.env.RAYA_DB, process.env.KILO_DB]))',
+      ],
+      cwd: `${import.meta.dir}/../..`,
+      env: {
+        ...process.env,
+        RAYA_CONFIG: "raya.json",
+        KILO_CONFIG: "legacy.json",
+        RAYA_DB: "raya.db",
+        KILO_DB: "legacy.db",
+      },
+    })
+
+    expect(child.exitCode).toBe(0)
+    expect(JSON.parse(child.stdout.toString())).toEqual([
+      "override.json",
+      "override.json",
+      "override.json",
+      "override.db",
+      "override.db",
+      "override.db",
+    ])
+  })
+
   for (const item of [
     {
       name: "legacy inputs",

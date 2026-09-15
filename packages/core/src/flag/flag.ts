@@ -47,8 +47,14 @@ export const Flag = {
   get KILO_CONFIG() {
     return EnvAlias.read("RAYA_CONFIG", "KILO_CONFIG")
   },
+  set KILO_CONFIG(value: string | undefined) {
+    EnvAlias.write("RAYA_CONFIG", "KILO_CONFIG", value)
+  },
   get KILO_CONFIG_CONTENT() {
     return EnvAlias.read("RAYA_CONFIG_CONTENT", "KILO_CONFIG_CONTENT")
+  },
+  set KILO_CONFIG_CONTENT(value: string | undefined) {
+    EnvAlias.write("RAYA_CONFIG_CONTENT", "KILO_CONFIG_CONTENT", value)
   },
   // kilocode_change end
   KILO_DISABLE_AUTOUPDATE: truthy("KILO_DISABLE_AUTOUPDATE"),
@@ -115,9 +121,14 @@ export const Flag = {
 
   KILO_DISABLE_EMBEDDED_WEB_UI: truthy("KILO_DISABLE_EMBEDDED_WEB_UI"), // kilocode_change
 
+  // kilocode_change start - Raya input alias with mutable compatibility access
   get KILO_DB() {
-    return EnvAlias.read("RAYA_DB", "KILO_DB") // kilocode_change - Raya input alias
+    return EnvAlias.read("RAYA_DB", "KILO_DB")
   },
+  set KILO_DB(value: string | undefined) {
+    EnvAlias.write("RAYA_DB", "KILO_DB", value)
+  },
+  // kilocode_change end
 
   KILO_DISABLE_CHANNEL_DB: truthy("KILO_DISABLE_CHANNEL_DB"), // kilocode_change
 
@@ -146,9 +157,14 @@ export const Flag = {
   get KILO_TUI_CONFIG() {
     return process.env["KILO_TUI_CONFIG"]
   },
+  // kilocode_change start - Raya input alias with mutable compatibility access
   get KILO_CONFIG_DIR() {
-    return EnvAlias.read("RAYA_CONFIG_DIR", "KILO_CONFIG_DIR") // kilocode_change - Raya input alias
+    return EnvAlias.read("RAYA_CONFIG_DIR", "KILO_CONFIG_DIR")
   },
+  set KILO_CONFIG_DIR(value: string | undefined) {
+    EnvAlias.write("RAYA_CONFIG_DIR", "KILO_CONFIG_DIR", value)
+  },
+  // kilocode_change end
   get KILO_PURE() {
     return truthy("KILO_PURE")
   },

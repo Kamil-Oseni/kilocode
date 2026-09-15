@@ -13,6 +13,7 @@ describe("profile writer manifest", () => {
     expect(manifest.writers.filter((writer) => writer.coverage === "integrated").map((writer) => writer.id)).toEqual([
       "profile.credentials.auth",
       "profile.credentials.mcp",
+      "profile.data.tool-output",
       "profile.storage.json",
     ])
     expect(manifest.writers.filter((writer) => writer.coverage !== "integrated").length).toBeGreaterThan(0)

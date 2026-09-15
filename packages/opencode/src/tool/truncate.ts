@@ -8,6 +8,7 @@ import { evaluate } from "@/permission/evaluate"
 import { Config } from "@/config/config"
 import { ToolID } from "./schema"
 import { truncationDir } from "./truncation-dir" // kilocode_change
+import { ProfileWriterLive } from "@/kilocode/migration/writer-live" // kilocode_change - profile migration admission
 
 const RETENTION = Duration.days(7)
 
@@ -52,37 +53,46 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Truncate") {}
 
-const layer = Layer.effect(
-  Service,
+const make = (
+  admission: ProfileWriterLive.Admission = ProfileWriterLive.output, // kilocode_change - injectable admission
+) =>
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
 
     const cleanup = Effect.fn("Truncate.cleanup")(function* () {
-      // kilocode_change start - use file mtimes because encoded IDs wrap
-      const dir = truncationDir()
-      const cutoff = Date.now() - Duration.toMillis(RETENTION)
-      const entries = yield* fs.readDirectory(dir).pipe(
-        Effect.map((all) => all.filter((name) => name.startsWith("tool_"))),
-        Effect.catch(() => Effect.succeed([])),
+      yield* admission.run(
+        Effect.gen(function* () {
+          // kilocode_change start - select the profile after admission and use mtimes because encoded IDs wrap
+          const dir = truncationDir()
+          const cutoff = Date.now() - Duration.toMillis(RETENTION)
+          const entries = yield* fs.readDirectory(dir).pipe(
+            Effect.map((all) => all.filter((name) => name.startsWith("tool_"))),
+            Effect.catch(() => Effect.succeed([])),
+          )
+          for (const entry of entries) {
+            const file = path.join(dir, entry)
+            const info = yield* fs.stat(file).pipe(Effect.catch(() => Effect.succeed(undefined)))
+            const mtime = info && Option.getOrUndefined(info.mtime)
+            if (!mtime || mtime.getTime() >= cutoff) continue
+            yield* fs.remove(file).pipe(Effect.catch(() => Effect.void))
+          }
+          // kilocode_change end
+        }),
       )
-      for (const entry of entries) {
-        const file = path.join(dir, entry)
-        const info = yield* fs.stat(file).pipe(Effect.catch(() => Effect.succeed(undefined)))
-        const mtime = info && Option.getOrUndefined(info.mtime)
-        if (!mtime || mtime.getTime() >= cutoff) continue
-        yield* fs.remove(file).pipe(Effect.catch(() => Effect.void))
-      }
-      // kilocode_change end
     })
 
     const write = Effect.fn("Truncate.write")(function* (text: string) {
-      // kilocode_change start - pin one write to one active profile directory
-      const dir = truncationDir()
-      const file = path.join(dir, ToolID.ascending())
-      yield* fs.ensureDir(dir).pipe(Effect.orDie)
-      yield* fs.writeFileString(file, text).pipe(Effect.orDie)
-      return file
-      // kilocode_change end
+      return yield* admission.run(
+        Effect.gen(function* () {
+          // kilocode_change start - select and pin one active profile directory after admission
+          const dir = truncationDir()
+          const file = path.join(dir, ToolID.ascending())
+          yield* fs.ensureDir(dir).pipe(Effect.orDie)
+          yield* fs.writeFileString(file, text).pipe(Effect.orDie)
+          return file
+          // kilocode_change end
+        }),
+      )
     })
 
     const limits = Effect.fn("Truncate.limits")(function* () {
@@ -161,8 +171,11 @@ const layer = Layer.effect(
     )
 
     return Service.of({ cleanup, write, output, limits })
-  }),
-)
+  })
+
+const layer = Layer.effect(Service, make()) // kilocode_change - process-lifetime admission
+
+export const layerWithAdmission = (admission: ProfileWriterLive.Admission) => Layer.effect(Service, make(admission)) // kilocode_change - tests
 
 export const node = LayerNode.make({ service: Service, layer: layer, deps: [FSUtil.node] })
 

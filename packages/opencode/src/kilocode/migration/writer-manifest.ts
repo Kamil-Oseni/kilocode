@@ -224,7 +224,7 @@ export namespace ProfileWriterManifest {
         methods: ["write", "cleanup"],
         lifecycle: "Pin data/tool-output and interrupt or drain background cleanup before switching.",
         copyPolicy: "copy-after-drain",
-        coverage: unintegrated,
+        coverage: "integrated",
       }),
       writer({
         id: "profile.data.worktrees",

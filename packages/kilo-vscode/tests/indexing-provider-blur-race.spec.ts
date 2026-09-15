@@ -122,21 +122,23 @@ test("scope switching preserves raw overrides and commits blur to the original s
   await expect(tuningRow.locator('[data-component="tag"]')).toHaveText("Default")
 })
 
-test("Kilo exposes only supported embedding model presets", async ({ page }) => {
+test("Raya exposes only supported managed embedding model presets", async ({ page }) => {
   await page.setViewportSize({ width: 420, height: 720 })
   await page.goto(storyUrl(KILO_STORY_ID), { waitUntil: "load" })
   await disableAnimations(page)
   await page.waitForSelector("#storybook-root *", { state: "attached" })
 
-  await expect(page.getByText("Kilo model preset", { exact: true })).toBeVisible()
+  await expect(page.getByText("Raya model preset", { exact: true })).toBeVisible() // raya_change - consumer branding proof
   await expect(page.getByText("Embedding model", { exact: true })).toHaveCount(0)
   await expect(page.getByText("Vector dimension", { exact: true })).toBeVisible()
 
-  const preset = selectIn(page, "Kilo model preset")
+  const preset = selectIn(page, "Raya model preset")
   await expect(preset).toContainText("Provider Model")
 
   const dimension = field(page, "Vector dimension").first()
   await expect(dimension).toHaveValue("")
+  await expect(dimension).toHaveAttribute("placeholder", "Provided by Raya") // raya_change - rendered managed-field label
+  await expect(page.getByPlaceholder("Provided by Kilo")).toHaveCount(0)
 
   await preset.click()
   await page.locator('[data-slot="select-select-item-label"]', { hasText: "Provider Compact" }).click()

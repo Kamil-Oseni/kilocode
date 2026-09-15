@@ -472,7 +472,7 @@ const IndexingTab: Component = () => {
                 : String(cfg().dimension)
             }
             placeholder={
-              selectedProvider() === "kilo" ? "Provided by Kilo" : language.t("settings.indexing.dimension.placeholder")
+              selectedProvider() === "kilo" ? "Provided by Raya" : language.t("settings.indexing.dimension.placeholder") // raya_change - public product branding
             }
             disabled={selectedProvider() === "kilo"}
             onChange={(value) => saveNumber("dimension", value, { integer: true, min: 1 })}

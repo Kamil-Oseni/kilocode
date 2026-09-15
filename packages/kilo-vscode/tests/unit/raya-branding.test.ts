@@ -117,6 +117,14 @@ describe("Raya branding boundary", () => {
     expect(model).not.toContain('name: "Kilo Gateway"')
   })
 
+  test("labels managed indexing fields as provided by Raya", async () => {
+    const source = await read("webview-ui/src/components/settings/IndexingTab.tsx")
+
+    expect(source).toContain('"Provided by Raya"')
+    expect(source).not.toContain(["Provided by Ki", "lo"].join(""))
+    expect(source).toContain('selectedProvider() === "kilo"')
+  })
+
   test("labels the profile subscription card as Raya Pass", async () => {
     const source = await read("webview-ui/src/components/profile/ProviderUsageCards.tsx")
 

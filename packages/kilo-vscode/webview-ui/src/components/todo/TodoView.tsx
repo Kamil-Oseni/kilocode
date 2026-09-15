@@ -6,7 +6,8 @@ import { Spinner } from "@kilocode/kilo-ui/spinner"
 import { TextField } from "@kilocode/kilo-ui/text-field"
 import { Component, For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { useVSCode } from "../../context/vscode"
-import type { ExtensionMessage, FocusTimerItem, PersonalTodoItem } from "../../types/messages"
+import type { ExtensionMessage, FocusTimerItem, PersonalTodoItem, PersonalTodoProposalView } from "../../types/messages"
+import { TodoProposalCard, type TodoProposal, type TodoProposalIssue } from "./TodoProposalCard"
 
 type Intent =
   | { operation: "create"; title: string; reminderAt?: number }
@@ -25,6 +26,11 @@ type Notice = { kind: "offline" | "stale" | "error"; message: string }
 type TimerIntent =
   | { operation: "start"; durationMs: number; todoID?: string }
   | { operation: "pause" | "resume" | "reset" }
+type ProposalIntent =
+  | { operation: "list" }
+  | { operation: "get"; proposalID: string; digest: string }
+  | { operation: "apply" | "reject"; proposalID: string; digest: string }
+type ProposalFocus = { nonce: string; id: string; digest: string }
 
 const durations = [
   { label: "15 minutes", value: 15 * 60_000 },
@@ -46,7 +52,33 @@ const local = (value?: number) => {
 const due = (value: number) =>
   new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value))
 
-export const TodoView: Component<{ onBack: () => void }> = (props) => {
+const proposal = (view: PersonalTodoProposalView): TodoProposal => ({
+  id: view.proposal.id,
+  title: view.proposal.changes.title ?? (view.proposal.target.kind === "existing" ? "Update this Todo" : "New Todo"),
+  detail: view.proposal.changes.detail,
+  priority: view.proposal.changes.priority,
+  estimateMinutes: view.proposal.changes.estimateMinutes,
+  dueAt: view.proposal.changes.dueAt,
+  reminderAt: view.proposal.changes.reminderAt,
+  links: view.proposal.changes.links,
+  subtasks: view.proposal.changes.subtasks?.map((item) => ({
+    id: item.id,
+    title: item.title,
+    status: item.status,
+    notes: item.notes,
+    priority: item.priority,
+    estimateMinutes: item.estimateMinutes,
+    dueAt: item.dueAt,
+    links: item.links,
+  })),
+})
+
+export const TodoView: Component<{
+  onBack: () => void
+  focus?: ProposalFocus
+  onFocusConsumed?: () => void
+  onEditProposal?: (id: string) => void
+}> = (props) => {
   const vscode = useVSCode()
   const [items, setItems] = createSignal<PersonalTodoItem[]>([])
   const [draft, setDraft] = createSignal("")
@@ -67,8 +99,16 @@ export const TodoView: Component<{ onBack: () => void }> = (props) => {
   const [todo, setTodo] = createSignal<string>()
   const [now, setNow] = createSignal(Date.now())
   const [checkpoint, setCheckpoint] = createSignal<number>()
+  const [proposals, setProposals] = createSignal<PersonalTodoProposalView[]>([])
+  const [proposalLoading, setProposalLoading] = createSignal(true)
+  const [proposalNotice, setProposalNotice] = createSignal<TodoProposalIssue>()
+  const [proposalBusy, setProposalBusy] = createSignal<Record<string, "apply" | "reject">>({})
+  const [proposalIssues, setProposalIssues] = createSignal<Record<string, TodoProposalIssue | undefined>>({})
+  const [proposalRecovery, setProposalRecovery] = createSignal<Record<string, ProposalIntent | undefined>>({})
+  const [settled, setSettled] = createSignal<ReadonlySet<string>>(new Set())
   const requests = new Map<string, Intent | { operation: "list" }>()
   const timers = new Map<string, TimerIntent | { operation: "get" }>()
+  const proposalRequests = new Map<string, ProposalIntent>()
 
   const send = (intent: Intent | { operation: "list" }) => {
     const item = "todoID" in intent ? items().find((row) => row.id === intent.todoID) : undefined
@@ -117,6 +157,124 @@ export const TodoView: Component<{ onBack: () => void }> = (props) => {
         rows.some((row) => row.id === item.id) ? rows.map((row) => (row.id === item.id ? item : row)) : [...rows, item],
       ),
     )
+
+  const replaceProposal = (item: PersonalTodoProposalView) =>
+    setProposals((rows) =>
+      rows.some((row) => row.proposal.id === item.proposal.id)
+        ? rows.map((row) => (row.proposal.id === item.proposal.id ? item : row))
+        : [...rows, item],
+    )
+
+  const sendProposal = (intent: ProposalIntent) => {
+    const requestID = crypto.randomUUID()
+    proposalRequests.set(requestID, intent)
+    if (intent.operation === "list") {
+      setProposalLoading(true)
+      setProposalNotice()
+      vscode.postMessage({ type: "personalTodoProposalList", requestID })
+      return
+    }
+    if (intent.operation === "get") {
+      vscode.postMessage({ type: "personalTodoProposalGet", requestID, proposalID: intent.proposalID })
+      return
+    }
+    setProposalBusy((state) => ({ ...state, [intent.proposalID]: intent.operation }))
+    setProposalIssues((state) => ({ ...state, [intent.proposalID]: undefined }))
+    setProposalRecovery((state) => ({ ...state, [intent.proposalID]: undefined }))
+    vscode.postMessage({
+      type: intent.operation === "apply" ? "personalTodoProposalApply" : "personalTodoProposalReject",
+      requestID,
+      proposalID: intent.proposalID,
+      digest: intent.digest,
+    })
+  }
+
+  const focusProposal = (id: string) =>
+    queueMicrotask(() => {
+      const item = document.querySelector<HTMLElement>(`[data-proposal-id="${CSS.escape(id)}"]`)
+      if (!item) return
+      item.scrollIntoView({ block: "nearest" })
+      const target =
+        item.querySelector<HTMLElement>("button:not([disabled])") ??
+        item.querySelector<HTMLElement>("[data-slot='todo-proposal-status']")
+      target?.focus()
+    })
+
+  type ProposalMessage = Extract<ExtensionMessage, { type: "personalTodoProposalResult" }>
+
+  const issue = (message: ProposalMessage): TodoProposalIssue | undefined => {
+    if (!("message" in message)) return
+    if (
+      message.kind !== "offline" &&
+      message.kind !== "stale" &&
+      message.kind !== "conflict" &&
+      message.kind !== "uncertain" &&
+      message.kind !== "error"
+    )
+      return
+    return { kind: message.kind, message: message.message }
+  }
+
+  const clearProposalBusy = (intent: ProposalIntent) => {
+    if (intent.operation !== "apply" && intent.operation !== "reject") return
+    setProposalBusy((state) => {
+      const next = { ...state }
+      delete next[intent.proposalID]
+      return next
+    })
+  }
+
+  const acceptProposal = (message: ProposalMessage, item?: PersonalTodoProposalView) => {
+    if (message.kind === "listed") {
+      setProposals(message.items)
+      setProposalNotice()
+      return true
+    }
+    if (message.kind !== "loaded" && message.kind !== "applied" && message.kind !== "rejected") return false
+    const id = item?.proposal.id
+    if (!id) return true
+    setProposalIssues((state) => ({ ...state, [id]: undefined }))
+    setProposalRecovery((state) => ({ ...state, [id]: undefined }))
+    focusProposal(id)
+    return true
+  }
+
+  const failProposal = (intent: ProposalIntent, message: ProposalMessage, item?: PersonalTodoProposalView) => {
+    const failure = issue(message)
+    if (!failure) return
+    if (intent.operation === "list" || intent.operation === "get") {
+      setProposalNotice(failure)
+      return
+    }
+    setProposalIssues((state) => ({
+      ...state,
+      [intent.proposalID]: failure,
+    }))
+    const recoverable =
+      message.kind === "offline" ||
+      (message.kind === "uncertain" && item !== undefined && (item.state === "open" || item.state === "pending"))
+    setProposalRecovery((state) => ({ ...state, [intent.proposalID]: recoverable ? intent : undefined }))
+  }
+
+  const receiveProposal = (message: ProposalMessage) => {
+    const intent = proposalRequests.get(message.requestID)
+    if (!intent || message.operation !== intent.operation) return
+    if (intent.operation !== "list" && message.proposalID !== intent.proposalID) return
+    proposalRequests.delete(message.requestID)
+    if (intent.operation === "list") setProposalLoading(false)
+    clearProposalBusy(intent)
+    const item = "item" in message ? message.item : undefined
+    if (intent.operation === "get" && item && item.proposal.digest !== intent.digest) {
+      setProposalNotice({ kind: "conflict", message: "The saved proposal no longer matches this review." })
+      return
+    }
+    if (item) {
+      replaceProposal(item)
+      if (intent.operation !== "get") setSettled((ids) => new Set(ids).add(item.proposal.id))
+    }
+    if (acceptProposal(message, item)) return
+    failProposal(intent, message, item)
+  }
 
   const receiveTimer = (message: Extract<ExtensionMessage, { type: "focusTimerResult" }>) => {
     const intent = timers.get(message.requestID)
@@ -185,6 +343,7 @@ export const TodoView: Component<{ onBack: () => void }> = (props) => {
 
   const receive = (message: ExtensionMessage) => {
     if (message.type === "focusTimerResult") return receiveTimer(message)
+    if (message.type === "personalTodoProposalResult") return receiveProposal(message)
     if (message.type === "personalTodoResult") receiveTodo(message)
   }
 
@@ -192,7 +351,15 @@ export const TodoView: Component<{ onBack: () => void }> = (props) => {
   onCleanup(unsubscribe)
   onMount(() => {
     send({ operation: "list" })
+    sendProposal({ operation: "list" })
     sendTimer({ operation: "get" })
+  })
+
+  createEffect(() => {
+    const focus = props.focus
+    if (!focus) return
+    sendProposal({ operation: "get", proposalID: focus.id, digest: focus.digest })
+    props.onFocusConsumed?.()
   })
 
   createEffect(() => {
@@ -202,6 +369,19 @@ export const TodoView: Component<{ onBack: () => void }> = (props) => {
   })
 
   const remaining = createMemo(() => items().filter((item) => !item.done).length)
+  const reviewCount = createMemo(
+    () => proposals().filter((item) => item.state === "open" || item.state === "pending").length,
+  )
+  const visibleProposals = createMemo(() =>
+    proposals().filter((item) => item.state === "open" || item.state === "pending" || settled().has(item.proposal.id)),
+  )
+  const decideProposal = (item: PersonalTodoProposalView, operation: "apply" | "reject") =>
+    sendProposal({ operation, proposalID: item.proposal.id, digest: item.proposal.digest })
+  const retryProposal = (item: PersonalTodoProposalView) => {
+    const intent = proposalRecovery()[item.proposal.id]
+    if (intent) sendProposal(intent)
+    if (!intent && item.state === "pending") decideProposal(item, "apply")
+  }
   const compose = (next: { title?: string; reminder?: string }) => {
     const title = next.title ?? draft()
     const value = next.reminder ?? reminder()
@@ -441,6 +621,71 @@ export const TodoView: Component<{ onBack: () => void }> = (props) => {
       </header>
 
       {panel()}
+
+      <section data-slot="todo-proposals" aria-labelledby="todo-proposals-title">
+        <header data-slot="todo-proposals-header">
+          <div>
+            <h2 id="todo-proposals-title">For review</h2>
+            <p>{reviewCount()} waiting</p>
+          </div>
+          <Button
+            variant="ghost"
+            size="small"
+            disabled={proposalLoading()}
+            onClick={() => sendProposal({ operation: "list" })}
+          >
+            Refresh
+          </Button>
+        </header>
+
+        <Show when={proposalNotice()}>
+          {(notice) => (
+            <div data-slot="todo-proposals-notice" data-kind={notice().kind} role="alert">
+              <span>{notice().message}</span>
+              <Button variant="ghost" size="small" onClick={() => sendProposal({ operation: "list" })}>
+                Try again
+              </Button>
+            </div>
+          )}
+        </Show>
+
+        <Show when={proposalLoading()}>
+          <div data-slot="todo-proposals-loading" role="status">
+            <Spinner /> <span>Checking plans…</span>
+          </div>
+        </Show>
+
+        <Show when={!proposalLoading() && !proposalNotice() && visibleProposals().length === 0}>
+          <p data-slot="todo-proposals-empty">No plans are waiting for review.</p>
+        </Show>
+
+        <Show when={!proposalLoading() && visibleProposals().length > 0}>
+          <ul data-slot="todo-proposals-list" aria-label="Todo plans for review">
+            <For each={visibleProposals()}>
+              {(item) => {
+                const id = () => item.proposal.id
+                const issue = () => proposalIssues()[id()]
+                const recovery = () => proposalRecovery()[id()]
+                return (
+                  <li data-proposal-id={id()}>
+                    <TodoProposalCard
+                      proposal={proposal(item)}
+                      state={item.state}
+                      busy={proposalBusy()[id()]}
+                      issue={issue()}
+                      decisionDisabled={issue() !== undefined}
+                      onApply={() => decideProposal(item, "apply")}
+                      onEdit={() => props.onEditProposal?.(id())}
+                      onReject={() => decideProposal(item, "reject")}
+                      onRetry={recovery() || item.state === "pending" ? () => retryProposal(item) : undefined}
+                    />
+                  </li>
+                )
+              }}
+            </For>
+          </ul>
+        </Show>
+      </section>
 
       <form
         data-slot="personal-todo-compose"

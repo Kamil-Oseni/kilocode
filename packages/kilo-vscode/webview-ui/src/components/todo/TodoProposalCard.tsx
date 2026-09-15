@@ -271,9 +271,9 @@ export const TodoProposalCard: Component<TodoProposalCardProps> = (props) => {
             {message()}
           </span>
         </span>
-        <Show when={props.issue && props.onRetry}>
+        <Show when={props.onRetry && (props.issue || props.state === "pending")}>
           <Button size="small" variant="secondary" disabled={pending()} onClick={() => props.onRetry?.()}>
-            Try again
+            {props.state === "pending" && !props.issue ? "Continue applying" : "Try again"}
           </Button>
         </Show>
       </div>

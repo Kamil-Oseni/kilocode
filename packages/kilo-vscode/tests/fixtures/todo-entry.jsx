@@ -9,6 +9,7 @@ import { TodoView } from "../../webview-ui/src/components/todo/TodoView"
 const params = new URLSearchParams(location.search)
 const state = params.get("state") ?? "populated"
 const timerState = params.get("timer") ?? "idle"
+const proposalState = params.get("proposal") ?? "none"
 const holdTimer = params.get("holdTimer") === "true"
 const messages = []
 let offline = state === "offline"
@@ -17,6 +18,38 @@ let editOffline = state === "edit-offline"
 let editError = state === "edit-error"
 let timerOffline = timerState === "offline"
 let timerStale = timerState === "stale"
+let proposalOffline = proposalState === "offline"
+let proposalUncertain = proposalState === "uncertain"
+const proposalID = "proposal_11111111-1111-4111-8111-111111111111"
+const proposalDigest = "a".repeat(64)
+const proposalView = {
+  proposal: {
+    version: 1,
+    id: proposalID,
+    digest: proposalDigest,
+    createdAt: 100,
+    source: { sessionID: "ses_fixture", messageID: "msg_fixture", callID: "call_fixture" },
+    target: { kind: "new", todoID: "todo_22222222-2222-4222-8222-222222222222", baseRevision: 0 },
+    changes: {
+      title: "Plan the move",
+      detail: "Compare neighborhoods and prepare the application.",
+      priority: "high",
+      estimateMinutes: 90,
+      links: [{ kind: "chat", id: "ses_fixture" }],
+      subtasks: [
+        {
+          kind: "new",
+          id: "subtodo_33333333-3333-4333-8333-333333333333",
+          title: "Book viewings",
+          estimateMinutes: 45,
+        },
+      ],
+    },
+  },
+  state: proposalState === "pending" ? "pending" : "open",
+}
+let proposals =
+  proposalState === "none" || proposalState === "loading" || proposalState === "offline" ? [] : [proposalView]
 const initialItems =
   state === "empty" || state === "loading" || state === "offline"
     ? []
@@ -72,6 +105,98 @@ window.acquireVsCodeApi = () => ({
   setState: () => {},
   postMessage: (message) => {
     record(message)
+    if (message.type === "personalTodoProposalList") {
+      if (proposalState === "loading") return
+      if (proposalOffline) {
+        proposalOffline = false
+        emit({
+          type: "personalTodoProposalResult",
+          requestID: message.requestID,
+          operation: "list",
+          kind: "offline",
+          message: "Raya is offline. Your saved plans are unchanged.",
+        })
+        return
+      }
+      emit({
+        type: "personalTodoProposalResult",
+        requestID: message.requestID,
+        operation: "list",
+        kind: "listed",
+        items: proposals,
+      })
+      return
+    }
+    if (message.type === "personalTodoProposalGet") {
+      const item = proposals.find((row) => row.proposal.id === message.proposalID) ?? proposalView
+      emit({
+        type: "personalTodoProposalResult",
+        requestID: message.requestID,
+        operation: "get",
+        proposalID: message.proposalID,
+        kind: "loaded",
+        item,
+      })
+      return
+    }
+    if (message.type === "personalTodoProposalApply" || message.type === "personalTodoProposalReject") {
+      const operation = message.type === "personalTodoProposalApply" ? "apply" : "reject"
+      if (proposalState === "hold") return
+      if (proposalState === "stale") {
+        emit({
+          type: "personalTodoProposalResult",
+          requestID: message.requestID,
+          operation,
+          proposalID: message.proposalID,
+          kind: "stale",
+          message: "This Todo changed after the plan was prepared.",
+          todoID: proposalView.proposal.target.todoID,
+          expected: 1,
+          actual: 2,
+        })
+        return
+      }
+      if (proposalState === "conflict") {
+        const item = { ...proposalView, state: operation === "apply" ? "rejected" : "applied" }
+        proposals = [item]
+        emit({
+          type: "personalTodoProposalResult",
+          requestID: message.requestID,
+          operation,
+          proposalID: message.proposalID,
+          kind: "conflict",
+          message: `The Todo proposal is already ${item.state}.`,
+          item,
+        })
+        return
+      }
+      if (proposalUncertain) {
+        proposalUncertain = false
+        const item = { ...proposalView, state: "pending" }
+        proposals = [item]
+        emit({
+          type: "personalTodoProposalResult",
+          requestID: message.requestID,
+          operation,
+          proposalID: message.proposalID,
+          kind: "uncertain",
+          message: "The connection ended before Raya confirmed the saved decision.",
+          item,
+        })
+        return
+      }
+      const item = { ...proposalView, state: operation === "apply" ? "applied" : "rejected" }
+      proposals = [item]
+      emit({
+        type: "personalTodoProposalResult",
+        requestID: message.requestID,
+        operation,
+        proposalID: message.proposalID,
+        kind: item.state,
+        item,
+      })
+      return
+    }
     if (message.type === "focusTimerGet") {
       if (timerState === "loading") return
       if (timerOffline) {
@@ -266,7 +391,14 @@ document.body.style.color = colors.foreground
 render(
   () => (
     <StoryProviders noPadding config={{}}>
-      <TodoView onBack={() => {}} />
+      <TodoView
+        focus={
+          params.get("focus") === "true" ? { nonce: "fixture", id: proposalID, digest: proposalDigest } : undefined
+        }
+        onFocusConsumed={() => {}}
+        onEditProposal={(id) => document.body.setAttribute("data-edited-proposal", id)}
+        onBack={() => {}}
+      />
       <output data-messages hidden>
         {JSON.stringify(messages)}
       </output>

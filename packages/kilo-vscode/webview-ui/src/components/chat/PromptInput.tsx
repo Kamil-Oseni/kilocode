@@ -544,6 +544,24 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   window.addEventListener("focusPrompt", onFocusPrompt)
   onCleanup(() => window.removeEventListener("focusPrompt", onFocusPrompt))
 
+  const onPrefillPrompt = (event: Event) => {
+    if (!(event instanceof CustomEvent) || typeof event.detail?.text !== "string") return
+    const prompt = event.detail.text.trim()
+    if (!prompt || prompt.length > 2_000) return
+    const current = text().trimEnd()
+    const next = current ? `${current}\n\n${prompt}` : prompt
+    setText(next)
+    mention.seedFromText(next)
+    saveDraft(draftKey(), next, reviewComments(), imageAttach.images())
+    if (!textareaRef) return
+    textareaRef.value = next
+    adjustHeight()
+    textareaRef.focus({ preventScroll: true })
+    textareaRef.setSelectionRange(next.length, next.length)
+  }
+  window.addEventListener("raya:prefill-prompt", onPrefillPrompt)
+  onCleanup(() => window.removeEventListener("raya:prefill-prompt", onPrefillPrompt))
+
   // Start a new task, carrying over the current prompt text (without auto-sending it)
   const onNewTaskRequest = () => {
     const draft = text().trim()

@@ -36,6 +36,7 @@ import "./styles/chat.css"
 
 type ViewType = "newTask" | "history" | "routines" | "todo" | "admin" | "profile" | "settings" | "subAgentViewer"
 type RoutineTarget = { nonce: string; organizationID?: string; agentID?: string }
+type TodoTarget = { nonce: string; id: string; digest: string }
 const VALID_VIEWS = new Set<string>([
   "newTask",
   "history",
@@ -248,6 +249,7 @@ const AppContent: Component = () => {
   const [settingsTab, setSettingsTab] = createSignal<string | undefined>()
   const [agentManagerProjectId, setAgentManagerProjectId] = createSignal<string | undefined>()
   const [routineTarget, setRoutineTarget] = createSignal<RoutineTarget>()
+  const [todoTarget, setTodoTarget] = createSignal<TodoTarget>()
   const [subagent, setSubagent] = createSignal<SubagentTarget>()
   // legacy-migration: state-driven flag independent of currentView to avoid
   // race conditions with SettingsEditorProvider's navigate messages.
@@ -273,6 +275,35 @@ const AppContent: Component = () => {
     onCleanup(() => window.removeEventListener("raya:open-routines", open))
   })
 
+  onMount(() => {
+    const open = (event: Event) => {
+      const detail = (event as CustomEvent<{ id?: unknown; digest?: unknown }>).detail
+      if (
+        typeof detail?.id !== "string" ||
+        !/^proposal_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(detail.id)
+      )
+        return
+      if (typeof detail.digest !== "string" || !/^[a-f0-9]{64}$/.test(detail.digest)) return
+      setTodoTarget({ nonce: crypto.randomUUID(), id: detail.id, digest: detail.digest })
+      setCurrentView("todo")
+    }
+    window.addEventListener("raya:open-todo-proposal", open)
+    onCleanup(() => window.removeEventListener("raya:open-todo-proposal", open))
+  })
+
+  const editTodoProposal = (id: string) => {
+    setCurrentView("newTask")
+    queueMicrotask(() =>
+      window.dispatchEvent(
+        new CustomEvent("raya:prefill-prompt", {
+          detail: {
+            text: `Revise Todo proposal ${id}. Keep the saved proposal unchanged and create a new proposal with these changes: `,
+          },
+        }),
+      ),
+    )
+  }
+
   const handleViewAction = (action: string) => {
     switch (action) {
       case "plusButtonClicked": {
@@ -290,6 +321,7 @@ const AppContent: Component = () => {
         setCurrentView("routines")
         break
       case "todoButtonClicked":
+        setTodoTarget()
         setCurrentView("todo")
         break
       case "adminButtonClicked":
@@ -457,7 +489,12 @@ const AppContent: Component = () => {
               />
             </Match>
             <Match when={currentView() === "todo"}>
-              <TodoView onBack={() => setCurrentView("newTask")} />
+              <TodoView
+                focus={todoTarget()}
+                onFocusConsumed={() => setTodoTarget()}
+                onEditProposal={editTodoProposal}
+                onBack={() => setCurrentView("newTask")}
+              />
             </Match>
             <Match when={currentView() === "admin"}>
               <AdminView onBack={() => setCurrentView("newTask")} />

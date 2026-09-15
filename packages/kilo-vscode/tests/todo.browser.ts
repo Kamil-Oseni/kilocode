@@ -37,6 +37,105 @@ for (const theme of ["light", "dark", "contrast"])
     })
   }
 
+for (const theme of ["light", "dark", "contrast"])
+  for (const width of [320, 760]) {
+    test(`${theme} Todo proposal review at ${width}px`, async ({ page }, info) => {
+      await page.setViewportSize({ width, height: 760 })
+      if (theme === "contrast") await page.emulateMedia({ forcedColors: "active" })
+      await page.goto(`/?theme=${theme}&proposal=open`)
+      await expect(page.getByRole("heading", { name: "For review" })).toBeVisible()
+      await expect(page.getByRole("heading", { name: "Plan the move" })).toBeVisible()
+      await expect(page.getByText("Compare neighborhoods and prepare the application.", { exact: true })).toBeVisible()
+      await expect(page.getByText("Book viewings", { exact: true })).toBeVisible()
+      await expect(page.getByText("ses_fixture", { exact: true })).toBeVisible()
+      if (theme === "contrast") await page.emulateMedia({ forcedColors: "none" })
+      await audit(page)
+      if (theme === "contrast") await page.emulateMedia({ forcedColors: "active" })
+      await page.screenshot({ path: info.outputPath("todo-proposal.png"), fullPage: true })
+    })
+  }
+
+test("applies and rejects exact Todo proposals from the keyboard", async ({ page }) => {
+  await page.goto("/?proposal=open")
+  const apply = page.getByRole("button", { name: "Apply" })
+  await apply.focus()
+  await page.keyboard.press("Enter")
+  await expect(page.getByText("Proposal applied", { exact: true })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Apply" })).toHaveCount(0)
+
+  await page.goto("/?proposal=open")
+  const reject = page.getByRole("button", { name: "Reject" })
+  await reject.focus()
+  await page.keyboard.press("Enter")
+  await expect(page.getByText("Proposal rejected", { exact: true })).toBeVisible()
+  await audit(page)
+})
+
+test("resumes only after an uncertain decision is reconciled as pending", async ({ page }) => {
+  await page.goto("/?proposal=uncertain")
+  await page.getByRole("button", { name: "Apply" }).click()
+  await expect(page.getByText("Application pending", { exact: true })).toBeVisible()
+  await expect(page.getByText("Result is uncertain.")).toBeVisible()
+  const retry = page.getByRole("button", { name: "Try again" })
+  await expect(retry).toBeEnabled()
+  await retry.click()
+  await expect(page.getByText("Proposal applied", { exact: true })).toBeVisible()
+  const sent = JSON.parse((await page.locator("[data-messages]").textContent()) ?? "[]")
+  expect(sent.filter((message) => message.type === "personalTodoProposalApply")).toHaveLength(2)
+})
+
+test("offers exact continuation for a durable pending proposal", async ({ page }) => {
+  await page.goto("/?proposal=pending")
+  const resume = page.getByRole("button", { name: "Continue applying" })
+  await expect(resume).toBeEnabled()
+  await resume.click()
+  await expect(page.getByText("Proposal applied", { exact: true })).toBeVisible()
+})
+
+test("keeps Edit available when a proposal is stale", async ({ page }) => {
+  await page.goto("/?proposal=stale")
+  await page.getByRole("button", { name: "Apply" }).click()
+  await expect(page.getByText("Proposal is out of date.")).toBeVisible()
+  await expect(page.getByRole("button", { name: "Apply" })).toBeDisabled()
+  const edit = page.getByRole("button", { name: "Edit", exact: true })
+  await expect(edit).toBeEnabled()
+  await edit.click()
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-edited-proposal",
+    "proposal_11111111-1111-4111-8111-111111111111",
+  )
+})
+
+test("shows the authoritative terminal decision after a conflict", async ({ page }) => {
+  await page.goto("/?proposal=conflict")
+  await page.getByRole("button", { name: "Apply" }).click()
+  await expect(page.getByText("Proposal rejected", { exact: true })).toBeVisible()
+  await expect(page.getByText("Proposal conflict.")).toBeVisible()
+  await expect(page.getByRole("button", { name: "Apply" })).toHaveCount(0)
+})
+
+test("keeps proposal actions disabled while a request is in flight", async ({ page }) => {
+  await page.goto("/?proposal=hold")
+  await page.getByRole("button", { name: "Apply" }).click()
+  await expect(page.getByRole("button", { name: "Apply" })).toBeDisabled()
+  await expect(page.getByRole("button", { name: "Edit", exact: true })).toBeDisabled()
+  await expect(page.getByText("Applying proposal.")).toBeVisible()
+})
+
+test("recovers proposal list loading after an offline response", async ({ page }) => {
+  await page.goto("/?proposal=offline")
+  await expect(page.getByRole("alert")).toContainText("Your saved plans are unchanged.")
+  await page.getByRole("button", { name: "Try again" }).click()
+  await expect(page.getByText("No plans are waiting for review.", { exact: true })).toBeVisible()
+  await audit(page)
+})
+
+test("keeps a matching focused proposal reachable", async ({ page }) => {
+  await page.goto("/?proposal=open&focus=true")
+  await expect(page.getByRole("heading", { name: "Plan the move" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Apply" })).toBeFocused()
+})
+
 test("shows loading and empty states", async ({ page }) => {
   await page.goto("/?state=loading")
   await expect(page.locator('[data-slot="personal-todo-loading"]')).toContainText("Loading your todos")

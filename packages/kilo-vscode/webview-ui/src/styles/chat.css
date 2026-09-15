@@ -536,6 +536,72 @@
   }
 }
 
+[data-slot="todo-proposals"] {
+  display: grid;
+  gap: var(--raya-space-12);
+  padding-block: var(--raya-space-16);
+  border-block: var(--raya-hairline) solid var(--border-weak-base, var(--vscode-panel-border));
+}
+
+[data-slot="todo-proposals-header"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--raya-space-12);
+}
+
+[data-slot="todo-proposals-header"] h2,
+[data-slot="todo-proposals-header"] p,
+[data-slot="todo-proposals-empty"] {
+  margin: 0;
+}
+
+[data-slot="todo-proposals-header"] h2 {
+  font-family: var(--raya-font-display);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: var(--raya-leading-tight);
+}
+
+[data-slot="todo-proposals-header"] p,
+[data-slot="todo-proposals-empty"] {
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-size: var(--font-size-small);
+}
+
+[data-slot="todo-proposals-list"] {
+  display: grid;
+  gap: var(--raya-space-12);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+[data-slot="todo-proposals-notice"],
+[data-slot="todo-proposals-loading"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--raya-space-10);
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-size: var(--font-size-small);
+}
+
+[data-slot="todo-proposals-notice"][data-kind="conflict"],
+[data-slot="todo-proposals-notice"][data-kind="stale"],
+[data-slot="todo-proposals-notice"][data-kind="error"] {
+  color: var(--vscode-errorForeground);
+}
+
+[data-slot="todo-proposals-loading"] {
+  justify-content: flex-start;
+}
+
+[data-slot="todo-proposals-loading"] [data-component="spinner"] {
+  width: 14px;
+  height: 14px;
+}
+
 [data-component="personal-todo"] {
   display: flex;
   flex-direction: column;

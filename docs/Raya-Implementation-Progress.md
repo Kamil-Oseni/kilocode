@@ -1,10 +1,16 @@
 # Raya implementation progress
 
-> **Goal status: ACTIVE — implementation is continuing.** Current product and installed package source is `18e8e12f51`; repository history may continue with documentation-only receipts. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Current product and installed package source is `66631de1db`; repository history may continue with documentation-only receipts. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
 >
 > Any older pause wording later in this chronological record describes a superseded handoff or a product state, not the current implementation goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 added future requirements are literal `FUT-*` rows directly after `OVR-10` in the single canonical [Findings and overhauls](#findings-and-overhauls) table. They extend the existing implementation and do not pause or replace it.
 >
 > Kilo-to-Raya migration is active through lossless compatibility-first slices; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-15 18:02 America/Toronto - Accumulated migration slices are installed
+
+**Status: built, packaged and installed.** The authorized low-memory snapshot workflow completed from repository source `66631de1db` after the global-path inventory, credential, plugin/model preference, truncation and sandbox late-binding checkpoints. Production SDK generation, the single Windows CLI build, CLI/version/model/sandbox-worker smoke checks, sequential extension host and webview typechecks, lint, production bundle, VSIX packaging and VS Code installation all passed.
+
+The installed extension is `7.4.23-snapshot+66631de1db.kamil-oseni.1789509508005`. The retained rollback package is `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.453d4b7cad27c1084c5a2ed630257a6692d13c911ac772828d689d9f5f5550c3.vsix`. The workflow removed one superseded vault package, one staged package and one old installed snapshot. It did not force the open VS Code host to reload, so the running host continues using its prior active pointer until a normal user reload.
 
 ## ChatGPT 2026-09-15 17:51 America/Toronto - Sandbox persistence no longer freezes its startup root
 

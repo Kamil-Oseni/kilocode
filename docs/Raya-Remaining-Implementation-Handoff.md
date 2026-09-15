@@ -1,10 +1,16 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from product and installed package source `18e8e12f51`; repository history may continue with documentation-only receipts. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from product and installed package source `66631de1db`; repository history may continue with documentation-only receipts. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-15 18:02 America/Toronto - Installed checkpoint and rollback package
+
+The low-memory snapshot workflow installed `7.4.23-snapshot+66631de1db.kamil-oseni.1789509508005` from source `66631de1db`. It passed production SDK generation, the one-platform CLI build and smoke checks, sequential extension validation, production bundling, packaging and installation. The rollback VSIX is retained at `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.453d4b7cad27c1084c5a2ed630257a6692d13c911ac772828d689d9f5f5550c3.vsix`.
+
+Do not force-reload the user's open VS Code host. Its active pointer remains `6b57cdfb0a` until the user performs a normal reload. Future implementation continues from repository and installed source `66631de1db`; another product checkpoint may advance Git before the next coherent low-memory installation.
 
 ## ChatGPT 2026-09-15 17:51 America/Toronto - Preserve late-bound sandbox persistence and its remaining cache boundary
 

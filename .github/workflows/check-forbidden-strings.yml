@@ -19,3 +19,6 @@ jobs:
 
       - name: Run check
         run: bun run script/check-forbidden-strings.ts
+
+      - name: Check Raya brand inventory
+        run: bun run check:brand-inventory

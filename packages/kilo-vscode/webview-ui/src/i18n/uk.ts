@@ -304,7 +304,7 @@ export const dict = {
   "sidebar.topBar.history": "Історія",
   "sidebar.topBar.routines": "Рутини",
   "sidebar.topBar.agentManager": "Agent Manager",
-  "sidebar.topBar.kiloClaw": "KiloClaw",
+  "sidebar.topBar.kiloClaw": "Raya Messenger",
   "sidebar.topBar.marketplace": "Маркетплейс",
   "sidebar.topBar.profile": "Профіль",
   "sidebar.topBar.settings": "Налаштування",

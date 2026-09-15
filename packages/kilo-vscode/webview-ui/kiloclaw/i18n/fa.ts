@@ -1,6 +1,6 @@
 export const dict = {
   // App
-  "kiloClaw.loading": "در حال بارگذاری KiloClaw...",
+  "kiloClaw.loading": "در حال بارگذاری Raya Messenger...",
 
   // Chat
   "kiloClaw.chat.connecting": "در حال اتصال...",
@@ -34,7 +34,7 @@ export const dict = {
   "kiloClaw.typing.many": "{count} نفر در حال تایپ هستند...",
 
   // Messages
-  "kiloClaw.message.bot": "KiloClaw",
+  "kiloClaw.message.bot": "Raya Messenger",
   "kiloClaw.message.you": "شما",
   "kiloClaw.message.thinking": "در حال فکر کردن...",
   "kiloClaw.message.deleted": "[پیام حذف شد]",
@@ -59,25 +59,25 @@ export const dict = {
   "kiloClaw.error.retry": "تلاش مجدد",
 
   // Setup
-  "kiloClaw.setup.title": "KiloClaw",
+  "kiloClaw.setup.title": "Raya Messenger",
   "kiloClaw.setup.subtitle": "هوش مصنوعی شخصی برای زندگی روزمره",
   "kiloClaw.setup.description1":
-    "KiloClaw یک هوش مصنوعی شخصی در اختیار شما قرار می‌دهد که ایمیل‌ها را می‌خواند، تقویم شما را مدیریت می‌کند، پروژه‌هایتان را رصد می‌کند و در Telegram، Slack — هر چیزی که از قبل استفاده می‌کنید — در دسترس است.",
+    "Raya Messenger یک هوش مصنوعی شخصی در اختیار شما قرار می‌دهد که ایمیل‌ها را می‌خواند، تقویم شما را مدیریت می‌کند، پروژه‌هایتان را رصد می‌کند و در Telegram، Slack — هر چیزی که از قبل استفاده می‌کنید — در دسترس است.",
   "kiloClaw.setup.description2":
     "نیازی به نصب برنامه نیست. رابط جدیدی برای یادگیری وجود ندارد. فقط مثل یک دوست برایش پیام بفرستید.",
   "kiloClaw.setup.learnMore": "بیشتر بدانید",
-  "kiloClaw.setup.tryKiloClaw": "امتحان KiloClaw",
+  "kiloClaw.setup.tryRaya Messenger": "امتحان Raya Messenger",
 
   // Upgrade
-  "kiloClaw.upgrade.title": "KiloClaw Chat نیاز به ارتقا دارد",
+  "kiloClaw.upgrade.title": "Raya Messenger Chat نیاز به ارتقا دارد",
   "kiloClaw.upgrade.description1": "این نمونه قبل از فعال‌سازی چت راه‌اندازی شده است.",
   "kiloClaw.upgrade.description2.before": "از دکمه ",
   "kiloClaw.upgrade.description2.bold": "ارتقا به آخرین نسخه",
-  "kiloClaw.upgrade.description2.after": " در داشبورد KiloClaw برای فعال‌سازی چت زنده با ربات خود استفاده کنید.",
+  "kiloClaw.upgrade.description2.after": " در داشبورد Raya Messenger برای فعال‌سازی چت زنده با ربات خود استفاده کنید.",
   "kiloClaw.upgrade.openDashboard": "باز کردن داشبورد",
 
   // Sidebar
-  "kiloClaw.sidebar.title": "KiloClaw",
+  "kiloClaw.sidebar.title": "Raya Messenger",
   "kiloClaw.sidebar.instance": "نمونه",
   "kiloClaw.sidebar.unknown": "ناشناخته",
   "kiloClaw.sidebar.bot": "ربات",

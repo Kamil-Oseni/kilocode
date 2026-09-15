@@ -166,7 +166,7 @@
       },
       {
         "command": "raya.kiloClawOpen",
-        "title": "KiloClaw",
+        "title": "Raya Messenger",
         "category": "Raya",
         "icon": "$(comment-discussion)"
       },
@@ -212,7 +212,7 @@
       },
       {
         "command": "raya.sidebarTitle.kiloClawOpen",
-        "title": "KiloClaw",
+        "title": "Raya Messenger",
         "icon": "$(comment-discussion)"
       },
       {

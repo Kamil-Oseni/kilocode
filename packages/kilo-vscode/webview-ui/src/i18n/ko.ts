@@ -302,7 +302,7 @@ export const dict = {
   "sidebar.topBar.history": "기록",
   "sidebar.topBar.routines": "루틴",
   "sidebar.topBar.agentManager": "에이전트 관리자",
-  "sidebar.topBar.kiloClaw": "KiloClaw",
+  "sidebar.topBar.kiloClaw": "Raya Messenger",
   "sidebar.topBar.marketplace": "마켓플레이스",
   "sidebar.topBar.profile": "프로필",
   "sidebar.topBar.settings": "설정",

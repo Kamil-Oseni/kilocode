@@ -702,7 +702,7 @@ export const dict = {
   "sidebar.topBar.history": "تاریخچه",
   "sidebar.topBar.routines": "روتین‌ها",
   "sidebar.topBar.agentManager": "مدیر عامل‌ها",
-  "sidebar.topBar.kiloClaw": "KiloClaw",
+  "sidebar.topBar.kiloClaw": "Raya Messenger",
   "sidebar.topBar.marketplace": "بازارچه",
   "sidebar.topBar.profile": "پروفایل",
   "sidebar.topBar.settings": "تنظیمات",

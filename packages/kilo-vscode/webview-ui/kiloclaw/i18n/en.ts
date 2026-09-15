@@ -1,6 +1,6 @@
 export const dict = {
   // App
-  "kiloClaw.loading": "Loading KiloClaw...",
+  "kiloClaw.loading": "Loading Raya Messenger...",
 
   // Chat
   "kiloClaw.chat.connecting": "Connecting...",
@@ -34,7 +34,7 @@ export const dict = {
   "kiloClaw.typing.many": "{count} people are typing...",
 
   // Messages
-  "kiloClaw.message.bot": "KiloClaw",
+  "kiloClaw.message.bot": "Raya Messenger",
   "kiloClaw.message.you": "You",
   "kiloClaw.message.thinking": "Thinking...",
   "kiloClaw.message.deleted": "[deleted message]",
@@ -59,24 +59,25 @@ export const dict = {
   "kiloClaw.error.retry": "Retry",
 
   // Setup
-  "kiloClaw.setup.title": "KiloClaw",
+  "kiloClaw.setup.title": "Raya Messenger",
   "kiloClaw.setup.subtitle": "Personal AI for everyday life",
   "kiloClaw.setup.description1":
-    "KiloClaw gives you a personal AI that reads email, manages your calendar, monitors your projects, and lives in Telegram, Slack \u2014 whatever you already use.",
+    "Raya Messenger gives you a personal AI that reads email, manages your calendar, monitors your projects, and lives in Telegram, Slack \u2014 whatever you already use.",
   "kiloClaw.setup.description2": "No app to install. No new interface to learn. Just message it like a friend.",
   "kiloClaw.setup.learnMore": "Learn more",
-  "kiloClaw.setup.tryKiloClaw": "Try KiloClaw",
+  "kiloClaw.setup.tryRaya Messenger": "Try Raya Messenger",
 
   // Upgrade
-  "kiloClaw.upgrade.title": "KiloClaw Chat requires an upgrade",
+  "kiloClaw.upgrade.title": "Raya Messenger Chat requires an upgrade",
   "kiloClaw.upgrade.description1": "This instance was provisioned before chat was enabled.",
   "kiloClaw.upgrade.description2.before": "Use the ",
   "kiloClaw.upgrade.description2.bold": "Upgrade to Latest",
-  "kiloClaw.upgrade.description2.after": " button on the KiloClaw dashboard to activate real-time chat with your bot.",
+  "kiloClaw.upgrade.description2.after":
+    " button on the Raya Messenger dashboard to activate real-time chat with your bot.",
   "kiloClaw.upgrade.openDashboard": "Open Dashboard",
 
   // Sidebar
-  "kiloClaw.sidebar.title": "KiloClaw",
+  "kiloClaw.sidebar.title": "Raya Messenger",
   "kiloClaw.sidebar.instance": "Instance",
   "kiloClaw.sidebar.unknown": "Unknown",
   "kiloClaw.sidebar.bot": "Bot",

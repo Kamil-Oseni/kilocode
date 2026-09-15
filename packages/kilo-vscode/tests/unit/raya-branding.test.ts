@@ -75,4 +75,20 @@ describe("Raya branding boundary", () => {
     expect(visible).not.toContain("kiloman")
     expect(visible).toContain("eden-logo-light.svg")
   })
+
+  test("labels managed messaging as Raya Messenger without changing its routes", async () => {
+    const pkg = await read("package.json")
+    const commands = pkg.match(/"command": "raya(?:\.sidebarTitle)?\.kiloClawOpen",\s*"title": "Raya Messenger"/g) ?? []
+    const provider = await read("src/kiloclaw/KiloClawProvider.ts")
+    const main = [...new Bun.Glob("webview-ui/src/i18n/*.ts").scanSync({ cwd: root, absolute: true })]
+    const messenger = [...new Bun.Glob("webview-ui/kiloclaw/i18n/*.ts").scanSync({ cwd: root, absolute: true })]
+    const locales = await Promise.all([...main, ...messenger].map((file) => Bun.file(file).text()))
+
+    expect(commands).toHaveLength(2)
+    expect(provider).toContain('"raya.KiloClawPanel"')
+    expect(provider).toContain('"Raya Messenger"')
+    expect(provider).not.toContain('"KiloClaw"')
+    expect(locales.some((source) => source.includes("KiloClaw"))).toBe(false)
+    expect(locales.some((source) => source.includes("Raya Messenger"))).toBe(true)
+  })
 })

@@ -201,7 +201,7 @@ export function useSlashCommand(
     },
     {
       name: "kiloclaw",
-      description: "Open KiloClaw chat",
+      description: "Open Raya Messenger",
       hints: ["claw"],
       action: () => {
         vscode.postMessage({ type: "openKiloClaw" })

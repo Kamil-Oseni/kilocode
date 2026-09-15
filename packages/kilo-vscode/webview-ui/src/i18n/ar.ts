@@ -294,7 +294,7 @@ export const dict = {
   "sidebar.topBar.history": "السجل",
   "sidebar.topBar.routines": "الروتينات",
   "sidebar.topBar.agentManager": "مدير الوكلاء",
-  "sidebar.topBar.kiloClaw": "KiloClaw",
+  "sidebar.topBar.kiloClaw": "Raya Messenger",
   "sidebar.topBar.marketplace": "المتجر",
   "sidebar.topBar.profile": "الملف الشخصي",
   "sidebar.topBar.settings": "الإعدادات",

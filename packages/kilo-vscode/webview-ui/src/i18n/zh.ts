@@ -288,7 +288,7 @@ export const dict = {
   "sidebar.topBar.history": "历史记录",
   "sidebar.topBar.routines": "例程",
   "sidebar.topBar.agentManager": "代理管理器",
-  "sidebar.topBar.kiloClaw": "KiloClaw",
+  "sidebar.topBar.kiloClaw": "Raya Messenger",
   "sidebar.topBar.marketplace": "市场",
   "sidebar.topBar.profile": "个人资料",
   "sidebar.topBar.settings": "设置",

@@ -303,7 +303,7 @@ export const dict = {
   "sidebar.topBar.history": "Historique",
   "sidebar.topBar.routines": "Routines",
   "sidebar.topBar.agentManager": "Agent Manager",
-  "sidebar.topBar.kiloClaw": "KiloClaw",
+  "sidebar.topBar.kiloClaw": "Raya Messenger",
   "sidebar.topBar.marketplace": "Marketplace",
   "sidebar.topBar.profile": "Profil",
   "sidebar.topBar.settings": "Paramètres",

@@ -287,7 +287,7 @@ export const dict = {
   "sidebar.topBar.history": "歷史記錄",
   "sidebar.topBar.routines": "例程",
   "sidebar.topBar.agentManager": "代理管理器",
-  "sidebar.topBar.kiloClaw": "KiloClaw",
+  "sidebar.topBar.kiloClaw": "Raya Messenger",
   "sidebar.topBar.marketplace": "市集",
   "sidebar.topBar.profile": "個人資料",
   "sidebar.topBar.settings": "設定",
@@ -1052,7 +1052,6 @@ export const dict = {
   "dialog.model.notSet": "未設定",
   "profile.personalAccount": "個人帳戶",
   "profile.switchingAccount": "正在切換帳戶…",
-
 
   "settings.indexing.dimension.description": "留空以自動從模型偵測嵌入維度。",
   "settings.indexing.dimension.placeholder": "自動",

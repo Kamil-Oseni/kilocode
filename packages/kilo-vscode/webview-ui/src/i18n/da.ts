@@ -301,7 +301,7 @@ export const dict = {
   "sidebar.topBar.history": "Historik",
   "sidebar.topBar.routines": "Rutiner",
   "sidebar.topBar.agentManager": "Agent Manager",
-  "sidebar.topBar.kiloClaw": "KiloClaw",
+  "sidebar.topBar.kiloClaw": "Raya Messenger",
   "sidebar.topBar.marketplace": "Markedsplads",
   "sidebar.topBar.profile": "Profil",
   "sidebar.topBar.settings": "Indstillinger",
@@ -386,7 +386,6 @@ export const dict = {
   "sound.option.yup04": "Ja 04",
   "sound.option.yup05": "Ja 05",
   "sound.option.yup06": "Ja 06",
-
 
   "settings.indexing.title": "Indeksering",
   "settings.indexing.enable.title": "Aktivér indeksering",

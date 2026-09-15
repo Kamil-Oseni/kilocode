@@ -1,6 +1,12 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: active.** Continue implementation from local product source `132116ee2c`; installed snapshot source is `7b3796f2bf`; do not pause it. `origin/main` is still `d894fc0eb9` because the normal pre-push hook reaches existing cross-package `@opencode-ai/tui` type failures. The 16 future additions are canonical `FUT-*` rows in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+> **Goal status: active.** Continue implementation from local product source `40e2efee3d`; installed snapshot source is `7b3796f2bf`; do not pause it. `origin/main` is still `d894fc0eb9` because the normal pre-push hook reaches existing cross-package `@opencode-ai/tui` type failures. The 16 future additions are canonical `FUT-*` rows in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+
+## ChatGPT 2026-09-15 01:18 America/Toronto - Bundled console Marketplace copy corrected
+
+Product commit `40e2efee3d` changes the MCP drawer instruction in `packages/kilo-console/src/routes/config/McpRoute.tsx` to **Raya Marketplace** and removes that file from the `Kilo Marketplace` exception in `script/check-forbidden-strings.ts`. Do not restore the exception. The remaining allowed occurrences are explicit repository lineage/support documentation and the two implementation records that describe the migration.
+
+The change does not touch MCP catalog fetching, installation, routes, identifiers or scope selection. The console's 2 GB-capped typecheck, targeted Prettier, forbidden-string guard, brand inventory and whitespace checks pass. The documented inventory is 68,329 total: 1,694 potential public defects, 34,616 compatibility identities, 5,685 provenance references and 26,334 internal migration sites. It extends `.changeset/raya-public-branding.md` and has not been installed; the active snapshot remains `7b3796f2bf`.
 
 ## ChatGPT 2026-09-15 01:14 America/Toronto - Current branding snapshot installed
 

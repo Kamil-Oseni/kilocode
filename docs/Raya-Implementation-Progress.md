@@ -1,5 +1,13 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-14 21:44 America/Toronto - Time is visible in chat and Routine DMs
+
+**Status: `FUT-CHAT-01` product commit `7bc677b389` is verified and pushed to `origin/main`; packaging is batched.** Ordinary user and assistant messages plus Routine conversation messages now render one shared semantic `<time>` element from the server-authored `time.created` instant. A valid persisted `createdAt` is the legacy fallback; a missing or malformed value renders no invented time. The visible label uses the current locale's compact time, while hover and assistive technology receive the full localized date, time and timezone. Routine next-run metadata keeps its date as well as time.
+
+The component uses the existing quiet transcript metadata treatment and aligns with the message side, applying `docs/designer.md` without adding a setting or a second metadata card. The production 760 px conversation screenshot was inspected: both timestamps are readable without competing with message content. Focused Chromium verification passes chat semantics, exact ISO `datetime`, visible user/assistant times, scoped axe, no overflow, and Routine conversations at 320 px and 900 px. Adding the narrow timestamp exposed that a lazy audio preview's loading state had no accessible filename; the placeholder now exposes its real file name, and the full narrow Routine interaction/axe flow passes.
+
+Evidence: message-time unit tests **2 / 2** with four assertions; webview typecheck passes under the 2 GB cap; focused ESLint passes; scoped single-thread Oxlint has zero errors and five older ref-assignment/spread warnings in the two Routine files. No Bun or tsgo process remains. This slice is intentionally not packaged alone; include it with the next coherent Band 1 checkpoint. Next implement `FUT-AGENT-01` durable intelligent child display names, then the `FUT-AGENT-02` glanceable child monitor.
+
 ## ChatGPT 2026-09-14 21:23 America/Toronto - Future roadmap authorized and reordered
 
 **Status: planning complete; implementation is authorized and starts with the smallest independently verifiable slices.** The owner has superseded the earlier rule in `Raya-Features.md` that deferred future work must wait for every audit and Live item. Existing PR/EN/UI/OVR requirements remain active and keep their present evidence status; a future feature does not make an audit item verified.

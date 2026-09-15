@@ -1,5 +1,13 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-14 21:44 America/Toronto - FUT-CHAT-01 implemented
+
+Product commit `7bc677b389` is verified and pushed. Preserve `MessageTime.tsx` as the single UI formatter and `utils/message-time.ts` as the source validator. `time.created` is authoritative; `createdAt` is only a valid persisted fallback. Do not restore the old hard-coded 12-hour formatter or invent a current time for a legacy record. The visible label is compact and locale-aware; its ISO `datetime`, full localized title and accessible label retain exact context. Routine next-run copy uses the component's date-time detail so a future day is not reduced to a clock time.
+
+`VscodeUserMessage`, both transcript render paths and Routine `Inbox` consume the component. The narrow Routine case also preserves the accessible media filename while a lazy preview is loading. Verification: unit **2 / 2**; webview typecheck; 760 px production conversation semantics/axe/no-overflow/screenshot; full Routine interaction/axe at 320 px and 900 px; scoped lint with zero errors. Package this with the next coherent Band 1 batch.
+
+Proceed to `FUT-AGENT-01`. Inspect `packages/opencode/src/tool/task.ts`, child session metadata, task result projection, restart recovery and existing Background Agents/Agent Manager types. Add an immutable optional display name derived once from the structured brief and chosen role. Persist the display name, specialist, parent ID and auto/explicit selection provenance. Use a bounded deterministic fallback and sibling collision suffix; never rename a recovered or running child. Do not broaden tool authority: only policy-eligible agents/modes can request `task`, and denials must surface the real reason. Test simultaneous similar objectives, restart, explicit versus automatic specialist choice, malformed/empty briefs and an older client that ignores the additive field. Commit backend schema/storage/tests before updating the UI consumer.
+
 ## ChatGPT 2026-09-14 21:23 America/Toronto - Master future-feature build and merge order
 
 The owner explicitly authorized implementation of the future roadmap on 2026-09-14. This supersedes the sentence in the untracked owner catalog `Raya-Features.md` that deferred Codex work must wait for all 39 audit requirements and Live leftovers. It does not change the truth of the audit table: keep every PR/EN/UI/OVR item open until its own acceptance criteria pass.

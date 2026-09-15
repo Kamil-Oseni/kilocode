@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto"
 import path from "node:path"
-import { expect } from "bun:test"
+import { expect, test } from "bun:test"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import { Effect, Exit } from "effect"
+import { Effect, Exit, Schema } from "effect"
 import { Git } from "@/git"
-import { cleanup, records, seal, type Intent } from "@/kilocode/tool/apply-patch-receipt"
+import { cleanup, Intent as IntentSchema, records, seal, type Intent } from "@/kilocode/tool/apply-patch-receipt"
 import { journals } from "@/kilocode/tool/mutation-journal"
 import { Storage } from "@/storage/storage"
 import { tmpdirScoped } from "../fixture/fixture"
@@ -14,6 +14,25 @@ import { testEffect } from "../lib/effect"
 
 const it = testEffect(LayerNode.compile(LayerNode.group([FSUtil.node, Git.node, CrossSpawnSpawner.node])))
 const hash = (value: string) => createHash("sha256").update(value).digest("hex")
+
+test("Apply Patch intent retains every file operation", () => {
+  const types = ["add", "update", "delete", "move"] as const
+  const value = {
+    ...draft("ses_schema", "call_schema", "C:\\workspace"),
+    files: types.map((type) => ({
+      filePath: `${type}.txt`,
+      relativePath: `${type}.txt`,
+      type,
+      patch: type,
+      additions: 0,
+      deletions: 0,
+    })),
+    changes: types.map((type) => ({ filePath: `${type}.txt`, type })),
+  }
+  const decoded = Schema.decodeUnknownSync(IntentSchema)(value)
+  expect(decoded.files.map((file) => file.type)).toEqual(types)
+  expect(decoded.changes.map((change) => change.type)).toEqual(types)
+})
 
 function draft(owner: string, id: string, root: string) {
   const value: Omit<Intent, "digest"> = {

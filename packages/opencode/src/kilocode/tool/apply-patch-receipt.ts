@@ -7,7 +7,7 @@ import { Conflict, journals } from "./mutation-journal"
 export const File = Schema.Struct({
   filePath: Schema.String,
   relativePath: Schema.String,
-  type: Schema.Literal("add", "update", "delete", "move"),
+  type: Schema.Literals(["add", "update", "delete", "move"]),
   patch: Schema.String,
   additions: NonNegativeInt,
   deletions: NonNegativeInt,
@@ -16,7 +16,7 @@ export const File = Schema.Struct({
 
 export const Change = Schema.Struct({
   filePath: Schema.String,
-  type: Schema.Literal("add", "update", "delete", "move"),
+  type: Schema.Literals(["add", "update", "delete", "move"]),
   movePath: Schema.optional(Schema.String),
 })
 

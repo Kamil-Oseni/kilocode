@@ -23,7 +23,7 @@ import { assertMutablePath } from "../kilocode/agent-manager/protection" // kilo
 import { RayaPath } from "@/kilocode/task/path-boundary" // kilocode_change
 import { Storage } from "@/storage/storage" // kilocode_change
 import { transact, type Item } from "@/kilocode/tool/apply-patch-transaction" // kilocode_change
-import { records, seal, type Intent } from "@/kilocode/tool/apply-patch-receipt" // kilocode_change
+import { records, seal, type Intent, type Receipt } from "@/kilocode/tool/apply-patch-receipt" // kilocode_change
 import { Conflict, journals } from "@/kilocode/tool/mutation-journal" // kilocode_change
 
 export const Parameters = Schema.Struct({
@@ -103,7 +103,7 @@ export const ApplyPatchTool = Tool.define(
           }
           output += yield* Effect.promise(() => ConfigValidation.check(target))
         }
-        const result = {
+        const result: Receipt["result"] = {
           title: output,
           metadata: {
             diff: intent.diff,
@@ -519,7 +519,7 @@ export const ApplyPatchTool = Tool.define(
         })
         append({ kind: "remove", target: source, review })
       }
-      const proposed = {
+      const proposed: Omit<Intent, "digest"> = {
         version: 1,
         invocation,
         request,
@@ -531,7 +531,7 @@ export const ApplyPatchTool = Tool.define(
           type: change.type,
           movePath: change.movePath,
         })),
-      } as const
+      }
       const intent = yield* replay.prepare(ctx.sessionID, { ...proposed, digest: seal(proposed) })
       yield* transact(storage, { invocation, digest: intent.digest, workspace: instance.worktree, items })
       return yield* finish(intent)

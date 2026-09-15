@@ -159,11 +159,11 @@ describe("run permission shared", () => {
 
   test("formats always-allow copy for wildcard and explicit patterns", () => {
     expect(permissionAlwaysLines(req({ permission: "bash", always: ["*"] }))).toEqual([
-      "This will allow bash until Kilo is restarted.",
+      "This will allow bash until Raya is restarted.", // kilocode_change - assert the public CLI permission copy
     ])
 
     expect(permissionAlwaysLines(req({ always: ["src/**/*.ts", "src/**/*.tsx"] }))).toEqual([
-      "This will allow the following patterns until Kilo is restarted.",
+      "This will allow the following patterns until Raya is restarted.", // kilocode_change - assert the public CLI permission copy
       "- src/**/*.ts",
       "- src/**/*.tsx",
     ])

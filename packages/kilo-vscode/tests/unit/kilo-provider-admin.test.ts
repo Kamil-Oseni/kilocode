@@ -68,4 +68,36 @@ describe("admin host bridge", () => {
       },
     ])
   })
+
+  it("keeps fresh health when the diagnostic request throws", async () => {
+    const posts: unknown[] = []
+    const health = { format: "raya.admin-health" as const, version: 1 as const, generatedAt: 1, items: [] }
+    const client = {
+      raya: {
+        admin: {
+          health: async () => ({ data: health }),
+          logs: async () => {
+            throw new Error("C:/private token=synthetic-log-secret")
+          },
+        },
+      },
+    } as unknown as KiloClient
+
+    await handleAdminMessage({
+      client,
+      directory: "/workspace",
+      message: { type: "requestAdmin", requestID: "req_3" },
+      post: (message) => posts.push(message),
+    })
+    expect(JSON.stringify(posts)).not.toContain("private")
+    expect(JSON.stringify(posts)).not.toContain("synthetic")
+    expect(posts).toEqual([
+      {
+        type: "adminResult",
+        requestID: "req_3",
+        health,
+        error: { kind: "error", message: "Health is available, but diagnostics couldn't be loaded." },
+      },
+    ])
+  })
 })

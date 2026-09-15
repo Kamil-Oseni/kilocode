@@ -35,6 +35,8 @@ function stale(value: unknown): PersonalTodoProposalStaleRevisionError | undefin
   return error as PersonalTodoProposalStaleRevisionError
 }
 
+function action(type: "personalTodoProposalApply" | "personalTodoProposalReject"): "apply" | "reject"
+function action(type: Message["type"]): Action
 function action(type: Message["type"]): Action {
   if (type === "personalTodoProposalList") return "list"
   if (type === "personalTodoProposalGet") return "get"
@@ -223,6 +225,7 @@ export async function handlePersonalTodoProposalMessage(input: {
       failure({ message, action: operation, result, post: input.post })
       return true
     }
+    const decision = action(message.type)
     const params = { directory: input.directory, proposalID: message.proposalID, digest: message.digest }
     const result =
       message.type === "personalTodoProposalApply"
@@ -232,9 +235,9 @@ export async function handlePersonalTodoProposalMessage(input: {
       input.post({
         type: "personalTodoProposalResult",
         requestID: message.requestID,
-        operation,
+        operation: decision,
         proposalID: message.proposalID,
-        kind: operation === "apply" ? "applied" : "rejected",
+        kind: decision === "apply" ? "applied" : "rejected",
         item: result.data,
       })
       return true
@@ -243,7 +246,7 @@ export async function handlePersonalTodoProposalMessage(input: {
       client: input.client,
       directory: input.directory,
       message,
-      action: operation,
+      action: decision,
       result,
       post: input.post,
     })

@@ -30,8 +30,8 @@ export async function handleAdminMessage(input: {
       })
       return true
     }
-    const logs = await input.client.raya.admin.logs({ directory: input.directory, limit: "48" })
-    if (!logs.data) {
+    const logs = await input.client.raya.admin.logs({ directory: input.directory, limit: "48" }).catch(() => undefined)
+    if (!logs?.data) {
       input.post({
         type: "adminResult",
         requestID,

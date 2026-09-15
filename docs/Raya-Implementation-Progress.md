@@ -1,5 +1,13 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-14 20:25 America/Toronto - Terminal-session follow-ups recover safely
+
+**Status: product commit `b19a5586cb` is verified and pushed to `origin/main`; packaging remains.** A Routine inbox message attached just as its selected run becomes terminal no longer remains permanently stranded. The post-send resume path first proves that the requested session still owns an exact pending run. When it does not, bounded Routine reconciliation finds only user messages that have a session but no dispatch identity and no delivered timestamp. It moves that message to one newly durable run with an exact old-session database compare-and-set.
+
+The move occurs inside the new run's existing startup claim, after run history is durable and before that claim can be released. A competing delivery assignment therefore either wins and prevents reassignment without new dispatch, or the exact move wins and restart sees one current run/session. Messages with a delivery identity or delivered timestamp remain attached as review evidence; recovery does not guess whether the old session consumed them. Existing pending work also prevents automatic reassignment.
+
+Inbox and follow-up coverage passes **12 / 123** for move identity, exact replay, delivery refusal, immediate terminal-race recovery, repeated stale resume and zero replacement work when dispatch ownership exists. The full scheduler/recovery suite remains **33 / 446**. Scoped one-thread lint has zero errors and only older wider-file warnings; formatting, whitespace, annotation and Effect Promise-facade guards pass. EN-02/OVR-05 remain **In progress** for real process interruption at this new bind boundary, explicit review of ambiguous owned deliveries, representative company execution and broader lifecycle acceptance. Installed source remains `17ff50e907` until the next coherent low-memory package.
+
 ## ChatGPT 2026-09-14 20:15 America/Toronto - Stale Routine continuations are fenced
 
 **Status: product commit `0d648d0deb` is verified and pushed to `origin/main`; it is intentionally not installed alone.** Manual, event and delegated Routine sessions can no longer dispatch another automatic turn merely because their startup claim is absent. Every continuation now requires the session metadata to match one exact pending run by worker, run, session, schedule version and immutable trigger evidence. A retained startup claim remains an additional exact local-ownership check. Terminal runs, missing history, changed run IDs, changed session IDs, relabelled timer triggers and malformed claims all fail closed before model work.

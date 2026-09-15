@@ -49,6 +49,99 @@ it.live("serves typed personal todo CRUD and exact stale revision conflicts", ()
         expect(fetched.status).toBe(200)
         expect(yield* json(fetched)).toMatchObject({ id: created.id, revision: 1 })
 
+        const reminderResponse = yield* request(tmp.path, "/raya/personal-todos", {
+          method: "POST",
+          body: JSON.stringify({ title: "Call the landlord", reminderAt: 0 }),
+        })
+        expect(reminderResponse.status).toBe(200)
+        const reminder = yield* json(reminderResponse).pipe(
+          Effect.flatMap(Schema.decodeUnknownEffect(PersonalTodo.Info)),
+        )
+        const dueResponses = yield* Effect.all(
+          [
+            request(tmp.path, "/raya/personal-todos/reminders/claim", { method: "POST" }),
+            request(tmp.path, "/raya/personal-todos/reminders/claim", { method: "POST" }),
+          ],
+          { concurrency: "unbounded" },
+        )
+        expect(dueResponses.map((response) => response.status)).toEqual([200, 200])
+        const due = (yield* Effect.forEach(dueResponses, (response) =>
+          json(response).pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.Array(PersonalTodo.Reminder)))),
+        )).flat()
+        expect(due).toHaveLength(1)
+        expect(due).toEqual([
+          expect.objectContaining({
+            deliveryID: `${reminder.id}_r1`,
+            todoID: reminder.id,
+            todoRevision: 1,
+            reminderRevision: 1,
+            reminderAt: 0,
+          }),
+        ])
+        const acknowledgedResponse = yield* request(tmp.path, "/raya/personal-todos/reminders/acknowledge", {
+          method: "POST",
+          body: JSON.stringify({ deliveryID: due[0].deliveryID, claimID: due[0].claimID }),
+        })
+        expect(acknowledgedResponse.status).toBe(200)
+        expect(yield* json(acknowledgedResponse)).toMatchObject({
+          version: 1,
+          state: "acknowledged",
+          deliveryID: due[0].deliveryID,
+          claimID: due[0].claimID,
+          todoID: reminder.id,
+          todoRevision: 1,
+          reminderRevision: 1,
+        })
+        expect(
+          yield* json(yield* request(tmp.path, "/raya/personal-todos/reminders/claim", { method: "POST" })),
+        ).toEqual([])
+        const repeatedAck = yield* request(tmp.path, "/raya/personal-todos/reminders/acknowledge", {
+          method: "POST",
+          body: JSON.stringify({ deliveryID: due[0].deliveryID, claimID: due[0].claimID }),
+        })
+        expect(repeatedAck.status).toBe(200)
+        expect(yield* json(repeatedAck)).toMatchObject({ deliveryID: due[0].deliveryID })
+        expect(
+          (yield* request(tmp.path, "/raya/personal-todos/reminders/acknowledge", {
+            method: "POST",
+            body: JSON.stringify({ deliveryID: `${reminder.id}_r999`, claimID: due[0].claimID }),
+          })).status,
+        ).toBe(404)
+
+        const clearedResponse = yield* request(tmp.path, `/raya/personal-todos/${reminder.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ revision: 1, reminderAt: null }),
+        })
+        expect(clearedResponse.status).toBe(200)
+        const cleared = yield* json(clearedResponse)
+        expect(cleared).toMatchObject({ id: reminder.id, revision: 2 })
+        expect(cleared).not.toHaveProperty("reminderAt")
+        expect(cleared).not.toHaveProperty("reminderRevision")
+        expect(
+          (yield* request(tmp.path, `/raya/personal-todos/${reminder.id}`, {
+            method: "PATCH",
+            body: JSON.stringify({ revision: 1, reminderAt: 0 }),
+          })).status,
+        ).toBe(409)
+        const resetResponse = yield* request(tmp.path, `/raya/personal-todos/${reminder.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ revision: 2, reminderAt: 0 }),
+        })
+        expect(resetResponse.status).toBe(200)
+        expect(yield* json(resetResponse)).toMatchObject({ revision: 3, reminderAt: 0, reminderRevision: 3 })
+        const resetDue = yield* json(
+          yield* request(tmp.path, "/raya/personal-todos/reminders/claim", { method: "POST" }),
+        )
+        expect(resetDue).toEqual([expect.objectContaining({ deliveryID: `${reminder.id}_r3` })])
+        const finalClear = yield* request(tmp.path, `/raya/personal-todos/${reminder.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ revision: 3, reminderAt: null }),
+        })
+        expect(finalClear.status).toBe(200)
+        expect(
+          yield* json(yield* request(tmp.path, "/raya/personal-todos/reminders/claim", { method: "POST" })),
+        ).toEqual([])
+
         const missingUpdateRevision = yield* request(tmp.path, `/raya/personal-todos/${created.id}`, {
           method: "PATCH",
           body: JSON.stringify({ done: true }),

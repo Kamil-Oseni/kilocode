@@ -41,6 +41,14 @@ export const personalTodoHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-
     return handlers
       .handle("personalTodoList", () => todos.list())
       .handle("personalTodoCreate", (ctx) => api(todos.create(ctx.payload)))
+      .handle("personalTodoReminders", () => api(todos.claimReminders()))
+      .handle("personalTodoReminderAcknowledge", (ctx) =>
+        api(todos.acknowledge(ctx.payload.deliveryID, ctx.payload.claimID)).pipe(
+          Effect.flatMap((ack) =>
+            ack ? Effect.succeed(ack) : Effect.fail(notFound("Personal todo reminder not found or not due.")),
+          ),
+        ),
+      )
       .handle("personalTodoGet", (ctx) =>
         api(todos.get(ctx.params.todoID)).pipe(
           Effect.flatMap((item) => (item ? Effect.succeed(item) : Effect.fail(notFound("Personal todo not found.")))),

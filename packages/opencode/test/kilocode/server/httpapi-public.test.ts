@@ -10,6 +10,7 @@ import { KiloGatewayPaths } from "../../../src/kilocode/server/httpapi/groups/ki
 import { KilocodePaths } from "../../../src/kilocode/server/httpapi/groups/kilocode"
 import { MemoryPaths } from "../../../src/kilocode/server/httpapi/groups/memory"
 import { NetworkPaths } from "../../../src/kilocode/server/httpapi/groups/network"
+import { PersonalTodoPaths } from "../../../src/kilocode/server/httpapi/groups/personal-todo"
 import { TelemetryPaths } from "../../../src/kilocode/server/httpapi/groups/telemetry"
 import { ExperimentalPaths } from "../../../src/server/routes/instance/httpapi/groups/experimental"
 import { SessionPaths } from "../../../src/server/routes/instance/httpapi/groups/session"
@@ -183,6 +184,17 @@ describe("Kilo PublicApi OpenAPI contract", () => {
     const schema = body?.content?.["application/json"]?.schema
     const props = schema?.properties
     expect(props?.organizationId).toEqual({ anyOf: [{ type: "string" }, { type: "null" }] })
+  })
+
+  test("keeps personal Todo clear operations nullable", () => {
+    const spec = OpenApi.fromApi(PublicApi)
+    const path = PersonalTodoPaths.item.replace(/:([A-Za-z0-9_]+)/g, "{$1}")
+    const body = spec.paths[path]?.patch?.requestBody as Body | undefined
+    const schema = body?.content?.["application/json"]?.schema
+
+    expect(schema?.properties?.detail).toEqual({ anyOf: [{ type: "string" }, { type: "null" }] })
+    expect(schema?.properties?.dueAt?.anyOf).toContainEqual({ type: "null" })
+    expect(schema?.properties?.reminderAt?.anyOf).toContainEqual({ type: "null" })
   })
 
   test("keeps branch-name responses nullable", () => {

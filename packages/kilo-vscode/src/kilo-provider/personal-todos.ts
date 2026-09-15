@@ -197,10 +197,7 @@ export async function handlePersonalTodoMessage(input: {
         done: msg.done,
         dueAt: msg.dueAt,
       }
-      // The generated SDK currently drops nullable request fields even though the endpoint schema accepts them.
-      const result = await input.client.raya.personalTodo.update(
-        params as unknown as Parameters<typeof input.client.raya.personalTodo.update>[0],
-      )
+      const result = await input.client.raya.personalTodo.update(params)
       if (result.data) {
         input.post({ type: "personalTodoResult", requestID: msg.requestID, operation: "update", item: result.data })
         return true

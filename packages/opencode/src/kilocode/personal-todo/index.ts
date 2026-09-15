@@ -18,6 +18,8 @@ export namespace PersonalTodo {
     detail: Schema.optional(Detail),
     done: Schema.Boolean,
     dueAt: Schema.optional(Time),
+    reminderAt: Schema.optional(Time),
+    reminderRevision: Schema.optional(Revision),
     createdAt: Time,
     updatedAt: Time,
     completedAt: Schema.optional(Time),
@@ -38,6 +40,7 @@ export namespace PersonalTodo {
     title: string
     detail?: string
     dueAt?: number
+    reminderAt?: number
   }
 
   export type Update = {
@@ -46,10 +49,49 @@ export namespace PersonalTodo {
     detail?: string | null
     done?: boolean
     dueAt?: number | null
+    reminderAt?: number | null
   }
 
+  export const Reminder = Schema.Struct({
+    version: Schema.Literal(1),
+    state: Schema.Literal("claimed"),
+    deliveryID: Schema.String,
+    claimID: Schema.String,
+    todoID: Schema.String,
+    todoRevision: Revision,
+    reminderRevision: Revision,
+    title: Text,
+    reminderAt: Time,
+    claimedAt: Time,
+    claimExpiresAt: Time,
+  })
+  export type Reminder = typeof Reminder.Type
+
+  export const ReminderAck = Schema.Struct({
+    version: Schema.Literal(1),
+    state: Schema.Literal("acknowledged"),
+    deliveryID: Schema.String,
+    claimID: Schema.String,
+    todoID: Schema.String,
+    todoRevision: Revision,
+    reminderRevision: Revision,
+    acknowledgedAt: Time,
+  })
+  export type ReminderAck = typeof ReminderAck.Type
+  const ReminderReceipt = Schema.Union([Reminder, ReminderAck])
+
   export class InputError extends Schema.TaggedErrorClass<InputError>()("PersonalTodoInputError", {
-    field: Schema.Literals(["id", "title", "detail", "dueAt", "revision", "time"]),
+    field: Schema.Literals([
+      "id",
+      "title",
+      "detail",
+      "dueAt",
+      "reminderAt",
+      "revision",
+      "time",
+      "deliveryID",
+      "claimID",
+    ]),
     message: Schema.String,
   }) {}
 
@@ -74,11 +116,19 @@ export namespace PersonalTodo {
     storage: Store
     now?: () => number
     id?: () => string
+    claim?: () => string
   }
 
+  export const REMINDER_LEASE_MS = 300_000
+  export const REMINDER_CLAIM_LIMIT = 100
   const prefix = ["raya", "personal-todos", "v1"]
+  const reminderPrefix = ["raya", "personal-todo-reminders", "v1", "receipt"]
   const pattern = /^todo_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+  const deliveryPattern =
+    /^(todo_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})_r([1-9][0-9]*)$/i
+  const claimPattern = /^claim_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
   const key = (id: string) => [...prefix, id]
+  const receiptKey = (id: string) => [...reminderPrefix, id]
   const decode = Schema.decodeUnknownEffect(Info)
   const stored = Schema.decodeUnknownEffect(Stored)
 
@@ -87,6 +137,7 @@ export namespace PersonalTodo {
   export function make(deps: Deps) {
     const now = () => deps.now?.() ?? Date.now()
     const identify = () => deps.id?.() ?? `todo_${randomUUID()}`
+    const claimID = () => deps.claim?.() ?? `claim_${randomUUID()}`
     const identity = (id: string) =>
       pattern.test(id)
         ? Effect.succeed(id)
@@ -106,6 +157,11 @@ export namespace PersonalTodo {
       if (value === undefined || value === null) return Effect.succeed(undefined)
       if (valid(value)) return Effect.succeed(value)
       return Effect.fail(new InputError({ field: "dueAt", message: "Use a valid due date." }))
+    }
+    const reminder = (value: number | undefined | null) => {
+      if (value === undefined || value === null) return Effect.succeed(undefined)
+      if (valid(value)) return Effect.succeed(value)
+      return Effect.fail(new InputError({ field: "reminderAt", message: "Use a valid reminder time." }))
     }
     const revision = (value: number) =>
       Number.isSafeInteger(value) && value >= 1
@@ -154,16 +210,23 @@ export namespace PersonalTodo {
     const create = Effect.fn("PersonalTodo.create")(function* (input: Create) {
       const id = yield* identity(identify())
       const at = yield* clock()
+      const notes = yield* detail(input.detail)
+      const date = yield* due(input.dueAt)
+      const alert = yield* reminder(input.reminderAt)
       const item: Info = {
         version: 1,
         id,
         title: yield* title(input.title),
-        detail: yield* detail(input.detail),
         done: false,
-        dueAt: yield* due(input.dueAt),
         createdAt: at,
         updatedAt: at,
         revision: 1,
+      }
+      if (notes !== undefined) item.detail = notes
+      if (date !== undefined) item.dueAt = date
+      if (alert !== undefined) {
+        item.reminderAt = alert
+        item.reminderRevision = 1
       }
       if (yield* deps.storage.create(key(id), item).pipe(Effect.orDie)) return item
       return yield* new ConflictError({ id, message: "A personal todo with this ID already exists." })
@@ -176,6 +239,7 @@ export namespace PersonalTodo {
       const name = input.title === undefined ? undefined : yield* title(input.title)
       const notes = input.detail === undefined ? undefined : yield* detail(input.detail)
       const date = input.dueAt === undefined ? undefined : yield* due(input.dueAt)
+      const alert = input.reminderAt === undefined ? undefined : yield* reminder(input.reminderAt)
       const state: { actual?: number; missing?: boolean } = {}
       const raw = yield* deps.storage
         .update<Record<string, unknown>>(key(id), (draft) => {
@@ -190,16 +254,29 @@ export namespace PersonalTodo {
           }
           const done = input.done ?? prior.done
           const stamp = Math.max(at, prior.updatedAt)
+          const next = prior.revision + 1
           const item: Info = {
             ...prior,
             title: name ?? prior.title,
-            detail: input.detail === null ? undefined : (notes ?? prior.detail),
             done,
-            dueAt: input.dueAt === null ? undefined : (date ?? prior.dueAt),
             updatedAt: stamp,
-            completedAt: done ? (prior.completedAt ?? stamp) : undefined,
-            revision: prior.revision + 1,
+            revision: next,
           }
+          if (input.detail === null) delete item.detail
+          if (notes !== undefined) item.detail = notes
+          if (input.dueAt === null) delete item.dueAt
+          if (date !== undefined) item.dueAt = date
+          if (input.reminderAt === null) {
+            delete item.reminderAt
+            delete item.reminderRevision
+          }
+          if (alert !== undefined) {
+            item.reminderAt = alert
+            item.reminderRevision = next
+          }
+          if (done) item.completedAt = prior.completedAt ?? stamp
+          if (!done) delete item.completedAt
+          for (const field of Object.keys(draft)) delete draft[field]
           Object.assign(draft, item)
         })
         .pipe(
@@ -265,6 +342,104 @@ export namespace PersonalTodo {
       return true
     })
 
-    return { create, get, list, update, remove }
+    const reserve = Effect.fn("PersonalTodo.reserveReminder")(function* (item: Info, at: number) {
+      const deliveryID = `${item.id}_r${item.reminderRevision}`
+      const claim: Reminder = {
+        version: 1,
+        state: "claimed",
+        deliveryID,
+        claimID: claimID(),
+        todoID: item.id,
+        todoRevision: item.revision,
+        reminderRevision: item.reminderRevision!,
+        title: item.title,
+        reminderAt: item.reminderAt!,
+        claimedAt: at,
+        claimExpiresAt: Math.min(8.64e15, at + REMINDER_LEASE_MS),
+      }
+      if (yield* deps.storage.create(receiptKey(deliveryID), claim).pipe(Effect.orDie)) return claim
+      const state: { claim?: Reminder } = {}
+      yield* deps.storage
+        .update<Record<string, unknown>>(receiptKey(deliveryID), (draft) => {
+          const prior = Schema.decodeUnknownSync(ReminderReceipt)(draft)
+          if (prior.state === "acknowledged" || prior.claimExpiresAt >= at) return
+          for (const field of Object.keys(draft)) delete draft[field]
+          Object.assign(draft, claim)
+          state.claim = claim
+        })
+        .pipe(Effect.orDie)
+      return state.claim
+    })
+
+    const claimReminders = Effect.fn("PersonalTodo.claimReminders")(function* () {
+      const at = yield* clock()
+      const items = (yield* list())
+        .filter(
+          (item) =>
+            !item.done && item.reminderAt !== undefined && item.reminderRevision !== undefined && item.reminderAt <= at,
+        )
+        .toSorted((a, b) => a.reminderAt! - b.reminderAt! || a.id.localeCompare(b.id))
+      const rows: Reminder[] = []
+      for (const item of items) {
+        if (rows.length >= REMINDER_CLAIM_LIMIT) break
+        const claim = yield* reserve(item, at)
+        if (!claim) continue
+        const current = yield* read(item.id)
+        if (
+          !current ||
+          current.done ||
+          current.reminderRevision !== item.reminderRevision ||
+          current.reminderAt === undefined ||
+          current.reminderAt > at
+        )
+          continue
+        rows.push({ ...claim, title: current.title, todoRevision: current.revision, reminderAt: current.reminderAt })
+      }
+      return rows
+    })
+
+    const acknowledge = Effect.fn("PersonalTodo.acknowledge")(function* (deliveryID: string, claim: string) {
+      const match = deliveryPattern.exec(deliveryID)
+      if (!match)
+        return yield* new InputError({ field: "deliveryID", message: "Use a valid personal todo reminder ID." })
+      yield* identity(match[1])
+      yield* revision(Number(match[2]))
+      if (!claimPattern.test(claim))
+        return yield* new InputError({ field: "claimID", message: "Use a valid personal todo reminder claim ID." })
+      const at = yield* clock()
+      const state: { ack?: ReminderAck } = {}
+      yield* deps.storage
+        .update<Record<string, unknown>>(receiptKey(deliveryID), (draft) => {
+          const prior = Schema.decodeUnknownSync(ReminderReceipt)(draft)
+          if (prior.state === "acknowledged") {
+            if (prior.claimID === claim) state.ack = prior
+            return
+          }
+          if (prior.claimID !== claim || prior.claimExpiresAt < at) return
+          const ack: ReminderAck = {
+            version: 1,
+            state: "acknowledged",
+            deliveryID,
+            claimID: claim,
+            todoID: prior.todoID,
+            todoRevision: prior.todoRevision,
+            reminderRevision: prior.reminderRevision,
+            acknowledgedAt: at,
+          }
+          for (const field of Object.keys(draft)) delete draft[field]
+          Object.assign(draft, ack)
+          state.ack = ack
+        })
+        .pipe(
+          Effect.catchIf(
+            (err) => Storage.NotFoundError.isInstance(err),
+            () => Effect.succeed(undefined),
+          ),
+          Effect.orDie,
+        )
+      return state.ack
+    })
+
+    return { create, get, list, update, remove, claimReminders, acknowledge }
   }
 }

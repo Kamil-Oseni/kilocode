@@ -79,15 +79,22 @@ export function matchLegacyKiloOpenApi(input: Record<string, unknown>) {
   const pty = spec.components?.schemas?.Pty?.properties
   if (pty?.sessionID) pty.sessionID = nullable(pty.sessionID)
 
-  const out = spec.paths?.["/session/{sessionID}/branch-name"]?.post?.responses?.["200"]?.content?.[
-    "application/json"
-  ]?.schema?.properties
+  const out =
+    spec.paths?.["/session/{sessionID}/branch-name"]?.post?.responses?.["200"]?.content?.["application/json"]?.schema
+      ?.properties
   if (out?.branch) out.branch = nullable(out.branch)
 
   const update = spec.paths?.["/pty/{ptyID}"]?.put?.requestBody?.content?.["application/json"]?.schema
   const name = update?.$ref?.replace("#/components/schemas/", "")
   const fields = name ? spec.components?.schemas?.[name]?.properties : update?.properties
   if (fields?.sessionID) fields.sessionID = nullable(fields.sessionID)
+
+  const todo = spec.paths?.["/raya/personal-todos/{todoID}"]?.patch?.requestBody?.content?.["application/json"]?.schema
+  const todoRef = todo?.$ref?.replace("#/components/schemas/", "")
+  const todoFields = todoRef ? spec.components?.schemas?.[todoRef]?.properties : todo?.properties
+  if (todoFields?.detail) todoFields.detail = nullable(todoFields.detail)
+  if (todoFields?.dueAt) todoFields.dueAt = nullable(todoFields.dueAt)
+  if (todoFields?.reminderAt) todoFields.reminderAt = nullable(todoFields.reminderAt)
 
   const fim = spec.paths?.["/kilo/fim"]?.post?.responses
   if (!fim) return

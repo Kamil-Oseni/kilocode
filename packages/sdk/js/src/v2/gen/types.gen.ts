@@ -27973,6 +27973,8 @@ export type RayaPersonalTodoListResponses = {
     detail?: string
     done: boolean
     dueAt?: number
+    reminderAt?: number
+    reminderRevision?: number
     createdAt: number
     updatedAt: number
     completedAt?: number
@@ -27987,6 +27989,7 @@ export type RayaPersonalTodoCreateData = {
     title: string
     detail?: string
     dueAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    reminderAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
   }
   path?: never
   query?: {
@@ -28024,6 +28027,8 @@ export type RayaPersonalTodoCreateResponses = {
     detail?: string
     done: boolean
     dueAt?: number
+    reminderAt?: number
+    reminderRevision?: number
     createdAt: number
     updatedAt: number
     completedAt?: number
@@ -28032,6 +28037,105 @@ export type RayaPersonalTodoCreateResponses = {
 }
 
 export type RayaPersonalTodoCreateResponse = RayaPersonalTodoCreateResponses[keyof RayaPersonalTodoCreateResponses]
+
+export type RayaPersonalTodoRemindersData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/raya/personal-todos/reminders/claim"
+}
+
+export type RayaPersonalTodoRemindersErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * ConflictError | PersonalTodoStaleRevisionError
+   */
+  409: ConflictError | PersonalTodoStaleRevisionError
+}
+
+export type RayaPersonalTodoRemindersError = RayaPersonalTodoRemindersErrors[keyof RayaPersonalTodoRemindersErrors]
+
+export type RayaPersonalTodoRemindersResponses = {
+  /**
+   * Due personal todo reminders
+   */
+  200: Array<{
+    version: 1
+    state: "claimed"
+    deliveryID: string
+    claimID: string
+    todoID: string
+    todoRevision: number
+    reminderRevision: number
+    title: string
+    reminderAt: number
+    claimedAt: number
+    claimExpiresAt: number
+  }>
+}
+
+export type RayaPersonalTodoRemindersResponse =
+  RayaPersonalTodoRemindersResponses[keyof RayaPersonalTodoRemindersResponses]
+
+export type RayaPersonalTodoAcknowledgeReminderData = {
+  body?: {
+    deliveryID: string
+    claimID: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/raya/personal-todos/reminders/acknowledge"
+}
+
+export type RayaPersonalTodoAcknowledgeReminderErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * ConflictError | PersonalTodoStaleRevisionError
+   */
+  409: ConflictError | PersonalTodoStaleRevisionError
+}
+
+export type RayaPersonalTodoAcknowledgeReminderError =
+  RayaPersonalTodoAcknowledgeReminderErrors[keyof RayaPersonalTodoAcknowledgeReminderErrors]
+
+export type RayaPersonalTodoAcknowledgeReminderResponses = {
+  /**
+   * Acknowledged personal todo reminder
+   */
+  200: {
+    version: 1
+    state: "acknowledged"
+    deliveryID: string
+    claimID: string
+    todoID: string
+    todoRevision: number
+    reminderRevision: number
+    acknowledgedAt: number
+  }
+}
+
+export type RayaPersonalTodoAcknowledgeReminderResponse =
+  RayaPersonalTodoAcknowledgeReminderResponses[keyof RayaPersonalTodoAcknowledgeReminderResponses]
 
 export type RayaPersonalTodoDeleteData = {
   body?: never
@@ -28112,6 +28216,8 @@ export type RayaPersonalTodoGetResponses = {
     detail?: string
     done: boolean
     dueAt?: number
+    reminderAt?: number
+    reminderRevision?: number
     createdAt: number
     updatedAt: number
     completedAt?: number
@@ -28125,9 +28231,10 @@ export type RayaPersonalTodoUpdateData = {
   body?: {
     revision: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     title?: string
-    detail?: string
+    detail?: string | null
     done?: boolean
-    dueAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    dueAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN" | null
+    reminderAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN" | null
   }
   path: {
     todoID: string
@@ -28167,6 +28274,8 @@ export type RayaPersonalTodoUpdateResponses = {
     detail?: string
     done: boolean
     dueAt?: number
+    reminderAt?: number
+    reminderRevision?: number
     createdAt: number
     updatedAt: number
     completedAt?: number

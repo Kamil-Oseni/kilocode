@@ -134,3 +134,101 @@ it.live("rejects invalid input and duplicate identities without overwriting dura
     }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
   }),
 )
+
+it.live("claims due reminders once and recovers expired claims after reconstruction", () =>
+  Effect.gen(function* () {
+    const root = yield* tmpdirScoped()
+    const dir = path.join(root, "storage")
+    const clock = { now: 100 }
+    const ids = [first, second]
+    const claims = yield* Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const todos = PersonalTodo.make({ storage, id: () => ids.shift()!, now: () => clock.now })
+      yield* todos.create({ title: "Call the landlord", reminderAt: 300 })
+      yield* todos.create({ title: "Review the budget", reminderAt: 200 })
+
+      clock.now = 199
+      expect(yield* todos.claimReminders()).toEqual([])
+      clock.now = 300
+      const concurrent = yield* Effect.all([todos.claimReminders(), todos.claimReminders()], {
+        concurrency: "unbounded",
+      })
+      const due = concurrent.flat()
+      expect(due).toHaveLength(2)
+      expect(new Set(due.map((item) => item.deliveryID)).size).toBe(2)
+      expect(due.map((item) => item.reminderAt).toSorted((a, b) => a - b)).toEqual([200, 300])
+      expect(yield* todos.claimReminders()).toEqual([])
+      const firstClaim = due.find((item) => item.todoID === first)!
+      const secondClaim = due.find((item) => item.todoID === second)!
+      const ack = yield* todos.acknowledge(secondClaim.deliveryID, secondClaim.claimID)
+      expect(ack).toMatchObject({
+        version: 1,
+        state: "acknowledged",
+        deliveryID: `${second}_r1`,
+        claimID: secondClaim.claimID,
+        todoID: second,
+        reminderRevision: 1,
+        acknowledgedAt: 300,
+      })
+      return { firstClaim, secondClaim, ack }
+    }).pipe(Effect.provide(Storage.layerFromDir(dir)))
+
+    yield* Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const todos = PersonalTodo.make({ storage, now: () => clock.now })
+      expect(yield* todos.claimReminders()).toEqual([])
+      expect(yield* todos.acknowledge(`${second}_r1`, claims.secondClaim.claimID)).toEqual(claims.ack)
+
+      clock.now = 300 + PersonalTodo.REMINDER_LEASE_MS + 1
+      const recovered = yield* todos.claimReminders()
+      expect(recovered).toHaveLength(1)
+      expect(recovered[0]).toMatchObject({ deliveryID: `${first}_r1`, todoID: first })
+      expect(recovered[0].claimID).not.toBe(claims.firstClaim.claimID)
+      expect(yield* todos.acknowledge(recovered[0].deliveryID, claims.firstClaim.claimID)).toBeUndefined()
+      expect(yield* todos.acknowledge(recovered[0].deliveryID, recovered[0].claimID)).toMatchObject({
+        state: "acknowledged",
+        claimID: recovered[0].claimID,
+      })
+
+      const sooner = yield* todos.get(second)
+      const renamed = yield* todos.update(second, { revision: sooner!.revision, title: "Review rent budget" })
+      expect(renamed).toMatchObject({ revision: 2, reminderAt: 200, reminderRevision: 1 })
+      expect(yield* todos.claimReminders()).toEqual([])
+      const changed = yield* todos.update(second, { revision: renamed!.revision, reminderAt: 350 })
+      expect(changed).toMatchObject({ revision: 3, reminderAt: 350, reminderRevision: 3 })
+      expect((yield* todos.claimReminders()).map((item) => item.deliveryID)).toEqual([`${second}_r3`])
+
+      const later = yield* todos.get(first)
+      const cleared = yield* todos.update(first, { revision: later!.revision, reminderAt: null })
+      expect(cleared).not.toHaveProperty("reminderAt")
+      expect(cleared).not.toHaveProperty("reminderRevision")
+      expect((yield* todos.update(first, { revision: later!.revision, reminderAt: 500 }).pipe(Effect.flip))._tag).toBe(
+        "PersonalTodoStaleRevisionError",
+      )
+      expect((yield* todos.acknowledge("not-a-reminder", recovered[0].claimID).pipe(Effect.flip)).field).toBe(
+        "deliveryID",
+      )
+    }).pipe(Effect.provide(Storage.layerFromDir(dir)))
+  }),
+)
+
+it.live(
+  "bounds each reminder claim batch",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const storage = yield* Storage.Service
+        const todos = PersonalTodo.make({ storage, now: () => 100 })
+        yield* Effect.forEach(
+          Array.from({ length: PersonalTodo.REMINDER_CLAIM_LIMIT + 1 }, (_, index) => index),
+          (index) => todos.create({ title: `Reminder ${index}`, reminderAt: 0 }),
+          { concurrency: 4 },
+        )
+        expect(yield* todos.claimReminders()).toHaveLength(PersonalTodo.REMINDER_CLAIM_LIMIT)
+        expect(yield* todos.claimReminders()).toHaveLength(1)
+        expect(yield* todos.claimReminders()).toEqual([])
+      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+    }),
+  20_000,
+)

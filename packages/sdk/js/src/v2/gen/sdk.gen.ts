@@ -542,6 +542,8 @@ import type {
   RayaFocusTimerResumeResponses,
   RayaFocusTimerStartErrors,
   RayaFocusTimerStartResponses,
+  RayaPersonalTodoAcknowledgeReminderErrors,
+  RayaPersonalTodoAcknowledgeReminderResponses,
   RayaPersonalTodoCreateErrors,
   RayaPersonalTodoCreateResponses,
   RayaPersonalTodoDeleteErrors,
@@ -550,6 +552,8 @@ import type {
   RayaPersonalTodoGetResponses,
   RayaPersonalTodoListErrors,
   RayaPersonalTodoListResponses,
+  RayaPersonalTodoRemindersErrors,
+  RayaPersonalTodoRemindersResponses,
   RayaPersonalTodoUpdateErrors,
   RayaPersonalTodoUpdateResponses,
   RemoteDisableErrors,
@@ -13561,6 +13565,7 @@ export class PersonalTodo extends HeyApiClient {
       title?: string
       detail?: string
       dueAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      reminderAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -13574,6 +13579,7 @@ export class PersonalTodo extends HeyApiClient {
             { in: "body", key: "title" },
             { in: "body", key: "detail" },
             { in: "body", key: "dueAt" },
+            { in: "body", key: "reminderAt" },
           ],
         },
       ],
@@ -13584,6 +13590,83 @@ export class PersonalTodo extends HeyApiClient {
       ThrowOnError
     >({
       url: "/raya/personal-todos",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Claim due personal todo reminders
+   *
+   * Atomically claim up to 100 due local reminders with restart-safe delivery leases.
+   */
+  public reminders<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      RayaPersonalTodoRemindersResponses,
+      RayaPersonalTodoRemindersErrors,
+      ThrowOnError
+    >({
+      url: "/raya/personal-todos/reminders/claim",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Acknowledge a personal todo reminder
+   *
+   * Durably suppress an exact reminder delivery after local presentation.
+   */
+  public acknowledgeReminder<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      deliveryID?: string
+      claimID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "deliveryID" },
+            { in: "body", key: "claimID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      RayaPersonalTodoAcknowledgeReminderResponses,
+      RayaPersonalTodoAcknowledgeReminderErrors,
+      ThrowOnError
+    >({
+      url: "/raya/personal-todos/reminders/acknowledge",
       ...options,
       ...params,
       headers: {
@@ -13674,9 +13757,10 @@ export class PersonalTodo extends HeyApiClient {
       workspace?: string
       revision?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       title?: string
-      detail?: string
+      detail?: string | null
       done?: boolean
-      dueAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      dueAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN" | null
+      reminderAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN" | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -13693,6 +13777,7 @@ export class PersonalTodo extends HeyApiClient {
             { in: "body", key: "detail" },
             { in: "body", key: "done" },
             { in: "body", key: "dueAt" },
+            { in: "body", key: "reminderAt" },
           ],
         },
       ],

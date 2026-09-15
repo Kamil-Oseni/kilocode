@@ -49263,6 +49263,16 @@
                         "minimum": -8640000000000000,
                         "maximum": 8640000000000000
                       },
+                      "reminderAt": {
+                        "type": "number",
+                        "minimum": -8640000000000000,
+                        "maximum": 8640000000000000
+                      },
+                      "reminderRevision": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      },
                       "createdAt": {
                         "type": "number",
                         "minimum": -8640000000000000,
@@ -49399,6 +49409,16 @@
                       "minimum": -8640000000000000,
                       "maximum": 8640000000000000
                     },
+                    "reminderAt": {
+                      "type": "number",
+                      "minimum": -8640000000000000,
+                      "maximum": 8640000000000000
+                    },
+                    "reminderRevision": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
                     "createdAt": {
                       "type": "number",
                       "minimum": -8640000000000000,
@@ -49508,6 +49528,29 @@
                         "enum": ["Infinity", "-Infinity", "NaN"]
                       }
                     ]
+                  },
+                  "reminderAt": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
                   }
                 },
                 "required": ["title"],
@@ -49520,6 +49563,314 @@
           {
             "lang": "js",
             "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.raya.personalTodo.create({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/raya/personal-todos/reminders/claim": {
+      "post": {
+        "tags": ["raya-personal-todo"],
+        "operationId": "raya.personalTodo.reminders",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Due personal todo reminders",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "version": {
+                        "type": "number",
+                        "enum": [1]
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": ["claimed"]
+                      },
+                      "deliveryID": {
+                        "type": "string"
+                      },
+                      "claimID": {
+                        "type": "string"
+                      },
+                      "todoID": {
+                        "type": "string"
+                      },
+                      "todoRevision": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      },
+                      "reminderRevision": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      },
+                      "title": {
+                        "type": "string",
+                        "pattern": "\\S",
+                        "maxLength": 500
+                      },
+                      "reminderAt": {
+                        "type": "number",
+                        "minimum": -8640000000000000,
+                        "maximum": 8640000000000000
+                      },
+                      "claimedAt": {
+                        "type": "number",
+                        "minimum": -8640000000000000,
+                        "maximum": 8640000000000000
+                      },
+                      "claimExpiresAt": {
+                        "type": "number",
+                        "minimum": -8640000000000000,
+                        "maximum": 8640000000000000
+                      }
+                    },
+                    "required": [
+                      "version",
+                      "state",
+                      "deliveryID",
+                      "claimID",
+                      "todoID",
+                      "todoRevision",
+                      "reminderRevision",
+                      "title",
+                      "reminderAt",
+                      "claimedAt",
+                      "claimExpiresAt"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "description": "Due personal todo reminders"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ConflictError | PersonalTodoStaleRevisionError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConflictError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PersonalTodoStaleRevisionError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Atomically claim up to 100 due local reminders with restart-safe delivery leases.",
+        "summary": "Claim due personal todo reminders",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.raya.personalTodo.reminders({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/raya/personal-todos/reminders/acknowledge": {
+      "post": {
+        "tags": ["raya-personal-todo"],
+        "operationId": "raya.personalTodo.acknowledgeReminder",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Acknowledged personal todo reminder",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "number",
+                      "enum": [1]
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": ["acknowledged"]
+                    },
+                    "deliveryID": {
+                      "type": "string"
+                    },
+                    "claimID": {
+                      "type": "string"
+                    },
+                    "todoID": {
+                      "type": "string"
+                    },
+                    "todoRevision": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "reminderRevision": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "acknowledgedAt": {
+                      "type": "number",
+                      "minimum": -8640000000000000,
+                      "maximum": 8640000000000000
+                    }
+                  },
+                  "required": [
+                    "version",
+                    "state",
+                    "deliveryID",
+                    "claimID",
+                    "todoID",
+                    "todoRevision",
+                    "reminderRevision",
+                    "acknowledgedAt"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Acknowledged personal todo reminder"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ConflictError | PersonalTodoStaleRevisionError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConflictError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PersonalTodoStaleRevisionError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Durably suppress an exact reminder delivery after local presentation.",
+        "summary": "Acknowledge a personal todo reminder",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "deliveryID": {
+                    "type": "string"
+                  },
+                  "claimID": {
+                    "type": "string"
+                  }
+                },
+                "required": ["deliveryID", "claimID"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.raya.personalTodo.acknowledgeReminder({\n  ...\n})"
           }
         ]
       }
@@ -49585,6 +49936,16 @@
                       "type": "number",
                       "minimum": -8640000000000000,
                       "maximum": 8640000000000000
+                    },
+                    "reminderAt": {
+                      "type": "number",
+                      "minimum": -8640000000000000,
+                      "maximum": 8640000000000000
+                    },
+                    "reminderRevision": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
                     },
                     "createdAt": {
                       "type": "number",
@@ -49728,6 +50089,16 @@
                       "minimum": -8640000000000000,
                       "maximum": 8640000000000000
                     },
+                    "reminderAt": {
+                      "type": "number",
+                      "minimum": -8640000000000000,
+                      "maximum": 8640000000000000
+                    },
+                    "reminderRevision": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
                     "createdAt": {
                       "type": "number",
                       "minimum": -8640000000000000,
@@ -49836,7 +50207,14 @@
                     "type": "string"
                   },
                   "detail": {
-                    "type": "string"
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "done": {
                     "type": "boolean"
@@ -49844,23 +50222,60 @@
                   "dueAt": {
                     "anyOf": [
                       {
-                        "type": "number"
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["NaN"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["-Infinity"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity", "-Infinity", "NaN"]
+                          }
+                        ]
                       },
                       {
-                        "type": "string",
-                        "enum": ["NaN"]
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "reminderAt": {
+                    "anyOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["NaN"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["-Infinity"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity", "-Infinity", "NaN"]
+                          }
+                        ]
                       },
                       {
-                        "type": "string",
-                        "enum": ["Infinity"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["-Infinity"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity", "-Infinity", "NaN"]
+                        "type": "null"
                       }
                     ]
                   }

@@ -16,12 +16,15 @@ const root = "/raya/personal-todos"
 export const PersonalTodoPaths = {
   list: root,
   item: `${root}/:todoID`,
+  reminders: `${root}/reminders/claim`,
+  acknowledge: `${root}/reminders/acknowledge`,
 } as const
 
 export const PersonalTodoCreatePayload = Schema.Struct({
   title: Schema.String,
   detail: Schema.optional(Schema.String),
   dueAt: Schema.optional(Schema.Number),
+  reminderAt: Schema.optional(Schema.Number),
 })
 
 export const PersonalTodoUpdatePayload = Schema.Struct({
@@ -30,7 +33,10 @@ export const PersonalTodoUpdatePayload = Schema.Struct({
   detail: Schema.optional(Schema.NullOr(Schema.String)),
   done: Schema.optional(Schema.Boolean),
   dueAt: Schema.optional(Schema.NullOr(Schema.Number)),
+  reminderAt: Schema.optional(Schema.NullOr(Schema.Number)),
 })
+
+export const PersonalTodoReminderAckPayload = Schema.Struct({ deliveryID: Schema.String, claimID: Schema.String })
 
 export const PersonalTodoDeleteQuery = Schema.Struct({
   ...WorkspaceRoutingQueryFields,
@@ -79,6 +85,29 @@ export const PersonalTodoApi = HttpApi.make("raya-personal-todo").add(
           identifier: "raya.personalTodo.create",
           summary: "Create a personal todo",
           description: "Create one durable personal todo without starting agent work.",
+        }),
+      ),
+      HttpApiEndpoint.post("personalTodoReminders", PersonalTodoPaths.reminders, {
+        query: WorkspaceRoutingQuery,
+        success: described(Schema.Array(PersonalTodo.Reminder), "Due personal todo reminders"),
+        error: errors,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "raya.personalTodo.reminders",
+          summary: "Claim due personal todo reminders",
+          description: "Atomically claim up to 100 due local reminders with restart-safe delivery leases.",
+        }),
+      ),
+      HttpApiEndpoint.post("personalTodoReminderAcknowledge", PersonalTodoPaths.acknowledge, {
+        query: WorkspaceRoutingQuery,
+        payload: PersonalTodoReminderAckPayload,
+        success: described(PersonalTodo.ReminderAck, "Acknowledged personal todo reminder"),
+        error: errors,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "raya.personalTodo.acknowledgeReminder",
+          summary: "Acknowledge a personal todo reminder",
+          description: "Durably suppress an exact reminder delivery after local presentation.",
         }),
       ),
       HttpApiEndpoint.get("personalTodoGet", PersonalTodoPaths.item, {

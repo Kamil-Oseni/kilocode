@@ -107,6 +107,11 @@ function transcript(input: {
   return { rows, part }
 }
 
+function completed(part: MessageV2.ToolPart | undefined) {
+  if (!part || part.state.status !== "completed") throw new Error("Expected completed tool")
+  return part
+}
+
 function setup(
   storage: Storage.Interface,
   rows: () => MessageV2.WithParts[],
@@ -391,7 +396,7 @@ describe("RayaGoal", () => {
         heartbeat: 100_000,
       })
       const lease = yield* claims.claim(root, "USD")
-      yield* Effect.addFinalizer(() => lease.release)
+      yield* Effect.addFinalizer(() => lease.release.pipe(Effect.orDie))
       yield* lease.dispatch
       time.at += 101
 
@@ -441,7 +446,7 @@ describe("RayaGoal", () => {
         heartbeat: 100_000,
       })
       const lease = yield* claims.claim(root, "USD", token)
-      yield* Effect.addFinalizer(() => lease.release)
+      yield* Effect.addFinalizer(() => lease.release.pipe(Effect.orDie))
       expect(lease.amount).toBeUndefined()
       yield* lease.dispatch
       time.at += 101
@@ -3962,8 +3967,10 @@ describe("RayaGoal", () => {
         grand.rows[1].info.role !== "assistant"
       )
         throw new Error("Expected assistant messages")
-      parent.part!.state.metadata.childMessageID = child.rows[0].info.id
-      child.part!.state.metadata.childMessageID = grand.rows[0].info.id
+      const parentPart = completed(parent.part)
+      const childPart = completed(child.part)
+      parentPart.state.metadata.childMessageID = child.rows[0].info.id
+      childPart.state.metadata.childMessageID = grand.rows[0].info.id
       parent.rows[1].info.cost = 3.5
       child.rows[1].info.cost = 2.5
       grand.rows[1].info.cost = 2
@@ -3990,8 +3997,8 @@ describe("RayaGoal", () => {
         undefined,
         { modelCost: 3 },
       )
-      parent.part!.state.time.start = created.createdAt + 1
-      child.part!.state.time.start = created.createdAt + 2
+      parentPart.state.time.start = created.createdAt + 1
+      childPart.state.time.start = created.createdAt + 2
       child.rows[0].info.time.created = created.createdAt + 2
       grand.rows[0].info.time.created = created.createdAt + 3
       const turn = yield* goals.recordTurn(parentID, parent.rows[1].info.id)
@@ -4196,7 +4203,8 @@ describe("RayaGoal", () => {
       const storage = yield* Storage.Service
       const sessionID = SessionID.make(`ses_goal_${crypto.randomUUID()}`)
       const data = transcript({ sessionID, tool: "bash", exit: 0 })
-      if (!data.part || data.rows[1].info.role !== "assistant") throw new Error("Expected completed assistant tool")
+      if (data.rows[1].info.role !== "assistant") throw new Error("Expected assistant message")
+      const part = completed(data.part)
       data.rows[1].info.cost = 2
       const goals = setup(storage, () => data.rows)
       yield* Effect.addFinalizer(() => goals.clear(sessionID))
@@ -4209,7 +4217,7 @@ describe("RayaGoal", () => {
         undefined,
         { modelCost: 1 },
       )
-      data.part.state.time.start = created.createdAt + 1
+      part.state.time.start = created.createdAt + 1
       const complete = yield* goals.update(sessionID, {
         status: "complete",
         audit: {
@@ -4928,28 +4936,26 @@ describe("RayaGoal", () => {
       yield* Effect.addFinalizer(() => goals.clear(sessionID))
       const created = yield* goals.create(sessionID, "Generate and account for one image")
       const data = transcript({ sessionID, tool: "generate_image", metadata: {} })
-      const part = data.part!
-      part.state.metadata.rayaGoalCharge = {
-        version: 1,
-        receipt: {
-          id: "generate-image:openrouter:gen_goal_1",
-          kind: "tool",
-          provider: "openrouter",
-          service: "openai/gpt-5-image",
-          origin: { sessionID, messageID: part.messageID, callID: part.callID },
-          at: created.createdAt,
-          coverage: "recorded",
-          amount: 0.125,
-          currency: "USD",
-          source: "usage.cost",
-        },
+      const part = completed(data.part)
+      const receipt: RayaGoal.Charge = {
+        id: "generate-image:openrouter:gen_goal_1",
+        kind: "tool",
+        provider: "openrouter",
+        service: "openai/gpt-5-image",
+        origin: { sessionID, messageID: part.messageID, callID: part.callID },
+        at: created.createdAt,
+        coverage: "recorded",
+        amount: 0.125,
+        currency: "USD",
+        source: "usage.cost",
       }
+      part.state.metadata.rayaGoalCharge = { version: 1, receipt }
       rows.push(...data.rows)
 
       const first = yield* goals.recordTurn(sessionID, data.rows[1].info.id)
-      expect(first?.state.charges).toEqual([part.state.metadata.rayaGoalCharge.receipt])
+      expect(first?.state.charges).toEqual([receipt])
       expect(yield* goals.recordTurn(sessionID, data.rows[1].info.id)).toBeUndefined()
-      expect((yield* goals.get(sessionID))?.charges).toEqual([part.state.metadata.rayaGoalCharge.receipt])
+      expect((yield* goals.get(sessionID))?.charges).toEqual([receipt])
     }),
   )
 
@@ -4962,7 +4968,7 @@ describe("RayaGoal", () => {
       yield* Effect.addFinalizer(() => goals.clear(sessionID))
       const created = yield* goals.create(sessionID, "Search and account for one hosted result")
       const data = transcript({ sessionID, tool: "websearch", metadata: {} })
-      const part = data.part!
+      const part = completed(data.part)
       const receipt: RayaGoal.Charge = {
         id: "websearch:kilo-exa:receipt_goal_1",
         kind: "tool",
@@ -4993,7 +4999,7 @@ describe("RayaGoal", () => {
       yield* Effect.addFinalizer(() => goals.clear(sessionID))
       const created = yield* goals.create(sessionID, "Do not trust arbitrary tool billing metadata")
       const data = transcript({ sessionID, tool: "bash", metadata: {} })
-      const part = data.part!
+      const part = completed(data.part)
       part.state.metadata.rayaGoalCharge = {
         version: 1,
         receipt: {
@@ -5031,7 +5037,7 @@ describe("RayaGoal", () => {
         { chargeCosts: [{ currency: "USD", limit: 0.2, reservation: 0.1 }] },
       )
       const data = transcript({ sessionID, tool: "generate_image", metadata: {} })
-      const part = data.part!
+      const part = completed(data.part)
       const receipt: RayaGoal.Charge = {
         id: "generate-image:openrouter:gen_failed_1",
         kind: "tool",
@@ -5075,7 +5081,10 @@ describe("RayaGoal", () => {
       })
       const child = transcript({ sessionID: childID, tool: "generate_image", metadata: {} })
       const stray = transcript({ sessionID: strayID, tool: "generate_image", metadata: {} })
-      parent.part!.state.metadata.childMessageID = child.rows[0].info.id
+      const parentPart = completed(parent.part)
+      const childPart = completed(child.part)
+      const strayPart = completed(stray.part)
+      parentPart.state.metadata.childMessageID = child.rows[0].info.id
       const rows = new Map([
         [parentID, parent.rows],
         [childID, child.rows],
@@ -5087,10 +5096,10 @@ describe("RayaGoal", () => {
       })
       yield* Effect.addFinalizer(() => goals.clear(parentID))
       const created = yield* goals.create(parentID, "Account for delegated image generation")
-      parent.part!.state.time.start = created.createdAt + 1
+      parentPart.state.time.start = created.createdAt + 1
       child.rows[0].info.time.created = created.createdAt + 2
       stray.rows[0].info.time.created = created.createdAt + 2
-      const part = child.part!
+      const part = childPart
       const receipt: RayaGoal.Charge = {
         id: "generate-image:openrouter:gen_child_1",
         kind: "tool",
@@ -5104,15 +5113,15 @@ describe("RayaGoal", () => {
         currency: "USD",
       }
       part.state.metadata.rayaGoalCharge = { version: 1, receipt }
-      stray.part!.state.metadata.rayaGoalCharge = {
+      strayPart.state.metadata.rayaGoalCharge = {
         version: 1,
         receipt: {
           ...receipt,
           id: "generate-image:openrouter:gen_stray_1",
           origin: {
             sessionID: strayID,
-            messageID: stray.part!.messageID,
-            callID: stray.part!.callID,
+            messageID: strayPart.messageID,
+            callID: strayPart.callID,
           },
         },
       }

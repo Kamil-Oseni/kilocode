@@ -9,7 +9,7 @@ import { mutation } from "./mutation"
 
 type Deps = {
   storage: Storage.Interface
-  sessions: Session.Interface
+  sessions: Pick<Session.Interface, "get" | "messages" | "children">
   clock?: () => number
   ttl?: number
   heartbeat?: number

@@ -33,8 +33,8 @@ it.live("stores immutable proposals idempotently and reconstructs their canonica
         dueAt: 500,
         reminderAt: 400,
         subtasks: [
-          { id: sub1, title: "Choose an area" },
-          { id: sub2, title: "Book viewings" },
+          { kind: "new", id: sub1, title: "Choose an area" },
+          { kind: "new", id: sub2, title: "Book viewings" },
         ],
       },
     }
@@ -75,6 +75,17 @@ it.live("enforces target, change, clear, and ordered subtask bounds", () =>
       expect(missing._tag).toBe("PersonalTodoProposalInputError")
       const cleared = yield* proposals.propose({ ...base, changes: { title: "New", detail: null } }).pipe(Effect.flip)
       expect(cleared._tag).toBe("PersonalTodoProposalInputError")
+      const metadata = yield* proposals
+        .propose({ ...base, changes: { title: "New", priority: null, estimateMinutes: null, links: null } })
+        .pipe(Effect.flip)
+      expect(metadata._tag).toBe("PersonalTodoProposalInputError")
+      const impossible = yield* proposals
+        .propose({
+          ...base,
+          changes: { title: "New", subtasks: [{ kind: "existing", id: sub1, revision: 1, title: "Impossible" }] },
+        })
+        .pipe(Effect.flip)
+      expect(impossible._tag).toBe("PersonalTodoProposalInputError")
 
       const existing = { ...base, target: { kind: "existing" as const, todoID: todo, baseRevision: 1 } }
       const empty = yield* proposals.propose({ ...existing, changes: {} }).pipe(Effect.flip)
@@ -84,14 +95,15 @@ it.live("enforces target, change, clear, and ordered subtask bounds", () =>
           ...existing,
           changes: {
             subtasks: [
-              { id: sub1, title: "One" },
-              { id: sub1, title: "Two" },
+              { kind: "new", id: sub1, title: "One" },
+              { kind: "new", id: sub1, title: "Two" },
             ],
           },
         })
         .pipe(Effect.flip)
       expect(duplicate._tag).toBe("PersonalTodoProposalInputError")
       const many = Array.from({ length: 101 }, (_, index) => ({
+        kind: "new" as const,
         id: `subtodo_55555555-5555-4555-8555-${index.toString().padStart(12, "0")}`,
         title: `Step ${index}`,
       }))

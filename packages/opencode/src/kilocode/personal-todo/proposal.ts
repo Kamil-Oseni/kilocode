@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto"
 import { Effect, Schema } from "effect"
+import { PersonalTodo } from "."
 import { Storage } from "@/storage/storage"
 
 export namespace PersonalTodoProposal {
@@ -21,6 +22,10 @@ export namespace PersonalTodoProposal {
     Schema.isPattern(/^subtodo_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i),
   )
   const Hash = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/))
+  const Estimate = Schema.Int.check(
+    Schema.isGreaterThanOrEqualTo(1),
+    Schema.isLessThanOrEqualTo(PersonalTodo.MAX_ESTIMATE_MINUTES),
+  )
 
   export const Source = Schema.Struct({
     sessionID: SourceID,
@@ -35,7 +40,33 @@ export namespace PersonalTodoProposal {
   ])
   export type Target = typeof Target.Type
 
-  export const Subtask = Schema.Struct({ id: SubtodoID, title: Text })
+  const Child = {
+    id: SubtodoID,
+    title: Text,
+    status: Schema.optional(PersonalTodo.Status),
+  }
+  const ChildLinks = Schema.Array(PersonalTodo.Link).check(Schema.isMaxLength(PersonalTodo.MAX_LINKS))
+  export const Subtask = Schema.Union([
+    Schema.Struct({
+      kind: Schema.Literal("new"),
+      ...Child,
+      priority: Schema.optional(PersonalTodo.Priority),
+      estimateMinutes: Schema.optional(Estimate),
+      dueAt: Schema.optional(Time),
+      notes: Schema.optional(Detail),
+      links: Schema.optional(ChildLinks),
+    }),
+    Schema.Struct({
+      kind: Schema.Literal("existing"),
+      ...Child,
+      revision: Revision,
+      priority: Schema.optional(Schema.NullOr(PersonalTodo.Priority)),
+      estimateMinutes: Schema.optional(Schema.NullOr(Estimate)),
+      dueAt: Schema.optional(Schema.NullOr(Time)),
+      notes: Schema.optional(Schema.NullOr(Detail)),
+      links: Schema.optional(Schema.NullOr(ChildLinks)),
+    }),
+  ])
   export type Subtask = typeof Subtask.Type
 
   export const Changes = Schema.Struct({
@@ -43,6 +74,11 @@ export namespace PersonalTodoProposal {
     detail: Schema.optional(Schema.NullOr(Detail)),
     dueAt: Schema.optional(Schema.NullOr(Time)),
     reminderAt: Schema.optional(Schema.NullOr(Time)),
+    priority: Schema.optional(Schema.NullOr(PersonalTodo.Priority)),
+    estimateMinutes: Schema.optional(Schema.NullOr(Estimate)),
+    links: Schema.optional(
+      Schema.NullOr(Schema.Array(PersonalTodo.Link).check(Schema.isMaxLength(PersonalTodo.MAX_LINKS))),
+    ),
     subtasks: Schema.optional(Schema.Array(Subtask).check(Schema.isMaxLength(100))),
   })
   export type Changes = typeof Changes.Type
@@ -101,7 +137,23 @@ export namespace PersonalTodoProposal {
         field(value.changes.detail),
         field(value.changes.dueAt),
         field(value.changes.reminderAt),
-        field(value.changes.subtasks?.map((item) => [item.id, item.title])),
+        field(value.changes.priority),
+        field(value.changes.estimateMinutes),
+        field(value.changes.links?.map((item) => [item.kind, item.id])),
+        field(
+          value.changes.subtasks?.map((item) => [
+            item.kind,
+            item.id,
+            item.kind === "existing" ? item.revision : 0,
+            item.title,
+            field(item.notes),
+            field(item.status),
+            field(item.priority),
+            field(item.estimateMinutes),
+            field(item.dueAt),
+            field(item.links?.map((link) => [link.kind, link.id]) ?? item.links),
+          ]),
+        ),
       ],
     ])
   const request = (value: Pick<Info, "id" | "source" | "target" | "changes">) =>
@@ -116,7 +168,23 @@ export namespace PersonalTodoProposal {
         field(value.changes.detail),
         field(value.changes.dueAt),
         field(value.changes.reminderAt),
-        field(value.changes.subtasks?.map((item) => [item.id, item.title])),
+        field(value.changes.priority),
+        field(value.changes.estimateMinutes),
+        field(value.changes.links?.map((item) => [item.kind, item.id])),
+        field(
+          value.changes.subtasks?.map((item) => [
+            item.kind,
+            item.id,
+            item.kind === "existing" ? item.revision : 0,
+            item.title,
+            field(item.notes),
+            field(item.status),
+            field(item.priority),
+            field(item.estimateMinutes),
+            field(item.dueAt),
+            field(item.links?.map((link) => [link.kind, link.id]) ?? item.links),
+          ]),
+        ),
       ],
     ])
 
@@ -155,20 +223,38 @@ export namespace PersonalTodoProposal {
             return invalid("changes", "A new Todo proposal requires a title.")
           if (
             value.target.kind === "new" &&
-            (value.changes.detail === null || value.changes.dueAt === null || value.changes.reminderAt === null)
+            (value.changes.detail === null ||
+              value.changes.dueAt === null ||
+              value.changes.reminderAt === null ||
+              value.changes.priority === null ||
+              value.changes.estimateMinutes === null ||
+              value.changes.links === null)
           )
             return invalid("changes", "Clear values are only valid for an existing Todo.")
+          if (value.target.kind === "new" && value.changes.subtasks?.some((item) => item.kind === "existing"))
+            return invalid("subtasks", "A new Todo proposal can contain only new subtasks.")
           if (
             value.target.kind === "existing" &&
             value.changes.title === undefined &&
             value.changes.detail === undefined &&
             value.changes.dueAt === undefined &&
             value.changes.reminderAt === undefined &&
+            value.changes.priority === undefined &&
+            value.changes.estimateMinutes === undefined &&
+            value.changes.links === undefined &&
             value.changes.subtasks === undefined
           )
             return invalid("changes", "An existing Todo proposal requires at least one change.")
           const ids = value.changes.subtasks?.map((item) => item.id) ?? []
           if (new Set(ids).size !== ids.length) return invalid("subtasks", "Todo proposal subtask IDs must be unique.")
+          const links = value.changes.links ?? []
+          if (new Set(links.map((item) => `${item.kind}:${item.id}`)).size !== links.length)
+            return invalid("changes", "Todo proposal links must be unique.")
+          for (const task of value.changes.subtasks ?? []) {
+            const refs = task.links ?? []
+            if (new Set(refs.map((item) => `${item.kind}:${item.id}`)).size !== refs.length)
+              return invalid("subtasks", "Todo proposal subtask links must be unique.")
+          }
           return Effect.succeed(value)
         }),
       )

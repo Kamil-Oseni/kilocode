@@ -88,15 +88,35 @@ export namespace PersonalTodo {
   })
   type V2Info = typeof V2Info.Type
 
+  const ProposalApply = Schema.Struct({
+    version: Schema.Literal(1),
+    id: Schema.String.check(
+      Schema.isPattern(/^proposal_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i),
+    ),
+    digest: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
+  })
+  type ProposalApply = typeof ProposalApply.Type
+  const StoredV1Info = Schema.Struct({ ...V1Info.fields, proposalApply: Schema.optional(ProposalApply) })
+  const StoredV2Info = Schema.Struct({ ...V2Info.fields, proposalApply: Schema.optional(ProposalApply) })
+  type StoredInfo = typeof StoredV1Info.Type | typeof StoredV2Info.Type
+
   const TombstoneFields = {
     id: Schema.String,
     deleted: Schema.Literal(true),
     deletedAt: Time,
     revision: Revision,
   }
-  const V1Tombstone = Schema.Struct({ version: Schema.Literal(1), ...TombstoneFields })
-  const V2Tombstone = Schema.Struct({ version: Schema.Literal(2), ...TombstoneFields })
-  const Stored = Schema.Union([V1Info, V2Info, V1Tombstone, V2Tombstone])
+  const V1Tombstone = Schema.Struct({
+    version: Schema.Literal(1),
+    ...TombstoneFields,
+    proposalApply: Schema.optional(ProposalApply),
+  })
+  const V2Tombstone = Schema.Struct({
+    version: Schema.Literal(2),
+    ...TombstoneFields,
+    proposalApply: Schema.optional(ProposalApply),
+  })
+  const Stored = Schema.Union([StoredV1Info, StoredV2Info, V1Tombstone, V2Tombstone])
 
   export type Create = {
     title: string
@@ -235,8 +255,8 @@ export namespace PersonalTodo {
   const stored = Schema.decodeUnknownEffect(Stored)
 
   const valid = (value: number) => Number.isFinite(value) && Math.abs(value) <= 8.64e15
-  const project = (item: V1Info | V2Info): Info =>
-    item.version === 1 ? { ...item, status: item.done ? "completed" : "open" } : item
+  const project = (item: StoredInfo): Info =>
+    Schema.decodeUnknownSync(Info)(item.version === 1 ? { ...item, status: item.done ? "completed" : "open" } : item)
   const uniqueLinks = (items: readonly Link[] | undefined) => {
     if (items === undefined) return true
     const keys = items.map((item) => `${item.kind}:${item.id}`)
@@ -475,6 +495,7 @@ export namespace PersonalTodo {
             updatedAt: stamp,
             ...(done ? { completedAt: prior.completedAt ?? stamp } : {}),
             revision: next,
+            ...(prior.proposalApply === undefined ? {} : { proposalApply: prior.proposalApply }),
           }
           const item: V1Info | V2Info = extended
             ? {
@@ -662,13 +683,14 @@ export namespace PersonalTodo {
             return
           }
           const done = prior.done
-          const next: V2Info = {
+          const next: typeof StoredV2Info.Type = {
             ...project(prior),
             version: 2,
             status: done ? "completed" : "open",
             subtasks: tasks,
             updatedAt: Math.max(at, prior.updatedAt),
             revision: prior.revision + 1,
+            ...(prior.proposalApply === undefined ? {} : { proposalApply: prior.proposalApply }),
           }
           for (const field of Object.keys(draft)) delete draft[field]
           Object.assign(draft, next)
@@ -809,7 +831,9 @@ export namespace PersonalTodo {
             revision: prior.revision + 1,
           } as const
           const tombstone: typeof V1Tombstone.Type | typeof V2Tombstone.Type =
-            prior.version === 1 ? { version: 1, ...base } : { version: 2, ...base }
+            prior.version === 1
+              ? { version: 1, ...base, ...(prior.proposalApply ? { proposalApply: prior.proposalApply } : {}) }
+              : { version: 2, ...base, ...(prior.proposalApply ? { proposalApply: prior.proposalApply } : {}) }
           Object.assign(draft, tombstone)
         })
         .pipe(
@@ -829,6 +853,77 @@ export namespace PersonalTodo {
         })
       if (raw === undefined || state.missing) return false
       return true
+    })
+
+    const applyProposal = Effect.fn("PersonalTodo.applyProposal")(function* (input: {
+      proposalID: string
+      digest: string
+      todoID: string
+      baseRevision: number
+      postimage: Info
+    }) {
+      yield* identity(input.todoID)
+      const marker = yield* Schema.decodeUnknownEffect(ProposalApply)({
+        version: 1,
+        id: input.proposalID,
+        digest: input.digest,
+      }).pipe(Effect.orDie)
+      const postimage = yield* Schema.decodeUnknownEffect(Info)(input.postimage).pipe(Effect.orDie)
+      if (
+        postimage.version !== 2 ||
+        !coherent(postimage) ||
+        postimage.id !== input.todoID ||
+        postimage.revision !== input.baseRevision + 1
+      )
+        return yield* new InputError({ field: "revision", message: "The Todo proposal postimage is invalid." })
+      const marked = (item: { proposalApply?: ProposalApply }) =>
+        item.proposalApply?.id === marker.id && item.proposalApply.digest === marker.digest
+      if (input.baseRevision === 0) {
+        if (yield* deps.storage.create(key(input.todoID), { ...postimage, proposalApply: marker }).pipe(Effect.orDie))
+          return postimage
+        const raw = yield* deps.storage.read<unknown>(key(input.todoID)).pipe(Effect.orDie)
+        const prior = decodeStored(raw)
+        if (prior.proposalApply?.id === marker.id && prior.proposalApply.digest === marker.digest) return postimage
+        return yield* new ConflictError({ id: input.todoID, message: "The proposed new personal Todo already exists." })
+      }
+      const state: { actual?: number; item?: Info; missing?: boolean } = {}
+      const raw = yield* deps.storage
+        .update<Record<string, unknown>>(key(input.todoID), (draft) => {
+          const prior = decodeStored(draft)
+          if (marked(prior)) {
+            state.item = postimage
+            return
+          }
+          if ("deleted" in prior) {
+            state.missing = true
+            return
+          }
+          if (prior.revision !== input.baseRevision || prior.revision === Number.MAX_SAFE_INTEGER) {
+            state.actual = prior.revision
+            return
+          }
+          for (const field of Object.keys(draft)) delete draft[field]
+          Object.assign(draft, postimage, { proposalApply: marker })
+        })
+        .pipe(
+          Effect.catchIf(
+            (err) => Storage.NotFoundError.isInstance(err),
+            () => Effect.succeed(undefined),
+          ),
+          Effect.orDie,
+        )
+      if (state.item) return state.item
+      if (state.actual !== undefined)
+        return yield* new StaleRevisionError({
+          id: input.todoID,
+          operation: "update",
+          expected: input.baseRevision,
+          actual: state.actual,
+          message: "The personal todo changed before this proposal was applied.",
+        })
+      if (raw === undefined || state.missing) return undefined
+      const saved = decodeStored(raw)
+      return "deleted" in saved ? undefined : project(saved)
     })
 
     const reserve = Effect.fn("PersonalTodo.reserveReminder")(function* (item: Info, at: number) {
@@ -937,6 +1032,7 @@ export namespace PersonalTodo {
       replaceSubtasks,
       completeSubtask,
       reopenSubtask,
+      applyProposal,
       remove,
       claimReminders,
       acknowledge,

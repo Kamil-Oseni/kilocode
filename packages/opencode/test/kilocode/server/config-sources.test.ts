@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import * as Log from "@opencode-ai/core/util/log"
 import { Server } from "../../../src/server/server"
 import { resetDatabase } from "../../fixture/db"
@@ -31,7 +30,6 @@ const env = {
   KILO_CONFIG_DIR: process.env.KILO_CONFIG_DIR,
   KILO_DISABLE_PROJECT_CONFIG: process.env.KILO_DISABLE_PROJECT_CONFIG,
   KILO_TEST_MANAGED_CONFIG_DIR: process.env.KILO_TEST_MANAGED_CONFIG_DIR,
-  flagConfig: Flag.KILO_CONFIG,
 }
 
 afterEach(async () => {
@@ -46,7 +44,6 @@ function restore() {
   set("KILO_CONFIG_DIR", env.KILO_CONFIG_DIR)
   set("KILO_DISABLE_PROJECT_CONFIG", env.KILO_DISABLE_PROJECT_CONFIG)
   set("KILO_TEST_MANAGED_CONFIG_DIR", env.KILO_TEST_MANAGED_CONFIG_DIR)
-  Flag.KILO_CONFIG = env.flagConfig
 }
 
 function set(key: keyof typeof process.env, value: string | undefined) {
@@ -78,7 +75,7 @@ describe("config source routes", () => {
         await Bun.write(path.join(dir, "env.json"), "{}")
         await Bun.write(path.join(dir, "kilo.json"), "{}")
 
-        for (const root of [".opencode", ".kilocode", ".kilo"]) {
+        for (const root of [".opencode", ".kilocode", ".kilo", ".raya"]) {
           const local = path.join(dir, root)
           await fs.mkdir(local, { recursive: true })
           await Bun.write(path.join(local, "kilo.jsonc"), "{}")
@@ -99,11 +96,11 @@ describe("config source routes", () => {
     const opencodeFile = path.join(tmp.path, ".opencode", "kilo.jsonc")
     const kilocodeFile = path.join(tmp.path, ".kilocode", "kilo.jsonc")
     const configFile = path.join(tmp.path, ".kilo", "kilo.jsonc")
+    const rayaFile = path.join(tmp.path, ".raya", "kilo.jsonc")
     const extraFile = path.join(tmp.path, "extra", "opencode.json")
     const managedFile = path.join(tmp.path, "managed", "kilo.json")
 
     process.env.KILO_CONFIG = envFile
-    Flag.KILO_CONFIG = envFile
     process.env.KILO_CONFIG_CONTENT = '{"username":"secret-inline-value"}'
     process.env.KILO_CONFIG_DIR = path.join(tmp.path, "extra")
     process.env.KILO_TEST_MANAGED_CONFIG_DIR = path.join(tmp.path, "managed")
@@ -114,8 +111,9 @@ describe("config source routes", () => {
     expect(order(body, envFile)).toBeLessThan(order(body, projectFile))
     expect(order(body, projectFile)).toBeLessThan(order(body, kilocodeFile))
     expect(order(body, kilocodeFile)).toBeLessThan(order(body, configFile))
+    expect(order(body, configFile)).toBeLessThan(order(body, rayaFile))
     expect(body.sources.some((source) => source.path === opencodeFile)).toBe(false)
-    expect(order(body, configFile)).toBeLessThan(order(body, extraFile))
+    expect(order(body, rayaFile)).toBeLessThan(order(body, extraFile))
     expect(inline?.order).toBeGreaterThan(order(body, extraFile))
     expect(inline?.order).toBeLessThan(order(body, managedFile))
 

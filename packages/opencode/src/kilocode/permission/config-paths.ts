@@ -6,9 +6,9 @@ import { KilocodePaths } from "@/kilocode/paths"
 export namespace ConfigProtection {
   /**
    * Config directory prefixes (relative paths, forward-slash normalized).
-   * Matches .kilo/ and legacy .kilocode/ at any depth within the project.
+   * Matches .kilo/, legacy .kilocode/, and the read-only .raya alias at any depth within the project.
    */
-  const CONFIG_DIRS = [".kilo/", ".kilocode/"]
+  const CONFIG_DIRS = [".kilo/", ".kilocode/", ".raya/"]
 
   /**
    * Subdirectories under CONFIG_DIRS that are NOT config files (e.g. plan files).
@@ -20,7 +20,15 @@ export namespace ConfigProtection {
    * Root-level config files that must be protected.
    * Matched only when the relative path has no directory component.
    */
-  const CONFIG_ROOT_FILES = new Set(["kilo.json", "kilo.jsonc", "opencode.json", "opencode.jsonc", "AGENTS.md"])
+  const CONFIG_ROOT_FILES = new Set([
+    "kilo.json",
+    "kilo.jsonc",
+    "opencode.json",
+    "opencode.jsonc",
+    "raya.json",
+    "raya.jsonc",
+    "AGENTS.md",
+  ])
 
   /** Metadata key used to signal the UI to hide the "Allow always" option. */
   export const DISABLE_ALWAYS_KEY = "disableAlways" as const
@@ -147,6 +155,10 @@ export namespace ConfigProtection {
       const root = physical(dir)
       if (within(filepath, dir) || (target && root && within(target, root))) return true
     }
+
+    const raya = path.join(Global.Path.home, ".raya")
+    const root = physical(raya)
+    if (within(filepath, raya) || (target && root && within(target, root))) return true
 
     return false
   }

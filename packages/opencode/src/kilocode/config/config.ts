@@ -37,8 +37,11 @@ export namespace KilocodeConfig {
 
   // ── Config file constants ────────────────────────────────────────────
 
-  /** All config file names in precedence order (kilo + opencode). */
+  /** Canonical config file names retained for update targets and compatibility writes. */
   export const ALL_CONFIG_FILES = ["kilo.jsonc", "kilo.json", "opencode.jsonc", "opencode.json"] as const
+
+  /** Read precedence within a config directory. Raya aliases merge last and are never selected as write targets. */
+  export const READ_CONFIG_FILES = [...ALL_CONFIG_FILES, "raya.json", "raya.jsonc"] as const
 
   /** Config directory suffixes in update-target preference order. */
   export const KILO_DIR_SUFFIXES = [".kilo", ".kilocode"] as const
@@ -444,6 +447,9 @@ export namespace KilocodeConfig {
   /** Global config file names in read-merge order (lowest-to-highest precedence). */
   export const GLOBAL_CONFIG_FILES = ["config.json", "kilo.json", "kilo.jsonc", "opencode.json", "opencode.jsonc"]
 
+  /** Global read precedence. Keep GLOBAL_CONFIG_FILES as the canonical write/migration set. */
+  export const READ_GLOBAL_CONFIG_FILES = [...GLOBAL_CONFIG_FILES, "raya.json", "raya.jsonc"] as const
+
   /**
    * Migrate bash permission for existing users before config is consumed.
    *
@@ -453,13 +459,14 @@ export namespace KilocodeConfig {
    * behavior now that the new default is `bash: "ask"`.
    */
   export async function migrateBashPermission() {
-    const files = GLOBAL_CONFIG_FILES.map((f) => path.join(Global.Path.config, f))
+    const files = READ_GLOBAL_CONFIG_FILES.map((f) => path.join(Global.Path.config, f))
     const legacy = path.join(Global.Path.config, "config")
     const existing = files.filter((f) => existsSync(f))
+    const writable = GLOBAL_CONFIG_FILES.map((f) => path.join(Global.Path.config, f)).filter((f) => existsSync(f))
     const hasLegacy = existsSync(legacy)
 
     // no global config → new user, they'll get the new bash:ask default
-    if (existing.length === 0 && !hasLegacy) return
+    if (writable.length === 0 && !hasLegacy) return
 
     const configs: Array<{ file: string; data: Record<string, unknown> }> = []
     // check if any config file already has an explicit bash permission
@@ -483,7 +490,7 @@ export namespace KilocodeConfig {
     }
 
     // existing user without bash permission → write bash:allow to highest-precedence file
-    const target = existing.length > 0 ? existing[existing.length - 1] : path.join(Global.Path.config, "config.json")
+    const target = writable.length > 0 ? writable[writable.length - 1] : path.join(Global.Path.config, "config.json")
     const text = await Bun.file(target)
       .text()
       .catch(() => "{}")
@@ -618,7 +625,7 @@ export namespace KilocodeConfig {
 
   /** Check whether a directory path should be treated as a config directory (for loading config files). */
   export function isConfigDir(dir: string, flagDir?: string): boolean {
-    return dir.endsWith(".kilo") || dir.endsWith(".kilocode") || dir === flagDir
+    return dir.endsWith(".kilo") || dir.endsWith(".kilocode") || dir.endsWith(".raya") || dir === flagDir
   }
 
   // ── Opencode config migration notice ─────────────────────────────────
@@ -634,7 +641,11 @@ export namespace KilocodeConfig {
    * opencode configuration but no longer reads `.opencode` directories.
    * Returns the existing `.opencode` locations (global + project), highest first.
    */
-  export function detectOpencodeConfig(input: { directory: string; worktree?: string; scanProject: boolean }): string[] {
+  export function detectOpencodeConfig(input: {
+    directory: string
+    worktree?: string
+    scanProject: boolean
+  }): string[] {
     const found: string[] = []
 
     // Global opencode config dir (sibling of the kilo global config dir, e.g. ~/.config/opencode).

@@ -82,8 +82,11 @@ export namespace KilocodeConfigOverlay {
     sources: KilocodeConfigSources.Source[]
   }
 
+  // Canonical targets remain Kilo/OpenCode; Raya names participate only in the read projection.
   const files = ["kilo.jsonc", "kilo.json", "opencode.jsonc", "opencode.json"] as const
+  const readFiles = [...files, "raya.json", "raya.jsonc"] as const
   const dirs = [".kilocode", ".kilo"] as const
+  const readDirs = [...dirs, ".raya"] as const
 
   const fieldPaths = [
     ["model"],
@@ -226,9 +229,9 @@ export namespace KilocodeConfigOverlay {
   }
 
   async function projectFiles(input: { directory: string; worktree?: string }) {
-    const roots = await Filesystem.findUp([...files], input.directory, input.worktree, { rootFirst: true })
-    const found = await Filesystem.findUp([...dirs], input.directory, input.worktree)
-    const nested = found.flatMap((dir) => files.map((file) => path.join(dir, file)))
+    const roots = await Filesystem.findUp([...readFiles], input.directory, input.worktree, { rootFirst: true })
+    const found = await Filesystem.findUp([...readDirs], input.directory, input.worktree)
+    const nested = found.flatMap((dir) => readFiles.map((file) => path.join(dir, file)))
     const checks = await Promise.all(
       [...roots, ...nested].map(async (file) => ({ file, exists: await Bun.file(file).exists() })),
     )
@@ -236,11 +239,16 @@ export namespace KilocodeConfigOverlay {
   }
 
   async function projectDirs(input: { directory: string; worktree?: string }) {
-    return Filesystem.findUp([...dirs], input.directory, input.worktree)
+    return Filesystem.findUp([...readDirs], input.directory, input.worktree)
   }
 
   function globalDirs() {
-    return [Global.Path.config, path.join(Global.Path.home, ".kilocode"), path.join(Global.Path.home, ".kilo")]
+    return [
+      Global.Path.config,
+      path.join(Global.Path.home, ".kilocode"),
+      path.join(Global.Path.home, ".kilo"),
+      path.join(Global.Path.home, ".raya"),
+    ]
   }
 
   // kilocode_change start - root confines untrusted agent {file:} reads

@@ -391,12 +391,17 @@ const layer = Layer.effect(
       // Seed the default global config with the schema for editor completion, but avoid writing when the user
       // explicitly routes config through env-provided paths or content.
       if (!Flag.KILO_CONFIG && !Flag.KILO_CONFIG_DIR && !Flag.KILO_CONFIG_CONTENT) {
+        // kilocode_change start - Raya alias files suppress optional canonical setup writes
         const file = globalConfigFile()
-        if (!existsSync(file)) {
+        const exists = KilocodeConfig.READ_GLOBAL_CONFIG_FILES.some((name) =>
+          existsSync(path.join(Global.Path.config, name)),
+        )
+        if (!exists) {
           yield* fs
             .writeWithDirs(file, JSON.stringify({ $schema: "https://app.kilo.ai/config.json" }, null, 2))
             .pipe(Effect.catch(() => Effect.void))
         }
+        // kilocode_change end
       }
       // kilocode_change - global config is user-owned and trusted to resolve {file:}/{env:} tokens
       result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "config.json"), env, true))
@@ -406,6 +411,16 @@ const layer = Layer.effect(
       // kilocode_change end
       result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "opencode.json"), env, true)) // kilocode_change
       result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "opencode.jsonc"), env, true)) // kilocode_change
+      // kilocode_change start - additive read-only Raya aliases have highest global precedence
+      result = mergeConfig(
+        result,
+        yield* loadFile(path.join(Global.Path.config, "raya.json"), env, true, undefined, undefined, false),
+      )
+      result = mergeConfig(
+        result,
+        yield* loadFile(path.join(Global.Path.config, "raya.jsonc"), env, true, undefined, undefined, false),
+      )
+      // kilocode_change end
 
       const legacy = path.join(Global.Path.config, "config")
       if (existsSync(legacy)) {
@@ -687,12 +702,19 @@ const layer = Layer.effect(
 
         if (!Flag.KILO_DISABLE_PROJECT_CONFIG) {
           // kilocode_change start - also discover kilo.json project files
-          for (const name of ["kilo", "opencode"] as const) {
+          for (const name of ["kilo", "opencode", "raya"] as const) {
             for (const file of yield* ConfigPaths.files(name, ctx.directory, ctx.worktree).pipe(Effect.orDie)) {
               yield* merge(
                 file,
                 // kilocode_change - project config is untrusted: {env:} rejected by substitution; MCP entries with variable-bearing headers dropped pre-substitution, {file:} confined to projectRoot
-                yield* loadFile(file, authEnv, false, { root: projectRoot, source: file }, warnings, setup).pipe(
+                yield* loadFile(
+                  file,
+                  authEnv,
+                  false,
+                  { root: projectRoot, source: file },
+                  warnings,
+                  name === "raya" ? false : setup,
+                ).pipe(
                   Effect.catchDefect((err: unknown) => {
                     caughtWarning(warnings, file, err)
                     return Effect.succeed({} as Info)
@@ -713,7 +735,7 @@ const layer = Layer.effect(
         const directories = yield* ConfigPaths.directories(ctx.directory, ctx.worktree)
         const primary = Flag.KILO_DISABLE_PROJECT_CONFIG
           ? []
-          : yield* primaryPaths(ctx.directory, ctx.worktree, [".kilocode", ".kilo"])
+          : yield* primaryPaths(ctx.directory, ctx.worktree, [".kilocode", ".kilo", ".raya"])
         // Load primary fallbacks before active-worktree config, then track them as local.
         directories.splice(1, 0, ...primary)
         const primarySet = new Set(primary)
@@ -738,12 +760,20 @@ const layer = Layer.effect(
             ? undefined
             : { root: primarySet.has(dir) ? path.dirname(dir) : projectRoot, source: dir }
           if (KilocodeConfig.isConfigDir(dir, Flag.KILO_CONFIG_DIR)) {
-            for (const file of KilocodeConfig.ALL_CONFIG_FILES) {
+            for (const file of KilocodeConfig.READ_CONFIG_FILES) {
               const source = path.join(dir, file)
               yield* Effect.logDebug(`loading config from ${source}`)
               // kilocode_change - untrusted config dirs confine {file:} reads to projectRoot
               const fileScope = dirTrusted ? undefined : { root: projectRoot, source }
-              const next = yield* loadFile(source, authEnv, dirTrusted, fileScope, dirTrusted ? undefined : warnings, setup).pipe(
+              const readonly = dir.endsWith(".raya") || file === "raya.json" || file === "raya.jsonc"
+              const next = yield* loadFile(
+                source,
+                authEnv,
+                dirTrusted,
+                fileScope,
+                dirTrusted ? undefined : warnings,
+                readonly ? false : setup,
+              ).pipe(
                 Effect.catchDefect((err: unknown) => {
                   caughtWarning(warnings, source, err)
                   return Effect.succeed({} as Info)
@@ -758,7 +788,12 @@ const layer = Layer.effect(
           }
           // kilocode_change end
 
-          if (setup) yield* ensureGitignore(dir).pipe(Effect.orDie) // kilocode_change - preserve owned repair source
+          const aliasOnly =
+            dir.endsWith(".raya") ||
+            (dir === Global.Path.config &&
+              !KilocodeConfig.ALL_CONFIG_FILES.some((file) => existsSync(path.join(dir, file))) &&
+              ["raya.json", "raya.jsonc"].some((file) => existsSync(path.join(dir, file))))
+          if (setup && !aliasOnly) yield* ensureGitignore(dir).pipe(Effect.orDie) // kilocode_change - preserve owned repair source
 
           // kilocode_change start - propagate parse errors to the Warning accumulator
           const sourceScopes = (names: readonly string[]) => [
@@ -802,13 +837,13 @@ const layer = Layer.effect(
           // kilocode_change end
         }
 
-        if (process.env.KILO_CONFIG_CONTENT) {
-          // kilocode_change start - capture KILO_CONFIG_CONTENT parse failures as warnings
-          const source = "KILO_CONFIG_CONTENT"
+        if (Flag.KILO_CONFIG_CONTENT) {
+          // kilocode_change start - capture Raya/Kilo inline-config parse failures as warnings
+          const source = process.env.RAYA_CONFIG_CONTENT !== undefined ? "RAYA_CONFIG_CONTENT" : "KILO_CONFIG_CONTENT"
           yield* merge(
             source,
             yield* loadConfig(
-              process.env.KILO_CONFIG_CONTENT,
+              Flag.KILO_CONFIG_CONTENT,
               {
                 dir: ctx.directory,
                 source,
@@ -816,7 +851,7 @@ const layer = Layer.effect(
               undefined,
               true, // kilocode_change - KILO_CONFIG_CONTENT is user-provided, trusted for {file:}/{env:}
             ).pipe(
-              Effect.tap(() => Effect.logDebug("loaded custom config from KILO_CONFIG_CONTENT")),
+              Effect.tap(() => Effect.logDebug("loaded custom config from environment content", { source })),
               Effect.catchDefect((err: unknown) => {
                 caughtWarning(warnings, source, err)
                 return Effect.succeed({} as Info)
@@ -874,10 +909,11 @@ const layer = Layer.effect(
         const managedDir = ConfigManaged.managedConfigDir()
         // kilocode_change start - include kilo.json/kilo.jsonc in managed dir loading
         if (existsSync(managedDir)) {
-          for (const file of KilocodeConfig.ALL_CONFIG_FILES) {
+          for (const file of KilocodeConfig.READ_CONFIG_FILES) {
             const source = path.join(managedDir, file)
             // kilocode_change - MDM/enterprise-managed config is a trusted source
-            yield* merge(source, yield* loadFile(source, undefined, true), "global")
+            const setup = file !== "raya.json" && file !== "raya.jsonc"
+            yield* merge(source, yield* loadFile(source, undefined, true, undefined, undefined, setup), "global")
           }
         }
         // kilocode_change end
@@ -1138,7 +1174,17 @@ const layer = Layer.effect(
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [FSUtil.node, Auth.node, Account.node, Env.node, Npm.node, httpClient, Git.node, EffectFlock.node, Storage.node], // kilocode_change
+  deps: [
+    FSUtil.node,
+    Auth.node,
+    Account.node,
+    Env.node,
+    Npm.node,
+    httpClient,
+    Git.node,
+    EffectFlock.node,
+    Storage.node,
+  ], // kilocode_change
 })
 
 export * as Config from "./config"

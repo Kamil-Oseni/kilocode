@@ -158,7 +158,7 @@ describe("ConfigProtection.isRequest", () => {
   })
 
   test("returns true for edit targeting root config files", () => {
-    for (const file of ["kilo.json", "kilo.jsonc", "AGENTS.md"]) {
+    for (const file of ["kilo.json", "kilo.jsonc", "raya.json", "raya.jsonc", "AGENTS.md"]) {
       const result = ConfigProtection.isRequest({
         permission: "edit",
         patterns: [file],
@@ -176,7 +176,7 @@ describe("ConfigProtection.isRequest", () => {
   })
 
   test("protects package lock files in project config directories", () => {
-    for (const file of [".kilo/package-lock.json", ".kilocode/package-lock.json"]) {
+    for (const file of [".kilo/package-lock.json", ".kilocode/package-lock.json", ".raya/package-lock.json"]) {
       expect(ConfigProtection.isRequest({ permission: "edit", patterns: [file] })).toBe(true)
     }
   })

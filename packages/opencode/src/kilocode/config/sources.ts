@@ -56,8 +56,8 @@ export namespace KilocodeConfigSources {
 
   type Pending = Omit<Source, "order">
 
-  const roots = [".kilocode", ".kilo"] as const
-  const global = ["config.json", "kilo.json", "kilo.jsonc", "opencode.json", "opencode.jsonc"] as const
+  const roots = [".kilocode", ".kilo", ".raya"] as const
+  const global = KilocodeConfig.READ_GLOBAL_CONFIG_FILES
 
   export async function list(input: Input): Promise<Result> {
     const project = Flag.KILO_DISABLE_PROJECT_CONFIG ? [] : await projectSources(input)
@@ -121,8 +121,9 @@ export namespace KilocodeConfigSources {
   async function projectSources(input: Input): Promise<Pending[]> {
     const kilo = await projectFiles("kilo", input)
     const opencode = await projectFiles("opencode", input)
+    const raya = await projectFiles("raya", input)
     return Promise.all(
-      [...kilo, ...opencode].map((file) =>
+      [...kilo, ...opencode, ...raya].map((file) =>
         fileSource({ kind: "project-file", scope: "project", label: "Project config", file }),
       ),
     )
@@ -153,7 +154,7 @@ export namespace KilocodeConfigSources {
         editable: scope !== "managed" && scope !== "cloud",
       })
 
-      for (const name of KilocodeConfig.ALL_CONFIG_FILES) {
+      for (const name of KilocodeConfig.READ_CONFIG_FILES) {
         const file = path.join(dir, name)
         result.push(await fileSource({ kind: "config-dir-file", scope, label: `Config directory ${name}`, file }))
       }
@@ -170,12 +171,13 @@ export namespace KilocodeConfigSources {
 
   function envContentSources(): Pending[] {
     const sources: Pending[] = []
-    if (process.env.KILO_CONFIG_CONTENT) {
+    if (Flag.KILO_CONFIG_CONTENT) {
+      const source = process.env.RAYA_CONFIG_CONTENT !== undefined ? "RAYA_CONFIG_CONTENT" : "KILO_CONFIG_CONTENT"
       sources.push({
         kind: "env-content",
         scope: "env",
-        label: "KILO_CONFIG_CONTENT",
-        source: "KILO_CONFIG_CONTENT",
+        label: source,
+        source,
         exists: true,
         editable: false,
         reason: "Inline config content from the process environment; value is not exposed.",
@@ -225,7 +227,7 @@ export namespace KilocodeConfigSources {
   async function managedSources(): Promise<Pending[]> {
     const dir = ConfigManaged.managedConfigDir()
     const files = await Promise.all(
-      KilocodeConfig.ALL_CONFIG_FILES.map((name) =>
+      KilocodeConfig.READ_CONFIG_FILES.map((name) =>
         fileSource({
           kind: "managed-file",
           scope: "managed",

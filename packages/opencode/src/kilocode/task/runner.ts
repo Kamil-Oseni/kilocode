@@ -591,6 +591,13 @@ export namespace RayaTaskRunner {
       return false
     })
 
+    const removing = Effect.fn("RayaTaskRunner.removing")(function* (id: string) {
+      const claim = yield* inspect(input.storage, id)
+      if (!claim) return false
+      if (!("runID" in claim)) return true
+      return claim.operation === "remove"
+    })
+
     const fetch = (id: string) =>
       Effect.gen(function* () {
         const live = yield* tasks
@@ -615,6 +622,8 @@ export namespace RayaTaskRunner {
       const found = yield* fetch(input.recipientID)
       if (!found) return yield* new RayaTask.NotFoundError({ message: "Agent not found" })
       const recipient = found.agent
+      if (yield* removing(recipient.id))
+        return yield* new RayaTask.GuardError({ message: "This worker is being removed and cannot accept new work." })
       if (input.parentRunID) {
         const history = yield* tasks.runsFor(sender.id)
         if (!history.some((run) => run.id === input.parentRunID))
@@ -622,6 +631,18 @@ export namespace RayaTaskRunner {
       }
       yield* lapse(Date.now())
       const admitted = yield* errands.admit(input, sender, recipient, found.gone)
+      const available = yield* tasks
+        .get(recipient.id)
+        .pipe(Effect.catchTag("RayaTask.NotFoundError", () => Effect.succeed(undefined)))
+      if ((!available || (yield* removing(recipient.id))) && admitted.record.state !== "failed")
+        return yield* errands.finish(
+          admitted.record.id,
+          "failed",
+          recipient,
+          undefined,
+          undefined,
+          "This worker was removed before the request could start.",
+        )
       if ((yield* busy(recipient.id)) || admitted.record.state !== "queued") return admitted.record
       const taken = yield* errands.take(recipient.id)
       if (!taken) return admitted.record

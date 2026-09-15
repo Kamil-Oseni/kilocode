@@ -329,6 +329,78 @@ test("organization authority is rechecked after the worker startup claim is acqu
   )
 })
 
+test("a durable removal owner refuses concurrent delegation admission", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const base = memory()
+      const entered = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const storage = {
+        ...base,
+        create: (key: string[], value: unknown) => {
+          const operation = value && typeof value === "object" && "operation" in value ? value.operation : undefined
+          return base
+            .create(key, value)
+            .pipe(
+              Effect.tap((created) =>
+                created && key[1] === "agent-claims" && operation === "remove"
+                  ? Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release)))
+                  : Effect.void,
+              ),
+            )
+        },
+      }
+      const starts: string[] = []
+      const runner = RayaTaskRunner.make({
+        database,
+        storage,
+        sessions: {
+          create: () =>
+            Effect.sync(() => {
+              starts.push("start")
+              return session("ses_removal_race")
+            }),
+          get: () => Effect.die("unused"),
+          messages: () => Effect.succeed([]),
+          children: () => Effect.succeed([]),
+        },
+      })
+      const chief = yield* runner.tasks.create({
+        name: "Chief",
+        objective: "Assign work",
+        access: "brief",
+        schedule: { kind: "manual" },
+      })
+      const books = yield* runner.tasks.create({
+        name: "Books",
+        objective: "Review accounts",
+        access: "brief",
+        schedule: { kind: "manual" },
+      })
+      const removal = yield* runner.tasks.remove(books.id).pipe(Effect.forkChild)
+      yield* Deferred.await(entered)
+
+      const denied = yield* runner
+        .delegate({
+          source: "dlg_removal_race",
+          senderID: chief.id,
+          recipientID: books.id,
+          objective: "Review the close.",
+        })
+        .pipe(Effect.flip)
+      expect(denied._tag).toBe("RayaTask.GuardError")
+      expect(denied.message).toContain("being removed")
+      expect(yield* RayaTaskDelegation.make(database).lookup("dlg_removal_race")).toBeUndefined()
+      expect(starts).toEqual([])
+
+      yield* Deferred.succeed(release, undefined)
+      expect(yield* Fiber.join(removal)).toBe(true)
+      expect(Exit.isFailure(yield* runner.tasks.get(books.id).pipe(Effect.exit))).toBe(true)
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
 test("restart resumes an accepted delegation that stopped before its startup claim", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {

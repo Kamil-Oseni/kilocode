@@ -35,6 +35,7 @@ import { capabilitiesHandlers } from "./handlers/capabilities"
 import { telemetryHandlers } from "./handlers/telemetry"
 import { voiceHandlers } from "./handlers/voice" // raya_change - realtime voice async plane
 import { personalTodoHandlers } from "./handlers/personal-todo"
+import { focusTimerHandlers } from "./handlers/focus-timer"
 import { adminHandlers } from "./handlers/admin"
 
 export const provide = Layer.provide([
@@ -61,6 +62,7 @@ export const provide = Layer.provide([
   telemetryHandlers,
   voiceHandlers, // raya_change - realtime voice async plane
   personalTodoHandlers,
+  focusTimerHandlers,
   adminHandlers.pipe(Layer.provide(RayaAdminLog.layer)),
 ])
 

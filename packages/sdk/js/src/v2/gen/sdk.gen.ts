@@ -532,6 +532,16 @@ import type {
   RayaAdminHealthResponses,
   RayaAdminLogsErrors,
   RayaAdminLogsResponses,
+  RayaFocusTimerGetErrors,
+  RayaFocusTimerGetResponses,
+  RayaFocusTimerPauseErrors,
+  RayaFocusTimerPauseResponses,
+  RayaFocusTimerResetErrors,
+  RayaFocusTimerResetResponses,
+  RayaFocusTimerResumeErrors,
+  RayaFocusTimerResumeResponses,
+  RayaFocusTimerStartErrors,
+  RayaFocusTimerStartResponses,
   RayaPersonalTodoCreateErrors,
   RayaPersonalTodoCreateResponses,
   RayaPersonalTodoDeleteErrors,
@@ -13704,6 +13714,194 @@ export class PersonalTodo extends HeyApiClient {
   }
 }
 
+export class FocusTimer extends HeyApiClient {
+  /**
+   * Get the focus timer
+   *
+   * Read restart-safe focus progress derived from persisted wall-clock timestamps.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<RayaFocusTimerGetResponses, RayaFocusTimerGetErrors, ThrowOnError>({
+      url: "/raya/focus-timer",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Start the focus timer
+   *
+   * Start a revision-fenced focus timer, optionally linked to an exact personal todo.
+   */
+  public start<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      revision?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      durationMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      todoID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "revision" },
+            { in: "body", key: "durationMs" },
+            { in: "body", key: "todoID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<RayaFocusTimerStartResponses, RayaFocusTimerStartErrors, ThrowOnError>(
+      {
+        url: "/raya/focus-timer/start",
+        ...options,
+        ...params,
+        headers: {
+          "Content-Type": "application/json",
+          ...options?.headers,
+          ...params.headers,
+        },
+      },
+    )
+  }
+
+  /**
+   * Pause the focus timer
+   */
+  public pause<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      revision?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "revision" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<RayaFocusTimerPauseResponses, RayaFocusTimerPauseErrors, ThrowOnError>(
+      {
+        url: "/raya/focus-timer/pause",
+        ...options,
+        ...params,
+        headers: {
+          "Content-Type": "application/json",
+          ...options?.headers,
+          ...params.headers,
+        },
+      },
+    )
+  }
+
+  /**
+   * Resume the focus timer
+   */
+  public resume<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      revision?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "revision" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      RayaFocusTimerResumeResponses,
+      RayaFocusTimerResumeErrors,
+      ThrowOnError
+    >({
+      url: "/raya/focus-timer/resume",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Reset the focus timer
+   */
+  public reset<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      revision?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "revision" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<RayaFocusTimerResetResponses, RayaFocusTimerResetErrors, ThrowOnError>(
+      {
+        url: "/raya/focus-timer/reset",
+        ...options,
+        ...params,
+        headers: {
+          "Content-Type": "application/json",
+          ...options?.headers,
+          ...params.headers,
+        },
+      },
+    )
+  }
+}
+
 export class Admin extends HeyApiClient {
   /**
    * Get subsystem health
@@ -13774,6 +13972,11 @@ export class Raya extends HeyApiClient {
   private _personalTodo?: PersonalTodo
   get personalTodo(): PersonalTodo {
     return (this._personalTodo ??= new PersonalTodo({ client: this.client }))
+  }
+
+  private _focusTimer?: FocusTimer
+  get focusTimer(): FocusTimer {
+    return (this._focusTimer ??= new FocusTimer({ client: this.client }))
   }
 
   private _admin?: Admin

@@ -6046,6 +6046,16 @@ export type PersonalTodoStaleRevisionError = {
   }
 }
 
+export type FocusTimerStaleRevisionError = {
+  name: "FocusTimerStaleRevisionError"
+  data: {
+    operation: "start" | "pause" | "resume" | "reset"
+    expected: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    actual: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    message: string
+  }
+}
+
 export type UnauthorizedError = {
   _tag: "UnauthorizedError"
   message: string
@@ -28165,6 +28175,261 @@ export type RayaPersonalTodoUpdateResponses = {
 }
 
 export type RayaPersonalTodoUpdateResponse = RayaPersonalTodoUpdateResponses[keyof RayaPersonalTodoUpdateResponses]
+
+export type RayaFocusTimerGetData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/raya/focus-timer"
+}
+
+export type RayaFocusTimerGetErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * FocusTimerStaleRevisionError
+   */
+  409: FocusTimerStaleRevisionError
+}
+
+export type RayaFocusTimerGetError = RayaFocusTimerGetErrors[keyof RayaFocusTimerGetErrors]
+
+export type RayaFocusTimerGetResponses = {
+  /**
+   * Focus timer
+   */
+  200: {
+    version: 1
+    state: "idle" | "running" | "paused" | "completed"
+    durationMs?: number
+    todoID?: string
+    elapsedMs: number
+    startedAt?: number
+    runStartedAt?: number
+    updatedAt: number
+    completedAt?: number
+    revision: number
+    remainingMs: number
+    todoExists?: boolean
+  }
+}
+
+export type RayaFocusTimerGetResponse = RayaFocusTimerGetResponses[keyof RayaFocusTimerGetResponses]
+
+export type RayaFocusTimerStartData = {
+  body?: {
+    revision: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    durationMs: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    todoID?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/raya/focus-timer/start"
+}
+
+export type RayaFocusTimerStartErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * FocusTimerStaleRevisionError
+   */
+  409: FocusTimerStaleRevisionError
+}
+
+export type RayaFocusTimerStartError = RayaFocusTimerStartErrors[keyof RayaFocusTimerStartErrors]
+
+export type RayaFocusTimerStartResponses = {
+  /**
+   * Started focus timer
+   */
+  200: {
+    version: 1
+    state: "idle" | "running" | "paused" | "completed"
+    durationMs?: number
+    todoID?: string
+    elapsedMs: number
+    startedAt?: number
+    runStartedAt?: number
+    updatedAt: number
+    completedAt?: number
+    revision: number
+    remainingMs: number
+    todoExists?: boolean
+  }
+}
+
+export type RayaFocusTimerStartResponse = RayaFocusTimerStartResponses[keyof RayaFocusTimerStartResponses]
+
+export type RayaFocusTimerPauseData = {
+  body?: {
+    revision: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/raya/focus-timer/pause"
+}
+
+export type RayaFocusTimerPauseErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * FocusTimerStaleRevisionError
+   */
+  409: FocusTimerStaleRevisionError
+}
+
+export type RayaFocusTimerPauseError = RayaFocusTimerPauseErrors[keyof RayaFocusTimerPauseErrors]
+
+export type RayaFocusTimerPauseResponses = {
+  /**
+   * Paused focus timer
+   */
+  200: {
+    version: 1
+    state: "idle" | "running" | "paused" | "completed"
+    durationMs?: number
+    todoID?: string
+    elapsedMs: number
+    startedAt?: number
+    runStartedAt?: number
+    updatedAt: number
+    completedAt?: number
+    revision: number
+    remainingMs: number
+    todoExists?: boolean
+  }
+}
+
+export type RayaFocusTimerPauseResponse = RayaFocusTimerPauseResponses[keyof RayaFocusTimerPauseResponses]
+
+export type RayaFocusTimerResumeData = {
+  body?: {
+    revision: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/raya/focus-timer/resume"
+}
+
+export type RayaFocusTimerResumeErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * FocusTimerStaleRevisionError
+   */
+  409: FocusTimerStaleRevisionError
+}
+
+export type RayaFocusTimerResumeError = RayaFocusTimerResumeErrors[keyof RayaFocusTimerResumeErrors]
+
+export type RayaFocusTimerResumeResponses = {
+  /**
+   * Resumed focus timer
+   */
+  200: {
+    version: 1
+    state: "idle" | "running" | "paused" | "completed"
+    durationMs?: number
+    todoID?: string
+    elapsedMs: number
+    startedAt?: number
+    runStartedAt?: number
+    updatedAt: number
+    completedAt?: number
+    revision: number
+    remainingMs: number
+    todoExists?: boolean
+  }
+}
+
+export type RayaFocusTimerResumeResponse = RayaFocusTimerResumeResponses[keyof RayaFocusTimerResumeResponses]
+
+export type RayaFocusTimerResetData = {
+  body?: {
+    revision: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/raya/focus-timer/reset"
+}
+
+export type RayaFocusTimerResetErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * FocusTimerStaleRevisionError
+   */
+  409: FocusTimerStaleRevisionError
+}
+
+export type RayaFocusTimerResetError = RayaFocusTimerResetErrors[keyof RayaFocusTimerResetErrors]
+
+export type RayaFocusTimerResetResponses = {
+  /**
+   * Reset focus timer
+   */
+  200: {
+    version: 1
+    state: "idle" | "running" | "paused" | "completed"
+    durationMs?: number
+    todoID?: string
+    elapsedMs: number
+    startedAt?: number
+    runStartedAt?: number
+    updatedAt: number
+    completedAt?: number
+    revision: number
+    remainingMs: number
+    todoExists?: boolean
+  }
+}
+
+export type RayaFocusTimerResetResponse = RayaFocusTimerResetResponses[keyof RayaFocusTimerResetResponses]
 
 export type RayaAdminHealthData = {
   body?: never

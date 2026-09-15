@@ -49991,6 +49991,873 @@
         ]
       }
     },
+    "/raya/focus-timer": {
+      "get": {
+        "tags": ["raya-focus-timer"],
+        "operationId": "raya.focusTimer.get",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Focus timer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "number",
+                      "enum": [1]
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": ["idle", "running", "paused", "completed"]
+                    },
+                    "durationMs": {
+                      "type": "integer",
+                      "minimum": 60000,
+                      "maximum": 86400000
+                    },
+                    "todoID": {
+                      "type": "string"
+                    },
+                    "elapsedMs": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 86400000
+                    },
+                    "startedAt": {
+                      "type": "number",
+                      "minimum": -8640000000000000,
+                      "maximum": 8640000000000000
+                    },
+                    "runStartedAt": {
+                      "type": "number",
+                      "minimum": -8640000000000000,
+                      "maximum": 8640000000000000
+                    },
+                    "updatedAt": {
+                      "type": "number",
+                      "minimum": -8640000000000000,
+                      "maximum": 8640000000000000
+                    },
+                    "completedAt": {
+                      "type": "number",
+                      "minimum": -8640000000000000,
+                      "maximum": 8640000000000000
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "remainingMs": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 86400000
+                    },
+                    "todoExists": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["version", "state", "elapsedMs", "updatedAt", "revision", "remainingMs"],
+                  "additionalProperties": false,
+                  "description": "Focus timer"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "FocusTimerStaleRevisionError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FocusTimerStaleRevisionError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Read restart-safe focus progress derived from persisted wall-clock timestamps.",
+        "summary": "Get the focus timer",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.raya.focusTimer.get({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/raya/focus-timer/start": {
+      "post": {
+        "tags": ["raya-focus-timer"],
+        "operationId": "raya.focusTimer.start",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Started focus timer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "number",
+                      "enum": [1]
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": ["idle", "running", "paused", "completed"]
+                    },
+                    "durationMs": {
+                      "type": "integer",
+                      "minimum": 60000,
+                      "maximum": 86400000
+                    },
+                    "todoID": {
+                      "type": "string"
+                    },
+                    "elapsedMs": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 86400000
+                    },
+                    "startedAt": {
+                      "type": "number",
+                      "minimum": -8640000000000000,
+                      "maximum": 8640000000000000
+                    },
+                    "runStartedAt": {
+                      "type": "number",
+                      "minimum": -8640000000000000,
+                      "maximum": 8640000000000000
+                    },
+                    "updatedAt": {
+                      "type": "number",
+                      "minimum": -8640000000000000,
+                      "maximum": 8640000000000000
+                    },
+                    "completedAt": {
+                      "type": "number",
+                      "minimum": -8640000000000000,
+                      "maximum": 8640000000000000
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "remainingMs": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 86400000
+                    },
+                    "todoExists": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["version", "state", "elapsedMs", "updatedAt", "revision", "remainingMs"],
+                  "additionalProperties": false,
+                  "description": "Started focus timer"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "FocusTimerStaleRevisionError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FocusTimerStaleRevisionError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Start a revision-fenced focus timer, optionally linked to an exact personal todo.",
+        "summary": "Start the focus timer",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "revision": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  },
+                  "durationMs": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  },
+                  "todoID": {
+                    "type": "string"
+                  }
+                },
+                "required": ["revision", "durationMs"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.raya.focusTimer.start({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/raya/focus-timer/pause": {
+      "post": {
+        "tags": ["raya-focus-timer"],
+        "operationId": "raya.focusTimer.pause",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paused focus timer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "number",
+                      "enum": [1]
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": ["idle", "running", "paused", "completed"]
+                    },
+                    "durationMs": {
+                      "type": "integer",
+                      "minimum": 60000,
+                      "maximum": 86400000
+                    },
+                    "todoID": {
+                      "type": "string"
+                    },
+                    "elapsedMs": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 86400000
+                    },
+                    "startedAt": {
+                      "type": "number",
+                      "minimum": -8640000000000000,
+                      "maximum": 8640000000000000
+                    },
+                    "runStartedAt": {
+                      "type": "number",
+                      "minimum": -8640000000000000,
+                      "maximum": 8640000000000000
+                    },
+                    "updatedAt": {
+                      "type": "number",
+                      "minimum": -8640000000000000,
+                      "maximum": 8640000000000000
+                    },
+                    "completedAt": {
+                      "type": "number",
+                      "minimum": -8640000000000000,
+                      "maximum": 8640000000000000
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "remainingMs": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 86400000
+                    },
+                    "todoExists": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["version", "state", "elapsedMs", "updatedAt", "revision", "remainingMs"],
+                  "additionalProperties": false,
+                  "description": "Paused focus timer"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "FocusTimerStaleRevisionError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FocusTimerStaleRevisionError"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Pause the focus timer",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "revision": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  }
+                },
+                "required": ["revision"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.raya.focusTimer.pause({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/raya/focus-timer/resume": {
+      "post": {
+        "tags": ["raya-focus-timer"],
+        "operationId": "raya.focusTimer.resume",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resumed focus timer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "number",
+                      "enum": [1]
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": ["idle", "running", "paused", "completed"]
+                    },
+                    "durationMs": {
+                      "type": "integer",
+                      "minimum": 60000,
+                      "maximum": 86400000
+                    },
+                    "todoID": {
+                      "type": "string"
+                    },
+                    "elapsedMs": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 86400000
+                    },
+                    "startedAt": {
+                      "type": "number",
+                      "minimum": -8640000000000000,
+                      "maximum": 8640000000000000
+                    },
+                    "runStartedAt": {
+                      "type": "number",
+                      "minimum": -8640000000000000,
+                      "maximum": 8640000000000000
+                    },
+                    "updatedAt": {
+                      "type": "number",
+                      "minimum": -8640000000000000,
+                      "maximum": 8640000000000000
+                    },
+                    "completedAt": {
+                      "type": "number",
+                      "minimum": -8640000000000000,
+                      "maximum": 8640000000000000
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "remainingMs": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 86400000
+                    },
+                    "todoExists": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["version", "state", "elapsedMs", "updatedAt", "revision", "remainingMs"],
+                  "additionalProperties": false,
+                  "description": "Resumed focus timer"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "FocusTimerStaleRevisionError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FocusTimerStaleRevisionError"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Resume the focus timer",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "revision": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  }
+                },
+                "required": ["revision"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.raya.focusTimer.resume({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/raya/focus-timer/reset": {
+      "post": {
+        "tags": ["raya-focus-timer"],
+        "operationId": "raya.focusTimer.reset",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reset focus timer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "number",
+                      "enum": [1]
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": ["idle", "running", "paused", "completed"]
+                    },
+                    "durationMs": {
+                      "type": "integer",
+                      "minimum": 60000,
+                      "maximum": 86400000
+                    },
+                    "todoID": {
+                      "type": "string"
+                    },
+                    "elapsedMs": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 86400000
+                    },
+                    "startedAt": {
+                      "type": "number",
+                      "minimum": -8640000000000000,
+                      "maximum": 8640000000000000
+                    },
+                    "runStartedAt": {
+                      "type": "number",
+                      "minimum": -8640000000000000,
+                      "maximum": 8640000000000000
+                    },
+                    "updatedAt": {
+                      "type": "number",
+                      "minimum": -8640000000000000,
+                      "maximum": 8640000000000000
+                    },
+                    "completedAt": {
+                      "type": "number",
+                      "minimum": -8640000000000000,
+                      "maximum": 8640000000000000
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "remainingMs": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 86400000
+                    },
+                    "todoExists": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["version", "state", "elapsedMs", "updatedAt", "revision", "remainingMs"],
+                  "additionalProperties": false,
+                  "description": "Reset focus timer"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "FocusTimerStaleRevisionError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FocusTimerStaleRevisionError"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Reset the focus timer",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "revision": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  }
+                },
+                "required": ["revision"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.raya.focusTimer.reset({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/raya/admin/health": {
       "get": {
         "tags": ["raya-admin"],
@@ -75314,6 +76181,77 @@
         "required": ["name", "data"],
         "additionalProperties": false
       },
+      "FocusTimerStaleRevisionError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["FocusTimerStaleRevisionError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": ["start", "pause", "resume", "reset"]
+              },
+              "expected": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["NaN"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["-Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              },
+              "actual": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["NaN"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["-Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["operation", "expected", "actual", "message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
       "UnauthorizedError": {
         "type": "object",
         "properties": {
@@ -97287,6 +98225,9 @@
     },
     {
       "name": "raya-personal-todo"
+    },
+    {
+      "name": "raya-focus-timer"
     },
     {
       "name": "raya-admin"

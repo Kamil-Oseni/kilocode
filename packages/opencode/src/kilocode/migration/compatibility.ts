@@ -103,14 +103,21 @@ export namespace RayaMigrationLedger {
     "owner-approval",
   ]
 
-  const env = ["CONFIG", "CONFIG_CONTENT", "CONFIG_DIR", "AUTH_CONTENT", "DB", "GIT_BASH_PATH", "MODELS_PATH"].map(
-    (name) => ({
-      kind: `environment:${name.toLowerCase()}`,
-      raya: `RAYA_${name}`,
-      legacy: `KILO_${name}`,
-      policy: "raya-wins-legacy-write" as const,
-    }),
-  )
+  const env = [
+    "CONFIG",
+    "CONFIG_CONTENT",
+    "CONFIG_DIR",
+    "AUTH_CONTENT",
+    "DB",
+    "GIT_BASH_PATH",
+    "MODELS_PATH",
+    "BIN_PATH",
+  ].map((name) => ({
+    kind: `environment:${name.toLowerCase()}`,
+    raya: `RAYA_${name}`,
+    legacy: `KILO_${name}`,
+    policy: "raya-wins-legacy-write" as const,
+  }))
 
   const configs = ["config.json", "kilo.json", "kilo.jsonc", "opencode.json", "opencode.jsonc"].map((name) => ({
     kind: "configuration:file",
@@ -205,7 +212,6 @@ export namespace RayaMigrationLedger {
         { kind: "executable:path", legacy: "bin/kilo", policy: "legacy-canonical" },
         { kind: "executable:name", legacy: "kilo", policy: "legacy-canonical" },
         { kind: "executable:name", legacy: "kilo.exe", policy: "legacy-canonical" },
-        { kind: "environment:binary-override", legacy: "KILO_BIN_PATH", policy: "legacy-canonical" },
       ],
       required: future,
       evidence: [],
@@ -352,8 +358,8 @@ export namespace RayaMigrationLedger {
       baseline: baseline ?? {
         source: "script/raya-brand-inventory.json",
         category: "compatibility-key",
-        count: 35_108,
-        digest: "fc649dbb66a58e13c9e2f31d2cb1f269afff18d63f9902ca9c7ecb7a8ef5c497",
+        count: 35_122,
+        digest: "b39cd3ef6f5dd069efd54b8104266076faa58d47e7cff4b5da37130daa991b5c",
       },
       entries: input.map((item) => ({ ...item, cutoverReady: false as const })),
     })

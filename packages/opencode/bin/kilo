@@ -80,7 +80,7 @@ function run(target, fallback) {
   })
 }
 
-const envPath = process.env.KILO_BIN_PATH
+const envPath = process.env.RAYA_BIN_PATH ?? process.env.KILO_BIN_PATH // kilocode_change - additive Raya override
 
 const scriptPath = fs.realpathSync(__filename)
 const scriptDir = path.dirname(scriptPath)
@@ -225,7 +225,7 @@ function findBinary(startDir) {
 const resolved = envPath || (fs.existsSync(cached) ? cached : findBinary(scriptDir))
 if (!resolved) {
   console.error(
-    "It seems that your package manager failed to install the right version of the Kilo CLI for your platform. You can try manually installing " +
+    "It seems that your package manager failed to install the right version of the Raya CLI for your platform. You can try manually installing " + // kilocode_change
       names.map((n) => `\"${n}\"`).join(" or ") +
       " package",
   )

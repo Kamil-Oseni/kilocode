@@ -6,6 +6,14 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-15 16:23 America/Toronto - Preserve the Raya npm binary override
+
+`packages/opencode/bin/kilo` now resolves `RAYA_BIN_PATH ?? KILO_BIN_PATH`. Preserve that exact precedence and keep all three npm commands mapped to this same wrapper. The physical artifact and platform-package grammar remain Kilo compatibility identities. The missing-binary message may say Raya CLI, but it must keep printing the real `@kilocode/cli-*` package names until those packages receive a separate published compatibility migration.
+
+The real wrapper test uses distinct executable scripts and passes the selected cases at 2 tests / 8 assertions: both names launch the Raya path, while a legacy-only environment launches the Kilo path. It has a 15-second case timeout because starting two nested Windows Bun/wrapper processes takes about seven seconds on this machine. Do not replace it with a string-only assertion. The ledger suite passes 3 / 17 and the full bounded CLI typecheck passes. The environment ledger/checker now contains `BIN_PATH` after the seven earlier pairs, and the physical-executable entry no longer treats the override as legacy-only.
+
+The reviewed inventory is 68,989 total: public 1,693; compatibility 35,122; provenance 5,686; internal 26,488.
+
 ## ChatGPT 2026-09-15 16:04 America/Toronto - Preserve the new operator path aliases
 
 `packages/core/src/flag/flag.ts` now resolves `RAYA_GIT_BASH_PATH` over `KILO_GIT_BASH_PATH` and `RAYA_MODELS_PATH` over `KILO_MODELS_PATH` through `EnvAlias`. Preserve the legacy `Flag.KILO_*` property names because current callers and tests use them. Each remains mutable: setters write both environment names and clearing deletes both. Do not turn this compatibility slice into a catalog move, Git Bash discovery change or legacy-variable removal.

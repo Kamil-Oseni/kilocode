@@ -12,10 +12,38 @@ describe("npm install artifact behavior", () => {
   test("keeps the CLI wrapper contract", async () => {
     const text = await fs.readFile(wrapper, "utf8")
     expect(text.startsWith("#!/usr/bin/env node")).toBe(true)
-    expect(text).toContain("const envPath = process.env.KILO_BIN_PATH")
+    expect(text).toContain("const envPath = process.env.RAYA_BIN_PATH ?? process.env.KILO_BIN_PATH")
     expect(text).toContain('const base = "@kilocode/cli-" + platform + "-" + arch')
     expect(text).toContain("function findBinary(startDir)")
   })
+
+  test("prefers the Raya binary override and preserves the Kilo fallback", async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "raya-bin-override-"))
+    try {
+      const ext = process.platform === "win32" ? ".cmd" : ".sh"
+      const raya = path.join(tmp, `raya${ext}`)
+      const legacy = path.join(tmp, `legacy${ext}`)
+      const script = (value: string) =>
+        process.platform === "win32" ? `@echo off\r\necho ${value}\r\n` : `#!/bin/sh\nprintf '${value}\\n'\n`
+      await Promise.all([fs.writeFile(raya, script("raya")), fs.writeFile(legacy, script("legacy"))])
+      if (process.platform !== "win32") await Promise.all([fs.chmod(raya, 0o755), fs.chmod(legacy, 0o755)])
+      const run = (env: NodeJS.ProcessEnv) =>
+        Bun.spawn([process.execPath, wrapper], {
+          cwd: root,
+          env: { ...process.env, ...env },
+          stdout: "pipe",
+          stderr: "pipe",
+        })
+      const preferred = run({ RAYA_BIN_PATH: raya, KILO_BIN_PATH: legacy })
+      expect(await preferred.exited).toBe(0)
+      expect((await new Response(preferred.stdout).text()).trim()).toBe("raya")
+      const fallback = run({ RAYA_BIN_PATH: undefined, KILO_BIN_PATH: legacy })
+      expect(await fallback.exited).toBe(0)
+      expect((await new Response(fallback.stdout).text()).trim()).toBe("legacy")
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true })
+    }
+  }, 15_000)
 
   test("copies cached binary runtime resources during postinstall", async () => {
     if (process.platform === "win32") return

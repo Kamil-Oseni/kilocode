@@ -4,6 +4,14 @@ This is the single, prioritized source of truth for what to build into Raya next
 
 The order is deliberate. Features are ranked by what is most important to have first, weighing three things at once: how much it changes what Raya can do for you day to day, whether it makes an already-shipped feature actually reliable, and whether other features on the list depend on it. Reliability of things you already touch beats breadth of things you don't, and foundations that unlock several later goals are pulled forward even when they are less glamorous than the ambitious cloud work near the bottom.
 
+## Release staging decision — Version 3 migrations
+
+The compatibility-breaking Kilo-to-Raya identity migration and a Raya-owned VS Code distribution are deferred to **Version 3**, after the current extension and backend are stable. They are not part of the active numbered build order.
+
+Current releases continue improving visible Raya branding while retaining the existing package IDs, `kilo` command/executable, provider IDs, API/event paths, storage/config/environment keys, profile folders, telemetry/auth identities, marketplace/update identities and the `eden.raya` extension architecture. Keep the classified brand inventory active; do not begin dual-read/write identity migration, remove legacy aliases or create the VS Code fork yet.
+
+Version 3 opens only after feature contracts, restart/rebuild persistence, install/rollback, security boundaries and the supported extension UX have sustained acceptance evidence. Its first deliverables are reviewed migration/editor ADRs, a lossless legacy-profile upgrade proof, a published compatibility window, reproducible signed editor artifacts and one complete upgrade/rollback cycle with the extension still supported.
+
 ## Completed (as of 6 September 2026)
 
 Goals 1, 2, and 4 are in the product. They were built as one pass because the original ranking already said routines needed a glanceable blocked state and a structured plan you can hand to a background run. The work is on `main` and installed as a VS Code snapshot (`7.4.23-snapshot+1b4dc98813`). Goal 3 (canvas) was left untouched on purpose.
@@ -903,4 +911,3 @@ DONE = a bad evaluate expression returns one repairable tool error and the panel
 This is not a goal; it is the discipline to apply to every goal above. The Grok Bot essay's quietest lesson is that the best agent interface removes knobs and caps scope rather than accumulating them. The settings search that already shipped makes things findable, but the deeper move is to ask, for each feature here, whether it helps you **delegate** or just gives you one more thing to **manage**.
 
 Concretely, hold each of these builds to three tests before calling it done. Default to the summary and reveal detail on demand, so the presence-as-state view and every transcript stay calm rather than becoming a firehose. Prefer a sensible default over a new setting, and when a setting is genuinely needed, make sure it is discoverable through search rather than buried. And cap scope deliberately — a small number of assignable agents, a bounded run history, a short list of first-class states — because a constrained surface you trust to run unattended is worth more than an unlimited one you have to babysit. The routines feature is the clearest expression of this principle: its success is measured not by how many controls it exposes, but by how rarely you have to touch it once a job is assigned.
-

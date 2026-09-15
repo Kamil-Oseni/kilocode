@@ -2,6 +2,12 @@
 
 > **Goal status: ACTIVE — implementation is continuing.** Continue from local product source `afc8101bfe`; installed snapshot source is `bfd53bdb3e`. Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. `origin/main` is still `d894fc0eb9` because the normal pre-push hook reaches existing cross-package `@opencode-ai/tui` type failures. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 
+## ChatGPT 2026-09-15 10:58 America/Toronto - Keep Kilo compatibility and VS Code extension through stability
+
+The owner has deferred the compatibility-breaking Kilo migration and the Raya-owned VS Code distribution to **Version 3**. Remove both from the active implementation queue. Current releases continue as the `eden.raya` VS Code extension backed by the existing compatible CLI/runtime identities. Continue small user-visible Raya copy/icon/accessibility corrections and keep the inventory guard, but do not rename or migrate package IDs, the `kilo` command/executable, provider IDs, API/event paths, storage/config/environment keys, profile folders, telemetry/auth identities, marketplace identity or update/release identity.
+
+Version 3 begins only after the current feature set, backend protocol, durable storage/restart behavior, installation and rollback path, security boundaries and extension UX have stable acceptance evidence. At that point, review the migration and editor-fork ADRs, prove a legacy-profile upgrade without state loss, publish a compatibility window and retain the extension through at least one complete fork upgrade/rollback cycle. Until that gate is explicitly opened, `FUT-BRAND-01` means visible Raya branding only and `FUT-EDITOR-01` remains deferred. Continue all other original and `FUT-*` work in the existing merged order; the goal itself remains active.
+
 ## ChatGPT 2026-09-15 10:56 America/Toronto - Preserve exact absent-policy replay
 
 Preserve `afc8101bfe`. Provisioning plans must omit an absent optional organization policy rather than publish `policy: undefined`; JSON storage drops undefined fields, so retaining that key only in memory breaks exact recovery equality. The fix restores lost-result, activation, revision-change, concurrent-create and restart fencing. Delegation tests must attach the exact `childRunID` returned by `errands.take()`; a different ID is correctly rejected. The full Routine-management suite passes 10 / 150 under the 1 GB cap. The six-case warning in the next chronological entry is superseded.
@@ -394,8 +400,8 @@ Use these sources together:
 | `FUT-CHAT-01` | Truthful time in ordinary, routine and child chat | Messages already carry `createdAt` | Shared localized `<time>` component with legacy, timezone and DST behavior |
 | `FUT-AGENT-01` | Intelligent child spawning and durable names from every policy-eligible mode | `task`, Chief routing, nested depth and specialist provenance | Persist bounded intent-derived display name and expose real denial reasons; do not widen authority |
 | `FUT-AGENT-02` | Glanceable, openable and steerable active children | Saved monitor state, direct activity/elapsed/model cost, exact breadcrumbs and installed fail-closed child steering | Complete 10+ child visual, keyboard and installed reload/restart acceptance |
-| `FUT-BRAND-01` | Raya product identity across public interfaces and stored/runtime migrations | Extension commands are largely `raya.*`; thousands of internal Kilo references remain | Checked user-visible/compatibility inventory and staged dual-read aliases |
-| `FUT-EDITOR-01` | Raya-owned VS Code distribution | VS Code extension only | ADR and boundary inventory after protocols and branding stabilize; fork implementation last |
+| `FUT-BRAND-01` | Raya public identity now; stored/runtime compatibility migration in Version 3 | Extension commands are largely `raya.*`; thousands of internal Kilo references remain | Continue proven visible-copy fixes and the inventory guard; defer identifiers, dual-read/write migration and alias removal until the stability gate |
+| `FUT-EDITOR-01` | Raya-owned VS Code distribution | VS Code extension only | Deferred to Version 3 after stable extension/backend/install/rollback acceptance; no current implementation |
 | `FUT-CONTACT-01` | Routine agents contact the owner in-app, by email, Telegram and WhatsApp | Routine inbox and local `notify_user` | Durable provider-neutral outbox with Raya inbox adapter first |
 | `FUT-ORG-01` | Multiple durable organizations whose agents coordinate bounded company work | Organization revisions, members, reporting, delegation and recovery already exist | Representative multi-worker job through real storage and integration boundaries |
 | `FUT-SKILL-01` | Universal design, coding, writing, marketing and role skills | Bundled skill discovery and specialist prompts | One versioned resolution/precedence pipeline with provenance and capability-neutral loading |
@@ -513,7 +519,9 @@ Vercel may host a prototype web/control plane. Do not assume request-bound serve
 
 The separate GitHub PR review → autofix → issue-to-PR track and Agent SDK/CI runner from `build-goals.md` can proceed when their own dependencies are ready; issue-to-PR requires authenticated background execution.
 
-#### Band 7 - Full Kilo-to-Raya migration
+#### Version 3 deferred program - Full Kilo-to-Raya compatibility migration
+
+**Do not implement this program in the current release line.** Continue the Band 1 inventory and proven user-visible Raya copy corrections only. Begin the steps below after the owner opens Version 3 and the extension/backend, durable storage, installation, rollback and security stability gates pass.
 
 Start the inventory in Band 1; perform destructive removal late. Migration waves:
 
@@ -528,7 +536,9 @@ Start the inventory in Band 1; perform destructive removal late. Migration waves
 
 “All traces” means Raya product identity, public APIs, stored keys and shipped binaries. Preserve required upstream provenance, copyright and legal notices. An automated inventory must reach zero unintended user-visible Kilo references. Upgrade must preserve credentials, settings, sessions, Routines, organizations, messages, Todo and agent state.
 
-#### Band 8 - Raya-owned VS Code fork
+#### Version 3 deferred program - Raya-owned VS Code distribution
+
+**Do not implement this program in the current release line.** Raya remains the `eden.raya` extension until the owner opens Version 3 after stability evidence.
 
 Treat `FUT-EDITOR-01` as a separate product program or isolated distribution repository. Prerequisites are stable client/backend protocol, Raya packages/update channel, finished extension UX, cloud/mobile auth, signing/updater/crash reporting/accessibility and a funded upstream VS Code merge process.
 

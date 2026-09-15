@@ -7,9 +7,9 @@
  * upstream tool registrations have run (i.e. after importing message-part).
  */
 
-import { createEffect, createMemo, For, onCleanup, Show, type Component, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onCleanup, Show, type Component, type JSX } from "solid-js"
 import { Dynamic } from "solid-js/web"
-import { BasicTool } from "@kilocode/kilo-ui/basic-tool"
+import { BasicTool, GenericTool } from "@kilocode/kilo-ui/basic-tool"
 import { Button } from "@kilocode/kilo-ui/button"
 import { ToolRegistry, type ToolProps } from "@kilocode/kilo-ui/message-part"
 import { useSession } from "../../context/session"
@@ -17,12 +17,27 @@ import { useVSCode } from "../../context/vscode"
 import { editReview } from "./edit-review"
 import { EditReviewChrome } from "./EditReviewChrome"
 import { note, targets, type Kind } from "./review-files"
+import {
+  TodoProposalCard,
+  type TodoProposal,
+  type TodoProposalIssue,
+  type TodoProposalLink,
+  type TodoProposalState,
+  type TodoProposalSubtask,
+} from "../todo/TodoProposalCard"
 
 /** Tools that should be open by default in the VS Code sidebar. */
 const DEFAULT_OPEN_TOOLS = ["bash"]
 /** File-mutating tools that get the inline review chrome (Undo/Keep + navigator). */
 const REVIEW_TOOLS = ["edit", "write", "apply_patch", "multiedit"]
 const ROUTINE_TOOLS = ["create_organization", "update_routine", "update_organization"]
+const PROPOSAL = /^proposal_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const SUBTODO = /^subtodo_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const TODO = /^todo_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const DIGEST = /^[a-f0-9]{64}$/
+const ESTIMATE = 525_600
+const PRIORITY = new Set(["low", "medium", "high", "urgent"])
+const SUBTASK_STATUS = new Set(["open", "completed"])
 const registered = new Set<string>()
 
 const TITLE: Record<string, string> = {
@@ -93,6 +108,305 @@ function output(text?: string) {
   const value = text?.trimEnd()
   if (!value?.trim()) return undefined
   return value
+}
+
+function record(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function optional(value: unknown, check: (item: unknown) => boolean) {
+  return value === undefined || value === null || check(value)
+}
+
+function link(value: unknown): value is TodoProposalLink {
+  if (!record(value)) return false
+  if (value.kind !== "chat" && value.kind !== "routine" && value.kind !== "goal" && value.kind !== "session")
+    return false
+  return typeof value.id === "string" && value.id.trim().length > 0 && value.id.length <= 500
+}
+
+function links(value: unknown) {
+  if (!Array.isArray(value) || value.length > 50 || !value.every(link)) return false
+  return new Set(value.map((item) => `${item.kind}:${item.id}`)).size === value.length
+}
+
+function subtask(value: unknown): value is Record<string, unknown> {
+  if (!record(value)) return false
+  if (value.kind !== "new" && value.kind !== "existing") return false
+  if (typeof value.id !== "string" || !SUBTODO.test(value.id)) return false
+  if (typeof value.title !== "string" || !value.title.trim() || value.title.length > 500) return false
+  if (value.kind === "existing" && (!Number.isSafeInteger(value.revision) || Number(value.revision) < 1)) return false
+  if (value.status !== undefined && (typeof value.status !== "string" || !SUBTASK_STATUS.has(value.status)))
+    return false
+  if (!optional(value.notes, (item) => typeof item === "string" && item.length <= 10_000)) return false
+  if (!optional(value.priority, (item) => typeof item === "string" && PRIORITY.has(item))) return false
+  if (
+    !optional(
+      value.estimateMinutes,
+      (item) => Number.isSafeInteger(item) && Number(item) > 0 && Number(item) <= ESTIMATE,
+    )
+  )
+    return false
+  if (!optional(value.dueAt, (item) => typeof item === "number" && Number.isFinite(item))) return false
+  if (!optional(value.links, links)) return false
+  return true
+}
+
+function flatten(value: Record<string, unknown>): TodoProposalSubtask {
+  return {
+    id: String(value.id),
+    title: String(value.title).trim(),
+    ...(value.status === undefined ? {} : { status: value.status as TodoProposalSubtask["status"] }),
+    ...(value.notes === undefined ? {} : { notes: value.notes as string | null }),
+    ...(value.priority === undefined ? {} : { priority: value.priority as TodoProposalSubtask["priority"] }),
+    ...(value.estimateMinutes === undefined ? {} : { estimateMinutes: value.estimateMinutes as number | null }),
+    ...(value.dueAt === undefined ? {} : { dueAt: value.dueAt as number | null }),
+    ...(value.links === undefined ? {} : { links: value.links as TodoProposalSubtask["links"] }),
+  }
+}
+
+function source(value: unknown) {
+  if (!record(value)) return false
+  return ["sessionID", "messageID", "callID"].every((key) => {
+    const item = value[key]
+    return typeof item === "string" && item.length > 0 && item.length <= 256
+  })
+}
+
+function target(value: unknown) {
+  if (!record(value) || typeof value.todoID !== "string" || !TODO.test(value.todoID)) return false
+  if (value.kind === "new") return value.baseRevision === 0
+  if (value.kind !== "existing") return false
+  return Number.isSafeInteger(value.baseRevision) && Number(value.baseRevision) >= 1
+}
+
+function validChanges(value: unknown): value is Record<string, unknown> {
+  if (!record(value)) return false
+  if (value.title !== undefined && (typeof value.title !== "string" || !value.title.trim() || value.title.length > 500))
+    return false
+  if (!optional(value.detail, (item) => typeof item === "string" && item.length <= 10_000)) return false
+  if (!optional(value.priority, (item) => typeof item === "string" && PRIORITY.has(item))) return false
+  if (
+    !optional(
+      value.estimateMinutes,
+      (item) => Number.isSafeInteger(item) && Number(item) > 0 && Number(item) <= ESTIMATE,
+    )
+  )
+    return false
+  if (!optional(value.dueAt, (item) => typeof item === "number" && Number.isFinite(item))) return false
+  if (!optional(value.reminderAt, (item) => typeof item === "number" && Number.isFinite(item))) return false
+  if (!optional(value.links, links)) return false
+  if (
+    value.subtasks !== undefined &&
+    (!Array.isArray(value.subtasks) || value.subtasks.length > 100 || !value.subtasks.every(subtask))
+  )
+    return false
+  return true
+}
+
+function changes(id: string, value: unknown): TodoProposal | undefined {
+  if (!validChanges(value)) return
+  const tasks = Array.isArray(value.subtasks) ? value.subtasks : undefined
+  return {
+    id,
+    title: typeof value.title === "string" ? value.title.trim() : "Update this Todo",
+    ...(value.detail === undefined ? {} : { detail: typeof value.detail === "string" ? value.detail : null }),
+    ...(value.priority === undefined ? {} : { priority: value.priority as TodoProposal["priority"] }),
+    ...(value.estimateMinutes === undefined ? {} : { estimateMinutes: value.estimateMinutes as number | null }),
+    ...(value.dueAt === undefined ? {} : { dueAt: value.dueAt as number | null }),
+    ...(value.reminderAt === undefined ? {} : { reminderAt: value.reminderAt as number | null }),
+    ...(value.links === undefined ? {} : { links: value.links as TodoProposal["links"] }),
+    ...(tasks ? { subtasks: tasks.map(flatten) } : {}),
+  }
+}
+
+function identity(props: ToolProps) {
+  if (props.tool !== "personal_todo" || props.status !== "completed") return
+  if (props.input.action !== "propose") return
+  if (
+    props.metadata.view !== "personal-todo-proposal" ||
+    props.metadata.action !== "propose" ||
+    props.metadata.status !== "complete"
+  )
+    return
+  const proposalID = props.metadata.proposalID
+  const digest = props.metadata.digest
+  if (typeof proposalID !== "string" || !PROPOSAL.test(proposalID)) return
+  if (typeof digest !== "string" || !DIGEST.test(digest)) return
+  return { proposalID, digest }
+}
+
+function json(value: string | undefined) {
+  if (!value) return
+  try {
+    const parsed: unknown = JSON.parse(value)
+    return parsed
+  } catch {
+    return undefined
+  }
+}
+
+function todoProposal(props: ToolProps) {
+  const expected = identity(props)
+  if (!expected) return
+  const proposalID = expected.proposalID
+  const digest = expected.digest
+  const parsed = json(props.output)
+  if (!record(parsed) || parsed.status !== "complete" || !record(parsed.proposal)) return
+  const raw = parsed.proposal
+  if (raw.version !== 1 || raw.id !== proposalID || raw.digest !== digest) return
+  if (typeof raw.createdAt !== "number" || !Number.isFinite(raw.createdAt)) return
+  if (!source(raw.source) || !target(raw.target)) return
+  const proposal = changes(proposalID, raw.changes)
+  if (!proposal) return
+  return { proposal, digest }
+}
+
+function lifecycle(value: unknown, id: string, digest: string) {
+  if (!record(value) || !["open", "pending", "applied", "rejected"].includes(String(value.state))) return
+  if (!record(value.proposal)) return
+  const raw = value.proposal
+  if (raw.version !== 1 || raw.id !== id || raw.digest !== digest) return
+  if (typeof raw.createdAt !== "number" || !Number.isFinite(raw.createdAt)) return
+  if (!source(raw.source) || !target(raw.target)) return
+  const proposal = changes(id, raw.changes)
+  if (!proposal) return
+  return { proposal, state: value.state as TodoProposalState }
+}
+
+function failure(kind: string, message: string): TodoProposalIssue | undefined {
+  if (kind === "stale") return { kind, message }
+  if (kind === "conflict") return { kind, message }
+  if (kind === "offline") return { kind, message }
+  if (kind === "error") return { kind, message }
+  return undefined
+}
+
+function proposalTool(upstream?: Component<ToolProps>): Component<ToolProps> {
+  return (props) => {
+    const vscode = useVSCode()
+    const value = createMemo(() => todoProposal(props))
+    const [proposal, setProposal] = createSignal<TodoProposal>()
+    const [state, setState] = createSignal<TodoProposalState>("open")
+    const [busy, setBusy] = createSignal<"apply" | "reject">()
+    const [issue, setIssue] = createSignal<TodoProposalIssue>()
+    const [retry, setRetry] = createSignal<"apply" | "reject">()
+    const [pending, setPending] = createSignal<{ id: string; action: "apply" | "reject" }>()
+
+    createEffect(() => {
+      const current = value()
+      if (!current || proposal()) return
+      setProposal(current.proposal)
+    })
+
+    const mutate = (action: "apply" | "reject") => {
+      const current = value()
+      if (!current || busy()) return
+      const id = crypto.randomUUID()
+      setBusy(action)
+      setIssue(undefined)
+      setRetry(undefined)
+      setPending({ id, action })
+      vscode.postMessage({
+        type: action === "apply" ? "personalTodoProposalApply" : "personalTodoProposalReject",
+        requestID: id,
+        proposalID: current.proposal.id,
+        digest: current.digest,
+      })
+    }
+
+    // One correlated response state machine keeps acknowledgement-loss handling explicit.
+    // eslint-disable-next-line complexity
+    const off = vscode.onMessage((message) => {
+      const request = pending()
+      const current = value()
+      if (!request || !current || message.type !== "personalTodoProposalResult") return
+      if (
+        message.requestID !== request.id ||
+        message.proposalID !== current.proposal.id ||
+        message.operation !== request.action
+      )
+        return
+      setPending(undefined)
+      setBusy(undefined)
+      const item = "item" in message ? lifecycle(message.item, current.proposal.id, current.digest) : undefined
+      if (message.kind === "applied" || message.kind === "rejected") {
+        if (!item || item.state !== message.kind) {
+          setIssue({ kind: "error", message: "Raya returned an invalid Todo proposal result." })
+          return
+        }
+        setProposal(item.proposal)
+        setState(item.state)
+        setIssue(undefined)
+        setRetry(undefined)
+        return
+      }
+      if (item) {
+        setProposal(item.proposal)
+        setState(item.state)
+      }
+      if (message.kind === "uncertain") {
+        setIssue({ kind: "uncertain", message: message.message })
+        setRetry(item && (item.state === "open" || item.state === "pending") ? request.action : undefined)
+        return
+      }
+      if ("message" in message) {
+        const issue = failure(message.kind, message.message)
+        if (issue) {
+          setIssue(issue)
+          if (message.kind === "offline") setRetry(request.action)
+          return
+        }
+      }
+      if (message.kind === "loaded" || message.kind === "listed") {
+        setIssue({ kind: "error", message: "Raya returned an unrelated Todo proposal result." })
+        return
+      }
+      setIssue({ kind: "error", message: "Raya returned an unexpected Todo proposal result." })
+    })
+    onCleanup(off)
+
+    const edit = () => {
+      const current = value()
+      if (!current) return
+      window.dispatchEvent(
+        new CustomEvent("raya:open-todo-proposal", {
+          detail: { id: current.proposal.id, digest: current.digest },
+        }),
+      )
+    }
+    const again = () => {
+      const action = retry()
+      if (action) mutate(action)
+    }
+
+    return (
+      <Show
+        when={value()}
+        fallback={
+          upstream ? (
+            <Dynamic component={upstream} {...props} />
+          ) : (
+            <GenericTool tool={props.tool} status={props.status} input={props.input} hideDetails={props.hideDetails} />
+          )
+        }
+      >
+        {(current) => (
+          <TodoProposalCard
+            proposal={proposal() ?? current().proposal}
+            state={state()}
+            busy={busy()}
+            issue={issue()}
+            decisionDisabled={issue() !== undefined}
+            onApply={() => mutate("apply")}
+            onEdit={edit}
+            onReject={() => mutate("reject")}
+            onRetry={retry() ? again : undefined}
+          />
+        )}
+      </Show>
+    )
+  }
 }
 
 function expanded(status?: string, open?: boolean) {
@@ -362,6 +676,11 @@ export function registerVscodeToolOverrides() {
       render: BackgroundProcessTool,
     })
     registered.add("background_process")
+  }
+
+  if (!registered.has("personal_todo")) {
+    ToolRegistry.register({ name: "personal_todo", render: proposalTool(ToolRegistry.render("personal_todo")) })
+    registered.add("personal_todo")
   }
 
   for (const name of ROUTINE_TOOLS) {

@@ -137,6 +137,21 @@ async function uncertain(input: {
   })
 }
 
+async function missed(input: {
+  client: KiloClient
+  directory: string
+  message: Extract<Message, { type: "personalTodoProposalApply" | "personalTodoProposalReject" }>
+  action: "apply" | "reject"
+  result: Result
+  post: Post
+}) {
+  if (input.result.response.status === 408 || input.result.response.status >= 500) {
+    await uncertain(input)
+    return
+  }
+  failure(input)
+}
+
 export async function handlePersonalTodoProposalMessage(input: {
   client: KiloClient | null
   directory: string
@@ -224,7 +239,14 @@ export async function handlePersonalTodoProposalMessage(input: {
       })
       return true
     }
-    failure({ message, action: operation, result, post: input.post })
+    await missed({
+      client: input.client,
+      directory: input.directory,
+      message,
+      action: operation,
+      result,
+      post: input.post,
+    })
     return true
   } catch {
     if (message.type === "personalTodoProposalApply" || message.type === "personalTodoProposalReject") {

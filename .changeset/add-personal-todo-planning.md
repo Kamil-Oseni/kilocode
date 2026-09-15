@@ -1,5 +1,6 @@
 ---
 "@kilocode/cli": minor
+"raya": minor
 ---
 
-Let agents prepare reviewable personal Todo plans and apply only the exact plan you approve.
+Let agents prepare reviewable personal Todo plans that you can inspect, edit, apply, or reject from chat and Todo.

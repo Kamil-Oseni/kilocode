@@ -133,7 +133,7 @@ describe("personal Todo proposal extension bridge", () => {
     ])
   })
 
-  it("reconciles interrupted mutations with one GET and never retries the mutation", async () => {
+  it("reconciles interrupted or failed mutations with one GET and never retries the mutation", async () => {
     const calls: string[] = []
     const applied = client({
       applyProposal: async () => {
@@ -170,10 +170,28 @@ describe("personal Todo proposal extension bridge", () => {
       post: (message) => messages.push(message),
     })
 
-    expect(calls).toEqual(["apply", "get-applied", "reject", "get-open"])
+    const failed = client({
+      applyProposal: async () => {
+        calls.push("apply-failed")
+        return { error: { message: "Receipt response failed." }, response: { status: 500 } }
+      },
+      getProposal: async () => {
+        calls.push("get-failed")
+        return { data: { ...view, state: "applied" }, response: { status: 200 } }
+      },
+    })
+    await handlePersonalTodoProposalMessage({
+      client: failed,
+      directory: "C:/work",
+      message: { type: "personalTodoProposalApply", requestID: "failed", proposalID: view.proposal.id, digest },
+      post: (message) => messages.push(message),
+    })
+
+    expect(calls).toEqual(["apply", "get-applied", "reject", "get-open", "apply-failed", "get-failed"])
     expect(messages).toMatchObject([
       { requestID: "applied", operation: "apply", kind: "applied" },
       { requestID: "uncertain", operation: "reject", kind: "uncertain", item: view },
+      { requestID: "failed", operation: "apply", kind: "applied" },
     ])
   })
 })

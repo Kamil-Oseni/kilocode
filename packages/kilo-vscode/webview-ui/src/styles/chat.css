@@ -304,6 +304,238 @@
 }
 
 /* Personal todo */
+[data-component="todo-proposal-card"] {
+  display: grid;
+  min-width: 0;
+  gap: var(--raya-space-12);
+  padding: var(--raya-space-14, 14px);
+  border: var(--raya-hairline) solid var(--border-weak-base, var(--vscode-panel-border));
+  border-radius: var(--raya-radius-md);
+  background: transparent;
+  color: var(--text-base, var(--vscode-foreground));
+}
+
+[data-slot="todo-proposal-header"] {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--raya-space-12);
+}
+
+[data-slot="todo-proposal-header"] h3,
+[data-slot="todo-proposal-detail"],
+[data-slot="todo-proposal-subtasks"] h4,
+[data-slot="todo-proposal-related"] h4,
+[data-slot="todo-proposal-subtasks"] p {
+  margin: 0;
+}
+
+[data-slot="todo-proposal-header"] h3 {
+  margin-top: var(--raya-space-2);
+  font-family: var(--raya-font-display);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: var(--raya-leading-tight);
+  overflow-wrap: anywhere;
+}
+
+[data-slot="todo-proposal-eyebrow"],
+[data-slot="todo-proposal-state"],
+[data-slot="todo-proposal-metadata"] dt,
+[data-slot="todo-proposal-subtask-meta"] {
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-size: var(--font-size-small);
+}
+
+[data-slot="todo-proposal-state"] {
+  flex: none;
+  text-align: end;
+}
+
+[data-slot="todo-proposal-detail"] {
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  line-height: var(--raya-leading-relaxed, 1.5);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+[data-slot="todo-proposal-metadata"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--raya-space-8) var(--raya-space-16);
+  margin: 0;
+}
+
+[data-slot="todo-proposal-metadata"] > div {
+  display: grid;
+  gap: var(--raya-space-2);
+}
+
+[data-slot="todo-proposal-metadata"] dd {
+  margin: 0;
+  text-transform: capitalize;
+}
+
+[data-slot="todo-proposal-subtasks"] {
+  display: grid;
+  gap: var(--raya-space-8);
+  padding-top: var(--raya-space-12);
+  border-top: var(--raya-hairline) solid var(--border-weak-base, var(--vscode-panel-border));
+}
+
+[data-slot="todo-proposal-subtasks"] h4 {
+  font-size: var(--font-size-small);
+  font-weight: 600;
+}
+
+[data-slot="todo-proposal-subtasks"] ol {
+  display: grid;
+  gap: var(--raya-space-8);
+  margin: 0;
+  padding-inline-start: var(--raya-space-20);
+}
+
+[data-slot="todo-proposal-subtasks"] li {
+  padding-inline-start: var(--raya-space-4);
+}
+
+[data-slot="todo-proposal-subtasks"] li > span:first-child,
+[data-slot="todo-proposal-subtasks"] li > p {
+  overflow-wrap: anywhere;
+}
+
+[data-slot="todo-proposal-subtasks"] li > p {
+  margin-top: var(--raya-space-4);
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-size: var(--font-size-small);
+  white-space: pre-wrap;
+}
+
+[data-slot="todo-proposal-subtasks"] li[data-status="completed"] > span:first-child {
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  text-decoration: line-through;
+}
+
+[data-slot="todo-proposal-subtask-meta"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--raya-space-8);
+  margin-top: var(--raya-space-4);
+}
+
+[data-slot="todo-proposal-related"] {
+  display: grid;
+  gap: var(--raya-space-6);
+  padding-top: var(--raya-space-10);
+  border-top: var(--raya-hairline) solid var(--border-weak-base, var(--vscode-panel-border));
+}
+
+[data-slot="todo-proposal-related"] h4 {
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-size: var(--font-size-small);
+  font-weight: 600;
+}
+
+[data-slot="todo-proposal-related"] ul {
+  display: grid;
+  gap: var(--raya-space-4);
+  margin: 0;
+  padding-inline-start: var(--raya-space-20);
+}
+
+[data-slot="todo-proposal-related"] li {
+  min-width: 0;
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-size: var(--font-size-small);
+  overflow-wrap: anywhere;
+}
+
+[data-slot="todo-proposal-related"] li > span:last-of-type {
+  text-transform: capitalize;
+}
+
+[data-slot="todo-proposal-related"] code {
+  color: var(--text-base, var(--vscode-foreground));
+  font-family: var(--raya-font-mono, var(--vscode-editor-font-family, monospace));
+  font-size: inherit;
+}
+
+[data-slot="todo-proposal-status"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--raya-space-10);
+  padding-top: var(--raya-space-10);
+  border-top: var(--raya-hairline) solid var(--border-weak-base, var(--vscode-panel-border));
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-size: var(--font-size-small);
+  outline: none;
+}
+
+[data-slot="todo-proposal-status"]:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: var(--raya-space-4);
+}
+
+[data-slot="todo-proposal-status"][data-kind="conflict"],
+[data-slot="todo-proposal-status"][data-kind="stale"],
+[data-slot="todo-proposal-status"][data-kind="error"] {
+  color: var(--vscode-errorForeground);
+}
+
+[data-slot="todo-proposal-status-copy"] {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: var(--raya-space-8);
+}
+
+[data-slot="todo-proposal-status-copy"] [data-component="spinner"] {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+[data-slot="todo-proposal-actions"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--raya-space-6);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="todo-proposal-card"] [data-component="spinner"] * {
+    animation: none !important;
+  }
+}
+
+@media (forced-colors: active) {
+  [data-component="todo-proposal-card"] {
+    border-color: ButtonText;
+  }
+
+  [data-slot="todo-proposal-status"]:focus-visible {
+    outline-color: Highlight;
+  }
+}
+
+@media (max-width: 360px) {
+  [data-slot="todo-proposal-header"],
+  [data-slot="todo-proposal-status"] {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  [data-slot="todo-proposal-state"] {
+    text-align: start;
+  }
+
+  [data-slot="todo-proposal-actions"] [data-component="button"] {
+    flex: 1;
+  }
+}
+
 [data-component="personal-todo"] {
   display: flex;
   flex-direction: column;

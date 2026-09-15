@@ -200,9 +200,9 @@ const KiloPassCard: Component<{
       <CardHeader>
         <div>
           <CardTitle icon={false} role="heading" aria-level={4}>
-            Kilo
+            Raya
           </CardTitle>
-          <CardDescription>Kilo Pass</CardDescription>
+          <CardDescription>Raya Pass</CardDescription>
         </div>
         <Tag>{RAYA_GATEWAY_NAME}</Tag>
       </CardHeader>

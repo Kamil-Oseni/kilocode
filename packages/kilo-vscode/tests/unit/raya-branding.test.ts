@@ -115,4 +115,11 @@ describe("Raya branding boundary", () => {
     expect(model).toContain("name: RAYA_GATEWAY_NAME")
     expect(model).not.toContain('name: "Kilo Gateway"')
   })
+
+  test("labels the profile subscription card as Raya Pass", async () => {
+    const source = await read("webview-ui/src/components/profile/ProviderUsageCards.tsx")
+
+    expect(source).toContain("Raya Pass")
+    expect(source).not.toContain(["Ki", "lo Pass"].join(""))
+  })
 })

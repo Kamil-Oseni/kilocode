@@ -34,6 +34,7 @@ import { Process } from "@/util/process"
 import { parseGitHubRemote } from "@/util/repository"
 import { Effect } from "effect"
 import { GitHubSecurity } from "@/kilocode/security/github" // kilocode_change
+import { GitHubCopy } from "@/kilocode/cli/github-copy" // kilocode_change
 import { extractResponseText, formatPromptTooLargeError } from "./github.shared"
 
 type GitHubAuthor = {
@@ -911,7 +912,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
     }
 
     async function chat(message: string, files: PromptFiles = []) {
-      console.log("Sending message to kilo...") // kilocode_change
+      console.log(GitHubCopy.sending) // kilocode_change
 
       return runLocalEffect(
         Effect.gen(function* () {

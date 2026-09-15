@@ -1,4 +1,4 @@
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { PersonalTodo } from "@/kilocode/personal-todo"
 import { PersonalTodoApplication } from "@/kilocode/personal-todo/application"
@@ -46,6 +46,9 @@ function api<A, R>(
 }
 
 type ProposalError =
+  | PersonalTodo.InputError
+  | PersonalTodo.ConflictError
+  | PersonalTodo.StaleRevisionError
   | PersonalTodoProposal.InputError
   | PersonalTodoProposal.ConflictError
   | PersonalTodoProposal.CorruptError
@@ -65,14 +68,31 @@ type ProposalApiError =
   | UnknownError
 
 function proposalError(err: ProposalError, proposalID?: string): Effect.Effect<never, ProposalApiError> {
-  if (PersonalTodoProposal.InputError.isInstance(err) || PersonalTodoApplication.InputError.isInstance(err))
+  if (Schema.is(PersonalTodo.InputError)(err))
+    return Effect.fail(new InvalidRequestError({ message: err.message, kind: "personal-todo", field: err.field }))
+  if (Schema.is(PersonalTodo.ConflictError)(err))
+    return Effect.fail(new ConflictError({ message: err.message, resource: err.id }))
+  if (Schema.is(PersonalTodo.StaleRevisionError)(err))
+    return Effect.fail(
+      new PersonalTodoProposalStaleRevisionError({
+        name: "PersonalTodoProposalStaleRevisionError",
+        data: {
+          proposalID: proposalID ?? err.id,
+          todoID: err.id,
+          expected: err.expected,
+          actual: err.actual,
+          message: err.message,
+        },
+      }),
+    )
+  if (Schema.is(PersonalTodoProposal.InputError)(err) || Schema.is(PersonalTodoApplication.InputError)(err))
     return Effect.fail(
       new InvalidRequestError({ message: err.message, kind: "personal-todo-proposal", field: err.field }),
     )
-  if (PersonalTodoProposal.ConflictError.isInstance(err) || PersonalTodoApplication.ConflictError.isInstance(err))
+  if (Schema.is(PersonalTodoProposal.ConflictError)(err) || Schema.is(PersonalTodoApplication.ConflictError)(err))
     return Effect.fail(new ConflictError({ message: err.message, resource: err.id }))
-  if (PersonalTodoApplication.NotFoundError.isInstance(err)) return Effect.fail(notFound(err.message))
-  if (PersonalTodoApplication.StaleRevisionError.isInstance(err))
+  if (Schema.is(PersonalTodoApplication.NotFoundError)(err)) return Effect.fail(notFound(err.message))
+  if (Schema.is(PersonalTodoApplication.StaleRevisionError)(err))
     return Effect.fail(
       new PersonalTodoProposalStaleRevisionError({
         name: "PersonalTodoProposalStaleRevisionError",
@@ -85,11 +105,11 @@ function proposalError(err: ProposalError, proposalID?: string): Effect.Effect<n
         },
       }),
     )
-  if (PersonalTodoProposal.CorruptError.isInstance(err))
+  if (Schema.is(PersonalTodoProposal.CorruptError)(err))
     return Effect.fail(new UnknownError({ message: "The saved personal Todo proposal is corrupt.", ref: err.id }))
-  if (PersonalTodoApplication.CorruptError.isInstance(err))
+  if (Schema.is(PersonalTodoApplication.CorruptError)(err))
     return Effect.fail(new UnknownError({ message: "The saved personal Todo application is corrupt.", ref: err.id }))
-  if (ApiNotFoundError.isInstance(err)) return Effect.fail(err)
+  if (Schema.is(ApiNotFoundError)(err)) return Effect.fail(err)
   return Effect.fail(new UnknownError({ message: "Personal Todo storage is unavailable." }))
 }
 

@@ -1,5 +1,13 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-14 20:54 America/Toronto - Real-process follow-up bind recovery verified
+
+**Status: regression commit `0dbf613872` is verified and pushed to `origin/main`; no runtime files changed after the installed checkpoint.** A dedicated Bun child now opens the same filesystem storage and SQLite database, persists the replacement session, active goal, exact running history and bound startup claim, then exits with code 21 at three boundaries: immediately before the inbox move, immediately after it, and after a competing delivery identity claims the old message.
+
+Two independent parent reopen passes prove that both move boundaries converge to one saved run/session and one message at the target, with no session creation and no retained claim. The competing-delivery case retains the message at its prior session and keeps the stopped claim for review; it creates no replacement session and does not duplicate the pending run. The full scheduler/recovery suite passes **36 / 473**. Scoped one-thread lint has zero errors and only two older scheduler-test warnings; formatting, whitespace and annotation guards pass. Installed runtime source remains `0d0a6b69ed`; this later commit adds test evidence only.
+
+EN-02/OVR-05 remain **In progress**. Next expose the ambiguous delivery as an actionable review state instead of leaving it visible only through retained claim evidence, then continue the representative organization execution chain.
+
 ## ChatGPT 2026-09-14 20:48 America/Toronto - Verified Routine reliability batch installed
 
 **Status: snapshot `7.4.23-snapshot+0d0a6b69ed.kamil-oseni.1789432984441` is installed.** The low-memory workflow rebuilt the SDK and CLI, ran the extension and webview typechecks, ESLint and production bundle, packaged the VSIX, installed it and pruned one older staged package, vault package and extension. The retained VSIX is **519,357,406 bytes**, SHA-256 `cc4335ed1fc5e570f124eae70af896337fd308587a9b9fdadcd9408f28636dd7`; its CLI is **230,668,800 bytes**, SHA-256 `56720120a5032b66aaf8bd18d5f6d769a34624a78ff395e84980002f1e425e9d`.

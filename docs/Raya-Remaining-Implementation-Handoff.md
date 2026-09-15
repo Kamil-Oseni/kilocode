@@ -1,5 +1,11 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-14 20:54 America/Toronto - EN-02 real-process inbox-bind matrix complete
+
+Regression commit `0dbf613872` is verified and pushed. Preserve `fixtures/inbox-bind-start.ts` and the three scheduler cases. The child opens real filesystem storage plus SQLite, creates the exact bound startup claim/session/goal/history and exits before the inbox move, after the move, or after assigning a competing delivery identity. The parent reopens the resources and invokes `runner.revive` twice. Before/after must reuse one run/session, move or retain the one message at the exact target, create no session and clear the claim. Delivery ownership must keep the message at the old session, retain the stopped claim and create no replacement work.
+
+The complete scheduler suite passes 36 tests / 473 assertions. This closes the requested process-bound proof for the linked/history-to-inbox-move interval. The remaining ambiguous-delivery product work is a visible, explicit review disposition: expose enough safe metadata for the Routine DM to say that delivery may have started, provide deliberate resolution choices, and route each choice through exact run/message ownership checks. Do not automatically reassign an owned delivery or discard its retained claim. After that, continue the representative company chain with saved inter-agent reports and permission-gated external actions. Installed runtime source remains `0d0a6b69ed`; `0dbf613872` changes tests only.
+
 ## ChatGPT 2026-09-14 20:48 America/Toronto - Installed checkpoint and activation boundary
 
 Snapshot `7.4.23-snapshot+0d0a6b69ed.kamil-oseni.1789432984441` completed the repository's low-memory build, typecheck, lint, production bundle, package and installation workflow. Retained artifact: 519,357,406 bytes with SHA-256 `cc4335ed1fc5e570f124eae70af896337fd308587a9b9fdadcd9408f28636dd7`. Bundled CLI: 230,668,800 bytes with SHA-256 `56720120a5032b66aaf8bd18d5f6d769a34624a78ff395e84980002f1e425e9d`.

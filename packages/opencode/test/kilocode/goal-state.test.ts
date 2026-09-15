@@ -109,7 +109,7 @@ function transcript(input: {
 
 function completed(part: MessageV2.ToolPart | undefined) {
   if (!part || part.state.status !== "completed") throw new Error("Expected completed tool")
-  return part
+  return { part, state: part.state }
 }
 
 function setup(
@@ -4226,7 +4226,7 @@ describe("RayaGoal", () => {
             {
               requirement: "Finish within the model-cost limit",
               passed: true,
-              evidence: [{ callID: data.part.callID, summary: "The command completed successfully." }],
+              evidence: [{ callID: part.part.callID, summary: "The command completed successfully." }],
             },
           ],
         },
@@ -4942,7 +4942,7 @@ describe("RayaGoal", () => {
         kind: "tool",
         provider: "openrouter",
         service: "openai/gpt-5-image",
-        origin: { sessionID, messageID: part.messageID, callID: part.callID },
+        origin: { sessionID, messageID: part.part.messageID, callID: part.part.callID },
         at: created.createdAt,
         coverage: "recorded",
         amount: 0.125,
@@ -4975,7 +4975,7 @@ describe("RayaGoal", () => {
         provider: "Kilo",
         service: "Exa Web Search",
         source: "kilo-exa.costDollars.total",
-        origin: { sessionID, messageID: part.messageID, callID: part.callID },
+        origin: { sessionID, messageID: part.part.messageID, callID: part.part.callID },
         at: created.createdAt,
         coverage: "recorded",
         amount: 0.007,
@@ -5007,7 +5007,7 @@ describe("RayaGoal", () => {
           kind: "tool",
           provider: "untrusted",
           service: "shell",
-          origin: { sessionID, messageID: part.messageID, callID: part.callID },
+          origin: { sessionID, messageID: part.part.messageID, callID: part.part.callID },
           at: created.createdAt,
           coverage: "recorded",
           amount: 999,
@@ -5043,14 +5043,14 @@ describe("RayaGoal", () => {
         kind: "tool",
         provider: "openrouter",
         service: "openai/gpt-5-image",
-        origin: { sessionID, messageID: part.messageID, callID: part.callID },
+        origin: { sessionID, messageID: part.part.messageID, callID: part.part.callID },
         at: created.createdAt,
         coverage: "recorded",
         amount: 0.25,
         currency: "USD",
         source: "usage.cost",
       }
-      part.state = {
+      part.part.state = {
         status: "error",
         input: {},
         error: "Workspace write was denied after generation.",
@@ -5106,7 +5106,7 @@ describe("RayaGoal", () => {
         provider: "openrouter",
         service: "openai/gpt-5-image",
         source: "usage.cost",
-        origin: { sessionID: childID, messageID: part.messageID, callID: part.callID },
+        origin: { sessionID: childID, messageID: part.part.messageID, callID: part.part.callID },
         at: created.createdAt + 3,
         coverage: "recorded",
         amount: 0.375,
@@ -5120,8 +5120,8 @@ describe("RayaGoal", () => {
           id: "generate-image:openrouter:gen_stray_1",
           origin: {
             sessionID: strayID,
-            messageID: strayPart.messageID,
-            callID: strayPart.callID,
+            messageID: strayPart.part.messageID,
+            callID: strayPart.part.callID,
           },
         },
       }

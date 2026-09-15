@@ -320,7 +320,7 @@ export const kiloGatewayHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilo",
         ? {
             dispatch: charge.dispatch,
             finish: charge.finish,
-            release: charge.release.pipe(Effect.catchAll((error: Error) => Effect.die(error))),
+            release: charge.release.pipe(Effect.catch((error: Error) => Effect.die(error))),
             uncertain: charge.uncertain,
           }
         : undefined

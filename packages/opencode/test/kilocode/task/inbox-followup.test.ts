@@ -327,3 +327,112 @@ test("routine startup claims an admitted follow-up that crashed before session a
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })
+
+test("a follow-up attached during terminal settlement moves to one current run", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const created: SessionID[] = []
+      const runner = RayaTaskRunner.make({
+        database,
+        storage,
+        sessions: {
+          create: () =>
+            Effect.sync(() => {
+              const id = SessionID.make("ses_rehomed")
+              created.push(id)
+              return session(id)
+            }),
+          get: (id) => Effect.succeed(session(id)),
+          messages: () => Effect.succeed([]),
+          children: () => Effect.succeed([]),
+        },
+      })
+      const agent = yield* runner.tasks.create({
+        name: "Accounts",
+        role: "accountant",
+        objective: "Review accounts",
+        capabilities: ["accounting"],
+        access: "full",
+        enabled: true,
+        schedule: { kind: "manual" },
+      })
+      const old = SessionID.make("ses_settled")
+      const prior = yield* runner.tasks.record({
+        id: "run_settled",
+        agentID: agent.id,
+        sessionID: old,
+        at: Date.now(),
+        status: "running",
+      })
+      expect(yield* runner.tasks.transition(prior, { ...prior, status: "error", blockedReason: "Settled" })).toBe(true)
+      const inbox = RayaTaskInbox.make(database)
+      yield* inbox.publish({
+        agentID: agent.id,
+        source: "user_terminal_race",
+        kind: "user",
+        body: "Continue after the prior run settled",
+      })
+      yield* inbox.attach(agent.id, "user_terminal_race", old)
+      yield* runner.resume(old)
+      expect(created).toEqual([SessionID.make("ses_rehomed")])
+      expect((yield* inbox.page(agent.id)).messages[0]?.sessionID).toBe(SessionID.make("ses_rehomed"))
+      yield* runner.resume(old)
+      expect(created).toEqual([SessionID.make("ses_rehomed")])
+      expect((yield* inbox.page(agent.id)).messages[0]?.sessionID).toBe(SessionID.make("ses_rehomed"))
+      const runs = yield* runner.tasks.runsFor(agent.id)
+      expect(runs).toHaveLength(2)
+      expect(runs.find((run) => run.sessionID === old)?.status).toBe("error")
+      expect(runs.find((run) => run.sessionID === SessionID.make("ses_rehomed"))?.status).toBe("running")
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
+test("delivery ownership prevents terminal-session message reassignment", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const created: string[] = []
+      const runner = RayaTaskRunner.make({
+        database,
+        storage,
+        sessions: {
+          create: () =>
+            Effect.sync(() => {
+              created.push("session")
+              return session("ses_must_not_start")
+            }),
+          get: () => Effect.die("must not resume terminal delivery"),
+          messages: () => Effect.succeed([]),
+          children: () => Effect.succeed([]),
+        },
+      })
+      const agent = yield* runner.tasks.create({
+        name: "Accounts",
+        objective: "Review accounts",
+        access: "full",
+        enabled: true,
+        schedule: { kind: "manual" },
+      })
+      const old = SessionID.make("ses_owned_delivery")
+      const prior = yield* runner.tasks.record({
+        id: "run_owned_delivery",
+        agentID: agent.id,
+        sessionID: old,
+        at: Date.now(),
+        status: "running",
+      })
+      yield* runner.tasks.transition(prior, { ...prior, status: "error", blockedReason: "Settled" })
+      const inbox = RayaTaskInbox.make(database)
+      yield* inbox.publish({ agentID: agent.id, source: "user_owned", kind: "user", body: "Review this" })
+      yield* inbox.attach(agent.id, "user_owned", old)
+      expect((yield* inbox.delivery(old, "msg_owned"))?.delivered).toBe(false)
+      yield* runner.resume(old)
+      expect(created).toEqual([])
+      expect((yield* inbox.page(agent.id)).messages[0]?.sessionID).toBe(old)
+      expect(yield* runner.tasks.runsFor(agent.id)).toHaveLength(1)
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})

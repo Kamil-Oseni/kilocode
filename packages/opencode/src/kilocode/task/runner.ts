@@ -134,7 +134,7 @@ export namespace RayaTaskRunner {
     ask: (
       id: string,
       question: string,
-      opts?: { defer?: boolean },
+      opts?: { defer?: boolean; bind?: { source: string; sessionID: SessionID } },
     ) => Effect.Effect<RayaTask.Run, RayaTask.GuardError | RayaTask.NotFoundError>
     resume: (sessionID: SessionID) => Effect.Effect<void>
     delegate: (input: Ask) => Effect.Effect<Errand, RayaTask.GuardError | RayaTask.NotFoundError | Invalid | Conflict>
@@ -320,6 +320,7 @@ export namespace RayaTaskRunner {
           guard?: Effect.Effect<void, RayaTask.GuardError>
           runID?: string
           delegationID?: string
+          bind?: { source: string; sessionID: SessionID }
         },
       ) =>
         tasks.enforce(id).pipe(
@@ -397,6 +398,7 @@ export namespace RayaTaskRunner {
                     trigger: selected.trigger,
                   }
                   const stored = yield* tasks.record(run)
+                  if (opts?.bind && inbox) yield* inbox.move(item.id, opts.bind.source, opts.bind.sessionID, created.id)
                   if (!opts?.defer)
                     yield* kick({
                       database: input.database,
@@ -468,7 +470,11 @@ export namespace RayaTaskRunner {
       return run
     })
 
-    const ask = Effect.fn("RayaTaskRunner.ask")(function* (id: string, question: string, opts?: { defer?: boolean }) {
+    const ask = Effect.fn("RayaTaskRunner.ask")(function* (
+      id: string,
+      question: string,
+      opts?: { defer?: boolean; bind?: { source: string; sessionID: SessionID } },
+    ) {
       const item = yield* tasks.get(id)
       if (item.access === undefined)
         return yield* new RayaTask.GuardError({
@@ -485,9 +491,15 @@ export namespace RayaTaskRunner {
         if (row?.state === "needs_input") yield* errands.resume(row.id, run.id, run.sessionID)
         return run
       }
-      return yield* fire(id, undefined, note, { follow: true, defer: opts?.defer })
+      return yield* fire(id, undefined, note, { follow: true, defer: opts?.defer, bind: opts?.bind })
     })
     const resume = Effect.fn("RayaTaskRunner.resume")(function* (sessionID: SessionID) {
+      const items = yield* tasks.list()
+      const active = yield* Effect.forEach(items, (item) => tasks.runsFor(item.id), { concurrency: 1 })
+      if (!active.flat().some((run) => run.sessionID === sessionID && RayaTask.pending(run))) {
+        yield* revive()
+        return
+      }
       yield* kick({ database: input.database, sessionID, storage: input.storage, sessions: input.sessions }).pipe(
         Effect.forkDetach,
       )
@@ -940,6 +952,16 @@ export namespace RayaTaskRunner {
       const items = yield* tasks.list()
       for (const item of items) {
         yield* reconcile(item.id)
+        const stranded = inbox ? yield* inbox.stranded(item.id) : undefined
+        if (stranded?.sessionID && inbox) {
+          const history = yield* tasks.runsFor(item.id)
+          const prior = history.find((run) => run.sessionID === stranded.sessionID)
+          if (prior && !RayaTask.pending(prior) && !history.some(RayaTask.pending))
+            yield* ask(item.id, stranded.body, {
+              defer: true,
+              bind: { source: stranded.source, sessionID: stranded.sessionID },
+            })
+        }
         const waiting = inbox ? yield* inbox.pending(item.id) : undefined
         if (waiting && inbox) {
           const resumed = yield* ask(item.id, waiting.body, { defer: true })

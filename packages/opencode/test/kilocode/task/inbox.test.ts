@@ -220,6 +220,27 @@ test("routine inbox publication is idempotent, unread ignores user messages, and
   )
 })
 
+test("an attached message moves only before delivery ownership exists", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const inbox = RayaTaskInbox.make(yield* Database.Service)
+      const old = SessionID.make("ses_old")
+      const next = SessionID.make("ses_next")
+      yield* inbox.publish({ agentID: "books", source: "user_move", kind: "user", body: "Continue the review" })
+      yield* inbox.attach("books", "user_move", old)
+      expect((yield* inbox.stranded("books"))?.sessionID).toBe(old)
+      expect((yield* inbox.move("books", "user_move", old, next)).sessionID).toBe(next)
+      expect((yield* inbox.move("books", "user_move", old, next)).sessionID).toBe(next)
+      expect((yield* inbox.delivery(next, "msg_owned"))?.record.sessionID).toBe(next)
+      expect(yield* inbox.stranded("books")).toBeUndefined()
+      expect(
+        Exit.isFailure(yield* inbox.move("books", "user_move", next, SessionID.make("ses_other")).pipe(Effect.exit)),
+      ).toBe(true)
+      expect((yield* inbox.page("books")).messages[0]?.sessionID).toBe(next)
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
 test("routine inbox pages return at most 50 messages and refuse a larger limit", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {

@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gt, isNull, ne, sql } from "drizzle-orm"
+import { and, asc, count, desc, eq, gt, isNotNull, isNull, ne, sql } from "drizzle-orm"
 import { createHash } from "node:crypto"
 import { Effect, Exit, Schema } from "effect"
 import type { Database } from "@opencode-ai/core/database/database"
@@ -649,6 +649,70 @@ export namespace RayaTaskInbox {
         .pipe(Effect.orDie)
       return row ? decode(row) : undefined
     })
+    const stranded = Effect.fn("RayaTaskInbox.stranded")(function* (agentID: string) {
+      const row = yield* db
+        .select()
+        .from(Message)
+        .where(
+          and(
+            eq(Message.agent_id, agentID),
+            eq(Message.kind, "user"),
+            isNotNull(Message.session_id),
+            isNull(Message.delivery_id),
+            isNull(Message.delivered_at),
+          ),
+        )
+        .orderBy(asc(Message.time_created), asc(Message.id))
+        .limit(1)
+        .get()
+        .pipe(Effect.orDie)
+      return row ? decode(row) : undefined
+    })
+    const move = Effect.fn("RayaTaskInbox.move")(function* (
+      agentID: string,
+      source: string,
+      expected: SessionID,
+      sessionID: SessionID,
+    ) {
+      if (expected === sessionID)
+        return yield* new Invalid({ message: "A stranded inbox message needs a different destination session." })
+      const prior = yield* db
+        .select()
+        .from(Message)
+        .where(and(eq(Message.agent_id, agentID), eq(Message.source, source)))
+        .get()
+        .pipe(Effect.orDie)
+      if (!prior) return yield* new Invalid({ message: "This inbox message was not found." })
+      if (
+        prior.kind === "user" &&
+        prior.session_id === sessionID &&
+        prior.delivery_id === null &&
+        prior.delivered_at === null
+      )
+        return decode(prior)
+      if (prior.kind !== "user" || prior.session_id !== expected || prior.delivery_id || prior.delivered_at !== null)
+        return yield* new Conflict({
+          message: "This inbox message has delivery evidence or belongs to another session.",
+        })
+      const rows = yield* db
+        .update(Message)
+        .set({ session_id: sessionID })
+        .where(
+          and(
+            eq(Message.id, prior.id),
+            eq(Message.agent_id, agentID),
+            eq(Message.session_id, expected),
+            isNull(Message.delivery_id),
+            isNull(Message.delivered_at),
+          ),
+        )
+        .returning()
+        .all()
+        .pipe(Effect.orDie)
+      if (!rows[0])
+        return yield* new Conflict({ message: "This inbox message changed before its recovery could finish." })
+      return decode(rows[0])
+    })
     const page = Effect.fn("RayaTaskInbox.page")(function* (agentID: string, cursor?: string, limit = 50) {
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50)
         return yield* new Invalid({ message: "Inbox pages are limited to 50 messages." })
@@ -848,6 +912,22 @@ export namespace RayaTaskInbox {
       }
       return items
     })
-    return { ensure, admit, publish, attach, delivery, delivered, content, pending, page, read, draft, summaries, used }
+    return {
+      ensure,
+      admit,
+      publish,
+      attach,
+      delivery,
+      delivered,
+      content,
+      pending,
+      stranded,
+      move,
+      page,
+      read,
+      draft,
+      summaries,
+      used,
+    }
   }
 }

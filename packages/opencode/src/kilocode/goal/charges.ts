@@ -50,9 +50,9 @@ export const make = Effect.fn("RayaGoalCharges.make")(function* (deps: Deps) {
   const locate = Effect.fn("RayaGoalCharges.locate")(function* (sessionID: SessionID) {
     let id: SessionID | undefined = sessionID
     for (let depth = 0; id && depth < 64; depth++) {
-      const goal = yield* goals.get(id).pipe(Effect.catchTag("RayaGoal.NotFoundError", () => Effect.succeed(undefined)))
+      const goal = yield* goals.get(id)
       if (goal?.status === "active") return { id, goal }
-      const session = yield* deps.sessions
+      const session: Session.Info | undefined = yield* deps.sessions
         .get(id)
         .pipe(Effect.catchTag("NotFoundError", () => Effect.succeed(undefined)))
       id = session?.parentID
@@ -62,9 +62,9 @@ export const make = Effect.fn("RayaGoalCharges.make")(function* (deps: Deps) {
   const locateAny = Effect.fn("RayaGoalCharges.locateAny")(function* (sessionID: SessionID) {
     let id: SessionID | undefined = sessionID
     for (let depth = 0; id && depth < 64; depth++) {
-      const goal = yield* goals.get(id).pipe(Effect.catchTag("RayaGoal.NotFoundError", () => Effect.succeed(undefined)))
+      const goal = yield* goals.get(id)
       if (goal) return { id, goal }
-      const session = yield* deps.sessions
+      const session: Session.Info | undefined = yield* deps.sessions
         .get(id)
         .pipe(Effect.catchTag("NotFoundError", () => Effect.succeed(undefined)))
       id = session?.parentID

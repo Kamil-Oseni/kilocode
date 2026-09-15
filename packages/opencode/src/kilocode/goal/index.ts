@@ -382,7 +382,7 @@ export namespace RayaGoal {
     conflict: Schema.optional(Schema.Literal(true)),
   }) {}
 
-  type Store = Pick<Storage.Interface, "read" | "write" | "remove" | "list" | "create" | "replace">
+  type Store = Pick<Storage.Interface, "read" | "write" | "remove" | "list" | "create" | "replace" | "update">
   export const openKey = "raya.goal.open"
   export const idleLimit = 3
   export const retryLimit = 3
@@ -2110,7 +2110,7 @@ export namespace RayaGoal {
       if (!deps.sessions.get) return false
       let id: SessionID | undefined = origin
       for (let depth = 0; id && depth < 64; depth++) {
-        const item = yield* deps.sessions
+        const item: Session.Info | undefined = yield* deps.sessions
           .get(id)
           .pipe(Effect.catchTag("NotFoundError", () => Effect.succeed(undefined)))
         id = item?.parentID
@@ -2166,7 +2166,7 @@ export namespace RayaGoal {
         updatedAt: now,
       }).pipe(
         Effect.catchIf(
-          (error) => AuditError.isInstance(error) && error.conflict === true,
+          (error) => error.conflict === true,
           (error) =>
             Effect.gen(function* () {
               const latest = yield* requireGoal(sessionID)

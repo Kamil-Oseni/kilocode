@@ -195,7 +195,7 @@ export namespace RayaSelfHeal {
   }
 
   export function make(
-    storage: Pick<Storage.Interface, "list" | "read" | "write" | "remove" | "create" | "replace">,
+    storage: Pick<Storage.Interface, "list" | "read" | "write" | "remove" | "create" | "replace" | "update">,
     root?: string,
   ) {
     const repair = repairs(storage, root)

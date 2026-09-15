@@ -24,4 +24,11 @@ describe("Kilo command branding", () => {
 
     expect(results.filter((result) => result.matches.length > 0)).toEqual([])
   })
+
+  test("provider errors use the Raya Gateway name without changing the login command", async () => {
+    const src = await Bun.file(path.join(root, "src", "kilocode", "components", "kilo-error-display.tsx")).text()
+
+    expect(src).toContain("Run /connect or `kilo auth login` to connect to Raya Gateway")
+    expect(src).not.toContain("connect to Kilo Gateway")
+  })
 })

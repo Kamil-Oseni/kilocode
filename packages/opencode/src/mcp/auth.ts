@@ -5,6 +5,7 @@ import { Global } from "@opencode-ai/core/global"
 import { Effect, Layer, Context, Option, Schema } from "effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
+import { ProfileWriterLive } from "@/kilocode/migration/writer-live" // kilocode_change - profile migration admission
 
 export const Tokens = Schema.Struct({
   accessToken: Schema.mutableKey(Schema.String),
@@ -55,8 +56,9 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Mc
 
 export const use = serviceUse(Service)
 
-const layer = Layer.effect(
-  Service,
+const make = (
+  admission: ProfileWriterLive.Admission = ProfileWriterLive.mcp, // kilocode_change - injectable admission
+) =>
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
     const flock = yield* EffectFlock.Service
@@ -76,12 +78,16 @@ const layer = Layer.effect(
     })
 
     const mutate = Effect.fn("McpAuth.mutate")(function* (update: (data: AuthData) => AuthData | undefined) {
-      const target = filepath() // kilocode_change - keep one profile generation for the transaction
-      yield* Effect.gen(function* () {
-        const next = update(yield* read(target)) // kilocode_change
-        if (!next) return
-        yield* fs.writeJson(target, next, 0o600).pipe(Effect.orDie) // kilocode_change
-      }).pipe(flock.withLock(`mcp-auth:${target}`), Effect.orDie) // kilocode_change
+      yield* admission.run(
+        Effect.gen(function* () {
+          const target = filepath() // kilocode_change - select the profile only after admission
+          yield* Effect.gen(function* () {
+            const next = update(yield* read(target))
+            if (!next) return
+            yield* fs.writeJson(target, next, 0o600).pipe(Effect.orDie)
+          }).pipe(flock.withLock(`mcp-auth:${target}`), Effect.orDie)
+        }),
+      ) // kilocode_change - admit lock acquisition and the complete transaction
     })
 
     const get = Effect.fn("McpAuth.get")(function* (mcpName: string) {
@@ -158,8 +164,11 @@ const layer = Layer.effect(
       getOAuthState,
       clearOAuthState,
     })
-  }),
-)
+  })
+
+const layer = Layer.effect(Service, make()) // kilocode_change - process-lifetime admission
+
+export const layerWithAdmission = (admission: ProfileWriterLive.Admission) => Layer.effect(Service, make(admission)) // kilocode_change - tests
 
 export const node = LayerNode.make({ service: Service, layer: layer, deps: [FSUtil.node, EffectFlock.node] })
 

@@ -27,5 +27,7 @@ export namespace ProfileWriterLive {
   }
 
   export const storage = admission("profile.storage.json")
+  export const auth = admission("profile.credentials.auth")
+  export const mcp = admission("profile.credentials.mcp")
   export const snapshot = registry.snapshot
 }

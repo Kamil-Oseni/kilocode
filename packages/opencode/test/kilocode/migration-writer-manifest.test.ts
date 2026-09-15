@@ -11,6 +11,8 @@ describe("profile writer manifest", () => {
     expect(manifest.complete).toBe(false)
     expect(manifest.gaps.length).toBeGreaterThan(0)
     expect(manifest.writers.filter((writer) => writer.coverage === "integrated").map((writer) => writer.id)).toEqual([
+      "profile.credentials.auth",
+      "profile.credentials.mcp",
       "profile.storage.json",
     ])
     expect(manifest.writers.filter((writer) => writer.coverage !== "integrated").length).toBeGreaterThan(0)
@@ -48,6 +50,18 @@ describe("profile writer manifest", () => {
     const storage = ProfileWriterManifest.manifest.writers.find((writer) => writer.id === "profile.storage.json")
     expect(storage?.methods).toEqual(["initialize", "migrate", "create", "replace", "write", "update", "remove"])
     expect(storage?.lifecycle).toContain("marker")
+
+    const mcp = ProfileWriterManifest.manifest.writers.find((writer) => writer.id === "profile.credentials.mcp")
+    expect(mcp?.methods).toEqual([
+      "set",
+      "remove",
+      "updateTokens",
+      "updateClientInfo",
+      "updateCodeVerifier",
+      "clearCodeVerifier",
+      "updateOAuthState",
+      "clearOAuthState",
+    ])
 
     const effect = ProfileWriterManifest.manifest.writers.find(
       (writer) => writer.id === "profile.sqlite.primary.effect",

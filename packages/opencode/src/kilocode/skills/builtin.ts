@@ -8,14 +8,25 @@ import BROWSER from "./browser/SKILL.md" with { type: "text" }
 import WORKFLOWS from "./browser-workflows/SKILL.md" with { type: "text" }
 import RECOVERY from "./browser-recovery/SKILL.md" with { type: "text" }
 import RUNTIME from "./browser-runtime/SKILL.md" with { type: "text" }
+import DESIGNER from "../agent/designer.txt" with { type: "text" }
 
 export interface BuiltinSkill {
   name: string
   description: string
   content: string
+  version?: string
+  source?: string
 }
 
 export const BUILTIN_SKILLS: BuiltinSkill[] = [
+  {
+    name: "designer",
+    description:
+      "Design and implement Raya interfaces, flows, design systems, product copy, responsive states, accessibility, and visual verification. Load for any UI or UX work.",
+    content: DESIGNER,
+    version: "1",
+    source: "raya:bundled:designer",
+  },
   {
     name: "browser",
     description:

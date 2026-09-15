@@ -1,5 +1,13 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-14 21:15 America/Toronto - Uncertain follow-ups have a dedicated review flow
+
+**Status: product commit `8a5d6efd1b` is verified and pushed to `origin/main`; packaging remains.** A retained startup claim now identifies a follow-up recovery in the public Routine execution state. The worker row says that the follow-up may have reached the worker and blocks more work. Run review uses a dedicated “Follow-up delivery” state with the saved run and conversation, followed by “Keep reviewing” or a confirmed “Close without resending.” Closing writes an idempotent receipt that states the message was not resent and no unverified result was accepted.
+
+The review hides the inbox workspace while open, giving the uncertain decision one readable column. This corrects a responsive defect exposed by the first screenshot, where the retained worker row collapsed beside the review. The production preview now includes the follow-up recovery, saved instructions and successful close states. Focused Chromium verification passes interaction, no horizontal overflow, screenshot and WCAG 2 A/AA checks. Backend claim and real-process recovery cases pass **4 / 38** targeted; the complete scheduler result remains **36 / 473**. Extension and webview typechecks, scoped ESLint/Oxlint, SDK generation, preview build, whitespace, Kilo marker, annotation and Effect Promise-facade guards pass.
+
+EN-02's terminal follow-up race, true process interruption and visible disposition are now complete. OVR-05 remains **In progress** for representative organization execution through real browser, artifact, hosting and outreach boundaries. Installed runtime source remains `0d0a6b69ed` until this UI/backend contract slice is packaged.
+
 ## ChatGPT 2026-09-14 20:54 America/Toronto - Real-process follow-up bind recovery verified
 
 **Status: regression commit `0dbf613872` is verified and pushed to `origin/main`; no runtime files changed after the installed checkpoint.** A dedicated Bun child now opens the same filesystem storage and SQLite database, persists the replacement session, active goal, exact running history and bound startup claim, then exits with code 21 at three boundaries: immediately before the inbox move, immediately after it, and after a competing delivery identity claims the old message.

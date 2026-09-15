@@ -1,5 +1,13 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-14 21:15 America/Toronto - EN-02 follow-up disposition complete
+
+Product commit `8a5d6efd1b` is verified and pushed. The Routine agent execution schema now projects `recovery: "followup"` only when a valid retained claim contains both the exact message source and prior session. Preserve that narrow projection. `runner.resolve` uses it to publish and replay the exact receipt “Closed after reviewing an uncertain follow-up delivery. The follow-up was not resent.” Existing generic interrupted starts keep their prior wording and behavior.
+
+In the webview, preserve the dedicated row copy, “Review follow-up” label and `RunReview` state. The decision is intentionally limited to keeping the evidence open or confirming “Close without resending”; there is no automatic retry because a delivery identity means the worker may already have consumed the message. While any run/access/output review is open, `data-review` hides the inbox workspace so the decision receives one readable column. This fixes the collapsed worker-row composition caught in the first real screenshot.
+
+The production preview scene and focused Playwright case cover roster state, saved run/instructions, confirmation, successful close, no overflow, screenshot and axe WCAG checks. Webview and extension typechecks, scoped lint, SDK generation and affected guards pass. The process-bound backend close is idempotent. Treat EN-02's ambiguous follow-up boundary as complete. Continue OVR-05 with a representative company chain: chief-to-worker delegation, real browser research, artifact handoff, hosting preparation and an outreach draft. Keep external publication and messages permission-gated, save every inter-agent handoff, interrupt and reopen one worker, and prove graph/DM reconstruction without duplicate external action. Installed runtime source remains `0d0a6b69ed` until the next low-memory snapshot.
+
 ## ChatGPT 2026-09-14 20:54 America/Toronto - EN-02 real-process inbox-bind matrix complete
 
 Regression commit `0dbf613872` is verified and pushed. Preserve `fixtures/inbox-bind-start.ts` and the three scheduler cases. The child opens real filesystem storage plus SQLite, creates the exact bound startup claim/session/goal/history and exits before the inbox move, after the move, or after assigning a competing delivery identity. The parent reopens the resources and invokes `runner.revive` twice. Before/after must reuse one run/session, move or retain the one message at the exact target, create no session and clear the claim. Delivery ownership must keep the message at the old session, retain the stopped claim and create no replacement work.

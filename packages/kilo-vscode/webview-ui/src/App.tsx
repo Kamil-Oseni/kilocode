@@ -1,5 +1,6 @@
 import { Component, createSignal, createMemo, Switch, Match, Show, onMount, onCleanup } from "solid-js"
 import { DataProvider } from "@kilocode/kilo-ui/context/data"
+import { Icon } from "@kilocode/kilo-ui/icon"
 import Settings from "./components/settings/Settings"
 import ProfileView from "./components/profile/ProfileView"
 import { useVSCode } from "./context/vscode"
@@ -34,7 +35,25 @@ import "./styles/chat.css"
 
 type ViewType = "newTask" | "history" | "routines" | "profile" | "settings" | "subAgentViewer"
 type RoutineTarget = { nonce: string; organizationID?: string; agentID?: string }
+type SubagentTarget = {
+  sessionID: string
+  title?: string
+  parentSessionID?: string
+  parentTitle?: string
+}
 const VALID_VIEWS = new Set<string>(["newTask", "history", "routines", "profile", "settings", "subAgentViewer"])
+
+const subagentTarget = (value: unknown): SubagentTarget | undefined => {
+  if (!value || typeof value !== "object") return
+  const message = value as Record<string, unknown>
+  if (message.type !== "viewSubAgentSession" || typeof message.sessionID !== "string") return
+  return {
+    sessionID: message.sessionID,
+    title: typeof message.title === "string" ? message.title : undefined,
+    parentSessionID: typeof message.parentSessionID === "string" ? message.parentSessionID : undefined,
+    parentTitle: typeof message.parentTitle === "string" ? message.parentTitle : undefined,
+  }
+}
 
 /**
  * Bridge our session store to the DataProvider's expected Data shape.
@@ -225,6 +244,7 @@ const AppContent: Component = () => {
   const [settingsTab, setSettingsTab] = createSignal<string | undefined>()
   const [agentManagerProjectId, setAgentManagerProjectId] = createSignal<string | undefined>()
   const [routineTarget, setRoutineTarget] = createSignal<RoutineTarget>()
+  const [subagent, setSubagent] = createSignal<SubagentTarget>()
   // legacy-migration: state-driven flag independent of currentView to avoid
   // race conditions with SettingsEditorProvider's navigate messages.
   const [migrationNeeded, setMigrationNeeded] = createSignal(false)
@@ -328,9 +348,11 @@ const AppContent: Component = () => {
       }
       handleKiloModel(message)
       handleForked(message)
-      if (message?.type === "viewSubAgentSession" && message.sessionID) {
-        console.log("[Kilo New] App: 🔍 viewSubAgentSession:", message.sessionID)
-        session.setCurrentSessionID(message.sessionID)
+      const target = subagentTarget(message)
+      if (target) {
+        console.log("[Kilo New] App: 🔍 viewSubAgentSession:", target.sessionID)
+        setSubagent(target)
+        session.setCurrentSessionID(target.sessionID)
         setCurrentView("subAgentViewer")
       }
       // legacy-migration: state-driven migration wizard
@@ -447,7 +469,18 @@ const AppContent: Component = () => {
               />
             </Match>
             <Match when={currentView() === "subAgentViewer"}>
-              <ChatView readonly />
+              <div data-component="subagent-viewer">
+                <Show when={subagent()?.parentSessionID}>
+                  <nav data-slot="subagent-breadcrumb" aria-label="Conversation path">
+                    <button type="button" onClick={() => vscode.postMessage({ type: "closePanel" })}>
+                      {subagent()?.parentTitle?.trim() || "Parent conversation"}
+                    </button>
+                    <Icon name="chevron-right" size="small" />
+                    <span>{subagent()?.title?.trim() || session.currentSession()?.title || "Sub-agent"}</span>
+                  </nav>
+                </Show>
+                <ChatView readonly />
+              </div>
             </Match>
           </Switch>
         }

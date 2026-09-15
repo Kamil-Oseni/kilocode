@@ -1320,14 +1320,19 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         case "reload":
           this.handleReload().catch((e) => console.error("[Kilo New] KiloProvider: Reload failed:", e))
           break
-        case "openSubAgentViewer":
+        case "openSubAgentViewer": {
+          const current = this.currentSession
+          const parentTitle = current && current.id === message.parentSessionID ? current.title : undefined
           vscode.commands.executeCommand(
             "raya.openSubAgentViewer",
             message.sessionID,
             message.title,
             this.getWorkspaceDirectory(message.parentSessionID),
+            message.parentSessionID,
+            parentTitle,
           )
           break
+        }
         case "saveImage":
           return saveImage(this.getWorkspaceDirectory(this.currentSession?.id), message)
         case "requestProviders":

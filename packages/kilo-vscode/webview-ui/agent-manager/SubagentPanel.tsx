@@ -7,7 +7,7 @@
 
 import { Icon } from "@kilocode/kilo-ui/icon"
 import { IconButton } from "@kilocode/kilo-ui/icon-button"
-import { createEffect, type Accessor, type Component } from "solid-js"
+import { Show, createEffect, type Accessor, type Component } from "solid-js"
 import { DataBridge } from "../src/App"
 import { ChatView } from "../src/components/chat"
 import { SessionProvider, useSession } from "../src/context/session"
@@ -25,6 +25,8 @@ interface Props {
   onClose: (id: string) => void
   onCloseOthers: (id: string) => void
   onReorder: (from: string, to: string) => void
+  parentTitle: (id: string) => string
+  onOpenParent: (id: string) => void
   onClosePanel: () => void
 }
 
@@ -48,6 +50,7 @@ const SubagentContent: Component<Props> = (props) => {
   const session = useSession()
   const ids = () => props.tabs().map((tab) => tab.id)
   const title = (id: string) => props.tabs().find((tab) => tab.id === id)?.title ?? "Sub-agent"
+  const active = () => props.tabs().find((tab) => tab.id === props.active())
   const close = (id: string, focus: { restore: () => void }) => {
     props.onClose(id)
     session.releaseSession(id)
@@ -70,7 +73,17 @@ const SubagentContent: Component<Props> = (props) => {
       <header class="am-subagent-header">
         <div class="am-subagent-heading">
           <Icon name="task" size="small" />
-          <span>Subagents</span>
+          <Show when={active()?.parentID} fallback={<span>Subagents</span>}>
+            {(id) => (
+              <>
+                <button class="am-subagent-parent" onClick={() => props.onOpenParent(id())}>
+                  {props.parentTitle(id())}
+                </button>
+                <Icon name="chevron-right" size="small" />
+                <span class="am-subagent-child">{active()?.title ?? "Sub-agent"}</span>
+              </>
+            )}
+          </Show>
           <span class="am-subagent-count">{props.tabs().length}</span>
         </div>
         <IconButton

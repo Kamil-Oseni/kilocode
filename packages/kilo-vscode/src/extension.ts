@@ -570,8 +570,8 @@ export function activate(context: vscode.ExtensionContext) {
     ),
     vscode.commands.registerCommand(
       "raya.openSubAgentViewer",
-      (sessionID: string, title?: string, directory?: string) => {
-        subAgentViewerProvider.openPanel(sessionID, title, directory)
+      (sessionID: string, title?: string, directory?: string, parentSessionID?: string, parentTitle?: string) => {
+        subAgentViewerProvider.openPanel(sessionID, title, directory, parentSessionID, parentTitle)
       },
     ),
     vscode.commands.registerCommand("raya.agentManager.previousSession", () => {

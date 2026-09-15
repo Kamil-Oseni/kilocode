@@ -5292,6 +5292,36 @@ body.vscode-high-contrast-light {
   font-weight: 600;
 }
 
+.am-subagent-parent {
+  all: unset;
+  min-width: 0;
+  max-width: 42%;
+  overflow: hidden;
+  color: var(--text-weak);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.am-subagent-parent:hover,
+.am-subagent-parent:focus-visible {
+  color: var(--text-base);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.am-subagent-parent:focus-visible {
+  outline: 1px solid var(--border-focus, var(--vscode-focusBorder));
+  outline-offset: 2px;
+}
+
+.am-subagent-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .am-subagent-count {
   color: var(--text-weak);
   font-size: var(--kilo-font-size-10);

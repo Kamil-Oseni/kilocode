@@ -6,6 +6,7 @@ import type { ToolPart } from "../src/types/messages"
 export interface SubagentTab {
   id: string
   title: string
+  parentID?: string
 }
 
 interface Options {
@@ -44,9 +45,14 @@ export function createSubagentTabs(opts: Options) {
       setTabs((prev) => {
         const current = prev[scope] ?? []
         const existing = current.find((tab) => tab.id === id)
-        if (!existing) return { ...prev, [scope]: [...current, { id, title: label }] }
-        if (title?.trim() && existing.title !== label) {
-          return { ...prev, [scope]: current.map((tab) => (tab.id === id ? { ...tab, title: label } : tab)) }
+        if (!existing) return { ...prev, [scope]: [...current, { id, title: label, parentID }] }
+        if ((title?.trim() && existing.title !== label) || (!existing.parentID && parentID)) {
+          return {
+            ...prev,
+            [scope]: current.map((tab) =>
+              tab.id === id ? { ...tab, title: label, parentID: tab.parentID ?? parentID } : tab,
+            ),
+          }
         }
         return prev
       })

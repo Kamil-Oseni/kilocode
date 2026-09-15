@@ -32,6 +32,58 @@
 @import "./memory-provenance.css";
 @import "./high-contrast.css";
 
+/* Read-only delegated-agent conversation */
+[data-component="subagent-viewer"] {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
+[data-component="subagent-viewer"] > .chat-view {
+  flex: 1;
+  min-height: 0;
+}
+
+[data-slot="subagent-breadcrumb"] {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 12px;
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  border-bottom: var(--raya-hairline, 1px) solid var(--border-weak-base, var(--vscode-panel-border));
+  font-size: var(--font-size-small);
+}
+
+[data-slot="subagent-breadcrumb"] button {
+  all: unset;
+  max-width: 42%;
+  overflow: hidden;
+  color: var(--text-base, var(--vscode-foreground));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+[data-slot="subagent-breadcrumb"] button:hover {
+  text-decoration: underline;
+}
+
+[data-slot="subagent-breadcrumb"] button:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+}
+
+[data-slot="subagent-breadcrumb"] span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Cloud continuation */
 [data-slot="cloud-continuation"] code {
   overflow-wrap: anywhere;

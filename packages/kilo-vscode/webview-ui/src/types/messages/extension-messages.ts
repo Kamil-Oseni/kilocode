@@ -1672,6 +1672,9 @@ export interface EnhancePromptErrorMessage {
 export interface ViewSubAgentSessionMessage {
   type: "viewSubAgentSession"
   sessionID: string
+  title?: string
+  parentSessionID?: string
+  parentTitle?: string
 }
 
 export interface DiffViewerDiffsMessage {

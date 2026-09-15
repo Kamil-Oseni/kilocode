@@ -1672,6 +1672,10 @@ export interface OpenSubAgentViewerRequest {
   parentSessionID?: string
 }
 
+export interface ClosePanelRequest {
+  type: "closePanel"
+}
+
 // Preview an image attachment in VS Code's built-in image viewer
 export interface PreviewImageRequest {
   type: "previewImage"
@@ -2199,6 +2203,7 @@ export type WebviewMessage =
   | RetryConnectionRequest
   | ReloadRequest
   | OpenSubAgentViewerRequest
+  | ClosePanelRequest
   | PreviewImageRequest
   | SaveImageRequest
   | SetDefaultBaseBranchRequest

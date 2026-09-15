@@ -27,7 +27,10 @@ describe("Agent Manager subagent tabs", () => {
       item.tabs.open("child-1", "First", "parent-1")
       item.tabs.open("child-2", "Second", "parent-2")
 
-      expect(item.tabs.tabs().map((tab) => tab.id)).toEqual(["child-1", "child-2"])
+      expect(item.tabs.tabs()).toEqual([
+        { id: "child-1", title: "First", parentID: "parent-1" },
+        { id: "child-2", title: "Second", parentID: "parent-2" },
+      ])
       expect(item.tabs.active()).toBe("child-2")
       expect(item.calls.synced).toEqual([
         ["child-1", "parent-1"],
@@ -55,6 +58,19 @@ describe("Agent Manager subagent tabs", () => {
       expect(item.tabs.active()).toBeUndefined()
       expect(item.calls.unsynced).toEqual(["two", "three", "one"])
       expect(item.calls.hidden).toBe(1)
+      dispose()
+    })
+  })
+
+  it("adds missing parent context without replacing the original parent", () => {
+    createRoot((dispose) => {
+      const item = scene()
+      item.tabs.open("child", "Initial")
+      item.tabs.open("child", "Renamed", "parent")
+      item.tabs.open("child", "Changed again", "different-parent")
+
+      expect(item.tabs.tabs()).toEqual([{ id: "child", title: "Changed again", parentID: "parent" }])
+      expect(item.calls.synced).toEqual([["child", "parent"]])
       dispose()
     })
   })

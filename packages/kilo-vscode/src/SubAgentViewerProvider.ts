@@ -22,10 +22,23 @@ export class SubAgentViewerProvider implements vscode.Disposable {
     private readonly context: vscode.ExtensionContext,
   ) {}
 
-  openPanel(sessionID: string, title?: string, directory?: string): void {
+  openPanel(
+    sessionID: string,
+    title?: string,
+    directory?: string,
+    parentSessionID?: string,
+    parentTitle?: string,
+  ): void {
     const existing = this.panels.get(sessionID)
     if (existing) {
       if (directory) this.providers.get(sessionID)?.setSessionDirectory(sessionID, directory)
+      this.providers.get(sessionID)?.postMessage({
+        type: "viewSubAgentSession",
+        sessionID,
+        title,
+        parentSessionID,
+        parentTitle,
+      })
       existing.reveal(vscode.ViewColumn.One)
       return
     }
@@ -57,7 +70,7 @@ export class SubAgentViewerProvider implements vscode.Disposable {
       if (msg.type !== "webviewReady") return
       readyDisposable.dispose()
 
-      provider.postMessage({ type: "viewSubAgentSession", sessionID })
+      provider.postMessage({ type: "viewSubAgentSession", sessionID, title, parentSessionID, parentTitle })
       void provider.loadMessages(sessionID)
 
       try {

@@ -2678,6 +2678,13 @@ const AgentManagerContent: Component = () => {
                         onClose={subagents.close}
                         onCloseOthers={subagents.closeOthers}
                         onReorder={subagents.reorder}
+                        parentTitle={(id) =>
+                          session.sessions().find((item) => item.id === id)?.title ?? "Parent conversation"
+                        }
+                        onOpenParent={(id) => {
+                          selectSessionTab(id, false)
+                          setSidePanel(null)
+                        }}
                         onClosePanel={() => setSidePanel(null)}
                       />
                     </Show>

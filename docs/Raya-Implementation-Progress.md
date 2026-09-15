@@ -1,5 +1,11 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-14 22:41 America/Toronto - Active delegated-agent monitor checkpoint installed
+
+**Status: source/docs commit `8a7d9c96e7` is installed.** The authorized `RAYA_LOW_MEMORY=1` workflow found unchanged SDK output, reused the existing 230,681,600-byte CLI, then passed extension-host typecheck, webview typecheck, cached ESLint, production bundling, packaging and VS Code installation. Installed version: `eden.raya@7.4.23-snapshot+8a7d9c96e7.kamil-oseni.1789439945378`; its exact extension directory exists.
+
+The retained rollback VSIX is 519,386,621 bytes with SHA-256 `679334ec83cc99dadddb6dfc0da7433c768673b48ebcbe6fba50b9256f486758`. Its embedded CLI is 230,681,600 bytes with SHA-256 `38f13b3238d1ed3cbbc9cc5541b33a8874ce956b6ba062ad5d4319da23e2e36d`. No Bun or tsgo process remains. Reload the open VS Code window before judging the newly installed Background Agents state/activity UI.
+
 ## ChatGPT 2026-09-14 22:36 America/Toronto - Goal active; live delegated-agent activity delivered
 
 **Correction: the implementation goal is active.** The earlier paused flag came from the owner's older handoff instruction and no longer governs the work. The owner's later direction to continue superseded it, and the orchestrator now reports the goal as active. The 16 future requirements remain merged into the canonical Findings and overhauls table as `FUT-*` rows; they are additions to the existing audit, not a replacement project or a reason to stop the current implementation.
@@ -944,7 +950,7 @@ This checkpoint delivers explicit organization delegation permissions, admission
 
 ## Current work
 
-Latest pushed checkpoint: `dc0fdb09e4`. Latest installed source checkpoint: `4c5f5fdea8`, installed as `eden.raya@7.4.23-snapshot+4c5f5fdea8.kamil-oseni.1789438283214`. The installed checkpoint includes truthful chat/Routine timestamps and durable delegated-agent names; the pushed source additionally remembers each conversation's Background Agents disclosure/dismissals and shows real child activity plus registry-timed elapsed duration. The package and embedded CLI identities are verified; the open VS Code host still needs reload before activation can be claimed. Post-reload real-chat acceptance, the next batched install, full live rebuild-survival acceptance, paid Live voice/device acceptance, representative company execution and the remaining original plus future requirements stay open.
+Latest installed source/docs checkpoint: `8a7d9c96e7`, installed as `eden.raya@7.4.23-snapshot+8a7d9c96e7.kamil-oseni.1789439945378`. It includes truthful chat/Routine timestamps, durable delegated-agent names, remembered Background Agents disclosure/dismissals, and real child activity plus registry-timed elapsed duration. The package and embedded CLI identities are verified; reload the open VS Code host before runtime acceptance. Post-reload real-chat acceptance, full live rebuild-survival acceptance, paid Live voice/device acceptance, representative company execution and the remaining original plus future requirements stay open.
 
 The browser simplification is delivered through source, tests, push and installed snapshot. Durable spoken snapshots, warm handoff, live device/provider acceptance, organization delegation/provisioning and the full 39-requirement audit remain open.
 

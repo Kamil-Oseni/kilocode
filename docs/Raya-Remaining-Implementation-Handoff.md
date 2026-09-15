@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-14 22:41 America/Toronto - Active monitor checkpoint installed
+
+Source/docs commit `8a7d9c96e7` is installed as `eden.raya@7.4.23-snapshot+8a7d9c96e7.kamil-oseni.1789439945378`. The low-memory workflow reused the existing CLI and passed SDK drift, extension/webview types, cached ESLint, production bundle, package and install stages. Retained VSIX: 519,386,621 bytes, SHA-256 `679334ec83cc99dadddb6dfc0da7433c768673b48ebcbe6fba50b9256f486758`; embedded CLI: 230,681,600 bytes, SHA-256 `38f13b3238d1ed3cbbc9cc5541b33a8874ce956b6ba062ad5d4319da23e2e36d`. The installed directory exists and no Bun/tsgo process remains. Reload VS Code before installed-host acceptance.
+
 ## ChatGPT 2026-09-14 22:36 America/Toronto - Goal active; authoritative monitor activity pushed
 
 The goal is active. The earlier pause was an obsolete administrative state inherited from the owner's older handoff instruction; the owner's later direction to continue superseded it, and the orchestrator now agrees. Do not pause implementation. All 16 `FUT-*` requirements are present in the canonical Findings and overhauls table in `Raya-Implementation-Progress.md` and remain merged with the original audit work.

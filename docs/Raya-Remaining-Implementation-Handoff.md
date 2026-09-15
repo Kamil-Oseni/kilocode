@@ -1,6 +1,16 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: active.** Continue implementation from local product source `68e1162535`; installed snapshot source is `7b3796f2bf`; do not pause it. `origin/main` is still `d894fc0eb9` because the normal pre-push hook reaches existing cross-package `@opencode-ai/tui` type failures. The 16 future additions are literal `FUT-*` rows in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+> **Goal status: active.** Continue implementation from local product source `e9a05e3fde`; installed snapshot source is `7b3796f2bf`; do not pause it. `origin/main` is still `d894fc0eb9` because the normal pre-push hook reaches existing cross-package `@opencode-ai/tui` type failures. The 16 future additions are literal `FUT-*` rows in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+
+## ChatGPT 2026-09-15 02:44 America/Toronto - Todo view and Admin read APIs landed
+
+Continue from three new product commits:
+
+- `e9a05e3fde` adds the first user-reachable Todo view. Preserve native sidebar/editor commands, the `todo` App route, typed webview messages and `src/kilo-provider/personal-todos.ts` host boundary. Add/list/complete/reopen/delete are available. Failed create drafts and mutation intents survive errors; an exact stale 409 fetches the latest item and retries only with its new revision. Bridge plus message contracts pass 7 / 9, focused ESLint/Prettier/Knip/marker checks pass, and low-memory esbuild passes. The Happy DOM fixture harness cannot resolve unchanged Windows fixtures in this environment, so run real rendered and installed acceptance before declaring the view verified. Do not describe title/detail/due-date editing as present yet.
+- `5c3b0da1c6` adds authenticated `GET /raya/admin/health` and `GET /raya/admin/logs`, generated as `client.raya.admin.*`. Preserve workspace-isolated process-local log stores, 256-entry retention, sequence pagination, closed fields and explicit unknown browser/voice signals. The complete Admin suites pass 11 / 54. Build the UI as read-only health rows and a bounded log viewer; provide loading, disconnected, partial/unknown, empty and retry states. Never render raw errors, paths, IDs, URLs, credentials, messages, browser content or media.
+- `fa79d2776c` presents the configuration-migration notification as Raya while retaining its compatibility ID, `.opencode` source, `.kilo` destination and existing action URL. Its focused test passes 1 / 7.
+
+Next build a separate persisted wall-clock focus-timer contract with restart-safe elapsed/remaining derivation and revision-fenced start/pause/resume/reset operations, then expose it through the Todo view. After that, implement the Admin UI. Follow `docs/designer.md`, use `@kilocode/kilo-ui`, preserve Instrument Serif/Outfit and the Raya accent, and test error/recovery states rather than a success-only flow. Do not run broad Turbo/tsgo checks; the low-memory esbuild bundle already proved this Todo source resolves.
 
 ## ChatGPT 2026-09-15 02:20 America/Toronto - Active continuation after Todo/Admin/branding checkpoints
 

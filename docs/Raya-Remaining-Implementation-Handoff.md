@@ -1,6 +1,20 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: active.** Continue implementation from local product source `d20acc53bf`; installed snapshot source is `7b3796f2bf`; do not pause it. `origin/main` is still `d894fc0eb9` because the normal pre-push hook reaches existing cross-package `@opencode-ai/tui` type failures. The 16 future additions are literal `FUT-*` rows in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+> **Goal status: active.** Continue implementation from local product source `68e1162535`; installed snapshot source is `7b3796f2bf`; do not pause it. `origin/main` is still `d894fc0eb9` because the normal pre-push hook reaches existing cross-package `@opencode-ai/tui` type failures. The 16 future additions are literal `FUT-*` rows in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+
+## ChatGPT 2026-09-15 02:20 America/Toronto - Active continuation after Todo/Admin/branding checkpoints
+
+The goal service reports **active**. Do not restore the superseded pause described by older chronological entries. The canonical Findings and overhauls table contains the original rows and then all sixteen `FUT-*` rows without a heading, blank line or second header between `OVR-10` and `FUT-CU-01`.
+
+Three reviewed commits are newer than the previous documentation checkpoint:
+
+- `a2c6aaa8ea` exposes global personal Todos through typed list/create/get/update/delete HTTP endpoints and the generated `client.raya.personalTodo` SDK. Update and delete require the observed revision. Preserve the typed stale HTTP 409 and atomic tombstone behavior. Domain coverage passes 3 / 22; the real server route passes 1 / 18. Build the extension Todo CRUD tab next using the existing SDK, then add a persisted wall-clock focus timer. Follow `docs/designer.md`: neutral surfaces, Instrument Serif headings, Outfit body, restrained Raya accent, real loading/empty/offline/error/stale-conflict states, keyboard operation and 320 px overflow checks.
+- `90a5d67925` adds `RayaAdminLog`, a process-local 256-entry redacted diagnostic ring. It accepts only the fixed subsystem/severity/code schemas and allowlisted bounded fields; unknown fields are discarded without inspecting them. Registry, probe service and log coverage passes 10 / 38. Next expose the existing registry plus bounded log reads through a read-only typed API, then build the Admin UI. Do not add raw errors, messages, paths, IDs, URLs, browser content, credentials or media.
+- `68e1162535` presents provider-error recovery as Raya Gateway while retaining `kilo auth login` as a compatibility command. Branding coverage passes 2 / 3 and inventory is refreshed. Also preserve `d73b9b5040`, where public MCP/Codex OAuth callbacks were redesigned with Raya copy, semantic status/alert states, keyboard-readable recovery and responsive light/dark styling.
+
+Continue in this merged order: Todo CRUD UI; Todo focus timer; Admin read-only API; Admin health/log UI; small verified public-brand replacements; Todo AI clarification/planning and reminders; organization-policy skill composition and held-out skill evaluations. Then move through the higher-risk computer-use, live vision, external contact, autonomous-organization execution, encrypted cloud continuation and editor-fork stages while continuing unfinished original `PR-*`, `EN-*`, `UX-*`, `UI-*` and `OVR-*` acceptance. Update both documents after every checkpoint with author, date/time, commit, tests, limitations and the exact next step.
+
+Use [OpenAI's public GPT-6 Astra model guidance](https://developers.openai.com/api/docs/guides/latest-model) for the coding-agent behavior principles already captured in Raya's universal coding skill. Treat it as public product guidance, not evidence of private Codex desktop or hosted architecture.
 
 ## ChatGPT 2026-09-15 01:55 America/Toronto - Quick foundations reviewed and committed
 

@@ -1698,6 +1698,110 @@ for (const stage of ["session", "history"] as const) {
   )
 }
 
+for (const stage of ["before", "after", "owned"] as const) {
+  const title =
+    stage === "owned"
+      ? "a follow-up with competing delivery ownership stays held for review"
+      : `a follow-up stopped ${stage} its inbox move recovers without duplicate work`
+  it.live(
+    title,
+    () =>
+      Effect.gen(function* () {
+        const directory = yield* tmpdirScoped()
+        const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+        yield* Effect.gen(function* () {
+          const storage = yield* Storage.Service
+          const database = yield* Database.Service
+          const tasks = RayaTask.make({ storage, database })
+          const agent = yield* tasks.create({
+            name: "Accounts",
+            objective: "Review accounts",
+            access: "brief",
+            schedule: { kind: "manual" },
+          })
+          const prior = SessionID.make(`ses_bind_old_${stage}`)
+          const next = SessionID.make(`ses_bind_next_${stage}`)
+          const source = `user_bind_${stage}`
+          const old = yield* tasks.record({
+            id: `run_bind_old_${stage}`,
+            agentID: agent.id,
+            sessionID: prior,
+            at: Date.now() - 1,
+            status: "running",
+          })
+          yield* tasks.transition(old, { ...old, status: "error", blockedReason: "Settled" })
+          const inbox = RayaTaskInbox.make(database)
+          yield* inbox.publish({ agentID: agent.id, source, kind: "user", body: "Continue safely" })
+          yield* inbox.attach(agent.id, source, prior)
+          const fixture = fileURLToPath(new URL("./fixtures/inbox-bind-start.ts", import.meta.url))
+          const code = yield* spawner.exitCode(
+            ChildProcess.make(
+              process.execPath,
+              [fixture, path.join(directory, "queue.sqlite"), path.join(directory, "storage"), agent.id, stage],
+              { stdin: "ignore", stdout: "ignore", stderr: "ignore", detached: false },
+            ),
+          )
+          expect(Number(code)).toBe(21)
+          const held = yield* inspect(storage, agent.id)
+          expect(held?.state).toBe("recovery")
+          expect(held?.sessionID).toBe(next)
+          expect(held?.runID).toBeString()
+          const runID = held!.runID!
+          const metadata = {
+            rayaRoutine: {
+              version: 1 as const,
+              agentID: agent.id,
+              runID,
+              scheduleVersion: 1,
+              trigger: { kind: "manual" as const },
+            },
+          }
+          const saved = {
+            id: next,
+            slug: "routine",
+            projectID: ProjectV2.ID.make(`project_bind_${stage}`),
+            directory: path.join(directory, "storage"),
+            title: agent.name,
+            version: "test",
+            time: { created: Date.now(), updated: Date.now() },
+            metadata,
+          }
+          const opened: string[] = []
+          const runner = RayaTaskRunner.make({
+            database,
+            storage,
+            sessions: {
+              create: () =>
+                Effect.sync(() => {
+                  opened.push("duplicate")
+                  return saved
+                }),
+              get: (id) => (id === next ? Effect.succeed(saved) : Effect.die("unexpected session")),
+              messages: () => Effect.succeed([]),
+              children: () => Effect.succeed([]),
+            },
+          })
+
+          yield* runner.revive()
+          yield* runner.revive()
+
+          expect(opened).toEqual([])
+          expect((yield* tasks.runsFor(agent.id)).filter((run) => run.id === runID)).toHaveLength(1)
+          expect((yield* tasks.runsFor(agent.id)).filter(RayaTask.pending)).toHaveLength(1)
+          const message = (yield* inbox.page(agent.id)).messages.find((item) => item.source === source)
+          if (stage === "owned") {
+            expect(message?.sessionID).toBe(prior)
+            expect((yield* inspect(storage, agent.id))?.state).toBe("recovery")
+            return
+          }
+          expect(message?.sessionID).toBe(next)
+          expect(yield* storage.list(["raya", "agent-claims"])).toEqual([])
+        }).pipe(Effect.provide(state(directory)))
+      }),
+    30_000,
+  )
+}
+
 it.live("archive integration validates legacy data once and stops writing the source file", () =>
   Effect.gen(function* () {
     const directory = yield* tmpdirScoped()

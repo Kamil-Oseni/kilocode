@@ -1,6 +1,16 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: active.** Continue implementation from local product source `b139fab81b`; installed product source is `0d545aa678`; do not pause it. `origin/main` is still `d894fc0eb9` because the normal pre-push hook reaches existing cross-package `@opencode-ai/tui` type failures. The 16 future additions are canonical `FUT-*` rows in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+> **Goal status: active.** Continue implementation from local product source `132116ee2c`; installed product source is `0d545aa678`; do not pause it. `origin/main` is still `d894fc0eb9` because the normal pre-push hook reaches existing cross-package `@opencode-ai/tui` type failures. The 16 future additions are canonical `FUT-*` rows in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+
+## ChatGPT 2026-09-15 01:07 America/Toronto - Raya Gateway display projection complete
+
+Product commit `132116ee2c` adds `providerDisplayName(providerID, name)` and `RAYA_GATEWAY_NAME` at the extension's shared provider boundary. The helper maps only exact provider ID `kilo` to **Raya Gateway**. It does not rewrite the provider object, and every non-managed provider keeps its supplied name or ID fallback.
+
+Consumers now use the projection in the settings pinned card, connected/recommended rows, disabled selector and disconnect toast; the add-provider dialog; flattened model data used by model selector groups/tags; session model-usage groups; managed profile usage labels; autocomplete's provider warning; and speech-to-text provider labels. Keep new rendered provider consumers on this helper. Do not compare or rewrite the inherited display string, since identity comes from the provider ID.
+
+Compatibility tests prove `KILO_PROVIDER_ID === "kilo"`, the fallback/backend catalog data remains intact, a backend-supplied Kilo name cannot leak into rendered model/provider options, and all unrelated provider names remain unchanged. Seven suites pass **86 / 151**. Both 2 GB-capped typechecks, focused ESLint, Knip, Prettier, brand inventory, forbidden strings, extension marker and whitespace guards pass. One-thread Oxlint has zero errors and fifteen existing warnings; this slice removed one older unused import from `ProvidersTab.tsx`. The documented inventory is 68,328 total: 1,694 potential public defects, 34,615 compatibility identities, 5,685 provenance references and 26,334 internal migration sites.
+
+Next address the remaining small public strings, beginning with the console Marketplace and carefully deciding the user-facing replacement for Kilo Pass without changing billing/auth contracts. Then implement the versioned universal design-skill foundation. Batch the current branding runtime commits into the next low-memory snapshot; installed source remains `0d545aa678` until then.
 
 ## ChatGPT 2026-09-15 00:58 America/Toronto - Raya Messenger display migration complete
 

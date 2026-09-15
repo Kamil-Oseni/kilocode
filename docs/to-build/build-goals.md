@@ -6,7 +6,7 @@ The order is deliberate. Features are ranked by what is most important to have f
 
 ## Release staging decision — Version 3 migrations
 
-The compatibility-breaking Kilo-to-Raya identity migration and a Raya-owned VS Code distribution are deferred to **Version 3**, after the current extension and backend are stable. They are not part of the active numbered build order.
+The compatibility-breaking Kilo-to-Raya identity migration and a Raya-owned VS Code distribution are deferred to **Version 3**, after the current extension and backend are stable. They have **no Version 1 or Version 2 implementation scope** and are not part of the active numbered build order. Version 3 begins only when the owner explicitly opens it.
 
 Current releases continue improving visible Raya branding while retaining the existing package IDs, `kilo` command/executable, provider IDs, API/event paths, storage/config/environment keys, profile folders, telemetry/auth identities, marketplace/update identities and the `eden.raya` extension architecture. Keep the classified brand inventory active; do not begin dual-read/write identity migration, remove legacy aliases or create the VS Code fork yet.
 

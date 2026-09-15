@@ -34,8 +34,7 @@ export type Entry = Schema.Schema.Type<typeof Entry>
 const decodeAuthData = Schema.decodeUnknownOption(Schema.Record(Schema.String, Entry))
 type AuthData = Record<string, Entry>
 
-const filepath = path.join(Global.Path.data, "mcp-auth.json")
-const lockKey = `mcp-auth:${filepath}`
+const filepath = () => path.join(Global.Path.data, "mcp-auth.json") // kilocode_change - resolve the active profile per operation
 
 export interface Interface {
   readonly all: () => Effect.Effect<Record<string, Entry>>
@@ -62,23 +61,27 @@ const layer = Layer.effect(
     const fs = yield* FSUtil.Service
     const flock = yield* EffectFlock.Service
 
-    const read = Effect.fn("McpAuth.read")(function* () {
-      return yield* fs.readJson(filepath).pipe(
+    // kilocode_change start - read from the operation-bound profile path
+    const read = Effect.fn("McpAuth.read")(function* (target: string) {
+      return yield* fs.readJson(target).pipe(
         Effect.map((data): AuthData => Option.getOrElse(decodeAuthData(data), () => ({}) as AuthData) as AuthData),
         Effect.catch(() => Effect.succeed({} as AuthData)),
       )
     })
+    // kilocode_change end
 
     const all = Effect.fn("McpAuth.all")(function* () {
-      return yield* read().pipe(flock.withLock(lockKey), Effect.orDie)
+      const target = filepath() // kilocode_change - lock the selected profile generation
+      return yield* read(target).pipe(flock.withLock(`mcp-auth:${target}`), Effect.orDie) // kilocode_change
     })
 
     const mutate = Effect.fn("McpAuth.mutate")(function* (update: (data: AuthData) => AuthData | undefined) {
+      const target = filepath() // kilocode_change - keep one profile generation for the transaction
       yield* Effect.gen(function* () {
-        const next = update(yield* read())
+        const next = update(yield* read(target)) // kilocode_change
         if (!next) return
-        yield* fs.writeJson(filepath, next, 0o600).pipe(Effect.orDie)
-      }).pipe(flock.withLock(lockKey), Effect.orDie)
+        yield* fs.writeJson(target, next, 0o600).pipe(Effect.orDie) // kilocode_change
+      }).pipe(flock.withLock(`mcp-auth:${target}`), Effect.orDie) // kilocode_change
     })
 
     const get = Effect.fn("McpAuth.get")(function* (mcpName: string) {

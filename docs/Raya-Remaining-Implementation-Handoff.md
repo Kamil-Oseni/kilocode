@@ -6,9 +6,21 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-15 17:17 America/Toronto - Preserve operation-bound Auth and MCP paths
+
+`packages/opencode/src/auth/index.ts` and `packages/opencode/src/mcp/auth.ts` must resolve the active data root at the beginning of each operation. Auth `set`/`remove` pass the same resolved target to load and write. MCP `all` binds one target to its lock/read; `mutate` binds one target to its lock/read/write. Do not replace these with module constants, and do not independently resolve the path between the read and write steps because a generation change could split a transaction.
+
+The focused late-binding test imports both services before redirecting the active root and proves both read and write beneath the redirected root. Together with the existing Auth and MCP suites, evidence is 6 tests / 15 assertions; bounded CLI typecheck passes. The path baseline remains 205 total consumers but now has six module captures, including only two `data` captures, with digest `62c13e2054eff368f471228ea108aec1f70f23c0799eda417863aa85d49d57ec`.
+
+The refreshed repository inventory is 69,060 total: public 1,693; compatibility 35,162; provenance 5,686; internal 26,519.
+
+Continue by late-binding the remaining six captures individually with focused behavior tests. The two sandbox roots intentionally use the parent of the state directory and require compatibility tests before changing their lifetime. The plug command global directory and run-command model state are lower-risk next candidates. Keep credential files at their current physical paths until the future journaled copy and rollback workflow exists.
+
 ## ChatGPT 2026-09-15 17:10 America/Toronto - Preserve the Global.Path migration ratchet
 
 `script/kilocode/global-path-consumers.ts` is the mandatory pre-cutover inventory. It scans tracked and untracked package runtime source with the TypeScript AST, validates the producer and public interface against the nine reviewed fields, and compares every normalized consumer against `script/global-path-consumers.json`. Do not replace it with a grep count or per-file total: the current full baseline distinguishes 205 exact accesses across 78 files, eight module captures, one bounded enumeration and zero production assignments.
+
+This guard and its initial eight-capture baseline were pushed in `a67f95143b`; its normal hook passed all 29 JavaScript/TypeScript packages plus JetBrains. The newer section above records the first reduction to six captures.
 
 The eight eager captures are `packages/core/src/plugin/agent.ts`, `packages/opencode/src/auth/index.ts`, `packages/opencode/src/cli/cmd/plug.ts`, `packages/opencode/src/cli/cmd/run/variant.shared.ts`, `packages/opencode/src/kilocode/sandbox/preference.ts`, `packages/opencode/src/kilocode/sandbox/store.ts`, `packages/opencode/src/mcp/auth.ts` and `packages/opencode/src/tool/truncation-dir.ts`. Before changing canonical roots, remove or generation-bind every capture and prove that long-lived services reopen against the selected generation. Do not interpret the absence of direct `Global.Path` assignments as proof that downstream file/database writers are quiesced.
 

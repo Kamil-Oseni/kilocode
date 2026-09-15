@@ -5,7 +5,7 @@
   "policy": "inventory-only-no-cutover-evidence",
   "total": {
     "count": 205,
-    "digest": "301d1199254266c87cc3dba6ab8638f40e3226d5e8c1c0a3253d89a605954a0f"
+    "digest": "62c13e2054eff368f471228ea108aec1f70f23c0799eda417863aa85d49d57ec"
   },
   "members": {
     "bin": {
@@ -25,7 +25,7 @@
     },
     "data": {
       "count": 33,
-      "module": 4,
+      "module": 2,
       "writes": 0
     },
     "home": {
@@ -379,14 +379,6 @@
       "ordinal": 1
     },
     {
-      "file": "packages/opencode/src/auth/index.ts",
-      "member": "data",
-      "phase": "module",
-      "access": "read",
-      "context": "const file = path.join(Global.Path.data, \"auth.json\")",
-      "ordinal": 1
-    },
-    {
       "file": "packages/opencode/src/cli/cmd/plug.ts",
       "member": "config",
       "phase": "module",
@@ -416,14 +408,6 @@
       "phase": "module",
       "access": "read",
       "context": "export const root = path.join(realpathSync.native(path.dirname(Global.Path.state)), \"kilo-sandbox-policy\")",
-      "ordinal": 1
-    },
-    {
-      "file": "packages/opencode/src/mcp/auth.ts",
-      "member": "data",
-      "phase": "module",
-      "access": "read",
-      "context": "const filepath = path.join(Global.Path.data, \"mcp-auth.json\")",
       "ordinal": 1
     },
     {
@@ -607,9 +591,9 @@
     {
       "file": "packages/opencode/src/auth/index.ts",
       "member": "data",
-      "phase": "module",
+      "phase": "runtime",
       "access": "read",
-      "context": "const file = path.join(Global.Path.data, \"auth.json\")",
+      "context": "const filepath = () => path.join(Global.Path.data, \"auth.json\") // kilocode_change - resolve the active profile per operation",
       "ordinal": 1
     },
     {
@@ -1855,9 +1839,9 @@
     {
       "file": "packages/opencode/src/mcp/auth.ts",
       "member": "data",
-      "phase": "module",
+      "phase": "runtime",
       "access": "read",
-      "context": "const filepath = path.join(Global.Path.data, \"mcp-auth.json\")",
+      "context": "const filepath = () => path.join(Global.Path.data, \"mcp-auth.json\") // kilocode_change - resolve the active profile per operation",
       "ordinal": 1
     },
     {

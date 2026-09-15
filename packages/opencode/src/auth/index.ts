@@ -9,7 +9,7 @@ import { EnvAlias } from "@opencode-ai/core/kilocode/env-alias" // kilocode_chan
 
 export const OAUTH_DUMMY_KEY = "kilo-oauth-dummy-key" // kilocode_change
 
-const file = path.join(Global.Path.data, "auth.json")
+const filepath = () => path.join(Global.Path.data, "auth.json") // kilocode_change - resolve the active profile per operation
 
 const fail = (message: string) => (cause: unknown) => new AuthError({ message, cause })
 
@@ -57,40 +57,43 @@ const layer = Layer.effect(
     const fsys = yield* FSUtil.Service
     const decode = Schema.decodeUnknownOption(Info)
 
-    const all = Effect.fn("Auth.all")(function* () {
-      // kilocode_change start - accept the Raya name while keeping the Kilo process-local contract
+    // kilocode_change start - late-bound path and Raya environment compatibility
+    const load = Effect.fn("Auth.load")(function* (target: string) {
       const content = EnvAlias.read("RAYA_AUTH_CONTENT", "KILO_AUTH_CONTENT")
       if (content) {
         try {
           return JSON.parse(content)
         } catch (err) {}
       }
-      // kilocode_change end
-
-      const data = (yield* fsys.readJson(file).pipe(Effect.orElseSucceed(() => ({})))) as Record<string, unknown>
+      const data = (yield* fsys.readJson(target).pipe(Effect.orElseSucceed(() => ({})))) as Record<string, unknown>
       return Record.filterMap(data, (value) => Result.fromOption(decode(value), () => undefined))
     })
+    // kilocode_change end
+
+    const all = Effect.fn("Auth.all")(() => load(filepath())) // kilocode_change - late-bound profile path
 
     const get = Effect.fn("Auth.get")(function* (providerID: string) {
       return (yield* all())[providerID]
     })
 
     const set = Effect.fn("Auth.set")(function* (key: string, info: Info) {
+      const target = filepath() // kilocode_change - keep one profile generation for the read/write pair
       const norm = key.replace(/\/+$/, "")
-      const data = yield* all()
+      const data = yield* load(target) // kilocode_change
       if (norm !== key) delete data[key]
       delete data[norm + "/"]
       yield* fsys
-        .writeJson(file, { ...data, [norm]: info }, 0o600)
+        .writeJson(target, { ...data, [norm]: info }, 0o600) // kilocode_change
         .pipe(Effect.mapError(fail("Failed to write auth data")))
     })
 
     const remove = Effect.fn("Auth.remove")(function* (key: string) {
+      const target = filepath() // kilocode_change - keep one profile generation for the read/write pair
       const norm = key.replace(/\/+$/, "")
-      const data = yield* all()
+      const data = yield* load(target) // kilocode_change
       delete data[key]
       delete data[norm]
-      yield* fsys.writeJson(file, data, 0o600).pipe(Effect.mapError(fail("Failed to write auth data")))
+      yield* fsys.writeJson(target, data, 0o600).pipe(Effect.mapError(fail("Failed to write auth data"))) // kilocode_change
 
       // kilocode_change start - Track logout and reset telemetry identity for Kilo
       if (key === "kilo") {

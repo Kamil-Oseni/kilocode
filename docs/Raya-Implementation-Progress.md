@@ -6,9 +6,19 @@
 >
 > Kilo-to-Raya migration is active through lossless compatibility-first slices; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-15 17:17 America/Toronto - Auth files no longer capture the startup data root
+
+**Status: implemented and verified locally; commit and push remain, installation is batched.** The CLI provider credential service and MCP OAuth credential service now resolve `Global.Path.data` when an operation starts instead of freezing the path when their modules load. Auth `set` and `remove` resolve one target and use it for both read and write. MCP `all` resolves one target for its lock/read, while every mutation resolves one target for the lock/read/write transaction. A root change therefore cannot split one operation between generations.
+
+A focused service test imports both modules first, redirects the active data root, then proves both readers and writers use `auth.json` and `mcp-auth.json` beneath the new root. Existing Auth normalization/removal and concurrent MCP transaction tests continue to pass. Combined evidence is **6 tests / 15 assertions**, and the bounded one-checker CLI typecheck passes.
+
+The exact path inventory remains at **205 consumers**, but module-scope captures fall from eight to **six** and `data` captures fall from four to **two**. Its new digest is `62c13e2054eff368f471228ea108aec1f70f23c0799eda417863aa85d49d57ec`. The remaining captures are agent truncation permissions, the plug command's global directory, run-command model state, two sandbox roots and the exported tool truncation directory. No credential file was moved or copied and no compatibility name changed.
+
+The refreshed repository inventory is 69,060 total: public 1,693; compatibility 35,162; provenance 5,686; internal 26,519.
+
 ## ChatGPT 2026-09-15 17:10 America/Toronto - Canonical storage migration now has a fail-closed consumer inventory
 
-**Status: implemented and verified locally; commit and push remain, installation is not required.** A TypeScript-AST guard now inventories every tracked or untracked production source access to the canonical `Global.Path` object. The reviewed baseline contains **205 accesses across 78 files**, split across all nine supported roots, with **zero production assignments**, **one bounded diagnostic enumeration**, and **eight module-scope captures**. CI runs both the real-tree guard and its focused test suite.
+**Status: implemented, verified and pushed in `a67f95143b`; installation is not required.** A TypeScript-AST guard now inventories every tracked or untracked production source access to the canonical `Global.Path` object. The reviewed baseline contains **205 accesses across 78 files**, split across all nine supported roots, with **zero production assignments**, **one bounded diagnostic enumeration**, and **eight module-scope captures** at that checkpoint. CI runs both the real-tree guard and its focused test suite.
 
 The eight eager captures are now explicit: the shared agent truncation glob, CLI auth file, global plug command directory, run-command model state, sandbox preference root, sandbox policy root, MCP auth file and tool truncation directory. These are the exact locations that must become generation-aware before any live profile-root cutover. The guard also binds the producer object and exported interface to the reviewed nine-field set, so adding a root cannot silently bypass the inventory.
 
@@ -17,6 +27,8 @@ The scanner follows normal, aliased, direct-`Path`, namespace and dynamic-import
 The focused suite passes **5 tests / 20 assertions** and the real-tree check reports 205 consumers, eight module captures and no drift. The compatibility checker passes **4 tests / 8 assertions** and now requires `script/global-path-consumers.json` under the `profile-roots` entry while rejecting any claim that this inventory is cutover evidence. The bounded CLI typecheck passes. This slice does not copy, open, rename, delete or redirect any user file; Version 1 remains unable to declare cutover ready.
 
 The refreshed repository inventory classifies **69,042** references: **1,693** potential public defects, **35,162** compatibility identities, **5,686** provenance references and **26,501** internal migration references.
+
+The normal protected push passed all 29 JavaScript/TypeScript packages plus JetBrains and advanced `origin/main` to `a67f95143b`.
 
 ## ChatGPT 2026-09-15 16:52 America/Toronto - Every model-catalog reader now accepts the Raya URL
 

@@ -103,6 +103,9 @@ function folder(value?: string) {
 
 export const AWAY = "This request cannot leave the sender's workspace."
 export const GONE = "This worker is no longer available. Delegation is not started."
+const PAUSED = "This worker is paused. Delegation is not started until it is enabled."
+const ACCESS = "Review this older routine's workspace access before starting delegated work."
+const DENIALS = new Set([AWAY, GONE, PAUSED, ACCESS])
 
 export function scope(sender: Pick<RayaTask.Agent, "dir">, recipient: Pick<RayaTask.Agent, "dir">) {
   const from = folder(sender.dir)
@@ -218,6 +221,14 @@ function cards(row: Record, sender: RayaTask.Agent, recipient: RayaTask.Agent): 
   ]
 }
 
+function admission(row: Record, sender: RayaTask.Agent, recipient: RayaTask.Agent) {
+  const denied = row.state === "failed" && !!row.reason && DENIALS.has(row.reason)
+  if (row.state !== "queued" && !denied) return []
+  const initial: Record = denied ? row : { ...row, state: "queued", reason: undefined }
+  const reply = denied ? replied(row, recipient) : undefined
+  return reply ? [...cards(initial, sender, recipient), reply] : cards(initial, sender, recipient)
+}
+
 export function begun(row: Record): Publish | undefined {
   if (row.state !== "accepted" && row.state !== "running") return
   return {
@@ -300,15 +311,12 @@ export namespace RayaTaskDelegation {
     const inbox = RayaTaskInbox.make(database)
     const publish = (items: readonly Publish[]) =>
       Effect.forEach(items, (item) =>
-        inbox
-          .publish(item)
-          .pipe(
-            Effect.catch((error) =>
-              typeof error === "object" && error !== null && "_tag" in error && error._tag === "RayaTaskInbox.Conflict"
-                ? Effect.void
-                : Effect.die(error),
-            ),
+        inbox.publish(item).pipe(
+          Effect.catchTag("RayaTaskInbox.Conflict", () =>
+            Effect.fail(new Conflict({ message: "A delegation message source already has different content." })),
           ),
+          Effect.catchTag("RayaTaskInbox.Invalid", Effect.die),
+        ),
       )
     const reply = (record: Record, recipient: RayaTask.Agent) => {
       const item = replied(record, recipient)
@@ -384,6 +392,7 @@ export namespace RayaTaskDelegation {
       if (prior) {
         if (!same(prior, value))
           return yield* new Conflict({ message: "This delegation source already has a different request." })
+        yield* publish(admission(prior, sender, recipient))
         return { record: prior, created: false }
       }
       const organization = value.organizationID
@@ -422,27 +431,9 @@ export namespace RayaTaskDelegation {
       if (sender.dir?.trim() && recipient.dir?.trim() && workspace === undefined)
         return yield* persist(value, sender, recipient, workspace, depth, "failed", AWAY, organization)
       if (!recipient.enabled)
-        return yield* persist(
-          value,
-          sender,
-          recipient,
-          workspace,
-          depth,
-          "failed",
-          "This worker is paused. Delegation is not started until it is enabled.",
-          organization,
-        )
+        return yield* persist(value, sender, recipient, workspace, depth, "failed", PAUSED, organization)
       if (recipient.access === undefined)
-        return yield* persist(
-          value,
-          sender,
-          recipient,
-          workspace,
-          depth,
-          "failed",
-          "Review this older routine's workspace access before starting delegated work.",
-          organization,
-        )
+        return yield* persist(value, sender, recipient, workspace, depth, "failed", ACCESS, organization)
       return yield* persist(value, sender, recipient, workspace, depth, "queued", undefined, organization)
     })
     const persist = Effect.fn("RayaTaskDelegation.persist")(function* (
@@ -484,8 +475,7 @@ export namespace RayaTaskDelegation {
       }
       yield* db.insert(Delegation).values(row).run().pipe(Effect.orDie)
       const record = decode(row)
-      const denial = state === "failed" ? replied(record, recipient) : undefined
-      yield* publish(denial ? [...cards(record, sender, recipient), denial] : cards(record, sender, recipient))
+      yield* publish(admission(record, sender, recipient))
       return { record, created: true }
     })
     const accepted = Effect.fn("RayaTaskDelegation.accepted")(function* (recipientID: string) {

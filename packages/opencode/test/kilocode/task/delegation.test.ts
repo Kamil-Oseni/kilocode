@@ -271,6 +271,7 @@ test("delegation admits once, refuses loops, and queues without duplicating a bu
         Exit.isFailure(yield* store.finish(taken!.id, "failed", books, "A different result.").pipe(Effect.exit)),
       ).toBe(true)
       expect((yield* inbox.page(chief.id)).messages.filter((item) => item.source.startsWith("reply:")).length).toBe(1)
+      expect((yield* store.admit(request("dlg_1", chief.id, books.id), chief, books)).created).toBe(false)
       const loop = yield* store
         .admit(request("dlg_loop", books.id, chief.id, { parentID: first.record.id }), books, chief)
         .pipe(Effect.exit)
@@ -313,6 +314,160 @@ test("delegation admits once, refuses loops, and queues without duplicating a bu
         ),
       ).toBe(true)
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
+test("an exact admission replay restores a missing sent card after restart", async () => {
+  await using directory = await tmpdir()
+  const filename = path.join(directory.path, "sent-card.sqlite")
+  const source = "dlg_sent_recovery"
+  const chief = agent("chief", "generalist")
+  const books = agent("books", "accountant")
+  const saved = await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const store = RayaTaskDelegation.make(database)
+      const inbox = RayaTaskInbox.make(database)
+      yield* database.db.run(`
+        CREATE TRIGGER fail_delegation_sent
+        BEFORE INSERT ON raya_routine_message
+        WHEN NEW.source LIKE 'sent:%'
+        BEGIN
+          SELECT RAISE(ABORT, 'injected sent-card failure');
+        END
+      `)
+      expect(
+        Exit.isFailure(yield* store.admit(request(source, chief.id, books.id), chief, books).pipe(Effect.exit)),
+      ).toBe(true)
+      const row = (yield* store.lookup(source))!
+      expect(row.state).toBe("queued")
+      expect((yield* inbox.page(books.id)).messages.filter((item) => item.source === `ask:${source}`)).toHaveLength(1)
+      expect((yield* inbox.page(chief.id)).messages.filter((item) => item.source === `sent:${source}`)).toHaveLength(0)
+      yield* database.db.run("DROP TRIGGER fail_delegation_sent")
+      return row
+    }).pipe(Effect.provide(Database.layerFromPath(filename)), Effect.scoped),
+  )
+
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const store = RayaTaskDelegation.make(database)
+      const inbox = RayaTaskInbox.make(database)
+      const first = yield* store.admit(request(source, chief.id, books.id), chief, books)
+      const second = yield* store.admit(request(source, chief.id, books.id), chief, books)
+      expect(first).toMatchObject({ created: false, record: { id: saved.id, state: "queued" } })
+      expect(second).toMatchObject({ created: false, record: { id: saved.id, state: "queued" } })
+      expect((yield* inbox.page(books.id)).messages.filter((item) => item.source === `ask:${source}`)).toHaveLength(1)
+      const sent = (yield* inbox.page(chief.id)).messages.filter((item) => item.source === `sent:${source}`)
+      expect(sent).toHaveLength(1)
+      expect(sent[0]?.body).toContain("Asked books")
+      expect(sent[0]?.body).toContain("Review Friday receipts")
+    }).pipe(Effect.provide(Database.layerFromPath(filename)), Effect.scoped),
+  )
+})
+
+test("an exact denied admission replay restores its missing reply after restart", async () => {
+  await using directory = await tmpdir()
+  const filename = path.join(directory.path, "denial-card.sqlite")
+  const source = "dlg_denial_recovery"
+  const chief = agent("chief", "generalist")
+  const quiet = agent("quiet", "reviewer", { enabled: false })
+  const saved = await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const store = RayaTaskDelegation.make(database)
+      const inbox = RayaTaskInbox.make(database)
+      yield* database.db.run(`
+        CREATE TRIGGER fail_delegation_denial
+        BEFORE INSERT ON raya_routine_message
+        WHEN NEW.source LIKE 'reply:%'
+        BEGIN
+          SELECT RAISE(ABORT, 'injected denial-card failure');
+        END
+      `)
+      expect(
+        Exit.isFailure(yield* store.admit(request(source, chief.id, quiet.id), chief, quiet).pipe(Effect.exit)),
+      ).toBe(true)
+      const row = (yield* store.lookup(source))!
+      expect(row).toMatchObject({ state: "failed", reason: expect.stringContaining("paused") })
+      expect((yield* inbox.page(quiet.id)).messages.filter((item) => item.source === `ask:${source}`)).toHaveLength(1)
+      const messages = (yield* inbox.page(chief.id)).messages
+      expect(messages.filter((item) => item.source === `sent:${source}`)).toHaveLength(1)
+      expect(messages.filter((item) => item.source === `reply:${source}`)).toHaveLength(0)
+      yield* database.db.run("DROP TRIGGER fail_delegation_denial")
+      return row
+    }).pipe(Effect.provide(Database.layerFromPath(filename)), Effect.scoped),
+  )
+
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const store = RayaTaskDelegation.make(database)
+      const inbox = RayaTaskInbox.make(database)
+      const first = yield* store.admit(request(source, chief.id, quiet.id), chief, quiet)
+      const second = yield* store.admit(request(source, chief.id, quiet.id), chief, quiet)
+      expect(first).toMatchObject({ created: false, record: { id: saved.id, state: "failed" } })
+      expect(second).toMatchObject({ created: false, record: { id: saved.id, state: "failed" } })
+      expect((yield* inbox.page(quiet.id)).messages.filter((item) => item.source === `ask:${source}`)).toHaveLength(1)
+      const messages = (yield* inbox.page(chief.id)).messages
+      expect(messages.filter((item) => item.source === `sent:${source}`)).toHaveLength(1)
+      const replies = messages.filter((item) => item.source === `reply:${source}`)
+      expect(replies).toHaveLength(1)
+      expect(replies[0]?.body).toContain("paused")
+      expect(replies[0]?.body).toContain("not a completed worker reply")
+    }).pipe(Effect.provide(Database.layerFromPath(filename)), Effect.scoped),
+  )
+})
+
+test("an exact admission replay fails closed on mismatched deterministic card content", async () => {
+  await using directory = await tmpdir()
+  const filename = path.join(directory.path, "card-conflict.sqlite")
+  const source = "dlg_card_conflict"
+  const chief = agent("chief", "generalist")
+  const books = agent("books", "accountant")
+  const saved = await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const store = RayaTaskDelegation.make(database)
+      const inbox = RayaTaskInbox.make(database)
+      yield* database.db.run(`
+        CREATE TRIGGER fail_delegation_sent_conflict
+        BEFORE INSERT ON raya_routine_message
+        WHEN NEW.source LIKE 'sent:%'
+        BEGIN
+          SELECT RAISE(ABORT, 'injected sent-card failure');
+        END
+      `)
+      expect(
+        Exit.isFailure(yield* store.admit(request(source, chief.id, books.id), chief, books).pipe(Effect.exit)),
+      ).toBe(true)
+      yield* database.db.run("DROP TRIGGER fail_delegation_sent_conflict")
+      const row = (yield* store.lookup(source))!
+      yield* inbox.publish({
+        agentID: chief.id,
+        source: `sent:${source}`,
+        kind: "delegation",
+        body: "Injected incompatible sent card.",
+        occurrenceID: row.id,
+      })
+      return row
+    }).pipe(Effect.provide(Database.layerFromPath(filename)), Effect.scoped),
+  )
+
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const store = RayaTaskDelegation.make(database)
+      const inbox = RayaTaskInbox.make(database)
+      const conflict = yield* store.admit(request(source, chief.id, books.id), chief, books).pipe(Effect.flip)
+      expect(conflict._tag).toBe("RayaTaskDelegation.Conflict")
+      expect(conflict.message).toContain("different content")
+      expect(yield* store.lookup(source)).toEqual(saved)
+      expect((yield* inbox.page(books.id)).messages.filter((item) => item.source === `ask:${source}`)).toHaveLength(1)
+      const sent = (yield* inbox.page(chief.id)).messages.filter((item) => item.source === `sent:${source}`)
+      expect(sent).toHaveLength(1)
+      expect(sent[0]?.body).toBe("Injected incompatible sent card.")
+    }).pipe(Effect.provide(Database.layerFromPath(filename)), Effect.scoped),
   )
 })
 

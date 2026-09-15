@@ -316,19 +316,12 @@ export const kiloGatewayHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilo",
           409,
         )
       const charge = admitted && Result.isSuccess(admitted) ? admitted.success : undefined
-      const lease = charge
+      const lease: DictationBilling.Lease | undefined = charge
         ? {
-            dispatch: charge.dispatch.pipe(
-              Effect.mapError((error) => (error instanceof Error ? error : new Error(String(error)))),
-            ),
-            finish: charge.finish.pipe(
-              Effect.mapError((error) => (error instanceof Error ? error : new Error(String(error)))),
-            ),
-            release: charge.release,
-            uncertain: (reason: string) =>
-              charge
-                .uncertain(reason)
-                .pipe(Effect.mapError((error) => (error instanceof Error ? error : new Error(String(error))))),
+            dispatch: charge.dispatch,
+            finish: charge.finish,
+            release: charge.release.pipe(Effect.catchAll((error: Error) => Effect.die(error))),
+            uncertain: charge.uncertain,
           }
         : undefined
 

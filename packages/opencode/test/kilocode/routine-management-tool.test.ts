@@ -924,8 +924,9 @@ it.live(
           chief,
           designer,
         )
-        yield* errands.take(designer.id)
-        const runID = "run_design_request"
+        const accepted = yield* errands.take(designer.id)
+        const runID = accepted?.childRunID
+        if (!runID) return yield* Effect.die(new Error("delegation run reservation was not returned"))
         const sessionID = SessionID.make("ses_routine_management")
         yield* tasks.record({
           id: runID,

@@ -494,7 +494,7 @@ export function routineManagementTools(input: {
               create: {
                 name: params.name,
                 purpose: params.purpose,
-                policy: params.policy,
+                ...(params.policy ? { policy: params.policy } : {}),
                 members: params.workers.map((item) => ({
                   agentID: ids.get(item.key)!,
                   role: item.role,

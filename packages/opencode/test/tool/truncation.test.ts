@@ -248,10 +248,10 @@ describe("Truncate", () => {
         const svc = yield* Truncate.Service
         const fs = yield* FileSystem.FileSystem
 
-        yield* fs.makeDirectory(Truncate.DIR, { recursive: true })
+        yield* fs.makeDirectory(Truncate.dir(), { recursive: true })
 
-        const old = path.join(Truncate.DIR, Identifier.create("tool", "ascending", 2 ** 36 - 1))
-        const recent = path.join(Truncate.DIR, Identifier.create("tool", "ascending", 2 ** 36 + 1))
+        const old = path.join(Truncate.dir(), Identifier.create("tool", "ascending", 2 ** 36 - 1))
+        const recent = path.join(Truncate.dir(), Identifier.create("tool", "ascending", 2 ** 36 + 1))
 
         yield* writeFileStringScoped(old, "old content")
         yield* writeFileStringScoped(recent, "recent content")

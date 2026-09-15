@@ -8,7 +8,11 @@ import { Global } from "../global"
 import { Location } from "../location"
 import { PermissionV2 } from "../permission"
 
-const TRUNCATION_GLOB = path.join(Global.Path.data, "tool-output", "*")
+// kilocode_change start - resolve managed output permissions for the active profile
+function truncationGlob() {
+  return path.join(Global.Path.data, "tool-output", "*")
+}
+// kilocode_change end
 const BUILD_SYSTEM =
   "You are an AI coding agent. Help the user accomplish software engineering tasks by inspecting the workspace, making targeted changes, and using tools according to the configured permissions."
 
@@ -102,7 +106,7 @@ export const Plugin = define({
   effect: Effect.fn(function* (ctx) {
     const location = yield* Location.Service
     const worktree = location.directory
-    const whitelistedDirs = [TRUNCATION_GLOB, path.join(Global.Path.tmp, "*")]
+    const whitelistedDirs = [truncationGlob(), path.join(Global.Path.tmp, "*")] // kilocode_change
     const readonlyExternalDirectory: PermissionV2.Ruleset = [
       { action: "external_directory", resource: "*", effect: "ask" },
       ...whitelistedDirs.map(

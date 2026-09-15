@@ -242,7 +242,7 @@ function askGuard(mcp: Record<string, "allow" | "ask" | "deny"> = {}) {
     websearch: "allow",
     semantic_search: "allow",
     external_directory: {
-      [Truncate.GLOB]: "allow",
+      [Truncate.glob()]: "allow",
     },
     ...mcp,
     // After the MCP rules: a server named `agent`/`notebook` emits `agent_*`/`notebook_*`,
@@ -414,7 +414,7 @@ function planGuard(worktree: string, mcp: Record<string, "allow" | "ask" | "deny
     websearch: "allow",
     semantic_search: "allow",
     external_directory: {
-      [Truncate.GLOB]: "allow",
+      [Truncate.glob()]: "allow",
       [path.join(Global.Path.data, "plans", "*")]: "allow",
     },
     edit: planEditRules(worktree),
@@ -779,7 +779,7 @@ export function patchAgents(
         webfetch: "allow",
         websearch: "allow",
         external_directory: {
-          [Truncate.GLOB]: "allow",
+          [Truncate.glob()]: "allow",
         },
       }),
       user,

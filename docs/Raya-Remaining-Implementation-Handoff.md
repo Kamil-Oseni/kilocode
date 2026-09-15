@@ -6,6 +6,16 @@
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
 
+## ChatGPT 2026-09-15 17:41 America/Toronto - Preserve late-bound managed tool output
+
+`packages/opencode/src/tool/truncation-dir.ts` now exposes `truncationDir()` rather than a captured string. `Truncate.dir()` and `Truncate.glob()` are callable accessors; do not restore string-valued `DIR` or `GLOB` exports because ESM strings cannot follow a live root change. Cleanup must bind `const dir = truncationDir()` once before listing and removing entries. Write must bind once before ensuring the directory, writing the generated file and returning its logical path. This prevents a generation change from splitting one operation.
+
+Every internal consumer now calls `Truncate.glob()` while constructing permissions. In the main CLI agent service, bind one `truncation` value and reuse it for explicit-deny detection and default allow insertion so the two comparisons cannot diverge mid-build. The Core plugin resolves its own glob inside plugin execution. The two new tests are deliberately side-effect-safe: the CLI service test redirects actual bytes to a disposable directory while retaining the requested logical paths, and the Core permission test performs no filesystem work.
+
+Core agent tests pass 8 tests / 19 assertions. CLI truncation and agent tests pass 68 tests / 218 assertions. Core and bounded CLI typechecks pass. The reviewed inventory remains 205 consumers and now has only two module captures, with digest `65ce546aef362aae935eb62fa4ff496fa8c825920514a96e03c668ae56985df6`. Continue with the paired sandbox preference/policy roots as one higher-risk slice; inspect their persistence, process lifetime and consumer contracts before editing either.
+
+The refreshed repository inventory is 69,097 total: public 1,693; compatibility 35,166; provenance 5,686; internal 26,552. Keep the compatibility ledger at count 35,166 and digest `83b435e235d9d6baf055f66400b19c03807221621de683b6d48034d66bce84a5` until another reviewed refresh changes it.
+
 ## ChatGPT 2026-09-15 17:29 America/Toronto - Preserve late-bound plugin and model-state paths
 
 The plug command's default dependency object must keep `global` as a lazy getter over `Global.Path.config`. Preserve the `PlugDeps.global: string` contract: changing it to a callback would create needless production and fixture churn. Read the getter only when passing the target into `patchPluginConfig`. The path inventory is the safe regression proof because deliberately running a regressed default command could write to the user's real global configuration.
@@ -15,6 +25,8 @@ The plug command's default dependency object must keep `global` as a lazy getter
 The plugin and variant suites pass 28 tests / 80 assertions. The reviewed inventory remains 205 consumers and now has four module captures, with digest `05ad537e4725954d9195803fb0907d69d1bdb0751848c8bb6427508cd42c7e0a`. The remaining eager captures are `packages/core/src/plugin/agent.ts`, `packages/opencode/src/kilocode/sandbox/preference.ts`, `packages/opencode/src/kilocode/sandbox/store.ts` and `packages/opencode/src/tool/truncation-dir.ts`. Treat the paired truncation paths as one slice. Treat the paired sandbox roots as a separate, higher-risk slice because both derive a shared parent from the state directory and participate in persisted policy/preference behavior.
 
 The refreshed repository inventory is 69,073 total: public 1,693; compatibility 35,165; provenance 5,686; internal 26,529. The compatibility ledger baseline must remain count 35,165 with digest `e180c64b9e84dc22f273d2a023b8b887c9cf7c55029ec7e0aa856285c8e08c59` until another reviewed inventory refresh changes it.
+
+This slice was pushed in `35d43bcb4c`; its normal protected hook passed all 29 JavaScript/TypeScript packages plus JetBrains.
 
 ## ChatGPT 2026-09-15 17:17 America/Toronto - Preserve operation-bound Auth and MCP paths
 

@@ -125,7 +125,7 @@ const layer = Layer.effect(
           return (yield* (yield* Reference.Service).list()).map((reference) => reference.path)
         }).pipe(Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(ctx.directory) }))))
         const whitelistedDirs = [
-          Truncate.GLOB,
+          Truncate.glob(),
           path.join(Global.Path.tmp, "*"),
           ...skillDirs.map((dir) => path.join(dir, "*")),
           path.join(Global.Path.config, "*"),
@@ -471,19 +471,20 @@ const layer = Layer.effect(
 
         KiloAgent.refreshAuto(agents) // kilocode_change - refresh specialists without overwriting an explicit Auto model
 
-        // Ensure Truncate.GLOB is allowed unless explicitly configured
+        // Ensure the truncation glob is allowed unless explicitly configured // kilocode_change
+        const truncation = Truncate.glob() // kilocode_change
         for (const name in agents) {
           const agent = agents[name]
           const explicit = agent.permission.some((r) => {
             if (r.permission !== "external_directory") return false
             if (r.action !== "deny") return false
-            return r.pattern === Truncate.GLOB
+            return r.pattern === truncation // kilocode_change
           })
           if (explicit) continue
 
           agents[name].permission = Permission.merge(
             agents[name].permission,
-            Permission.fromConfig({ external_directory: { [Truncate.GLOB]: "allow" } }),
+            Permission.fromConfig({ external_directory: { [truncation]: "allow" } }), // kilocode_change
           )
         }
 

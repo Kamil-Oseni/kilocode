@@ -5,7 +5,7 @@
   "policy": "inventory-only-no-cutover-evidence",
   "total": {
     "count": 205,
-    "digest": "05ad537e4725954d9195803fb0907d69d1bdb0751848c8bb6427508cd42c7e0a"
+    "digest": "65ce546aef362aae935eb62fa4ff496fa8c825920514a96e03c668ae56985df6"
   },
   "members": {
     "bin": {
@@ -25,7 +25,7 @@
     },
     "data": {
       "count": 33,
-      "module": 2,
+      "module": 0,
       "writes": 0
     },
     "home": {
@@ -371,14 +371,6 @@
   ],
   "moduleCaptures": [
     {
-      "file": "packages/core/src/plugin/agent.ts",
-      "member": "data",
-      "phase": "module",
-      "access": "read",
-      "context": "const TRUNCATION_GLOB = path.join(Global.Path.data, \"tool-output\", \"*\")",
-      "ordinal": 1
-    },
-    {
       "file": "packages/opencode/src/kilocode/sandbox/preference.ts",
       "member": "state",
       "phase": "module",
@@ -392,14 +384,6 @@
       "phase": "module",
       "access": "read",
       "context": "export const root = path.join(realpathSync.native(path.dirname(Global.Path.state)), \"kilo-sandbox-policy\")",
-      "ordinal": 1
-    },
-    {
-      "file": "packages/opencode/src/tool/truncation-dir.ts",
-      "member": "data",
-      "phase": "module",
-      "access": "read",
-      "context": "export const TRUNCATION_DIR = path.join(Global.Path.data, \"tool-output\")",
       "ordinal": 1
     }
   ],
@@ -439,14 +423,6 @@
     {
       "file": "packages/core/src/plugin/agent.ts",
       "member": "data",
-      "phase": "module",
-      "access": "read",
-      "context": "const TRUNCATION_GLOB = path.join(Global.Path.data, \"tool-output\", \"*\")",
-      "ordinal": 1
-    },
-    {
-      "file": "packages/core/src/plugin/agent.ts",
-      "member": "data",
       "phase": "runtime",
       "access": "read",
       "context": "{ action: \"external_directory\", resource: path.join(Global.Path.data, \"plans\", \"*\"), effect: \"allow\" },",
@@ -462,10 +438,18 @@
     },
     {
       "file": "packages/core/src/plugin/agent.ts",
+      "member": "data",
+      "phase": "runtime",
+      "access": "read",
+      "context": "return path.join(Global.Path.data, \"tool-output\", \"*\")",
+      "ordinal": 1
+    },
+    {
+      "file": "packages/core/src/plugin/agent.ts",
       "member": "tmp",
       "phase": "runtime",
       "access": "read",
-      "context": "const whitelistedDirs = [TRUNCATION_GLOB, path.join(Global.Path.tmp, \"*\")]",
+      "context": "const whitelistedDirs = [truncationGlob(), path.join(Global.Path.tmp, \"*\")] // kilocode_change",
       "ordinal": 1
     },
     {
@@ -1983,9 +1967,9 @@
     {
       "file": "packages/opencode/src/tool/truncation-dir.ts",
       "member": "data",
-      "phase": "module",
+      "phase": "runtime",
       "access": "read",
-      "context": "export const TRUNCATION_DIR = path.join(Global.Path.data, \"tool-output\")",
+      "context": "return path.join(Global.Path.data, \"tool-output\")",
       "ordinal": 1
     },
     {

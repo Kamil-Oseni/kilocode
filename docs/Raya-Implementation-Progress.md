@@ -1,5 +1,33 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-14 21:23 America/Toronto - Future roadmap authorized and reordered
+
+**Status: planning complete; implementation is authorized and starts with the smallest independently verifiable slices.** The owner has superseded the earlier rule in `Raya-Features.md` that deferred future work must wait for every audit and Live item. Existing PR/EN/UI/OVR requirements remain active and keep their present evidence status; a future feature does not make an audit item verified.
+
+The merged roadmap now uses stable `FUT-*` IDs and dependency bands instead of the old strict Goal 3 → Goal 5 sequence. Three parallel read-only reviews compared `docs/to-build/build-goals.md`, `docs/Raya-Features.md`, the 16 owner requirements and the repository. They found that organization records, chat-created routines/organizations, routine DMs, persistence/recovery, browser automation and child-agent visibility already have substantial foundations. Implementation must extend those paths rather than introduce parallel stores or duplicate viewers.
+
+The working order is:
+
+1. shared additive contracts and current reliability work;
+2. chat timestamps, durable child display names and a glanceable child monitor;
+3. universal skill resolution, read-only Admin health and the local personal Todo MVP;
+4. representative organization execution, main-chat provisioning acceptance and messenger information/media views;
+5. outbound contact through the Raya inbox first, then separately authorized external adapters;
+6. shared multimodal capture, measurable desktop/browser computer use and mobile vision;
+7. authenticated sync, remote continuation, mobile/web clients and isolated cloud runners;
+8. a compatibility-staged Kilo-to-Raya migration;
+9. an independently governed VS Code fork program.
+
+`FUT-PERSIST-01` is a gate on every durable slice: stable identities, schema versions, restart/replay, extension reload and package-upgrade behavior must be proved as each feature lands. UI work must apply `docs/designer.md` and the runtime designer guidance, preserving Raya's accent, Instrument Serif, Outfit and goal-card design. External sends, deployment and spending keep explicit scoped authority and durable receipts. “Astra-class” is defined by a benchmark matrix for success, unintended actions, stale-frame refusal, recovery, latency, cost and human interventions; code existence or visual similarity is not parity.
+
+The detailed implementation and merge instructions are at the top of `Raya-Remaining-Implementation-Handoff.md`. The first implementation slice is `FUT-CHAT-01`, because stored message timestamps already exist and the remaining work is a shared localized time component plus production-view verification.
+
+## ChatGPT 2026-09-14 21:23 America/Toronto - Follow-up recovery snapshot installed
+
+**Status: snapshot `7.4.23-snapshot+949148fdab.kamil-oseni.1789434997507` is installed.** The low-memory workflow completed its SDK/CLI build, extension and webview typechecks, ESLint, production bundle, VSIX package and forced installation. Retained package: **519,359,256 bytes**, SHA-256 `077c38dc2d90e961bc49d67ac8dc7e0bb37f49d5e6e5b2e7cf02dc001f2d6e4a`; bundled CLI: **230,669,312 bytes**, SHA-256 `bb2a41125bbd4f719005323a8bedcc4cf3e48a83567b825f88346ffd7bdff9d1`.
+
+The installed extension directory exists. The package vault still reports active-host digest `69aff4b80dfdb67185b60348dd805ea99e6faa7ea03d4d1cbb9096e753f2963d`, so the open VS Code extension host still needs a reload before activation can be claimed. Drive C has **94,206,472,192 bytes** free. No Bun or tsgo process remains.
+
 ## ChatGPT 2026-09-14 21:15 America/Toronto - Uncertain follow-ups have a dedicated review flow
 
 **Status: product commit `8a5d6efd1b` is verified and pushed to `origin/main`; packaging remains.** A retained startup claim now identifies a follow-up recovery in the public Routine execution state. The worker row says that the follow-up may have reached the worker and blocks more work. Run review uses a dedicated “Follow-up delivery” state with the saved run and conversation, followed by “Keep reviewing” or a confirmed “Close without resending.” Closing writes an idempotent receipt that states the message was not resent and no unverified result was accepted.

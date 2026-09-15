@@ -1,5 +1,185 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-14 21:23 America/Toronto - Master future-feature build and merge order
+
+The owner explicitly authorized implementation of the future roadmap on 2026-09-14. This supersedes the sentence in the untracked owner catalog `Raya-Features.md` that deferred Codex work must wait for all 39 audit requirements and Live leftovers. It does not change the truth of the audit table: keep every PR/EN/UI/OVR item open until its own acceptance criteria pass.
+
+Use these sources together:
+
+- `docs/to-build/build-goals.md` supplies the existing 25-goal backlog and its technical prompts.
+- `docs/Raya-Features.md` distinguishes shipped foundations from future end states and records the owner's 16 additions.
+- This handoff is authoritative for build order, dependencies, merge gates and next implementation steps.
+- `docs/designer.md` and the runtime `designer.txt` guidance govern every UI surface. Preserve Raya's accent, Instrument Serif, Outfit and the goal-card design; redesign the remaining surfaces using those rules and the restrained Codex interaction principles already documented.
+
+### Stable future requirement IDs
+
+| ID | End state | Current foundation | Required next slice |
+|---|---|---|---|
+| `FUT-CU-01` | Measurable Astra-class browser and desktop computer use | Mature host-owned browser in `browser-session.ts`; no general Windows host | Versioned observe/action/receipt/eval contract; browser becomes adapter one |
+| `FUT-VIS-01` | Live desktop and mobile camera/screen vision | Static images and voice image sharing | User-controlled desktop single-frame capture through the existing image path, then bounded streams |
+| `FUT-CHAT-01` | Truthful time in ordinary, routine and child chat | Messages already carry `createdAt` | Shared localized `<time>` component with legacy, timezone and DST behavior |
+| `FUT-AGENT-01` | Intelligent child spawning and durable names from every policy-eligible mode | `task`, Chief routing, nested depth and specialist provenance | Persist bounded intent-derived display name and expose real denial reasons; do not widen authority |
+| `FUT-AGENT-02` | Glanceable, openable and steerable active children | `BackgroundAgents.tsx` and Agent Manager child tabs | Persist strip state, show lineage/current step, and route Open to the real child session |
+| `FUT-BRAND-01` | Raya product identity across public interfaces and stored/runtime migrations | Extension commands are largely `raya.*`; thousands of internal Kilo references remain | Checked user-visible/compatibility inventory and staged dual-read aliases |
+| `FUT-EDITOR-01` | Raya-owned VS Code distribution | VS Code extension only | ADR and boundary inventory after protocols and branding stabilize; fork implementation last |
+| `FUT-CONTACT-01` | Routine agents contact the owner in-app, by email, Telegram and WhatsApp | Routine inbox and local `notify_user` | Durable provider-neutral outbox with Raya inbox adapter first |
+| `FUT-ORG-01` | Multiple durable organizations whose agents coordinate bounded company work | Organization revisions, members, reporting, delegation and recovery already exist | Representative multi-worker job through real storage and integration boundaries |
+| `FUT-SKILL-01` | Universal design, coding, writing, marketing and role skills | Bundled skill discovery and specialist prompts | One versioned resolution/precedence pipeline with provenance and capability-neutral loading |
+| `FUT-ADM-01` | Admin health/log console for every Raya subsystem | Redacted diagnostic export and scattered health signals | Read-only typed subsystem registry and disconnected-capable UI |
+| `FUT-RMSG-01` | Messenger-grade Routine chat, info, media, links and agent exchanges | Two-pane inbox, `ChatInfo`, attachments and delegation cards | Project existing data into complete info/media/exchange sections and states |
+| `FUT-RCHAT-01` | Create a routine or organization from main chat after clarification | `schedule_task`, `create_organization` and required `ask_options` descriptions exist | Scripted real-chat acceptance, reviewed provisioning card and deep link |
+| `FUT-PERSIST-01` | Agents, jobs, conversations and in-flight ownership survive restart/rebuild | Extensive SQLite/storage claims, staging and recovery | Cross-cutting acceptance gate on every durable feature; installed-host reload matrix |
+| `FUT-TODO-01` | Personal ADHD-oriented Todo, focus timer, AI planning and reminders | Session execution todos only | Independent local durable store, API and tab with manual CRUD and saved wall-clock timer |
+| `FUT-CLOUD-01` | Encrypted multi-device storage, remote continuation and cloud execution | One-way cloud preview/import and legacy cloud-agent code | Versioned sync envelope and local two-client round trip before a provider is selected |
+
+### Non-negotiable delivery contract
+
+Every coherent vertical slice follows this order:
+
+1. Define an additive schema and capability version. Durable records include a stable UUID, schema version, UTC timestamps, correlation identity and idempotency identity where work can replay.
+2. Implement the local source of truth in Kilo-owned directories, preferably `packages/opencode/src/kilocode/`. Reuse existing Routine, Agent Manager, browser, voice, diagnostic and storage services. Do not create a second organization, inbox, child-session or scheduler store.
+3. Define restart, replay, stale-client and rollback behavior before adding the UI. Keep old records readable and ignore unknown additive fields.
+4. Add server routes and regenerate `packages/sdk/js/` only when a client needs a new contract. Never hand-edit generated SDK code.
+5. Add UI states required by `designer.md`: loading, empty, partial, working, waiting, permission-needed, error, offline, reconnect and reduced-motion/high-contrast/zoom behavior where relevant.
+6. Test the smallest realistic implementation path. Prefer real storage, SQLite, processes, production components and local deterministic pages over mocks or success-only DOM fixtures.
+7. Add a flag or compatibility seam for behavior that cannot safely be rolled back by simply hiding a view.
+8. Run the smallest package checks. Avoid root tests and broad Turbo/tsgo jobs. Keep one heavy process at a time.
+9. Commit and push a coherent batch. Batch related commits before `$env:RAYA_LOW_MEMORY='1'; bun run snapshot:install` from `packages/kilo-vscode`.
+10. Add a timestamped `ChatGPT` entry to both docs with commit, exact evidence, installed version/hash when packaged, remaining human acceptance and rollback switch.
+
+New durable features must negotiate client/backend capability versions. A disabled feature must leave its records readable. No rollback may require installing an older database. Every background or external action needs exact authority, cost attribution, bounded retries, correlation, a durable receipt and an interruption test.
+
+### Master implementation order
+
+#### Band 0 - Reliability floor and shared seams
+
+Continue the open PR/EN/UI/OVR work when it blocks a future slice. Add shared seams only as a consumer needs them:
+
+- stable agent identity separate from mutable name, role, avatar, organization and presence;
+- UTC timestamp rendering conventions;
+- correlation IDs spanning parent, child, Routine run, organization assignment, message, tool action and outbound delivery;
+- additive lifecycle/message/action/sync event envelopes;
+- client-visible capability registry for schema versions, tools, multimodal inputs, orchestration events, remote sync and host abilities;
+- feature flags for new surfaces and runtime behavior.
+
+Acceptance: legacy sessions and routines reopen; a current client ignores unknown fields; a reduced capability response is valid for an older client; IDs and timestamps survive restart. Rollback: disable each new surface while retaining readable records.
+
+#### Band 1 - Quick metadata and existing-UI wins
+
+**1A — `FUT-CHAT-01`, implement first.** Use the server-authored message `createdAt`. Add one shared localized `<time>` primitive used by `VscodeUserMessage.tsx`, `AssistantMessage.tsx`, `TranscriptRow.tsx`, `VscodeSessionTurn.tsx` and Routine message rendering as their data shapes allow. Show compact time according to `designer.md`; expose exact local date/time and timezone through the accessible label/title. Do not invent a time for a legacy record. Prove historical plus streaming order, missing timestamps, timezone/DST formatting, keyboard/focus visibility, 320 px and wide layouts, no overflow and production-component use.
+
+**1B — `FUT-AGENT-01` display-name slice.** In `packages/opencode/src/tool/task.ts`, derive a bounded human name from the structured task brief and selected role. Persist it once with immutable child/parent IDs, specialist and auto/explicit selection provenance. Resolve sibling collisions deterministically without renaming active work. Recovered children keep the saved name. Keep spawn eligibility capability- and permission-based: Ask remains read-only; Voice remains isolated until interruption/result ownership is safe; a denial must state the actual reason.
+
+**1C — `FUT-AGENT-02` presence slice.** Extend `BackgroundAgents.tsx` rather than building another viewer. Show child name, role, truthful current step, elapsed time, real state and cost when authoritative. Persist expanded/hidden state per parent and add parent/child breadcrumbs. “Open” must use `open-subagent.ts` and the real Agent Manager session route. Direct steering requires a dedicated child-steer contract; never send it as a fresh parent prompt. Verify 10+ children, narrow layout, keyboard access, restart, cancel, waiting and failure.
+
+**1D — `FUT-BRAND-01` inventory only.** Add a checked allowlist that categorizes every Kilo reference as user-visible defect, temporary compatibility key, upstream provenance/legal reference or internal migration work. Remove only proven user-visible strings in small batches. Do not mass rename packages, storage or commands.
+
+Merge these as separate commits because chat UI, task metadata, Agent Manager UI and branding inventory have distinct rollback boundaries. Install after the band forms one coherent user-visible checkpoint.
+
+#### Band 2 - Skills, Admin and personal Todo
+
+**2A — `FUT-SKILL-01`.** Build one resolution pipeline used by primary agents, modes, Routine workers, organization workers and children. Precedence is: system safety/repository instructions → universal skill → role skill → organization policy → task context → user instruction. Record skill name, version, hash/provenance and resolution result in run metadata. Skill discovery must be bounded and deterministic; a skill can guide work but cannot widen tools or permissions. Improve `docs/designer.md` and runtime `designer.txt` together before making the design skill universal. Add coding, writing and marketing skills as versioned files with focused evaluation fixtures. Use only public or owner-supplied Astra principles; do not claim or reproduce a private system prompt.
+
+**2B — `FUT-ADM-01`.** Create a read-only typed registry first. Expose CLI/protocol/build identity, session stream/storage, scheduler/claims/staging/queue/inbox, parent/child agents/orphans, browser/computer host, voice/media capability, and later sync/channels. Each row reports `healthy`, `degraded`, `blocked`, `offline` or `unknown`, evidence time and a plain explanation. Reuse `packages/kilo-vscode/src/services/diagnostics.ts` for bounded redacted export. Never include secrets, auth headers, raw media or unredacted message bodies. The view must work while the CLI is disconnected. Add no reset/repair/delete controls in this band.
+
+**2C — `FUT-TODO-01` local MVP.** Do not reuse session execution todos as personal state. Add a Kilo-owned versioned store/API for lists, items, subtasks, due/reminder time, priority, estimate, status, notes and links to chat/Routine/goal/session. Build a dedicated tab with manual CRUD. Persist focus sessions by start/end wall-clock timestamps so closing the webview or extension does not pause or drift them. “Help organize” calls a dedicated proposal tool, uses `ask`/`ask_options` for missing facts and shows proposed subtasks for review before apply. Use the existing local scheduler/notification boundary for reminders with a durable dedupe key. Test restart, duplicate reminder prevention, edit-versus-open-proposal conflict, keyboard use and narrow/empty/error/offline states.
+
+Rollback: each subsystem has independent storage/flag; current prompt path, diagnostics export and session todos remain usable.
+
+#### Band 3 - Finish organizations and Routine messaging
+
+**3A — `FUT-ORG-01` representative execution.** Extend `packages/opencode/src/kilocode/task/organization.ts`, `task/index.ts`, `task/delegation.ts` and `task/inbox.ts`. Retain existing organization IDs, revisions, members, reporting lines, bounded depth/fanout, staged provisioning and recovery. Add only missing purpose/policy/budget/schedule/delegation-edge fields through additive schemas. Enforce cycle detection, depth, active-child, retry, time and cost limits. Each handoff has one durable assignment, message, artifact list, authority snapshot and idempotent result receipt. A worker may spawn bounded temporary specialists without escaping the organization's authority ceiling.
+
+Create a deterministic “Website Builders” fixture with representative/CEO, researcher, designer and developer roles. Drive prospect research → saved report → design handoff → implementation/hosting preparation → outreach draft. Use deterministic fake businesses for the full automated case; use real browser/artifact/hosting boundaries where safe. Publication, spending and outbound contact stop at explicit permission gates. Kill before and after each handoff and prove one logical advance, no duplicate child/external action, reconstructable graph/DMs and complete provenance.
+
+**3B — `FUT-RCHAT-01`.** The backend tools already exist in `kilocode/tool/routine-management.ts` and scheduling tools. Add scripted main-chat journeys for underspecified “create a routine” and “create an organization”: required fields trigger `ask_options`; answers produce an exact reviewed plan; commit uses one idempotency identity and expected organization revision; success deep-links to Routines. Replayed or lost responses must inspect the durable result instead of provisioning again.
+
+**3C — `FUT-RMSG-01`.** Extend the current `Inbox.tsx`, `ChatInfo.tsx`, `MediaAttachment.tsx` and organization activity components. Group threads by organization plus independent workers. Add info sections for role/settings, membership/reporting, media/files, links, related runs/artifacts and agent-to-agent contacts/exchanges with redaction. Retain one stable user/worker thread and explicit job/team threads only where needed. Project from durable messages; opening the UI must never rewrite history. Verify pagination, concurrent ordering, unread/drafts, archived workers, attachments, blocked/offline states and high-volume narrow layouts.
+
+**3D — `FUT-PERSIST-01` installed-host gate.** Create an organization, worker, thread, draft, queued/blocked follow-up and in-flight assignment. Restart the backend, reload VS Code, install a newer snapshot and reopen twice. Require the same IDs, exactly one pending owner, no duplicated message or run, preserved unread/draft/media index and an actionable held-review state for ambiguous delivery. This is a release gate for every later durable feature.
+
+Rollback: an organization flag can hide organization execution while individual Routines keep working; existing Routine inspection remains until messenger parity passes; unknown fields remain preserved.
+
+#### Band 4 - Owner contact
+
+Implement `FUT-CONTACT-01` as one provider-neutral durable outbox. An entry contains destination identity, reviewed body/template, channel, worker/run correlation, idempotency key, state, attempts, quiet-hours decision and authoritative provider receipt.
+
+Adapter order is Raya inbox → local desktop notification → email → Telegram → WhatsApp → multi-channel escalation. The in-app message is canonical. External channels default to draft/review. Recurring preauthorization is narrowly scoped by worker, organization, channel, verified recipient, template and expiry. Store credentials only in platform secret storage. Add rate limits, retry/dead-letter review, per-channel disable and revocation. An agent cannot widen its own contact scope.
+
+Provider sandbox tests must cover success, timeout, retry, duplicate callback, rejection and revoked credentials. Restart cannot duplicate delivery; one failed channel cannot resend a successful channel. Real-account delivery stays a named human acceptance step.
+
+#### Band 5 - Multimodal perception and computer use
+
+**5A — `FUT-VIS-01` shared media contract.** Define still image, camera, screen and browser frame envelopes with source/device, dimensions, UTC capture time, sequence, MIME type, privacy state and content hash. Add adaptive sampling, backpressure, compression, cancellation, dropped-frame counters, bounded retention, model-capability negotiation, crop/redaction regions and per-source permission. Reuse current image normalization and voice image attachments. Ship desktop selected-window/screen/camera single-frame capture first with visible source picker, preview, pause/stop and permission/error states. Then add bounded streaming. Still-image upload must remain usable when streaming is off.
+
+**5B — `FUT-CU-01` measurable program.** Put browser and desktop hosts behind one typed interface:
+
+1. observe: screenshot/frame, accessibility tree, active window, cursor, viewport and scale;
+2. plan: proposed next action tied to an observation ID;
+3. act: normalized click/type/key/scroll/drag/select/wait/focus actions;
+4. verify: post-action observation and explicit state-change result;
+5. protect: consent, sensitive fields, restricted apps/regions, destructive review, emergency stop and budgets;
+6. replay/evaluate: redacted observations, actions, results, latency and failure reason.
+
+Start with a benchmark harness around the existing browser service. Add grounded action receipts and stale-observation refusal, then a Windows desktop host, cross-app workflows, recovery/performance and later mobile observation. Prefer accessibility targets; coordinate actions record DPI/scale and exact source-frame hash. A global kill switch and client-local Stop must work without a backend response.
+
+Use the public Browser Use reverse-engineering article as external analysis and label architectural deductions as inference. Use public OpenAI sources or owner-provided material for Astra claims. Do not infer private desktop/hosted architecture. “As perfect as Astra” closes only against a versioned benchmark matrix: task success, unintended action rate, stale-frame refusal, recovery, median/p95 action latency, token/cost, human interventions and supported platforms. Include DPI, multiple monitors, dialogs, downloads, auth handoff, focus theft, layout changes and network loss. Real packaged OS control requires human acceptance.
+
+Before this band, complete or incorporate build-goal 23 screenshot-first verification, 24 same-reason convergence cap and 25 repairable-error versus human-takeover classification. Canvas Goal 3 gates Canvas Design Mode/capture and the canvas half of generalized takeover.
+
+#### Band 6 - Cloud, remote continuation and mobile
+
+**6A — `FUT-CLOUD-01` sync protocol.** Architecture comes before provider choice. Create a versioned encrypted sync envelope with device/source ID, object ID/type, revision, event cursor, tombstone, content hash and conflict metadata. Prove local export/import and two-client cursor replay before any cloud writer. Then add short-lived user/device auth, device registration/revocation, durable metadata/events, encrypted blobs, queued work leases with fencing, secret isolation, audited remote commands, host heartbeat, retention/export/delete and account recovery. Local remains authoritative in the first rollout.
+
+Vercel may host a prototype web/control plane. Do not assume request-bound serverless functions can host long-running agents. Keep database, blob, queue and runner providers behind interfaces.
+
+**6B — mobile/web companion.** Deliver read-only session/Routine monitoring first, then remote steering/approvals, Todo/Routine messenger, notifications, camera/screen vision and optional remote computer observation/control. The client never exposes unauthenticated `kilo serve`; it uses the control plane or a strongly authenticated tunnel. Show whether work runs on the home PC, cloud, paused or disconnected. Prove WAN disconnect/reconnect, notification deep links, camera rotation/backgrounding and device revocation. Real iOS/Android acceptance is human-required.
+
+**6C — cloud runners/handoff.** Only after auth, sync, leases and audit are stable, add isolated workspaces/VMs/containers with scoped credentials/network, fenced leases, checkpoints, artifacts, quotas and kill. A handoff manifest includes exact session, repo revision, worktree state, pending permissions, tools, skills and artifacts. Conflicting local/cloud advances enter review. Kill at every checkpoint and prove stale leases cannot publish or repeat non-idempotent external work.
+
+The separate GitHub PR review → autofix → issue-to-PR track and Agent SDK/CI runner from `build-goals.md` can proceed when their own dependencies are ready; issue-to-PR requires authenticated background execution.
+
+#### Band 7 - Full Kilo-to-Raya migration
+
+Start the inventory in Band 1; perform destructive removal late. Migration waves:
+
+1. Inventory user-visible text, commands, package IDs, executable/service names, environment variables, config/storage keys, paths, URLs, telemetry/auth identity, marketplace/update artifacts, schemas and docs.
+2. Give every new public API a Raya name immediately.
+3. Add dual-read/write or copy-once compatibility for Kilo config, storage, commands, credentials, sessions and CLI invocation.
+4. Migrate UI, marketplace, docs and external product identity.
+5. Rename Kilo-owned internal modules only where upstream merge cost stays bounded.
+6. Migrate package namespaces, executable/service identity and release tooling.
+7. Test fresh install, real legacy-profile upgrade, uninstall/reinstall and documented downgrade behavior.
+8. Remove aliases only after a published compatibility window and evidence that old paths are unused.
+
+“All traces” means Raya product identity, public APIs, stored keys and shipped binaries. Preserve required upstream provenance, copyright and legal notices. An automated inventory must reach zero unintended user-visible Kilo references. Upgrade must preserve credentials, settings, sessions, Routines, organizations, messages, Todo and agent state.
+
+#### Band 8 - Raya-owned VS Code fork
+
+Treat `FUT-EDITOR-01` as a separate product program or isolated distribution repository. Prerequisites are stable client/backend protocol, Raya packages/update channel, finished extension UX, cloud/mobile auth, signing/updater/crash reporting/accessibility and a funded upstream VS Code merge process.
+
+Write an ADR for extension limitations first. Build an unmodified reproducible fork, define security-patch SLA/upstream cadence, bundle Raya through the same protocol, move only proven surfaces into editor chrome, then add signed installers, updater, profile migration and platform packaging. The backend must continue serving both the extension and fork during migration. Keep shipping the extension through at least one complete fork upgrade cycle.
+
+### Existing build goals retained outside the 16 additions
+
+Do not lose these while reprioritizing: Canvas repair; deterministic lifecycle hooks; true per-hunk undo; Cmd/Ctrl+I overlay; honest per-hunk gutter actions; terminal/canvas status-preview-takeover; design-system lock → aware generation → design/code round trip; Canvas Design Mode and run capture; GitHub review/autofix/issue-to-PR; Agent SDK/CI; automated visual proof; convergence caps; takeover classification; current GPT-Live packaged microphone/latency/warm-handoff work; telemetry consent ordering; child budgets; path/plugin confinement; self-heal publish/install/rollback; full UI redesign; assistive-technology/high-contrast/zoom; authoritative queue/steering; checkpoint picker and temporary side chats.
+
+### Parallel lanes and merge discipline
+
+- Lane A, client UX: time, active children, Todo, Routine messenger, Admin.
+- Lane B, local runtime: child naming/policy, skills, organization execution, correlation/events, multimodal and computer-use host.
+- Lane C, distributed platform: auth, sync, outbound adapters, mobile, cloud runners and migration inventory.
+
+Lane C protocol work waits for Lane B to define the local source of truth. Do not have concurrent agents edit shared message schemas, generated SDK files or the same webview shell. Merge additive contracts before consumers, then storage/runtime, then UI, then acceptance evidence. Rebase each lane on the last merged contract and regenerate the SDK once per route batch.
+
+### Current first action
+
+Implement `FUT-CHAT-01` now. Inspect the real timestamp fields and all ordinary/Routine/child renderers; build one shared component instead of formatting independently. Use production preview stories and focused tests only. After that, take `FUT-AGENT-01` durable display names, then `FUT-AGENT-02` presence polish. Keep OVR-05 representative company execution as the next higher-risk Routine lane.
+
+## ChatGPT 2026-09-14 21:23 America/Toronto - Current snapshot checkpoint
+
+Snapshot `7.4.23-snapshot+949148fdab.kamil-oseni.1789434997507` is installed from source `949148fdab`. Retained VSIX: 519,359,256 bytes, SHA-256 `077c38dc2d90e961bc49d67ac8dc7e0bb37f49d5e6e5b2e7cf02dc001f2d6e4a`. Bundled CLI: 230,669,312 bytes, SHA-256 `bb2a41125bbd4f719005323a8bedcc4cf3e48a83567b825f88346ffd7bdff9d1`. The extension directory exists, staging is empty, no Bun/tsgo process remains and C has 94,206,472,192 bytes free. The package vault active-host pointer remains `69aff4b80dfdb67185b60348dd805ea99e6faa7ea03d4d1cbb9096e753f2963d`; reload VS Code before claiming activation.
+
 ## ChatGPT 2026-09-14 21:15 America/Toronto - EN-02 follow-up disposition complete
 
 Product commit `8a5d6efd1b` is verified and pushed. The Routine agent execution schema now projects `recovery: "followup"` only when a valid retained claim contains both the exact message source and prior session. Preserve that narrow projection. `runner.resolve` uses it to publish and replay the exact receipt “Closed after reviewing an uncertain follow-up delivery. The follow-up was not resent.” Existing generic interrupted starts keep their prior wording and behavior.

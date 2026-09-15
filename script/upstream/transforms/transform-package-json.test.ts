@@ -103,6 +103,14 @@ test("fixScripts preserves opencode validation scripts", () => {
   expect(scripts["test:ci"]).toBe("bun test --ci")
 })
 
+test("fixScripts preserves the bounded TUI typecheck", () => {
+  const ours = { scripts: { typecheck: "tsgo --noEmit --singleThreaded --checkers 1" } }
+  const pkg: Record<string, unknown> = { scripts: { typecheck: "tsgo --noEmit" } }
+  const changes: string[] = []
+  fixScripts(pkg, "packages/tui/package.json", ours, changes)
+  expect((pkg.scripts as Record<string, string>).typecheck).toBe("tsgo --noEmit --singleThreaded --checkers 1")
+})
+
 test("fixScripts preserves dev:local and shared-package test:ci scripts", () => {
   const junit = "mkdir -p .artifacts/unit && bun test --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml"
   const root: Record<string, unknown> = { scripts: { dev: "bun dev" } }

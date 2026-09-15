@@ -305,7 +305,7 @@ const PRESERVE_SCRIPTS: Record<string, string[]> = {
   "packages/llm/package.json": ["test:ci"],
   "packages/sdk-next/package.json": ["test:ci"],
   "packages/session-ui/package.json": ["test:ci"],
-  "packages/tui/package.json": ["test:ci"],
+  "packages/tui/package.json": ["typecheck", "test:ci"],
   "packages/ui/package.json": ["test:ci"],
   "packages/codemode/package.json": ["test:ci"],
 }

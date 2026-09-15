@@ -211,7 +211,8 @@ it.live("lets exactly one of concurrent apply and reject claim the proposal", ()
         [app.apply(saved.id, saved.digest).pipe(Effect.exit), app.reject(saved.id, saved.digest).pipe(Effect.exit)],
         { concurrency: "unbounded" },
       )
-      expect(results.reduce((count, result) => count + (Exit.isSuccess(result) ? 1 : 0), 0)).toBe(1)
+      const wins = Number(Exit.isSuccess(results[0])) + Number(Exit.isSuccess(results[1]))
+      expect(wins).toBe(1)
       const rows = yield* app.list()
       expect(rows).toHaveLength(1)
       expect(["applied", "rejected"]).toContain(rows[0].state)

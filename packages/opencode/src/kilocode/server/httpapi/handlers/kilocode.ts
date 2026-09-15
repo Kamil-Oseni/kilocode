@@ -1019,7 +1019,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       return yield* healing
         .publish(ctx.params.itemID, ctx.payload)
         .pipe(
-          Effect.catch((err) => {
+          Effect.catch((err): Effect.Effect<never, HttpApiError.Conflict | UnknownError> => {
             if (Schema.is(PublicationConflict)(err)) return Effect.fail(new HttpApiError.Conflict({}))
             return Effect.fail(
               new UnknownError({ message: "Self-heal verification storage is unavailable.", ref: ctx.params.itemID }),

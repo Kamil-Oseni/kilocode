@@ -7,7 +7,7 @@ import { owner as identity, stopped } from "./owner"
 import { read } from "./storage-read"
 
 type Store = Pick<Storage.Interface, "create" | "replace" | "remove"> & {
-  read: Storage.Interface["read"]
+  read: (key: string[]) => Effect.Effect<unknown, Storage.Error>
 }
 type Claim = { id: string; at: number; link: (sessionID: SessionID) => Effect.Effect<void> }
 type Context = { runID: string; delegationID: string } | { source: string; sessionID: SessionID }

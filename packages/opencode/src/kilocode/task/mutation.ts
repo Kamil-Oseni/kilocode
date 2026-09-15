@@ -14,7 +14,7 @@ export function mutate<A, E, R>(storage: Store, operation: Effect.Effect<A, E, R
   gates.set(storage, gate)
   const key = (parts: string[]) => [parts[0], `mutation-${parts[1]}`, ...parts.slice(2)]
   const scoped: Store = {
-    read: <T>(parts: string[]) => storage.read<T>(key(parts)),
+    read: (parts: string[]) => storage.read(key(parts)),
     create: (parts: string[], value: unknown) => storage.create(key(parts), value),
     replace: (parts: string[], value: unknown) => storage.replace(key(parts), value),
     remove: (parts: string[]) => storage.remove(key(parts)),

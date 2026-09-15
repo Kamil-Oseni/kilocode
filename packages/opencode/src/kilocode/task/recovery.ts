@@ -24,7 +24,7 @@ const Record = Schema.Struct({
 })
 const Permit = Schema.Struct({ id: Schema.String, owner: Owner, settled: Schema.optional(Schema.Boolean) })
 type Store = Pick<Storage.Interface, "create" | "replace" | "remove"> & {
-  read: Storage.Interface["read"]
+  read: (key: string[]) => Effect.Effect<unknown, Storage.Error>
 }
 const hash = (id: string) => createHash("sha256").update(id).digest("hex")
 

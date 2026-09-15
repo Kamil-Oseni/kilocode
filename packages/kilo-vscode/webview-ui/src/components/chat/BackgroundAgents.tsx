@@ -27,6 +27,7 @@ import {
   type BackgroundAgent,
 } from "./background-agents"
 import { openSubagent } from "./open-subagent"
+import { loadAgentView, saveAgentView } from "./background-agent-state"
 
 export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
   const session = useSession()
@@ -43,7 +44,10 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
 
   createEffect(
     on(session.currentSessionID, () => {
-      setHidden(new Set<string>())
+      const id = session.currentSessionID()
+      const saved = id ? loadAgentView(vscode.getState(), id) : { open: false, hidden: [] }
+      setOpen(saved.open)
+      setHidden(new Set(saved.hidden))
       setLoaded(false)
       setJobs([])
       pending = undefined
@@ -117,6 +121,17 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
 
   const status = (agent: BackgroundAgent) => language.t(`task.backgroundAgents.status.${agent.status}`)
 
+  const save = (id: string, next: { open: boolean; hidden: Set<string> }) =>
+    vscode.setState(saveAgentView(vscode.getState(), id, { open: next.open, hidden: [...next.hidden] }))
+
+  const toggle = () => {
+    const id = session.currentSessionID()
+    if (!id) return
+    const next = !open()
+    setOpen(next)
+    save(id, { open: next, hidden: hidden() })
+  }
+
   const icon = (agent: BackgroundAgent) => {
     if (agent.status === "completed") return "circle-check" as const
     if (agent.status === "cancelled") return "circle-ban-sign" as const
@@ -147,14 +162,17 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
     if (id) vscode.postMessage({ type: "backgroundSubagents", sessionID: id })
   }
 
-  const hideFinished = () =>
-    setHidden(
-      new Set(
-        agents()
-          .filter((agent) => agent.status !== "running")
-          .map((agent) => agent.jobID),
-      ),
+  const hideFinished = () => {
+    const id = session.currentSessionID()
+    if (!id) return
+    const next = new Set(
+      agents()
+        .filter((agent) => agent.status !== "running")
+        .map((agent) => agent.jobID),
     )
+    setHidden(next)
+    save(id, { open: open(), hidden: next })
+  }
 
   return (
     <Show when={visible().length > 0 || (!props.readonly && foreground())}>
@@ -163,7 +181,7 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
           <Show when={visible().length > 0}>
             <button
               data-slot="task-header-todos-trigger"
-              onClick={() => setOpen((value) => !value)}
+              onClick={toggle}
               aria-expanded={open()}
               aria-label={waiting() > 0 ? language.t("task.backgroundAgents.waiting") : undefined}
             >
@@ -269,7 +287,11 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
                       aria-label={`${language.t("task.backgroundAgents.dismiss")}: ${label(agent)}`}
                       onClick={(event: MouseEvent) => {
                         event.stopPropagation()
-                        setHidden((current) => new Set(current).add(agent.jobID))
+                        const id = session.currentSessionID()
+                        if (!id) return
+                        const next = new Set(hidden()).add(agent.jobID)
+                        setHidden(next)
+                        save(id, { open: open(), hidden: next })
                       }}
                     >
                       <span data-slot="task-header-agent-action-label">

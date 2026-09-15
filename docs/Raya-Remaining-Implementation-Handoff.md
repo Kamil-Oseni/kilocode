@@ -1,5 +1,11 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-14 22:20 America/Toronto - Canonical table corrected; monitor state implemented
+
+The owner explicitly instructed implementation to continue. The orchestrator goal record still carries the older paused state and the agent API cannot resume it; do not stop work because of that stale administrative flag. The owner can select Resume in the goal UI. All 16 future requirements now also appear in the Findings and Overhauls table in `Raya-Implementation-Progress.md` with truthful status and evidence.
+
+The next `FUT-AGENT-02` slice saves Background Agents disclosure and dismissed completed rows per parent in the existing VS Code webview state without overwriting other feature keys. `background-agent-state.ts` uses a versioned parser, safe defaults, deduplication, a 100-job bound and a 50-parent recency bound. Focused state plus monitor regressions pass 22 / 30; webview typecheck and zero-warning scoped lint pass. Keep running rows visible regardless of saved dismissal. Continue with real child activity projection, then elapsed time/cost only from authoritative backend fields, breadcrumbs and the dedicated steer contract. Do not infer those values from UI polling or send steering to the parent session.
+
 ## ChatGPT 2026-09-14 22:15 America/Toronto - Band 1 checkpoint installed
 
 Snapshot `7.4.23-snapshot+4c5f5fdea8.kamil-oseni.1789438283214` is installed. It contains `FUT-CHAT-01` and the durable identity portion of `FUT-AGENT-01/02`. Retained VSIX: 519,377,848 bytes, SHA-256 `011e278a43f74a5600735ac775a8fbf1ab0a10f70617fd4148f69e20e41b57be`; bundled CLI: 230,681,600 bytes, SHA-256 `38f13b3238d1ed3cbbc9cc5541b33a8874ce956b6ba062ad5d4319da23e2e36d`. The installed directory matches the version. Reload VS Code to activate it; the package vault still identifies the previous host digest until reload. No build process remains.

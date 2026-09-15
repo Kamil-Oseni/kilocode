@@ -1423,7 +1423,10 @@ describe("opencode config migration notice", () => {
     await withGlobalConfig(path.join(globalTmp.path, "kilo"), () => {
       const notice = KilocodeConfig.opencodeConfigNotification({ directory: tmp.path, scanProject: true })
       expect(notice?.id).toBe(KilocodeConfig.OPENCODE_NOTIFICATION_ID)
+      expect(notice?.message).toStartWith("Raya no longer falls back to opencode configuration.")
+      expect(notice?.message).not.toContain("Kilo no longer falls back")
       expect(notice?.message).toContain(path.join(tmp.path, ".opencode"))
+      expect(notice?.message).toContain("Move it into a .kilo directory")
       expect(notice?.action?.actionURL).toBe(KilocodeConfig.CONFIG_DOCS_URL)
       expect(notice?.showIn).toEqual(["cli", "extension"])
     })

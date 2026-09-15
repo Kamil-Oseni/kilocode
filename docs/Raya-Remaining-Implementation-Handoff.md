@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from committed, remote and installed package source `116db5d430`; the open extension host's active-vault pointer remains `bfd53bdb3e` until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from product and installed package source `48ddf52644`; repository history may continue with documentation-only receipts. The open extension host's active-vault pointer remains `bfd53bdb3e` until VS Code reloads.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
@@ -14,7 +14,7 @@ Version 1 intentionally defines `cutoverReady` as the schema literal `false`. Do
 
 Local evidence for `1d0927f146`: ledger 3/3, cross-repository checker 3/3, real Admin HTTP 1/1 with 31 assertions, SDK typecheck, bounded full CLI typecheck, workflow/brand/annotation/Promise-facade/Markdown-table/diff guards. The inventory is 68,925 total: public 1,693; compatibility 35,069; provenance 5,686; internal 26,477.
 
-The normal hook passed 29 JavaScript/TypeScript packages plus JetBrains and pushed through `116db5d430`. The authorized low-memory workflow installed `eden.raya@7.4.23-snapshot+116db5d430.kamil-oseni.1789496539811`. Its retained VSIX SHA-256 is `3393f9d1d565c84a438de662d80af6b6359e5c2411353c513f2c685661057a25` at 520,070,922 bytes. The bundled CLI SHA-256 is `60774bb61d3fae6cad74ea99c6851fea4ea123358b701921a82c8ca958997711` at 231,120,384 bytes. VS Code lists the exact installed identity, while the open host's active pointer remains the earlier package until reload.
+The normal hook passed 29 JavaScript/TypeScript packages plus JetBrains and pushed through `48ddf52644`. The authorized low-memory workflow installed `eden.raya@7.4.23-snapshot+48ddf52644.kamil-oseni.1789497108231`. Its retained VSIX SHA-256 is `0e283dc0fe75935636a4a46ab19b6ef46820122091e352343adc1971ec4085be` at 520,070,922 bytes. The bundled CLI SHA-256 is `e8deb17783e08039c86d1d618c9f8729ce6d0709ccb80e2f09e308322734fa2b` at 231,120,384 bytes. VS Code lists the exact installed identity, while the open host's active pointer remains the earlier package until reload.
 
 ## ChatGPT 2026-09-15 13:47 America/Toronto - Continue after synchronized push and install
 

@@ -1,30 +1,26 @@
 import { createWriteStream } from "node:fs"
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises"
 import { createRequire } from "node:module"
 import { join } from "node:path"
 import { pipeline } from "node:stream/promises"
 import type { Readable } from "node:stream"
 import { expect, test } from "bun:test"
-import { PackageVault } from "../../src/services/package-vault"
+import { PackageVault, type Package } from "../../src/services/package-vault"
 
 const require = createRequire(import.meta.url)
 const writer = createRequire(require.resolve("@vscode/vsce"))("yazl") as {
   ZipFile: new () => { addBuffer(buffer: Buffer, name: string): void; end(): void; outputStream: Readable }
 }
 
-async function fixture() {
-  const root = await mkdtemp(join(import.meta.dir, ".package-vault-"))
-  const source = join(root, "source.vsix")
-  const binary = Buffer.from("retained kilo binary")
+async function archive(root: string, version: string, text: string, name: string) {
+  const source = join(root, name)
+  const binary = Buffer.from(text)
   const target = `${process.platform}-${process.arch}`
   const zip = new writer.ZipFile()
-  zip.addBuffer(
-    Buffer.from(JSON.stringify({ name: "raya", publisher: "eden", version: "1.2.3" })),
-    "extension/package.json",
-  )
+  zip.addBuffer(Buffer.from(JSON.stringify({ name: "raya", publisher: "eden", version })), "extension/package.json")
   zip.addBuffer(
     Buffer.from(
-      `<PackageManifest><Metadata><Identity Id="raya" Publisher="eden" Version="1.2.3" TargetPlatform="${target}" /></Metadata></PackageManifest>`,
+      `<PackageManifest><Metadata><Identity Id="raya" Publisher="eden" Version="${version}" TargetPlatform="${target}" /></Metadata></PackageManifest>`,
     ),
     "extension.vsixmanifest",
   )
@@ -32,7 +28,26 @@ async function fixture() {
   const done = pipeline(zip.outputStream, createWriteStream(source))
   zip.end()
   await done
-  return { root, source, binary, target }
+  return { source, binary, target, version }
+}
+
+async function fixture() {
+  const root = await mkdtemp(join(import.meta.dir, ".package-vault-"))
+  return { root, ...(await archive(root, "1.2.3", "retained kilo binary", "source.vsix")) }
+}
+
+function gate(target: "retain" | "activate") {
+  const entered = Promise.withResolvers<void>()
+  const resumed = Promise.withResolvers<void>()
+  return {
+    entered: entered.promise,
+    release: () => resumed.resolve(),
+    barrier: async (phase: "retain" | "activate") => {
+      if (phase !== target) return
+      entered.resolve()
+      await resumed.promise
+    },
+  }
 }
 
 test("retains and revalidates one exact active package across service restart", async () => {
@@ -122,6 +137,163 @@ test("prunes stale snapshots while preserving active, current, recent and releas
     await expect(Bun.file(packages[1].package).exists()).resolves.toBeTrue()
     await expect(Bun.file(packages[3].package).exists()).resolves.toBeTrue()
     await expect(Bun.file(packages[4].package).exists()).resolves.toBeTrue()
+  } finally {
+    await rm(run.root, { recursive: true, force: true })
+  }
+})
+
+test("retention commits against the latest manifest after package verification", async () => {
+  const run = await fixture()
+  try {
+    const next = await archive(run.root, "1.2.4", "second retained binary", "next.vsix")
+    const root = join(run.root, "vault")
+    const pause = gate("retain")
+    const first = new PackageVault(root, pause.barrier).retain(run.source, {
+      name: "raya",
+      publisher: "eden",
+      version: run.version,
+      target: run.target,
+    })
+    await pause.entered
+    const second = await new PackageVault(root).retain(next.source, {
+      name: "raya",
+      publisher: "eden",
+      version: next.version,
+      target: next.target,
+    })
+    pause.release()
+    const saved = await first
+    const manifest = JSON.parse(await readFile(join(root, "packages.json"), "utf8"))
+    expect(new Set(manifest.packages.map((value: Package) => value.artifact.digest))).toEqual(
+      new Set([saved.artifact.digest, second.artifact.digest]),
+    )
+  } finally {
+    await rm(run.root, { recursive: true, force: true })
+  }
+})
+
+test("activation preserves packages retained while verification is in progress", async () => {
+  const run = await fixture()
+  try {
+    const next = await archive(run.root, "1.2.4", "second retained binary", "next.vsix")
+    const root = join(run.root, "vault")
+    const vault = new PackageVault(root)
+    const saved = await vault.retain(run.source, {
+      name: "raya",
+      publisher: "eden",
+      version: run.version,
+      target: run.target,
+    })
+    const binary = join(run.root, "kilo.exe")
+    await writeFile(binary, run.binary)
+    const pause = gate("activate")
+    const active = new PackageVault(root, pause.barrier).activate(run.version, run.target, binary)
+    await pause.entered
+    const second = await vault.retain(next.source, {
+      name: "raya",
+      publisher: "eden",
+      version: next.version,
+      target: next.target,
+    })
+    pause.release()
+    expect(await active).toEqual(saved)
+    const manifest = JSON.parse(await readFile(join(root, "packages.json"), "utf8"))
+    expect(manifest.active).toBe(saved.artifact.digest)
+    expect(new Set(manifest.packages.map((value: Package) => value.artifact.digest))).toEqual(
+      new Set([saved.artifact.digest, second.artifact.digest]),
+    )
+  } finally {
+    await rm(run.root, { recursive: true, force: true })
+  }
+})
+
+test("adopts a verified digest-named package left by an interrupted manifest write", async () => {
+  const run = await fixture()
+  try {
+    const seed = await new PackageVault(join(run.root, "seed")).retain(run.source, {
+      name: "raya",
+      publisher: "eden",
+      version: run.version,
+      target: run.target,
+    })
+    const root = join(run.root, "vault")
+    await mkdir(root)
+    const orphan = join(root, `raya.${seed.artifact.digest}.vsix`)
+    await copyFile(seed.package, orphan)
+    const saved = await new PackageVault(root).retain(run.source, {
+      name: "raya",
+      publisher: "eden",
+      version: run.version,
+      target: run.target,
+    })
+    expect(saved.package).toBe(orphan)
+    const manifest = JSON.parse(await readFile(join(root, "packages.json"), "utf8"))
+    expect(manifest.packages).toEqual([saved])
+  } finally {
+    await rm(run.root, { recursive: true, force: true })
+  }
+})
+
+test("rejects a corrupt digest-named orphan instead of indexing it", async () => {
+  const run = await fixture()
+  try {
+    const seed = await new PackageVault(join(run.root, "seed")).retain(run.source, {
+      name: "raya",
+      publisher: "eden",
+      version: run.version,
+      target: run.target,
+    })
+    const root = join(run.root, "vault")
+    await mkdir(root)
+    await writeFile(join(root, `raya.${seed.artifact.digest}.vsix`), "corrupt")
+    await expect(
+      new PackageVault(root).retain(run.source, {
+        name: "raya",
+        publisher: "eden",
+        version: run.version,
+        target: run.target,
+      }),
+    ).rejects.toThrow()
+    await expect(Bun.file(join(root, "packages.json")).exists()).resolves.toBeFalse()
+  } finally {
+    await rm(run.root, { recursive: true, force: true })
+  }
+})
+
+test("pruning removes missing index entries and unindexed digest packages", async () => {
+  const run = await fixture()
+  try {
+    const root = join(run.root, "vault")
+    const saved = await new PackageVault(root).retain(run.source, {
+      name: "raya",
+      publisher: "eden",
+      version: run.version,
+      target: run.target,
+    })
+    const next = await archive(run.root, "1.2.4", "orphaned retained binary", "next.vsix")
+    const extra = await new PackageVault(join(run.root, "seed")).retain(next.source, {
+      name: "raya",
+      publisher: "eden",
+      version: next.version,
+      target: next.target,
+    })
+    const orphan = join(root, `raya.${extra.artifact.digest}.vsix`)
+    await copyFile(extra.package, orphan)
+    const missing: Package = {
+      ...saved,
+      version: "1.2.2",
+      package: join(root, `raya.${"f".repeat(64)}.vsix`),
+      artifact: { digest: "f".repeat(64), size: 123 },
+      retainedAt: saved.retainedAt - 1,
+    }
+    await writeFile(join(root, "packages.json"), JSON.stringify({ version: 1, packages: [saved, missing] }))
+    expect(await new PackageVault(root).pruneSnapshots()).toEqual({ packages: 2, bytes: extra.artifact.size })
+    const manifest = JSON.parse(await readFile(join(root, "packages.json"), "utf8"))
+    expect(manifest.packages).toEqual([saved])
+    const files = (await readdir(root)).filter((file) => /^raya\.[a-f0-9]{64}\.vsix$/.test(file)).sort()
+    expect(files).toEqual([`raya.${saved.artifact.digest}.vsix`])
+    await expect(Bun.file(saved.package).exists()).resolves.toBeTrue()
+    await expect(Bun.file(orphan).exists()).resolves.toBeFalse()
   } finally {
     await rm(run.root, { recursive: true, force: true })
   }

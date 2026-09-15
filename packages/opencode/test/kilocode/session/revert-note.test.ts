@@ -42,4 +42,11 @@ describe("RayaRevertNote", () => {
     expect(noted?.some((file) => file.endsWith("drawing-canvas.html"))).toBe(true)
     expect(RayaRevertNote.reminder(noted)).toContain("restored to their state before your edits")
   })
+
+  test("serializes concurrent records without losing restored paths", async () => {
+    const id = sid()
+    const files = Array.from({ length: 12 }, (_, index) => `C:/tmp/${index}.txt`)
+    await Promise.all(files.map((file) => RayaRevertNote.record(id, [file])))
+    expect(new Set(await RayaRevertNote.take(id))).toEqual(new Set(files))
+  })
 })

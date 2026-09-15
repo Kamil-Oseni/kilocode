@@ -3,10 +3,12 @@
 // history still shows the edits it made and it will otherwise trust that stale context — e.g.
 // claim a change is still present, or refuse to redo it. This note nudges it to re-read.
 import { Global } from "@opencode-ai/core/global"
+import { Flock } from "@opencode-ai/core/util/flock"
 import { Effect } from "effect"
-import fs from "fs"
+import { rm } from "node:fs/promises"
 import path from "path"
 import { ProfileWriterLive } from "@/kilocode/migration/writer-live"
+import { Filesystem } from "@/util/filesystem"
 
 export namespace RayaRevertNote {
   // In-process cache plus a small JSON file so the note survives a backend restart
@@ -15,26 +17,22 @@ export namespace RayaRevertNote {
 
   const dest = (sessionID: string) => path.join(Global.Path.data, "raya", "revert-note", `${sessionID}.json`)
 
+  const lock = (file: string) => `revert-note:${file}`
+
   const merge = (a: readonly string[], b: readonly string[]) => [...new Set([...a, ...b])]
 
-  const readDisk = (file: string): string[] => {
-    if (!fs.existsSync(file)) return []
+  const readDisk = async (file: string): Promise<string[]> => {
     try {
-      const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as unknown
+      const parsed = await Filesystem.readJson(file)
       return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : []
     } catch {
       return []
     }
   }
 
-  const writeDisk = (file: string, files: readonly string[]) => {
-    fs.mkdirSync(path.dirname(file), { recursive: true })
-    fs.writeFileSync(file, JSON.stringify([...files]))
-  }
+  const writeDisk = (file: string, files: readonly string[]) => Filesystem.writeJson(file, [...files], 0o600)
 
-  const dropDisk = (file: string) => {
-    if (fs.existsSync(file)) fs.unlinkSync(file)
-  }
+  const dropDisk = (file: string) => rm(file, { force: true })
 
   // Record the files a user-initiated discard just restored, to surface on the next turn.
   export async function record(
@@ -45,11 +43,13 @@ export namespace RayaRevertNote {
     if (files.length === 0) return
     await Effect.runPromise(
       admission.run(
-        Effect.sync(() => {
+        Effect.promise(async () => {
           const file = dest(sessionID)
-          const next = merge(pending.get(file) ?? readDisk(file), files)
-          pending.set(file, next)
-          writeDisk(file, next)
+          await Flock.withLock(lock(file), async () => {
+            const next = merge(pending.get(file) ?? (await readDisk(file)), files)
+            await writeDisk(file, next)
+            pending.set(file, next)
+          })
         }),
       ),
     )
@@ -62,13 +62,15 @@ export namespace RayaRevertNote {
   ): Promise<string[] | undefined> {
     return Effect.runPromise(
       admission.run(
-        Effect.sync(() => {
+        Effect.promise(async () => {
           const file = dest(sessionID)
-          const files = merge(pending.get(file) ?? [], readDisk(file))
-          pending.delete(file)
-          dropDisk(file)
-          if (files.length === 0) return undefined
-          return files
+          return Flock.withLock(lock(file), async () => {
+            const files = merge(pending.get(file) ?? [], await readDisk(file))
+            await dropDisk(file)
+            pending.delete(file)
+            if (files.length === 0) return undefined
+            return files
+          })
         }),
       ),
     )

@@ -115,6 +115,10 @@ export namespace KiloCli {
     )
 
     const auth = await AppRuntime.runPromise(Auth.Service.use((s) => s.get("kilo")))
+    const { EnvAlias } = await import("@opencode-ai/core/kilocode/env-alias")
+    const conflicts = EnvAlias.conflicts()
+    if (conflicts.length)
+      log.warn("Raya environment variables override conflicting Kilo aliases", { aliases: conflicts.join(", ") })
     if (auth) {
       const token = auth.type === "oauth" ? auth.access : auth.key
       const account = auth.type === "oauth" ? auth.accountId : undefined

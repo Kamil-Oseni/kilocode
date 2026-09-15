@@ -1,5 +1,6 @@
 import { Config } from "effect"
 import { InstallationChannel } from "../installation/version" // kilocode_change
+import { EnvAlias } from "../kilocode/env-alias" // kilocode_change
 
 export function truthy(key: string) {
   const value = process.env[key]?.toLowerCase()
@@ -42,8 +43,10 @@ export const Flag = {
   KILO_AUTO_SHARE: truthy("KILO_AUTO_SHARE"), // kilocode_change
   KILO_AUTO_HEAP_SNAPSHOT: truthy("KILO_AUTO_HEAP_SNAPSHOT"),
   KILO_GIT_BASH_PATH: process.env["KILO_GIT_BASH_PATH"],
-  KILO_CONFIG: process.env["KILO_CONFIG"],
-  KILO_CONFIG_CONTENT: process.env["KILO_CONFIG_CONTENT"],
+  // kilocode_change start - Raya input aliases preserve Kilo compatibility names for callers
+  KILO_CONFIG: EnvAlias.read("RAYA_CONFIG", "KILO_CONFIG"),
+  KILO_CONFIG_CONTENT: EnvAlias.read("RAYA_CONFIG_CONTENT", "KILO_CONFIG_CONTENT"),
+  // kilocode_change end
   KILO_DISABLE_AUTOUPDATE: truthy("KILO_DISABLE_AUTOUPDATE"),
   KILO_ALWAYS_NOTIFY_UPDATE: truthy("KILO_ALWAYS_NOTIFY_UPDATE"),
   KILO_DISABLE_PRUNE: truthy("KILO_DISABLE_PRUNE"),
@@ -108,7 +111,7 @@ export const Flag = {
 
   KILO_DISABLE_EMBEDDED_WEB_UI: truthy("KILO_DISABLE_EMBEDDED_WEB_UI"), // kilocode_change
 
-  KILO_DB: process.env["KILO_DB"],
+  KILO_DB: EnvAlias.read("RAYA_DB", "KILO_DB"), // kilocode_change - Raya input alias
 
   KILO_DISABLE_CHANNEL_DB: truthy("KILO_DISABLE_CHANNEL_DB"), // kilocode_change
 
@@ -138,7 +141,7 @@ export const Flag = {
     return process.env["KILO_TUI_CONFIG"]
   },
   get KILO_CONFIG_DIR() {
-    return process.env["KILO_CONFIG_DIR"]
+    return EnvAlias.read("RAYA_CONFIG_DIR", "KILO_CONFIG_DIR") // kilocode_change - Raya input alias
   },
   get KILO_PURE() {
     return truthy("KILO_PURE")

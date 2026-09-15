@@ -17,6 +17,7 @@ import path from "path"
 import { parse as parseKiloAccounts } from "./kilocode/credential-migration"
 import { isBusy } from "./kilocode/sqlite-error"
 import { NonNegativeInt } from "./schema"
+import { EnvAlias } from "./kilocode/env-alias"
 // kilocode_change end
 
 export const ID = Credential.ID
@@ -242,7 +243,7 @@ export const layer = Layer.effect(
     }
 
     // kilocode_change start - process-local workspace credentials override host storage without being persisted
-    const content = process.env.KILO_AUTH_CONTENT
+    const content = EnvAlias.read("RAYA_AUTH_CONTENT", "KILO_AUTH_CONTENT") // kilocode_change - Raya input alias
     const injected = yield* content === undefined
       ? Effect.succeed(new Map<Integration.ID, Info>())
       : Effect.try({

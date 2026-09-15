@@ -208,6 +208,13 @@ describe("sandbox policy", () => {
       "KILO_CONFIG",
       "KILO_CONFIG_CONTENT",
       "KILO_CONFIG_DIR",
+      "RAYA_CONFIG",
+      "RAYA_CONFIG_CONTENT",
+      "RAYA_CONFIG_DIR",
+      "KILO_AUTH_CONTENT",
+      "RAYA_AUTH_CONTENT",
+      "KILO_DB",
+      "RAYA_DB",
       "KILO_SERVER_PASSWORD",
       "KILO_SERVER_USERNAME",
     ])

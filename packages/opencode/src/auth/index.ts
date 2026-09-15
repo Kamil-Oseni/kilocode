@@ -5,6 +5,7 @@ import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { Global } from "@opencode-ai/core/global"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Telemetry } from "@kilocode/kilo-telemetry" // kilocode_change
+import { EnvAlias } from "@opencode-ai/core/kilocode/env-alias" // kilocode_change
 
 export const OAUTH_DUMMY_KEY = "kilo-oauth-dummy-key" // kilocode_change
 
@@ -57,11 +58,14 @@ const layer = Layer.effect(
     const decode = Schema.decodeUnknownOption(Info)
 
     const all = Effect.fn("Auth.all")(function* () {
-      if (process.env.KILO_AUTH_CONTENT) {
+      // kilocode_change start - accept the Raya name while keeping the Kilo process-local contract
+      const content = EnvAlias.read("RAYA_AUTH_CONTENT", "KILO_AUTH_CONTENT")
+      if (content) {
         try {
-          return JSON.parse(process.env.KILO_AUTH_CONTENT)
+          return JSON.parse(content)
         } catch (err) {}
       }
+      // kilocode_change end
 
       const data = (yield* fsys.readJson(file).pipe(Effect.orElseSucceed(() => ({})))) as Record<string, unknown>
       return Record.filterMap(data, (value) => Result.fromOption(decode(value), () => undefined))

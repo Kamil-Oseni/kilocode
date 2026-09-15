@@ -1,0 +1,97 @@
+import { describe, expect, test } from "bun:test"
+import { EnvAlias } from "../../src/kilocode/env-alias"
+
+describe("Raya environment aliases", () => {
+  for (const item of [
+    { name: "neither name", env: {}, expected: undefined },
+    { name: "legacy fallback", env: { KILO_CONFIG: "legacy" }, expected: "legacy" },
+    { name: "Raya name", env: { RAYA_CONFIG: "raya" }, expected: "raya" },
+    {
+      name: "matching names",
+      env: { RAYA_CONFIG: "same", KILO_CONFIG: "same" },
+      expected: "same",
+    },
+    {
+      name: "Raya precedence",
+      env: { RAYA_CONFIG: "raya", KILO_CONFIG: "legacy" },
+      expected: "raya",
+    },
+    {
+      name: "explicit empty Raya value",
+      env: { RAYA_CONFIG: "", KILO_CONFIG: "legacy" },
+      expected: "",
+    },
+  ]) {
+    test(`resolves ${item.name}`, () => {
+      EnvAlias.conflicts()
+      expect(EnvAlias.read("RAYA_CONFIG", "KILO_CONFIG", item.env)).toBe(item.expected)
+    })
+  }
+
+  test("reports each conflicting pair once without values", () => {
+    EnvAlias.conflicts()
+    const env = { RAYA_AUTH_CONTENT: "raya-secret", KILO_AUTH_CONTENT: "legacy-secret" }
+    EnvAlias.read("RAYA_AUTH_CONTENT", "KILO_AUTH_CONTENT", env)
+    EnvAlias.read("RAYA_AUTH_CONTENT", "KILO_AUTH_CONTENT", env)
+
+    const conflicts = EnvAlias.conflicts()
+    expect(conflicts).toEqual(["RAYA_AUTH_CONTENT/KILO_AUTH_CONTENT"])
+    expect(JSON.stringify(conflicts)).not.toContain("secret")
+    expect(EnvAlias.conflicts()).toEqual([])
+  })
+
+  for (const item of [
+    {
+      name: "legacy inputs",
+      env: {
+        KILO_CONFIG: "legacy-file",
+        KILO_CONFIG_CONTENT: "legacy-content",
+        KILO_CONFIG_DIR: "legacy-dir",
+        KILO_DB: "legacy.db",
+      },
+      expected: ["legacy-file", "legacy-content", "legacy-dir", "legacy.db"],
+    },
+    {
+      name: "Raya inputs over conflicting legacy inputs",
+      env: {
+        RAYA_CONFIG: "raya-file",
+        KILO_CONFIG: "legacy-file",
+        RAYA_CONFIG_CONTENT: "raya-content",
+        KILO_CONFIG_CONTENT: "legacy-content",
+        RAYA_CONFIG_DIR: "raya-dir",
+        KILO_CONFIG_DIR: "legacy-dir",
+        RAYA_DB: "raya.db",
+        KILO_DB: "legacy.db",
+      },
+      expected: ["raya-file", "raya-content", "raya-dir", "raya.db"],
+    },
+  ]) {
+    test(`wires ${item.name} through legacy Flag properties`, () => {
+      const names = [
+        "RAYA_CONFIG",
+        "KILO_CONFIG",
+        "RAYA_CONFIG_CONTENT",
+        "KILO_CONFIG_CONTENT",
+        "RAYA_CONFIG_DIR",
+        "KILO_CONFIG_DIR",
+        "RAYA_DB",
+        "KILO_DB",
+      ]
+      const env = { ...process.env }
+      for (const name of names) delete env[name]
+      Object.assign(env, item.env)
+      const child = Bun.spawnSync({
+        cmd: [
+          process.execPath,
+          "-e",
+          'import { Flag } from "./src/flag/flag.ts"; console.log(JSON.stringify([Flag.KILO_CONFIG, Flag.KILO_CONFIG_CONTENT, Flag.KILO_CONFIG_DIR, Flag.KILO_DB]))',
+        ],
+        cwd: `${import.meta.dir}/../..`,
+        env,
+      })
+
+      expect(child.exitCode).toBe(0)
+      expect(JSON.parse(child.stdout.toString())).toEqual(item.expected)
+    })
+  }
+})

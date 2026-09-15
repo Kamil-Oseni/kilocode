@@ -97,6 +97,22 @@ describe("Raya admin diagnostic log", () => {
     expect(store.list({ after: 2, limit: 1 }).map((entry) => entry.seq)).toEqual([3])
   })
 
+  test("returns the newest bounded page unless a forward cursor is explicit", () => {
+    const store = RayaAdminLog.make({ capacity: 5, clock: () => 1 })
+    for (const count of [1, 2, 3, 4, 5]) {
+      store.write({
+        subsystem: "runtime",
+        severity: "info",
+        code: "probe.completed",
+        fields: { count },
+      })
+    }
+
+    expect(store.list({ limit: 2 }).map((entry) => entry.seq)).toEqual([4, 5])
+    expect(store.list({ after: 0, limit: 2 }).map((entry) => entry.seq)).toEqual([1, 2])
+    expect(store.list({ after: 2, limit: 2 }).map((entry) => entry.seq)).toEqual([3, 4])
+  })
+
   test("returns copies so readers cannot mutate retained diagnostics", () => {
     const store = RayaAdminLog.make({ clock: () => 1 })
     const entry = store.write({

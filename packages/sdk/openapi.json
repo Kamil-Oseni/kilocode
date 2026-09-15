@@ -54843,7 +54843,7 @@
             }
           }
         },
-        "description": "Read retained redacted diagnostic entries in sequence order.",
+        "description": "Read the newest retained redacted diagnostic entries, or page forward in sequence order after an explicit cursor.",
         "summary": "List diagnostic entries",
         "x-codeSamples": [
           {

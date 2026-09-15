@@ -36,7 +36,12 @@ test("the Admin API returns isolated redacted health and bounded workspace logs"
     ])
     expect(JSON.stringify(snapshot)).not.toContain(first.path)
 
-    const page = await request("/raya/admin/logs?limit=2")
+    const recent = await request("/raya/admin/logs?limit=2")
+    expect(recent.status).toBe(200)
+    const latest = Schema.decodeUnknownSync(Schema.Array(RayaAdminLog.Entry))(await recent.json())
+    expect(latest.map((entry) => entry.seq)).toEqual([5, 6])
+
+    const page = await request("/raya/admin/logs?after=0&limit=2")
     expect(page.status).toBe(200)
     const entries = Schema.decodeUnknownSync(Schema.Array(RayaAdminLog.Entry))(await page.json())
     expect(entries.map((entry) => entry.seq)).toEqual([1, 2])

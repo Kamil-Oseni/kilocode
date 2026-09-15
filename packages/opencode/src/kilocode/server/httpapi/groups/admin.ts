@@ -52,7 +52,8 @@ export const AdminApi = HttpApi.make("raya-admin").add(
         OpenApi.annotations({
           identifier: "raya.admin.logs",
           summary: "List diagnostic entries",
-          description: "Read retained redacted diagnostic entries in sequence order.",
+          description:
+            "Read the newest retained redacted diagnostic entries, or page forward in sequence order after an explicit cursor.",
         }),
       ),
     )

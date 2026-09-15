@@ -78,13 +78,12 @@ export namespace RayaAdminLog {
     }
 
     const list = (query: Query = {}): Entry[] => {
-      const after = Number.isInteger(query.after) && (query.after ?? -1) >= 0 ? (query.after ?? 0) : 0
+      const after = Number.isInteger(query.after) && (query.after ?? -1) >= 0 ? query.after : undefined
       const requested = Number.isInteger(query.limit) ? (query.limit ?? 100) : 100
       const limit = Math.max(1, Math.min(requested, 100))
-      return entries
-        .filter((entry) => entry.seq > after)
-        .slice(0, limit)
-        .map(copy)
+      const found =
+        after === undefined ? entries.slice(-limit) : entries.filter((entry) => entry.seq > after).slice(0, limit)
+      return found.map(copy)
     }
 
     return { write, list }

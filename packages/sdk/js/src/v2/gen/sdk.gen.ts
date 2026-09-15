@@ -14183,7 +14183,7 @@ export class Admin extends HeyApiClient {
   /**
    * List diagnostic entries
    *
-   * Read retained redacted diagnostic entries in sequence order.
+   * Read the newest retained redacted diagnostic entries, or page forward in sequence order after an explicit cursor.
    */
   public logs<ThrowOnError extends boolean = false>(
     parameters?: {

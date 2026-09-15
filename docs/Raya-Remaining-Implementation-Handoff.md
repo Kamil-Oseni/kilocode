@@ -1,6 +1,12 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from local product source `bfd53bdb3e`; installed snapshot source is `bfd53bdb3e`. Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. `origin/main` is still `d894fc0eb9` because the normal pre-push hook reaches existing cross-package `@opencode-ai/tui` type failures. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from local product source `02c17879fd`; installed snapshot source is `bfd53bdb3e`. Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. `origin/main` is still `d894fc0eb9` because the normal pre-push hook reaches existing cross-package `@opencode-ai/tui` type failures. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+
+## ChatGPT 2026-09-15 10:24 America/Toronto - Continue public-brand migration after direct-mode splash
+
+Preserve `02c17879fd`: `packages/opencode/src/cli/cmd/run/splash.ts` renders Raya at direct-mode entry, while the exit splash intentionally retains `kilo run -i -s ...` until command compatibility has a staged migration. The one shared-file literal retains its narrow `kilocode_change` marker. The focused source/consumer regression passes 1 / 5 and the annotation plus brand-inventory guards pass.
+
+The refreshed inventory has 68,582 total references: 1,692 public defects, 34,824 compatibility keys, 5,685 provenance sites and 26,381 internal migration sites. The +41 compatibility and +19 internal changes since the prior baseline came from the reviewed recent Todo/Admin code and documentation plus this checkpoint; the public-defect count stayed flat. Continue only with rendered consumers proven by source tracing. Do not rename commands, package/provider IDs, events, URLs, storage keys, paths or environment variables without dual-read/write compatibility, rollback and a removal window.
 
 ## ChatGPT 2026-09-15 10:20 America/Toronto - Installed snapshot receipt through `bfd53bdb3e`
 

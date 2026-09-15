@@ -109,12 +109,14 @@ it.live("rejects duration bounds without changing the retained revision", () =>
       const todos = PersonalTodo.make({ storage })
       const timer = FocusTimer.make({ storage, todos, now: () => 1_000 })
       const idle = yield* timer.get()
-      expect((yield* timer.start({ revision: idle.revision, durationMs: 59_999 }).pipe(Effect.flip)).field).toBe(
-        "durationMs",
-      )
-      expect((yield* timer.start({ revision: idle.revision, durationMs: 86_400_001 }).pipe(Effect.flip)).field).toBe(
-        "durationMs",
-      )
+      expect(yield* timer.start({ revision: idle.revision, durationMs: 59_999 }).pipe(Effect.flip)).toMatchObject({
+        _tag: "FocusTimerInputError",
+        field: "durationMs",
+      })
+      expect(yield* timer.start({ revision: idle.revision, durationMs: 86_400_001 }).pipe(Effect.flip)).toMatchObject({
+        _tag: "FocusTimerInputError",
+        field: "durationMs",
+      })
       expect((yield* timer.get()).revision).toBe(idle.revision)
     }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
   }),

@@ -576,7 +576,7 @@ describe("tool.apply_patch freeform", () => {
       const { ctx } = makeCtx()
       const denied = {
         ...ctx,
-        ask: () => Effect.fail(new Error("permission denied")),
+        ask: () => Effect.die(new Error("permission denied")),
       }
       const patchText = "*** Begin Patch\n*** Update File: denied.txt\n@@\n-before\n+after\n*** End Patch"
 

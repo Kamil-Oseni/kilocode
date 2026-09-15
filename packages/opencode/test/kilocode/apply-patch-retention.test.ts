@@ -30,8 +30,8 @@ test("Apply Patch intent retains every file operation", () => {
     changes: types.map((type) => ({ filePath: `${type}.txt`, type })),
   }
   const decoded = Schema.decodeUnknownSync(IntentSchema)(value)
-  expect(decoded.files.map((file) => file.type)).toEqual(types)
-  expect(decoded.changes.map((change) => change.type)).toEqual(types)
+  expect(decoded.files.map((file) => file.type)).toEqual([...types])
+  expect(decoded.changes.map((change) => change.type)).toEqual([...types])
 })
 
 function draft(owner: string, id: string, root: string) {
@@ -74,7 +74,7 @@ const terminal = Effect.fn("ApplyPatchRetention.terminal")(function* (
 ) {
   const journal = journals(storage)
   const admitted = yield* journal.admit(plan(root, value.invocation, value.digest))
-  if (!admitted.owned) return yield* Effect.dieMessage("test transaction was not admitted")
+  if (!admitted.owned) return yield* Effect.die(new Error("test transaction was not admitted"))
   const token = admitted.token
   const artifact = { identity: { dev: "3", ino: "4" }, sha256: hash("after") }
   const entries = admitted.outcome.entries.map((entry) => ({ ...entry, artifact }))

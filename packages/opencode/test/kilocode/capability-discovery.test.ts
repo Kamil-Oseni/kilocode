@@ -609,7 +609,7 @@ it.instance(
         .pipe(Effect.exit)
       expect(Exit.isFailure(denied)).toBe(true)
       expect(new Uint8Array(yield* Effect.promise(() => Bun.file(target).arrayBuffer()))).toEqual(before)
-      for (const input of [
+      const invalids: Tool.InferParameters<typeof CreatePdfTool>[] = [
         { filePath: path.join(instance.directory, "wrong.docx"), blocks: [{ type: "paragraph", text: "No" }] },
         { filePath: path.join(instance.directory, "blank.pdf"), blocks: [{ type: "paragraph", text: "   " }] },
         {
@@ -662,7 +662,8 @@ it.instance(
             label: `Field ${index + 1}`,
           })),
         },
-      ]) {
+      ]
+      for (const input of invalids) {
         expect(Exit.isFailure(yield* defs.pdf.execute(input, ctx).pipe(Effect.exit))).toBe(true)
         expect(yield* Effect.promise(() => Bun.file(input.filePath).exists())).toBe(false)
       }
@@ -991,7 +992,7 @@ it.instance(
       expect(reread.output).toContain("--- Sheet: Replacement ---")
       expect(reread.output).toContain("2: Current\n3: 42")
       expect(reread.output).not.toContain("--- Sheet: Summary ---")
-      for (const input of [
+      const invalids: Tool.InferParameters<typeof CreateSpreadsheetTool>[] = [
         { filePath: path.join(instance.directory, "wrong.csv"), sheets: [{ name: "Data", rows: [[1]] }] },
         {
           filePath: path.join(instance.directory, "duplicate.xlsx"),
@@ -1021,7 +1022,8 @@ it.instance(
           filePath: path.join(instance.directory, "text-format.xlsx"),
           sheets: [{ name: "Data", rows: [[{ formula: "IF(TRUE,1,0)", value: "one", format: "number" }]] }],
         },
-      ]) {
+      ]
+      for (const input of invalids) {
         expect(Exit.isFailure(yield* defs.spreadsheet.execute(input, ctx).pipe(Effect.exit))).toBe(true)
         expect(yield* Effect.promise(() => Bun.file(input.filePath).exists())).toBe(false)
       }

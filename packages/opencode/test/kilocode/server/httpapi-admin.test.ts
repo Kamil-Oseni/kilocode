@@ -39,12 +39,17 @@ test("the Admin API returns isolated redacted health and bounded workspace logs"
     const recent = await request("/raya/admin/logs?limit=2")
     expect(recent.status).toBe(200)
     const latest = Schema.decodeUnknownSync(Schema.Array(RayaAdminLog.Entry))(await recent.json())
-    expect(latest.map((entry) => entry.seq)).toEqual([5, 6])
+    expect(latest.map((entry) => [entry.seq, entry.subsystem, entry.code])).toEqual([
+      [7, "agents", "probe.completed"],
+      [8, "routines", "probe.completed"],
+    ])
 
     const page = await request("/raya/admin/logs?after=0&limit=2")
     expect(page.status).toBe(200)
     const entries = Schema.decodeUnknownSync(Schema.Array(RayaAdminLog.Entry))(await page.json())
     expect(entries.map((entry) => entry.seq)).toEqual([1, 2])
+    expect(entries.map((entry) => entry.code)).toEqual(["probe.started", "probe.started"])
+    expect(entries.map((entry) => entry.subsystem)).toEqual(["runtime", "sessions"])
     expect(entries.every((entry) => entry.fields?.source === "registry")).toBe(true)
 
     const cursor = entries.at(1)?.seq
@@ -53,6 +58,7 @@ test("the Admin API returns isolated redacted health and bounded workspace logs"
     expect(next.status).toBe(200)
     const following = Schema.decodeUnknownSync(Schema.Array(RayaAdminLog.Entry))(await next.json())
     expect(following.map((entry) => entry.seq)).toEqual([3, 4])
+    expect(following.map((entry) => entry.subsystem)).toEqual(["routines", "agents"])
 
     const isolated = await request("/raya/admin/logs", second.path)
     expect(isolated.status).toBe(200)
@@ -85,7 +91,20 @@ test("the Admin API returns isolated redacted health and bounded workspace logs"
     expect(text).not.toContain("private")
     expect(text).not.toContain(first.path)
 
+    const failures = Schema.decodeUnknownSync(Schema.Array(RayaAdminLog.Entry))(
+      await (await request("/raya/admin/logs?limit=2")).json(),
+    )
+    expect(failures.map((entry) => entry.code)).toEqual(["probe.failed", "probe.failed"])
+    expect(failures.map((entry) => entry.subsystem).sort()).toEqual(["agents", "routines"])
+    expect(JSON.stringify(failures)).not.toContain("synthetic")
+    expect(JSON.stringify(failures)).not.toContain("private")
+
     expect((await request("/raya/admin/logs?limit=101")).status).toBe(400)
+
+    await disposeAllInstances()
+    const restarted = await request("/raya/admin/logs")
+    expect(restarted.status).toBe(200)
+    expect(await restarted.json()).toEqual([])
   } finally {
     ;(Global.Path as { data: string }).data = data
     await disposeAllInstances()

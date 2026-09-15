@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
+import type { RayaAdminLog } from "@/kilocode/admin/log"
 import { RayaAdminService } from "@/kilocode/admin/service"
 
 const at = 1_800_000_000_000
@@ -7,6 +8,7 @@ const at = 1_800_000_000_000
 describe("Raya admin health service", () => {
   test("reads each authoritative source once and composes its existing signals", async () => {
     const reads = { sessions: 0, agents: 0, histories: 0, browser: 0, voice: 0 }
+    const events: RayaAdminLog.Input[] = []
     const service = RayaAdminService.make({
       runtime: () => "connected",
       sessions: {
@@ -33,6 +35,7 @@ describe("Raya admin health service", () => {
         reads.voice++
         return { available: true, states: [{ info: { status: "active" }, incomplete: false }] }
       },
+      report: (event) => events.push(event),
       clock: () => at,
     })
 
@@ -46,6 +49,16 @@ describe("Raya admin health service", () => {
       ["browser", "healthy", "ready"],
       ["voice", "healthy", "ready"],
     ])
+    expect(events).toHaveLength(12)
+    for (const id of ["runtime", "sessions", "routines", "agents", "browser", "voice"] as const) {
+      expect(events.filter((event) => event.subsystem === id).map((event) => event.code)).toEqual([
+        "probe.started",
+        "probe.completed",
+      ])
+    }
+
+    await service.snapshot()
+    expect(events).toHaveLength(24)
   })
 
   test("keeps disconnected output useful without reading backend-owned stores", async () => {
@@ -85,6 +98,7 @@ describe("Raya admin health service", () => {
   })
 
   test("contains source failures and never emits their details", async () => {
+    const events: RayaAdminLog.Input[] = []
     const service = RayaAdminService.make({
       runtime: () => "connected",
       sessions: {
@@ -96,6 +110,7 @@ describe("Raya admin health service", () => {
       },
       browser: () => Promise.reject(new Error("https://private.example/?token=synthetic-browser-secret")),
       voice: () => Promise.reject(new Error("synthetic-voice-secret")),
+      report: (event) => events.push(event),
       clock: () => at,
     })
 
@@ -107,6 +122,39 @@ describe("Raya admin health service", () => {
       ["agents", "unknown", "probe-failed"],
       ["browser", "unknown", "probe-failed"],
       ["voice", "unknown", "probe-failed"],
+    ])
+    expect(JSON.stringify(snapshot)).not.toContain("synthetic")
+    expect(JSON.stringify(snapshot)).not.toContain("private")
+    expect(
+      events
+        .filter((event) => event.code === "probe.failed")
+        .map((event) => event.subsystem)
+        .sort(),
+    ).toEqual(["agents", "browser", "routines", "voice"])
+    expect(JSON.stringify(events)).not.toContain("synthetic")
+    expect(JSON.stringify(events)).not.toContain("private")
+  })
+
+  test("diagnostic sink failure cannot turn a healthy probe into an outage", async () => {
+    const service = RayaAdminService.make({
+      runtime: () => "connected",
+      sessions: { list: () => Effect.succeed([]) },
+      tasks: {
+        list: () => Effect.succeed([]),
+        histories: () => Effect.succeed({ items: [], failed: [] }),
+      },
+      report: () => Promise.reject(new Error("C:/private/log?token=synthetic-log-secret")),
+      clock: () => at,
+    })
+
+    const snapshot = await service.snapshot()
+    expect(snapshot.items.map((item) => [item.id, item.status, item.reason])).toEqual([
+      ["runtime", "healthy", "ready"],
+      ["sessions", "healthy", "ready"],
+      ["routines", "healthy", "ready"],
+      ["agents", "healthy", "ready"],
+      ["browser", "unknown", "not-checked"],
+      ["voice", "unknown", "not-checked"],
     ])
     expect(JSON.stringify(snapshot)).not.toContain("synthetic")
     expect(JSON.stringify(snapshot)).not.toContain("private")

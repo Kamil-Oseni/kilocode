@@ -26,16 +26,9 @@ export const adminHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-admin",
           list: (input) => sessions.list(input).pipe(Effect.provideService(InstanceRef, ctx)),
         },
         tasks,
+        report: (event) => Effect.runPromise(logs.write(event).pipe(Effect.provideService(InstanceRef, ctx))),
       })
       const snapshot = yield* Effect.promise(() => admin.snapshot())
-      for (const row of snapshot.items) {
-        yield* logs.write({
-          subsystem: row.id,
-          severity: row.status === "healthy" ? "info" : row.status === "unknown" ? "warning" : "error",
-          code: row.reason === "probe-failed" ? "probe.failed" : "probe.completed",
-          fields: { state: row.status, reason: row.reason, source: "registry" },
-        })
-      }
       return snapshot
     })
 

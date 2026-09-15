@@ -3,6 +3,7 @@ import type { ProfileInfo } from "@/kilocode/browser/profile-schema"
 import type { Session } from "@/session/session"
 import { RayaTask } from "@/kilocode/task"
 import type { Info as VoiceInfo } from "@/kilocode/voice/protocol"
+import type { RayaAdminLog } from "./log"
 import { RayaAdmin } from "./registry"
 
 export namespace RayaAdminService {
@@ -24,11 +25,50 @@ export namespace RayaAdminService {
     tasks: Tasks
     browser?: () => Result<Browser>
     voice?: () => Result<Voice>
+    report?: (event: RayaAdminLog.Input) => Result<unknown>
     clock?: () => number
   }
 
   export function make(deps: Deps) {
     const snapshot = async () => {
+      const report = async (event: RayaAdminLog.Input) => {
+        await Promise.resolve()
+          .then(() => deps.report?.(event))
+          .catch(() => undefined)
+      }
+      const probe = (item: RayaAdmin.Probe): RayaAdmin.Probe => ({
+        id: item.id,
+        read: async (at) => {
+          await report({ subsystem: item.id, severity: "info", code: "probe.started", fields: { source: "registry" } })
+          return Promise.resolve()
+            .then(() => item.read(at))
+            .then(async (row) => {
+              await report({
+                subsystem: item.id,
+                severity:
+                  row.reason === "probe-failed"
+                    ? "error"
+                    : row.status === "healthy"
+                      ? "info"
+                      : row.status === "unknown"
+                        ? "warning"
+                        : "error",
+                code: row.reason === "probe-failed" ? "probe.failed" : "probe.completed",
+                fields: { state: row.status, reason: row.reason, source: "registry" },
+              })
+              return row
+            })
+            .catch(async (err) => {
+              await report({
+                subsystem: item.id,
+                severity: "error",
+                code: "probe.failed",
+                fields: { reason: "probe-failed", source: "registry" },
+              })
+              throw err
+            })
+        },
+      })
       const state = Promise.resolve().then(deps.runtime)
       const agents = state.then((current) => {
         if (current !== "connected") return undefined
@@ -82,7 +122,7 @@ export namespace RayaAdminService {
             return RayaAdmin.voice(signal.available, signal.states, at)
           },
         })
-      return RayaAdmin.collect(probes, deps.clock)
+      return RayaAdmin.collect(probes.map(probe), deps.clock)
     }
     return { snapshot }
   }

@@ -1,10 +1,18 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from product and installed package source `efeb75f365`; repository history may continue with documentation-only receipts. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from product and installed package source `18e8e12f51`; repository history may continue with documentation-only receipts. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-15 15:58 America/Toronto - Continue after the reconciled delegation/vault snapshot
+
+Product commits `31e60286f8` and `18e8e12f51` are on `origin/main`; the normal hook passed all 29 JavaScript/TypeScript packages plus JetBrains. The low-memory production workflow installed `eden.raya@7.4.23-snapshot+18e8e12f51.kamil-oseni.1789501895328`. Retained VSIX: `raya.1fc4ffd93d9c1c784c308c8f2c23d58e3ba08dcb4c1d5f620c22dd959736d1da.vsix`, 520,076,255 bytes, SHA-256 `1FC4FFD93D9C1C784C308C8F2C23D58E3BA08DCB4C1D5F620C22DD959736D1DA`. Installed CLI: 231,122,432 bytes, SHA-256 `9CC57A705AC84B776446863D6C758022D45B9EEDD255953FBC8AD3CB59083E72`. Independent hashes match the manifest.
+
+The production prune path removed three old vault packages across its two passes and repaired the observed stale state. Final evidence is two index entries, two digest-named files, all index paths present, no unindexed file and no duplicate digest. One staged package and one old installed extension were removed. No Bun or tsgo process remains; C: has 126,308,290,560 bytes free. Do not manually edit the vault.
+
+The open host's active digest remains `50b30bedc004133d58bf2a7ca09165f93b358ecf8471c94f332e814db2156c91`, source `6b57cdfb0a`. Require a normal reload and active digest `1fc4ffd93d9c1c784c308c8f2c23d58e3ba08dcb4c1d5f620c22dd959736d1da` before installed-host acceptance. Continue implementation after that boundary; compatibility-first Kilo migration remains active, while the Raya-owned editor/fork remains Version 3 work.
 
 ## ChatGPT 2026-09-15 15:36 America/Toronto - Preserve fresh package-vault transactions and orphan recovery
 

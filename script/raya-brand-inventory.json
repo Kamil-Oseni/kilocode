@@ -18,13 +18,13 @@
       "reason": "Legal, attribution, fork documentation, translation process or upstream merge material."
     },
     "internal-migration": {
-      "count": 26477,
-      "digest": "84826dd2f5a293392abef797eae06bc2f788da3a45e904ecf08704a96245cacc",
+      "count": 26478,
+      "digest": "28f0e23654fa3c042c9a59d056ed57fca0adbb47cf31b369c3c0db5fc80af01a",
       "reason": "Internal source identity that can migrate after public and stored compatibility contracts stabilize."
     }
   },
   "total": {
-    "count": 68944,
-    "digest": "e82d840a0786f476b1ea36a3362cbeb87bf8e89d5ce8048bacbed0b9d241be74"
+    "count": 68945,
+    "digest": "ad2ddf6997b440335e5d4386a510c640efa6a166cc4b6feb8e6e970320b8babb"
   }
 }

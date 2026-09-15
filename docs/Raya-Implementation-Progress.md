@@ -1,10 +1,20 @@
 # Raya implementation progress
 
-> **Goal status: ACTIVE — implementation is continuing.** Current product and installed package source is `efeb75f365`; repository history may continue with documentation-only receipts. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Current product and installed package source is `18e8e12f51`; repository history may continue with documentation-only receipts. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
 >
 > Any older pause wording later in this chronological record describes a superseded handoff or a product state, not the current implementation goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 added future requirements are literal `FUT-*` rows directly after `OVR-10` in the single canonical [Findings and overhauls](#findings-and-overhauls) table. They extend the existing implementation and do not pause or replace it.
 >
 > Kilo-to-Raya migration is active through lossless compatibility-first slices; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-15 15:58 America/Toronto - Vault repair and delegation recovery pushed, reconciled and installed
+
+**Status: verified, pushed and installed; active-host reload acceptance remains.** The normal protected push passed all 29 JavaScript/TypeScript package typechecks plus JetBrains and advanced `origin/main` through Routine delegation recovery commit `31e60286f8` and rollback-vault repair commit `18e8e12f51`. Local `HEAD` matched that remote source before this documentation receipt.
+
+The authorized sequential low-memory workflow regenerated the SDK without retained source drift, rebuilt the Windows CLI and bundled console, passed CLI version/model/sandbox-worker smoke tests, extension-host and webview typechecks, ESLint and production bundling, then installed `eden.raya@7.4.23-snapshot+18e8e12f51.kamil-oseni.1789501895328`. Its retained VSIX is `C:\Users\User\AppData\Roaming\Code\User\globalStorage\eden.raya\package-vault\raya.1fc4ffd93d9c1c784c308c8f2c23d58e3ba08dcb4c1d5f620c22dd959736d1da.vsix`, **520,076,255 bytes**, SHA-256 `1FC4FFD93D9C1C784C308C8F2C23D58E3BA08DCB4C1D5F620C22DD959736D1DA`. The installed CLI is **231,122,432 bytes**, SHA-256 `9CC57A705AC84B776446863D6C758022D45B9EEDD255953FBC8AD3CB59083E72`. Independent filesystem hashes and sizes exactly match the new manifest.
+
+The installer reported three old vault packages removed across its two prune passes. The final reconciliation invariant is exact: two manifest entries, two digest-named VSIX files, every indexed path exists, every file is indexed, and there are zero duplicate digests. This repairs the prior missing-index/unindexed-file state through production code. One staged package and one old extension were also removed, no Bun or tsgo process remains, and C: has **126,308,290,560 bytes free**.
+
+The open VS Code host still owns active digest `50b30bedc004133d58bf2a7ca09165f93b358ecf8471c94f332e814db2156c91`, source `6b57cdfb0a`. Do not infer active-host acceptance from installation. A normal user reload must advance the active pointer to `1fc4ffd93d9c1c784c308c8f2c23d58e3ba08dcb4c1d5f620c22dd959736d1da` before the installed delegation and vault behavior can be called live.
 
 ## ChatGPT 2026-09-15 15:36 America/Toronto - Rollback package updates no longer overwrite fresh vault state
 

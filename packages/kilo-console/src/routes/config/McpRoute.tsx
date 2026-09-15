@@ -154,7 +154,7 @@ export function McpRoute() {
               <header class="drawer-header">
                 <div>
                   <h2>Install MCP server</h2>
-                  <span>Browse the Kilo Marketplace MCP catalog and install into the current settings scope.</span>
+                  <span>Browse the Raya Marketplace MCP catalog and install into the current settings scope.</span>
                 </div>
                 <Button variant="ghost" aria-label="Close MCP marketplace overlay" onClick={state.close}>
                   X

@@ -317,13 +317,13 @@ export class BrowserPanel implements vscode.Disposable {
     * { box-sizing: border-box; }
     [hidden] { display: none !important; }
     html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; color: var(--vscode-foreground); background: var(--vscode-editor-background); font-family: var(--vscode-font-family); }
-    body { display: grid; grid-template-rows: 36px 42px 32px minmax(0, 1fr); }
+    body { display: grid; grid-template-rows: 36px 42px minmax(0, 1fr); }
     header { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--vscode-panel-border); background: var(--vscode-sideBar-background); }
     button, input, select { height: 28px; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, transparent); }
     button { min-width: 30px; cursor: pointer; }
     button:hover { background: var(--vscode-toolbar-hoverBackground); }
     input { flex: 1; padding: 0 8px; }
-    #statusbar { display: flex; align-items: center; gap: 8px; padding: 3px 8px; border-bottom: 1px solid var(--vscode-panel-border); color: var(--vscode-descriptionForeground); background: var(--vscode-editor-background); }
+    #statusbar { position: absolute; top: 78px; right: 0; left: 0; z-index: 5; display: flex; min-height: 32px; align-items: center; gap: 8px; padding: 3px 8px; border-bottom: 1px solid var(--vscode-panel-border); color: var(--vscode-descriptionForeground); background: var(--vscode-editor-background); }
     #status { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #resume, #retry-browser { width: auto; padding: 0 10px; color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
     #go, #takeover { width: auto; padding: 0 10px; }
@@ -353,8 +353,8 @@ export class BrowserPanel implements vscode.Disposable {
     <input id="url" aria-label="URL" placeholder="https://example.com">
     <button id="go">Go</button>
   </header>
-  <section id="statusbar" aria-live="polite">
-    <span id="status">Agent control ready</span>
+  <section id="statusbar" aria-live="polite" hidden>
+    <span id="status"></span>
     <button id="retry-browser" hidden>Retry browser</button>
     <button id="resume" hidden>Resume agent</button>
   </section>
@@ -453,6 +453,7 @@ export class BrowserPanel implements vscode.Disposable {
       if (event.data.type === "startup") {
         const ready = event.data.status === "ready";
         retry.hidden = ready;
+        document.getElementById("statusbar").hidden = ready;
         if (!ready) {
           displayed = undefined;
           screen.hidden = true;
@@ -595,7 +596,8 @@ export class BrowserPanel implements vscode.Disposable {
         ? (state.reason || "Manual browser control is active.") + (state.busy ? " Finishing the interrupted action…" : "")
         : state.busy
           ? "Agent action in progress" + (state.attempts ? " (attempt " + state.attempts + " of 3)" : "")
-          : "Agent control ready";
+          : "";
+      document.getElementById("statusbar").hidden = !manual && retry.hidden;
       resume.hidden = !manual;
       resume.disabled = manual && state.busy;
       shield.hidden = manual || !state.busy;

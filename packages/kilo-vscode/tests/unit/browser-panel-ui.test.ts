@@ -5,7 +5,7 @@ import { Window } from "happy-dom"
 const source = await Bun.file(new URL("../../src/services/browser-automation/browser-panel.ts", import.meta.url)).text()
 
 describe("Raya browser takeover panel", () => {
-  it("reserves a grid row for every browser surface", () => {
+  it("keeps the browser viewport continuous while status is an overlay", () => {
     const start = source.indexOf("<!doctype html>")
     const end = source.indexOf("  <script nonce=", start)
     expect(start).toBeGreaterThanOrEqual(0)
@@ -15,7 +15,9 @@ describe("Raya browser takeover panel", () => {
     window.document.write(source.slice(start, end) + "</body></html>")
     const surfaces = Array.from(window.document.body.children).map((element) => element.id || element.tagName)
     expect(surfaces).toEqual(["HEADER", "HEADER", "statusbar", "MAIN"])
-    expect(source).toContain("grid-template-rows: 36px 42px 32px minmax(0, 1fr)")
+    expect(source).toContain("grid-template-rows: 36px 42px minmax(0, 1fr)")
+    expect(window.document.getElementById("statusbar")!.hidden).toBe(true)
+    expect(source).not.toContain("Agent control ready")
     expect(source).not.toContain("Workspace browser identity")
     expect(source).not.toContain("Save authentication")
     expect(source).not.toContain("Choose workspace")
@@ -71,10 +73,12 @@ it("binds panel input to displayed tab identity and hides stale frames", () => {
     expect(empty.textContent).toContain("<img src=x onerror=bad()>")
     expect(empty.querySelector("img")).toBeNull()
     expect(window.document.getElementById("retry-browser")!.hidden).toBe(false)
+    expect(window.document.getElementById("statusbar")!.hidden).toBe(false)
     window.document.getElementById("retry-browser")!.click()
     expect(sent.at(-1)).toMatchObject({ type: "retry" })
     message({ type: "startup", status: "ready" })
     expect(window.document.getElementById("retry-browser")!.hidden).toBe(true)
+    expect(window.document.getElementById("statusbar")!.hidden).toBe(true)
     message({
       type: "uploads",
       uploads: [
@@ -149,6 +153,10 @@ it("binds panel input to displayed tab identity and hides stale frames", () => {
     window.document.getElementById("newtab")!.click()
     expect(sent.at(-1)).toMatchObject({ type: "tab", action: "open" })
     message({ type: "state", state: { control: "agent", busy: true } })
+    expect(window.document.getElementById("statusbar")!.hidden).toBe(true)
+    message({ type: "state", state: { control: "manual", busy: false, reason: "You are controlling this tab." } })
+    expect(window.document.getElementById("statusbar")!.hidden).toBe(false)
+    expect(window.document.getElementById("status")!.textContent).toBe("You are controlling this tab.")
     message({
       type: "dialogs",
       dialogs: [

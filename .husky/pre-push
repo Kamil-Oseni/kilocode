@@ -40,10 +40,10 @@ while read -r local_ref local_oid remote_ref remote_oid; do
   fi
 done
 
-bun typecheck --filter='!@kilocode/kilo-jetbrains'
+bun typecheck --concurrency=1 --filter='!@kilocode/kilo-jetbrains'
 
 if [ "$jetbrains" -eq 1 ]; then
-  bun typecheck --filter='@kilocode/kilo-jetbrains'
+  bun typecheck --concurrency=1 --filter='@kilocode/kilo-jetbrains'
 else
   echo "Skipping JetBrains typecheck (no relevant changes)"
 fi

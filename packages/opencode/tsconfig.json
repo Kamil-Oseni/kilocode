@@ -13,5 +13,20 @@
       "@tui/*": ["../tui/src/*"], // kilocode_change - extracted TUI imports used by Kilo-owned components
       "@test/*": ["./test/*"]
     }
-  }
+  },
+  // kilocode_change start - keep generated CLI output out of the authored-source typecheck
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "test/**/*.ts",
+    "test/**/*.tsx",
+    "test/**/*.js",
+    "script/**/*.ts",
+    "script/**/*.mjs",
+    "specs/**/*.ts",
+    "parsers-config.ts",
+    "sst-env.d.ts"
+  ],
+  "exclude": ["dist", ".artifacts", ".tmp", "node_modules"]
+  // kilocode_change end
 }

@@ -294,7 +294,7 @@ const PRESERVE_SCRIPTS: Record<string, string[]> = {
     "dev:local",
     "test:script:ci",
   ],
-  "packages/opencode/package.json": ["test", "test:ci"],
+  "packages/opencode/package.json": ["typecheck", "test", "test:ci"],
   // Upstream-shared packages where Kilo adds a JUnit test:ci script for CI.
   // Without these entries every merge silently schedules zero tests for them.
   "packages/core/package.json": ["test:ci"],

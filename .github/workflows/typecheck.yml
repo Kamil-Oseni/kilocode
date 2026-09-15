@@ -40,7 +40,6 @@ jobs:
               - '!packages/kilo-vscode/**'
               - '!packages/kilo-docs/**'
   # kilocode_change end
-
   typecheck-js:
     name: typecheck-js
     needs: changes # kilocode_change
@@ -55,7 +54,7 @@ jobs:
 
       # kilocode_change start
       - name: Run TypeScript typecheck
-        run: bun turbo typecheck --filter='!@kilocode/kilo-jetbrains'
+        run: bun turbo typecheck --concurrency=1 --filter='!@kilocode/kilo-jetbrains'
 
       - name: Build Kilo Console
         run: bun turbo build --filter=@kilocode/kilo-console

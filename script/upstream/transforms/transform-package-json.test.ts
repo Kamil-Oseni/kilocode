@@ -86,12 +86,19 @@ test("fixScripts removes upstream-only dead scripts from root", () => {
   expect(changes.length).toBe(4)
 })
 
-test("fixScripts preserves opencode test scripts", () => {
-  const ours = { scripts: { test: "bun test", "test:ci": "bun test --ci" } }
-  const pkg: Record<string, unknown> = { scripts: { test: "vitest" } }
+test("fixScripts preserves opencode validation scripts", () => {
+  const ours = {
+    scripts: {
+      typecheck: "tsgo --noEmit --singleThreaded --checkers 1",
+      test: "bun test",
+      "test:ci": "bun test --ci",
+    },
+  }
+  const pkg: Record<string, unknown> = { scripts: { typecheck: "tsgo --noEmit", test: "vitest" } }
   const changes: string[] = []
   fixScripts(pkg, "packages/opencode/package.json", ours, changes)
   const scripts = pkg.scripts as Record<string, string>
+  expect(scripts.typecheck).toBe("tsgo --noEmit --singleThreaded --checkers 1")
   expect(scripts.test).toBe("bun test")
   expect(scripts["test:ci"]).toBe("bun test --ci")
 })

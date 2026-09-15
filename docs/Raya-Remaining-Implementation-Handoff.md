@@ -12,9 +12,9 @@ The runtime flag, UI provider-icon build and generated catalog script now resolv
 
 The real provider test makes the Kilo URL unreachable and serves the refreshed catalog only at the Raya URL; its successful model refresh proves the runtime does not silently fall back. It passes 1 test / 3 assertions. The reusable alias suite passes 14 / 25. Core, UI, bounded CLI, extension-host and webview typechecks pass. Keep the test's 20-second outer timeout because real service startup crossed Bun's five-second default on this machine. Do not change the product's own fetch timeout or default URL as part of this compatibility slice.
 
-Commit and push this slice after refreshing the compatibility inventory and extending the fail-closed ledger/checker to ten ordered environment pairs. Installation remains batched with the binary and TUI aliases.
+Commit `75436a8cdb` is on `origin/main`; its normal hook passed all 29 JavaScript/TypeScript packages plus JetBrains. The ledger/checker contains ten ordered environment pairs. Installation remains batched with the binary and TUI aliases.
 
-The refreshed inventory is 69,035 total: public 1,693; compatibility 35,155; provenance 5,686; internal 26,501.
+The refreshed inventory is 69,037 total: public 1,693; compatibility 35,157; provenance 5,686; internal 26,501.
 
 ## ChatGPT 2026-09-15 16:37 America/Toronto - Preserve the Raya TUI configuration override
 

@@ -49,6 +49,7 @@ import { ModelCache } from "@/provider/model-cache"
 import { InstanceHttpApi } from "@/server/routes/instance/httpapi/api"
 import { MessageTable, PartTable } from "@opencode-ai/core/session/sql"
 import { Session } from "@/session/session"
+import { SessionID } from "@/session/schema"
 import { Storage } from "@/storage/storage"
 import * as GoalCharges from "@/kilocode/goal/charges"
 import * as DictationBilling from "@/kilocode/tool/dictation-billing"
@@ -306,16 +307,30 @@ export const kiloGatewayHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilo",
 
       const id = DictationBilling.identify(ctx.payload.sessionID, ctx.payload.requestID)
       if (!id.ok) return jsonError("Transcription request and session identities must be supplied together.", 400)
+      const session = ctx.payload.sessionID ? SessionID.make(ctx.payload.sessionID) : undefined
       const admitted =
-        ctx.payload.sessionID && id.value
-          ? yield* charges.claim(ctx.payload.sessionID, "USD", id.value).pipe(Effect.result)
-          : undefined
+        session && id.value ? yield* charges.claim(session, "USD", id.value).pipe(Effect.result) : undefined
       if (admitted && Result.isFailure(admitted))
         return jsonError(
           admitted.failure instanceof Error ? admitted.failure.message : "Transcription charge admission failed.",
           409,
         )
-      const lease = admitted && Result.isSuccess(admitted) ? admitted.success : undefined
+      const charge = admitted && Result.isSuccess(admitted) ? admitted.success : undefined
+      const lease = charge
+        ? {
+            dispatch: charge.dispatch.pipe(
+              Effect.mapError((error) => (error instanceof Error ? error : new Error(String(error)))),
+            ),
+            finish: charge.finish.pipe(
+              Effect.mapError((error) => (error instanceof Error ? error : new Error(String(error)))),
+            ),
+            release: charge.release,
+            uncertain: (reason: string) =>
+              charge
+                .uncertain(reason)
+                .pipe(Effect.mapError((error) => (error instanceof Error ? error : new Error(String(error))))),
+          }
+        : undefined
 
       const request = yield* HttpServerRequest.HttpServerRequest
       const result = yield* DictationBilling.run(

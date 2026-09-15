@@ -1,6 +1,16 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: active.** Continue implementation from local product source `40e2efee3d`; installed snapshot source is `7b3796f2bf`; do not pause it. `origin/main` is still `d894fc0eb9` because the normal pre-push hook reaches existing cross-package `@opencode-ai/tui` type failures. The 16 future additions are canonical `FUT-*` rows in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+> **Goal status: active.** Continue implementation from local product source `403b3ec645`; installed snapshot source is `7b3796f2bf`; do not pause it. `origin/main` is still `d894fc0eb9` because the normal pre-push hook reaches existing cross-package `@opencode-ai/tui` type failures. The 16 future additions are canonical `FUT-*` rows in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+
+## ChatGPT 2026-09-15 01:26 America/Toronto - Universal Designer skill registration complete
+
+Product commit `403b3ec645` registers built-in skill `designer` from the existing `kilocode/agent/designer.txt` import. The descriptor's version is `1` and source ID is `raya:bundled:designer`. Do not add a duplicate `SKILL.md` doctrine body: `docs/designer.md` and `designer.txt` remain parity-locked, and the built-in registry imports that packaged body directly.
+
+All normal session types already consume `SystemPrompt.skills()` and the shared `Skill.Service`, so this makes the Designer doctrine loadable by primary agents, modes, Task children, Routine workers and organization workers. Preserve `Skill.available(agent)` permission filtering. A universal skill is guidance, never a permission or tool grant. Preserve current same-name user/project override behavior.
+
+Focused doctrine and service-backed discovery tests pass **6 / 42**; targeted Prettier, one-thread Oxlint, annotation, forbidden-string, brand-inventory and whitespace checks pass. `.changeset/raya-designer-skill.md` records the new CLI feature. This commit is newer than installed snapshot `7b3796f2bf`.
+
+Next implement provenance without widening the public `/skill` schema: add a Kilo-owned pure resolution helper with exact UTF-8 source-content SHA-256, bounded version strings and at most sixteen shadowed candidates; sort each glob result by normalized path while retaining existing stage/declaration last-write precedence; attach source kind/locator/trust/version/hash and selected/shadowed resolution to the internal resolved record; add that receipt to both SkillTool metadata branches while retaining legacy `name` and `dir`. Test reversed scan order, project override of built-in Designer, configured path/URL ordering, changed-content hashes, truncation and tool receipt durability. Then add coding, writing and marketing built-ins.
 
 ## ChatGPT 2026-09-15 01:18 America/Toronto - Bundled console Marketplace copy corrected
 

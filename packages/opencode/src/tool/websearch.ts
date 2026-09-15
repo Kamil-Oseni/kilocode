@@ -195,49 +195,48 @@ export const webSearchTool = (goals?: GoalDeps) =>
               },
             })
 
-            // kilocode_change start - reserve configured non-model capacity before the hosted paid request
-            if (transport === "kilo-rest" && !kiloToken)
-              return yield* Effect.die(
-                new Error("KILO_WEBSEARCH_PROVIDER=kilo-exa requires Kilo auth; run `kilo auth login`"),
-              )
-            const claim = charges
-              ? charges.claim(
-                  ctx.sessionID,
-                  "USD",
-                  `websearch:${createHash("sha256")
-                    .update(`${ctx.sessionID}:${ctx.messageID}:${ctx.callID ?? "unknown"}`)
-                    .digest("hex")}`,
+            // kilocode_change start - reserve configured non-model capacity only for the hosted paid request
+            const result = yield* Effect.gen(function* () {
+              if (transport !== "kilo-rest")
+                return yield* callProvider(http, provider, params, ctx, { exa: exaKey, parallel: parallelKey })
+              const token = kiloToken
+              if (!token)
+                return yield* Effect.die(
+                  new Error("KILO_WEBSEARCH_PROVIDER=kilo-exa requires Kilo auth; run `kilo auth login`"),
                 )
-              : Effect.succeed({
-                  dispatch: Effect.void,
-                  release: Effect.void,
-                  settle: (_charge: RayaGoal.Charge) => Effect.void,
-                })
-            // kilocode_change end
-
-            // kilocode_change start - dispatch Kilo-REST transport
-            const result = yield* transport === "kilo-rest"
-              ? KiloExa.admitKiloExa({
-                  http,
-                  params: {
-                    query: params.query,
-                    type: params.type,
-                    numResults: params.numResults,
-                  },
-                  token: kiloToken,
-                  claim,
-                  sessionID: ctx.sessionID,
-                  messageID: ctx.messageID,
-                  callID: ctx.callID,
-                  at:
-                    ctx.messages.find((message) => message.info.id === ctx.messageID)?.info.time.created ?? Date.now(),
-                })
-              : callProvider(http, provider, params, ctx, { exa: exaKey, parallel: parallelKey }) // kilocode_change
+              const lease = charges
+                ? yield* charges.claim(
+                    ctx.sessionID,
+                    "USD",
+                    `websearch:${createHash("sha256")
+                      .update(`${ctx.sessionID}:${ctx.messageID}:${ctx.callID ?? "unknown"}`)
+                      .digest("hex")}`,
+                  )
+                : {
+                    dispatch: Effect.void,
+                    release: Effect.void,
+                    settle: (_charge: RayaGoal.Charge) => Effect.void,
+                  }
+              return yield* KiloExa.admitKiloExa({
+                http,
+                params: {
+                  query: params.query,
+                  type: params.type,
+                  numResults: params.numResults,
+                },
+                token,
+                claim: Effect.succeed(lease),
+                sessionID: ctx.sessionID,
+                messageID: ctx.messageID,
+                callID: ctx.callID,
+                at: ctx.messages.find((message) => message.info.id === ctx.messageID)?.info.time.created ?? Date.now(),
+              })
+            })
             // kilocode_change end
 
             // kilocode_change start - retain the authoritative Kilo-hosted search charge in goal accounting
-            const hosted = typeof result === "string" ? undefined : result
-            const output = typeof result === "string" ? result : result.output
+            const hosted = !result || typeof result === "string" ? undefined : result
+            const output = typeof result === "string" ? result : result?.output
             const charge = hosted?.charge
             if (charge) {
               yield* ctx.metadata({
@@ -255,7 +254,7 @@ export const webSearchTool = (goals?: GoalDeps) =>
                 ...(charge ? { rayaGoalCharge: { version: 1 as const, receipt: charge } } : {}),
               }, // kilocode_change - add transport and authoritative hosted-search charge
             }
-          }).pipe(Effect.orDie),
+          }).pipe(Effect.scoped, Effect.orDie), // kilocode_change - scope hosted reservation heartbeat to this request
       }
     }),
   )

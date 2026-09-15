@@ -1973,6 +1973,7 @@ export interface PersonalTodoCreateMessage {
   type: "personalTodoCreate"
   requestID: string
   title: string
+  reminderAt?: number
 }
 
 export interface PersonalTodoUpdateMessage {
@@ -1984,6 +1985,7 @@ export interface PersonalTodoUpdateMessage {
   detail?: string | null
   done?: boolean
   dueAt?: number | null
+  reminderAt?: number | null
 }
 
 export interface PersonalTodoDeleteMessage {

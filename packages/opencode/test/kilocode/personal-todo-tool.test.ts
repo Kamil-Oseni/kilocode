@@ -57,6 +57,8 @@ it.live(
         const ctx = context(asks, "create-once")
 
         expect(tool.description).toContain("ask_options")
+        expect(tool.description).toContain("local date, local time, or timezone is missing or ambiguous")
+        expect(tool.description).toContain("exact Unix epoch milliseconds before mutation")
         expect(tool.description).toContain("one reviewed item per call")
         expect(KiloToolRegistry.available(tool, agent("code", "primary"))).toBe(true)
         expect(KiloToolRegistry.available(tool, agent("worker", "subagent"))).toBe(true)
@@ -157,6 +159,71 @@ it.live(
           ["delete"],
           ["delete"],
         ])
+      }).pipe(Effect.provide(Storage.layerFromDir(path.join(directory, "storage")))),
+    ),
+  30_000,
+)
+
+it.live(
+  "creates, updates, and clears reminders with exact revisions and durable request replay",
+  () =>
+    provideTmpdirInstance((directory) =>
+      Effect.gen(function* () {
+        const storage = yield* Storage.Service
+        const tool = yield* Tool.init(yield* personalTodoTool({ storage }))
+        const asks: Parameters<Tool.Context["ask"]>[0][] = []
+        const ctx = context(asks, "reminder-create-once")
+
+        expect(
+          Schema.is(tool.parameters)({
+            action: "create",
+            title: "Invalid reminder",
+            reminderAt: Number.POSITIVE_INFINITY,
+          }),
+        ).toBe(false)
+        expect(
+          Schema.is(tool.parameters)({
+            action: "update",
+            id: "todo_11111111-1111-4111-8111-111111111111",
+            revision: 1,
+            reminderAt: Number.NaN,
+          }),
+        ).toBe(false)
+
+        const created = yield* tool.execute(
+          { action: "create", title: "Call the dentist", dueAt: 4_000, reminderAt: 3_000 },
+          ctx,
+        )
+        const first = Schema.decodeUnknownSync(ItemResult)(JSON.parse(created.output))
+        expect(first.item).toMatchObject({ revision: 1, dueAt: 4_000, reminderAt: 3_000, reminderRevision: 1 })
+
+        const replay = yield* tool.execute(
+          { reminderAt: 3_000, dueAt: 4_000, title: "Call the dentist", action: "create" },
+          ctx,
+        )
+        expect(replay).toEqual(created)
+        expect(asks).toHaveLength(1)
+
+        const updated = yield* tool.execute(
+          { action: "update", id: first.item.id, revision: 1, reminderAt: 3_500 },
+          ctx,
+        )
+        const second = Schema.decodeUnknownSync(ItemResult)(JSON.parse(updated.output))
+        expect(second.item).toMatchObject({ revision: 2, reminderAt: 3_500, reminderRevision: 2 })
+
+        const stale = yield* tool.execute({ action: "update", id: first.item.id, revision: 1, reminderAt: null }, ctx)
+        expect(JSON.parse(stale.output)).toMatchObject({
+          status: "conflict",
+          expectedRevision: 1,
+          actualRevision: 2,
+          latest: { reminderAt: 3_500, reminderRevision: 2, revision: 2 },
+        })
+
+        const cleared = yield* tool.execute({ action: "update", id: first.item.id, revision: 2, reminderAt: null }, ctx)
+        const third = Schema.decodeUnknownSync(ItemResult)(JSON.parse(cleared.output))
+        expect(third.item).toMatchObject({ revision: 3, dueAt: 4_000 })
+        expect(third.item.reminderAt).toBeUndefined()
+        expect(third.item.reminderRevision).toBeUndefined()
       }).pipe(Effect.provide(Storage.layerFromDir(path.join(directory, "storage")))),
     ),
   30_000,

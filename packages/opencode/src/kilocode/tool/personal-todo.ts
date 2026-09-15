@@ -12,8 +12,12 @@ const Text = Schema.String.annotate({ description: "A concise todo title." })
 const Detail = Schema.NullOr(Schema.String).annotate({
   description: "Replacement notes, or null to clear existing notes.",
 })
-const Due = Schema.NullOr(Schema.Number).annotate({
+const Time = Schema.Number.check(Schema.isFinite(), Schema.isBetween({ minimum: -8.64e15, maximum: 8.64e15 }))
+const Due = Schema.NullOr(Time).annotate({
   description: "Replacement due time as Unix epoch milliseconds, or null to clear it.",
+})
+const Reminder = Schema.NullOr(Time).annotate({
+  description: "Replacement reminder time as Unix epoch milliseconds, or null to clear it.",
 })
 
 const Parameters = Schema.Union([
@@ -23,7 +27,8 @@ const Parameters = Schema.Union([
     action: Schema.Literal("create"),
     title: Text,
     detail: Schema.optional(Schema.String),
-    dueAt: Schema.optional(Schema.Number),
+    dueAt: Schema.optional(Time),
+    reminderAt: Schema.optional(Time),
   }),
   Schema.Struct({
     action: Schema.Literal("update"),
@@ -32,6 +37,7 @@ const Parameters = Schema.Union([
     title: Schema.optional(Text),
     detail: Schema.optional(Detail),
     dueAt: Schema.optional(Due),
+    reminderAt: Schema.optional(Reminder),
   }),
   Schema.Struct({ action: Schema.Literals(["complete", "reopen"]), id: ID, revision: Revision }),
   Schema.Struct({ action: Schema.Literal("delete"), id: ID, revision: Revision }),
@@ -61,7 +67,7 @@ export function personalTodoTool(input: { storage: Storage.Interface }) {
     "personal_todo",
     Effect.succeed({
       description:
-        "Manage the user's durable personal Todo list. Actions: list, get, create, update, complete, reopen, and delete. List or get first and pass the exact returned revision for every change or deletion; never guess a revision or retry a conflict automatically. Use ask_options before creating or expanding an item when the user's title, due time, scope, or intended breakdown is materially ambiguous. Create only one reviewed item per call. When a broad goal could become several subtasks, present suggested subtasks to the user for review instead of silently creating them. This tool updates personal planning state only; it does not start agents or perform the work in a Todo.",
+        "Manage the user's durable personal Todo list. Actions: list, get, create, update, complete, reopen, and delete. List or get first and pass the exact returned revision for every change or deletion; never guess a revision or retry a conflict automatically. Use ask_options before creating or expanding an item when the user's title, due time, reminder time, scope, or intended breakdown is materially ambiguous. Before setting a due time or reminder, use ask_options if the user's local date, local time, or timezone is missing or ambiguous, then resolve it to exact Unix epoch milliseconds before mutation. Create only one reviewed item per call. When a broad goal could become several subtasks, present suggested subtasks to the user for review instead of silently creating them. This tool updates personal planning state only; it does not start agents or perform the work in a Todo.",
       parameters: Parameters,
       execute: (params: Params, ctx: Tool.Context) =>
         Effect.gen(function* () {
@@ -93,11 +99,16 @@ export function personalTodoTool(input: { storage: Storage.Interface }) {
             params.action === "update" &&
             params.title === undefined &&
             params.detail === undefined &&
-            params.dueAt === undefined
+            params.dueAt === undefined &&
+            params.reminderAt === undefined
           )
             return result(
               "Personal todo unchanged",
-              { status: "invalid", id: params.id, message: "Provide at least one title, detail, or dueAt change." },
+              {
+                status: "invalid",
+                id: params.id,
+                message: "Provide at least one title, detail, dueAt, or reminderAt change.",
+              },
               { action: params.action, status: "invalid", id: params.id },
             )
 
@@ -114,7 +125,14 @@ export function personalTodoTool(input: { storage: Storage.Interface }) {
                   metadata: params,
                 })
                 .pipe(
-                  Effect.andThen(todos.create({ title: params.title, detail: params.detail, dueAt: params.dueAt })),
+                  Effect.andThen(
+                    todos.create({
+                      title: params.title,
+                      detail: params.detail,
+                      dueAt: params.dueAt,
+                      reminderAt: params.reminderAt,
+                    }),
+                  ),
                   Effect.map((item) =>
                     result(
                       "Personal todo created",
@@ -158,7 +176,13 @@ export function personalTodoTool(input: { storage: Storage.Interface }) {
 
           const patch =
             params.action === "update"
-              ? { revision: params.revision, title: params.title, detail: params.detail, dueAt: params.dueAt }
+              ? {
+                  revision: params.revision,
+                  title: params.title,
+                  detail: params.detail,
+                  dueAt: params.dueAt,
+                  reminderAt: params.reminderAt,
+                }
               : { revision: params.revision, done: params.action === "complete" }
           const item = yield* todos.update(params.id, patch)
           if (!item)

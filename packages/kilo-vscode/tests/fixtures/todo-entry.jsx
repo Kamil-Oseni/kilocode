@@ -26,6 +26,7 @@ const initialItems =
           title: "Review the launch checklist",
           detail: "Confirm owners, rollout order, and rollback signals.",
           dueAt: new Date("2030-04-05T14:30:00").getTime(),
+          reminderAt: state === "epoch" ? 0 : new Date("2030-04-05T13:30:00").getTime(),
           done: false,
           revision: 1,
           createdAt: 10,
@@ -151,6 +152,7 @@ window.acquireVsCodeApi = () => ({
       const item = {
         id: `todo-${items.length + 1}`,
         title: message.title,
+        reminderAt: message.reminderAt,
         done: false,
         revision: 1,
         createdAt: 40 + items.length,
@@ -207,6 +209,7 @@ window.acquireVsCodeApi = () => ({
         ...(message.detail === undefined ? {} : { detail: message.detail ?? undefined }),
         ...(message.done === undefined ? {} : { done: message.done }),
         ...(message.dueAt === undefined ? {} : { dueAt: message.dueAt ?? undefined }),
+        ...(message.reminderAt === undefined ? {} : { reminderAt: message.reminderAt ?? undefined }),
         revision: current.revision + 1,
         updatedAt: 60,
       }

@@ -25,6 +25,7 @@ for (const theme of ["light", "dark", "contrast"])
         page.getByText("Confirm owners, rollout order, and rollback signals.", { exact: true }),
       ).toBeVisible()
       await expect(page.getByText(/^Due /)).toBeVisible()
+      await expect(page.locator('[data-slot="personal-todo-reminder"]')).toBeVisible()
       if (theme === "contrast") await page.emulateMedia({ forcedColors: "none" })
       await audit(page)
       await page.getByRole("button", { name: "Edit Review the launch checklist" }).click()
@@ -45,12 +46,26 @@ test("shows loading and empty states", async ({ page }) => {
   await audit(page)
 })
 
+test("displays a saved reminder at the Unix epoch", async ({ page }) => {
+  await page.goto("/?state=epoch")
+  const reminder = page.locator('[data-slot="personal-todo-reminder"]')
+  await expect(reminder).toBeVisible()
+  await expect(reminder).toHaveAttribute("datetime", new Date(0).toISOString())
+})
+
 test("adds, completes, reopens and confirms deletion from the keyboard", async ({ page }) => {
   await page.goto("/?state=empty")
   const draft = page.getByLabel("New todo")
   await draft.fill("Ship the verified fixture")
-  await draft.press("Enter")
+  await page.getByLabel("Reminder date and time").fill("2031-01-02T08:30")
+  await page.getByRole("button", { name: "Add" }).focus()
+  await page.keyboard.press("Enter")
   await expect(page.getByText("Ship the verified fixture", { exact: true })).toBeVisible()
+  await expect(page.locator('[data-slot="personal-todo-reminder"]')).toBeVisible()
+  const sent = JSON.parse((await page.locator("[data-messages]").textContent()) ?? "[]")
+  expect(sent.filter((message) => message.type === "personalTodoCreate")).toMatchObject([
+    { title: "Ship the verified fixture", reminderAt: new Date("2031-01-02T08:30").getTime() },
+  ])
   const complete = page.getByRole("checkbox", { name: "Complete Ship the verified fixture" })
   await complete.focus()
   await page.keyboard.press("Space")
@@ -103,7 +118,9 @@ test("recovers an exact stale completion intent without losing the draft", async
   await audit(page)
 })
 
-test("edits title, details, and due date from the keyboard and reloads the saved result", async ({ page }) => {
+test("edits title, details, due date, and reminder from the keyboard and reloads the saved result", async ({
+  page,
+}) => {
   await page.goto("/")
   const edit = page.getByRole("button", { name: "Edit Review the launch checklist" })
   await edit.focus()
@@ -112,12 +129,14 @@ test("edits title, details, and due date from the keyboard and reloads the saved
   await form.getByLabel("Title").fill("Review the release plan")
   await form.getByLabel("Details").fill("Check ownership, rollout, and rollback.")
   await form.getByLabel("Due date and time").fill("2031-06-07T09:45")
+  await form.getByLabel("Reminder date and time").fill("2031-06-07T08:45")
   await form.getByRole("button", { name: "Save" }).focus()
   await page.keyboard.press("Enter")
   await expect(
     page.getByRole("list", { name: "Personal todos" }).getByText("Review the release plan", { exact: true }),
   ).toBeVisible()
   await expect(page.getByText("Check ownership, rollout, and rollback.", { exact: true })).toBeVisible()
+  await expect(page.locator('[data-slot="personal-todo-reminder"]')).toBeVisible()
   const sent = async () => JSON.parse((await page.locator("[data-messages]").textContent()) ?? "[]")
   expect((await sent()).filter((message) => message.type === "personalTodoUpdate")).toMatchObject([
     {
@@ -126,6 +145,7 @@ test("edits title, details, and due date from the keyboard and reloads the saved
       title: "Review the release plan",
       detail: "Check ownership, rollout, and rollback.",
       dueAt: new Date("2031-06-07T09:45").getTime(),
+      reminderAt: new Date("2031-06-07T08:45").getTime(),
     },
   ])
   await page.reload()
@@ -133,6 +153,7 @@ test("edits title, details, and due date from the keyboard and reloads the saved
     page.getByRole("list", { name: "Personal todos" }).getByText("Review the release plan", { exact: true }),
   ).toBeVisible()
   await expect(page.getByText("Check ownership, rollout, and rollback.", { exact: true })).toBeVisible()
+  await expect(page.locator('[data-slot="personal-todo-reminder"]')).toBeVisible()
   await audit(page)
 })
 
@@ -159,11 +180,13 @@ for (const state of ["edit-offline", "edit-error"] as const) {
     await form.getByLabel("Title").fill("Retained edit")
     await form.getByLabel("Details").fill("This exact detail stays visible.")
     await form.getByLabel("Due date and time").fill("2032-08-09T11:15")
+    await form.getByLabel("Reminder date and time").fill("2032-08-09T10:15")
     await form.getByRole("button", { name: "Save" }).click()
     await expect(page.getByRole("alert")).toContainText(state === "edit-offline" ? "still here" : "could not save")
     await expect(form.getByLabel("Title")).toHaveValue("Retained edit")
     await expect(form.getByLabel("Details")).toHaveValue("This exact detail stays visible.")
     await expect(form.getByLabel("Due date and time")).toHaveValue("2032-08-09T11:15")
+    await expect(form.getByLabel("Reminder date and time")).toHaveValue("2032-08-09T10:15")
     await page.getByRole("button", { name: "Try again" }).click()
     await expect(
       page.getByRole("list", { name: "Personal todos" }).getByText("Retained edit", { exact: true }),
@@ -180,13 +203,20 @@ test("keeps an exact stale edit visible and retries against the adopted revision
   await form.getByLabel("Title").fill("Reviewed stale edit")
   await form.getByLabel("Details").fill("Preserve this context through reconciliation.")
   await form.getByLabel("Due date and time").fill("2033-10-11T13:20")
+  await form.getByLabel("Reminder date and time").fill("2033-10-11T12:20")
   await form.getByRole("button", { name: "Save" }).click()
   await expect(page.getByRole("alert")).toContainText("Saved version 2 replaced version 1.")
   await expect(form.getByLabel("Title")).toHaveValue("Reviewed stale edit")
   await expect(form.getByLabel("Details")).toHaveValue("Preserve this context through reconciliation.")
+  await expect(form.getByLabel("Reminder date and time")).toHaveValue("2033-10-11T12:20")
   const sent = async () => JSON.parse((await page.locator("[data-messages]").textContent()) ?? "[]")
   expect((await sent()).filter((message) => message.type === "personalTodoUpdate")).toMatchObject([
-    { todoID: "todo-open", revision: 1, title: "Reviewed stale edit" },
+    {
+      todoID: "todo-open",
+      revision: 1,
+      title: "Reviewed stale edit",
+      reminderAt: new Date("2033-10-11T12:20").getTime(),
+    },
   ])
   await page.getByRole("button", { name: "Review and retry" }).click()
   await expect(
@@ -194,27 +224,37 @@ test("keeps an exact stale edit visible and retries against the adopted revision
   ).toBeVisible()
   expect((await sent()).filter((message) => message.type === "personalTodoUpdate")).toMatchObject([
     { todoID: "todo-open", revision: 1, title: "Reviewed stale edit" },
-    { todoID: "todo-open", revision: 2, title: "Reviewed stale edit" },
+    {
+      todoID: "todo-open",
+      revision: 2,
+      title: "Reviewed stale edit",
+      reminderAt: new Date("2033-10-11T12:20").getTime(),
+    },
   ])
   await page.reload()
   await expect(
     page.getByRole("list", { name: "Personal todos" }).getByText("Reviewed stale edit", { exact: true }),
   ).toBeVisible()
   await expect(page.getByText("Preserve this context through reconciliation.", { exact: true })).toBeVisible()
+  await expect(page.locator('[data-slot="personal-todo-reminder"]')).toBeVisible()
   await audit(page)
 })
 
-test("clears optional detail and due date explicitly", async ({ page }) => {
+test("clears optional detail, due date, and reminder explicitly", async ({ page }) => {
   await page.goto("/")
   await page.getByRole("button", { name: "Edit Review the launch checklist" }).click()
   const form = page.getByRole("form", { name: "Edit Review the launch checklist" })
   await form.getByLabel("Details").fill("")
   await form.getByLabel("Due date and time").fill("")
+  await form.getByLabel("Reminder date and time").fill("")
   await form.getByRole("button", { name: "Save" }).click()
   await expect(page.getByText("Confirm owners, rollout order, and rollback signals.", { exact: true })).toHaveCount(0)
   await expect(page.getByText(/^Due /)).toHaveCount(0)
+  await expect(page.locator('[data-slot="personal-todo-reminder"]')).toHaveCount(0)
   const sent = JSON.parse((await page.locator("[data-messages]").textContent()) ?? "[]")
-  expect(sent.filter((message) => message.type === "personalTodoUpdate")).toMatchObject([{ detail: null, dueAt: null }])
+  expect(sent.filter((message) => message.type === "personalTodoUpdate")).toMatchObject([
+    { detail: null, dueAt: null, reminderAt: null },
+  ])
 })
 
 for (const state of ["idle", "running", "paused", "completed"] as const) {

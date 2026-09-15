@@ -49,7 +49,7 @@ describe("personal todo extension bridge", () => {
     await handlePersonalTodoMessage({
       client: api,
       directory: "C:/work",
-      message: { type: "personalTodoCreate", requestID: "2", title: "Review accounts" },
+      message: { type: "personalTodoCreate", requestID: "2", title: "Review accounts", reminderAt: 900_000 },
       post,
     })
     await handlePersonalTodoMessage({
@@ -63,6 +63,7 @@ describe("personal todo extension bridge", () => {
         title: "Review quarterly accounts",
         detail: null,
         dueAt: 1_800_000,
+        reminderAt: null,
       },
       post,
     })
@@ -75,7 +76,7 @@ describe("personal todo extension bridge", () => {
 
     expect(calls).toEqual([
       ["list", { directory: "C:/work" }],
-      ["create", { directory: "C:/work", title: "Review accounts" }],
+      ["create", { directory: "C:/work", title: "Review accounts", reminderAt: 900_000 }],
       [
         "update",
         {
@@ -86,6 +87,7 @@ describe("personal todo extension bridge", () => {
           detail: null,
           done: undefined,
           dueAt: 1_800_000,
+          reminderAt: null,
         },
       ],
       ["delete", { directory: "C:/work", todoID: item.id, revision: "4" }],
@@ -149,6 +151,25 @@ describe("personal todo extension bridge", () => {
     ])
   })
 
+  it("rejects a null reminder on create instead of silently dropping it", async () => {
+    const calls: unknown[] = []
+    const messages: unknown[] = []
+    await handlePersonalTodoMessage({
+      client: client({
+        create: async (input: unknown) => {
+          calls.push(input)
+          return { data: item, response: { status: 200 } }
+        },
+      }),
+      directory: "C:/work",
+      message: { type: "personalTodoCreate", requestID: "null-reminder", title: "Review accounts", reminderAt: null },
+      post: (message) => messages.push(message),
+    })
+
+    expect(calls).toEqual([])
+    expect(messages).toMatchObject([{ error: { kind: "error", message: "This todo request was incomplete." } }])
+  })
+
   it("rejects empty and invalid update payloads before calling the backend", async () => {
     const calls: unknown[] = []
     const api = client({
@@ -163,6 +184,7 @@ describe("personal todo extension bridge", () => {
       ["title", { title: " " }],
       ["detail", { detail: "x".repeat(10_001) }],
       ["due", { dueAt: Number.NaN }],
+      ["reminder", { reminderAt: Number.POSITIVE_INFINITY }],
     ] as const)
       await handlePersonalTodoMessage({
         client: api,
@@ -172,7 +194,7 @@ describe("personal todo extension bridge", () => {
       })
 
     expect(calls).toEqual([])
-    expect(messages).toHaveLength(4)
+    expect(messages).toHaveLength(5)
     for (const message of messages)
       expect(message).toMatchObject({ error: { kind: "error", message: "This todo request was incomplete." } })
   })

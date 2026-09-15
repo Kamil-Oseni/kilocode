@@ -9,12 +9,18 @@ import { useVSCode } from "../../context/vscode"
 import type { ExtensionMessage, FocusTimerItem, PersonalTodoItem } from "../../types/messages"
 
 type Intent =
-  | { operation: "create"; title: string }
+  | { operation: "create"; title: string; reminderAt?: number }
   | { operation: "update"; todoID: string; changes: Changes }
   | { operation: "delete"; todoID: string }
 
-type Changes = { title?: string; detail?: string | null; done?: boolean; dueAt?: number | null }
-type Edit = { todoID: string; title: string; detail: string; due: string }
+type Changes = {
+  title?: string
+  detail?: string | null
+  done?: boolean
+  dueAt?: number | null
+  reminderAt?: number | null
+}
+type Edit = { todoID: string; title: string; detail: string; due: string; reminder: string }
 type Notice = { kind: "offline" | "stale" | "error"; message: string }
 type TimerIntent =
   | { operation: "start"; durationMs: number; todoID?: string }
@@ -44,6 +50,7 @@ export const TodoView: Component<{ onBack: () => void }> = (props) => {
   const vscode = useVSCode()
   const [items, setItems] = createSignal<PersonalTodoItem[]>([])
   const [draft, setDraft] = createSignal("")
+  const [reminder, setReminder] = createSignal("")
   const [loading, setLoading] = createSignal(true)
   const [notice, setNotice] = createSignal<Notice>()
   const [confirming, setConfirming] = createSignal<string>()
@@ -76,7 +83,12 @@ export const TodoView: Component<{ onBack: () => void }> = (props) => {
       setPending((state) => ({ ...state, ["todoID" in intent ? intent.todoID : "create"]: true }))
     if (intent.operation === "list") vscode.postMessage({ type: "personalTodoList", requestID })
     if (intent.operation === "create")
-      vscode.postMessage({ type: "personalTodoCreate", requestID, title: intent.title })
+      vscode.postMessage({
+        type: "personalTodoCreate",
+        requestID,
+        title: intent.title,
+        reminderAt: intent.reminderAt,
+      })
     if (intent.operation === "update" && item)
       vscode.postMessage({
         type: "personalTodoUpdate",
@@ -154,10 +166,16 @@ export const TodoView: Component<{ onBack: () => void }> = (props) => {
     if (message.items) setItems(order(message.items))
     if (message.item) replace(message.item)
     if (message.removed && message.todoID) setItems((rows) => rows.filter((row) => row.id !== message.todoID))
-    if (intent.operation === "create") setDraft("")
+    if (intent.operation === "create") {
+      setDraft("")
+      setReminder("")
+    }
     if (
       intent.operation === "update" &&
-      (intent.changes.title !== undefined || intent.changes.detail !== undefined || intent.changes.dueAt !== undefined)
+      (intent.changes.title !== undefined ||
+        intent.changes.detail !== undefined ||
+        intent.changes.dueAt !== undefined ||
+        intent.changes.reminderAt !== undefined)
     ) {
       setEditing()
       setEditError()
@@ -184,10 +202,26 @@ export const TodoView: Component<{ onBack: () => void }> = (props) => {
   })
 
   const remaining = createMemo(() => items().filter((item) => !item.done).length)
+  const compose = (next: { title?: string; reminder?: string }) => {
+    const title = next.title ?? draft()
+    const value = next.reminder ?? reminder()
+    if (next.title !== undefined) setDraft(next.title)
+    if (next.reminder !== undefined) setReminder(next.reminder)
+    const intent = recovery()
+    if (intent?.operation !== "create") return
+    const reminderAt = value ? new Date(value).getTime() : undefined
+    setRecovery({ operation: "create", title: title.trim(), reminderAt })
+  }
   const begin = (item: PersonalTodoItem) => {
     setConfirming()
     setEditError()
-    setEditing({ todoID: item.id, title: item.title, detail: item.detail ?? "", due: local(item.dueAt) })
+    setEditing({
+      todoID: item.id,
+      title: item.title,
+      detail: item.detail ?? "",
+      due: local(item.dueAt),
+      reminder: local(item.reminderAt),
+    })
   }
   const change = (next: Partial<Edit>) => {
     const current = editing()
@@ -197,6 +231,7 @@ export const TodoView: Component<{ onBack: () => void }> = (props) => {
     const intent = recovery()
     if (intent?.operation !== "update" || intent.todoID !== edit.todoID || intent.changes.done !== undefined) return
     const stamp = edit.due ? new Date(edit.due).getTime() : null
+    const reminderAt = edit.reminder ? new Date(edit.reminder).getTime() : null
     setRecovery({
       operation: "update",
       todoID: edit.todoID,
@@ -204,6 +239,7 @@ export const TodoView: Component<{ onBack: () => void }> = (props) => {
         title: edit.title.trim(),
         detail: edit.detail || null,
         dueAt: Number.isFinite(stamp) ? stamp : null,
+        reminderAt: Number.isFinite(reminderAt) ? reminderAt : null,
       },
     })
   }
@@ -229,11 +265,13 @@ export const TodoView: Component<{ onBack: () => void }> = (props) => {
     if (!title) return setEditError("Add a title before saving.")
     const stamp = edit.due ? new Date(edit.due).getTime() : null
     if (stamp !== null && !Number.isFinite(stamp)) return setEditError("Use a valid due date and time.")
+    const reminderAt = edit.reminder ? new Date(edit.reminder).getTime() : null
+    if (reminderAt !== null && !Number.isFinite(reminderAt)) return setEditError("Use a valid reminder date and time.")
     setEditError()
     send({
       operation: "update",
       todoID: edit.todoID,
-      changes: { title, detail: edit.detail || null, dueAt: stamp },
+      changes: { title, detail: edit.detail || null, dueAt: stamp, reminderAt },
     })
   }
   const retry = () => {
@@ -409,15 +447,24 @@ export const TodoView: Component<{ onBack: () => void }> = (props) => {
         onSubmit={(event) => {
           event.preventDefault()
           const title = draft().trim()
-          if (title) send({ operation: "create", title })
+          const stamp = reminder() ? new Date(reminder()).getTime() : undefined
+          if (title && (stamp === undefined || Number.isFinite(stamp)))
+            send({ operation: "create", title, reminderAt: stamp })
         }}
       >
         <TextField
           value={draft()}
-          onChange={setDraft}
+          onChange={(title) => compose({ title })}
           aria-label="New todo"
           placeholder="What needs your attention?"
           maxLength={500}
+          disabled={pending().create === true}
+        />
+        <TextField
+          label="Reminder date and time"
+          type="datetime-local"
+          value={reminder()}
+          onChange={(value) => compose({ reminder: value })}
           disabled={pending().create === true}
         />
         <Button type="submit" size="small" disabled={!draft().trim() || pending().create === true}>
@@ -472,15 +519,21 @@ export const TodoView: Component<{ onBack: () => void }> = (props) => {
                         <Show when={item.detail}>
                           <p>{item.detail}</p>
                         </Show>
-                        <Show when={item.dueAt}>
-                          {(stamp) => (
-                            <time
-                              dateTime={new Date(stamp()).toISOString()}
-                              data-overdue={!item.done && stamp() < Date.now()}
-                            >
-                              Due {due(stamp())}
-                            </time>
-                          )}
+                        <Show when={item.dueAt !== undefined}>
+                          <time
+                            dateTime={new Date(item.dueAt ?? 0).toISOString()}
+                            data-overdue={!item.done && (item.dueAt ?? 0) < Date.now()}
+                          >
+                            Due {due(item.dueAt ?? 0)}
+                          </time>
+                        </Show>
+                        <Show when={item.reminderAt !== undefined}>
+                          <time
+                            dateTime={new Date(item.reminderAt ?? 0).toISOString()}
+                            data-slot="personal-todo-reminder"
+                          >
+                            Reminder {due(item.reminderAt ?? 0)}
+                          </time>
                         </Show>
                       </div>
                       <Show
@@ -566,6 +619,13 @@ export const TodoView: Component<{ onBack: () => void }> = (props) => {
                         type="datetime-local"
                         value={edit().due}
                         onChange={(value) => change({ due: value })}
+                        disabled={pending()[item.id] === true}
+                      />
+                      <TextField
+                        label="Reminder date and time"
+                        type="datetime-local"
+                        value={edit().reminder}
+                        onChange={(value) => change({ reminder: value })}
                         disabled={pending()[item.id] === true}
                       />
                       <div data-slot="personal-todo-edit-actions">

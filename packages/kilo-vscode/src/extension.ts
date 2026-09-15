@@ -38,6 +38,7 @@ import { createGitExecutable } from "./util/git-executable"
 import { registerUpdateChecker } from "./services/update-checker" // raya_change - GitHub Release auto-update
 import { recover as recoverSelfHealInstallation } from "./self-heal/recovery"
 import { isCursorHost } from "./utils"
+import { PersonalTodoReminderCoordinator } from "./services/personal-todo-reminders"
 
 let agentManager: AgentManagerProvider | undefined
 let shuttingDown = false
@@ -68,6 +69,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Create shared connection service (one server for all webviews)
   const connectionService = new KiloConnectionService(context)
+  context.subscriptions.push(new PersonalTodoReminderCoordinator(connectionService))
   context.subscriptions.push(registerDiagnostics(context, connectionService))
   context.subscriptions.push(registerGrantAllPermissions(connectionService)) // raya_change - global all-tools toggle
   context.subscriptions.push(registerDesignSystemLock(connectionService)) // raya_change - owner design-system lock

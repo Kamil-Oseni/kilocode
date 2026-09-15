@@ -2,7 +2,7 @@ import type { KiloClient, PersonalTodoStaleRevisionError } from "@kilocode/sdk/v
 
 type Message =
   | { type: "personalTodoList"; requestID: string }
-  | { type: "personalTodoCreate"; requestID: string; title: string }
+  | { type: "personalTodoCreate"; requestID: string; title: string; reminderAt?: number }
   | {
       type: "personalTodoUpdate"
       requestID: string
@@ -12,6 +12,7 @@ type Message =
       detail?: string | null
       done?: boolean
       dueAt?: number | null
+      reminderAt?: number | null
     }
   | { type: "personalTodoDelete"; requestID: string; todoID: string; revision: number }
 
@@ -54,7 +55,8 @@ function update(message: Extract<Message, { type: "personalTodoUpdate" }>) {
     message.title !== undefined ||
     message.detail !== undefined ||
     message.done !== undefined ||
-    message.dueAt !== undefined
+    message.dueAt !== undefined ||
+    message.reminderAt !== undefined
   if (!changed) return false
   if (
     message.title !== undefined &&
@@ -68,17 +70,28 @@ function update(message: Extract<Message, { type: "personalTodoUpdate" }>) {
   )
     return false
   if (message.done !== undefined && typeof message.done !== "boolean") return false
+  if (!stamp(message.dueAt)) return false
+  return stamp(message.reminderAt)
+}
+
+function stamp(value: unknown) {
   return (
-    message.dueAt === undefined ||
-    message.dueAt === null ||
-    (typeof message.dueAt === "number" && Number.isFinite(message.dueAt) && Math.abs(message.dueAt) <= 8.64e15)
+    value === undefined ||
+    value === null ||
+    (typeof value === "number" && Number.isFinite(value) && Math.abs(value) <= 8.64e15)
   )
 }
 
 function valid(message: Message) {
   if (typeof message.requestID !== "string" || !message.requestID) return false
   if (message.type === "personalTodoList") return true
-  if (message.type === "personalTodoCreate") return typeof message.title === "string" && Boolean(message.title.trim())
+  if (message.type === "personalTodoCreate")
+    return (
+      typeof message.title === "string" &&
+      Boolean(message.title.trim()) &&
+      message.reminderAt !== null &&
+      stamp(message.reminderAt)
+    )
   if (
     !(
       typeof message.todoID === "string" &&
@@ -174,7 +187,11 @@ export async function handlePersonalTodoMessage(input: {
       return true
     }
     if (msg.type === "personalTodoCreate") {
-      const result = await input.client.raya.personalTodo.create({ directory: input.directory, title: msg.title })
+      const result = await input.client.raya.personalTodo.create({
+        directory: input.directory,
+        title: msg.title,
+        reminderAt: msg.reminderAt ?? undefined,
+      })
       input.post(
         result.data
           ? { type: "personalTodoResult", requestID: msg.requestID, operation: "create", item: result.data }
@@ -196,6 +213,7 @@ export async function handlePersonalTodoMessage(input: {
         detail: msg.detail,
         done: msg.done,
         dueAt: msg.dueAt,
+        reminderAt: msg.reminderAt,
       }
       const result = await input.client.raya.personalTodo.update(params)
       if (result.data) {

@@ -341,7 +341,7 @@
 
 [data-slot="personal-todo-compose"] {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(170px, 0.7fr) auto;
   align-items: end;
   gap: var(--raya-space-8);
 }

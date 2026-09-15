@@ -17535,6 +17535,91 @@
                         "required": ["providerID", "modelID", "steps", "cost", "tokens"],
                         "additionalProperties": false
                       }
+                    },
+                    "sessionUsage": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "sessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "steps": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "cost": {
+                            "type": "number"
+                          },
+                          "accounting": {
+                            "type": "object",
+                            "properties": {
+                              "amount": {
+                                "type": "number"
+                              },
+                              "reported": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "estimated": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "partial": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "unknown": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "legacy": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "required": ["amount", "reported", "estimated", "partial", "unknown", "legacy"],
+                            "additionalProperties": false
+                          },
+                          "tokens": {
+                            "type": "object",
+                            "properties": {
+                              "input": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "output": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "reasoning": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "cache": {
+                                "type": "object",
+                                "properties": {
+                                  "read": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  },
+                                  "write": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  }
+                                },
+                                "required": ["read", "write"],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": ["input", "output", "reasoning", "cache"],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": ["sessionID", "steps", "cost", "tokens"],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": ["sessionIDs", "totals", "models"],

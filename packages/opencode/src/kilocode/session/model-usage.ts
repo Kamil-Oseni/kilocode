@@ -34,10 +34,18 @@ export namespace ModelUsage {
 
   type Model = typeof Model.Type
 
+  const SessionUsage = Schema.Struct({
+    sessionID: SessionID,
+    ...Usage.fields,
+  })
+
+  type SessionUsage = typeof SessionUsage.Type
+
   export const Info = Schema.Struct({
     sessionIDs: Schema.Array(SessionID),
     totals: Usage,
     models: Schema.Array(Model),
+    sessionUsage: Schema.optional(Schema.Array(SessionUsage)),
   })
 
   type Info = typeof Info.Type
@@ -52,6 +60,7 @@ export namespace ModelUsage {
   }
 
   type Row = typeof Accounting.Summary.Type & {
+    sessionID: SessionID
     providerID: ProviderV2.ID
     modelID: ModelV2.ID
     steps: number
@@ -71,6 +80,7 @@ export namespace ModelUsage {
   const usageSql = (sessionIDs: SessionID[]) => sql`
     WITH step AS (
       SELECT
+        part.session_id AS sessionID,
         coalesce(json_extract(part.data, '$.model.providerID'), json_extract(message.data, '$.providerID')) AS providerID,
         coalesce(json_extract(part.data, '$.model.modelID'), json_extract(message.data, '$.modelID')) AS modelID,
         max(0.0, cast(coalesce(json_extract(part.data, '$.cost'), 0) AS REAL)) AS cost,
@@ -90,6 +100,7 @@ export namespace ModelUsage {
         AND json_extract(message.data, '$.role') = 'assistant'
     )
     SELECT
+      sessionID,
       providerID,
       modelID,
       count(*) AS steps,
@@ -102,8 +113,8 @@ export namespace ModelUsage {
       coalesce(sum(cache_write), 0) AS write
     FROM step
     WHERE providerID IS NOT NULL AND modelID IS NOT NULL
-    GROUP BY providerID, modelID
-    ORDER BY cost DESC, providerID, modelID`
+    GROUP BY sessionID, providerID, modelID
+    ORDER BY sessionID, cost DESC, providerID, modelID`
 
   const empty = () => ({
     steps: 0,
@@ -167,7 +178,9 @@ export namespace ModelUsage {
       .pipe(Effect.orDie)).map((item) => item.id)
     const rows = sessionIDs.length === 0 ? [] : yield* db.all<Row>(usageSql(sessionIDs)).pipe(Effect.orDie)
     const totals = empty()
-    const models = rows.map((row): Model => {
+    const sessions = new Map<SessionID, SessionUsage>()
+    const grouped = new Map<string, Model>()
+    for (const row of rows) {
       totals.steps += row.steps
       totals.cost += row.cost
       totals.tokens.input += row.input
@@ -175,21 +188,43 @@ export namespace ModelUsage {
       totals.tokens.reasoning += row.reasoning
       totals.tokens.cache.read += row.read
       totals.tokens.cache.write += row.write
-      return {
+      Accounting.merge(totals.accounting, row)
+
+      const usage = sessions.get(row.sessionID) ?? { sessionID: row.sessionID, ...empty() }
+      usage.steps += row.steps
+      usage.cost += row.cost
+      usage.tokens.input += row.input
+      usage.tokens.output += row.output
+      usage.tokens.reasoning += row.reasoning
+      usage.tokens.cache.read += row.read
+      usage.tokens.cache.write += row.write
+      Accounting.merge(usage.accounting!, row)
+      sessions.set(row.sessionID, usage)
+
+      const key = `${row.providerID}\0${row.modelID}`
+      const model = grouped.get(key) ?? {
         providerID: row.providerID,
         modelID: row.modelID,
-        steps: row.steps,
-        cost: row.cost,
-        accounting: Accounting.merge(totals.accounting, row),
-        tokens: {
-          input: row.input,
-          output: row.output,
-          reasoning: row.reasoning,
-          cache: { read: row.read, write: row.write },
-        },
+        ...empty(),
       }
+      model.steps += row.steps
+      model.cost += row.cost
+      model.tokens.input += row.input
+      model.tokens.output += row.output
+      model.tokens.reasoning += row.reasoning
+      model.tokens.cache.read += row.read
+      model.tokens.cache.write += row.write
+      Accounting.merge(model.accounting!, row)
+      grouped.set(key, model)
+    }
+    const models = [...grouped.values()].sort(
+      (a, b) => b.cost - a.cost || a.providerID.localeCompare(b.providerID) || a.modelID.localeCompare(b.modelID),
+    )
+    const sessionUsage = sessionIDs.flatMap((id) => {
+      const usage = sessions.get(id)
+      return usage ? [usage] : []
     })
 
-    return { sessionIDs, totals, models } satisfies Info
+    return { sessionIDs, totals, models, sessionUsage } satisfies Info
   })
 }

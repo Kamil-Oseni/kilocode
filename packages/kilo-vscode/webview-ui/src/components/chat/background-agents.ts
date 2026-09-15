@@ -38,6 +38,27 @@ export interface BackgroundAgent {
   question?: QuestionRequest
 }
 
+export interface BackgroundAgentUsage {
+  sessionID: string
+  steps: number
+  cost: number
+  accounting?: {
+    amount: number
+    reported: number
+    estimated: number
+    partial: number
+    unknown: number
+    legacy: number
+  }
+}
+
+export function backgroundAgentUsage(
+  usage: readonly BackgroundAgentUsage[] | undefined,
+  sessionID: string,
+): BackgroundAgentUsage | undefined {
+  return usage?.find((item) => item.sessionID === sessionID && item.steps > 0)
+}
+
 export function backgroundAgentActivity(tools: ToolPart[]): ToolPart | undefined {
   return tools.findLast((part) => part.state.status === "pending" || part.state.status === "running")
 }

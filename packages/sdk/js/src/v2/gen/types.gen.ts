@@ -19880,6 +19880,28 @@ export type KilocodeSessionModelUsageResponses = {
         }
       }
     }>
+    sessionUsage?: Array<{
+      sessionID: string
+      steps: number
+      cost: number
+      accounting?: {
+        amount: number
+        reported: number
+        estimated: number
+        partial: number
+        unknown: number
+        legacy: number
+      }
+      tokens: {
+        input: number
+        output: number
+        reasoning: number
+        cache: {
+          read: number
+          write: number
+        }
+      }
+    }>
   }
 }
 

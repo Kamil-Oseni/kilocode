@@ -3,6 +3,7 @@ import {
   backgroundAgentActivity,
   backgroundAgentDuration,
   backgroundAgentElapsed,
+  backgroundAgentUsage,
   backgroundAgents,
   backgroundJobAgents,
   foregroundAgent,
@@ -85,6 +86,28 @@ describe("backgroundAgents", () => {
     expect(backgroundAgentDuration(5)).toBe("5s")
     expect(backgroundAgentDuration(65)).toBe("1m 5s")
     expect(backgroundAgentDuration(7_381)).toBe("2h 3m")
+  })
+
+  it("keeps direct child accounting including reported zero and unknown cost", () => {
+    const usage = [
+      {
+        sessionID: "reported",
+        steps: 1,
+        cost: 0,
+        accounting: { amount: 0, reported: 1, estimated: 0, partial: 0, unknown: 0, legacy: 0 },
+      },
+      {
+        sessionID: "unknown",
+        steps: 1,
+        cost: 0,
+        accounting: { amount: 0, reported: 0, estimated: 0, partial: 0, unknown: 1, legacy: 0 },
+      },
+    ]
+
+    expect(backgroundAgentUsage(usage, "reported")?.accounting?.reported).toBe(1)
+    expect(backgroundAgentUsage(usage, "unknown")?.accounting?.unknown).toBe(1)
+    expect(backgroundAgentUsage(usage, "missing")).toBeUndefined()
+    expect(backgroundAgentUsage([{ sessionID: "empty", steps: 0, cost: 0 }], "empty")).toBeUndefined()
   })
 
   it("lists a running background agent from tool state metadata", () => {

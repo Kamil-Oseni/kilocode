@@ -156,6 +156,29 @@ describe("session model usage", () => {
             tokens: { input: 100, output: 20, reasoning: 5, cache: { read: 200, write: 10 } },
           },
         ],
+        sessionUsage: [
+          {
+            sessionID: root.id,
+            steps: 1,
+            cost: 0.25,
+            accounting: { amount: 0, reported: 0, estimated: 0, partial: 0, unknown: 0, legacy: 1 },
+            tokens: { input: 100, output: 20, reasoning: 5, cache: { read: 200, write: 10 } },
+          },
+          {
+            sessionID: child.id,
+            steps: 1,
+            cost: 0.75,
+            accounting: { amount: 0, reported: 0, estimated: 0, partial: 0, unknown: 0, legacy: 1 },
+            tokens: { input: 200, output: 40, reasoning: 15, cache: { read: 400, write: 30 } },
+          },
+          {
+            sessionID: sibling.id,
+            steps: 1,
+            cost: 0.125,
+            accounting: { amount: 0, reported: 0, estimated: 0, partial: 0, unknown: 0, legacy: 1 },
+            tokens: { input: 50, output: 10, reasoning: 0, cache: { read: 100, write: 5 } },
+          },
+        ].sort((a, b) => a.sessionID.localeCompare(b.sessionID)),
       })
     }),
   )
@@ -165,6 +188,7 @@ describe("session model usage", () => {
       const sessions = yield* Session.Service
       const root = yield* sessions.create({ title: "accounting" })
       const child = yield* sessions.create({ parentID: root.id })
+      const grandchild = yield* sessions.create({ parentID: child.id })
       const model = ref("test", "priced")
       const tokens = { input: 10, output: 1, reasoning: 0, cache: { read: 0, write: 0 } }
       const parent = yield* seed(root.id, model)
@@ -192,6 +216,22 @@ describe("session model usage", () => {
           issues: ["no_verified_priced_usage"],
         },
       })
+      const grandchildAssistant = yield* seed(grandchild.id, model)
+      yield* step({
+        sessionID: grandchild.id,
+        messageID: grandchildAssistant.id,
+        cost: 0,
+        tokens,
+        accounting: {
+          version: 1,
+          status: "reported",
+          currency: "USD",
+          amount: 0,
+          source: "provider-usage",
+          buckets: [],
+          issues: [],
+        },
+      })
       const reloaded = yield* sessions.messages({ sessionID: root.id })
       expect(reloaded.flatMap((item) => item.parts).find((part) => part.type === "step-finish")).toMatchObject({
         accounting: evidence,
@@ -199,12 +239,37 @@ describe("session model usage", () => {
       const result = yield* ModelUsage.get(child.id)
       expect(result?.totals.accounting).toEqual({
         amount: 0.25,
-        reported: 0,
+        reported: 1,
         estimated: 1,
         partial: 0,
         unknown: 1,
         legacy: 0,
       })
+      expect(result?.sessionUsage).toEqual(
+        [
+          {
+            sessionID: root.id,
+            steps: 1,
+            cost: 0.25,
+            accounting: { amount: 0.25, reported: 0, estimated: 1, partial: 0, unknown: 0, legacy: 0 },
+            tokens,
+          },
+          {
+            sessionID: child.id,
+            steps: 1,
+            cost: 0,
+            accounting: { amount: 0, reported: 0, estimated: 0, partial: 0, unknown: 1, legacy: 0 },
+            tokens,
+          },
+          {
+            sessionID: grandchild.id,
+            steps: 1,
+            cost: 0,
+            accounting: { amount: 0, reported: 1, estimated: 0, partial: 0, unknown: 0, legacy: 0 },
+            tokens,
+          },
+        ].sort((a, b) => a.sessionID.localeCompare(b.sessionID)),
+      )
       expect((yield* ModelUsage.get(root.id))?.totals).toEqual(result?.totals)
     }),
   )

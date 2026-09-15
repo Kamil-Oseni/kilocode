@@ -18,6 +18,7 @@ import { getToolInfo } from "@kilocode/kilo-ui/message-part"
 import type { BackgroundJobInfo } from "../../types/messages"
 import { useLanguage } from "../../context/language"
 import { useSession } from "../../context/session"
+import { costLabel } from "../../context/accounting"
 import { useVSCode } from "../../context/vscode"
 import { useWorktreeMode } from "../../context/worktree-mode"
 import {
@@ -25,6 +26,7 @@ import {
   backgroundAgentActivity,
   backgroundAgentDuration,
   backgroundAgentElapsed,
+  backgroundAgentUsage,
   backgroundJobAgents,
   foregroundAgent,
   showBackgroundAgent,
@@ -261,6 +263,15 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
                   return info.subtitle ? `${info.title}: ${info.subtitle}` : info.title
                 })
                 const elapsed = createMemo(() => backgroundAgentElapsed(agent, now()))
+                const usage = createMemo(() => backgroundAgentUsage(session.modelUsage()?.sessionUsage, agent.id))
+                const cost = createMemo(() => {
+                  const item = usage()
+                  if (!item) return undefined
+                  return {
+                    brief: costLabel(item, language.locale(), true),
+                    detail: costLabel(item, language.locale()),
+                  }
+                })
                 const started = () =>
                   agent.startedAt > 0 && Number.isFinite(agent.startedAt)
                     ? new Date(agent.startedAt).toLocaleString(language.locale())
@@ -297,6 +308,16 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
                           <span data-slot="task-header-agent-elapsed" title={started()}>
                             {backgroundAgentDuration(elapsed()!)}
                           </span>
+                        </Show>
+                        <Show when={cost()}>
+                          {(value) => (
+                            <span
+                              data-slot="task-header-agent-cost"
+                              title={`${value().detail}. Recorded model usage for this agent.`}
+                            >
+                              {value().brief}
+                            </span>
+                          )}
                         </Show>
                         <Show when={agent.permission || agent.question}>
                           <span data-slot="task-header-agent-attention-label">

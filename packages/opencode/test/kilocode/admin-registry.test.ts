@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
 import { RayaAdmin } from "@/kilocode/admin/registry"
+import { SessionID } from "@/session/schema"
 
 const at = 1_800_000_000_000
 
@@ -55,7 +56,7 @@ describe("Raya admin health registry", () => {
                 id: "secret-run",
                 agentID: "secret-agent",
                 at,
-                sessionID: "ses_secret",
+                sessionID: SessionID.make("ses_secret"),
                 status: "error",
               },
             ],
@@ -101,7 +102,7 @@ describe("Raya admin health registry", () => {
         items: [
           {
             agentID: "agent",
-            runs: [{ id: "run", agentID: "agent", at, sessionID: "ses_test", status: "blocked" }],
+            runs: [{ id: "run", agentID: "agent", at, sessionID: SessionID.make("ses_test"), status: "blocked" }],
           },
         ],
         failed: [],

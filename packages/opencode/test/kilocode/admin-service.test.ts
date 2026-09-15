@@ -102,10 +102,10 @@ describe("Raya admin health service", () => {
     const service = RayaAdminService.make({
       runtime: () => "connected",
       sessions: {
-        list: () => Effect.fail(new Error("C:/private/session-store synthetic-session-secret")),
+        list: () => Effect.die(new Error("C:/private/session-store synthetic-session-secret")),
       },
       tasks: {
-        list: () => Effect.fail(new Error("synthetic-task-secret")),
+        list: () => Effect.die(new Error("synthetic-task-secret")),
         histories: () => Effect.succeed({ items: [], failed: [] }),
       },
       browser: () => Promise.reject(new Error("https://private.example/?token=synthetic-browser-secret")),
@@ -175,7 +175,7 @@ describe("Raya admin health service", () => {
         },
         histories: () => {
           reads.histories++
-          return Effect.fail(new Error("C:/private/routines?token=synthetic-history-secret"))
+          return Effect.die(new Error("C:/private/routines?token=synthetic-history-secret"))
         },
       },
       clock: () => at,

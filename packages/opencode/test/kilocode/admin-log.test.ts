@@ -122,7 +122,7 @@ describe("Raya admin diagnostic log", () => {
       fields: { reason: "voice-failed" },
     })
     if (!entry?.fields) throw new Error("expected diagnostic fields")
-    entry.fields.reason = "ready"
+    expect(Reflect.set(entry.fields, "reason", "ready")).toBe(true)
     expect(store.list()[0].fields?.reason).toBe("voice-failed")
   })
 })

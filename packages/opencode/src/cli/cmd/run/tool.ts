@@ -26,6 +26,7 @@ import type { InvalidTool } from "@/tool/invalid"
 import type { LspTool } from "@/tool/lsp"
 import type { PlanExitTool } from "@/tool/plan"
 import type { InteractiveTerminalTool } from "@/kilocode/tool/interactive-terminal" // kilocode_change
+import type { Intent as ApplyPatchIntent } from "@/kilocode/tool/apply-patch-receipt" // kilocode_change
 import type { QuestionTool } from "@/tool/question"
 import type { ReadTool } from "@/tool/read"
 import type { SkillTool } from "@/tool/skill"
@@ -403,7 +404,7 @@ function runSkill(p: ToolProps<typeof SkillTool>): ToolInline {
 }
 
 function runPatch(p: ToolProps<typeof ApplyPatchTool>): ToolInline {
-  const files = p.metadata.files?.length ?? 0
+  const files = list(p.metadata.files).length // kilocode_change
   if (files === 0) {
     return {
       icon: "%",
@@ -508,7 +509,7 @@ function runPlanExit(p: ToolProps<typeof PlanExitTool>): ToolInline {
   }
 }
 
-type PatchFile = Tool.InferMetadata<typeof ApplyPatchTool>["files"][number]
+type PatchFile = ApplyPatchIntent["files"][number] // kilocode_change
 
 function patchTitle(file: PatchFile): string {
   const rel = file.relativePath
@@ -778,7 +779,7 @@ function scrollPatchFinal(p: ToolProps<typeof ApplyPatchTool>): string {
     return rows.join("\n")
   }
 
-  return patchLine(files[0]!)
+  return patchLine(files[0]) // kilocode_change
 }
 
 function scrollTaskStart(_: ToolProps<typeof TaskTool>): string {

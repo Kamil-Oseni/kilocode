@@ -14,7 +14,9 @@ The focused real-filesystem test proves two imported modules follow two temporar
 
 The path inventory now has 205 consumers, zero module captures and digest `4bd0af27a253229bf66216f4b7ed7ae9e8873354d31bb972af30de46130a83e3`. Keep its policy `inventory-only-no-cutover-evidence`. Zero eager captures does not authorize a hot root switch: `SandboxPolicy` caches snapshots by directory and session without storage generation, and other services still lack coordinated writer quiescence. Before live cutover, bind that cache to the selected generation or clear/reload it under a global barrier, then implement the writer registry, verified copy, restart/crash recovery and rollback gates already listed in the `profile-roots` ledger entry.
 
-The refreshed repository inventory is 69,102 total: public 1,693; compatibility 35,171; provenance 5,686; internal 26,552. Keep the ledger baseline at count 35,171 and digest `443fdbb71a6a80b299343e6a6bf065c0c46833a38ae74d3cf2cdc320f74af1cd` until the next reviewed refresh.
+The post-commit repository inventory is 69,114 total: public 1,693; compatibility 35,183; provenance 5,686; internal 26,552. Keep the ledger baseline at count 35,183 and digest `08c420c68747e661d2ba8c0edce0fabe702a6daef883eea47385cf2d64dc8a81` until the next reviewed refresh. This baseline includes the newly tracked sandbox test and changeset; refresh only after newly added files have entered Git or explicitly include untracked sources.
+
+This slice was pushed in `c105d17c75`; its normal protected hook passed all 29 JavaScript/TypeScript packages plus JetBrains.
 
 ## ChatGPT 2026-09-15 17:41 America/Toronto - Preserve late-bound managed tool output
 

@@ -1,10 +1,28 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `33d8c5f9f4`; the installed package source is `66631de1db`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from repository product source `e48019e771`; the installed package source is `66631de1db`. The open extension host's active-vault pointer is still product source `6b57cdfb0a` until VS Code reloads.
 >
 > Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. The complete CLI package, normal push hook and low-memory snapshot workflow pass. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 >
 > Compatibility-first Kilo migration is active; the Raya-owned VS Code distribution remains deferred to Version 3 after stability.
+
+## ChatGPT 2026-09-15 18:39 America/Toronto - Continue from the partial profile-writer manifest
+
+Product commit `e48019e771` is on `origin/main`. `writer-manifest.ts` records 33 ordinary boundaries and 2 exclusive maintenance boundaries. Preserve `complete: false` until every boundary is integrated and every gap is closed. `ProfileWriterRegistry.fromManifest()` must continue to reject incomplete manifests, non-empty gaps and any status other than `integrated`; do not derive completeness from how many runtime IDs happened to register.
+
+Implement admission in this order:
+
+1. Wrap the complete `Storage` service boundary, including its cached first-use migrations and `migration` marker, then its create/replace/write/update/remove methods. Pin one storage root before the first await. Test generation A/B lazy initialization, mutation, failure, interruption and cleanup with real files.
+2. Admit `auth.json`, `mcp-auth.json`, sandbox policy/preference, truncation output and plugin/model state. Preserve existing flocks and atomic replacement. Consolidate the uncertain model writers before marking that entry integrated. Do the same for global configuration rather than wrapping only one caller.
+3. Integrate both primary SQLite clients as one release boundary. Block new Effect service acquisition and legacy `Client()` use, drain transactions, dispose every application layer, call legacy `Database.close()`, then use SQLite online backup. Treat `KILO_DB`/external overrides as admitted but outside profile copy. Never copy WAL/SHM.
+4. Add close acknowledgements for session-export workers, indexing workers, memory, TUI queued writes, logs, daemons, persistent background processes, LSP installers and Git subprocesses. A process-lifetime writer keeps its generation lease until verified exit or explicit handoff.
+5. Build a checked static mutation-candidate guard for direct mutation APIs, child-process output/cwd/env, `useTuiPaths().state`, injected roots and both DB resolvers. The existing 205-consumer path inventory is supporting evidence only; it misses indirect writes.
+6. Add reader generation leases and outer-process cross-process ownership. The gate must outlive `AppRuntime.dispose()`. A second CLI/backend holding a DB, flock, log stream, worker or child process must prevent cutover, and stopped-owner recovery must be explicit.
+7. Only after all entries are integrated and gaps are empty may review change `complete` to true. Then implement immutable journal revisions, sorted hashes, DB integrity/foreign-key/table-count checks, restart, killed-process recovery, rollback and legacy-profile upgrade before adding ledger evidence.
+
+Keep maintenance separate. Legacy JSON-to-SQLite migration needs JSON storage plus both DB leases and must not overlap cutover. Uninstall needs exclusive global quiescence; successful uninstall must not reopen ordinary writer admission. Generic shell/process tools can inherit profile paths, so close tool admission globally before migration.
+
+Verification at this checkpoint: 12 tests / 390 assertions; bounded CLI typecheck; brand, path, annotation, Effect-facade, formatting and diff guards; protected push across all 29 JavaScript/TypeScript packages plus JetBrains. The brand inventory is 69,155 total with 35,224 compatibility references and digest `4c386b67b8f30eec2f355e5ff1c9795aedab87688a05ac43b4e4256bf68a7e3e`. Installed source remains `66631de1db`; batch this infrastructure work into a later coherent snapshot.
 
 ## ChatGPT 2026-09-15 18:19 America/Toronto - Continue from the fail-closed writer registry
 

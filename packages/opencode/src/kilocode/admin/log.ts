@@ -1,4 +1,5 @@
-import { Option, Schema } from "effect"
+import { Context, Effect, Layer, Option, Schema } from "effect"
+import { InstanceState } from "@/effect/instance-state"
 import { RayaAdmin } from "./registry"
 
 export namespace RayaAdminLog {
@@ -51,6 +52,12 @@ export namespace RayaAdminLog {
   export type Entry = typeof Entry.Type
 
   export type Query = { after?: number; limit?: number }
+  export interface Interface {
+    write: (value: unknown) => Effect.Effect<Entry | undefined>
+    list: (query?: Query) => Effect.Effect<Entry[]>
+  }
+
+  export class Service extends Context.Service<Service, Interface>()("@kilocode/RayaAdminLog") {}
 
   export function make(opts: { capacity?: number; clock?: () => number } = {}) {
     const requested = Number.isInteger(opts.capacity) ? (opts.capacity ?? 256) : 256
@@ -82,6 +89,17 @@ export namespace RayaAdminLog {
 
     return { write, list }
   }
+
+  export const layer = Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const stores = yield* InstanceState.make(() => Effect.sync(() => make()))
+      return Service.of({
+        write: (value) => InstanceState.use(stores, (store) => store.write(value)),
+        list: (query) => InstanceState.use(stores, (store) => store.list(query)),
+      })
+    }),
+  )
 
   function copy(entry: Entry): Entry {
     return { ...entry, ...(entry.fields ? { fields: { ...entry.fields } } : {}) }

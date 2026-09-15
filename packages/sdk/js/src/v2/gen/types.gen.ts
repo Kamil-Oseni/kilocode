@@ -28166,6 +28166,332 @@ export type RayaPersonalTodoUpdateResponses = {
 
 export type RayaPersonalTodoUpdateResponse = RayaPersonalTodoUpdateResponses[keyof RayaPersonalTodoUpdateResponses]
 
+export type RayaAdminHealthData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/raya/admin/health"
+}
+
+export type RayaAdminHealthErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type RayaAdminHealthError = RayaAdminHealthErrors[keyof RayaAdminHealthErrors]
+
+export type RayaAdminHealthResponses = {
+  /**
+   * Redacted subsystem health snapshot
+   */
+  200: {
+    format: "raya.admin-health"
+    version: 1
+    generatedAt: number
+    items: [
+      {
+        id: "runtime" | "sessions" | "routines" | "agents" | "browser" | "voice"
+        status: "healthy" | "degraded" | "blocked" | "offline" | "unknown"
+        reason:
+          | "ready"
+          | "connecting"
+          | "disconnected"
+          | "runtime-error"
+          | "storage-unreadable"
+          | "stream-error"
+          | "routine-blocked"
+          | "routine-recovery"
+          | "routine-history-unreadable"
+          | "agent-recovery"
+          | "browser-closed"
+          | "browser-unavailable"
+          | "browser-locked"
+          | "browser-error"
+          | "browser-auth-expired"
+          | "voice-unavailable"
+          | "voice-failed"
+          | "voice-incomplete"
+          | "not-checked"
+          | "probe-failed"
+        observedAt: number
+        metrics?: {
+          agents?: number
+          runs?: number
+          active?: number
+          blocked?: number
+          recovering?: number
+          failed?: number
+          incomplete?: number
+        }
+      },
+      {
+        id: "runtime" | "sessions" | "routines" | "agents" | "browser" | "voice"
+        status: "healthy" | "degraded" | "blocked" | "offline" | "unknown"
+        reason:
+          | "ready"
+          | "connecting"
+          | "disconnected"
+          | "runtime-error"
+          | "storage-unreadable"
+          | "stream-error"
+          | "routine-blocked"
+          | "routine-recovery"
+          | "routine-history-unreadable"
+          | "agent-recovery"
+          | "browser-closed"
+          | "browser-unavailable"
+          | "browser-locked"
+          | "browser-error"
+          | "browser-auth-expired"
+          | "voice-unavailable"
+          | "voice-failed"
+          | "voice-incomplete"
+          | "not-checked"
+          | "probe-failed"
+        observedAt: number
+        metrics?: {
+          agents?: number
+          runs?: number
+          active?: number
+          blocked?: number
+          recovering?: number
+          failed?: number
+          incomplete?: number
+        }
+      },
+      {
+        id: "runtime" | "sessions" | "routines" | "agents" | "browser" | "voice"
+        status: "healthy" | "degraded" | "blocked" | "offline" | "unknown"
+        reason:
+          | "ready"
+          | "connecting"
+          | "disconnected"
+          | "runtime-error"
+          | "storage-unreadable"
+          | "stream-error"
+          | "routine-blocked"
+          | "routine-recovery"
+          | "routine-history-unreadable"
+          | "agent-recovery"
+          | "browser-closed"
+          | "browser-unavailable"
+          | "browser-locked"
+          | "browser-error"
+          | "browser-auth-expired"
+          | "voice-unavailable"
+          | "voice-failed"
+          | "voice-incomplete"
+          | "not-checked"
+          | "probe-failed"
+        observedAt: number
+        metrics?: {
+          agents?: number
+          runs?: number
+          active?: number
+          blocked?: number
+          recovering?: number
+          failed?: number
+          incomplete?: number
+        }
+      },
+      {
+        id: "runtime" | "sessions" | "routines" | "agents" | "browser" | "voice"
+        status: "healthy" | "degraded" | "blocked" | "offline" | "unknown"
+        reason:
+          | "ready"
+          | "connecting"
+          | "disconnected"
+          | "runtime-error"
+          | "storage-unreadable"
+          | "stream-error"
+          | "routine-blocked"
+          | "routine-recovery"
+          | "routine-history-unreadable"
+          | "agent-recovery"
+          | "browser-closed"
+          | "browser-unavailable"
+          | "browser-locked"
+          | "browser-error"
+          | "browser-auth-expired"
+          | "voice-unavailable"
+          | "voice-failed"
+          | "voice-incomplete"
+          | "not-checked"
+          | "probe-failed"
+        observedAt: number
+        metrics?: {
+          agents?: number
+          runs?: number
+          active?: number
+          blocked?: number
+          recovering?: number
+          failed?: number
+          incomplete?: number
+        }
+      },
+      {
+        id: "runtime" | "sessions" | "routines" | "agents" | "browser" | "voice"
+        status: "healthy" | "degraded" | "blocked" | "offline" | "unknown"
+        reason:
+          | "ready"
+          | "connecting"
+          | "disconnected"
+          | "runtime-error"
+          | "storage-unreadable"
+          | "stream-error"
+          | "routine-blocked"
+          | "routine-recovery"
+          | "routine-history-unreadable"
+          | "agent-recovery"
+          | "browser-closed"
+          | "browser-unavailable"
+          | "browser-locked"
+          | "browser-error"
+          | "browser-auth-expired"
+          | "voice-unavailable"
+          | "voice-failed"
+          | "voice-incomplete"
+          | "not-checked"
+          | "probe-failed"
+        observedAt: number
+        metrics?: {
+          agents?: number
+          runs?: number
+          active?: number
+          blocked?: number
+          recovering?: number
+          failed?: number
+          incomplete?: number
+        }
+      },
+      {
+        id: "runtime" | "sessions" | "routines" | "agents" | "browser" | "voice"
+        status: "healthy" | "degraded" | "blocked" | "offline" | "unknown"
+        reason:
+          | "ready"
+          | "connecting"
+          | "disconnected"
+          | "runtime-error"
+          | "storage-unreadable"
+          | "stream-error"
+          | "routine-blocked"
+          | "routine-recovery"
+          | "routine-history-unreadable"
+          | "agent-recovery"
+          | "browser-closed"
+          | "browser-unavailable"
+          | "browser-locked"
+          | "browser-error"
+          | "browser-auth-expired"
+          | "voice-unavailable"
+          | "voice-failed"
+          | "voice-incomplete"
+          | "not-checked"
+          | "probe-failed"
+        observedAt: number
+        metrics?: {
+          agents?: number
+          runs?: number
+          active?: number
+          blocked?: number
+          recovering?: number
+          failed?: number
+          incomplete?: number
+        }
+      },
+    ]
+  }
+}
+
+export type RayaAdminHealthResponse = RayaAdminHealthResponses[keyof RayaAdminHealthResponses]
+
+export type RayaAdminLogsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    after?: string
+    limit?: string
+  }
+  url: "/raya/admin/logs"
+}
+
+export type RayaAdminLogsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type RayaAdminLogsError = RayaAdminLogsErrors[keyof RayaAdminLogsErrors]
+
+export type RayaAdminLogsResponses = {
+  /**
+   * Redacted diagnostic log entries
+   */
+  200: Array<{
+    seq: number
+    at: number
+    subsystem: "runtime" | "sessions" | "routines" | "agents" | "browser" | "voice"
+    severity: "info" | "warning" | "error"
+    code:
+      | "probe.started"
+      | "probe.completed"
+      | "probe.failed"
+      | "connection.changed"
+      | "storage.checked"
+      | "recovery.detected"
+      | "host.changed"
+    fields?: {
+      durationMs?: number
+      count?: number
+      attempt?: number
+      generation?: number
+      state?:
+        | "healthy"
+        | "degraded"
+        | "blocked"
+        | "offline"
+        | "unknown"
+        | "connecting"
+        | "connected"
+        | "disconnected"
+        | "error"
+      reason?:
+        | "ready"
+        | "connecting"
+        | "disconnected"
+        | "runtime-error"
+        | "storage-unreadable"
+        | "stream-error"
+        | "routine-blocked"
+        | "routine-recovery"
+        | "routine-history-unreadable"
+        | "agent-recovery"
+        | "browser-closed"
+        | "browser-unavailable"
+        | "browser-locked"
+        | "browser-error"
+        | "browser-auth-expired"
+        | "voice-unavailable"
+        | "voice-failed"
+        | "voice-incomplete"
+        | "not-checked"
+        | "probe-failed"
+      source?: "runtime" | "sessions" | "routines" | "agents" | "browser" | "voice" | "registry" | "host"
+      version?: string
+    }
+  }>
+}
+
+export type RayaAdminLogsResponse = RayaAdminLogsResponses[keyof RayaAdminLogsResponses]
+
 export type V2HealthGetData = {
   body?: never
   path?: never

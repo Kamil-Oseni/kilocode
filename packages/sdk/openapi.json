@@ -49991,6 +49991,357 @@
         ]
       }
     },
+    "/raya/admin/health": {
+      "get": {
+        "tags": ["raya-admin"],
+        "operationId": "raya.admin.health",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Redacted subsystem health snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "format": {
+                      "type": "string",
+                      "enum": ["raya.admin-health"]
+                    },
+                    "version": {
+                      "type": "number",
+                      "enum": [1]
+                    },
+                    "generatedAt": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "enum": ["runtime", "sessions", "routines", "agents", "browser", "voice"]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": ["healthy", "degraded", "blocked", "offline", "unknown"]
+                          },
+                          "reason": {
+                            "type": "string",
+                            "enum": [
+                              "ready",
+                              "connecting",
+                              "disconnected",
+                              "runtime-error",
+                              "storage-unreadable",
+                              "stream-error",
+                              "routine-blocked",
+                              "routine-recovery",
+                              "routine-history-unreadable",
+                              "agent-recovery",
+                              "browser-closed",
+                              "browser-unavailable",
+                              "browser-locked",
+                              "browser-error",
+                              "browser-auth-expired",
+                              "voice-unavailable",
+                              "voice-failed",
+                              "voice-incomplete",
+                              "not-checked",
+                              "probe-failed"
+                            ]
+                          },
+                          "observedAt": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "metrics": {
+                            "type": "object",
+                            "properties": {
+                              "agents": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 1000000
+                              },
+                              "runs": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 1000000
+                              },
+                              "active": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 1000000
+                              },
+                              "blocked": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 1000000
+                              },
+                              "recovering": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 1000000
+                              },
+                              "failed": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 1000000
+                              },
+                              "incomplete": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 1000000
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": ["id", "status", "reason", "observedAt"],
+                        "additionalProperties": false
+                      },
+                      "minItems": 6,
+                      "maxItems": 6
+                    }
+                  },
+                  "required": ["format", "version", "generatedAt", "items"],
+                  "additionalProperties": false,
+                  "description": "Redacted subsystem health snapshot"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Read bounded, redacted health signals for Raya subsystems.",
+        "summary": "Get subsystem health",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.raya.admin.health({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/raya/admin/logs": {
+      "get": {
+        "tags": ["raya-admin"],
+        "operationId": "raya.admin.logs",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Redacted diagnostic log entries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "seq": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      },
+                      "at": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "subsystem": {
+                        "type": "string",
+                        "enum": ["runtime", "sessions", "routines", "agents", "browser", "voice"]
+                      },
+                      "severity": {
+                        "type": "string",
+                        "enum": ["info", "warning", "error"]
+                      },
+                      "code": {
+                        "type": "string",
+                        "enum": [
+                          "probe.started",
+                          "probe.completed",
+                          "probe.failed",
+                          "connection.changed",
+                          "storage.checked",
+                          "recovery.detected",
+                          "host.changed"
+                        ]
+                      },
+                      "fields": {
+                        "type": "object",
+                        "properties": {
+                          "durationMs": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 600000
+                          },
+                          "count": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 1000000
+                          },
+                          "attempt": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 1000000
+                          },
+                          "generation": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 1000000
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "healthy",
+                              "degraded",
+                              "blocked",
+                              "offline",
+                              "unknown",
+                              "connecting",
+                              "connected",
+                              "disconnected",
+                              "error"
+                            ]
+                          },
+                          "reason": {
+                            "type": "string",
+                            "enum": [
+                              "ready",
+                              "connecting",
+                              "disconnected",
+                              "runtime-error",
+                              "storage-unreadable",
+                              "stream-error",
+                              "routine-blocked",
+                              "routine-recovery",
+                              "routine-history-unreadable",
+                              "agent-recovery",
+                              "browser-closed",
+                              "browser-unavailable",
+                              "browser-locked",
+                              "browser-error",
+                              "browser-auth-expired",
+                              "voice-unavailable",
+                              "voice-failed",
+                              "voice-incomplete",
+                              "not-checked",
+                              "probe-failed"
+                            ]
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "runtime",
+                              "sessions",
+                              "routines",
+                              "agents",
+                              "browser",
+                              "voice",
+                              "registry",
+                              "host"
+                            ]
+                          },
+                          "version": {
+                            "type": "string",
+                            "maxLength": 64,
+                            "pattern": "^\\d{1,4}\\.\\d{1,4}\\.\\d{1,8}$"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["seq", "at", "subsystem", "severity", "code"],
+                    "additionalProperties": false
+                  },
+                  "description": "Redacted diagnostic log entries"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Read retained redacted diagnostic entries in sequence order.",
+        "summary": "List diagnostic entries",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.raya.admin.logs({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "tags": ["Kilo HttpApi"],
@@ -96936,6 +97287,9 @@
     },
     {
       "name": "raya-personal-todo"
+    },
+    {
+      "name": "raya-admin"
     },
     {
       "name": "Kilo HttpApi",

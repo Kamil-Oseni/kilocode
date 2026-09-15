@@ -8,6 +8,7 @@ import { fenceLayer } from "@/server/routes/instance/httpapi/middleware/fence"
 import * as AnacondaDesktop from "@/kilocode/anaconda-desktop/service"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import { AppNodeBuilderV1 } from "@/effect/app-node-builder-v1" // kilocode_change - defaultLayer aliases are gone
+import { RayaAdminLog } from "@/kilocode/admin/log"
 
 import { KiloViewers } from "@/kilocode/presence/service" // kilocode_change
 import { Canvas } from "@/kilocode/canvas/service" // raya_change - Milestone E canvas handler dependency
@@ -34,6 +35,7 @@ import { capabilitiesHandlers } from "./handlers/capabilities"
 import { telemetryHandlers } from "./handlers/telemetry"
 import { voiceHandlers } from "./handlers/voice" // raya_change - realtime voice async plane
 import { personalTodoHandlers } from "./handlers/personal-todo"
+import { adminHandlers } from "./handlers/admin"
 
 export const provide = Layer.provide([
   agentBuilderHandlers,
@@ -59,6 +61,7 @@ export const provide = Layer.provide([
   telemetryHandlers,
   voiceHandlers, // raya_change - realtime voice async plane
   personalTodoHandlers,
+  adminHandlers.pipe(Layer.provide(RayaAdminLog.layer)),
 ])
 
 export function provideListener(opts?: CorsOptions) {

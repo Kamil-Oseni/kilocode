@@ -159,6 +159,13 @@ export const kiloScenarios: Scenario[] = [
     object(value.features)
     check(value.features["goal.commandCheck"] === 1, "capability manifest should advertise command checks")
   }),
+  http.protected.get("/raya/admin/health", "raya.admin.health").json(200, (value) => {
+    object(value)
+    check(value.format === "raya.admin-health", "admin health should use the versioned format")
+    array(value.items)
+    check(value.items.length === 6, "admin health should report every registered subsystem")
+  }),
+  http.protected.get("/raya/admin/logs?limit=2", "raya.admin.logs").json(200, array),
   http.protected.get("/background-process", "backgroundProcess.list").json(200, array),
   http.protected
     .get("/background-process/{processID}", "backgroundProcess.get")

@@ -528,6 +528,10 @@ import type {
   QuestionReplyErrors,
   QuestionReplyResponses,
   QuestionV2Reply,
+  RayaAdminHealthErrors,
+  RayaAdminHealthResponses,
+  RayaAdminLogsErrors,
+  RayaAdminLogsResponses,
   RayaPersonalTodoCreateErrors,
   RayaPersonalTodoCreateResponses,
   RayaPersonalTodoDeleteErrors,
@@ -13700,10 +13704,81 @@ export class PersonalTodo extends HeyApiClient {
   }
 }
 
+export class Admin extends HeyApiClient {
+  /**
+   * Get subsystem health
+   *
+   * Read bounded, redacted health signals for Raya subsystems.
+   */
+  public health<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<RayaAdminHealthResponses, RayaAdminHealthErrors, ThrowOnError>({
+      url: "/raya/admin/health",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List diagnostic entries
+   *
+   * Read retained redacted diagnostic entries in sequence order.
+   */
+  public logs<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      after?: string
+      limit?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "after" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<RayaAdminLogsResponses, RayaAdminLogsErrors, ThrowOnError>({
+      url: "/raya/admin/logs",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Raya extends HeyApiClient {
   private _personalTodo?: PersonalTodo
   get personalTodo(): PersonalTodo {
     return (this._personalTodo ??= new PersonalTodo({ client: this.client }))
+  }
+
+  private _admin?: Admin
+  get admin(): Admin {
+    return (this._admin ??= new Admin({ client: this.client }))
   }
 }
 

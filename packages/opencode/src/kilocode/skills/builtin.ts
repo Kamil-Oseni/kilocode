@@ -9,6 +9,9 @@ import WORKFLOWS from "./browser-workflows/SKILL.md" with { type: "text" }
 import RECOVERY from "./browser-recovery/SKILL.md" with { type: "text" }
 import RUNTIME from "./browser-runtime/SKILL.md" with { type: "text" }
 import DESIGNER from "../agent/designer.txt" with { type: "text" }
+import CODING from "./coding/SKILL.md" with { type: "text" }
+import WRITING from "./writing/SKILL.md" with { type: "text" }
+import MARKETING from "./marketing/SKILL.md" with { type: "text" }
 
 export interface BuiltinSkill {
   name: string
@@ -20,12 +23,36 @@ export interface BuiltinSkill {
 
 export const BUILTIN_SKILLS: BuiltinSkill[] = [
   {
+    name: "coding",
+    description:
+      "Implement, debug, refactor, review, or verify software changes in an existing repository. Load for engineering work that changes code, tests, build systems, APIs, storage, or runtime behavior.",
+    content: CODING,
+    version: "1",
+    source: "raya:bundled:coding",
+  },
+  {
     name: "designer",
     description:
       "Design and implement Raya interfaces, flows, design systems, product copy, responsive states, accessibility, and visual verification. Load for any UI or UX work.",
     content: DESIGNER,
     version: "1",
     source: "raya:bundled:designer",
+  },
+  {
+    name: "writing",
+    description:
+      "Plan, draft, revise, or review prose for reports, documentation, messages, briefs, proposals, and other written deliverables. Load when clarity, structure, evidence, tone, or publication readiness matters.",
+    content: WRITING,
+    version: "1",
+    source: "raya:bundled:writing",
+  },
+  {
+    name: "marketing",
+    description:
+      "Research, position, plan, create, or evaluate marketing for a product, service, audience, channel, or campaign. Load for market analysis, messaging, content, acquisition, lifecycle, launch, or measurement work.",
+    content: MARKETING,
+    version: "1",
+    source: "raya:bundled:marketing",
   },
   {
     name: "browser",

@@ -48,6 +48,22 @@ it.instance(
 )
 
 it.instance(
+  "universal role skills retain stable versioned identities",
+  () =>
+    Effect.gen(function* () {
+      const skill = yield* Skill.Service
+      for (const name of ["coding", "designer", "writing", "marketing"] as const) {
+        const item = yield* skill.get(name)
+        expect(item?.location).toBe(Skill.BUILTIN_LOCATION)
+        expect(item?.provenance.source.locator).toBe(`raya:bundled:${name}`)
+        expect(item?.provenance.skillVersion).toBe("1")
+        if (name !== "designer") expect(item?.content).toContain(`name: ${name}`)
+      }
+    }),
+  { git: true },
+)
+
+it.instance(
   "kilo-config is protected from removal",
   () =>
     Effect.gen(function* () {

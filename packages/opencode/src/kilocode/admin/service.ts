@@ -30,9 +30,13 @@ export namespace RayaAdminService {
   export function make(deps: Deps) {
     const snapshot = async () => {
       const state = Promise.resolve().then(deps.runtime)
-      const tasks = state.then((current) => {
+      const agents = state.then((current) => {
         if (current !== "connected") return undefined
-        return Promise.all([Effect.runPromise(deps.tasks.list()), Effect.runPromise(deps.tasks.histories())])
+        return Effect.runPromise(deps.tasks.list())
+      })
+      const histories = state.then((current) => {
+        if (current !== "connected") return undefined
+        return Effect.runPromise(deps.tasks.histories())
       })
       const probes: RayaAdmin.Probe[] = [
         {
@@ -53,17 +57,17 @@ export namespace RayaAdminService {
         {
           id: "routines",
           read: async (at) => {
-            const found = await tasks
-            if (!found) return RayaAdmin.unavailable("routines", at, "disconnected")
+            const found = await Promise.all([agents, histories])
+            if (!found[0] || !found[1]) return RayaAdmin.unavailable("routines", at, "disconnected")
             return RayaAdmin.routines(found[0], found[1], at)
           },
         },
         {
           id: "agents",
           read: async (at) => {
-            const found = await tasks
+            const found = await agents
             if (!found) return RayaAdmin.unavailable("agents", at, "disconnected")
-            return RayaAdmin.agents(found[0], at)
+            return RayaAdmin.agents(found, at)
           },
         },
       ]

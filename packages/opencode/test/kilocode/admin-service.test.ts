@@ -111,4 +111,44 @@ describe("Raya admin health service", () => {
     expect(JSON.stringify(snapshot)).not.toContain("synthetic")
     expect(JSON.stringify(snapshot)).not.toContain("private")
   })
+
+  test("keeps agent health when routine history alone fails", async () => {
+    const reads = { agents: 0, histories: 0 }
+    const service = RayaAdminService.make({
+      runtime: () => "connected",
+      sessions: { list: () => Effect.succeed([]) },
+      tasks: {
+        list: () => {
+          reads.agents++
+          return Effect.succeed([
+            { execution: { state: "active" as const } },
+            { execution: { state: "recovery" as const, runID: "private-run" } },
+          ])
+        },
+        histories: () => {
+          reads.histories++
+          return Effect.fail(new Error("C:/private/routines?token=synthetic-history-secret"))
+        },
+      },
+      clock: () => at,
+    })
+
+    const snapshot = await service.snapshot()
+    expect(reads).toEqual({ agents: 1, histories: 1 })
+    expect(snapshot.items.find((item) => item.id === "routines")).toEqual({
+      id: "routines",
+      status: "unknown",
+      reason: "probe-failed",
+      observedAt: at,
+    })
+    expect(snapshot.items.find((item) => item.id === "agents")).toEqual({
+      id: "agents",
+      status: "degraded",
+      reason: "agent-recovery",
+      observedAt: at,
+      metrics: { agents: 2, active: 1, recovering: 1 },
+    })
+    expect(JSON.stringify(snapshot)).not.toContain("synthetic")
+    expect(JSON.stringify(snapshot)).not.toContain("private")
+  })
 })

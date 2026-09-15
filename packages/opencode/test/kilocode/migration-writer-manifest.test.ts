@@ -11,6 +11,7 @@ describe("profile writer manifest", () => {
     expect(manifest.complete).toBe(false)
     expect(manifest.gaps.length).toBeGreaterThan(0)
     expect(manifest.writers.filter((writer) => writer.coverage === "integrated").map((writer) => writer.id)).toEqual([
+      "profile.cache.browser-uploads",
       "profile.credentials.auth",
       "profile.credentials.mcp",
       "profile.data.revert-note",

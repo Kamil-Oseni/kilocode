@@ -70,10 +70,10 @@ export namespace ProfileWriterManifest {
         id: "profile.cache.browser-uploads",
         roots: ["cache"],
         sources: ["packages/opencode/src/kilocode/browser/upload-stage.ts"],
-        methods: ["stream", "publish-receipt", "prune", "release"],
+        methods: ["stage", "chunk", "prune", "release"],
         lifecycle: "Finish or cancel streams and settle capability receipts before reconstruction.",
         copyPolicy: "reconstruct-after-drain",
-        coverage: unintegrated,
+        coverage: "integrated",
       }),
       writer({
         id: "profile.cache.commands",

@@ -1,6 +1,6 @@
 # Raya remaining implementation and agent handoff
 
-> **Goal status: ACTIVE — implementation is continuing.** Continue from local product source `b9ecb482f2`; installed snapshot source is `d22177be2d`. Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. `origin/main` is still `d894fc0eb9` because the normal pre-push hook reaches existing cross-package `@opencode-ai/tui` type failures. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
+> **Goal status: ACTIVE — implementation is continuing.** Continue from local product source `3708347653`; installed snapshot source is `d22177be2d`. Any older pause wording later in this chronological handoff is superseded and does not describe the live goal. `origin/main` is still `d894fc0eb9` because the normal pre-push hook reaches existing cross-package `@opencode-ai/tui` type failures. The 16 future additions are contiguous `FUT-*` rows directly after `OVR-10` in the single canonical table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls) and are merged with the original work.
 
 ## ChatGPT 2026-09-15 05:30 America/Toronto - Continue the active reviewed Todo plan
 
@@ -9,6 +9,8 @@ The goal is active. The sixteen added requirements are already literal rows `FUT
 Preserve `dd68003479`: `Storage.update` now uses the existing temporary-file/fsync/atomic-replacement publisher while retaining the per-key in-process lock and callback contract. Its real-filesystem suite passes 16 / 50. This proves complete-file publication and prior-value preservation before rename, not cross-process CAS.
 
 Preserve `b9ecb482f2`: immutable Todo proposals bind the complete request to ID, source, exact target/base revision and canonical digest. Exact replay returns the first artifact and changed reuse refuses overwrite. Get/list reconstruction rejects malformed keys, identity mismatch and digest corruption. Its focused real-Storage suite passes 3 / 19.
+
+Preserve `3708347653`: v2 Todo aggregates add bounded priority, estimates, links and ordered stable-ID embedded subtasks while retaining v1 storage through reads and ordinary legacy writes. Parent and child revisions are checked independently; malformed v2 state is never overwritten; timestamps remain monotonic. Its focused real-Storage suite passes 6 / 67.
 
 Finish the in-progress backward-compatible Todo aggregate next. Keep raw v1 records unchanged until an extended write; validate status/done/completedAt coherence, bounds and duplicate IDs; retain ordered stable-ID embedded subtasks; fence parent and subtask mutations by exact revisions. Then implement an apply receipt containing the exact postimage and proposal digest. Apply only stored proposal content, reject stale base revisions, persist a private applied marker, recover acknowledgement loss from receipt plus marker and never silently rebase. After domain tests, expose typed API/tool contracts and one review card shared by main chat and the Todo tab with explicit Apply, Edit and Reject actions.
 

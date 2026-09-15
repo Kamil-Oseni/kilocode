@@ -520,7 +520,7 @@ export namespace RayaTaskRunner {
       if (last && RayaTask.pending(last)) {
         const run = yield* steer(last, note, opts?.defer)
         const row = errands ? yield* errands.bySession(run.sessionID) : undefined
-        if (row?.state === "needs_input") yield* errands.resume(row.id, run.id, run.sessionID)
+        if (row?.state === "needs_input" && errands) yield* errands.resume(row.id, run.id, run.sessionID)
         return run
       }
       return yield* fire(id, undefined, note, { follow: true, defer: opts?.defer, bind: opts?.bind })
@@ -529,7 +529,11 @@ export namespace RayaTaskRunner {
       const items = yield* tasks.list()
       const active = yield* Effect.forEach(items, (item) => tasks.runsFor(item.id), { concurrency: 1 })
       if (!active.flat().some((run) => run.sessionID === sessionID && RayaTask.pending(run))) {
-        yield* revive()
+        yield* revive().pipe(
+          Effect.catchCause((cause) =>
+            Effect.sync(() => log.error("task resume recovery failed", { sessionID, err: Cause.squash(cause) })),
+          ),
+        )
         return
       }
       yield* kick({ database: input.database, sessionID, storage: input.storage, sessions: input.sessions }).pipe(
@@ -878,8 +882,9 @@ export namespace RayaTaskRunner {
     const resolve = Effect.fn("RayaTaskRunner.resolve")(function* (id: string, runID: string) {
       yield* tasks.get(id)
       const execution = yield* inspect(input.storage, id)
+      const current = execution && "runID" in execution ? execution : undefined
       const reason =
-        execution?.runID === runID && execution.recovery === "followup"
+        current?.runID === runID && current.recovery === "followup"
           ? "Closed after reviewing an uncertain follow-up delivery. The follow-up was not resent."
           : "Closed after reviewing an interrupted start. No unverified result was accepted."
       const source = `recovery:${runID}`
@@ -898,7 +903,7 @@ export namespace RayaTaskRunner {
         }
       const rows = schedule ? yield* schedule.active(id) : []
       const row = rows.find((item) => item.claim_id === runID)
-      if (!row && execution?.runID !== runID)
+      if (!row && current?.runID !== runID)
         return yield* new RayaTask.GuardError({
           kind: "conflict",
           message: "This interrupted start is no longer current. Reload its recovery review.",
@@ -952,7 +957,7 @@ export namespace RayaTaskRunner {
           })
         return true
       })
-      if (execution?.runID === runID) {
+      if (current?.runID === runID) {
         const closed = yield* recover(
           input.storage,
           id,

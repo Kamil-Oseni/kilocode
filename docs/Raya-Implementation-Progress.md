@@ -1,5 +1,11 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-14 20:15 America/Toronto - Stale Routine continuations are fenced
+
+**Status: product commit `0d648d0deb` is verified and pushed to `origin/main`; it is intentionally not installed alone.** Manual, event and delegated Routine sessions can no longer dispatch another automatic turn merely because their startup claim is absent. Every continuation now requires the session metadata to match one exact pending run by worker, run, session, schedule version and immutable trigger evidence. A retained startup claim remains an additional exact local-ownership check. Terminal runs, missing history, changed run IDs, changed session IDs, relabelled timer triggers and malformed claims all fail closed before model work.
+
+The complete scheduler/recovery suite passes **33 / 446**, including both manual and event continuation paths, retained/startup claims, terminal-run denial, missing-run denial, timer queue ownership, retry and restart recovery. Scoped one-thread lint reports zero errors and two older warnings; formatting, changeset assembly, whitespace, annotation and Effect Promise-facade guards pass. EN-02/OVR-05 remain **In progress**. Next close the companion inbox race: a user follow-up attached just as its run becomes terminal must remain recoverable and must move only when no dispatch/delivery identity proves the old session consumed it. Installed source remains `17ff50e907`.
+
 ## ChatGPT 2026-09-14 20:00 America/Toronto - Delegation admission fenced during worker removal
 
 **Status: product commit `8087eea4b0` is verified and pushed to `origin/main`; it is intentionally not installed alone.** Delegation admission now recognizes the recipient's durable `operation: remove` ownership record. A removal already in progress rejects new work before creating a request. Admission also rereads the worker and removal claim after its durable database insert; if removal won the intervening race, the request becomes a durable failed result rather than leaving queued work addressed to an archived worker. Normal startup claims remain distinguishable and do not prevent a busy worker from receiving queued work.
